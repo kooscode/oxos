@@ -8,7 +8,7 @@ INCLUDE = -I$(TOPDIR)/grub -I$(TOPDIR)/include -I$(TOPDIR)/ -I./ -I$(TOPDIR)/fs/
 	-I$(TOPDIR)/boot_xbe/ -I$(TOPDIR)/fs/grub -I$(TOPDIR)/lib/cromwell/font \
 	-I$(TOPDIR)/startuploader -I$(TOPDIR)/drivers/cpu -I$(TOPDIR)/menu \
   -I$(TOPDIR)/menu/actions -I$(TOPDIR)/menu/textmenu -I$(TOPDIR)/menu/iconmenu
-# 	-I$(TOPDIR)/lib/jpeg/
+
 CROM_CFLAGS += $(INCLUDE) -fno-zero-initialized-in-bss
 CFLAGS = -Os -march=pentium -m32 -Werror -Wstrict-prototypes -Wreturn-type -pipe -fomit-frame-pointer -DIPv4 -fpack-struct -ffreestanding
 CFLAGS += -fno-stack-protector -U_FORTIFY_SOURCE -fno-PIC
