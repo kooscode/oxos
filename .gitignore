@@ -1,0 +1,15 @@
+*.obj
+*.o
+*.d
+*.elf
+*.bin
+*.gz
+*.map
+*.xbe
+.vscode
+/bin/
+/boot_vml/disk/vmlboot
+/boot_eth/ethboot
+!/bin/2blimage.bin
+!/bin/*.script
+
