@@ -72,30 +72,30 @@ void dots(void) {
 }
 
 void cromwellError(void) {
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk("\t[ ");
-   VIDEO_ATTR=0xffff0000;
+   VIDEO_ARGB=0xffff0000;
    printk("!!");
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk(" ]");
    errorLED();
 }
 
 void cromwellWarning(void) {
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk("\t[ ");
-   VIDEO_ATTR=0xffffae01;
+   VIDEO_ARGB=0xffffae01;
    printk("!!");
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk(" ]\n");
    errorLED();
 }
 
 void cromwellSuccess(void) {
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk("\t[ ");
-   VIDEO_ATTR=0xff00ff00;
+   VIDEO_ARGB=0xff00ff00;
    printk("ok");
-   VIDEO_ATTR=0xffd8d8d8;
+   VIDEO_ARGB=0xffd8d8d8;
    printk(" ]\n");
 }

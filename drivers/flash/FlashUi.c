@@ -80,7 +80,7 @@ void BootShowFlashDevice(void)
 
     if(progress.currentFlashOp != FlashOp_Idle)
     {
-        VIDEO_ATTR=0xffc8c8c8;
+        VIDEO_ARGB=0xffc8c8c8;
         printk("\n           Flash is unavailable.");
     }
 
@@ -88,27 +88,27 @@ void BootShowFlashDevice(void)
 
     if(progress.currentFlashOp == FlashOp_Error)
     {
-        VIDEO_ATTR=0xffc8c8c8;
+        VIDEO_ARGB=0xffc8c8c8;
         printk("\n           No valid Flash device Detected!!!");
         return;
     }
 
 
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n           Manufacturer ID : ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     printk("%02X", of->flashType.m_bManufacturerId);
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n           Device ID : ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     printk("%02X", of->flashType.m_bDeviceId);
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n           Name : ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     printk("%s", of->flashType.m_szFlashDescription);
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n           Total size : ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     printk("%u KB", of->flashType.m_dwLengthInBytes / 1024);
 
     return;
@@ -121,7 +121,7 @@ static bool FlashPrintResult(void)
     const char* string;
 
     BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-    VIDEO_ATTR=0xffef37;
+    VIDEO_ARGB=0xffef37;
 
 #ifndef DEV_FEATURES
     if(mustRestart == true)
@@ -140,7 +140,7 @@ static bool FlashPrintResult(void)
     if(res == FlashErrorcodes_NoError)
     {
         printk("\n           \2Flashing success...\n\2\n\n\n");
-        VIDEO_ATTR=0xffffff;
+        VIDEO_ARGB=0xffffff;
         printk("           ");
         cromwellSuccess();
         printk ("\n           Flashing successful!!!");
@@ -148,7 +148,7 @@ static bool FlashPrintResult(void)
     else
     {
         printk("\n           \2Flashing failed...\n\2\n\n\n");
-        VIDEO_ATTR=0xffffff;
+        VIDEO_ARGB=0xffffff;
         switch (res)
         {
         case FlashErrorcodes_UserAbort:
@@ -369,12 +369,12 @@ bool executeFlashDriverUI(void)
         if(flashProgress.currentFlashOp == FlashOp_PendingOp)
         {
             BootLogger(DEBUG_FLASH_UI, DBG_LVL_DEBUG, "Flash update sequence pending op");
-            VIDEO_ATTR=0xffef37;
+            VIDEO_ARGB=0xffef37;
 
             if(mustRestart)
             {
                 printk("\n           \2%s\n\2\n", (isXBlastOnLPC())?"Updating XBlast OS...":"Updating flash bank...");
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 printk("\n\n\n           WARNING!\n");
                 printk("           Do not turn off your console during this process!\n");
                 printk("           Your console should automatically reboot when this\n");
@@ -385,7 +385,7 @@ bool executeFlashDriverUI(void)
             else
             {
                 printk("\n           \2Updating BIOS bank...\n\2\n");
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 printk("\n\n\n           WARNING!\n");
                 printk("           Do not turn off your console during this process!\n");
             }
@@ -472,7 +472,7 @@ bool executeFlashDriverUI(void)
             UIFooter();
 #endif
             printk("\n\n\n\n\n           \2Save Settings to flash failed...\n\2\n");
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             resultSuccess = FlashPrintResult() == false;
 
             if(resultSuccess)

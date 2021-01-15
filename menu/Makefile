@@ -1,2 +1,2 @@
-subdir +=  iconmenu textmenu actions misc
+subdir += textmenu actions misc
 include $(TOPDIR)/Rules.make

@@ -108,7 +108,7 @@ void TextMenuDraw(TEXTMENU* menu, TEXTMENUITEM *firstVisibleMenuItem, TEXTMENUIT
     VIDEO_CURSOR_POSY = 45;
     
     //Draw the menu title.
-    VIDEO_ATTR = 0xff00ff;
+    VIDEO_ARGB = 0xff00ff;
 
     printk("\2          %s\n\2", menu->szCaption);
     
@@ -144,16 +144,16 @@ void TextMenuDraw(TEXTMENU* menu, TEXTMENUITEM *firstVisibleMenuItem, TEXTMENUIT
         //Selected item in yellow
         if (item == selectedItem)
         {
-            VIDEO_ATTR=0xffef37;
+            VIDEO_ARGB=0xffef37;
         }
         //If noSelect flag, draw in red.
         else if(item->noSelect == NOSELECTERROR)
         {
-            VIDEO_ATTR=0xffff1515;
+            VIDEO_ARGB=0xffff1515;
         }
         else
         {
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
         }
         //Font size 2=big.
         if(menu->smallChars)
@@ -166,32 +166,6 @@ void TextMenuDraw(TEXTMENU* menu, TEXTMENUITEM *firstVisibleMenuItem, TEXTMENUIT
         }
         item=item->nextMenuItem;
     }
-
-    // if(menu->hideUncommittedChangesLabel == false)
-    // {
-    //     unsigned char uncommittedChanges = LPCMod_CountNumberOfChangesInSettings(false, NULL);
-    //     uncommittedChanges += generateEEPROMChangeList(false, NULL); //do not generate strings
-    //     if(LPCMod_checkForBootScriptChanges())
-    //     {
-    //         uncommittedChanges += 1;
-    //     }
-
-    //     if(LPCMod_checkForBackupEEPROMChange())
-    //     {
-    //         uncommittedChanges += 1;
-    //     }
-
-    //     if(uncommittedChanges > 0)
-    //     {
-    //         //There are settings that have changed.
-    //         VIDEO_CURSOR_POSY = vmode.height - 30;
-    //         VIDEO_CURSOR_POSX = vmode.width - 480;
-    //         VIDEO_ATTR=0x88c8c8c8;
-    //         printk("Uncommitted changes: %u", uncommittedChanges);
-    //     }
-    // }
-
-    // textMenuLCDPrint(menu, selectedItem);
 }
 
 void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
@@ -272,18 +246,18 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
         {
             temp = 0;
             BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Menu item selected - invoke function pointer.
 
             if (selectedMenuItem->functionPtr!=NULL)
             {
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 selectedMenuItem->functionPtr(selectedMenuItem->functionDataPtr);
             }
             //Clear the screen again    
             BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Did the function that was run set the 'Quit the menu' flag?
             if (breakOutOfMenu)
             {
@@ -302,14 +276,14 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
             }
 
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Menu item selected - invoke function pointer.
             if (selectedMenuItem->functionLeftPtr!=NULL)
             {
                 selectedMenuItem->functionLeftPtr(selectedMenuItem->functionLeftDataPtr);
                 //Clear the screen again    
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 //Did the function that was run set the 'Quit the menu' flag?
                 if (breakOutOfMenu)
                 {
@@ -329,14 +303,14 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
             }
 
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Menu item selected - invoke function pointer.
             if (selectedMenuItem->functionRightPtr!=NULL)
             {
                 selectedMenuItem->functionRightPtr(selectedMenuItem->functionRightDataPtr);
                 //Clear the screen again    
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 //Did the function that was run set the 'Quit the menu' flag?
                 if (breakOutOfMenu)
                 {
@@ -357,14 +331,14 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
             }
 
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Menu item selected - invoke function pointer.
             if (selectedMenuItem->functionRTPtr!=NULL)
             {
                 selectedMenuItem->functionRTPtr(selectedMenuItem->functionRTDataPtr);
                 //Clear the screen again    
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 //Did the function that was run set the 'Quit the menu' flag?
                 if (breakOutOfMenu)
                 {
@@ -385,14 +359,14 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
             }
 
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             //Menu item selected - invoke function pointer.
             if (selectedMenuItem->functionLTPtr!=NULL)
             {
                 selectedMenuItem->functionLTPtr(selectedMenuItem->functionLTDataPtr);
                 //Clear the screen again    
                 BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-                VIDEO_ATTR=0xffffff;
+                VIDEO_ARGB=0xffffff;
                 //Did the function that was run set the 'Quit the menu' flag?
                 if (breakOutOfMenu)
                 {
@@ -408,7 +382,7 @@ void TextMenu(TEXTMENU *menu, TEXTMENUITEM *selectedItem)
                  risefall_xpad_STATE(XPAD_STATE_BACK) == 1)
         {
             BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-            VIDEO_ATTR=0xffffff;
+            VIDEO_ARGB=0xffffff;
             temp = 0;
             bypassConfirmDialog[0] = 0;    //reset for confirmDialog
             return;

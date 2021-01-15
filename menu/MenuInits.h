@@ -11,8 +11,6 @@
 #include "MenuActions.h"
 #include "stdlib.h"
 
-void IconMenuInit(void);
-
 TEXTMENU* ResetMenuInit(void);
 
 TEXTMENU* TextMenuInit(void);

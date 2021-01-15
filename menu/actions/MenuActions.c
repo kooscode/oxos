@@ -88,13 +88,13 @@ void freeTextMenuAllocMem(TEXTMENU* menu)
 void UiHeader(char *title)
 {
     BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-    VIDEO_ATTR=0xffffef37;
+    VIDEO_ARGB=0xffffef37;
     printk("\n\n\2       %s\2\n\n\n", title);
 }
 
 void UIFooter(void)
 {
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n\n           Press Button 'B' or 'Back' to return.");
     while(cromwellLoop())
     {
@@ -103,5 +103,4 @@ void UIFooter(void)
             break;
         }
     }
-    // initialSetLED(LPCmodSettings.OSsettings.LEDColor);
 }

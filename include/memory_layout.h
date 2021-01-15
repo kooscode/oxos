@@ -4,7 +4,7 @@
 /* a retail Xbox has 64 MB of RAM */
 #define RAMSIZE (64 * 1024*1024)
 /* parameters for the kernel have to be here */
-#define KERNEL_SETUP   0x90000
+#define KERNEL_SETUP 0x90000
 /* command line must not be overwritten, place it in unused setup area */
 #define CMD_LINE_LOC (KERNEL_SETUP+0x0800)
 /* place GDT at 0xA0000 */
@@ -22,19 +22,22 @@
 #define MEMORYMANAGERSTART MAX_INITRD_END
 #define MEMORYMANAGEREND   0x02FFFFFF
 
-#define CODE_LOC_START 0x03800000 /* Decompressed cromwell binary get puts at that offset in RAM */
+/* Decompressed cromwell binary get puts at that offset in RAM */
+#define CODE_LOC_START 0x03800000 
 
-#define STACK_TOP CODE_LOC_START /* Stack is going down on x86 */
+ /* Stack is going down on x86 */
+ #define STACK_TOP CODE_LOC_START
 
 #define MAX_KERNEL_SIZE    (KERNEL_PM_CODE_END - KERNEL_PM_CODE)
 #define MEMORYMANAGERSIZE  (MEMORYMANAGEREND - MEMORYMANAGERSTART)
 #define MAX_INITRD_SIZE    (MAX_INITRD_END - INITRD_START)
 
+/* pointer that stores Frame Buffer address */
+#define FB_POINTER 0xFD600800
 /* the size of the framebuffer (defaults to 4 MB) */
 #define FB_SIZE 0x00400000
 /* the start of the framebuffer */
 #define FB_START (0xf0000000 | (RAMSIZE - FB_SIZE))
-
 /* let's reserve 4 MB at the top for the framebuffer */
 #define RAMSIZE_USE (RAMSIZE - FB_SIZE)
 

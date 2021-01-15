@@ -110,7 +110,7 @@ void OnScreenKeyboard(char * string, unsigned char maxLength, unsigned char line
             BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
 
             VIDEO_CURSOR_POSY=56;
-            VIDEO_ATTR=0xffffffff;                        //White characters.
+            VIDEO_ARGB=0xffffffff;                        //White characters.
             if(kbType == IP_KEYPAD || kbType == HEX_KEYPAD)
             {
                 centerScreenPrintk(VIDEO_CURSOR_POSY, "Back=Cancel   Start=Confirm   B=Backspace");
@@ -120,7 +120,7 @@ void OnScreenKeyboard(char * string, unsigned char maxLength, unsigned char line
                 centerScreenPrintk(VIDEO_CURSOR_POSY, "Back=Cancel   Start=Confirm   B=Backspace   X=Space   Y=Shift");
             }
 
-            VIDEO_ATTR=0xffff9f00;                	  //Orangeish
+            VIDEO_ARGB=0xffff9f00;                	  //Orangeish
             VIDEO_CURSOR_POSX=75;
             VIDEO_CURSOR_POSY=50;
             if(kbType == IP_KEYPAD || kbType == HEX_KEYPAD)
@@ -132,7 +132,7 @@ void OnScreenKeyboard(char * string, unsigned char maxLength, unsigned char line
                 printk("\n\n\n\n\2                 %s", string);
             }
 
-            VIDEO_ATTR=0xffffffff;
+            VIDEO_ARGB=0xffffffff;
             if(kbType == IP_KEYPAD)
             {
                 printk("\n\n\n                                  ");
@@ -172,11 +172,11 @@ void OnScreenKeyboard(char * string, unsigned char maxLength, unsigned char line
                 {
                     if(x == cursorposX && y == cursorposY)      //About to draw selected character
                     {
-                        VIDEO_ATTR=0xffffef37;                  //In yellow
+                        VIDEO_ARGB=0xffffef37;                  //In yellow
                     }
                     else
                     {
-                        VIDEO_ATTR=0xffffffff;                  //the rest in white.
+                        VIDEO_ARGB=0xffffffff;                  //the rest in white.
                     }
 
                     if(kbType == IP_KEYPAD)

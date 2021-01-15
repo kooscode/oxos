@@ -30,10 +30,7 @@
 #include "focus.h"
 #include "xcalibur.h"
 #include "string.h"
-// #include "xblast/HardwareIdentifier.h"
-// #include "xblast/settings/xblastSettingsDefs.h"
 #include "lib/time/timeManagement.h"
-// #include "include/BootLogger.h"
 
 void DetectVideoEncoder(void)
 {
@@ -114,18 +111,12 @@ void BootVgaInitializationKernelNG(CURRENT_VIDEO_MODE_DETAILS * pvmode)
     xbox_video_mode encoder_mode;
     
     tv_encoding = DetectVideoStd();
-    // BootLogger(DEBUG_VIDEO_DRIVER, DBG_LVL_INFO, "Detected Video Standard:%s", tv_encoding == TV_ENC_NTSC ? "NTSC" : "PAL");
-
     DetectVideoEncoder();
-    // BootLogger(DEBUG_VIDEO_DRIVER, DBG_LVL_INFO, "Detected Video Encoder: %s", VideoEncoderName());
-
 
     // Dump to global variable
     VIDEO_AV_MODE=I2CTransmitByteGetReturn(0x10, 0x04);
     av_type = DetectAvType();
     gpu.av_type = av_type;
-
-    // BootLogger(DEBUG_VIDEO_DRIVER, DBG_LVL_INFO, "Detected Video Cable: %s", AvCableName());
 
     memset((void *)pvmode,0,sizeof(CURRENT_VIDEO_MODE_DETAILS));
 
@@ -146,7 +137,7 @@ void BootVgaInitializationKernelNG(CURRENT_VIDEO_MODE_DETAILS * pvmode)
 
     pvmode->m_dwFrameBufferStart = FB_START;
 
-    (*(unsigned int*)0xFD600800) = (FB_START & 0x0fffffff);
+    (*(unsigned int*)FB_POINTER) = (FB_START & 0x0fffffff);
 
     pvmode->m_bAvPack=I2CTransmitByteGetReturn(0x10, 0x04);
     pvmode->m_pbBaseAddressVideo=(unsigned char *)0xfd000000;

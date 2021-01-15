@@ -767,17 +767,6 @@ initaftermemcpy:
 	mov $0x400000,%edi
 	rep stosl
    	
-   	//Clear decompressed kernel space.
-   	// memset((void*)0x03800000,0x0,0x30000)
-#if 0
-   	#include "memory_layout.h"
-	movl $0x30000, %ecx
-	movl $CODE_LOC_START, %edi
-	rep stosl
-#endif
-	// We'll do that one PIC challenge has been resolved.
-	// Fix issue for 1.0 strict timing.
-
 	lidt tableIdtDescriptor
 	lgdt tableGdtDescriptor
 	// set up selectors for everything

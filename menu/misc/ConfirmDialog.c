@@ -31,9 +31,9 @@ bool ConfirmDialog(const char * string, bool critical)
     }
 
     BootVideoClearScreen(&jpegBackdrop, 0, 0xffff);
-    VIDEO_ATTR=0xffff1515;                        //Red characters.
+    VIDEO_ARGB=0xffff1515;                        //Red characters.
     yPos = centerScreenPrintk(yPos, "\2%s\n", string);
-    VIDEO_ATTR=0xffffff;                //Back to white
+    VIDEO_ARGB=0xffffff;                //Back to white
     yPos = centerScreenPrintk(yPos, "Hold RT, LT, Start and White to confirm\n");
     centerScreenPrintk(yPos, "Press Back to cancel");
     

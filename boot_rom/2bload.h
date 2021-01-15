@@ -56,26 +56,16 @@ static __inline unsigned short IoInputWord(unsigned short wAds) {
   return _v;
 }
 
-// boot process
-int BootPerformPicChallengeResponseAction(void);
 
-// LED control (see associated enum above)
-//int I2cSetFrontpanelLed(unsigned char b);
-
-////////// BootResetActions.c
-
-void BootStartBiosLoader(void);
-
-///////// BootPerformPicChallengeResponseAction.c
-
-int I2CTransmitWord(unsigned char bPicAddressI2cFormat, unsigned short wDataToWrite);
-int I2CTransmitByteGetReturn(unsigned char bPicAddressI2cFormat, unsigned char bDataToWrite);
-
+////////// 2bBootLibrary.c
 void *memcpy (void *__restrict __dest, const void *__restrict __src, size_t __n);
 void *memset (void *__s, int __c, size_t __n);
 int memcmp(const void *pb, const void *pb1, size_t n);
 
-unsigned char *BufferIN;
-int BufferINlen;
-unsigned char *BufferOUT;
-int BufferOUTPos;
+////////// 2bBootStartBios.c
+  void BootStartBiosLoader(void);
+
+///////// BootPerformPicChallengeResponseAction.c
+  int BootPerformPicChallengeResponseAction(void);
+  int I2CTransmitWord(unsigned char bPicAddressI2cFormat, unsigned short wDataToWrite);
+  int I2CTransmitByteGetReturn(unsigned char bPicAddressI2cFormat, unsigned char bDataToWrite);

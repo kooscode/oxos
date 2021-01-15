@@ -10,7 +10,7 @@
 
 unsigned char cromwellLoop(void)
 {
-    // START NETWORK DEAMONS HERE...
+    // process network and other related backends here.
 
     callbackTimer_execute();
     

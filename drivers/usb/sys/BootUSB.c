@@ -52,10 +52,6 @@ void BootStartUSB(void)
     hub_thread_handler=thread_handler;
     usb_hcd_pci_probe(&xx_ohci_dev, module_table_pci_ids);    
     XPADInit();
-    
-    //XRemoteInit();
-    
-    //UsbKeyBoardInit();
 
     for(n=0;n<30;n++) {
         USBGetEvents();

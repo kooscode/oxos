@@ -7,7 +7,7 @@ INCLUDE = -I$(TOPDIR)/grub -I$(TOPDIR)/include -I$(TOPDIR)/ -I./ -I$(TOPDIR)/fs/
 	-I$(TOPDIR)/drivers/video -I$(TOPDIR)/drivers/ide -I$(TOPDIR)/lib/misc \
 	-I$(TOPDIR)/boot_xbe/ -I$(TOPDIR)/fs/grub -I$(TOPDIR)/lib/cromwell/font \
 	-I$(TOPDIR)/startuploader -I$(TOPDIR)/drivers/cpu -I$(TOPDIR)/menu \
-  -I$(TOPDIR)/menu/actions -I$(TOPDIR)/menu/textmenu -I$(TOPDIR)/menu/iconmenu
+  -I$(TOPDIR)/menu/actions -I$(TOPDIR)/menu/textmenu
 
 CROM_CFLAGS += $(INCLUDE) -fno-zero-initialized-in-bss
 CFLAGS = -Os -march=pentium -m32 -Werror -Wstrict-prototypes -Wreturn-type -pipe -fomit-frame-pointer -DIPv4 -fpack-struct -ffreestanding
@@ -24,8 +24,8 @@ LDFLAGS-ROMBOOT = -s -S -T $(TOPDIR)/boot_rom/bootrom.ld
 LDFLAGS-VMLBOOT = -s -S -T $(TOPDIR)/boot_vml/vml_start.ld
 
 OBJECTS-ROMBOOT = $(TOPDIR)/obj/2bBootStartup.o
-OBJECTS-ROMBOOT += $(TOPDIR)/obj/2bPicResponseAction.o
 OBJECTS-ROMBOOT += $(TOPDIR)/obj/2bBootStartBios.o
+OBJECTS-ROMBOOT += $(TOPDIR)/obj/2bPicResponseAction.o
 OBJECTS-ROMBOOT += $(TOPDIR)/obj/sha1.o
 OBJECTS-ROMBOOT += $(TOPDIR)/obj/2bBootLibrary.o
 OBJECTS-ROMBOOT += $(TOPDIR)/obj/misc.o
@@ -52,15 +52,12 @@ OBJECTS-CROM += $(TOPDIR)/obj/vsprintf.o
 OBJECTS-CROM += $(TOPDIR)/obj/timeManagement.o
 OBJECTS-CROM += $(TOPDIR)/obj/Gentoox.o
 OBJECTS-CROM += $(TOPDIR)/obj/LED.o
-OBJECTS-CROM += $(TOPDIR)/obj/IconMenu.o
-OBJECTS-CROM += $(TOPDIR)/obj/IconMenuInit.o
 OBJECTS-CROM += $(TOPDIR)/obj/TextMenu.o
 OBJECTS-CROM += $(TOPDIR)/obj/TextMenuInit.o
 OBJECTS-CROM += $(TOPDIR)/obj/ResetMenuInit.o
 OBJECTS-CROM += $(TOPDIR)/obj/MenuActions.o
 OBJECTS-CROM += $(TOPDIR)/obj/ResetMenuActions.o
 OBJECTS-CROM += $(TOPDIR)/obj/OnScreenKeyboard.o
-OBJECTS-CROM += $(TOPDIR)/obj/LoadLinux.o
 OBJECTS-CROM += $(TOPDIR)/obj/setup.o
 OBJECTS-CROM += $(TOPDIR)/obj/iso9660.o
 OBJECTS-CROM += $(TOPDIR)/obj/BootLibrary.o

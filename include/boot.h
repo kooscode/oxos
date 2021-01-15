@@ -59,7 +59,7 @@ unsigned int video_encoder;
 
 volatile unsigned int VIDEO_CURSOR_POSX;
 volatile unsigned int VIDEO_CURSOR_POSY;
-volatile unsigned int VIDEO_ATTR;
+volatile unsigned int VIDEO_ARGB;
 volatile unsigned int VIDEO_LUMASCALING;
 volatile unsigned int VIDEO_RSCALING;
 volatile unsigned int VIDEO_BSCALING;
@@ -129,21 +129,6 @@ typedef struct tsHarddiskInfo {  // this is the retained knowledge about an IDE 
     bool m_fSMARTEnabled;
     unsigned char m_SMARTFeaturesSupported;
 } tsHarddiskInfo;
-
-/////////////////////////////////
-// LED-flashing codes
-// or these together as argument to I2cSetFrontpanelLed
-
-enum {
-    I2C_LED_RED0 = 0x80,
-    I2C_LED_RED1 = 0x40,
-    I2C_LED_RED2 = 0x20,
-    I2C_LED_RED3 = 0x10,
-    I2C_LED_GREEN0 = 0x08,
-    I2C_LED_GREEN1 = 0x04,
-    I2C_LED_GREEN2 = 0x02,
-    I2C_LED_GREEN3 = 0x01
-};
 
 ///////////////////////////////
 /* BIOS-wide error codes        all have b31 set  */
@@ -311,9 +296,5 @@ void HMAC_SHA1( unsigned char *result,
                 unsigned char *text2, int text2_length );
 
 void setLED(char *pattern);
-
-//Global for convenience.
-unsigned char *videosavepage;
-//void * gobalGenericPtr;
 
 #endif // _Boot_H_

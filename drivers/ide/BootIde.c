@@ -434,7 +434,7 @@ int BootIdeDriveInit(unsigned uIoBase, int nIndexDrive)
     tsaHarddiskInfo[nIndexDrive].m_wAtaRevisionSupported = drive_info[88];
 
 
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
         /* 48-bit LBA - we should check bits 83 AND 86 to check both
      * supported AND enabled  - however, some drives do not set
      * Bit 83. Bit 86 seems to be the accepted way to detect whether
@@ -470,9 +470,9 @@ int BootIdeDriveInit(unsigned uIoBase, int nIndexDrive)
         tsaHarddiskInfo[nIndexDrive].m_fAtapi=true;
 #ifndef SILENT_MODE
         printk("          hd%c: ", nIndexDrive+'a');
-        VIDEO_ATTR=0xffc8c800;
+        VIDEO_ARGB=0xffc8c800;
 
-        printk("          %s %s %s - ATAPI",tsaHarddiskInfo[nIndexDrive].m_szIdentityModelNumber,
+        printk("          %s %s %s - ATAPI\n",tsaHarddiskInfo[nIndexDrive].m_szIdentityModelNumber,
             tsaHarddiskInfo[nIndexDrive].m_szIdentityModelNumber,
             tsaHarddiskInfo[nIndexDrive].m_szSerial,
             tsaHarddiskInfo[nIndexDrive].m_szFirmware);
@@ -507,7 +507,7 @@ int BootIdeDriveInit(unsigned uIoBase, int nIndexDrive)
         
 #ifndef SILENT_MODE
         printk("          hd%c: ", nIndexDrive+'a');
-        VIDEO_ATTR=0xffc8c800;
+        VIDEO_ARGB=0xffc8c800;
 
         printk("          %s %s %u.%uGB - HDD\n",
             tsaHarddiskInfo[nIndexDrive].m_szIdentityModelNumber,
@@ -964,13 +964,15 @@ int BootIdeInit(void)
         }
     }
 
-    if(tsaHarddiskInfo[0].m_bCableConductors==40) 
-    {
+
 #ifndef SILENT_MODE
-        printk("         UDMA2\n");
-        BootLogger(DEBUG_IDE_DRIVER, DBG_LVL_INFO, "IDE cable limits UDMA support to UDMA2.");
+        VIDEO_ARGB=0xffffffff;
+        printk("          Cable: ");
+        VIDEO_ARGB=0xffc8c800;
+        printk("      %u Conductor\n", tsaHarddiskInfo[0].m_bCableConductors);
 #endif
-    } else 
+
+    if(tsaHarddiskInfo[0].m_bCableConductors != 40) 
     {
         int nAta=0;
         if(tsaHarddiskInfo[0].m_wAtaRevisionSupported&2) nAta=1;
@@ -978,9 +980,6 @@ int BootIdeInit(void)
         if(tsaHarddiskInfo[0].m_wAtaRevisionSupported&8) nAta=3;
         if(tsaHarddiskInfo[0].m_wAtaRevisionSupported&16) nAta=4;
         if(tsaHarddiskInfo[0].m_wAtaRevisionSupported&32) nAta=5;
-#ifndef SILENT_MODE
-        printk("          UDMA%d\n", nAta);
-#endif
         BootLogger(DEBUG_IDE_DRIVER, DBG_LVL_INFO, "UDMA%u supported by Master drive", nAta);
     }
     return 0;

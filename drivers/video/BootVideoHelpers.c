@@ -253,10 +253,10 @@ bool BootVideoInitJPEGBackdropBuffer(JPEG * pJpeg)
     {
 
   // TODO = Move err display to somwhere common
-        int curcolor =  VIDEO_ATTR;
-        VIDEO_ATTR = 0xffff0000;
+        int curcolor =  VIDEO_ARGB;
+        VIDEO_ARGB = 0xffff0000;
         printk("Error decode picture\n");
-        VIDEO_ATTR = curcolor;
+        VIDEO_ARGB = curcolor;
         return false;
     }
 
@@ -377,7 +377,7 @@ void BootVideoChunkedPrint(const char * szBuffer)
         {
             BootVideoOverlayString(
                 (unsigned int *)((FB_START) + VIDEO_CURSOR_POSY * (vmode.width*4) + VIDEO_CURSOR_POSX),
-                vmode.width*4, VIDEO_ATTR, &szBuffer[nDone]
+                vmode.width*4, VIDEO_ARGB, &szBuffer[nDone]
             );
             nDone=n+1;
             VIDEO_CURSOR_POSY += (16 << fDouble);
@@ -390,7 +390,7 @@ void BootVideoChunkedPrint(const char * szBuffer)
     {
         VIDEO_CURSOR_POSX += BootVideoOverlayString(
                                 (unsigned int *)((FB_START) + VIDEO_CURSOR_POSY * (vmode.width*4) + VIDEO_CURSOR_POSX),
-                                vmode.width*4, VIDEO_ATTR, &szBuffer[nDone]) << 2;
+                                vmode.width*4, VIDEO_ARGB, &szBuffer[nDone]) << 2;
 
         if (VIDEO_CURSOR_POSX > (vmode.width - vmode.xmargin) << 2)
         {

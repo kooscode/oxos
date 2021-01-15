@@ -51,17 +51,17 @@ void BootEepromCompareAndWriteEEPROM(EEPROMDATA * realeeprom)
 
 void BootEepromPrintInfo()
 {
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("\n           MAC : ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     printk("%02X%02X%02X%02X%02X%02X  ",
         eeprom.MACAddress[0], eeprom.MACAddress[1], eeprom.MACAddress[2],
         eeprom.MACAddress[3], eeprom.MACAddress[4], eeprom.MACAddress[5]
     );
 
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("Vid: ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
 
     switch(*((EEPROM_VideoStandard *)&eeprom.VideoStandard))
     {
@@ -82,9 +82,9 @@ void BootEepromPrintInfo()
             break;
     }
 
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
     printk("  Serial: ");
-    VIDEO_ATTR=0xffc8c800;
+    VIDEO_ARGB=0xffc8c800;
     
     {
         char sz[13];
@@ -94,7 +94,7 @@ void BootEepromPrintInfo()
     }
 
     printk("\n");
-    VIDEO_ATTR=0xffc8c8c8;
+    VIDEO_ARGB=0xffc8c8c8;
 }
 
 void BootEepromWriteEntireEEPROM(void)
