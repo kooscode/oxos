@@ -81,10 +81,34 @@ XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG P
     case AV_QUERY_ENCODER_TYPE:
         *Result = AvpEncoderAddress == 0xD4;
         return;
+    case 0x0D: // the current display mode word (titles' D3D derives its frame layout from it)
+        *Result = AvpCurrentMode;
+        return;
+    case 0x05: { // encoder status bits (none for HDTV modes)
+        ULONG v = 0;
+        if (!(AvpCurrentMode & 0xC0000000) && AvpEncoderAddress == 0x8A &&
+            NT_SUCCESS(HalReadSMBusValue(0x8A, 0x02, FALSE, &v)))
+            v = (v & 0x0C) >> 2;
+        else
+            v = 0;
+        *Result = v;
+        return;
+    }
+    case 0x0F: { // Conexant: the field currently being sent (register 6, bit 0)
+        ULONG v = 0;
+        if (AvpEncoderAddress != 0x8A || !NT_SUCCESS(HalReadSMBusValue(0x8A, 0x06, FALSE, &v)))
+            v = 0;
+        *Result = v & 1;
+        return;
+    }
+    case AV_QUERY_MODE_TABLE_VERSION:
+        *Result = 0;
+        return;
+    case 0x13: // mode flag 0x10000000 (GPIO 0x80D6 bit 0 on the next mode set)
+        AvpCurrentMode = (AvpCurrentMode & ~0x10000000u) | (Param ? 0x10000000u : 0);
+        return;
     default:
-        // Encoder options (macrovision, flicker filter, widescreen, ...) are accepted without effect for now.
-        if (Result && (Option == AV_QUERY_MODE_TABLE_VERSION || Option == 5 || Option == 0xF))
-            *Result = 0;
+        // Encoder writes (macrovision, flicker filter, widescreen, ...) need the encoder tables (spec/17): no effect yet.
         return;
     }
 }
@@ -99,6 +123,8 @@ static const UCHAR AvpVgaTimings[][2] = {
     {0x00, 0x5F}, {0x01, 0x4F}, {0x02, 0x50}, {0x03, 0x82}, {0x04, 0x54}, {0x05, 0x80}, {0x06, 0x0B},
     {0x07, 0x3E}, {0x08, 0x00}, {0x09, 0x40}, {0x10, 0xEA}, {0x11, 0x0C}, {0x12, 0xDF}, {0x14, 0x00},
     {0x15, 0xE7}, {0x16, 0x04}, {0x17, 0xE3},
+    {0x18, 0xFF}, // line compare: never
+    {0x39, 0xFF}, // NV interlace half-line: 0xFF = progressive (xemu shows anything else as half-height fields)
 };
 
 // Standard VGA graphics-mode state (spec/17 §5 step 9): sequencer, graphics controller, attribute controller with an
