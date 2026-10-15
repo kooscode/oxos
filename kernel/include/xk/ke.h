@@ -463,8 +463,8 @@ void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSiz
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
 void KeTerminateThread() __attribute__((noreturn));
 
-// Early memory until the memory manager exists (milestone 2c).
-PVOID MmEarlyAllocate(SIZE_T Size, SIZE_T Alignment);
+// Terminated threads whose kernel stacks are freed after the switch away from them.
+void KiReapDeadThreads();
 XBAPI void KiDispatchHardwareInterrupt(ULONG irq);
 XBAPI void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 

@@ -75,6 +75,9 @@ def run_checks(mon):
         "KiTestUserApcRan", "KiTestUserApcStatus", "KiTestAlertStatus", "KiTestCriticalRegionOk",
         "KiTestSuspendOk", "KiTestQueueProcessed", "KiTestQueueTimeout", "KiTestDeviceQueueOk",
         "KiTestBoostPriority", "KiTestApcSuiteDone")}
+    m2c = {name: mon.read(name) for name in (
+        "KiTestMmContiguousOk", "KiTestMmAlignedOk", "KiTestMmReuseOk", "KiTestMmSystemOk", "KiTestMmIoSpaceOk",
+        "KiTestMmPoolOk", "KiTestMmLayoutOk", "KiTestMmThreadChurnPages", "KiTestMmContiguousVa", "KiTestMmDone")}
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
@@ -82,6 +85,7 @@ def run_checks(mon):
     print("  " + ", ".join(f"{k}={v}" for k, v in values.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Status") or k.endswith("Timeout") else f"{k}={v}" for k, v in m2bp.items()))
+    print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Va") else f"{k}={v}" for k, v in m2c.items()))
     print(f"  spinner rates {spin_a:.0f}/s and {spin_b:.0f}/s, context switches {switches}")
     return {
         "M1": {
@@ -129,6 +133,17 @@ def run_checks(mon):
             "device queue semantics": m2bp["KiTestDeviceQueueOk"] == 1,
             "wake-up boost 8 + 2 = 10": m2bp["KiTestBoostPriority"] == 10,
             "APC suite finished": m2bp["KiTestApcSuiteDone"] == 1,
+        },
+        "M2c": {
+            "contiguous: VA=0x80000000|PA, top-down, size, data": m2c["KiTestMmContiguousOk"] == 1,
+            "contiguous Ex: <16 MB, 64 KB aligned, write-combine": m2c["KiTestMmAlignedOk"] == 1,
+            "free + realloc reuses block, pages restored": m2c["KiTestMmReuseOk"] == 1,
+            "system memory mapped/unmapped": m2c["KiTestMmSystemOk"] == 1,
+            "MmMapIoSpace alias + MMIO pass-through": m2c["KiTestMmIoSpaceOk"] == 1,
+            "pool: 500 blocks + large block": m2c["KiTestMmPoolOk"] == 1,
+            "no user mappings, RO text, stack guard page": m2c["KiTestMmLayoutOk"] == 1,
+            "50 thread lifetimes reclaim stacks (<= 8 pages kept)": m2c["KiTestMmThreadChurnPages"] <= 8,
+            "memory suite finished": m2c["KiTestMmDone"] == 1,
         },
     }
 

@@ -3,6 +3,7 @@
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 
 #define Prcb (KiPcr.PrcbData)
 
@@ -116,7 +117,9 @@ static void KiSwapToThread(PKTHREAD Old, PKTHREAD Next) {
     Prcb.KeContextSwitches++;
     KiNpxPrepareSwitch(Next);
     KiSwapContext(Old, Next);
-    // Back on Old's stack: a kernel APC queued while it was switched out is delivered when its IRQL drops.
+    // Back on Old's stack. Free stacks of threads that terminated (we're no longer running on them).
+    KiReapDeadThreads();
+    // A kernel APC queued while it was switched out is delivered when its IRQL drops.
     if (Old->ApcState.KernelApcPending)
         HalRequestSoftwareInterrupt(APC_LEVEL);
 }
@@ -265,5 +268,5 @@ void KiInitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit) {
     Prcb.NpxThread = nullptr;
     KiInitializeNpx();
 
-    Prcb.DpcStack = (UCHAR *)MmEarlyAllocate(0x3000, 16) + 0x3000;
+    Prcb.DpcStack = MmCreateKernelStack(0x3000, FALSE);
 }

@@ -2,6 +2,7 @@
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 #include <xk/rtl.h>
 
 #define Prcb (KiPcr.PrcbData)
@@ -105,12 +106,17 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
     StackSize = (StackSize + 0xFFF) & ~0xFFFu;
     if (StackSize < 0x3000)
         StackSize = 0x3000;
-    auto thread = (PKTHREAD)MmEarlyAllocate(0x140, 16); // ETHREAD-sized
-    auto stack = (UCHAR *)MmEarlyAllocate(StackSize, 16);
-    if (!thread || !stack)
+    auto thread = (PKTHREAD)ExAllocatePoolWithTag(0x140, 'erhT'); // ETHREAD-sized
+    auto stackTop = (UCHAR *)MmCreateKernelStack(StackSize, FALSE);
+    if (!thread || !stackTop) {
+        if (thread)
+            ExFreePool(thread);
+        if (stackTop)
+            MmDeleteKernelStack(stackTop, stackTop - StackSize);
         return nullptr;
+    }
     RtlZeroMemory(thread, 0x140);
-    KeInitializeThread(thread, stack + StackSize, StackSize, 0, KiSystemThreadRoutine, (PVOID)StartRoutine, Context,
+    KeInitializeThread(thread, stackTop, StackSize, 0, KiSystemThreadRoutine, (PVOID)StartRoutine, Context,
                        &KiSystemProcess);
     if (Priority >= 0)
         thread->Priority = thread->BasePriority = (SCHAR)Priority;
@@ -121,8 +127,19 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
     return thread;
 }
 
+// Dead threads keep their object (joiners may still look at it; freed with Ob reference counting in
+// milestone 3) but their stacks are released by the next thread to run.
+static LIST_ENTRY KiDeadThreadListHead = {&KiDeadThreadListHead, &KiDeadThreadListHead};
+
+void KiReapDeadThreads() {
+    while (!IsListEmpty(&KiDeadThreadListHead)) {
+        PKTHREAD t = CONTAINING_RECORD(RemoveHeadList(&KiDeadThreadListHead), KTHREAD, ThreadListEntry);
+        MmDeleteKernelStack(t->StackBase, t->StackLimit);
+        t->StackBase = t->StackLimit = t->KernelStack = nullptr;
+    }
+}
+
 // Terminate the current thread: signal its object, wake joiners, switch away for good.
-// The stack and object are not reclaimed yet (needs the memory manager).
 void KeTerminateThread() {
     KeRaiseIrqlToDpcLevel();
     PKTHREAD t = Prcb.CurrentThread;
@@ -134,6 +151,7 @@ void KeTerminateThread() {
     RemoveEntryList(&t->ThreadListEntry);
     t->ApcState.Process->StackCount--;
     KiNpxRelease(t);
+    InsertTailList(&KiDeadThreadListHead, &t->ThreadListEntry);
     KiSwapThread();
     KeBugCheck(0x12345678); // a terminated thread was resumed
     for (;;) {

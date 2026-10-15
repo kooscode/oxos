@@ -2,6 +2,7 @@
 // over the emulator monitor; nothing here is part of the kernel ABI.
 #include <xk/hal.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 
 volatile ULONG KiTestDpcCount;        // expect 1
 volatile ULONG KiTestTimerTicks;      // expect ~100/s (10 ms periodic timer)
@@ -344,7 +345,111 @@ static void NTAPI ApcControllerThread(PVOID) {
     KiTestApcSuiteDone = 1;
 }
 
+// ---------------------------------------------------------------- milestone 2c: memory manager
+
+volatile ULONG KiTestMmContiguousOk;   // VA = 0x80000000|PA, top-down, size query, data
+volatile ULONG KiTestMmAlignedOk;      // Ex: below 16 MB, 64 KB aligned, write-combine protect
+volatile ULONG KiTestMmReuseOk;        // free + reallocate returns the same block, page count restored
+volatile ULONG KiTestMmSystemOk;       // system memory in the PTE range, unmapped after free
+volatile ULONG KiTestMmIoSpaceOk;      // MmMapIoSpace alias + MMIO pass-through
+volatile ULONG KiTestMmPoolOk;         // 500 small blocks + a large block
+volatile ULONG KiTestMmLayoutOk;       // no user mappings, read-only kernel text, stack guard page
+volatile ULONG KiTestMmThreadChurnPages; // pages lost after 50 thread lifetimes (pool growth only)
+volatile ULONG KiTestMmContiguousVa;
+volatile ULONG KiTestMmDone;
+
+static void NTAPI ShortThread(PVOID) {}
+
+static void NTAPI MmControllerThread(PVOID) {
+    // Contiguous memory.
+    auto a = (ULONG *)MmAllocateContiguousMemory(0x3000);
+    KiTestMmContiguousVa = (ULONG)a;
+    bool ok = a && ((ULONG)a & 0xFFF) == 0 && (ULONG)a >= 0x83000000 &&
+              MmGetPhysicalAddress(a) == ((ULONG)a & 0x7FFFFFFF) && MmQueryAllocationSize(a) == 0x3000;
+    for (ULONG i = 0; ok && i < 0x3000 / 4; i++)
+        a[i] = i * 2654435761u;
+    for (ULONG i = 0; ok && i < 0x3000 / 4; i++)
+        ok = a[i] == i * 2654435761u;
+    KiTestMmContiguousOk = ok;
+
+    auto b = MmAllocateContiguousMemoryEx(0x1000, 0, 0x00FFFFFF, 0x10000, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    PHYSICAL_ADDRESS pb = MmGetPhysicalAddress(b);
+    KiTestMmAlignedOk = b && pb < 0x01000000 && (pb & 0xFFFF) == 0 &&
+                        MmQueryAddressProtect(b) == (PAGE_READWRITE | PAGE_WRITECOMBINE);
+    MmFreeContiguousMemory(b);
+
+    ULONG before = MmAvailablePages;
+    MmFreeContiguousMemory(a);
+    ULONG afterFree = MmAvailablePages;
+    auto a2 = MmAllocateContiguousMemory(0x3000);
+    KiTestMmReuseOk = a2 == a && afterFree == before + 3;
+
+    // System memory.
+    auto s = (ULONG *)MmAllocateSystemMemory(0x5000, PAGE_READWRITE);
+    ok = s && (ULONG)s >= MM_SYSTEM_PTE_BASE && (ULONG)s < MM_SYSTEM_PTE_END && MmQueryAllocationSize(s) == 0x5000 &&
+         MmGetPhysicalAddress(s) != 0;
+    for (ULONG i = 0; ok && i < 0x5000 / 4; i++)
+        s[i] = ~i;
+    for (ULONG i = 0; ok && i < 0x5000 / 4; i++)
+        ok = s[i] == ~i;
+    MmFreeSystemMemory(s, 0x5000);
+    KiTestMmSystemOk = ok && !MmIsAddressValid(s);
+
+    // I/O space: alias a contiguous page through system PTEs; MMIO pass-through.
+    auto alias = (volatile ULONG *)MmMapIoSpace(MmGetPhysicalAddress(a2), 0x1000, PAGE_READWRITE);
+    ok = alias && (ULONG)alias >= MM_SYSTEM_PTE_BASE;
+    if (ok) {
+        alias[7] = 0x5A5AA5A5;
+        ok = ((volatile ULONG *)a2)[7] == 0x5A5AA5A5;
+        MmUnmapIoSpace((PVOID)alias, 0x1000);
+        ok &= !MmIsAddressValid((PVOID)alias);
+    }
+    KiTestMmIoSpaceOk = ok && MmMapIoSpace(0xFD000000, 0x1000, PAGE_READWRITE | PAGE_NOCACHE) == (PVOID)0xFD000000;
+    MmFreeContiguousMemory(a2);
+
+    // Pool.
+    static UCHAR *blocks[500];
+    ok = true;
+    for (ULONG i = 0; i < 500; i++) {
+        ULONG size = (i * 37) % 4000 + 1;
+        blocks[i] = (UCHAR *)ExAllocatePoolWithTag(size, 'tseT');
+        ULONG q = blocks[i] ? ExQueryPoolBlockSize(blocks[i]) : 0;
+        ok &= blocks[i] && q >= size && (q + 8) % 32 == 0 && ((ULONG)blocks[i] & 7) == 0;
+        if (blocks[i])
+            for (ULONG j = 0; j < size; j++)
+                blocks[i][j] = (UCHAR)i;
+    }
+    for (ULONG i = 0; ok && i < 500; i++) {
+        ULONG size = (i * 37) % 4000 + 1;
+        for (ULONG j = 0; j < size && ok; j++)
+            ok = blocks[i][j] == (UCHAR)i;
+    }
+    for (auto p : blocks)
+        if (p)
+            ExFreePool(p);
+    auto big = ExAllocatePoolWithTag(0x2000, 'giB ');
+    ok &= big && ((ULONG)big & 0xFFF) == 0 && ExQueryPoolBlockSize(big) == 0x2000;
+    ExFreePool(big);
+    KiTestMmPoolOk = ok;
+
+    // Layout: no user mappings, read-only kernel code, guard page under our stack.
+    PKTHREAD self = KeGetCurrentThread();
+    KiTestMmLayoutOk = !MmIsAddressValid((PVOID)0x10000) && MmQueryAddressProtect((PVOID)&KiRunBootSelfTests) == PAGE_READONLY &&
+                       !MmIsAddressValid((UCHAR *)self->StackLimit - 1) && MmIsAddressValid(self->StackLimit);
+
+    // Thread churn: stacks come back (thread objects are kept until Ob reference counting exists).
+    ULONG baseline = MmAvailablePages;
+    for (int i = 0; i < 50; i++) {
+        PKTHREAD t = KiCreateSystemThread(ShortThread, nullptr, 0, 8);
+        KeWaitForSingleObject(t, Executive, KernelMode, FALSE, nullptr);
+    }
+    Sleep(5);
+    KiTestMmThreadChurnPages = baseline - MmAvailablePages;
+    KiTestMmDone = 1;
+}
+
 static void KiStartThreadSelfTests() {
+    KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
     KeInitializeEvent(&PingEventA, SynchronizationEvent, TRUE);
     KeInitializeEvent(&PingEventB, SynchronizationEvent, FALSE);
