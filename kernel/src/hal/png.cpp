@@ -1,5 +1,5 @@
-// PNG decoder for the boot splash (spec/17 §7): 8-bit RGB/RGBA, non-interlaced, one IDAT chunk (tools/mkbios.py
-// writes exactly that). Inflate follows RFC 1951 with canonical Huffman decoding one bit at a time: the splash is
+// PNG decoder for the boot splash (spec/17 §7): 8-bit palette/RGB/RGBA, non-interlaced, one IDAT chunk
+// (tools/mkbios.py writes a 256-colour palette image). Inflate follows RFC 1951 with canonical Huffman decoding one bit at a time: the splash is
 // decoded once per cold boot, so table speed-ups are not worth the code.
 #include <xk/arch.h>
 
@@ -197,8 +197,8 @@ ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, UL
     for (int i = 0; i < 8; i++)
         if (Size < 8 || Png[i] != signature[i])
             return 1;
-    const UCHAR *idat = nullptr;
-    ULONG idatSize = 0, bpp = 0;
+    const UCHAR *idat = nullptr, *palette = nullptr;
+    ULONG idatSize = 0, bpp = 0, colors = 0;
     for (ULONG o = 8; o + 12 <= Size;) {
         ULONG n = BigEndian32(Png + o);
         const UCHAR *type = Png + o + 4, *data = Png + o + 8;
@@ -206,9 +206,11 @@ ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, UL
             return 2;
         if (type[0] == 'I' && type[1] == 'H' && type[2] == 'D' && type[3] == 'R') {
             if (n < 13 || BigEndian32(data) != Width || BigEndian32(data + 4) != Height || data[8] != 8 ||
-                (data[9] != 2 && data[9] != 6) || data[10] || data[11] || data[12])
+                (data[9] != 2 && data[9] != 3 && data[9] != 6) || data[10] || data[11] || data[12])
                 return 3;
-            bpp = data[9] == 2 ? 3 : 4;
+            bpp = data[9] == 2 ? 3 : data[9] == 3 ? 1 : 4;
+        } else if (type[0] == 'P' && type[1] == 'L' && type[2] == 'T' && type[3] == 'E') {
+            palette = data, colors = n / 3;
         } else if (type[0] == 'I' && type[1] == 'D' && type[2] == 'A' && type[3] == 'T') {
             if (idat)
                 return 4; // one IDAT only
@@ -218,7 +220,7 @@ ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, UL
         }
         o += 12 + n;
     }
-    if (!bpp || !idat || idatSize < 6)
+    if (!bpp || !idat || idatSize < 6 || (bpp == 1 && !palette))
         return 5;
     // zlib wrapper (RFC 1950): deflate, no preset dictionary, Adler-32 of the output at the end.
     if ((idat[0] & 0x0F) != 8 || (idat[0] << 8 | idat[1]) % 31 || (idat[1] & 0x20))
@@ -257,8 +259,15 @@ ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, UL
             }
             x[i] = (UCHAR)(x[i] + pred);
         }
-        for (ULONG i = 0; i < Width; i++)
-            Pixels[y * Width + i] = (ULONG)x[i * bpp] << 16 | (ULONG)x[i * bpp + 1] << 8 | x[i * bpp + 2];
+        for (ULONG i = 0; i < Width; i++) {
+            const UCHAR *rgb = x + i * bpp;
+            if (bpp == 1) {
+                if (*rgb >= colors)
+                    return 10;
+                rgb = palette + *rgb * 3;
+            }
+            Pixels[y * Width + i] = (ULONG)rgb[0] << 16 | (ULONG)rgb[1] << 8 | rgb[2];
+        }
         prior = x;
     }
     return 0;
