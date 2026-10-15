@@ -234,15 +234,9 @@ bool FatxWildcardMatch(const CHAR *mask, ULONG mlen, const CHAR *name, ULONG nle
     return FatxWildcardMatch(mask + 1, mlen - 1, name + 1, nlen - 1);
 }
 
-struct TIME_FIELDS_ {
-    SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;
-};
-XBAPI void NTAPI RtlTimeToTimeFields(PLARGE_INTEGER Time, TIME_FIELDS_ *TimeFields);
-XBAPI BOOLEAN NTAPI RtlTimeFieldsToTime(TIME_FIELDS_ *TimeFields, PLARGE_INTEGER Time);
-
 // FAT-style stamp: date (high word: day, month, year-2000) and time (low word: seconds/2, minute, hour).
 ULONG FatxTimeToTimestamp(const LARGE_INTEGER *Time) {
-    TIME_FIELDS_ f;
+    TIME_FIELDS f;
     LARGE_INTEGER t = *Time;
     RtlTimeToTimeFields(&t, &f);
     if (f.Year < 2000)
@@ -253,7 +247,7 @@ ULONG FatxTimeToTimestamp(const LARGE_INTEGER *Time) {
 }
 
 void FatxTimestampToTime(ULONG Stamp, PLARGE_INTEGER Time) {
-    TIME_FIELDS_ f = {};
+    TIME_FIELDS f = {};
     f.Year = (SHORT)(2000 + (Stamp >> 25));
     f.Month = (SHORT)((Stamp >> 21) & 15);
     f.Day = (SHORT)((Stamp >> 16) & 31);
@@ -371,10 +365,17 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
 }
 
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
+NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice);
+
+// CD-ROM: UDF first (DVD-video), then XDVDFS (spec/11 §4, spec/04d).
+static NTSTATUS IopMountCdRom(PDEVICE_OBJECT TargetDevice) {
+    NTSTATUS status = UdfMountVolume(TargetDevice);
+    return status == STATUS_UNRECOGNIZED_VOLUME ? XdvdfsMountVolume(TargetDevice) : status;
+}
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice);
 
 void FsInitSystem() {
     IopFileSystems.Disk = FatxMountVolume;
-    IopFileSystems.CdRom = XdvdfsMountVolume;
+    IopFileSystems.CdRom = IopMountCdRom;
     IopFileSystems.Raw = RawMountVolume;
 }

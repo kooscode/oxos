@@ -1,9 +1,7 @@
 // System time <-> calendar fields (100 ns units since 1601-01-01, Gregorian calendar).
-#include <xk/types.h>
+#include <xk/rtl.h>
 
-typedef struct _TIME_FIELDS {
-    SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;
-} TIME_FIELDS, *PTIME_FIELDS;
+
 
 static bool RtlpIsLeap(LONG y) { return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0; }
 static const UCHAR RtlpMonthDays[2][12] = {{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
