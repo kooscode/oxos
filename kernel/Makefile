@@ -95,7 +95,12 @@ test-udf: $(BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
 
+# Interactive: boot the release BIOS in xemu with a copy of the HDD; optional ISO=path/to/game.iso.
+run:
+	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
+	python3 -I $(ROOT)/tools/run.py build-release/bios.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch test-fatal test-udf clean
+.PHONY: all bios test test-dash test-relaunch test-fatal test-udf run clean
