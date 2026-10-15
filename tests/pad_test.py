@@ -113,8 +113,11 @@ def main():
         + (f"hdd_path = '{hdd}'\n" if a.hdd else ""))
     pad = VirtualPad()  # before xemu starts, so it is bound to a controller port at startup
     log = open(os.path.join(work, "xemu.log"), "w")
+    # SDL ignores gamepads while the xemu window is not focused unless told otherwise: without this, the test
+    # fails whenever focus moves elsewhere (e.g. back to the terminal).
+    env = dict(os.environ, SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="1")
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
-                            stdout=log, stderr=subprocess.STDOUT)
+                            stdout=log, stderr=subprocess.STDOUT, env=env)
     ok = False
     try:
         for _ in range(100):
