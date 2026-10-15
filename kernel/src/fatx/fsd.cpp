@@ -869,7 +869,13 @@ static NTSTATUS NTAPI FatxFsdFlushOrDeviceControl(PDEVICE_OBJECT DeviceObject, P
     return IofCallDriver(FatxVolume(DeviceObject)->TargetDevice, Irp);
 }
 
-static NTSTATUS NTAPI FatxFsdFileSystemControl(PDEVICE_OBJECT, PIRP Irp) {
+static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject);
+
+// FSCTL_DISMOUNT_VOLUME (used by the utility-drive format: XAPI rewrites the FATX metadata through the volume handle,
+// then dismounts so the next open mounts the new file system). The reference also accepts 0x9411C / 0x98120.
+static NTSTATUS NTAPI FatxFsdFileSystemControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    if (IoGetCurrentIrpStackLocation(Irp)->Parameters.FileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
+        return FatxComplete(Irp, FatxDismountVolume(DeviceObject));
     return FatxComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
 }
 

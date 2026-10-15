@@ -509,7 +509,7 @@ DRIVER_OBJECT XdvdfsDriverObject = {
     XdvdfsDismountVolume,
     {XdvdfsFsdCreate, XdvdfsFsdClose, XdvdfsFsdRead, IoInvalidDeviceRequest, XdvdfsFsdQueryInformation,
      XdvdfsFsdSetInformation, XdvdfsFsdSuccess, XdvdfsFsdQueryVolume, XdvdfsFsdDirectoryControl,
-     IoInvalidDeviceRequest, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};
+     IoFsControlDismountOnly, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};
 
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY g;

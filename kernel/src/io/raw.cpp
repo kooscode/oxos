@@ -75,7 +75,7 @@ static DRIVER_OBJECT RawDriverObject = {
     RawDeleteVolume,
     RawDismountVolume,
     {RawCreate, RawSuccess, RawPassDown, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown,
-     RawQueryVolume, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown, IoInvalidDeviceRequest,
+     RawQueryVolume, IoInvalidDeviceRequest, IoFsControlDismountOnly, RawPassDown, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest, RawCleanup}};
 
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice) {
