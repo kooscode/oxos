@@ -357,6 +357,13 @@ volatile ULONG KiTestMmLayoutOk;       // no user mappings, read-only kernel tex
 volatile ULONG KiTestMmThreadChurnPages; // pages lost after 50 thread lifetimes (pool growth only)
 volatile ULONG KiTestMmContiguousVa;
 volatile ULONG KiTestMmDone;
+volatile ULONG KiTestVmReserveCommitOk;  // reserve 1 MB, commit 64 KB inside, zeroed + writable, query states
+volatile ULONG KiTestVmImageOk;          // explicit base 0x10000 reserve+commit like an XBE; conflict detected
+volatile ULONG KiTestVmTopDownOk;        // MEM_TOP_DOWN lands high
+volatile ULONG KiTestVmFreeRulesOk;      // release at non-base -> 0xC000009F; partial decommit; release
+volatile ULONG KiTestVmProtectOk;        // NtProtectVirtualMemory RW -> RO
+volatile ULONG KiTestVmPagesRestored;    // available pages identical before/after the VM tests
+volatile ULONG KiTestVmStatsOk;          // MmQueryStatistics
 
 static void NTAPI ShortThread(PVOID) {}
 
@@ -445,6 +452,81 @@ static void NTAPI MmControllerThread(PVOID) {
     }
     Sleep(5);
     KiTestMmThreadChurnPages = baseline - MmAvailablePages;
+
+    // Virtual memory.
+    ULONG vmBaseline = MmAvailablePages;
+    PVOID base = nullptr;
+    SIZE_T size = 0x100000;
+    NTSTATUS st = NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE);
+    ok = st == 0 && base && ((ULONG)base & 0xFFFF) == 0 && (ULONG)base >= 0x10000 && size == 0x100000;
+    PVOID commit = (UCHAR *)base + 0x20000;
+    SIZE_T commitSize = 0x10000;
+    ok &= NtAllocateVirtualMemory(&commit, 0, &commitSize, MEM_COMMIT, PAGE_READWRITE) == 0;
+    auto w = (ULONG *)commit;
+    for (ULONG i = 0; ok && i < 0x10000 / 4; i++)
+        ok = w[i] == 0;
+    for (ULONG i = 0; ok && i < 0x10000 / 4; i++)
+        w[i] = i;
+    MEMORY_BASIC_INFORMATION mbi;
+    NtQueryVirtualMemory(base, &mbi);
+    ok &= mbi.State == MEM_RESERVE && mbi.RegionSize == 0x20000 && mbi.AllocationBase == base;
+    NtQueryVirtualMemory(commit, &mbi);
+    ok &= mbi.State == MEM_COMMIT && mbi.RegionSize == 0x10000 && mbi.Protect == PAGE_READWRITE && mbi.Type == MEM_PRIVATE;
+    KiTestVmReserveCommitOk = ok;
+
+    // Protect RW -> RO.
+    PVOID pbase = commit;
+    SIZE_T psize = 0x1000;
+    ULONG oldProtect = 0;
+    ok = NtProtectVirtualMemory(&pbase, &psize, PAGE_READONLY, &oldProtect) == 0 && oldProtect == PAGE_READWRITE;
+    NtQueryVirtualMemory(commit, &mbi);
+    KiTestVmProtectOk = ok && mbi.Protect == PAGE_READONLY && mbi.RegionSize == 0x1000 && w[5] == 5;
+
+    // Free rules: release at a non-base address fails; decommit part; release all.
+    PVOID fbase = commit;
+    SIZE_T fsize = 0;
+    ok = NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE) == (NTSTATUS)0xC000009F;
+    fbase = commit;
+    fsize = 0x8000;
+    ok &= NtFreeVirtualMemory(&fbase, &fsize, MEM_DECOMMIT) == 0;
+    NtQueryVirtualMemory(commit, &mbi);
+    ok &= mbi.State == MEM_RESERVE;
+    fbase = base;
+    fsize = 0;
+    ok &= NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE) == 0 && fsize == 0x100000;
+    NtQueryVirtualMemory(base, &mbi);
+    KiTestVmFreeRulesOk = ok && mbi.State == MEM_FREE;
+
+    // XBE-style image: reserve + commit at 0x10000; a second reservation over it conflicts.
+    PVOID img = (PVOID)0x10000;
+    SIZE_T imgSize = 0x30000;
+    ok = NtAllocateVirtualMemory(&img, 0, &imgSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE) == 0 &&
+         img == (PVOID)0x10000 && MmIsAddressValid((PVOID)0x3F000);
+    *(volatile ULONG *)0x10000 = 0x48454258; // 'XBEH'
+    PVOID img2 = (PVOID)0x20000;
+    SIZE_T img2Size = 0x1000;
+    ok &= NtAllocateVirtualMemory(&img2, 0, &img2Size, MEM_RESERVE, PAGE_READWRITE) == (NTSTATUS)0xC0000018;
+    fbase = img;
+    fsize = 0;
+    ok &= NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE) == 0 && !MmIsAddressValid((PVOID)0x10000);
+    KiTestVmImageOk = ok;
+
+    // Top-down reservation.
+    PVOID top = nullptr;
+    SIZE_T topSize = 0x10000;
+    ok = NtAllocateVirtualMemory(&top, 0, &topSize, MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE) == 0 &&
+         (ULONG)top >= 0x7FF00000 && (ULONG)top + topSize <= 0x7FFE0000;
+    fbase = top;
+    fsize = 0;
+    NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE);
+    KiTestVmTopDownOk = ok;
+
+    KiTestVmPagesRestored = MmAvailablePages == vmBaseline;
+    MM_STATISTICS stats;
+    stats.Length = sizeof(stats);
+    KiTestVmStatsOk = MmQueryStatistics(&stats) == 0 && stats.TotalPhysicalPages == 0x4000 &&
+                      stats.AvailablePages == MmAvailablePages && stats.StackPagesCommitted > 0 &&
+                      stats.PoolPagesCommitted > 0 && stats.VirtualMemoryBytesReserved == 0;
     KiTestMmDone = 1;
 }
 

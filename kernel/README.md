@@ -34,7 +34,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 2b+: APCs, alerts, suspend/resume, queues, device queues, wake-up boosts (spec 08). ✅ passes in xemu.
    - PsCreateSystemThreadEx and the Nt* wrappers wait for object-manager handles (milestone 3).
    - 2c: memory manager part 1 — page tables, physical pages, contiguous/system memory, kernel stacks, I/O mapping, pool (spec 09). ✅ passes in xemu.
-   - 2c part 2: virtual memory (Nt*VirtualMemory), MmQueryStatistics, MmGlobalData.
+   - 2c part 2: title virtual memory (Nt*VirtualMemory), MmQueryStatistics, MmGlobalData. ✅ passes in xemu.
 3. Object manager, I/O manager, IDE + DVD + partitions (stock LBA28), FATX (spec 04).
 4. XBE loader and title launch (spec 05): boot the stock dashboard.
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).

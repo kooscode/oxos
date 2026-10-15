@@ -7,6 +7,7 @@
 static ULONG *const MiPteArray = (ULONG *)0x83FF0000;
 static ULONG MiGpuInstanceSize = 0x10000; // reserved below the page tables (reference initial value)
 static USHORT MiLockCount[MM_PAGES];
+ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 
 static ULONG BytesToPages(ULONG bytes) { return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT; }
 
@@ -154,11 +155,15 @@ XBAPI ULONG NTAPI MmFreeSystemMemory(PVOID BaseAddress, ULONG NumberOfBytes) {
 XBAPI PVOID NTAPI MmCreateKernelStack(ULONG NumberOfBytes, BOOLEAN DebuggerThread) {
     ULONG pages = BytesToPages(NumberOfBytes);
     auto stack = (UCHAR *)MiAllocateMappedPages(pages, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, true);
-    return stack ? stack + (pages << PAGE_SHIFT) : nullptr;
+    if (!stack)
+        return nullptr;
+    MmStackPagesCommitted += pages;
+    return stack + (pages << PAGE_SHIFT);
 }
 
 XBAPI void NTAPI MmDeleteKernelStack(PVOID KernelStackBase, PVOID KernelStackLimit) {
     ULONG pages = ((ULONG)KernelStackBase - (ULONG)KernelStackLimit) >> PAGE_SHIFT;
+    MmStackPagesCommitted -= pages;
     MiFreeMappedPages((ULONG)KernelStackLimit, pages);
     MiReleaseSystemPtes((UCHAR *)KernelStackLimit - PAGE_SIZE, pages + 1);
 }

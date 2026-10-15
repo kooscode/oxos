@@ -40,7 +40,7 @@ bool MiProtectToPte(ULONG protect, ULONG *pteBits) {
 
 // Single pages come from the bottom so top-down contiguous allocations stay unfragmented.
 // The page stays mapped at 0x80000000|PA (callers use that alias) and is zeroed.
-ULONG MiAllocatePhysicalPage() {
+ULONG MiAllocatePhysicalPage(bool zero) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pfn = 0;
     for (ULONG p = MiNextLowPfn; p <= MM_HIGHEST_CONTIGUOUS_PFN; p++)
@@ -55,7 +55,7 @@ ULONG MiAllocatePhysicalPage() {
         MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
     }
     KfLowerIrql(old);
-    if (pfn)
+    if (pfn && zero)
         RtlZeroMemory((PVOID)(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT)), PAGE_SIZE);
     return pfn;
 }
@@ -225,4 +225,5 @@ void MmInitSystem() {
     RtlZeroMemory(MiSystemPteBitmap, 4 * PAGE_SIZE);
 
     ExInitializePool();
+    MiInitializeVirtualMemory();
 }
