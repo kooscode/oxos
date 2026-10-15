@@ -215,6 +215,7 @@ def run_checks(mon, hdd=None, title_map=None):
                | {"SEH suite finished": mon.read("KiTestSehDone") == 1},
         "M5c": {f"Xc {n}": mon.read(f"KiTestXc{n}Ok") == 1 for n in ["Des", "ModExp", "Rsa", "Pkcs1", "Vector"]}
                | {"Xc suite finished": mon.read("KiTestXcDone") == 1},
+        "M5d-1": misc_checks(mon),
     }
 
 
@@ -325,6 +326,21 @@ def rtl_checks(mon):
     out = {f"Rtl {n}": mon.read(f"KiTestRtl{n}Ok") == 1 for n in names}
     out["Rtl suite finished"] = mon.read("KiTestRtlDone") == 1
     return out
+
+
+def misc_checks(mon):
+    for _ in range(80):
+        if mon.read("KiTestMiscDone"):
+            break
+        time.sleep(0.25)
+    print(f"  (PHY: PhyInitialize -> {mon.read('KiTestMiscPhyStatus'):#x}, link state {mon.read('KiTestMiscPhyLink'):#x})")
+    return {
+        "FATX dismount by name, remount on next open, not-mounted error": mon.read("KiTestMiscDismountOk") == 1,
+        "disc dismount + remount": mon.read("KiTestMiscDiscRemountOk") == 1,
+        "Fsc cache size limits": mon.read("KiTestMiscFscOk") == 1,
+        "PhyInitialize completes (success or E_FAIL), link state read": mon.read("KiTestMiscPhyStatus") in (0, 0x801F0001),
+        "misc suite finished": mon.read("KiTestMiscDone") == 1,
+    }
 
 
 def dash_checks(mon):

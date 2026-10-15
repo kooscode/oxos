@@ -49,7 +49,8 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 5a: runtime exports (Rtl/Interlocked/Ex locks/sprintf/Dbg/HAL extras/RTC time) (spec 13). ✅ passes in xemu.
    - 5b: structured exception handling: trap dispatch, raise, unwind, stack walks (spec 14). ✅ passes in xemu.
    - 5c: Xc public-key (BSAFE RSA, PKCS#1, modexp) and DES/3DES crypto, replaceable crypto vector (spec 15). ✅ passes in xemu.
-   - 5d: quick reboot + LaunchDataPage launches, Fsc*, dismount, PHY.
+   - 5d-1: volume dismount/remount (FATX, XDVDFS, RAW), Fsc cache control, Ethernet PHY (spec 16). ✅ passes in xemu.
+   - 5d-2: quick reboot + LaunchDataPage title-to-title launches.
 6. Real-hardware validation (encoder mode tables, SMC events, microcode).
 
 ## Known deviations (tracked)

@@ -56,10 +56,24 @@ static NTSTATUS NTAPI RawQueryVolume(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return RawComplete(Irp, STATUS_INVALID_PARAMETER);
 }
 
+static NTSTATUS NTAPI RawDismountVolume(PDEVICE_OBJECT DeviceObject) {
+    auto v = (RAW_VOLUME *)DeviceObject->DeviceExtension;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (v->TargetDevice->MountedOrSelfDevice == DeviceObject)
+        v->TargetDevice->MountedOrSelfDevice = nullptr;
+    KfLowerIrql(old);
+    IoDeleteDevice(DeviceObject);
+    return STATUS_SUCCESS;
+}
+
+static void NTAPI RawDeleteVolume(PDEVICE_OBJECT DeviceObject) {
+    ObfDereferenceObject(((RAW_VOLUME *)DeviceObject->DeviceExtension)->TargetDevice);
+}
+
 static DRIVER_OBJECT RawDriverObject = {
     nullptr,
-    nullptr,
-    nullptr,
+    RawDeleteVolume,
+    RawDismountVolume,
     {RawCreate, RawSuccess, RawPassDown, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown,
      RawQueryVolume, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest, RawCleanup}};

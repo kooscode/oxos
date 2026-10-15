@@ -357,3 +357,10 @@ XcBlockCrypt
 XcBlockCryptCBC
 XcCryptService
 XcUpdateCrypto
+FscGetCacheSize
+FscInvalidateIdleBlocks
+FscSetCacheSize
+IoDismountVolume
+IoDismountVolumeByName
+PhyGetLinkState
+PhyInitialize
