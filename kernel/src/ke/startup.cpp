@@ -7,6 +7,7 @@
 #include <xk/rtl.h>
 void HalpSmcInitColdBoot();
 void HalpSmcStartEvents();
+void HalpStartSplash();
 
 void KiInitializeDpcs();
 extern "C" UCHAR KiBootStack[];
@@ -70,6 +71,8 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
     HalpSmcStartEvents();
+    if (!quick)
+        HalpStartSplash();
 
 #if XK_BOOT_SELFTEST
     if (!quick)
