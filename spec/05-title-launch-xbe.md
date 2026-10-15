@@ -105,6 +105,43 @@ Then phase-1 calls the entry point at 0x10128 (spec 03).
   **20** dashboard failed with a title disc present, **21** boot-flags 0x20 path.
 - 0x80055933 is used for the disk errors. It is probably the same reporter path (unverified).
 
+## 7. Details confirmed for milestone 4a
+Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section load 0x8002ea65, post-load protect
+0x8002e9ad, certificate keys 0x8002ed7c), `ev_6e2b3c15…` (media flags 0x8002ec30, key derivation 0x8002ed4b),
+`ev_cfe66569…` (section digest 0x8002f4a4, section commit/decommit 0x8002e96c / 0x8002ea00).
+- **Kernel thunks:**
+  - every entry is taken as an ordinal (low 16 bits) and resolved through the kernel's own PE export directory
+    (ordinal − Base)
+  - an ordinal outside the table, or with RVA 0, → STATUS_ORDINAL_NOT_FOUND (0xC0000138)
+- **Section header** (0x38): Flags (1 WRITABLE, 2 PRELOAD, 4 EXECUTABLE, 0x10 HEAD_PAGE_RO, 0x20 TAIL_PAGE_RO),
+  VirtualAddress, VirtualSize, PointerToRawData, SizeOfRawData, SectionName, SectionReferenceCount, pointers to the
+  head/tail shared-page USHORT counters, SHA-1 digest[20].
+- **Section load:**
+  - commit VA..VA+VirtualSize and bump the head and tail page counters
+  - read the raw data and zero-fill the rest
+  - digest = SHA1(u32 SizeOfRawData ‖ data); a mismatch → 0xC0000190 and the section is unloaded
+  - ReferenceCount = 1. On a boot-time mismatch, retail titles reboot to the firmware.
+- **Section unload:** decrement both counters, and decommit the range minus any head/tail page still shared.
+- **After preload:** non-writable sections become PAGE_EXECUTE_READ, excluding partial head/tail pages unless the
+  HEAD/TAIL_RO flag is set.
+- **Media flags:** the file's volume device type is CD_ROM → (title-disc flag ? 2 : IOCTL_DVD_READ_STRUCTURE
+  0x335140: STATUS_UNRECOGNIZED_MEDIA → 0xC; layer type 1 → 0x14/0x24 by layer count; else 0x44/0x84); otherwise 1.
+- **Keys:** XboxLANKey, XboxSignatureKey and XboxAlternateSignatureKeys[16] = first 16 bytes of
+  HMAC-SHA1(certificate key from the 2BL, certificate +0xB0 / +0xC0 / +0xD0 + 16i).
+
+## 8. Our implementation (milestone 4a)
+- `src/xe/loader.cpp`:
+  - XeLoadImage, XeLoadSection/XeUnloadSection, thunk resolution, media and region checks, key derivation
+  - the launch order: `\Device\CdRom0\default.xbe`, then the dashboard
+- **Policy differences:**
+  - The header signature is not verified, and the non-secure-HDD fatal error 5 is not raised.
+  - Retail XOR keys (entry 0xA8FC57AB, thunk 0x5B6D40B6) are tried first, then the debug keys
+    (0x94859D4B / 0xEFB1F152); the reference BIOS kernel used for RE carries the debug pair.
+  - The console region is all regions until the EEPROM is read.
+  - No logo, SMC tray state, LaunchDataPage paths or quick reboot yet.
+- Path symbolic links (`\??\D:` → a directory inside a device) reparse the link target plus the rest of the name.
+- **Test title:** `tests/title/title.cpp` → `tools/mkxbe.py` → `default.xbe` on the generated test disc.
+
 ## Open questions
 - 0x8002ebba (signature), 0x8002ecee (thunk resolve), 0x8002ec30 (media flags), 0x8002ea65/0x8002e9ad
   (section load / post-step), 0x800565f3 (logo), 0x8002ed7c.

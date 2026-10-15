@@ -10,7 +10,7 @@ static LONGLONG IdexCdRomLength;     // media size in bytes (READ CAPACITY), 0 =
 volatile UCHAR IdexCdRomLastSense[3]; // key, ASC, ASCQ of the last failed command
 
 constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C,
-                IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014;
+                IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014, IOCTL_DVD_READ_STRUCTURE = 0x335140;
 constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE = (NTSTATUS)0xC0000013, STATUS_VERIFY_REQUIRED = (NTSTATUS)0x80000016;
 
 // --- Polled ATAPI packet command (PIO data phase). Called with the channel owned (StartIo) or at init.
@@ -153,6 +153,7 @@ static NTSTATUS NTAPI IdexCdRomDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP I
     case IOCTL_CDROM_GET_DRIVE_GEOMETRY:
     case IOCTL_CDROM_READ_TOC:
     case IOCTL_SCSI_PASS_THROUGH_DIRECT:
+    case IOCTL_DVD_READ_STRUCTURE:
         IoMarkIrpPending(Irp);
         IdexChannelStartPacket(DeviceObject, Irp);
         return STATUS_PENDING;
@@ -217,6 +218,17 @@ static void IdexCdRomControl(PIRP Irp) {
         status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
         IdexCdRomFinish(Irp, status, got);
         return;
+    case IOCTL_DVD_READ_STRUCTURE: {
+        // READ DVD STRUCTURE, format 0 (physical/layer descriptor): raw response into the output buffer.
+        cdb[0] = 0xAD;
+        cdb[8] = (UCHAR)(outLen >> 8);
+        cdb[9] = (UCHAR)outLen;
+        status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
+        if (status == STATUS_INVALID_DEVICE_REQUEST)
+            status = (NTSTATUS)0xC0000014; // STATUS_UNRECOGNIZED_MEDIA: not a DVD
+        IdexCdRomFinish(Irp, status, got);
+        return;
+    }
     case IOCTL_SCSI_PASS_THROUGH_DIRECT: {
         auto p = (SCSI_PASS_THROUGH_DIRECT_ *)s->Parameters.DeviceIoControl.InputBuffer;
         if (s->Parameters.DeviceIoControl.InputBufferLength < sizeof(*p) || p->CdbLength > 12) {

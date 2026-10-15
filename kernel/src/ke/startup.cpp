@@ -21,6 +21,8 @@ static void KiSetStage(UCHAR code) {
     post(code);
 }
 
+void XeStartTitleLauncher(); // spec/05: load and enter the title
+
 extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiSetStage(post_code::Entry);
 
@@ -48,6 +50,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
 #if XK_BOOT_SELFTEST
     KiRunBootSelfTests();
 #endif
+    XeStartTitleLauncher();
 
     KfLowerIrql(DISPATCH_LEVEL);
     KiSetStage(post_code::Idle);

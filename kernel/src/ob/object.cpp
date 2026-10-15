@@ -209,8 +209,42 @@ static NTSTATUS ObpResolveRoot(HANDLE RootDirectory, OBJECT_STRING *rest, PVOID 
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
+                                      POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
+                                      bool StopAtParse, OBJECT_STRING *Remaining);
+
 static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
                                     POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object) {
+    return ObpLookupObjectNameEx(RootDirectory, ObjectName, Attributes, ObjectType, ParseContext, Object, 0, false,
+                                 nullptr);
+}
+
+// Follow a path link: look up LinkTarget + "\" + rest from the root.
+static NTSTATUS ObpReparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, ULONG Attributes,
+                           POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth) {
+    if (Depth >= 8)
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    ULONG len = link->LinkTarget.Length + (rest->Length ? 1 + rest->Length : 0);
+    if (len > 0xFFFF)
+        return STATUS_OBJECT_NAME_INVALID;
+    auto buf = (PCHAR)ExAllocatePoolWithTag(len ? len : 1, 'prbO');
+    if (!buf)
+        return STATUS_INSUFFICIENT_RESOURCES_OB;
+    RtlCopyMemory(buf, link->LinkTarget.Buffer, link->LinkTarget.Length);
+    if (rest->Length) {
+        buf[link->LinkTarget.Length] = '\\';
+        RtlCopyMemory(buf + link->LinkTarget.Length + 1, rest->Buffer, rest->Length);
+    }
+    OBJECT_STRING name = {(USHORT)len, (USHORT)len, buf};
+    NTSTATUS status = ObpLookupObjectNameEx(nullptr, &name, Attributes, ObjectType, ParseContext, Object, Depth + 1,
+                                            false, nullptr);
+    ExFreePool(buf);
+    return status;
+}
+
+static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
+                                      POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
+                                      bool StopAtParse, OBJECT_STRING *Remaining) {
     *Object = nullptr;
     OBJECT_STRING rest = ObjectName ? *ObjectName : OBJECT_STRING{0, 0, nullptr};
     KIRQL old = KeRaiseIrqlToDpcLevel();
@@ -222,6 +256,12 @@ static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectN
     }
     for (;;) {
         POBJECT_TYPE type = OBJECT_TO_OBJECT_HEADER(current)->Type;
+        if (type != &ObDirectoryObjectType && type->ParseProcedure && StopAtParse) {
+            KfLowerIrql(old);
+            *Remaining = rest;
+            *Object = current;
+            return STATUS_SUCCESS;
+        }
         if (type != &ObDirectoryObjectType && type->ParseProcedure) {
             // Hand the rest of the path (with its leading '\') to the object's parse procedure.
             KfLowerIrql(old);
@@ -258,7 +298,19 @@ static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectN
             break;
         }
         bool follow = rest.Length || ObjectType != &ObSymbolicLinkObjectType;
-        PVOID next = ObpLookupElementNameInDirectory((POBJECT_DIRECTORY)current, &element, follow);
+        PVOID next = ObpLookupElementNameInDirectory((POBJECT_DIRECTORY)current, &element, false);
+        if (next && follow && OBJECT_TO_OBJECT_HEADER(next)->Type == &ObSymbolicLinkObjectType) {
+            auto link = (POBJECT_SYMBOLIC_LINK)next;
+            if (link->PathLink) {
+                ObfReferenceObject(link);
+                ObfDereferenceObject(current);
+                KfLowerIrql(old);
+                status = ObpReparse(link, &rest, Attributes, ObjectType, ParseContext, Object, Depth);
+                ObfDereferenceObject(link);
+                return status;
+            }
+            next = link->LinkTargetObject;
+        }
         if (!next) {
             status = rest.Length ? STATUS_OBJECT_PATH_NOT_FOUND : STATUS_OBJECT_NAME_NOT_FOUND;
             break;
@@ -326,9 +378,10 @@ static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
     if (dir == ObpDosDevicesDirectoryObject) {
         int letter = ObpDriveLetterIndex(&n->Name);
         if (letter >= 0)
-            ObpDosDevicesDriveLetterMap[letter] = h->Type == &ObSymbolicLinkObjectType
-                                                      ? ((POBJECT_SYMBOLIC_LINK)Object)->LinkTargetObject
-                                                      : Object;
+            ObpDosDevicesDriveLetterMap[letter] =
+                h->Type != &ObSymbolicLinkObjectType          ? Object
+                : ((POBJECT_SYMBOLIC_LINK)Object)->PathLink ? nullptr
+                                                              : ((POBJECT_SYMBOLIC_LINK)Object)->LinkTargetObject;
     }
     ObfReferenceObject(dir);
     ObfReferenceObject(Object);
@@ -582,8 +635,12 @@ static void NTAPI ObpDeleteSymbolicLink(PVOID Object) {
 
 // Permanent link LinkName -> object named TargetName (which must already exist).
 NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) {
+    // Resolve up to the first object with a parse procedure: a target like
+    // "\Device\Harddisk0\Partition1\Games\X" makes a path link into that device.
     PVOID target;
-    NTSTATUS status = ObReferenceObjectByName(TargetName, 0, nullptr, nullptr, &target);
+    OBJECT_STRING remaining = {};
+    NTSTATUS status = ObpLookupObjectNameEx(nullptr, TargetName, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &target, 0,
+                                            true, &remaining);
     if (!NT_SUCCESS(status))
         return status;
     OBJECT_ATTRIBUTES attrs = {nullptr, LinkName, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
@@ -594,6 +651,7 @@ NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetNam
         return status;
     }
     link->LinkTargetObject = target;
+    link->PathLink = remaining.Length != 0;
     link->LinkTarget.Buffer = (PCHAR)ExAllocatePoolWithTag(TargetName->Length + 1, 'bmyS');
     if (!link->LinkTarget.Buffer) {
         ObfDereferenceObject(link);
