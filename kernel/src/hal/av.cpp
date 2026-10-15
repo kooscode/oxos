@@ -101,6 +101,28 @@ static const UCHAR AvpVgaTimings[][2] = {
     {0x15, 0xE7}, {0x16, 0x04}, {0x17, 0xE3},
 };
 
+// Standard VGA graphics-mode state (spec/17 §5 step 9): sequencer, graphics controller, attribute controller with an
+// identity palette, then attribute index bit 5 (palette address source = display enabled). Without that last bit a
+// VGA (and xemu's display) shows a blank screen.
+static void AvpVgaGraphicsMode(volatile UCHAR *regs) {
+    static const UCHAR seq[] = {0x03, 0x01, 0x0F, 0x00, 0x0E};
+    static const UCHAR gfx[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F, 0xFF};
+    for (UCHAR i = 0; i < sizeof(seq); i++) {
+        regs[0xC03C4] = i;
+        regs[0xC03C5] = seq[i];
+    }
+    for (UCHAR i = 0; i < sizeof(gfx); i++) {
+        regs[0xC03CE] = i;
+        regs[0xC03CF] = gfx[i];
+    }
+    (void)regs[0x6013DA]; // reset the attribute controller's index/data flip-flop
+    for (UCHAR i = 0; i < 0x15; i++) {
+        regs[0x6013C0] = i;
+        regs[0x6013C0] = i < 0x10 ? i : i == 0x10 ? 0x41 : i == 0x12 ? 0x0F : 0x00;
+    }
+    regs[0x6013C0] = 0x20;
+}
+
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
@@ -121,6 +143,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         for (auto &t : AvpVgaTimings)
             AvpCrtc(regs, t[0], t[1]);
         regs[0xC03C3] = 0x01;
+        AvpVgaGraphicsMode(regs);
         regs[0xC03C2] = 0xE3; // misc output: 25 MHz clock, negative syncs
         AvpCurrentMode = Mode;
     }
