@@ -2,6 +2,7 @@
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 #include <xk/rtl.h>
 
 void KiInitializeDpcs();
@@ -33,6 +34,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     HalInitSystemPhase0(/*coldBoot=*/true);
     HalpDetectHardware();
 
+    MmInitSystem();
     KiInitializeDpcs();
     KiInitializeTimers();
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
