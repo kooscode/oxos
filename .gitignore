@@ -11,3 +11,9 @@ kernel/build-release/
 kernel/build-trace/
 __pycache__/
 claude-resume.sh
+third_party/
+tests/padtest/bin/
+tests/padtest/*.obj
+tests/padtest/*.d
+tests/padtest/*.exe
+tests/padtest/*.iso
