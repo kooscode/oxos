@@ -224,3 +224,7 @@ NtWriteFile
 NtWriteFileGather
 NtUserIoApcDispatcher
 RtlNtStatusToDosError
+IdexChannelObject
+HalDiskCachePartitionCount
+HalDiskModelNumber
+HalDiskSerialNumber

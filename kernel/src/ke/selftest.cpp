@@ -696,9 +696,11 @@ static void NTAPI ObControllerThread(PVOID) {
 }
 
 void KiStartIoSelfTests();
+void KiStartIdexSelfTests();
 
 static void KiStartThreadSelfTests() {
     KiStartIoSelfTests();
+    KiStartIdexSelfTests();
     KiCreateSystemThread(ObControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
