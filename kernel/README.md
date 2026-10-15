@@ -44,7 +44,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 4. XBE loader and title launch (spec 05):
    - 4a: XBE loader, kernel thunks, section load/digests, media/region checks, title keys, path symlinks, test title from disc. ✅ passes in xemu.
    - 4b-1: SMBus, SMC tray/reset, EEPROM settings + security section (HD key, region), HalReturnToFirmware (spec 12). ✅ passes in xemu.
-   - 4b-2: AV mode setting (encoders + NV2A CRTC), then the dashboard on C: (an nxdk app on the test image).
+   - 4b-2: AV options/capabilities + basic display mode; the nxdk dashboard on C: boots and draws (`make test-dash`, `tools/fbshot.py` for a framebuffer PNG). ✅ passes in xemu. Real-hardware encoder tables pending.
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).
 
 ## Known deviations (tracked)

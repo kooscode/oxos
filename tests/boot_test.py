@@ -310,6 +310,31 @@ def title_checks(mon, title_map):
     }
 
 
+def dash_checks(mon):
+    for _ in range(60):
+        if mon.read("XeTitleLaunched"):
+            break
+        time.sleep(0.25)
+    time.sleep(4)
+    exc = mon.read("KiLastExceptionVector")
+    t0 = mon.read("KeTickCount")
+    time.sleep(0.5)
+    ticking = mon.read("KeTickCount") > t0
+    start = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)
+    fb = start & 0x03FFFFFF
+    words = []
+    for off in range(0, 640 * 4 * 40, 4096):  # first 40 lines of a 640-wide 32 bpp surface
+        out = mon.hmp(f"xp/16wx {fb + off:#x}")
+        words += [int(w, 16) for w in re.findall(r"0x([0-9a-f]{8})", out.split(":", 1)[1] if ":" in out else "")]
+    return {"M4b-2": {
+        "dashboard (C:\\xboxdash.xbe) launched without a disc": mon.read("XeTitleLaunched") == 2
+            and mon.read("XeLastLoadStatus") == 0,
+        "no exception, clock running": exc == 0xFFFFFFFF and ticking,
+        "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
+        "framebuffer has drawn pixels": any(w != 0 for w in words),
+    }}
+
+
 def disk_checks(hdd_copy):
     """After xemu exits: what the kernel wrote must read back with an independent FATX reader."""
     e = Fatx(Qcow2(hdd_copy), "E")
@@ -328,6 +353,8 @@ def main():
     ap.add_argument("--map", required=True)
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
+    ap.add_argument("--no-disc", action="store_true")
+    ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
@@ -338,7 +365,8 @@ def main():
     cfg = os.path.join(work, "xemu.toml")
     hdd_copy = os.path.join(work, "hdd.qcow2")
     dvd = os.path.join(work, "test.iso")
-    mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None)
+    if not a.no_disc:
+        mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None)
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
@@ -347,7 +375,7 @@ def main():
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
         + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else "")
-        + f"dvd_path = '{dvd}'\n")
+        + ("" if a.no_disc else f"dvd_path = '{dvd}'\n"))
     log = open(os.path.join(work, "xemu.log"), "w")
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
                             stdout=log, stderr=subprocess.STDOUT)
@@ -358,7 +386,8 @@ def main():
                 break
             time.sleep(0.1)
         time.sleep(a.boot_wait)
-        results = run_checks(Monitor(sock, map_symbols(a.map)), a.hdd, a.title_map)
+        mon = Monitor(sock, map_symbols(a.map))
+        results = dash_checks(mon) if a.dash else run_checks(mon, a.hdd, a.title_map)
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():
@@ -371,7 +400,7 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
-    if ok and a.hdd:
+    if ok and a.hdd and not a.dash:
         for name, passed in disk_checks(hdd_copy).items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed

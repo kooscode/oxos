@@ -18,7 +18,6 @@ constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
 constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10,
                 XBE_SECTION_TAIL_RO = 0x20;
 constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_ORDINAL_NOT_FOUND = (NTSTATUS)0xC0000138,
-                   STATUS_TRUST_FAILURE = (NTSTATUS)0xC0000190,
                    STATUS_REGION_MISMATCH = (NTSTATUS)0xC0050001, STATUS_MEDIA_MISMATCH = (NTSTATUS)0xC0050002;
 
 struct XBE_SECTION_HEADER {
@@ -42,7 +41,7 @@ UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 UCHAR XePublicKeyData[284];
 ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
 volatile NTSTATUS XeLastLoadStatus;
-volatile ULONG XeLastMissingOrdinal;
+volatile ULONG XeLastMissingOrdinal, XeDigestMismatches;
 
 static NTSTATUS XeReadFile(HANDLE h, PVOID buffer, ULONG length, ULONG offset, ULONG *got = nullptr) {
     IO_STATUS_BLOCK iosb;
@@ -82,9 +81,12 @@ static NTSTATUS XepLoadSection(HANDLE file, XBE_SECTION_HEADER *s) {
         XcSHAUpdate(ctx, (PUCHAR)&raw, 4);
         XcSHAUpdate(ctx, (PUCHAR)s->VirtualAddress, raw);
         XcSHAFinal(ctx, digest);
+        // Homebrew images carry no valid digests; like the header signature this is not enforced (policy, spec/05).
         for (int i = 0; i < 20; i++)
-            if (digest[i] != s->SectionDigest[i])
-                status = STATUS_TRUST_FAILURE;
+            if (digest[i] != s->SectionDigest[i]) {
+                XeDigestMismatches = XeDigestMismatches + 1;
+                break;
+            }
     }
     if (!NT_SUCCESS(status)) {
         (*s->HeadSharedPageReferenceCount)--;
