@@ -58,12 +58,18 @@ EXC_NOERR 29
 EXC_NOERR 30
 EXC_NOERR 31
 
+// Trap frame (KTRAP_FRAME_XK): edi esi ebp esp ebx edx ecx eax | vector error | eip cs eflags.
+// KiDispatchTrap returns when execution resumes with the (possibly edited) frame; a context with a different
+// stack pointer is resumed through KiContinueContext instead.
 KiTrapCommon:
+    pushal
     cld
-    call _KiUnexpectedException     // (vector, errorCode, eip) are already on the stack
-1:  cli
-    hlt
-    jmp 1b
+    pushl %esp
+    call _KiDispatchTrap
+    addl $4, %esp
+    popal
+    addl $8, %esp
+    iretl
 
 // --- Hardware interrupts: push the IRQ number and dispatch in C (KiDispatchHardwareInterrupt).
 .macro IRQ n

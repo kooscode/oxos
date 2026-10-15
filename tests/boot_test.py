@@ -210,6 +210,9 @@ def run_checks(mon, hdd=None, title_map=None):
             "HAL suite finished": mon.read("KiTestHalDone") == 1,
         },
         "M5a": rtl_checks(mon),
+        "M5b": {f"SEH {n}": mon.read(f"KiTestSeh{n}Ok") == 1
+                for n in ["Divide", "PageFault", "Raise", "Unwind", "Nested", "Capture"]}
+               | {"SEH suite finished": mon.read("KiTestSehDone") == 1},
     }
 
 

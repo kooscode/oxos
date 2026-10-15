@@ -17,7 +17,7 @@ LD  := lld-link
 TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
-            -fno-stack-protector -fno-threadsafe-statics -nostdlib -O2 -g0 \
+            -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib -O2 -g0 \
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST)
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \

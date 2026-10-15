@@ -337,3 +337,12 @@ RtlVsnprintf
 RtlVsprintf
 HalEnableSecureTrayEject
 HalWriteSMCScratchRegister
+RtlCaptureContext
+RtlCaptureStackBackTrace
+RtlGetCallersAddress
+RtlRaiseException
+RtlRaiseStatus
+RtlUnwind
+RtlWalkFrameChain
+ExRaiseException
+ExRaiseStatus
