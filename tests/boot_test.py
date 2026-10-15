@@ -10,6 +10,7 @@ import argparse, json, os, re, shutil, socket, struct, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2  # noqa: E402
+from fatx import Fatx  # noqa: E402
 
 
 def map_symbols(path):
@@ -196,6 +197,7 @@ def run_checks(mon, hdd=None):
             "I/O suite finished": m3b["KiTestIoDone"] == 1,
         },
         "M3c": idex_checks(mon, hdd),
+        "M3c-2": fatx_checks(mon, hdd),
     }
 
 
@@ -219,6 +221,49 @@ def idex_checks(mon, hdd):
         "IOCTL partition info + drive geometry": mon.read("KiTestIdexIoctlOk") == 1,
         "alignment / bounds errors": mon.read("KiTestIdexErrorsOk") == 1,
         "IDE suite finished": mon.read("KiTestIdexDone") == 1,
+    }
+
+
+def read_string(mon, name, length):
+    words = [mon.read_offset(name, i) for i in range(0, length, 4)]
+    raw = b"".join(struct.pack("<I", w) for w in words)
+    return raw.split(b"\0")[0].decode("latin-1")
+
+
+def fatx_checks(mon, hdd):
+    if hdd is None:
+        return {"HDD image attached": False}
+    q = Qcow2(hdd)
+    c, e = Fatx(q, "C"), Fatx(q, "E")
+    dash = c.read_file("xboxdash.xbe")
+    s = 0
+    for b in dash:
+        s = (s * 31 + b) & 0xFFFFFFFF
+    names = "".join(n + "|" for n, *_ in e.listdir())
+    return {
+        "C:\\xboxdash.xbe read in odd pieces matches the image": mon.read("KiTestFatxReadOk") == 1
+            and mon.read("KiTestFatxReadLength") == len(dash) and mon.read("KiTestFatxReadSum") == s,
+        "file information (standard, network open, name, mode)": mon.read("KiTestFatxInfoOk") == 1,
+        "E:\\ enumeration matches the image": mon.read("KiTestFatxDirOk") == 1
+            and read_string(mon, "KiTestFatxDirNames", 64) == names[:62],
+        "create dir + 100 KB file, reopen and verify": mon.read("KiTestFatxWriteOk") == 1,
+        "mask query, rename, delete, non-empty dir refused": mon.read("KiTestFatxRenameDeleteOk") == 1,
+        "error statuses (not found, collision, dir/non-dir, names)": mon.read("KiTestFatxErrorsOk") == 1,
+        "volume information (size, serial, FATX)": mon.read("KiTestFatxVolumeOk") == 1
+            and mon.read("KiTestFatxTotalClusters") == e.clusters and mon.read("KiTestFatxSerial") == e.serial,
+        "free clusters balanced": mon.read("KiTestFatxFreeBalanced") == 1,
+        "FATX suite finished": mon.read("KiTestFatxDone") == 1,
+    }
+
+
+def disk_checks(hdd_copy):
+    """After xemu exits: what the kernel wrote must read back with an independent FATX reader."""
+    e = Fatx(Qcow2(hdd_copy), "E")
+    names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
+    return {
+        "E:\\XkTest\\keep.bin readable by an independent FATX reader": e.read_file("XkTest\\keep.bin")
+            == b"open xbox kernel fatx test",
+        "deleted/renamed entries gone, directory consistent": names == ["keep.bin"],
     }
 
 
@@ -267,8 +312,12 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
-        if os.path.exists(hdd_copy):
-            os.remove(hdd_copy)  # 1 GB; logs are kept on failure, the disk copy is not
+    if ok and a.hdd:
+        for name, passed in disk_checks(hdd_copy).items():
+            print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
+            ok &= passed
+    if os.path.exists(hdd_copy):
+        os.remove(hdd_copy)  # 1 GB; logs are kept on failure, the disk copy is not
     print("RESULT:", "PASS" if ok else f"FAIL (logs in {work})")
     if ok:
         shutil.rmtree(work, ignore_errors=True)

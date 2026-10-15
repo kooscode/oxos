@@ -228,3 +228,5 @@ IdexChannelObject
 HalDiskCachePartitionCount
 HalDiskModelNumber
 HalDiskSerialNumber
+RtlTimeFieldsToTime
+RtlTimeToTimeFields
