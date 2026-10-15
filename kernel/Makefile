@@ -68,7 +68,7 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
 test: $(BUILD)/bios.bin $(BUILD)/title.xbe
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
 	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map
-	$(MAKE) test-dash test-relaunch
+	$(MAKE) test-dash test-relaunch test-fatal
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
 test-dash: $(BUILD)/title.xbe
@@ -84,7 +84,13 @@ test-relaunch: $(BUILD)/title.xbe
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map \
 	    --relaunch --boot-wait 1
 
+# Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
+test-fatal:
+	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
+	    --map build-release/xboxkrnl.map --no-disc --fatal --boot-wait 2
+
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch clean
+.PHONY: all bios test test-dash test-relaunch test-fatal clean

@@ -107,7 +107,17 @@ Then phase-1 calls the entry point at 0x10128 (spec 03).
 - Known codes: **5** HDD not secured for the title, **7/8/9** HDD timeout / IDENTIFY failed /
   too small or invalid, **10/11/12** DVD equivalents, **13** dashboard failed to load (+LDP type),
   **20** dashboard failed with a title disc present, **21** boot-flags 0x20 path.
-- 0x80055933 is used for the disk errors. It is probably the same reporter path (unverified).
+- 0x80055933 is used for the disk errors: SMC LED sequence 0xE1 (as in §3), then the reporter. Confirmed.
+- Reporter details (confirmed): the EEPROM image is setting 0xFFFF (256 bytes); the stored error code is byte
+  **+0xFA**, the history word **+0xFC**. A nonzero +0xFA is cleared (and nothing is recorded). Before the EEPROM
+  update it stops the boot animation (0x800565f3(0, 0), 0x80055ee4). The digits: two (units on the right), each a
+  seven-segment glyph drawn as lines by the GPU code; then 0x80021b78(0) and `int 3`.
+
+### Our implementation (milestone 5f)
+- `src/ex/fatal.cpp` `IdexFatalError(code)`: LED sequence, the cert boot key wiped, the EEPROM history as above,
+  then (with an AV pack) a 640x480 X8R8G8B8 framebuffer with the two digits in **our own** seven-segment layout,
+  shown through `AvSetDisplayMode`; the thread then sleeps forever. No GPU drawing, no animation to stop yet.
+- Test: `make test-fatal` boots without a hard disk → code 9; checks the drawn digits and the EEPROM history bit.
 
 ## 7. Details confirmed for milestone 4a
 Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section load 0x8002ea65, post-load protect
