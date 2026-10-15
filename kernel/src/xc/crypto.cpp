@@ -34,7 +34,7 @@ static void XcpShaBlock(ULONG *s, const UCHAR *p) {
     s[0] += a, s[1] += b, s[2] += c, s[3] += d, s[4] += e;
 }
 
-XBAPI void NTAPI XcSHAInit(PUCHAR pbSHAContext) {
+XBAPI void NTAPI XcpSHAInit(PUCHAR pbSHAContext) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     static const ULONG init[5] = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
     for (int i = 0; i < 5; i++)
@@ -42,7 +42,7 @@ XBAPI void NTAPI XcSHAInit(PUCHAR pbSHAContext) {
     c->CountLow = c->CountHigh = 0;
 }
 
-XBAPI void NTAPI XcSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength) {
+XBAPI void NTAPI XcpSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     ULONG used = c->CountLow & 63;
     ULONG low = c->CountLow + dwInputLength;
@@ -60,47 +60,47 @@ XBAPI void NTAPI XcSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dw
     }
 }
 
-XBAPI void NTAPI XcSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest) {
+XBAPI void NTAPI XcpSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     ULONG bitsHigh = (c->CountHigh << 3) | (c->CountLow >> 29), bitsLow = c->CountLow << 3;
     static const UCHAR pad[64] = {0x80};
     ULONG used = c->CountLow & 63;
-    XcSHAUpdate(pbSHAContext, pad, used < 56 ? 56 - used : 120 - used);
+    XcpSHAUpdate(pbSHAContext, pad, used < 56 ? 56 - used : 120 - used);
     UCHAR len[8] = {(UCHAR)(bitsHigh >> 24), (UCHAR)(bitsHigh >> 16), (UCHAR)(bitsHigh >> 8), (UCHAR)bitsHigh,
                     (UCHAR)(bitsLow >> 24),  (UCHAR)(bitsLow >> 16),  (UCHAR)(bitsLow >> 8),  (UCHAR)bitsLow};
-    XcSHAUpdate(pbSHAContext, len, 8);
+    XcpSHAUpdate(pbSHAContext, len, 8);
     for (int i = 0; i < 5; i++)
         for (int j = 0; j < 4; j++)
             pbDigest[4 * i + j] = (UCHAR)(c->State[i] >> (24 - 8 * j));
 }
 
 // HMAC-SHA1 over the concatenation of two inputs (either may be empty).
-XBAPI void NTAPI XcHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
+XBAPI void NTAPI XcpHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
                         const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData) {
     UCHAR key[64] = {}, ctx[116], inner[20];
     if (cbKeyMaterial > 64) {
-        XcSHAInit(ctx);
-        XcSHAUpdate(ctx, pbKeyMaterial, cbKeyMaterial);
-        XcSHAFinal(ctx, key);
+        XcpSHAInit(ctx);
+        XcpSHAUpdate(ctx, pbKeyMaterial, cbKeyMaterial);
+        XcpSHAFinal(ctx, key);
     } else {
         RtlCopyMemory(key, pbKeyMaterial, cbKeyMaterial);
     }
     UCHAR pad[64];
     for (int i = 0; i < 64; i++)
         pad[i] = key[i] ^ 0x36;
-    XcSHAInit(ctx);
-    XcSHAUpdate(ctx, pad, 64);
+    XcpSHAInit(ctx);
+    XcpSHAUpdate(ctx, pad, 64);
     if (cbData)
-        XcSHAUpdate(ctx, pbData, cbData);
+        XcpSHAUpdate(ctx, pbData, cbData);
     if (cbData2)
-        XcSHAUpdate(ctx, pbData2, cbData2);
-    XcSHAFinal(ctx, inner);
+        XcpSHAUpdate(ctx, pbData2, cbData2);
+    XcpSHAFinal(ctx, inner);
     for (int i = 0; i < 64; i++)
         pad[i] = key[i] ^ 0x5C;
-    XcSHAInit(ctx);
-    XcSHAUpdate(ctx, pad, 64);
-    XcSHAUpdate(ctx, inner, 20);
-    XcSHAFinal(ctx, HmacData);
+    XcpSHAInit(ctx);
+    XcpSHAUpdate(ctx, pad, 64);
+    XcpSHAUpdate(ctx, inner, 20);
+    XcpSHAFinal(ctx, HmacData);
 }
 
 struct XC_RC4_STATE {
@@ -108,7 +108,7 @@ struct XC_RC4_STATE {
     UCHAR I, J;
 };
 
-XBAPI void NTAPI XcRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey) {
+XBAPI void NTAPI XcpRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey) {
     auto r = (XC_RC4_STATE *)pbKeyStruct;
     for (int i = 0; i < 256; i++)
         r->S[i] = (UCHAR)i;
@@ -122,7 +122,7 @@ XBAPI void NTAPI XcRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pb
     r->I = r->J = 0;
 }
 
-XBAPI void NTAPI XcRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput) {
+XBAPI void NTAPI XcpRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput) {
     auto r = (XC_RC4_STATE *)pbKeyStruct;
     UCHAR i = r->I, j = r->J;
     for (ULONG n = 0; n < dwInputLength; n++) {

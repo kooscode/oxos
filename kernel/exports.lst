@@ -346,3 +346,14 @@ RtlUnwind
 RtlWalkFrameChain
 ExRaiseException
 ExRaiseStatus
+XcPKEncPublic
+XcPKDecPrivate
+XcPKGetKeyLen
+XcVerifyPKCS1Signature
+XcModExp
+XcDESKeyParity
+XcKeyTable
+XcBlockCrypt
+XcBlockCryptCBC
+XcCryptService
+XcUpdateCrypto
