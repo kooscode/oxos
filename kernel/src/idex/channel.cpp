@@ -161,3 +161,14 @@ void IdexChannelInit() {
     IdexDiskInit();
     IdexCdRomInit();
 }
+
+// Software reset of both devices (SRST through the device control register), then wait for the master.
+void IdexChannelReset() {
+    outb(IDE_CONTROL, 0);
+    KeStallExecutionProcessor(50);
+    outb(IDE_CONTROL, 4);
+    KeStallExecutionProcessor(100);
+    outb(IDE_CONTROL, 0);
+    KeStallExecutionProcessor(50);
+    IdexWaitForStatus(IDE_STATUS_BSY, 0, 25000000);
+}

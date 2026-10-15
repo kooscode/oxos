@@ -86,9 +86,6 @@ static void XkpShowCode(ULONG Code) {
     RtlZeroMemory(KiPersistedBootKeys + 16, 16);
     XkpRecordError(Code);
     XkpShowCode(Code);
-    for (;;) {
-        LARGE_INTEGER t;
-        t.QuadPart = -1000 * 10000LL;
-        KeDelayExecutionThread(KernelMode, FALSE, &t);
-    }
+    for (;;) // possibly on the boot thread: halt, but keep the clock and DPCs running
+        __asm__ volatile("sti; hlt");
 }

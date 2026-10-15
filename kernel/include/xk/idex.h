@@ -79,6 +79,22 @@ constexpr ULONG IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x70000, IOCTL_DISK_VERIFY = 0x7
 constexpr NTSTATUS STATUS_IO_DEVICE_ERROR = (NTSTATUS)0xC0000185, STATUS_IO_TIMEOUT = (NTSTATUS)0xC00000B5,
                    STATUS_DEVICE_NOT_READY = (NTSTATUS)0xC00000A3, STATUS_BUFFER_TOO_SMALL_IO = (NTSTATUS)0xC0000023;
 
+// IOCTL_IDE_PASS_THROUGH buffer (input = output). On return the register bytes hold the drive's error (Features),
+// count, LBA bytes and status (Command).
+typedef struct _IDEREGS {
+    UCHAR bFeaturesReg, bSectorCountReg, bSectorNumberReg, bCylLowReg, bCylHighReg, bDriveHeadReg, bCommandReg,
+        bHostSendsData;
+} IDEREGS;
+typedef struct _ATA_PASS_THROUGH {
+    IDEREGS IdeReg;
+    ULONG DataBufferSize;
+    PVOID DataBuffer;
+} ATA_PASS_THROUGH;
+XK_SIZE(ATA_PASS_THROUGH, 0x10);
+constexpr NTSTATUS STATUS_REQUEST_ABORTED = (NTSTATUS)0xC0000240;
+void IdexChannelReset();
+void IdexDiskComputePassword(PUCHAR Password);
+
 // Fixed retail partition table (spec/04 §4); slot 0 is the whole disk.
 constexpr ULONG IDE_MAX_PARTITIONS = 20;
 XBAPI ULONG IdexDiskLengthInSectors;

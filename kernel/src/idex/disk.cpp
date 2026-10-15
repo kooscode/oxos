@@ -119,7 +119,11 @@ static void NTAPI IdexDiskFinishIo() {
 
 static void NTAPI IdexDiskTimeout() { IdexDiskFinishIo(); }
 
+static void IdexDiskPassThrough(PIRP Irp);
+
 static void NTAPI IdexDiskStartIo(PDEVICE_OBJECT, PIRP Irp) {
+    if (IoGetCurrentIrpStackLocation(Irp)->MajorFunction == IRP_MJ_DEVICE_CONTROL)
+        return IdexDiskPassThrough(Irp);
     IdexChannelObject.FinishIoRoutine = IdexDiskFinishIo;
     IdexChannelObject.TimeoutExpiredRoutine = IdexDiskTimeout;
     IdexDiskStartTransfer(Irp);
@@ -165,9 +169,73 @@ static NTSTATUS NTAPI IdexDiskDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Ir
                       v->StartingOffset.QuadPart + v->Length <= p->PartitionLength.QuadPart;
         return IdexCompleteWith(Irp, inside ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER, 0);
     }
+    case IOCTL_IDE_PASS_THROUGH: {
+        // The buffer is used in place: input and output must be the same ATA_PASS_THROUGH (16 bytes or more).
+        if (Irp->UserBuffer != s->Parameters.DeviceIoControl.InputBuffer || outLen < sizeof(ATA_PASS_THROUGH) ||
+            s->Parameters.DeviceIoControl.InputBufferLength < sizeof(ATA_PASS_THROUGH))
+            return IdexCompleteWith(Irp, STATUS_INVALID_PARAMETER, 0);
+        IoMarkIrpPending(Irp);
+        IdexChannelObject.StartPacketRoutine(DeviceObject, Irp);
+        return STATUS_PENDING;
+    }
     default:
         return IdexCompleteWith(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
     }
+}
+
+// IDE pass-through (spec/04 §5): the task file is written as given (the drive select is ours), PIO data follows
+// in the direction HostSendsData says, and the returned registers are copied back. The command itself may fail
+// (status ERR): the IRP still succeeds. Ours polls at the channel IRQL, up to 10 s like the reference timeout.
+static NTSTATUS IdexDiskExecutePassThrough(ATA_PASS_THROUGH *p) {
+    PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
+    KIRQL old = KfRaiseIrql(ch->InterruptIrql);
+    NTSTATUS status = STATUS_SUCCESS;
+    outb(IDE_DRIVE, 0xA0);
+    if (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 1000000)) {
+        IdexChannelReset();
+        status = STATUS_REQUEST_ABORTED;
+    } else {
+        outb(IDE_FEATURES, p->IdeReg.bFeaturesReg);
+        outb(IDE_COUNT, p->IdeReg.bSectorCountReg);
+        outb(IDE_LBA0, p->IdeReg.bSectorNumberReg);
+        outb(IDE_LBA1, p->IdeReg.bCylLowReg);
+        outb(IDE_LBA2, p->IdeReg.bCylHighReg);
+        outb(IDE_COMMAND, p->IdeReg.bCommandReg);
+        KeStallExecutionProcessor(1);
+        auto data = (PUCHAR)p->DataBuffer;
+        ULONG size = p->DataBufferSize;
+        if (size && p->IdeReg.bHostSendsData) {
+            if (IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 10000000)) {
+                for (ULONG i = 0; i + 1 < size; i += 2)
+                    outw(IDE_DATA, (USHORT)(data[i] | data[i + 1] << 8));
+                if (size & 1)
+                    outb(IDE_DATA, data[size - 1]);
+            }
+        } else if (size && IdexWaitForStatus(IDE_STATUS_BSY, 0, 10000000) && (inb(IDE_ALT_STATUS) & IDE_STATUS_DRQ)) {
+            for (ULONG i = 0; i + 1 < size; i += 2) {
+                USHORT w = inw(IDE_DATA);
+                data[i] = (UCHAR)w, data[i + 1] = (UCHAR)(w >> 8);
+            }
+            if (size & 1)
+                data[size - 1] = inb(IDE_DATA);
+        }
+        IdexWaitForStatus(IDE_STATUS_BSY, 0, 10000000);
+        p->IdeReg.bCommandReg = inb(IDE_STATUS); // the returned status
+        p->IdeReg.bFeaturesReg = inb(IDE_ERROR);
+        p->IdeReg.bSectorCountReg = inb(IDE_COUNT);
+        p->IdeReg.bSectorNumberReg = inb(IDE_LBA0);
+        p->IdeReg.bCylLowReg = inb(IDE_LBA1);
+        p->IdeReg.bCylHighReg = inb(IDE_LBA2);
+    }
+    KfLowerIrql(old);
+    return status;
+}
+
+static void IdexDiskPassThrough(PIRP Irp) {
+    Irp->IoStatus.Information = IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.OutputBufferLength;
+    Irp->IoStatus.Status = IdexDiskExecutePassThrough((ATA_PASS_THROUGH *)Irp->UserBuffer);
+    IofCompleteRequest(Irp, 1);
+    IdexChannelStartNextPacket();
 }
 
 static NTSTATUS NTAPI IdexDiskFlush(PDEVICE_OBJECT, PIRP Irp) {
@@ -308,6 +376,69 @@ static void IdexCopyIdentifyString(const USHORT *words, ULONG count, char *out, 
     s->Length = (USHORT)n;
 }
 
+XBAPI UCHAR XboxHDKey[16];
+XBAPI void NTAPI XcHMAC(const UCHAR *, ULONG, const UCHAR *, ULONG, const UCHAR *, ULONG, PUCHAR);
+XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength, BOOLEAN DoWrite);
+extern ULONG XeConsoleGameRegion;
+[[noreturn]] void IdexFatalError(ULONG Code);
+
+// The drive password: HMAC-SHA1(XboxHDKey, model, serial) over the trimmed IDENTIFY strings, zero-padded to 32.
+void IdexDiskComputePassword(PUCHAR Password) {
+    XcHMAC(XboxHDKey, 16, (PUCHAR)HalDiskModelNumber.Buffer, HalDiskModelNumber.Length,
+           (PUCHAR)HalDiskSerialNumber.Buffer, HalDiskSerialNumber.Length, Password);
+}
+
+static NTSTATUS IdexDiskExecutePassThrough(ATA_PASS_THROUGH *p);
+
+// SECURITY UNLOCK (0xF2, user password) with the pass-through code (the reference sends the IOCTL to Partition0;
+// ours runs on the boot thread, which cannot own IRPs), then IDENTIFY again and
+// INITIALIZE DEVICE PARAMETERS (16 heads, 63 sectors). Failures: fatal error 6 (unlock, except on manufacturing
+// units) or 8 (the follow-up commands).
+static void IdexDiskUnlock(const UCHAR *Password) {
+    static UCHAR block[512];
+    RtlZeroMemory(block, sizeof(block));
+    RtlCopyMemory(block + 2, Password, 32);
+    ATA_PASS_THROUGH p = {};
+    p.IdeReg.bCommandReg = 0xF2;
+    p.IdeReg.bHostSendsData = TRUE;
+    p.DataBufferSize = sizeof(block);
+    p.DataBuffer = block;
+    NTSTATUS status = IdexDiskExecutePassThrough(&p);
+    if (NT_SUCCESS(status) && !(p.IdeReg.bCommandReg & IDE_STATUS_ERR))
+        IdexDiskSecurityUnlocked = TRUE;
+    else if (!(XeConsoleGameRegion & 0x80000000))
+        IdexFatalError(6);
+    KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
+    bool ok = IdexDiskCommand(0xEC, 0, 0) || (inb(IDE_ALT_STATUS) & IDE_STATUS_DRQ);
+    if (ok) {
+        for (ULONG i = 0; i < 256; i++)
+            inw(IDE_DATA);
+        outb(IDE_DRIVE, 0xAF);
+        ok = IdexWaitForStatus(IDE_STATUS_BSY, 0, 1000000);
+        if (ok) {
+            outb(IDE_COUNT, 0x3F);
+            outb(IDE_COMMAND, 0x91);
+            KeStallExecutionProcessor(1);
+            ok = IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000) && !(inb(IDE_ALT_STATUS) & IDE_STATUS_ERR);
+        }
+    }
+    KfLowerIrql(old);
+    if (!ok)
+        IdexFatalError(8);
+}
+
+// End of disk init (cold boot, retail units): count the power cycle in the refurb record (on the disk, so it runs
+// on a system thread: the title launcher calls it).
+void IdexDiskCountPowerCycle() {
+    if (XeConsoleGameRegion & 0x80000000)
+        return;
+    ULONG info[4];
+    if (NT_SUCCESS(ExReadWriteRefurbInfo(info, sizeof(info), FALSE))) {
+        info[1]++;
+        ExReadWriteRefurbInfo(info, sizeof(info), TRUE);
+    }
+}
+
 void IdexDiskInit() {
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     outb(IDE_DRIVE, 0xA0);
@@ -334,9 +465,6 @@ void IdexDiskInit() {
     if (IdexDiskLengthInSectors < 0xEE8AB0)
         IdexFatalError(9);
     IdexDiskSecurityWord = id[128];
-    if ((id[128] & 3) == 3) // supported + enabled
-        IdexDiskSecurityUnlocked = !(id[128] & 4);
-    // TODO(M4): a locked drive needs SECURITY UNLOCK with HMAC-SHA1(XboxHDKey, model, serial).
 
     OBJECT_STRING name;
     RtlInitAnsiString(&name, "\\Device\\Harddisk0");
@@ -347,4 +475,15 @@ void IdexDiskInit() {
         NT_SUCCESS(ObInsertObject(dir, &attrs, 0, &h)))
         NtClose(h);
     IdexDiskCreateDevice(0, 0, (LONGLONG)IdexDiskLengthInSectors << 9, &IdexDiskPartitionTable[0]);
+
+    // ATA security (IDENTIFY word 128: bit 1 enabled, bit 2 locked).
+    if (IdexDiskSecurityWord & 2) {
+        if (!(IdexDiskSecurityWord & 4)) {
+            IdexDiskSecurityUnlocked = TRUE;
+        } else {
+            UCHAR password[32] = {};
+            IdexDiskComputePassword(password);
+            IdexDiskUnlock(password);
+        }
+    }
 }

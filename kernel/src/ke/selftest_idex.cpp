@@ -6,6 +6,8 @@
 volatile ULONG KiTestIdexPartitionSig[6][4]; // first 16 bytes of each partition (0 = whole disk sector 0)
 volatile ULONG KiTestIdexBigSum, KiTestIdexBigOk;  // 256 KB read at the start of partition 1 (E:)
 volatile ULONG KiTestIdexWriteOk, KiTestIdexIoctlOk, KiTestIdexErrorsOk, KiTestIdexNamesOk, KiTestIdexDone;
+volatile ULONG KiTestIdexPassThroughOk, KiTestIdexSecurityAfter; // IDENTIFY word 128 after boot
+volatile UCHAR KiTestIdexPassword[32]; // the derived drive password (boot_test.py recomputes it)
 
 static PDEVICE_OBJECT IdexTestOpen(PCSZ name) {
     OBJECT_STRING s;
@@ -96,6 +98,38 @@ static void NTAPI IdexControllerThread(PVOID) {
     ok &= IdexTestRead(parts[2], buf, 1024, 0x1F400000 - 512) == STATUS_INVALID_PARAMETER;
     ok &= IdexTestRead(parts[2], buf, 512, 0x1F400000 - 512) == STATUS_SUCCESS;
     KiTestIdexErrorsOk = ok;
+
+    // IDE pass-through: IDENTIFY DEVICE through Partition0 returns the model the driver reported; the buffer rule.
+    ok = parts[0] != nullptr;
+    if (ok) {
+        ATA_PASS_THROUGH p = {}, q = {};
+        p.IdeReg.bCommandReg = 0xEC;
+        p.DataBufferSize = 512;
+        p.DataBuffer = buf;
+        RtlZeroMemory(buf, 512);
+        ULONG got = 0;
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p),
+                                                  &got, FALSE) == STATUS_SUCCESS && got == sizeof(p);
+        ok &= !(p.IdeReg.bCommandReg & 0x81) && HalDiskModelNumber.Length >= 2 &&
+              buf[54] == (UCHAR)HalDiskModelNumber.Buffer[1] && buf[55] == (UCHAR)HalDiskModelNumber.Buffer[0];
+        KiTestIdexSecurityAfter = buf[256] | buf[257] << 8;
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &q, sizeof(q),
+                                                  nullptr, FALSE) == STATUS_INVALID_PARAMETER;
+        // A failing command still completes the IRP: status ERR comes back in the registers.
+        p = {};
+        p.IdeReg.bCommandReg = 0xF2; // SECURITY UNLOCK on an unlocked drive (or one without security) is aborted
+        p.IdeReg.bHostSendsData = TRUE;
+        p.DataBufferSize = 512;
+        p.DataBuffer = buf;
+        RtlZeroMemory(buf, 512);
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p),
+                                                  nullptr, FALSE) == STATUS_SUCCESS;
+        KiTestIdexPassThroughOk = ok;
+    }
+    UCHAR password[32] = {};
+    IdexDiskComputePassword(password);
+    for (ULONG i = 0; i < 32; i++)
+        KiTestIdexPassword[i] = password[i];
 
     for (ULONG i = 0; i < 6; i++)
         if (i != 1 && parts[i])
