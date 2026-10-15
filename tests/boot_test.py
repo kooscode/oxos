@@ -201,6 +201,14 @@ def run_checks(mon, hdd=None, title_map=None):
         "M3c-2": fatx_checks(mon, hdd),
         "M3c-3": dvd_checks(mon),
         "M4a": title_checks(mon, title_map),
+        "M4b-1": {
+            "EEPROM read (0xFFFF) + security section authenticated": mon.read("KiTestHalEepromOk") == 1,
+            "settings: game region, video standard, unknown index": mon.read("KiTestHalSettingsOk") == 1
+                and mon.read("KiTestHalRegion") != 0,
+            "save setting + read back, checksum kept": mon.read("KiTestHalSaveOk") == 1,
+            "SMC tray state with a disc = 0x60": mon.read("KiTestHalTrayState") == 0x60,
+            "HAL suite finished": mon.read("KiTestHalDone") == 1,
+        },
     }
 
 

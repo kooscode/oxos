@@ -43,7 +43,8 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 3c-3: DVD (ATAPI), XDVDFS, RAW file system (spec 04c). ✅ passes in xemu with a generated XISO.
 4. XBE loader and title launch (spec 05):
    - 4a: XBE loader, kernel thunks, section load/digests, media/region checks, title keys, path symlinks, test title from disc. ✅ passes in xemu.
-   - 4b: boot the stock dashboard (remaining exports: EEPROM settings, SMC/AV, crypto, ...).
+   - 4b-1: SMBus, SMC tray/reset, EEPROM settings + security section (HD key, region), HalReturnToFirmware (spec 12). ✅ passes in xemu.
+   - 4b-2: AV mode setting (encoders + NV2A CRTC), then the dashboard on C: (an nxdk app on the test image).
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).
 
 ## Known deviations (tracked)
