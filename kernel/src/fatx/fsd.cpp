@@ -362,6 +362,22 @@ static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONG offs
     return STATUS_SUCCESS;
 }
 
+// Scatter/gather: one page-sized piece of the transfer per segment element (spec/11 §5).
+static NTSTATUS FatxTransferIrp(FATX_VOLUME *v, FATX_FCB *f, PIRP Irp, bool write, ULONG offset, PUCHAR buffer,
+                                ULONG length) {
+    if (!Irp->SegmentArray)
+        return FatxTransfer(v, f, write, offset, buffer, length);
+    for (ULONG i = 0; length; i++) {
+        ULONG run = length < PAGE_SIZE ? length : PAGE_SIZE;
+        NTSTATUS status = FatxTransfer(v, f, write, offset, (PUCHAR)Irp->SegmentArray[i].Buffer, run);
+        if (!NT_SUCCESS(status))
+            return status;
+        offset += run;
+        length -= run;
+    }
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     FATX_VOLUME *v = FatxVolume(DeviceObject);
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
@@ -378,8 +394,8 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         IoCopyCurrentIrpStackLocationToNext(Irp);
         return IofCallDriver(v->TargetDevice, Irp);
     }
-    if (Irp->SegmentArray)
-        return FatxComplete(Irp, STATUS_INVALID_PARAMETER); // scatter/gather: not supported yet
+    if (Irp->SegmentArray && ((offset.LowPart | length) & (v->SectorSize - 1)))
+        return FatxComplete(Irp, STATUS_INVALID_PARAMETER); // scatter/gather is always sector-granular
     if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) &&
         ((offset.LowPart | length) & (v->SectorSize - 1)))
         return FatxComplete(Irp, STATUS_INVALID_PARAMETER);
@@ -395,7 +411,7 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         else if (length && end > f->FileSize)
             status = FatxSetFileSize(v, f, (ULONG)end);
         if (NT_SUCCESS(status) && length)
-            status = FatxTransfer(v, f, true, offset.LowPart, buffer, length);
+            status = FatxTransferIrp(v, f, Irp, true, offset.LowPart, buffer, length);
         if (NT_SUCCESS(status)) {
             done = length;
             f->LastWriteTime = FatxCurrentTimestamp();
@@ -407,7 +423,7 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             status = length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
         } else {
             done = f->FileSize - offset.LowPart < length ? f->FileSize - offset.LowPart : length;
-            status = FatxTransfer(v, f, false, offset.LowPart, buffer, done);
+            status = FatxTransferIrp(v, f, Irp, false, offset.LowPart, buffer, done);
             if (!NT_SUCCESS(status))
                 done = 0;
         }
