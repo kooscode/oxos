@@ -701,6 +701,7 @@ void KiStartFatxSelfTests();
 void KiStartDvdSelfTests();
 void KiStartHalSelfTests();
 void KiStartRtlSelfTests();
+void KiStartSehSelfTests();
 
 static void KiStartThreadSelfTests() {
     KiStartIoSelfTests();
@@ -709,6 +710,7 @@ static void KiStartThreadSelfTests() {
     KiStartDvdSelfTests();
     KiStartHalSelfTests();
     KiStartRtlSelfTests();
+    KiStartSehSelfTests();
     KiCreateSystemThread(ObControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
