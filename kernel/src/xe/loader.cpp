@@ -306,6 +306,7 @@ XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChang
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
 bool HalpCmosSignatureValid();
+void IdexDiskCountPowerCycle();
 
 volatile ULONG XeTitleLaunched; // 1 = disc title, 2 = dashboard, 3 = launched from the LaunchDataPage
 volatile ULONG XeLaunchReason;  // the cold-boot pre-launch check result (§1)
@@ -474,6 +475,8 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
+    if (!KiQuickRebootFlag)
+        IdexDiskCountPowerCycle();
     XeLaunchReason = KiQuickRebootFlag ? 0 : XepCheckFirstBoot();
     XepLaunchTitle(XeLaunchReason);
     XepPrepareToEnterTitle();

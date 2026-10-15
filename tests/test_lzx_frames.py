@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that mkbios's uncompressed-LZX stream decodes correctly across several 32 KiB frames,
+"""Check that mkbios's LZX stream (tools/lzx.py) decodes correctly across several 32 KiB frames,
 including an odd-length final frame, using the unpacker's libarchive-based CAB decoder."""
 import importlib.util, os, random, sys
 
@@ -17,8 +17,9 @@ mkbios = load("mkbios", os.path.join(ROOT, "tools", "mkbios.py"))
 unpack = load("unpack", os.path.join(ROOT, "..", "tmp4", "xbox_bios_unpack.py"))
 
 for size in (1, 0x8000, 0x8001, 3 * 0x8000 + 0x1235, 0x9B501):
-    data = random.Random(size).randbytes(size)
-    blocks = unpack.lzx_blocks(mkbios.lzx_uncompressed_stream(data))
+    rnd = random.Random(size)
+    data = bytes(rnd.choice(b"abcdefgh") if i % 3 else rnd.randrange(256) for i in range(size))
+    blocks = unpack.lzx_blocks(mkbios.lzx_stream(data))
     cab, total = unpack.make_cab(blocks)
     out = unpack.cab_extract(cab, total)
     status = "ok" if out == data else "MISMATCH"

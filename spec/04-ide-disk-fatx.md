@@ -40,7 +40,13 @@ Names marked (inferred) are not symbols in the binary.
      (20 bytes, zero-padded to 32) → SECURITY UNLOCK (0x800559f8)
    - not enabled → flag stays 0. The XBE loader then refuses titles that don't allow "non-secure hard disk"
      with **fatal error 5** (spec 05).
-8. Final step 0x80055ac6 (not yet decompiled).
+   Unlock details (0x800559f8, confirmed): a 512-byte block, word 0 = 0 (user password), the 32-byte password at
+   +2; sent as IDE pass-through (IOCTL 0x4D028) to Partition0 with command **0xF2**, HostSendsData = 1. Error (IRP
+   failure or status ERR) → **fatal error 6**, unless the console is a manufacturing unit (region bit 31). Success →
+   the disk-OK flag. Then, at the channel IRQL: IDENTIFY again, and **INITIALIZE DEVICE PARAMETERS (0x91)** with
+   drive/head 0xAF and count 0x3F (16 heads, 63 sectors); failure → **fatal error 8**.
+8. Final step 0x80055ac6: unless boot-flags 0x11 or a manufacturing unit, read the refurb record
+   (`ExReadWriteRefurbInfo`, 16 bytes), increment its **power-cycle count** (dword 1) and write it back.
 Fatal errors 5/7/8/9 go through the reporter at 0x80055933 (spec 05 §6).
 
 ## 3. DVD drive (device 1, slave), cold boot (0x80055d55)
@@ -114,13 +120,24 @@ Evidence: `ev_7550c775…` (channel init, partition create, channel StartPacket,
   - FLUSH_BUFFERS: flush the drive cache
   - DEVICE_CONTROL: GET_DRIVE_GEOMETRY 0x70000, VERIFY 0x70014, GET_PARTITION_INFO 0x74004, IDE pass-through 0x4D028
     (queued to the channel); others → STATUS_INVALID_DEVICE_REQUEST
+- **IDE pass-through** (StartIo 0x80024c9d, ISR 0x80024c06): buffer `ATA_PASS_THROUGH` {IDEREGS (Features, Count,
+  Number, CylLow, CylHigh, DriveHead, Command, HostSendsData), DataBufferSize, DataBuffer} = 16 bytes; the IRP's
+  UserBuffer must *be* the input buffer and both lengths ≥ 16, else STATUS_INVALID_PARAMETER. Information = output
+  length. Select drive 0xA0 (DriveHead from the caller is not used), wait not-busy (else reset the channel: SRST
+  pulse on 0x3F6, then poll; STATUS_REQUEST_ABORTED), write 0x1F1–0x1F5 and the command, then PIO data out if
+  HostSendsData (wait for DRQ). On the interrupt: the error, count, LBA bytes and **status** (in the Command byte)
+  are copied back; PIO data in when !HostSendsData. Timeout 10 s. The IRP status is success even if the command
+  failed.
   - everything else → IoInvalidDeviceRequest
 - **Transfer completion:**
   - error → retry (≤ 4) or fail
   - more than 128 KB left → advance (length −= 128 KB, buffer += 128 KB, LBA += 0x100) and restart
   - otherwise success, IofCompleteRequest(boost 1), start the next channel packet
 - Our implementation polls IDENTIFY/SET FEATURES at init; the whole-disk Partition0 is flagged RAW_MOUNT_ONLY.
-  ATA security unlock (needs XboxHDKey + HMAC-SHA1) is not implemented yet. The xemu test image is not locked.
+  Milestone 6a: ATA security unlock and the pass-through IOCTL are implemented (ours polls the pass-through at the
+  channel IRQL). Our disk init runs on the boot thread, so the unlock calls the pass-through code directly and the
+  refurb power-cycle count is done by the title-launcher thread. xemu emulates a locked drive: word 128 goes
+  0x0007 → 0x0003, proving the password derivation.
 
 ## 6. FATX volume mount (boot-sector processing, 0x80026be3)
 Input: partition device (sector size and sector shift from the device) and partition length.

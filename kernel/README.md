@@ -24,7 +24,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool |
 | `src/rtl/` | runtime library |
 | `exports.lst` | implemented exports; `../tools/gen_def.py` assigns the reference ordinals |
-| `../tools/mkbios.py` | flattens the PE, LZX-packs (uncompressed blocks), encrypts, fixes the 2BL digest |
+| `../tools/mkbios.py`, `../tools/lzx.py` | flattens the PE, LZX-compresses it, encrypts, fixes the 2BL digest |
 | `../tests/` | `boot_test.py` (xemu/QMP milestone checks), `test_lzx_frames.py` (packer round-trip) |
 
 ## Milestones
@@ -53,7 +53,9 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 5d-2: quick reboot (`.persist` section, device quiesce, persisted-memory re-adoption) + LaunchDataPage title-to-title launches (spec 02 §6, 05 §9; `make test-relaunch`). ✅ passes in xemu.
    - 5e: launch policy — first-boot reasons (CMOS clock-set signature, settings), tray/error → dashboard LDP reasons, dashboard failure → LED + fatal error, LDP moved below the kernel (spec 05 §10). ✅ passes in xemu.
    - 5f: fatal-error reporter — LED, EEPROM error history, code drawn on screen (spec 05 §6; `make test-fatal`). ✅ passes in xemu.
-6. Real-hardware validation (encoder mode tables, SMC events, microcode).
+6. Real-hardware readiness:
+   - 6a: ATA security unlock (HMAC-SHA1 drive password), IDE pass-through IOCTL, refurb power-cycle count (spec 04 §2/§5); LZX compression in `tools/lzx.py` so the kernel fits the 2BL's 256 KB bank. ✅ passes in xemu (its locked drive is unlocked).
+   - Next: real-hardware validation (encoder mode tables, SMC events, microcode).
 
 ## Known deviations (tracked)
 - `XboxHardwareInfo.GpuRevision` is read from PCI config rather than NV2A PMC_BOOT_0, and the strap flags are pending (needs MMIO mapping).
@@ -61,4 +63,4 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
-- The image uses LZX *uncompressed* blocks, so it is larger than a compressed one would be. Fine at this size; a real compressor may be needed as the kernel grows.
+- The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.

@@ -6,7 +6,9 @@ located through the linker map and read with HMP `x`.
 
 usage: boot_test.py --bios build/bios.bin --mcpx-rom mcpx.bin --map build/xboxkrnl.map [--xemu PATH]
 """
-import argparse, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time
+import argparse
+import hashlib
+import hmac, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2  # noqa: E402
@@ -230,7 +232,25 @@ def idex_checks(mon, hdd):
         for i, lba in enumerate(starts))
     data = struct.unpack("<65536I", q.read(0x55F400 * 512, 0x40000))
     want = sum(v * (i | 1) for i, v in enumerate(data)) & 0xFFFFFFFF
+
+    def mem(name, n):
+        return b"".join(struct.pack("<I", mon.read_offset(name, i)) for i in range(0, n, 4))[:n]
+
+    def ansi(name):  # STRING {Length, MaximumLength, Buffer}
+        length = mon.read(name) & 0xFFFF
+        buf = mon.read_offset(name, 4)
+        raw = b"".join(struct.pack("<I", int(mon.hmp(f"x/1wx {buf + i:#x}").split(":")[1].split()[0], 16))
+                       for i in range(0, length + 3, 4))
+        return raw[:length]
+    password = hmac.new(mem("XboxHDKey", 16), ansi("HalDiskModelNumber") + ansi("HalDiskSerialNumber"),
+                        hashlib.sha1).digest() + bytes(12)
+    before, after = mon.read("IdexDiskSecurityWord") & 0xFFFF, mon.read("KiTestIdexSecurityAfter")
+    print(f"  (IDENTIFY word 128: {before:#06x} at boot, {after:#06x} after)")
     return {
+        "IDE pass-through: IDENTIFY, buffer rule, failing command completes": mon.read("KiTestIdexPassThroughOk") == 1,
+        "drive password = HMAC-SHA1(XboxHDKey, model, serial)": mem("KiTestIdexPassword", 32) == password,
+        "locked drive unlocked at boot (word 128: locked bit gone)": not (before & 4)
+            or (after & 6) == 2 and mon.read("IdexDiskSecurityUnlocked") & 0xFF == 1,
         "disk identified: 8 GB LBA28 capacity": mon.read("IdexDiskLengthInSectors") == q.size // 512,
         "\\Device\\Harddisk0\\PartitionN on demand, names checked": mon.read("KiTestIdexNamesOk") == 1,
         "sector 0 of partitions 0-5 matches the image": sigs_ok,
@@ -468,7 +488,7 @@ def main():
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
-        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
+        "[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"

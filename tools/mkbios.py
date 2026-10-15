@@ -12,10 +12,13 @@ Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00
 The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
 fields 0x28..0x37 describe the .data copy used by quick reboot (spec/02 §1).
 
-LZX: each 32 KiB frame is one *uncompressed* LZX block, so no compressor is needed. The output is
-checked by decoding it again with libarchive (via the unpacker's CAB wrapper) when available.
+LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
+stream); its own decoder checks the result before the image is written.
 """
-import argparse, hashlib, struct, sys
+import argparse, hashlib, os, struct, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lzx  # noqa: E402
 
 BANK = 0x40000
 FLASH_BASE = 0xFFFC0000
@@ -80,41 +83,12 @@ def flatten(pe, data_src_addr_for):
     return bytes(img), bytes(img[va:va + init_len])
 
 
-class BitWriter:
-    """LZX bit order: 16-bit little-endian words, bits consumed MSB first."""
-
-    def __init__(self):
-        self.out, self.acc, self.n = bytearray(), 0, 0
-
-    def put(self, value, bits):
-        for i in reversed(range(bits)):
-            self.acc = (self.acc << 1) | ((value >> i) & 1)
-            self.n += 1
-            if self.n == 16:
-                self.out += struct.pack("<H", self.acc)
-                self.acc = self.n = 0
-
-    def align16(self):
-        if self.n:
-            self.put(0, 16 - self.n)
-
-
-def lzx_uncompressed_stream(image):
+def lzx_stream(image):
     """LDI stream: per 32 KiB frame {u16 compressed_len, u16 uncompressed_len, LZX bytes}, then 0."""
-    out = bytearray()
-    for n, off in enumerate(range(0, len(image), FRAME)):
-        chunk = image[off:off + FRAME]
-        bw = BitWriter()
-        if n == 0:
-            bw.put(0, 1)                 # no Intel E8 translation
-        bw.put(3, 3)                     # block type: uncompressed
-        bw.put(len(chunk), 24)           # block size
-        bw.align16()                     # header never ends word-aligned here (27/28 bits)
-        frame = bytes(bw.out) + struct.pack("<III", 1, 1, 1) + chunk
-        if len(chunk) & 1:
-            frame += b"\0"
-        out += struct.pack("<HH", len(frame), len(chunk)) + frame
-    return bytes(out) + b"\0\0\0\0"
+    frames = lzx.compress_frames(image)
+    if lzx.decompress_frames(frames) != image:
+        sys.exit("LZX self-check failed")
+    return b"".join(struct.pack("<HH", len(c), u) + c for c, u in frames) + b"\0\0\0\0"
 
 
 # Modded BIOSes (e.g. "Complex 4627") carry a 2BL stub that patches the decompressed kernel at fixed addresses:
@@ -161,7 +135,7 @@ def main():
     if a.flat_kernel:
         open(a.flat_kernel, "wb").write(image)
 
-    kernel = rc4(kkey, lzx_uncompressed_stream(image))
+    kernel = rc4(kkey, lzx_stream(image))
     dsz, ksz = len(data_init), len(kernel)
     dstart = OFF_2BL - dsz
     kstart = dstart - ksz
