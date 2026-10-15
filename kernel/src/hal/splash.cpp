@@ -11,7 +11,7 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
 XBAPI UCHAR HalBootSMCVideoMode;
 
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
-constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40, SPLASH_HOLD_MS = 600;
+constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40, SPLASH_HOLD_MS = 2000; // ~3 s on screen
 
 static KEVENT HalpSplashDone;
 static ULONG *HalpSplashScreen, *HalpSplashImage;

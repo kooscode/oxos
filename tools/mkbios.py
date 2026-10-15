@@ -121,21 +121,28 @@ SPLASH_BANK, SPLASH_W, SPLASH_H = 1, 640, 480
 SPLASH_BLACK = 6  # pixels no brighter than this become black: background noise costs bytes, not quality
 
 
-def splash_bank(path):
+def splash_bank(path, quantize="octree"):
     """The splash bank contents for an image file. A 640x480 palette PNG is kept as it is; anything else Pillow
-    reads is resized to 640x480, its near-black noise cleared and reduced to 256 colours (median cut, no dither)."""
+    reads is scaled to fit 640x480 keeping its aspect ratio (black bars), its near-black noise cleared and reduced
+    to 256 colours without dithering. `quantize`: "octree" (smallest; suits textured art) or "median" (median cut:
+    larger, but no banding in smooth gradients)."""
     from PIL import Image
     im = Image.open(path)
     if im.mode != "P" or im.size != (SPLASH_W, SPLASH_H):
         im = im.convert("RGB")
         if im.size != (SPLASH_W, SPLASH_H):
-            im = im.resize((SPLASH_W, SPLASH_H), Image.LANCZOS)
+            scale = min(SPLASH_W / im.width, SPLASH_H / im.height)
+            w, h = round(im.width * scale), round(im.height * scale)
+            canvas = Image.new("RGB", (SPLASH_W, SPLASH_H))
+            canvas.paste(im.resize((w, h), Image.LANCZOS), ((SPLASH_W - w) // 2, (SPLASH_H - h) // 2))
+            im = canvas
         px = bytearray(im.tobytes())
         for i in range(0, len(px), 3):
             if max(px[i], px[i + 1], px[i + 2]) <= SPLASH_BLACK:
                 px[i] = px[i + 1] = px[i + 2] = 0
         im = Image.frombytes("RGB", im.size, bytes(px))
-        im = im.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        method = {"octree": Image.Quantize.FASTOCTREE, "median": Image.Quantize.MEDIANCUT}[quantize]
+        im = im.quantize(256, method=method, dither=Image.Dither.NONE)
     buf = io.BytesIO()
     im.save(buf, "PNG", optimize=True)
     png = buf.getvalue()
@@ -165,6 +172,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
     ap.add_argument("--splash", help="boot splash image placed in flash bank 1 (1 MiB images only)")
+    ap.add_argument("--splash-quantize", choices=("octree", "median"), default="octree")
     a = ap.parse_args()
 
     raw = open(a.base, "rb").read()
@@ -205,7 +213,7 @@ def main():
     splash = ""
     if a.splash:
         if len(banks) > SPLASH_BANK + 1:
-            banks[SPLASH_BANK], size = splash_bank(a.splash)
+            banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize)
             splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
         else:
             print(f"warning: {len(raw):#x}-byte image has no spare bank for the splash; not included")
