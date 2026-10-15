@@ -3,7 +3,7 @@
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
-#include <xk/io.h>
+#include <xk/idex.h>
 #include <xk/rtl.h>
 
 void KiInitializeDpcs();
@@ -41,6 +41,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
     ObInitSystem();
     IoInitSystem();
+    IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
 
 #if XK_BOOT_SELFTEST

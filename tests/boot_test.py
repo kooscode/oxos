@@ -6,7 +6,10 @@ located through the linker map and read with HMP `x`.
 
 usage: boot_test.py --bios build/bios.bin --mcpx-rom mcpx.bin --map build/xboxkrnl.map [--xemu PATH]
 """
-import argparse, json, os, re, shutil, socket, subprocess, sys, tempfile, time
+import argparse, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from qcow2 import Qcow2  # noqa: E402
 
 
 def map_symbols(path):
@@ -58,7 +61,7 @@ class Monitor:
         return (v1 - v0) / (t1 - t0)
 
 
-def run_checks(mon):
+def run_checks(mon, hdd=None):
     exc = mon.read("KiLastExceptionVector")
     tick_rate = mon.rate("KeTickCount")
     timer_rate = mon.rate("KiTestTimerTicks")
@@ -192,6 +195,30 @@ def run_checks(mon):
             "I/O pool balanced": m3b["KiTestIoPoolBalanced"] == 1,
             "I/O suite finished": m3b["KiTestIoDone"] == 1,
         },
+        "M3c": idex_checks(mon, hdd),
+    }
+
+
+def idex_checks(mon, hdd):
+    if hdd is None:
+        return {"HDD image attached": False}
+    q = Qcow2(hdd)
+    starts = [0, 0x55F400, 0x465400, 0x400, 0x177400, 0x2EE400]
+    sigs_ok = all(
+        [mon.read_offset("KiTestIdexPartitionSig", 16 * i + 4 * w) for w in range(4)]
+        == list(struct.unpack("<4I", q.read(lba * 512, 16)))
+        for i, lba in enumerate(starts))
+    data = struct.unpack("<65536I", q.read(0x55F400 * 512, 0x40000))
+    want = sum(v * (i | 1) for i, v in enumerate(data)) & 0xFFFFFFFF
+    return {
+        "disk identified: 8 GB LBA28 capacity": mon.read("IdexDiskLengthInSectors") == q.size // 512,
+        "\\Device\\Harddisk0\\PartitionN on demand, names checked": mon.read("KiTestIdexNamesOk") == 1,
+        "sector 0 of partitions 0-5 matches the image": sigs_ok,
+        "256 KB DMA read (2 chunks) matches the image": mon.read("KiTestIdexBigOk") == 1 and mon.read("KiTestIdexBigSum") == want,
+        "write + read back (page-crossing pool buffer)": mon.read("KiTestIdexWriteOk") == 1,
+        "IOCTL partition info + drive geometry": mon.read("KiTestIdexIoctlOk") == 1,
+        "alignment / bounds errors": mon.read("KiTestIdexErrorsOk") == 1,
+        "IDE suite finished": mon.read("KiTestIdexDone") == 1,
     }
 
 
@@ -202,16 +229,21 @@ def main():
     ap.add_argument("--map", required=True)
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
+    ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     a = ap.parse_args()
 
     work = tempfile.mkdtemp(prefix="xk-boot-")
     sock = os.path.join(work, "qmp.sock")
     cfg = os.path.join(work, "xemu.toml")
+    hdd_copy = os.path.join(work, "hdd.qcow2")
+    if a.hdd:
+        shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
-        f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n")
+        f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
+        + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else ""))
     log = open(os.path.join(work, "xemu.log"), "w")
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
                             stdout=log, stderr=subprocess.STDOUT)
@@ -222,7 +254,7 @@ def main():
                 break
             time.sleep(0.1)
         time.sleep(a.boot_wait)
-        results = run_checks(Monitor(sock, map_symbols(a.map)))
+        results = run_checks(Monitor(sock, map_symbols(a.map)), a.hdd)
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():
@@ -235,6 +267,8 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
+        if os.path.exists(hdd_copy):
+            os.remove(hdd_copy)  # 1 GB; logs are kept on failure, the disk copy is not
     print("RESULT:", "PASS" if ok else f"FAIL (logs in {work})")
     if ok:
         shutil.rmtree(work, ignore_errors=True)

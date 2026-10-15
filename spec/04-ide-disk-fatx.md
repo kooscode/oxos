@@ -1,6 +1,6 @@
 # Spec 04 — IDE channel, disk, DVD, partitions, FATX mount (stock behaviour)
 
-Clean-room behavioural spec (no decompiled code). **Project rule: reproduce this exactly**
+Clean-room behavioural spec (no decompiled code). **Status: IDE channel + disk + partitions implemented (milestone 3c-1).** **Project rule: reproduce this exactly**
 (LBA28, fixed partition table) so stock drives and stock-formatted disks work. Extensions come later.
 Evidence: batch_decompile `ev_542cc685…` (0x80024ecc), `ev_9e7fc395…` (disk/DVD init),
 `ev_7012e098…` (FATX mount, transfer start, StartIo); objdump notes in `xboxkrnl-4627-notes.md`.
@@ -85,6 +85,42 @@ deleted and the existing one is used.
   **bus-master command 0xFF60 = 0x09 (read) / 0x01 (write)**. Set the ISR/timeout handlers, set the
   timeout counter to 10, and lower IRQL back to DISPATCH.
 - Note: **Xbox IRP major codes differ from NT** (read = 2 here).
+
+## 5a. Driver details (added for milestone 3c-1)
+Evidence: `ev_7550c775…` (channel init, partition create, channel StartPacket, transfer start/finish),
+`ev_2dbaa749…` (Harddisk0 parse), the disk driver object at 0x80012348, and the READ/WRITE and DEVICE_CONTROL dispatch.
+- **IdexChannelObject layout** (4-byte packed; matches the reference globals at 0x8003AD20):
+  InterruptRoutine, FinishIoRoutine, PollResetCompleteRoutine, TimeoutExpiredRoutine, StartPacketRoutine,
+  StartNextPacketRoutine, InterruptIrql +0x18, ExpectingBusMasterInterrupt, StartPacketBusy, StartPacketRequested,
+  Timeout +0x1C (10 s per command), IoRetries, MaximumIoRetries (4), CurrentIrp +0x20, DeviceQueue +0x24,
+  PRD table physical address +0x30, TimerDpc +0x34, FinishDpc +0x50, Timer +0x6C (1 s periodic), Interrupt +0x94.
+- **Channel serialisation:** both drives' StartIo go through the channel's StartPacket. If the channel device queue is idle,
+  record CurrentIrp, reset the retries, set StartPacketBusy and call the device driver's StartIo. A StartNextPacket requested
+  meanwhile runs afterwards.
+- **`\Device\Harddisk0`** is not a directory. It is an object with its own parse procedure:
+  - empty name → STATUS_ACCESS_DENIED
+  - the first element must be `Partition<decimal>` (case-insensitive), number < 20
+  - the device is created on demand (table above), and the rest of the name goes to the I/O parse of that partition device
+  - unknown partition → NAME_NOT_FOUND, or PATH_NOT_FOUND when more path follows
+- **Partition device:** type DISK (mountable), extension 0x24 = {DeviceObject, PARTITION_INFORMATION
+  {StartingOffset, PartitionLength, HiddenSectors = start LBA, PartitionNumber, …}}, Flags |= 0x44, SectorSize 512,
+  AlignmentRequirement 1.
+- **Disk driver dispatch:**
+  - CREATE/CLOSE succeed
+  - READ/WRITE: unless the stack flag 0x80 (cache request) is set, the buffer must be 2-byte aligned and the length and
+    offset 512-aligned, inside the partition. Otherwise STATUS_INVALID_PARAMETER.
+    - length 0 → success
+    - otherwise Information = length; the stack is rewritten to {absolute LBA, buffer address}; pending
+  - FLUSH_BUFFERS: flush the drive cache
+  - DEVICE_CONTROL: GET_DRIVE_GEOMETRY 0x70000, VERIFY 0x70014, GET_PARTITION_INFO 0x74004, IDE pass-through 0x4D028
+    (queued to the channel); others → STATUS_INVALID_DEVICE_REQUEST
+  - everything else → IoInvalidDeviceRequest
+- **Transfer completion:**
+  - error → retry (≤ 4) or fail
+  - more than 128 KB left → advance (length −= 128 KB, buffer += 128 KB, LBA += 0x100) and restart
+  - otherwise success, IofCompleteRequest(boost 1), start the next channel packet
+- Our implementation polls IDENTIFY/SET FEATURES at init; the whole-disk Partition0 is flagged RAW_MOUNT_ONLY.
+  ATA security unlock (needs XboxHDKey + HMAC-SHA1) is not implemented yet. The xemu test image is not locked.
 
 ## 6. FATX volume mount (boot-sector processing, 0x80026be3)
 Input: partition device (sector size and sector shift from the device) and partition length.

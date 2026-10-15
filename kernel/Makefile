@@ -7,6 +7,7 @@ ROOT      := ..
 BUILD     := build
 BIOS_BASE ?= $(ROOT)/xbox-files/bios/Complex_4627.bin
 MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
+HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
 SELFTEST  ?= 1
 
 CXX := clang++
@@ -51,7 +52,7 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
 	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe
 
 test: $(BUILD)/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE)
 
 clean:
 	rm -rf $(BUILD)
