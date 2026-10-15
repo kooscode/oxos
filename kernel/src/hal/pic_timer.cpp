@@ -198,3 +198,31 @@ void HalpSetRealTimeClock(const HAL_TIME_FIELDS *t) {
     HalpCmosWrite(0x09, ToBcd(year % 100));
     restore_flags(flags);
 }
+
+// The "clock has been set" signature in the second CMOS bank (spec/05 §1): bytes 0x10-0x6F and 0x80-0xFF hold
+// 0x55, 0xAA, 0x55, ... Written by NtSetSystemTime; checked before the first title launch.
+static bool HalpCmosPattern(UCHAR first, ULONG count, bool write) {
+    ULONG flags;
+    __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags));
+    UCHAR expect = 0x55;
+    bool ok = true;
+    for (ULONG i = 0; i < count && ok; i++, expect = (UCHAR)~expect) {
+        __asm__ volatile("outb %0, $0x72" ::"a"((UCHAR)(first + i)));
+        if (write) {
+            __asm__ volatile("outb %0, $0x71" ::"a"(expect));
+        } else {
+            UCHAR v;
+            __asm__ volatile("inb $0x71, %0" : "=a"(v));
+            ok = v == expect;
+        }
+    }
+    __asm__ volatile("pushl %0; popfl" ::"r"(flags) : "cc");
+    return ok;
+}
+
+void HalpWriteCmosSignature() {
+    HalpCmosPattern(0x10, 0x60, true);
+    HalpCmosPattern(0x80, 0x80, true);
+}
+
+bool HalpCmosSignatureValid() { return HalpCmosPattern(0x10, 0x60, false) && HalpCmosPattern(0x80, 0x80, false); }

@@ -25,6 +25,8 @@ and a live dump of the 2BL page directory. Virtual memory: batch_decompile `ev_e
   0x000–0x1FF cleared (user space); 0x3C0–0x3DF = 4 MB write-through (0xF0000000–0xF7FFFFFF, 0xEB);
   0x3E0–0x3FD = 4 MB uncached (0xF8000000–0xFF7FFFFF, 0xFB). The reference clears PDE 0x3FF (flash).
   **Ours keeps it mapped**: quick reboot reads the .data copy from flash. To revisit with the quick-reboot pre-reset hook.
+- Pages 1–14 (below the page directory) are free in the reference: the LaunchDataPage is moved there before a
+  title starts (spec 05 §5). Ours matches since milestone 5e.
 - PTE software bits: **bit 9 = last page of an allocation**, **bit 10 = persist across quick reboot**.
 
 ## 3. Protection → PTE (MiProtectToPte)

@@ -298,9 +298,18 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     return status;
 }
 
-// --- Launch (spec/05 §2-3, without the SMC tray handling and the LaunchDataPage paths)
+// --- Launch (spec/05 §1-3, §5)
 
-volatile ULONG XeTitleLaunched; // 1 = title entered, 2 = dashboard entered, 3 = launched from the LaunchDataPage
+XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
+                                               PULONG ResultLength);
+XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
+XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
+XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
+bool HalpCmosSignatureValid();
+
+volatile ULONG XeTitleLaunched; // 1 = disc title, 2 = dashboard, 3 = launched from the LaunchDataPage
+volatile ULONG XeLaunchReason;  // the cold-boot pre-launch check result (§1)
+UCHAR XeTitleDiscAuthenticated; // set by DVD authentication (not implemented: stays 0)
 [[noreturn]] void IdexFatalError(ULONG Code);
 extern "C" volatile UCHAR KiQuickRebootFlag;
 
@@ -310,49 +319,152 @@ struct LAUNCH_DATA_PAGE {
     CHAR LaunchPath[520];
     ULONG Flags;
     UCHAR Pad[492];
-    UCHAR LaunchData[3072];
+    ULONG DashboardReason; // +0x400
+    ULONG Reserved;
+    ULONG DashboardCode;   // +0x408
+    UCHAR LaunchData[3060];
 };
 static_assert(sizeof(LAUNCH_DATA_PAGE) == 0x1000);
 
-static void XepFreeLaunchDataPage() {
-    MmFreeContiguousMemory(LaunchDataPage);
-    LaunchDataPage = nullptr;
+// §1: bit 0 the clock was never set (CMOS signature, see NtSetSystemTime) or is outside [2001, 2101);
+// bits 1/2 the user settings are unreadable or lack a language (+0x08) / time zone (+0x30).
+static ULONG XepCheckFirstBoot() {
+    ULONG reason = 0;
+    if (HalpCmosSignatureValid()) {
+        LARGE_INTEGER now;
+        KeQuerySystemTime(&now);
+        if (now.QuadPart < 0x1C07385C89DC000LL /* 2001-01-01 */ || now.QuadPart >= 0x2309034F02AC000LL /* 2101-01-01 */)
+            reason = 1;
+    } else {
+        reason = 1;
+    }
+    UCHAR settings[0x60];
+    ULONG type, length;
+    if (!NT_SUCCESS(ExQueryNonVolatileSetting(0xFF, &type, settings, sizeof(settings), &length)))
+        return reason | 6;
+    if (!*(ULONG *)(settings + 0x30))
+        reason |= 4;
+    if (!settings[0x08])
+        reason |= 2;
+    return reason;
 }
 
-// Path A (spec/05 §2): a title asked for another title. Returns the load status, or 1 when there is no request
-// (or the request is a dashboard launch).
-static NTSTATUS XepLaunchFromDataPage() {
-    auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
-    if (!ldp)
-        return 1;
-    if (ldp->Flags & 1) { // already tried once: do not loop
-        XepFreeLaunchDataPage();
-        return 1;
+static void XepLaunchDashboard() {
+    if (NT_SUCCESS(XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE)))
+        return;
+    if (!KiQuickRebootFlag) {
+        HalWriteSMBusValue(0x20, 8, FALSE, 0xE1); // LED sequence, then LED mode "custom"
+        HalWriteSMBusValue(0x20, 7, FALSE, 1);
+        auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+        ULONG code = 13;
+        if (ldp && ldp->LaunchDataType == 1)
+            code += ldp->DashboardReason;
+        else if (XeTitleDiscAuthenticated)
+            code = 20;
+        IdexFatalError(code);
     }
-    ldp->Flags |= 1;
-    CHAR path[361];
-    ULONG n = 0;
-    while (n < 360 && ldp->LaunchPath[n])
-        path[n] = ldp->LaunchPath[n], n++;
-    path[n] = 0;
-    if (ldp->LaunchDataType == 0xFFFFFFFF)
-        XepFreeLaunchDataPage();
-    if (!n)
-        return 1; // the dashboard
-    // "\Device\...\dir;name.xbe": D: is the directory, the image is dir\name.xbe.
-    OBJECT_STRING dir = {0, 0, path}, link;
-    for (ULONG i = 0; i < n; i++)
-        if (path[i] == ';') {
-            dir.Length = dir.MaximumLength = (USHORT)i;
-            path[i] = '\\';
+    HalReturnToFirmware(4);
+}
+
+static void XepLaunchDashboardWithReason(ULONG Reason, ULONG Code) {
+    if (!LaunchDataPage)
+        LaunchDataPage = MmAllocateContiguousMemory(0x1000);
+    if (LaunchDataPage) {
+        MmPersistContiguousMemory(LaunchDataPage, 0x1000, TRUE);
+        auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+        RtlZeroMemory(ldp, 0x1000);
+        ldp->LaunchDataType = 1;
+        ldp->DashboardReason = Reason;
+        ldp->DashboardCode = Code;
+    }
+    XepLaunchDashboard();
+}
+
+static void XepFreeLaunchDataPage() {
+    PVOID page = LaunchDataPage;
+    LaunchDataPage = nullptr;
+    MmFreeContiguousMemory(page);
+}
+
+static bool XepPlainDashboardError(NTSTATUS s) {
+    return s == (NTSTATUS)0xC0000010 || s == (NTSTATUS)0xC0000013 || s == (NTSTATUS)0xC0000015 ||
+           s == (NTSTATUS)0xC0000034 || s == (NTSTATUS)0xC000003A || s == (NTSTATUS)0xC00000A3 ||
+           s == (NTSTATUS)0xC000014F;
+}
+
+// §2. Returns with XeTitleLaunched set once an image is loaded (or does not return).
+static void XepLaunchTitle(ULONG Reason) {
+    NTSTATUS status;
+    auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+    if (!Reason && ldp && (ldp->Flags & 1)) // already tried once: do not loop
+        XepFreeLaunchDataPage(), ldp = nullptr;
+    if (!Reason && ldp) {
+        // A. A title asked for another title.
+        ldp->Flags |= 1;
+        CHAR path[361];
+        RtlCopyMemory(path, ldp->LaunchPath, 360);
+        path[360] = 0;
+        if (ldp->LaunchDataType == 0xFFFFFFFF)
+            XepFreeLaunchDataPage();
+        if (!path[0]) {
+            XeTitleLaunched = 2;
+            return XepLaunchDashboard();
         }
-    RtlInitAnsiString(&link, "\\??\\D:");
-    if (dir.Length)
-        IoCreateSymbolicLink(&link, &dir);
-    NTSTATUS status = XeLoadImage(path, FALSE);
-    if (!NT_SUCCESS(status) && dir.Length)
-        IoDeleteSymbolicLink(&link);
-    return status;
+        // "\Device\...\dir;name.xbe": D: is the directory, the image is dir\name.xbe.
+        OBJECT_STRING dir, link;
+        RtlInitAnsiString(&link, "\\??\\D:");
+        bool linked = false;
+        for (ULONG i = 0; path[i]; i++)
+            if (path[i] == ';') {
+                path[i] = '\\';
+                dir = {(USHORT)i, (USHORT)i, path};
+                linked = NT_SUCCESS(IoCreateSymbolicLink(&link, &dir));
+                break;
+            }
+        status = XeLoadImage(path, FALSE);
+        if (NT_SUCCESS(status)) {
+            XeTitleLaunched = 3;
+            return;
+        }
+        if (linked)
+            IoDeleteSymbolicLink(&link);
+    } else {
+        // B. The disc, else the dashboard.
+        ULONG tray, before, after;
+        HalReadSMCTrayState(&tray, &before);
+        status = XeLoadImage("\\Device\\CdRom0\\default.xbe", FALSE);
+        if (NT_SUCCESS(status)) {
+            XeTitleLaunched = 1;
+            return;
+        }
+        XeTitleLaunched = 2;
+        if (Reason)
+            return XepLaunchDashboardWithReason(3, Reason);
+        HalReadSMCTrayState(&tray, &after);
+        if (tray != 0x60)
+            return XepLaunchDashboard();
+        if (before != after)
+            status = (NTSTATUS)0xC00000A3;
+        if (XepPlainDashboardError(status))
+            return XepLaunchDashboard();
+    }
+    XeTitleLaunched = 2;
+    XepLaunchDashboardWithReason(1, status == STATUS_REGION_MISMATCH ? 3 : status == STATUS_MEDIA_MISMATCH ? 5 : 1);
+}
+
+// §5: keep the LaunchDataPage below the kernel, out of the title's way.
+static void XepPrepareToEnterTitle() {
+    if (!LaunchDataPage)
+        return;
+    ULONG kernelPhys = MmGetPhysicalAddress((PVOID)0x80010000);
+    PVOID page = MmAllocateContiguousMemoryEx(0x1000, 0, kernelPhys - 1, 0, PAGE_READWRITE);
+    if (!page)
+        return;
+    RtlCopyMemory(page, LaunchDataPage, 0x1000);
+    MmPersistContiguousMemory(page, 0x1000, TRUE);
+    PVOID old = LaunchDataPage;
+    LaunchDataPage = page;
+    MmFreeContiguousMemory(old);
 }
 
 static void NTAPI XepTitleThread(PVOID, PVOID) {
@@ -364,19 +476,9 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
-    ULONG launched = 3;
-    NTSTATUS status = XepLaunchFromDataPage();
-    if (status == 1) {
-        launched = 1;
-        status = LaunchDataPage ? (NTSTATUS)0xC0000034 : XeLoadImage("\\Device\\CdRom0\\default.xbe", FALSE);
-    }
-    if (!NT_SUCCESS(status)) {
-        launched = 2;
-        status = XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE);
-    }
-    if (!NT_SUCCESS(status))
-        IdexFatalError(13);
-    XeTitleLaunched = launched;
+    XeLaunchReason = KiQuickRebootFlag ? 0 : XepCheckFirstBoot();
+    XepLaunchTitle(XeLaunchReason);
+    XepPrepareToEnterTitle();
     ((void(__cdecl *)())XbeField(0x128))();
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

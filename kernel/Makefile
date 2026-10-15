@@ -82,7 +82,7 @@ test-relaunch: $(BUILD)/title.xbe
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map \
-	    --relaunch
+	    --relaunch --boot-wait 1
 
 clean:
 	rm -rf $(BUILD) build-release

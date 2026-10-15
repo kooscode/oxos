@@ -299,11 +299,16 @@ def title_checks(mon, title_map, relaunch=False):
         if mon.read("XeTitleLaunched"):
             break
         time.sleep(0.25)
-    for _ in range(160):  # includes the quick reboot into media\second.xbe
-        if mon.hmp(f"x/1wx {base:#x}").split(":")[1].split()[0] == "0x54544b58":
+    for i in range(160):  # includes the quick reboot into media\second.xbe
+        v = mon.hmp(f"x/1wx {base:#x}")
+        if os.environ.get("XK_DEBUG"):
+            print(i, time.time(), v.strip(), mon.read("XeTitleLaunched"), mon.read("KiQuickRebootCount"))
+        if v.split(":")[1].split()[0] == "0x54544b58":
             break
         time.sleep(0.25)
-    words = [int(mon.hmp(f"x/1wx {base + 4 * i:#x}").split(":")[1].split()[0], 16) for i in range(9 + 16 + 3 + 16)]
+    count = 9 + 16 + 3 + 16
+    out = mon.hmp(f"x/{count}wx {base:#x}")  # one command: the relaunch test moves on after 8 s
+    words = [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:count]
 
     def text(ws):
         return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
@@ -320,10 +325,19 @@ def title_checks(mon, title_map, relaunch=False):
         "title finished": words[0] == 0x54544B58,
     }
     if relaunch:
+        for _ in range(80):
+            if mon.read("KiQuickRebootCount") == 2 and mon.read("XeTitleLaunched") == 2:
+                break
+            time.sleep(0.25)
+        ldp = mon.read("LaunchDataPage")
+        page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16)
+                for off in (0, 0x400, 0x408)] if ldp else []
+        checks["missing image from the launch page: dashboard with LDP {type 1, reason 1, code 1}"] = \
+            mon.read("XeTitleLaunched") == 2 and page == [1, 1, 1]
         del checks["path symbolic link \\??\\T: -> Partition1\\XkTest"]  # keep.bin comes from the FATX self-test
         checks |= {
-            "quick reboot (HalReturnToFirmware(2)): kernel re-entered once, LaunchDataPage re-adopted":
-                mon.read("KiQuickRebootCount") == 1 and mon.read("MmPersistedPages") >= 1,
+            "quick reboot (HalReturnToFirmware(2)): kernel re-entered (twice), LaunchDataPage re-adopted":
+                mon.read("KiQuickRebootCount") == 2 and mon.read("MmPersistedPages") >= 1,
             "LaunchDataPage launch of media;second.xbe, first run's results carried over": words[25] == 1
                 and second == "\\Device\\CdRom0\\media\\second.xbe",
             "persisted launch page contents (type, title id, flags, data)": words[27] == 1,
@@ -356,6 +370,7 @@ def misc_checks(mon):
         "disc dismount + remount": mon.read("KiTestMiscDiscRemountOk") == 1,
         "Fsc cache size limits": mon.read("KiTestMiscFscOk") == 1,
         "PhyInitialize completes (success or E_FAIL), link state read": mon.read("KiTestMiscPhyStatus") in (0, 0x801F0001),
+        "CMOS clock-set signature: write, verify, damaged byte detected": mon.read("KiTestMiscCmosOk") == 1,
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 
@@ -382,7 +397,19 @@ def dash_checks(mon):
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
-    }}
+    }, "M5e": launch_reason_checks(mon)}
+
+
+def launch_reason_checks(mon):
+    reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
+    page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
+        if ldp else None
+    print(f"  (cold-boot launch reason {reason:#x}, LaunchDataPage {ldp:#x} {page})")
+    return {
+        "no disc + launch reason: dashboard gets LDP {type 1, reason 3, code = reason} (or none if 0)":
+            page == [1, 3, reason] if reason else ldp == 0,
+        "the launch page sits below the kernel (spec/05 §5)": ldp == 0 or ldp < 0x80010000,
+    }
 
 
 def disk_checks(hdd_copy):
