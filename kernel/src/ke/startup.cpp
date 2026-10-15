@@ -4,10 +4,12 @@
 #include <xk/ke.h>
 #include <xk/rtl.h>
 
+void KiInitializeDpcs();
+
 // Second boot key handed over by the 2BL (likely the certificate key; spec 01 §1).
 UCHAR KiCertKey[16];
 
-// Boot progress, readable from the emulator monitor (tests/m1-boot.py).
+// Boot progress, readable from the emulator monitor (tests/boot_test.py).
 volatile ULONG KiBootStage;
 
 static void KiSetStage(UCHAR code) {
@@ -29,17 +31,32 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     HalInitSystemPhase0(/*coldBoot=*/true);
     HalpDetectHardware();
 
-    // Milestone 1 stops here: clock running, idle at DISPATCH_LEVEL.
-    HalpUnmaskIrq(0);
+    KiInitializeDpcs();
+    KiInitializeTimers();
+    HalEnableSystemInterrupt(0, Latched); // PIT clock
+
+#if XK_BOOT_SELFTEST
+    KiRunBootSelfTests();
+#endif
+
     KfLowerIrql(DISPATCH_LEVEL);
     KiSetStage(post_code::Idle);
     KiIdleLoop();
 }
 
+// Runs at DISPATCH_LEVEL. Like the reference KiIdleLoop, it drains DPCs itself because lowering
+// IRQL never happens here (spec/01 §3).
 void KiIdleLoop() {
     for (;;) {
-        sti();
-        halt();
+        cli();
+        if (!IsListEmpty(&KiPcr.PrcbData.DpcListHead)) {
+            HalClearSoftwareInterrupt(DISPATCH_LEVEL);
+            sti();
+            KiRetireDpcList();
+            continue;
+        }
+        // sti's one-instruction shadow makes "sti; hlt" race-free against the wake-up interrupt.
+        __asm__ volatile("sti\n\thlt" ::: "memory");
     }
 }
 

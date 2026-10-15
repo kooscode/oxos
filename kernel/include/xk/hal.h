@@ -1,5 +1,6 @@
-// Hardware abstraction layer (spec/02-executive-init.md §3).
+// Hardware abstraction layer (spec/02-executive-init.md §3, spec/06).
 #pragma once
+#include <xk/ke.h>
 #include <xk/types.h>
 
 typedef struct _PCI_SLOT_NUMBER {
@@ -16,6 +17,12 @@ typedef struct _PCI_SLOT_NUMBER {
 XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG RegisterNumber, PVOID Buffer,
                                       ULONG Length, BOOLEAN WritePCISpace);
 
+XBAPI ULONG NTAPI HalGetInterruptVector(ULONG BusInterruptLevel, PKIRQL Irql);
+XBAPI void NTAPI HalEnableSystemInterrupt(ULONG BusInterruptLevel, KINTERRUPT_MODE InterruptMode);
+XBAPI void NTAPI HalDisableSystemInterrupt(ULONG BusInterruptLevel);
+XBAPI void FASTCALL HalRequestSoftwareInterrupt(KIRQL RequestIrql);
+XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql);
+
 // Boot flags byte (origin not yet traced, spec 03); bit 0 suppresses the 0x80CF pulse.
 extern UCHAR HalBootFlags;
 
@@ -29,9 +36,16 @@ void HalpInitAcpiPm();
 void HalpPulse();
 void HalpDetectHardware();
 
-// PIC helpers
-void HalpUnmaskIrq(ULONG irq);
+// PIC: the effective mask is (disabled IRQs) | (IRQs whose IRQL <= current IRQL). See spec/06 §1.
+constexpr ULONG HAL_IRQ_BASE_VECTOR = 0x30;
+constexpr KIRQL HalpIrqToIrql(ULONG irq) { return (KIRQL)(26 - irq); }
+void HalpSetIrqlMask(KIRQL irql);
 void HalpEoi(ULONG irq);
+bool HalpIsSpuriousIrq(ULONG irq);
+
+// CMOS access (shared by RTC set-up and the RTC self-test).
+UCHAR HalpCmosRead(UCHAR reg);
+void HalpCmosWrite(UCHAR reg, UCHAR v);
 
 // Thin typed wrappers over HalReadWritePCISpace.
 UCHAR HalpPciRead8(ULONG bus, ULONG dev, ULONG reg);
