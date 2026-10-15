@@ -58,6 +58,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 6b: SMC events (power button, eject, tray, AV pack) on the ACPI SCI, boot flags from the SMC scratch register, the shutdown sequence, `HalReturnToFirmware`/`HalInitiateShutdown` as in the reference (spec 12 §4). ✅ passes in xemu (tray events and SCI delivery; xemu raises button events only from its UI).
    - 6c: `XboxHardwareInfo` exactly as the reference (flash marker, debug port, NV2A straps and boot ID) (spec 02 §5). ✅ passes in xemu.
    - 6d: performance counter as the reference: 3.375 MHz, 32-bit PM timer extended through the SCI (spec 06 §7). ✅ passes in xemu.
+   - 6e: FATX scatter/gather I/O (`NtReadFileScatter`/`NtWriteFileGather`) (spec 04b). ✅ passes in xemu.
    - Next: real-hardware validation (encoder mode tables, SMC events, microcode).
 
 ## Known deviations (tracked)

@@ -75,4 +75,6 @@ FATX driver object at 0x80012470. **Status: implemented (milestone 3c-2).**
 ## Implementation notes
 - Our driver uses a 32 × 4 KB write-through block cache for the FAT and directories. Sector-aligned data runs go
   straight to the disk. One lock per volume.
-- Not done yet: scatter/gather I/O on files, the Fsc* cache exports, dismount, and the RAW file system.
+- Scatter/gather (`NtReadFileScatter` / `NtWriteFileGather`): each FILE_SEGMENT_ELEMENT is one page of the transfer;
+  offset and length must be sector multiples. Ours since milestone 6e (volume handles still reject segment arrays).
+  The Fsc exports, dismount and RAW are covered by specs 16 and 04c.

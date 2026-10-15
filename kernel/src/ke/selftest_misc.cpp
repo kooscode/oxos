@@ -11,11 +11,15 @@ XBAPI ULONG NTAPI PhyGetLinkState(BOOLEAN);
 extern volatile ULONG KiTestXcDone;
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
-    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscDone;
+    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscScatterOk, KiTestMiscDone;
 volatile ULONG KiTestMiscPmTicksPerSecond, KiTestMiscPerfOk;
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency();
 void HalpSmcHandleEvents(ULONG reason);
+XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID, PIO_STATUS_BLOCK, PFILE_SEGMENT_ELEMENT,
+                                       ULONG, PLARGE_INTEGER);
+XBAPI NTSTATUS NTAPI NtWriteFileGather(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID, PIO_STATUS_BLOCK, PFILE_SEGMENT_ELEMENT,
+                                       ULONG, PLARGE_INTEGER);
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 bool HalpCmosSignatureValid();
 void HalpWriteCmosSignature();
@@ -88,6 +92,45 @@ static void NTAPI MiscControllerThread(PVOID) {
     HalpSmcHandleEvents(0x02);
     ok &= NT_SUCCESS(HalReadSMCTrayState(&tray, &count2)) && tray == 0x60 && count2 == count1 + 1;
     KiTestMiscSmcOk = ok;
+
+    // FATX scatter/gather: three pages written with NtWriteFileGather, read back into pages in reverse order with
+    // NtReadFileScatter, then the file is deleted.
+    {
+        auto pages = (PUCHAR)MmAllocateContiguousMemory(6 * PAGE_SIZE);
+        ok = pages != nullptr;
+        if (ok) {
+            FILE_SEGMENT_ELEMENT out[4] = {}, in[4] = {};
+            for (ULONG i = 0; i < 3; i++) {
+                RtlFillMemory(pages + i * PAGE_SIZE, PAGE_SIZE, (UCHAR)(0xA0 + i));
+                out[i].Buffer = pages + i * PAGE_SIZE;
+                in[i].Buffer = pages + (5 - i) * PAGE_SIZE;
+            }
+            OBJECT_STRING name;
+            RtlInitAnsiString(&name, "\\Device\\Harddisk0\\Partition1\\XkTest\\sg.bin");
+            OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+            IO_STATUS_BLOCK iosb;
+            HANDLE h;
+            ok = NT_SUCCESS(NtCreateFile(&h, GENERIC_READ | GENERIC_WRITE | DELETE | SYNCHRONIZE, &a, &iosb, nullptr,
+                                         0x80 /*FILE_ATTRIBUTE_NORMAL*/, 0, FILE_OVERWRITE_IF,
+                                         FILE_NO_INTERMEDIATE_BUFFERING | FILE_SYNCHRONOUS_IO_NONALERT));
+            if (ok) {
+                LARGE_INTEGER zero;
+                zero.QuadPart = 0;
+                ok &= NtWriteFileGather(h, nullptr, nullptr, nullptr, &iosb, out, 3 * PAGE_SIZE, &zero) == 0 &&
+                      iosb.Information == 3 * PAGE_SIZE;
+                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 3 * PAGE_SIZE, &zero) == 0 &&
+                      iosb.Information == 3 * PAGE_SIZE;
+                for (ULONG i = 0; i < 3 && ok; i++)
+                    ok = pages[(5 - i) * PAGE_SIZE] == 0xA0 + i && pages[(5 - i) * PAGE_SIZE + PAGE_SIZE - 1] == 0xA0 + i;
+                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 100, &zero) == STATUS_INVALID_PARAMETER;
+                FILE_DISPOSITION_INFORMATION del = {TRUE};
+                ok &= NtSetInformationFile(h, &iosb, &del, sizeof(del), FileDispositionInformation) == 0;
+                NtClose(h);
+            }
+            MmFreeContiguousMemory(pages);
+        }
+        KiTestMiscScatterOk = ok;
+    }
 
     // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz).
     {
