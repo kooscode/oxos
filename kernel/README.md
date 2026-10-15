@@ -11,6 +11,9 @@ make bios       # build/bios.bin: kernel packed into the base BIOS (MCPX 1.0) wi
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
+make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison)
+make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
+                                # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
 Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_ROM`
 (`../xbox-files/mcpx/mcpx_1.0.bin`). The xemu binary is found on PATH or at `~/.local/bin/xemu`.

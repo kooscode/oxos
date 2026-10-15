@@ -102,6 +102,27 @@ run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-release/bios.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
+# Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
+# reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
+# reference BIOS.
+NXDK_DIR    := $(abspath $(ROOT)/third_party/nxdk)
+NXDK_COMMIT := 14d5ee97e73347c973f1f57b68b79ec08c9e77f2
+NXDK_ENV    := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
+PAD_BIOS    ?= ours
+
+$(NXDK_DIR)/Makefile:
+	git clone -q https://github.com/XboxDev/nxdk $(NXDK_DIR)
+	git -C $(NXDK_DIR) checkout -q $(NXDK_COMMIT)
+	git -C $(NXDK_DIR) submodule update -q --init --recursive
+
+padtest: $(NXDK_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/padtest -j8
+
+test-pad: padtest
+	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin)
+	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),build-release/bios.bin) \
+		--mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
+
 # The same session on the reference BIOS (A/B comparison; the BIOS file is the user's own, never committed).
 run-stock:
 	python3 -I $(ROOT)/tools/run.py $(ROOT)/xbox-files/bios/Complex_4627.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
@@ -109,4 +130,4 @@ run-stock:
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch test-fatal test-udf run run-stock clean
+.PHONY: all bios test test-dash test-relaunch test-fatal test-udf test-pad padtest run run-stock clean
