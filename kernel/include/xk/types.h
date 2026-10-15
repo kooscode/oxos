@@ -2,7 +2,7 @@
 #pragma once
 
 typedef unsigned char UCHAR, BOOLEAN, KIRQL, *PUCHAR, *PKIRQL, *PBOOLEAN;
-typedef char CHAR, *PCHAR;
+typedef char CHAR, CCHAR, *PCHAR;
 typedef unsigned short USHORT, WCHAR, *PUSHORT;
 typedef short SHORT, CSHORT;
 typedef unsigned long ULONG, *PULONG;
