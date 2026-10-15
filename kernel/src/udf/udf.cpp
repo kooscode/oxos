@@ -639,7 +639,7 @@ DRIVER_OBJECT UdfDriverObject = {
     UdfDeleteVolume,
     UdfDismountVolume,
     {UdfFsdCreate, UdfFsdClose, UdfFsdRead, IoInvalidDeviceRequest, UdfFsdQueryInformation, UdfFsdSetInformation,
-     UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, IoInvalidDeviceRequest, UdfFsdPassDown,
+     UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, IoFsControlDismountOnly, UdfFsdPassDown,
      IoInvalidDeviceRequest, IoInvalidDeviceRequest, UdfFsdSuccess}};
 
 // --- Mount (spec/04d §1)

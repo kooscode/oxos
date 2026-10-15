@@ -35,3 +35,11 @@ state, link wait). **Status: implemented (milestone 5d-1).**
   6. Failure → 0x801F0001.
   The reference also clears bit 8 of vendor register 0x18 except on one hardware revision (not done).
 - **PhyGetLinkState(verify):** refresh when unknown or asked to verify, then return the state.
+
+## FSCTL_DISMOUNT_VOLUME (0x90020) (0x8002859c FATX, 0x8002aef5 RAW/XDVDFS; milestone 10)
+- FATX: FILE_SYSTEM_CONTROL with 0x90020 runs the volume dismount; 0x9411C and 0x98120 go to another routine
+  (0x800284bc, not reproduced); anything else STATUS_INVALID_DEVICE_REQUEST. Information = 0.
+- RAW / XDVDFS (and our UDF): 0x90020 calls the driver's DriverDismountVolume; anything else invalid.
+- Why it matters: XAPI formats a utility drive (X/Y/Z) by writing new FATX metadata through the volume handle and
+  then dismounting; without the dismount the old mount's free-space view stays and the title sees DISK_FULL
+  (Halo failed to size its map cache files and stalled on a black screen).

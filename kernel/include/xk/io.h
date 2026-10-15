@@ -23,6 +23,7 @@ typedef void(NTAPI *PDRIVER_DELETEDEVICE)(struct _DEVICE_OBJECT *DeviceObject);
 typedef NTSTATUS(NTAPI *PDRIVER_DISMOUNTVOLUME)(struct _DEVICE_OBJECT *DeviceObject);
 typedef NTSTATUS(NTAPI *PIO_COMPLETION_ROUTINE)(struct _DEVICE_OBJECT *DeviceObject, struct _IRP *Irp, PVOID Context);
 
+constexpr ULONG FSCTL_DISMOUNT_VOLUME = 0x90020;
 constexpr UCHAR IRP_MJ_CREATE = 0, IRP_MJ_CLOSE = 1, IRP_MJ_READ = 2, IRP_MJ_WRITE = 3,
                 IRP_MJ_QUERY_INFORMATION = 4, IRP_MJ_SET_INFORMATION = 5, IRP_MJ_FLUSH_BUFFERS = 6,
                 IRP_MJ_QUERY_VOLUME_INFORMATION = 7, IRP_MJ_DIRECTORY_CONTROL = 8, IRP_MJ_FILE_SYSTEM_CONTROL = 9,
@@ -349,6 +350,7 @@ XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJE
                                                PIO_STATUS_BLOCK IoStatusBlock);
 XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
                                              ULONG Length, PLARGE_INTEGER StartingOffset);
+NTSTATUS NTAPI IoFsControlDismountOnly(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject,
                                                          PVOID InputBuffer, ULONG InputBufferLength,
                                                          PVOID OutputBuffer, ULONG OutputBufferLength,

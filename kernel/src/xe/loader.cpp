@@ -143,6 +143,11 @@ XBAPI NTSTATUS NTAPI XeUnloadSection(XBE_SECTION_HEADER *Section) {
     return STATUS_SUCCESS;
 }
 
+#ifndef XK_TRACE_IMPORTS
+#define XK_TRACE_IMPORTS 0
+#endif
+ULONG XkTraceWrap(USHORT ordinal, ULONG target);
+
 // --- Kernel thunks: entries are ordinals (low 16 bits), resolved through our own export directory.
 static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
     auto image = (PUCHAR)0x80010000;
@@ -162,6 +167,9 @@ static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
             continue;
         }
         *thunk = (ULONG)image + functions[index];
+#if XK_TRACE_IMPORTS
+        *thunk = XkTraceWrap((USHORT)(index + ordinalBase), *thunk);
+#endif
     }
     return status;
 }

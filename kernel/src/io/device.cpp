@@ -256,6 +256,18 @@ XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject) {
     return status;
 }
 
+// FILE_SYSTEM_CONTROL for file systems whose only control is FSCTL_DISMOUNT_VOLUME (RAW, XDVDFS, UDF; the
+// reference's 0x8002aef5): the driver's dismount routine, anything else is an invalid request.
+NTSTATUS NTAPI IoFsControlDismountOnly(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
+    if (IoGetCurrentIrpStackLocation(Irp)->Parameters.FileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
+        status = DeviceObject->DriverObject->DriverDismountVolume(DeviceObject);
+    Irp->IoStatus.Status = status;
+    Irp->IoStatus.Information = 0;
+    IofCompleteRequest(Irp, 0);
+    return status;
+}
+
 XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName) {
     PVOID dev;
     NTSTATUS status = ObReferenceObjectByName(DeviceName, 0, &IoDeviceObjectType, nullptr, &dev);
