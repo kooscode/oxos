@@ -34,7 +34,11 @@ BOOLEAN HalpSmcArmEvents(BOOLEAN Dashboard);
 extern volatile ULONG HalpBootFlags;
 extern "C" volatile UCHAR KiQuickRebootFlag;
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
+#ifndef XK_RETAIL_MEDIA_POLICY
+#define XK_RETAIL_MEDIA_POLICY 0
+#endif
 XK_PERSIST ULONG XeDiscTitleId; // the title pinned to the current game disc (0 = none)
+XK_PERSIST UCHAR XeTitleDiscAuthenticated; // set by the DVD authentication (src/idex/cdrom.cpp)
 
 // --- Exported state
 XBAPI OBJECT_STRING XeImageFileName;
@@ -46,7 +50,8 @@ PVOID LaunchDataPage;
 UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 UCHAR XePublicKeyData[284];
 XK_PERSIST ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
-volatile NTSTATUS XeLastLoadStatus;
+volatile NTSTATUS XeLastLoadStatus, XeLoadHistory[4];
+volatile ULONG XeLoadCount;
 volatile ULONG XeLastMissingOrdinal, XeDigestMismatches;
 
 static NTSTATUS XeReadFile(HANDLE h, PVOID buffer, ULONG length, ULONG offset, ULONG *got = nullptr) {
@@ -172,6 +177,10 @@ static NTSTATUS XepMediaFlags(HANDLE file, ULONG *flags) {
         *flags = 1;
         return STATUS_SUCCESS;
     }
+    if (XeTitleDiscAuthenticated) { // an authenticated Xbox game disc
+        *flags = 2;
+        return STATUS_SUCCESS;
+    }
     ULONG in[6] = {}, out[6] = {};
     status = NtDeviceIoControlFile(file, nullptr, nullptr, nullptr, &iosb, 0x335140 /*IOCTL_DVD_READ_STRUCTURE*/,
                                    in, sizeof(in), out, sizeof(out));
@@ -253,13 +262,16 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         if (!inside(entry) || !inside(thunk))
             status = STATUS_INVALID_IMAGE_FORMAT;
     }
+    // Media/region policy: XK_RETAIL_MEDIA_POLICY=1 enforces both like a retail kernel; the default behaves like a
+    // modded BIOS (which patches the stock kernel to allow any media and region), so discs that cannot be
+    // authenticated (backups, XISOs in emulators) still start. Authenticated discs are pinned either way.
     ULONG region = XbeField(0x118) ? *(ULONG *)(cert + 0xA0) : 0;
-    if (NT_SUCCESS(status) && !(region & XeConsoleGameRegion))
+    if (NT_SUCCESS(status) && !(region & XeConsoleGameRegion) && XK_RETAIL_MEDIA_POLICY)
         status = STATUS_REGION_MISMATCH;
     if (NT_SUCCESS(status) && !Dashboard) {
         ULONG media;
         status = XepMediaFlags(h, &media);
-        if (NT_SUCCESS(status) && !(*(ULONG *)(cert + 0x9C) & media))
+        if (NT_SUCCESS(status) && !(*(ULONG *)(cert + 0x9C) & media) && XK_RETAIL_MEDIA_POLICY)
             status = STATUS_MEDIA_MISMATCH;
         if (NT_SUCCESS(status) && media == 2) { // an authenticated game disc runs one title until it is changed
             ULONG titleId = *(ULONG *)(cert + 8);
@@ -326,6 +338,8 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     if (!NT_SUCCESS(status) && reserved)
         XepReleaseImage();
     XeLastLoadStatus = status;
+    XeLoadHistory[XeLoadCount & 3] = status; // diagnostics: the last four load results
+    XeLoadCount = XeLoadCount + 1;
     return status;
 }
 
@@ -343,7 +357,6 @@ void IdexDiskCountPowerCycle();
 
 volatile ULONG XeTitleLaunched; // 1 = disc title, 2 = dashboard, 3 = launched from the LaunchDataPage
 volatile ULONG XeLaunchReason;  // the cold-boot pre-launch check result (§1)
-UCHAR XeTitleDiscAuthenticated; // set by DVD authentication (not implemented: stays 0)
 [[noreturn]] void IdexFatalError(ULONG Code);
 extern "C" volatile UCHAR KiQuickRebootFlag;
 

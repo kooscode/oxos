@@ -8,7 +8,7 @@ constexpr ULONG MM_LOW_RESERVED_PFN = 0xF; // the page directory; page 0 is rese
 static ULONG *const MiPteArray = (ULONG *)0x83FF0000; // PTEs for 0x80000000-0x83FFFFFF
 static ULONG MiFreeBitmap[MM_PAGES / 32];             // bit set = free physical page
 ULONG MmAvailablePages;
-static ULONG MiNextLowPfn;                            // single-page allocations go bottom-up
+static ULONG MiNextHighPfn;                           // single-page allocations go top-down
 
 static bool MiIsFree(ULONG pfn) { return MiFreeBitmap[pfn >> 5] & (1u << (pfn & 31)); }
 static void MiMarkFree(ULONG pfn) {
@@ -39,19 +39,20 @@ bool MiProtectToPte(ULONG protect, ULONG *pteBits) {
     return true;
 }
 
-// Single pages come from the bottom so top-down contiguous allocations stay unfragmented.
-// The page stays mapped at 0x80000000|PA (callers use that alias) and is zeroed.
+// Single pages come from the top of memory, like the reference: titles claim fixed physical ranges just above the
+// kernel image with MmAllocateContiguousMemoryEx (Halo takes 0x61000-0x19A5FFF), so the kernel's own pages must not
+// sit there. The page stays mapped at 0x80000000|PA (callers use that alias) and is zeroed.
 ULONG MiAllocatePhysicalPage(bool zero) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pfn = 0;
-    for (ULONG p = MiNextLowPfn; p <= MM_HIGHEST_CONTIGUOUS_PFN; p++)
+    for (ULONG p = MiNextHighPfn; p >= 1; p--)
         if (MiIsFree(p)) {
             pfn = p;
             break;
         }
     if (pfn) {
         MiMarkUsed(pfn);
-        MiNextLowPfn = pfn + 1;
+        MiNextHighPfn = pfn - 1;
         MiPteArray[pfn] = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY | PTE_END_OF_ALLOCATION;
         MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
     }
@@ -66,8 +67,8 @@ void MiFreePhysicalPage(ULONG pfn) {
     MiPteArray[pfn] = 0;
     MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
     MiMarkFree(pfn);
-    if (pfn < MiNextLowPfn)
-        MiNextLowPfn = pfn;
+    if (pfn > MiNextHighPfn)
+        MiNextHighPfn = pfn;
     KfLowerIrql(old);
 }
 
@@ -213,7 +214,7 @@ void MmInitSystem(bool QuickReboot) {
     for (ULONG pfn = 1; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++)
         if (allocatable(pfn) && !MiPteArray[pfn])
             MiMarkFree(pfn);
-    MiNextLowPfn = imageEndPfn;
+    MiNextHighPfn = MM_HIGHEST_CONTIGUOUS_PFN;
 
     // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above 64 MB, no user
     //    mappings, and the reference MMIO windows (spec/02 §4).

@@ -9,6 +9,7 @@ BIOS_BASE ?= $(ROOT)/xbox-files/bios/Complex_4627.bin
 MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
 SELFTEST  ?= 1
+RETAIL_MEDIA_POLICY ?= 0
 
 CXX := clang++
 CC  := clang
@@ -18,7 +19,7 @@ TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib -O2 -g0 \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST)
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY)
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \

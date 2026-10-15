@@ -147,6 +147,8 @@ static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return STATUS_PENDING;
 }
 
+static NTSTATUS IdexCdRomAuthenticate();
+
 static NTSTATUS NTAPI IdexCdRomDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     switch (IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_CDROM_CHECK_VERIFY:
@@ -157,6 +159,8 @@ static NTSTATUS NTAPI IdexCdRomDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP I
         IoMarkIrpPending(Irp);
         IdexChannelStartPacket(DeviceObject, Irp);
         return STATUS_PENDING;
+    case 0x24080: // IOCTL_CDROM_AUTHENTICATE_DISK: synchronous, in the caller's thread
+        return IdexCdRomComplete(Irp, IdexCdRomAuthenticate(), 0);
     default:
         return IdexCdRomComplete(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
     }
@@ -245,6 +249,138 @@ static void IdexCdRomControl(PIRP Irp) {
     }
     }
     IdexCdRomFinish(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
+}
+
+// --- Xbox game disc authentication (spec/04 §3a). The drive's security mode page (0x3E) and the disc's security
+// sector (READ DVD STRUCTURE 0xFF02FDFF, layer 0xFE) provide a challenge table; replaying it proves a pressed Xbox
+// disc. Success marks the media as "title disc" (XBE media type 2) and pins the disc's title.
+
+XBAPI void NTAPI XcSHAInit(PUCHAR);
+XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
+XBAPI void NTAPI XcSHAFinal(PUCHAR, PUCHAR);
+XBAPI void NTAPI XcRC4Key(PUCHAR, ULONG, const UCHAR *);
+XBAPI void NTAPI XcRC4Crypt(PUCHAR, ULONG, PUCHAR);
+XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
+extern UCHAR XeTitleDiscAuthenticated;
+extern ULONG XeDiscTitleId;
+constexpr ULONG SECURITY_SECTOR_SIZE = 0x664;
+constexpr NTSTATUS STATUS_TOO_MANY_SECRETS = (NTSTATUS)0xC0000156, STATUS_UNRECOGNIZED_MEDIA_ = (NTSTATUS)0xC0000014;
+
+static NTSTATUS IdexCdRomPassThrough(const UCHAR *cdb, PVOID data, ULONG length, bool dataIn) {
+    SCSI_PASS_THROUGH_DIRECT_ p = {};
+    p.Length = sizeof(p);
+    p.CdbLength = 12;
+    p.DataIn = dataIn;
+    p.DataTransferLength = length;
+    p.DataBuffer = data;
+    RtlCopyMemory(p.Cdb, cdb, 12);
+    return IoSynchronousDeviceIoControlRequest(IOCTL_SCSI_PASS_THROUGH_DIRECT, IdexCdRomDeviceObject, &p, sizeof(p),
+                                               nullptr, 0, nullptr, FALSE);
+}
+
+// MODE SENSE(10), the 28-byte security page; byte 11 must be 1.
+static NTSTATUS IdexCdRomSecurityPage(PUCHAR page) {
+    static const UCHAR cdb[12] = {0x5A, 0, 0x3E, 0, 0, 0, 0, 0, 0x1C};
+    RtlZeroMemory(page, 28);
+    NTSTATUS status = IdexCdRomPassThrough(cdb, page, 28, true);
+    if (!NT_SUCCESS(status))
+        return status == STATUS_TOO_MANY_SECRETS ? STATUS_UNRECOGNIZED_MEDIA_ : status;
+    return page[11] == 1 ? STATUS_SUCCESS : STATUS_UNRECOGNIZED_MEDIA_;
+}
+
+// One challenge: MODE SELECT the page with the challenge, MODE SENSE it back, compare the response.
+static NTSTATUS IdexCdRomChallenge(const UCHAR *sector, const UCHAR *entry, bool first, bool last) {
+    UCHAR page[28] = {};
+    page[1] = 0x1A;
+    page[8] = 0x3E;
+    page[9] = 0x12;
+    page[10] = last;
+    page[11] = 1;
+    page[12] = !first;
+    page[13] = sector[4];
+    page[14] = 1;
+    page[15] = entry[1];
+    RtlCopyMemory(page + 16, entry + 2, 4);
+    static const UCHAR select[12] = {0x55, 0, 0, 0, 0, 0, 0, 0, 0x1C};
+    NTSTATUS status = IdexCdRomPassThrough(select, page, 28, false);
+    if (NT_SUCCESS(status)) {
+        static const UCHAR sense[12] = {0x5A, 0, 0x3E, 0, 0, 0, 0, 0, 0x1C};
+        status = IdexCdRomPassThrough(sense, page, 28, true);
+    }
+    if (NT_SUCCESS(status) && (!page[12] || RtlCompareMemory(page + 20, entry + 7, 4) != 4))
+        status = STATUS_TOO_MANY_SECRETS;
+    return status;
+}
+
+volatile ULONG IdexCdRomAuthStage, IdexCdRomAuthStatus; // diagnostics
+volatile UCHAR IdexCdRomAuthPage[28];
+
+static NTSTATUS IdexCdRomAuthenticate() {
+    IdexCdRomAuthStage = 1;
+    if (XeTitleDiscAuthenticated)
+        return STATUS_SUCCESS;
+    UCHAR page[28];
+    NTSTATUS status = IdexCdRomSecurityPage(page);
+    for (int i = 0; i < 28; i++)
+        IdexCdRomAuthPage[i] = page[i];
+    IdexCdRomAuthStatus = status;
+    if (!NT_SUCCESS(status))
+        return status;
+    IdexCdRomAuthStage = 2;
+    auto sector = (PUCHAR)ExAllocatePoolWithTag(SECURITY_SECTOR_SIZE + 0x28, 'ScdI');
+    if (!sector)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    static const UCHAR read[12] = {0xAD, 0, 0xFF, 0x02, 0xFD, 0xFF, 0xFE, 0, 0x06, 0x64, 0, 0xC0};
+    RtlZeroMemory(sector, SECURITY_SECTOR_SIZE);
+    status = IdexCdRomPassThrough(read, sector, SECURITY_SECTOR_SIZE, true);
+    IdexCdRomAuthStatus = status;
+    if (NT_SUCCESS(status)) {
+        IdexCdRomAuthStage = 3;
+        status = STATUS_TOO_MANY_SECRETS;
+        UCHAR sha[116], digest[20], rc4[258];
+        XcSHAInit(sha);
+        XcSHAUpdate(sha, sector + 4, 0x4CB);
+        XcSHAFinal(sha, digest);
+        // The digest must match; the reference also checks an RSA signature over it with Microsoft's public key,
+        // which this open kernel does not carry (spec/04 §3a).
+        if (page[13] == sector[4] && RtlCompareMemory(digest, sector + 0x4CF, 20) == 20) {
+            XcSHAInit(sha);
+            XcSHAUpdate(sha, sector + 0x4A3, 0x2C);
+            XcSHAFinal(sha, digest);
+            XcRC4Key(rc4, 7, digest);
+            XcRC4Crypt(rc4, 0xFD, sector + 0x306);
+            ULONG count = sector[0x305];
+            IdexCdRomAuthStage = 4 | sector[0x304] << 8 | count << 16;
+            if (sector[0x304] == 1 && count && count < 0x18) {
+                ULONG start = KeQueryPerformanceCounter().LowPart % count, i = start, lastValid = 0xFFFFFFFF;
+                bool first = true;
+                status = STATUS_SUCCESS;
+                do {
+                    PUCHAR entry = sector + 0x306 + i * 11;
+                    if (entry[0] == 1) {
+                        status = IdexCdRomChallenge(sector, entry, first, false);
+                        if (!NT_SUCCESS(status))
+                            break;
+                        first = false;
+                        lastValid = i;
+                    }
+                    i = i + 1 == count ? 0 : i + 1;
+                } while (i != start);
+                if (NT_SUCCESS(status) && lastValid != 0xFFFFFFFF)
+                    status = IdexCdRomChallenge(sector, sector + 0x306 + lastValid * 11, false, true);
+                else if (NT_SUCCESS(status))
+                    status = STATUS_TOO_MANY_SECRETS;
+                IdexCdRomAuthStatus = status;
+                if (NT_SUCCESS(status)) {
+                    IdexCdRomAuthStage = 5;
+                    XeTitleDiscAuthenticated = 1;
+                    XeDiscTitleId = *(ULONG *)(sector + 0x4AB);
+                }
+            }
+        }
+    }
+    ExFreePool(sector);
+    return status;
 }
 
 // READ(10) of up to 128 KB through the bus master.

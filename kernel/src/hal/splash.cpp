@@ -103,9 +103,12 @@ void HalpStartSplash() {
     KeInitializeEvent(&HalpSplashDone, NotificationEvent, TRUE);
     if (HalBootSMCVideoMode == 7)
         return;
-    HalpSplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0x3FFFFFF, 0x1000,
+    // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/05 §5): titles
+    // assume the top of RAM holds only a little of the kernel's own memory when they start (an nxdk title clears a
+    // framebuffer at 0x3C00000 it never allocated).
+    HalpSplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0x1000,
                                                             PAGE_READWRITE | PAGE_WRITECOMBINE);
-    HalpSplashImage = (ULONG *)MmAllocateContiguousMemory(SPLASH_PITCH * SPLASH_H);
+    HalpSplashImage = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     if (!HalpSplashScreen || !HalpSplashImage)
         return;
     KeResetEvent(&HalpSplashDone);
