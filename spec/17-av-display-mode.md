@@ -80,3 +80,12 @@ framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(
 for xemu (which does not emulate the encoders) and for the nxdk dashboard. For real hardware the tables above must
 be built from datasheets with the same row numbering — tracked as milestone 7 (needs encoder datasheets and a way
 to learn the row ↔ video-standard mapping that the D3D library uses).
+
+The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF for progressive output: the
+reference leaves it at 0xFF, and xemu treats any other value as interlaced and shows each field at half height
+(observed: Halo's menu squished into the top half of the window). Line compare (CR18) is likewise 0xFF (never).
+
+`AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
+bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),
+0x11 (mode table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (mode flag 0x10000000). Other options are
+encoder writes and are no-ops until the tables exist.
