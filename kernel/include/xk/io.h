@@ -394,6 +394,10 @@ XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK Io
 XBAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock,
                                                   PVOID FsInformation, ULONG Length,
                                                   FS_INFORMATION_CLASS FsInformationClass);
+XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
+                                          PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
+                                          ULONG Length, FILE_INFORMATION_CLASS FileInformationClass,
+                                          POBJECT_STRING FileName, BOOLEAN RestartScan);
 XBAPI NTSTATUS NTAPI NtFlushBuffersFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock);
 XBAPI NTSTATUS NTAPI NtCreateIoCompletion(PHANDLE IoCompletionHandle, ACCESS_MASK DesiredAccess,
                                           POBJECT_ATTRIBUTES ObjectAttributes, ULONG Count);
@@ -413,3 +417,4 @@ struct IO_FILE_SYSTEM {
 extern IO_FILE_SYSTEM IopFileSystems;
 
 void IoInitSystem();
+void FsInitSystem(); // registers the file systems with the mount path

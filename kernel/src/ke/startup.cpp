@@ -41,6 +41,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
     ObInitSystem();
     IoInitSystem();
+    FsInitSystem();
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
 

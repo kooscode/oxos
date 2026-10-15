@@ -39,7 +39,8 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 3a: object manager, handles, namespace, symbolic links, Nt event/mutant/semaphore/timer objects, Ps threads (spec 10). ✅ passes in xemu.
    - 3b: I/O manager — devices, IRPs, StartIo, file objects, Nt*File services, completion ports (spec 11). ✅ passes in xemu.
    - 3c-1: IDE channel, hard disk DMA driver, partition devices (stock LBA28 table) (spec 04). ✅ passes in xemu with a copy of the HDD image.
-   - 3c-2: FATX file system. 3c-3: DVD (ATAPI) + XDVDFS.
+   - 3c-2: FATX file system — create/read/write/rename/delete, directory and volume queries (spec 04b). ✅ passes in xemu; written files verified on the disk copy by an independent reader.
+   - 3c-3: DVD (ATAPI) + XDVDFS, RAW file system.
 4. XBE loader and title launch (spec 05): boot the stock dashboard.
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).
 
