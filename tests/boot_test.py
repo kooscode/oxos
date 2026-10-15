@@ -400,6 +400,25 @@ def dash_checks(mon):
     }, "M5e": launch_reason_checks(mon)}
 
 
+def fatal_checks(mon):
+    for _ in range(240):  # the disk wait times out first
+        if mon.read("IdexFatalErrorCode"):
+            break
+        time.sleep(0.25)
+    time.sleep(2)
+    code, fb = mon.read("IdexFatalErrorCode"), mon.read("XkFatalErrorFrameBuffer")
+    lit = 0
+    for y in range(185, 295, 8):  # the two digit cells (x 250-390)
+        out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
+        lit += len(re.findall(r"0xffffffff", out))
+    print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit samples)")
+    return {"M5f": {
+        "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
+        "error code drawn on screen": fb != 0 and lit > 20
+            and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
+    }}, code
+
+
 def launch_reason_checks(mon):
     reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
     page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
@@ -431,6 +450,7 @@ def main():
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
     ap.add_argument("--no-disc", action="store_true")
+    ap.add_argument("--fatal", action="store_true", help="boot without a hard disk: check the fatal-error report")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
     ap.add_argument("--title-map")
@@ -465,7 +485,9 @@ def main():
             time.sleep(0.1)
         time.sleep(a.boot_wait)
         mon = Monitor(sock, map_symbols(a.map))
-        if a.dash:
+        if a.fatal:
+            results, fatal_code = fatal_checks(mon)
+        elif a.dash:
             results = dash_checks(mon)
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True)}
@@ -483,6 +505,12 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
+    if a.fatal:  # xemu writes the EEPROM image back to its file
+        e = open(os.path.join(work, "eeprom.bin"), "rb").read() if os.path.exists(os.path.join(work, "eeprom.bin")) else b""
+        history = struct.unpack_from("<H", e, 0xFC)[0] if len(e) >= 256 else 0
+        passed = fatal_code > 4 and bool(history & (1 << (fatal_code - 5)))
+        print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
+        ok &= passed
     if ok and a.hdd and not a.dash and not a.relaunch:
         for name, passed in disk_checks(hdd_copy).items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")

@@ -353,8 +353,6 @@ static void XepLaunchDashboard() {
     if (NT_SUCCESS(XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE)))
         return;
     if (!KiQuickRebootFlag) {
-        HalWriteSMBusValue(0x20, 8, FALSE, 0xE1); // LED sequence, then LED mode "custom"
-        HalWriteSMBusValue(0x20, 7, FALSE, 1);
         auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
         ULONG code = 13;
         if (ldp && ldp->LaunchDataType == 1)
