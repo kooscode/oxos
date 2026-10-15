@@ -102,3 +102,13 @@ Structure layouts follow nxdk `xboxkrnl.h` (CC0). They match the field writes ob
 EventNotification 0, EventSynchronization 1, Mutant 2, Process 3, Queue 4, Semaphore 5, Thread 6,
 TimerNotification 8, TimerSynchronization 9, Apc 0x12, Dpc 0x13, DeviceQueue 0x14 (nxdk/NT; Dpc and
 Timer confirmed in the reference).
+
+## 7. Performance counter and stalls (0x80015314, 0x80015350, 0x80015358, 0x800153a0; milestone 6d)
+- `KeQueryPerformanceFrequency` = **3,375,000** (the MCPX ACPI PM timer runs at 27 MHz / 8; not ACPI's 3.579545 MHz).
+- The PM timer (I/O 0x8008) is read as **32 bits**. The SCI handler, on PM1 status bit 0 (timer bit 31 toggled),
+  advances a 64-bit base by 2^31 (plus another 2^31 if bit 31 already toggled again); the base's high part is
+  written high2/low/high so readers can retry on a torn read. `KeQueryPerformanceCounter` = base high part : (timer
+  bits 0–30 | base bit 31), plus 2^31 if timer bit 31 differs from the base's (a toggle not handled yet).
+- `KeStallExecutionProcessor(us)`: `cpuid`, then a busy loop of us × (loops per µs, calibrated at boot,
+  0x8003AFF0). **Ours** polls the PM timer for us × 27/8 ticks instead (same duration, no calibration).
+- Measured in xemu: 3.378 M counts per second of KeTickCount; the timer goes past 24 bits (32-bit).

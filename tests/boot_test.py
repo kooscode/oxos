@@ -392,6 +392,7 @@ def misc_checks(mon):
         if mon.read("KiTestMiscDone"):
             break
         time.sleep(0.25)
+    print(f"  (performance counter: {mon.read('KiTestMiscPmTicksPerSecond')} per KeTickCount second)")
     print(f"  (PHY: PhyInitialize -> {mon.read('KiTestMiscPhyStatus'):#x}, link state {mon.read('KiTestMiscPhyLink'):#x})")
     return {
         "FATX dismount by name, remount on next open, not-mounted error": mon.read("KiTestMiscDismountOk") == 1,
@@ -400,6 +401,7 @@ def misc_checks(mon):
         "PhyInitialize completes (success or E_FAIL), link state read": mon.read("KiTestMiscPhyStatus") in (0, 0x801F0001),
         "CMOS clock-set signature: write, verify, damaged byte detected": mon.read("KiTestMiscCmosOk") == 1,
         "SMC tray events update the tray cache and change count": mon.read("KiTestMiscSmcOk") == 1,
+        "performance counter: 3.375 MHz, monotonic, matches the clock": mon.read("KiTestMiscPerfOk") == 1,
         "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "misc suite finished": mon.read("KiTestMiscDone") == 1,

@@ -1,4 +1,5 @@
 // Boot self-tests for dismount, Fsc and PHY (milestone 5d-1).
+#include <xk/arch.h>
 #include <xk/io.h>
 #include <xk/rtl.h>
 
@@ -11,6 +12,9 @@ extern volatile ULONG KiTestXcDone;
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
     KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscDone;
+volatile ULONG KiTestMiscPmTicksPerSecond, KiTestMiscPerfOk;
+XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
+XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency();
 void HalpSmcHandleEvents(ULONG reason);
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 bool HalpCmosSignatureValid();
@@ -84,6 +88,24 @@ static void NTAPI MiscControllerThread(PVOID) {
     HalpSmcHandleEvents(0x02);
     ok &= NT_SUCCESS(HalReadSMCTrayState(&tray, &count2)) && tray == 0x60 && count2 == count1 + 1;
     KiTestMiscSmcOk = ok;
+
+    // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz).
+    {
+        ULONG t0 = KeTickCount;
+        while (KeTickCount == t0) {
+        }
+        LARGE_INTEGER start = KeQueryPerformanceCounter(), last = start, now;
+        ULONG startTick = KeTickCount;
+        bool monotonic = true;
+        while (KeTickCount - startTick < 1000) {
+            now = KeQueryPerformanceCounter();
+            monotonic &= now.QuadPart >= last.QuadPart;
+            last = now;
+        }
+        LONGLONG rate = last.QuadPart - start.QuadPart, f = KeQueryPerformanceFrequency().QuadPart;
+        KiTestMiscPmTicksPerSecond = (ULONG)rate;
+        KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
+    }
 
     KiTestMiscPhyStatus = PhyInitialize(TRUE, nullptr);
     KiTestMiscPhyLink = PhyGetLinkState(TRUE);

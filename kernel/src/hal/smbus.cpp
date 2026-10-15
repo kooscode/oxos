@@ -340,13 +340,13 @@ static void NTAPI HalpSmcThread(PVOID) {
 static void NTAPI HalpSmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) { KeSetEvent(&HalpSmcWork, 0, FALSE); }
 
 // SCI: the PM timer overflow (folded into the performance counter) and the SMC's GPE.
-XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
+void KiPerfCounterOverflow();
 static BOOLEAN NTAPI HalpSciService(PKINTERRUPT, PVOID) {
     BOOLEAN handled = FALSE;
     HalpSciCount = HalpSciCount + 1;
     if (inw(0x8000) & 1) {
         outw(0x8000, 1);
-        KeQueryPerformanceCounter();
+        KiPerfCounterOverflow();
         handled = TRUE;
     }
     if (inw(0x8020) & 2) {
