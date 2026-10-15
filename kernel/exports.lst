@@ -1,0 +1,23 @@
+# Kernel exports implemented so far. Ordinals and kinds come from xboxkrnl-4627-exports.tsv;
+# tools/gen_def.py turns this list into build/xboxkrnl.def.
+HalReadWritePCISpace
+KeGetCurrentIrql
+KeInterruptTime
+KeQueryInterruptTime
+KeQueryPerformanceCounter
+KeQueryPerformanceFrequency
+KeQuerySystemTime
+KeRaiseIrqlToDpcLevel
+KeRaiseIrqlToSynchLevel
+KeStallExecutionProcessor
+KeSystemTime
+KeTickCount
+KeTimeIncrement
+KfLowerIrql
+KfRaiseIrql
+RtlFillMemory
+RtlMoveMemory
+RtlZeroMemory
+XboxEEPROMKey
+XboxHardwareInfo
+XboxKrnlVersion

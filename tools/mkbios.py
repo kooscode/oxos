@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Pack a kernel PE into an MCPX 1.0 BIOS image, reusing the base image's init tables and 2BL.
+
+usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
+                 [--flat-kernel OUT.exe]
+
+Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00):
+  [0, inittblSize)              init tables + X-codes (kept from the base image)
+  [kstart, dstart)              kernel: RC4(kernel key, LDI stream of LZX frames)
+  [dstart, 0x39E00)             kernel .data initializer (plaintext)
+  [0x39E00, 0x3FE00)            2BL, RC4(MCPX 1.0 key); boot params + digest updated here
+The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
+fields 0x28..0x37 describe the .data copy used by quick reboot (spec/02 §1).
+
+LZX: each 32 KiB frame is one *uncompressed* LZX block, so no compressor is needed. The output is
+checked by decoding it again with libarchive (via the unpacker's CAB wrapper) when available.
+"""
+import argparse, hashlib, struct, sys
+
+BANK = 0x40000
+FLASH_BASE = 0xFFFC0000
+OFF_2BL, LEN_2BL = 0x39E00, 0x6000
+BLDR_PARAMS, BLDR_KEYS, BLDR_MAGIC = 0x5FDC, 0x6C, 0x7854794A
+FRAME = 0x8000
+XBOX_SUBSYSTEM = 14
+
+
+def rc4(key, data):
+    s = list(range(256)); j = 0
+    for i in range(256):
+        j = (j + s[i] + key[i % len(key)]) & 0xFF
+        s[i], s[j] = s[j], s[i]
+    out = bytearray(len(data)); i = j = 0
+    for n, b in enumerate(data):
+        i = (i + 1) & 0xFF; j = (j + s[i]) & 0xFF
+        s[i], s[j] = s[j], s[i]
+        out[n] = b ^ s[(s[i] + s[j]) & 0xFF]
+    return bytes(out)
+
+
+u32 = lambda d, o: struct.unpack_from("<I", d, o)[0]
+u16 = lambda d, o: struct.unpack_from("<H", d, o)[0]
+
+
+def flatten(pe, data_src_addr_for):
+    """Return (image, data_init) with raw == RVA layout and quick-reboot header fields set.
+
+    data_src_addr_for(len) -> flash address where the .data initializer of that length will live.
+    """
+    lfanew = u32(pe, 0x3C)
+    nsec, optsz = u16(pe, lfanew + 6), u16(pe, lfanew + 20)
+    oh = lfanew + 24
+    size_of_image = u32(pe, oh + 56)
+    img = bytearray(size_of_image)
+    img[:u32(pe, oh + 60)] = pe[:u32(pe, oh + 60)]
+    data = None
+    for i in range(nsec):
+        sh = oh + optsz + i * 40
+        name = pe[sh:sh + 8].rstrip(b"\0")
+        vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", pe, sh + 8)
+        img[va:va + rawsize] = pe[rawptr:rawptr + rawsize]
+        span = (vsize + 0x1F) & ~0x1F
+        struct.pack_into("<II", img, sh + 16, span, va)      # SizeOfRawData, PointerToRawData
+        if name == b".data":
+            data = (va, vsize, rawsize)
+    if data is None:
+        sys.exit("kernel has no .data section")
+    struct.pack_into("<H", img, oh + 68, XBOX_SUBSYSTEM)
+
+    va, vsize, rawsize = data
+    init_len = min((rawsize + 0xF) & ~0xF, vsize)
+    base = u32(pe, oh + 28)
+    struct.pack_into("<IIII", img, 0x28, vsize - init_len, init_len, data_src_addr_for(init_len), base + va)
+    # PE checksum over the final image.
+    struct.pack_into("<I", img, oh + 64, 0)
+    s = 0
+    for (w,) in struct.iter_unpack("<H", bytes(img[:len(img) & ~1])):
+        s += w; s = (s & 0xFFFF) + (s >> 16)
+    struct.pack_into("<I", img, oh + 64, ((s & 0xFFFF) + (s >> 16)) + len(img))
+    return bytes(img), bytes(img[va:va + init_len])
+
+
+class BitWriter:
+    """LZX bit order: 16-bit little-endian words, bits consumed MSB first."""
+
+    def __init__(self):
+        self.out, self.acc, self.n = bytearray(), 0, 0
+
+    def put(self, value, bits):
+        for i in reversed(range(bits)):
+            self.acc = (self.acc << 1) | ((value >> i) & 1)
+            self.n += 1
+            if self.n == 16:
+                self.out += struct.pack("<H", self.acc)
+                self.acc = self.n = 0
+
+    def align16(self):
+        if self.n:
+            self.put(0, 16 - self.n)
+
+
+def lzx_uncompressed_stream(image):
+    """LDI stream: per 32 KiB frame {u16 compressed_len, u16 uncompressed_len, LZX bytes}, then 0."""
+    out = bytearray()
+    for n, off in enumerate(range(0, len(image), FRAME)):
+        chunk = image[off:off + FRAME]
+        bw = BitWriter()
+        if n == 0:
+            bw.put(0, 1)                 # no Intel E8 translation
+        bw.put(3, 3)                     # block type: uncompressed
+        bw.put(len(chunk), 24)           # block size
+        bw.align16()                     # header never ends word-aligned here (27/28 bits)
+        frame = bytes(bw.out) + struct.pack("<III", 1, 1, 1) + chunk
+        if len(chunk) & 1:
+            frame += b"\0"
+        out += struct.pack("<HH", len(frame), len(chunk)) + frame
+    return bytes(out) + b"\0\0\0\0"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--mcpx-rom", required=True)
+    ap.add_argument("--kernel", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--flat-kernel")
+    a = ap.parse_args()
+
+    raw = open(a.base, "rb").read()
+    bank = bytearray(raw[:BANK])
+    rom = open(a.mcpx_rom, "rb").read()[-0x200:]
+    mcpx_key = rom[0x1A5:0x1B5]
+    bl = bytearray(rc4(mcpx_key, bank[OFF_2BL:OFF_2BL + LEN_2BL]))
+    if u32(bl, 0x5FE4) != BLDR_MAGIC or u32(bl, BLDR_PARAMS + 8) != BLDR_MAGIC:
+        sys.exit("base image is not an MCPX 1.0 BIOS with a recognised 2BL (or wrong MCPX ROM)")
+    _old_dsz, itsz = struct.unpack_from("<II", bl, BLDR_PARAMS)
+    kkey = bytes(bl[BLDR_KEYS + 32:BLDR_KEYS + 48])
+
+    pe = open(a.kernel, "rb").read()
+    image, data_init = flatten(pe, lambda n: FLASH_BASE + OFF_2BL - n)
+    if a.flat_kernel:
+        open(a.flat_kernel, "wb").write(image)
+
+    kernel = rc4(kkey, lzx_uncompressed_stream(image))
+    dsz, ksz = len(data_init), len(kernel)
+    dstart = OFF_2BL - dsz
+    kstart = dstart - ksz
+    if kstart < itsz:
+        sys.exit(f"kernel too large: needs {ksz + dsz:#x} bytes, {OFF_2BL - itsz:#x} available")
+
+    bank[itsz:OFF_2BL] = bytes(OFF_2BL - itsz)
+    bank[kstart:dstart] = kernel
+    bank[dstart:OFF_2BL] = data_init
+
+    inner = hashlib.sha1(kkey + struct.pack("<I", ksz) + kernel + struct.pack("<I", dsz) + data_init
+                         + struct.pack("<I", itsz) + bytes(bank[:itsz])).digest()
+    struct.pack_into("<I", bl, BLDR_PARAMS, dsz)
+    struct.pack_into("<I", bl, BLDR_PARAMS + 12, ksz)
+    bl[BLDR_PARAMS + 16:BLDR_PARAMS + 36] = hashlib.sha1(kkey + inner).digest()
+    bank[OFF_2BL:OFF_2BL + LEN_2BL] = rc4(mcpx_key, bytes(bl))
+
+    out = bytes(bank) * (len(raw) // BANK)
+    open(a.out, "wb").write(out)
+    print(f"{a.out}: {len(out):#x} bytes; kernel image {len(image):#x} -> stream {ksz:#x} at {kstart:#x}, "
+          f".data init {dsz:#x} at {dstart:#x}, free {kstart - itsz:#x}")
+
+
+if __name__ == "__main__":
+    main()
