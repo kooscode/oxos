@@ -8,6 +8,7 @@ BUILD     := build
 BIOS_BASE ?= $(ROOT)/xbox-files/bios/Complex_4627.bin
 MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
+SPLASH    ?= splash/splash.png
 SELFTEST  ?= 1
 RETAIL_MEDIA_POLICY ?= 0
 TRACE_IMPORTS ?= 0
@@ -63,9 +64,9 @@ $(BUILD)/title.xbe: $(BUILD)/title.exe $(ROOT)/tools/mkxbe.py
 
 bios: $(BUILD)/bios.bin
 
-$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
+$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH))
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 
 test: $(BUILD)/bios.bin $(BUILD)/title.xbe
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \

@@ -2,7 +2,7 @@
 """Pack a kernel PE into an MCPX 1.0 BIOS image, reusing the base image's init tables and 2BL.
 
 usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
-                 [--flat-kernel OUT.exe]
+                 [--flat-kernel OUT.exe] [--splash IMAGE]
 
 Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00):
   [0, inittblSize)              init tables + X-codes (kept from the base image)
@@ -12,10 +12,15 @@ Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00
 The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
 fields 0x28..0x37 describe the .data copy used by quick reboot (spec/02 §1).
 
+Boot splash (optional, 1 MiB images only): the second 256 KiB bank (flash offset 0x40000, 0xFFF40000) holds
+  "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 8-bit RGB PNG with a single IDAT chunk.
+The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
+valid and falls back to its drawn emblem otherwise (spec/17 §7).
+
 LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
 stream); its own decoder checks the result before the image is written.
 """
-import argparse, hashlib, os, struct, sys
+import argparse, hashlib, io, os, struct, sys, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lzx  # noqa: E402
@@ -110,6 +115,36 @@ def disable_kernel_patcher(bl):
     print(f"2BL kernel patcher found: disabled its table of {n} patches at 2BL+{table:#x}")
 
 
+SPLASH_BANK, SPLASH_W, SPLASH_H = 1, 640, 480
+
+
+def splash_bank(path):
+    """The splash bank contents for an image file (any size/format Pillow reads; resized to 640x480 RGB)."""
+    from PIL import Image
+    im = Image.open(path).convert("RGB")
+    if im.size != (SPLASH_W, SPLASH_H):
+        im = im.resize((SPLASH_W, SPLASH_H), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "PNG", optimize=True)
+    png = buf.getvalue()
+    # Re-chunk: signature, IHDR, one IDAT with the whole zlib stream, IEND (the kernel decoder wants one IDAT).
+    chunks, idat, o = [], b"", 8
+    while o < len(png):
+        n, kind = struct.unpack_from(">I4s", png, o)
+        data = png[o + 8:o + 8 + n]
+        o += 12 + n
+        if kind == b"IDAT":
+            idat += data
+        elif kind == b"IHDR":
+            chunks.append((kind, data))
+    chunks += [(b"IDAT", idat), (b"IEND", b"")]
+    png = png[:8] + b"".join(struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d)) for k, d in chunks)
+    blob = b"XKSPLASH" + struct.pack("<III", 1, len(png), zlib.crc32(png)) + png
+    if len(blob) > BANK:
+        sys.exit(f"splash image too large: {len(blob):#x} bytes after compression, {BANK:#x} available")
+    return blob + b"\xff" * (BANK - len(blob)), len(blob)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", required=True)
@@ -117,6 +152,7 @@ def main():
     ap.add_argument("--kernel", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
+    ap.add_argument("--splash", help="boot splash image placed in flash bank 1 (1 MiB images only)")
     a = ap.parse_args()
 
     raw = open(a.base, "rb").read()
@@ -153,10 +189,18 @@ def main():
     bl[BLDR_PARAMS + 16:BLDR_PARAMS + 36] = hashlib.sha1(kkey + inner).digest()
     bank[OFF_2BL:OFF_2BL + LEN_2BL] = rc4(mcpx_key, bytes(bl))
 
-    out = bytes(bank) * (len(raw) // BANK)
+    banks = [bytes(bank)] * (len(raw) // BANK)
+    splash = ""
+    if a.splash:
+        if len(banks) > SPLASH_BANK + 1:
+            banks[SPLASH_BANK], size = splash_bank(a.splash)
+            splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
+        else:
+            print(f"warning: {len(raw):#x}-byte image has no spare bank for the splash; not included")
+    out = b"".join(banks)
     open(a.out, "wb").write(out)
     print(f"{a.out}: {len(out):#x} bytes; kernel image {len(image):#x} -> stream {ksz:#x} at {kstart:#x}, "
-          f".data init {dsz:#x} at {dstart:#x}, free {kstart - itsz:#x}")
+          f".data init {dsz:#x} at {dstart:#x}, free {kstart - itsz:#x}{splash}")
 
 
 if __name__ == "__main__":

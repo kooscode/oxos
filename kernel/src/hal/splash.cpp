@@ -1,6 +1,6 @@
-// Boot splash (our own artwork; the reference's INIT-section animation is not reproduced): on cold boot a system
-// thread shows an emblem and caption fading in on a 640x480 32 bpp screen. The title launcher waits for it and
-// releases it before entering the title.
+// Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
+// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/17 §7), or, without one, a
+// drawn emblem and caption. The title launcher waits for it and releases it before entering the title.
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>
@@ -16,6 +16,14 @@ constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40, SPLASH_HOLD_MS = 
 static KEVENT HalpSplashDone;
 static ULONG *HalpSplashScreen, *HalpSplashImage;
 volatile ULONG HalpSplashFrames; // frames shown (boot tests)
+volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = flash image (boot tests)
+volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header 0x100+, HalpDecodePng step 1-9)
+
+ULONG HalpPngScratchSize(ULONG Width, ULONG Height);
+ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, ULONG Height, UCHAR *Scratch);
+
+// Flash bank 1: "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG.
+constexpr ULONG SPLASH_FLASH = 0xFFF40000, SPLASH_FLASH_SIZE = 0x40000, SPLASH_HEADER = 20;
 
 // 5x7 glyphs, one byte per row (bit 4 = leftmost column), for the caption's letters.
 static const struct {
@@ -72,11 +80,39 @@ static void HalpDrawEmblem(ULONG *img) {
         }
 }
 
+static ULONG HalpLoadFlashSplash(ULONG *img) {
+    auto flash = (const UCHAR *)MmMapIoSpace(SPLASH_FLASH, SPLASH_FLASH_SIZE, PAGE_READONLY | PAGE_NOCACHE);
+    if (!flash)
+        return 0x100;
+    static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
+    ULONG status = 0, length = *(const ULONG *)(flash + 12);
+    for (int i = 0; i < 8; i++)
+        if (flash[i] != (UCHAR)magic[i])
+            status = 0x101; // no splash bank (256 KiB image, or built without one)
+    if (!status && (*(const ULONG *)(flash + 8) != 1 || length > SPLASH_FLASH_SIZE - SPLASH_HEADER))
+        status = 0x102;
+    if (!status) {
+        ULONG scratchSize = HalpPngScratchSize(SPLASH_W, SPLASH_H);
+        auto scratch = (UCHAR *)MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
+        status = scratch ? HalpDecodePng(flash + SPLASH_HEADER, length, img, SPLASH_W, SPLASH_H, scratch) : 0x103;
+        if (scratch)
+            MmFreeContiguousMemory(scratch);
+    }
+    MmUnmapIoSpace((PVOID)flash, SPLASH_FLASH_SIZE);
+    return status;
+}
+
 static void NTAPI HalpSplashThread(PVOID) {
-    RtlZeroMemory(HalpSplashImage, SPLASH_PITCH * SPLASH_H);
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
-    HalpDrawEmblem(HalpSplashImage);
-    HalpDrawText(HalpSplashImage, "OPEN XBOX KERNEL", 350, 3, 0xE0E0E0);
+    HalpSplashStatus = HalpLoadFlashSplash(HalpSplashImage);
+    if (!HalpSplashStatus) {
+        HalpSplashSource = 2;
+    } else {
+        RtlZeroMemory(HalpSplashImage, SPLASH_PITCH * SPLASH_H);
+        HalpDrawEmblem(HalpSplashImage);
+        HalpDrawText(HalpSplashImage, "OPEN XBOX KERNEL", 350, 3, 0xE0E0E0);
+        HalpSplashSource = 1;
+    }
     AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, SPLASH_PITCH, MmGetPhysicalAddress(HalpSplashScreen));
     for (ULONG f = 1; f <= SPLASH_FADE_FRAMES; f++) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
