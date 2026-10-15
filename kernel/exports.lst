@@ -244,3 +244,10 @@ XcSHAFinal
 XcHMAC
 XcRC4Key
 XcRC4Crypt
+HalReadSMBusValue
+HalWriteSMBusValue
+HalReadSMCTrayState
+HalReturnToFirmware
+ExQueryNonVolatileSetting
+ExSaveNonVolatileSetting
+XboxHDKey

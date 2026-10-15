@@ -699,12 +699,14 @@ void KiStartIoSelfTests();
 void KiStartIdexSelfTests();
 void KiStartFatxSelfTests();
 void KiStartDvdSelfTests();
+void KiStartHalSelfTests();
 
 static void KiStartThreadSelfTests() {
     KiStartIoSelfTests();
     KiStartIdexSelfTests();
     KiStartFatxSelfTests();
     KiStartDvdSelfTests();
+    KiStartHalSelfTests();
     KiCreateSystemThread(ObControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);

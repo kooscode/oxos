@@ -22,6 +22,7 @@ static void KiSetStage(UCHAR code) {
 }
 
 void XeStartTitleLauncher(); // spec/05: load and enter the title
+void ExInitEeprom();          // spec/12: EEPROM shadow, HD key, game region
 
 extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiSetStage(post_code::Entry);
@@ -44,6 +45,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     ObInitSystem();
     IoInitSystem();
     FsInitSystem();
+    ExInitEeprom();
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
 

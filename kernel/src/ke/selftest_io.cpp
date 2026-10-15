@@ -167,7 +167,9 @@ static OBJECT_ATTRIBUTES Attrs(OBJECT_STRING *s, PCSZ text, HANDLE root = nullpt
 }
 
 static void NTAPI IoControllerThread(PVOID) {
-    Sleep(150); // after the object-manager suite
+    extern volatile ULONG KiTestObDone;
+    while (!KiTestObDone) // after the object-manager suite: both measure pool balances
+        Sleep(10);
     ULONG poolBefore = ExpPoolBlocks;
 
     // Devices.
