@@ -176,6 +176,31 @@ typedef struct _KMUTANT {
 XK_OFFSET(KMUTANT, OwnerThread, 0x18);
 XK_OFFSET(KMUTANT, Abandoned, 0x1C);
 
+typedef struct _KQUEUE {
+    DISPATCHER_HEADER Header;
+    LIST_ENTRY EntryListHead;
+    ULONG CurrentCount;
+    ULONG MaximumCount;
+    LIST_ENTRY ThreadListHead;
+} KQUEUE, *PKQUEUE;
+XK_OFFSET(KQUEUE, CurrentCount, 0x18);
+XK_SIZE(KQUEUE, 0x28);
+
+typedef struct _KDEVICE_QUEUE {
+    CSHORT Type;
+    UCHAR Size;
+    BOOLEAN Busy;
+    LIST_ENTRY DeviceListHead;
+} KDEVICE_QUEUE, *PKDEVICE_QUEUE;
+XK_SIZE(KDEVICE_QUEUE, 0x0C);
+
+typedef struct _KDEVICE_QUEUE_ENTRY {
+    LIST_ENTRY DeviceListEntry;
+    ULONG SortKey;
+    BOOLEAN Inserted;
+} KDEVICE_QUEUE_ENTRY, *PKDEVICE_QUEUE_ENTRY;
+XK_SIZE(KDEVICE_QUEUE_ENTRY, 0x10);
+
 enum KTHREAD_STATE : UCHAR { Initialized, Ready, Running, Standby, Terminated, Waiting };
 
 typedef struct _KTHREAD {
@@ -213,7 +238,7 @@ typedef struct _KTHREAD {
     CHAR SuspendCount;             // 0x75
     BOOLEAN Preempted;             // 0x76
     BOOLEAN HasTerminated;         // 0x77
-    PVOID Queue;                   // 0x78
+    PKQUEUE Queue;                 // 0x78
     LIST_ENTRY QueueListEntry;     // 0x7C
     KTIMER Timer;                  // 0x88 (8-byte aligned)
     KWAIT_BLOCK TimerWaitBlock;    // 0xB0
@@ -337,8 +362,17 @@ XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE 
 XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt);
 XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt);
 
-typedef enum _KWAIT_REASON { Executive = 0, DelayExecution = 4, WrEventPair = 0x0E } KWAIT_REASON;
+typedef enum _KWAIT_REASON {
+    Executive = 0, DelayExecution = 4, Suspended = 5, UserRequest = 6, WrEventPair = 0x0E, WrQueue = 0x0F
+} KWAIT_REASON;
+
+typedef void(NTAPI *PKNORMAL_ROUTINE)(PVOID NormalContext, PVOID SystemArgument1, PVOID SystemArgument2);
+typedef void(NTAPI *PKKERNEL_ROUTINE)(PKAPC Apc, PKNORMAL_ROUTINE *NormalRoutine, PVOID *NormalContext,
+                                      PVOID *SystemArgument1, PVOID *SystemArgument2);
+typedef void(NTAPI *PKRUNDOWN_ROUTINE)(PKAPC Apc);
+typedef BOOLEAN(NTAPI *PKSYNCHRONIZE_ROUTINE)(PVOID SynchronizeContext);
 typedef CHAR KPROCESSOR_MODE;
+typedef LONG KPRIORITY;
 #define KernelMode 0
 #define UserMode 1
 
@@ -361,6 +395,35 @@ XBAPI LONG NTAPI KeReleaseSemaphore(PKSEMAPHORE Semaphore, LONG Increment, LONG 
 XBAPI void NTAPI KeInitializeMutant(PKMUTANT Mutant, BOOLEAN InitialOwner);
 XBAPI LONG NTAPI KeReleaseMutant(PKMUTANT Mutant, LONG Increment, BOOLEAN Abandoned, BOOLEAN Wait);
 XBAPI LONG NTAPI KeSetPriorityThread(PKTHREAD Thread, LONG Priority);
+XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine,
+                                 PKRUNDOWN_ROUTINE RundownRoutine, PKNORMAL_ROUTINE NormalRoutine,
+                                 KPROCESSOR_MODE ApcMode, PVOID NormalContext);
+XBAPI BOOLEAN NTAPI KeInsertQueueApc(PKAPC Apc, PVOID SystemArgument1, PVOID SystemArgument2, LONG Increment);
+XBAPI void NTAPI KeEnterCriticalRegion();
+XBAPI void NTAPI KeLeaveCriticalRegion();
+XBAPI BOOLEAN NTAPI KeTestAlertThread(KPROCESSOR_MODE AlertMode);
+XBAPI BOOLEAN NTAPI KeAlertThread(PKTHREAD Thread, KPROCESSOR_MODE AlertMode);
+XBAPI ULONG NTAPI KeAlertResumeThread(PKTHREAD Thread);
+XBAPI ULONG NTAPI KeSuspendThread(PKTHREAD Thread);
+XBAPI ULONG NTAPI KeResumeThread(PKTHREAD Thread);
+XBAPI void NTAPI KeInitializeQueue(PKQUEUE Queue, ULONG Count);
+XBAPI LONG NTAPI KeInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry);
+XBAPI LONG NTAPI KeInsertHeadQueue(PKQUEUE Queue, PLIST_ENTRY Entry);
+XBAPI PLIST_ENTRY NTAPI KeRemoveQueue(PKQUEUE Queue, KPROCESSOR_MODE WaitMode, PLARGE_INTEGER Timeout);
+XBAPI PLIST_ENTRY NTAPI KeRundownQueue(PKQUEUE Queue);
+XBAPI void NTAPI KeBoostPriorityThread(PKTHREAD Thread, KPRIORITY Increment);
+XBAPI LONG NTAPI KeSetBasePriorityThread(PKTHREAD Thread, LONG Increment);
+XBAPI BOOLEAN NTAPI KeSetDisableBoostThread(PKTHREAD Thread, BOOLEAN Disable);
+XBAPI KPRIORITY NTAPI KeSetPriorityProcess(PKPROCESS Process, KPRIORITY BasePriority);
+XBAPI void NTAPI KeInitializeDeviceQueue(PKDEVICE_QUEUE DeviceQueue);
+XBAPI BOOLEAN NTAPI KeInsertDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry);
+XBAPI BOOLEAN NTAPI KeInsertByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry,
+                                             ULONG SortKey);
+XBAPI PKDEVICE_QUEUE_ENTRY NTAPI KeRemoveDeviceQueue(PKDEVICE_QUEUE DeviceQueue);
+XBAPI PKDEVICE_QUEUE_ENTRY NTAPI KeRemoveByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, ULONG SortKey);
+XBAPI BOOLEAN NTAPI KeRemoveEntryDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry);
+XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
+                                           PVOID SynchronizeContext);
 XBAPI LONG NTAPI KeQueryBasePriorityThread(PKTHREAD Thread);
 
 // --- Internal
@@ -385,6 +448,11 @@ LONG KiSwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
 void KiUnlockDispatcherDatabase(KIRQL OldIrql);
 void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment);
 void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment);
+bool KiInsertQueueApc(PKAPC Apc, LONG Increment);
+void KiDeliverApc();
+void KiExecuteUserApcs();
+void KiActivateWaiterQueue(PKQUEUE Queue);
+LONG KiInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head);
 bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime);
 void KiRemoveTimerIfInserted(PKTIMER Timer);
 

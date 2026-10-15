@@ -12,10 +12,6 @@ constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 static volatile ULONG KiPendingSoftwareInterrupts;
 static PKINTERRUPT KiInterruptObjects[16];
 
-void KiDeliverApc() {
-    // Milestone 2b: kernel/user APC delivery.
-}
-
 // Interrupts are disabled on entry and exit; enabled while a handler runs.
 void KiDeliverSoftwareInterrupts() {
     for (;;) {

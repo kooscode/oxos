@@ -177,7 +177,175 @@ static void NTAPI ControllerThread(PVOID) {
     KiTestThreadsDone = 1;
 }
 
+// ---------------------------------------------------------------- milestone 2b+: APCs, alerts, suspend, queues
+
+volatile ULONG KiTestApcKernelRan, KiTestApcNormalAtPassive, KiTestApcRewaitOk;
+volatile ULONG KiTestSpecialApcAtApcLevel;
+volatile ULONG KiTestUserApcRan, KiTestUserApcStatus;
+volatile ULONG KiTestAlertStatus;
+volatile ULONG KiTestCriticalRegionOk;
+volatile ULONG KiTestSuspendOk;
+volatile ULONG KiTestQueueProcessed, KiTestQueueTimeout;
+volatile ULONG KiTestDeviceQueueOk;
+volatile ULONG KiTestBoostPriority;
+volatile ULONG KiTestApcSuiteDone;
+
+static KEVENT ApcWaitEvent, ApcTargetDone;
+static KAPC TestKernelApc, TestSpecialApc, TestUserApc, CriticalApc;
+
+static void NTAPI ApcKernelRoutine(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+    KiTestApcKernelRan = KiTestApcKernelRan + 1;
+}
+static void NTAPI ApcNormalRoutine(PVOID, PVOID, PVOID) {
+    KiTestApcNormalAtPassive = KeGetCurrentIrql() == PASSIVE_LEVEL;
+}
+static void NTAPI SpecialApcRoutine(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+    KiTestSpecialApcAtApcLevel = KeGetCurrentIrql() == APC_LEVEL;
+}
+static void NTAPI UserApcNormal(PVOID, PVOID, PVOID) { KiTestUserApcRan = 1; }
+
+// Waits non-alertably; a kernel APC must run and the wait must resume until the event is set.
+static void NTAPI ApcTargetThread(PVOID) {
+    NTSTATUS s = KeWaitForSingleObject(&ApcWaitEvent, Executive, KernelMode, FALSE, nullptr);
+    KiTestApcRewaitOk = s == STATUS_WAIT_0 && KiTestApcKernelRan == 1;
+    KeSetEvent(&ApcTargetDone, 0, FALSE);
+}
+
+static KEVENT UserApcReady;
+static void NTAPI UserApcThread(PVOID) {
+    KEVENT never;
+    KeInitializeEvent(&never, NotificationEvent, FALSE);
+    KeSetEvent(&UserApcReady, 0, FALSE);
+    KiTestUserApcStatus = KeWaitForSingleObject(&never, UserRequest, UserMode, TRUE, nullptr);
+}
+
+static void NTAPI AlertThreadBody(PVOID) {
+    LARGE_INTEGER t;
+    t.QuadPart = -5000 * 10000LL; // 5 s; the alert arrives long before
+    KiTestAlertStatus = KeDelayExecutionThread(KernelMode, TRUE, &t);
+}
+
+static volatile ULONG CriticalApcRan, CriticalRegionLeft;
+static void NTAPI CriticalApcNormal(PVOID, PVOID, PVOID) { CriticalApcRan = CriticalRegionLeft ? 2 : 1; }
+static void NTAPI CriticalRegionThread(PVOID) {
+    KeEnterCriticalRegion();
+    Sleep(30); // the APC is queued meanwhile and must wait
+    CriticalRegionLeft = 1;
+    KeLeaveCriticalRegion(); // delivered here
+    Sleep(1);
+}
+
+static volatile ULONG SuspendCounter;
+static void NTAPI SuspendSpinner(PVOID) {
+    for (;;)
+        SuspendCounter = SuspendCounter + 1;
+}
+
+static KQUEUE TestQueue;
+static LIST_ENTRY QueueItems[10];
+static void NTAPI QueueWorker(PVOID) {
+    for (;;) {
+        PLIST_ENTRY e = KeRemoveQueue(&TestQueue, KernelMode, nullptr);
+        if ((ULONG)e >= 0x80000000)
+            KiTestQueueProcessed = KiTestQueueProcessed + 1;
+    }
+}
+
+static KEVENT BoostEvent;
+static void NTAPI BoostWaiter(PVOID) {
+    KeWaitForSingleObject(&BoostEvent, Executive, KernelMode, FALSE, nullptr);
+    KiTestBoostPriority = (ULONG)KeGetCurrentThread()->Priority;
+}
+
+static void NTAPI ApcControllerThread(PVOID) {
+    // Kernel APC interrupts a non-alertable wait, which then resumes.
+    KeInitializeEvent(&ApcWaitEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&ApcTargetDone, NotificationEvent, FALSE);
+    PKTHREAD target = KiCreateSystemThread(ApcTargetThread, nullptr, 0, 8);
+    Sleep(10);
+    KeInitializeApc(&TestKernelApc, target, ApcKernelRoutine, nullptr, ApcNormalRoutine, KernelMode, nullptr);
+    KeInsertQueueApc(&TestKernelApc, nullptr, nullptr, 0);
+    Sleep(10);
+    KeSetEvent(&ApcWaitEvent, 0, FALSE);
+    KeWaitForSingleObject(&ApcTargetDone, Executive, KernelMode, FALSE, nullptr);
+
+    // Special APC to ourselves runs at APC_LEVEL when our IRQL drops.
+    KeInitializeApc(&TestSpecialApc, KeGetCurrentThread(), SpecialApcRoutine, nullptr, nullptr, KernelMode, nullptr);
+    KeInsertQueueApc(&TestSpecialApc, nullptr, nullptr, 0);
+
+    // User APC ends an alertable user-mode wait after running.
+    KeInitializeEvent(&UserApcReady, NotificationEvent, FALSE);
+    PKTHREAD userThread = KiCreateSystemThread(UserApcThread, nullptr, 0, 8);
+    KeWaitForSingleObject(&UserApcReady, Executive, KernelMode, FALSE, nullptr);
+    Sleep(5);
+    KeInitializeApc(&TestUserApc, userThread, ApcKernelRoutine, nullptr, UserApcNormal, UserMode, nullptr);
+    KeInsertQueueApc(&TestUserApc, nullptr, nullptr, 0);
+    KeWaitForSingleObject(userThread, Executive, KernelMode, FALSE, nullptr);
+
+    // Alert ends an alertable delay.
+    PKTHREAD alertThread = KiCreateSystemThread(AlertThreadBody, nullptr, 0, 8);
+    Sleep(10);
+    KeAlertThread(alertThread, KernelMode);
+    KeWaitForSingleObject(alertThread, Executive, KernelMode, FALSE, nullptr);
+
+    // Critical region defers a normal kernel APC.
+    PKTHREAD crit = KiCreateSystemThread(CriticalRegionThread, nullptr, 0, 8);
+    Sleep(10);
+    KeInitializeApc(&CriticalApc, crit, ApcKernelRoutine, nullptr, CriticalApcNormal, KernelMode, nullptr);
+    KeInsertQueueApc(&CriticalApc, nullptr, nullptr, 0);
+    KeWaitForSingleObject(crit, Executive, KernelMode, FALSE, nullptr);
+    KiTestCriticalRegionOk = CriticalApcRan == 2;
+
+    // Suspend stops a spinning thread; resume restarts it.
+    PKTHREAD spinner = KiCreateSystemThread(SuspendSpinner, nullptr, 0, 2); // above the 2b spinners
+    Sleep(20);
+    KeSuspendThread(spinner);
+    Sleep(5);
+    ULONG frozen = SuspendCounter;
+    Sleep(30);
+    bool stopped = SuspendCounter == frozen;
+    KeResumeThread(spinner);
+    Sleep(30);
+    KiTestSuspendOk = stopped && SuspendCounter != frozen;
+    KeSuspendThread(spinner); // leave it parked
+
+    // Queue with concurrency 1 feeds two workers.
+    KeInitializeQueue(&TestQueue, 1);
+    KiCreateSystemThread(QueueWorker, nullptr, 0, 8);
+    KiCreateSystemThread(QueueWorker, nullptr, 0, 8);
+    Sleep(5);
+    for (auto &item : QueueItems)
+        KeInsertQueue(&TestQueue, &item);
+    Sleep(20);
+    KQUEUE emptyQueue;
+    KeInitializeQueue(&emptyQueue, 1);
+    LARGE_INTEGER t;
+    t.QuadPart = -10 * 10000;
+    KiTestQueueTimeout = (ULONG)KeRemoveQueue(&emptyQueue, KernelMode, &t);
+
+    // Device queue: idle insert starts the request, later ones queue; by-key removal order.
+    KDEVICE_QUEUE dq;
+    KDEVICE_QUEUE_ENTRY e1, e2, e3;
+    KeInitializeDeviceQueue(&dq);
+    bool ok = !KeInsertDeviceQueue(&dq, &e1) && dq.Busy;
+    ok &= KeInsertByKeyDeviceQueue(&dq, &e2, 50) && KeInsertByKeyDeviceQueue(&dq, &e3, 20);
+    ok &= KeRemoveByKeyDeviceQueue(&dq, 30) == &e2; // first key >= 30
+    ok &= KeRemoveDeviceQueue(&dq) == &e3;
+    ok &= KeRemoveDeviceQueue(&dq) == nullptr && !dq.Busy;
+    KiTestDeviceQueueOk = ok;
+
+    // Wake-up boost: base 8 + increment 2.
+    KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
+    PKTHREAD boosted = KiCreateSystemThread(BoostWaiter, nullptr, 0, 8);
+    Sleep(5);
+    KeSetEvent(&BoostEvent, 2, FALSE);
+    KeWaitForSingleObject(boosted, Executive, KernelMode, FALSE, nullptr);
+
+    KiTestApcSuiteDone = 1;
+}
+
 static void KiStartThreadSelfTests() {
+    KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
     KeInitializeEvent(&PingEventA, SynchronizationEvent, TRUE);
     KeInitializeEvent(&PingEventB, SynchronizationEvent, FALSE);
     KiCreateSystemThread(PingThreadA, nullptr, 0, 8);

@@ -9,6 +9,8 @@
 void KiInitializeNpxArea(PKTHREAD t);
 void KiNpxRelease(PKTHREAD t);
 extern "C" void KiThreadStartup();
+void NTAPI KiSuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *);
+void NTAPI KiSuspendThread(PVOID, PVOID, PVOID);
 
 KPROCESS KiIdleProcess, KiSystemProcess;
 
@@ -65,8 +67,7 @@ void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSiz
     Thread->ApcState.Process = Process;
     Thread->ApcState.ApcQueueable = TRUE;
 
-    Thread->SuspendApc.Type = ApcObject;
-    Thread->SuspendApc.Thread = Thread;
+    KeInitializeApc(&Thread->SuspendApc, Thread, KiSuspendNop, nullptr, KiSuspendThread, KernelMode, nullptr);
     KeInitializeSemaphore(&Thread->SuspendSemaphore, 0, 2);
 
     KeInitializeTimerEx(&Thread->Timer, NotificationTimer);
@@ -153,4 +154,76 @@ XBAPI LONG NTAPI KeSetPriorityThread(PKTHREAD Thread, LONG Priority) {
 
 XBAPI LONG NTAPI KeQueryBasePriorityThread(PKTHREAD Thread) {
     return Thread->BasePriority - Thread->ApcState.Process->BasePriority;
+}
+
+// Base priority = process base + increment; +/-16 saturates to the top/bottom of the thread's class.
+XBAPI LONG NTAPI KeSetBasePriorityThread(PKTHREAD Thread, LONG Increment) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    LONG previous = Thread->BasePriority - Thread->ApcState.Process->BasePriority;
+    if (Thread->Saturation)
+        previous = (16 / 2) * Thread->Saturation;
+    LONG processBase = Thread->ApcState.Process->BasePriority;
+    LONG base = processBase + Increment;
+    Thread->Saturation = 0;
+    if (Increment >= 16 / 2 || Increment <= -(16 / 2)) {
+        Thread->Saturation = (CHAR)(Increment > 0 ? 1 : -1);
+        base = processBase >= 16 ? (Increment > 0 ? 31 : 16) : (Increment > 0 ? 15 : 1);
+    } else if (processBase >= 16) {
+        base = base < 16 ? 16 : base > 31 ? 31 : base;
+    } else {
+        base = base < 1 ? 1 : base > 15 ? 15 : base;
+    }
+    SCHAR oldBase = Thread->BasePriority;
+    Thread->BasePriority = (SCHAR)base;
+    Thread->Quantum = Thread->ApcState.Process->ThreadQuantum;
+    Thread->PriorityDecrement = 0;
+    LONG priority = base >= 16 ? base : Thread->Priority - oldBase + base;
+    if (priority < base)
+        priority = base;
+    KiSetPriorityThread(Thread, (SCHAR)priority);
+    KiUnlockDispatcherDatabase(old);
+    return previous;
+}
+
+XBAPI BOOLEAN NTAPI KeSetDisableBoostThread(PKTHREAD Thread, BOOLEAN Disable) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    BOOLEAN previous = Thread->DisableBoost;
+    Thread->DisableBoost = Disable;
+    KiUnlockDispatcherDatabase(old);
+    return previous;
+}
+
+// Boost a variable-priority thread that has no outstanding decrement (e.g. after I/O completion).
+XBAPI void NTAPI KeBoostPriorityThread(PKTHREAD Thread, KPRIORITY Increment) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (Thread->Priority < 16 && !Thread->PriorityDecrement && !Thread->DisableBoost) {
+        LONG priority = Thread->BasePriority + Increment;
+        if (priority > Thread->Priority) {
+            if (priority > 15)
+                priority = 15;
+            Thread->PriorityDecrement = (SCHAR)(priority - Thread->BasePriority);
+            KiSetPriorityThread(Thread, (SCHAR)priority);
+        }
+    }
+    KiUnlockDispatcherDatabase(old);
+}
+
+// Change a process's base priority and shift its threads by the same amount within their class.
+XBAPI KPRIORITY NTAPI KeSetPriorityProcess(PKPROCESS Process, KPRIORITY BasePriority) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    KPRIORITY previous = Process->BasePriority;
+    LONG delta = BasePriority - previous;
+    Process->BasePriority = (SCHAR)BasePriority;
+    for (PLIST_ENTRY e = Process->ThreadListHead.Flink; e != &Process->ThreadListHead; e = e->Flink) {
+        PKTHREAD t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
+        LONG low = BasePriority >= 16 ? 16 : 1, high = BasePriority >= 16 ? 31 : 15;
+        LONG base = t->BasePriority + delta;
+        base = base < low ? low : base > high ? high : base;
+        t->BasePriority = (SCHAR)base;
+        t->Quantum = Process->ThreadQuantum;
+        t->PriorityDecrement = 0;
+        KiSetPriorityThread(t, (SCHAR)base);
+    }
+    KiUnlockDispatcherDatabase(old);
+    return previous;
 }

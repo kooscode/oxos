@@ -116,6 +116,9 @@ static void KiSwapToThread(PKTHREAD Old, PKTHREAD Next) {
     Prcb.KeContextSwitches++;
     KiNpxPrepareSwitch(Next);
     KiSwapContext(Old, Next);
+    // Back on Old's stack: a kernel APC queued while it was switched out is delivered when its IRQL drops.
+    if (Old->ApcState.KernelApcPending)
+        HalRequestSoftwareInterrupt(APC_LEVEL);
 }
 
 // Block the current thread (its wait state is already set). Returns its WaitStatus when resumed;
