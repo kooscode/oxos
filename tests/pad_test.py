@@ -10,7 +10,7 @@ usage: pad_test.py --bios BIOS --mcpx-rom MCPX --iso padtest.iso [--hdd HDD] [--
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vpad import VirtualPad  # noqa: E402
+from vpad import VPAD_PRODUCT, VPAD_VENDOR, VirtualPad  # noqa: E402
 
 ANALOG = ["A", "B", "X", "Y", "BLACK", "WHITE", "LT", "RT"]
 DIGITAL = ["UP", "DOWN", "LEFT", "RIGHT", "START", "BACK", "LS", "RS"]
@@ -39,6 +39,16 @@ def decode(report):
         elif v > 16000:
             active.add(AXES[i] + "+")
     return active
+
+
+def xemu_env():
+    """Environment for an xemu that sees only the virtual pad, also while its window is not focused."""
+    return dict(os.environ,
+                # SDL ignores gamepads while the app has no focus unless told otherwise: without this, a test fails
+                # whenever focus moves elsewhere (e.g. back to the terminal).
+                SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="1",
+                # The user's own controllers would take controller port 1 and could press things mid-test.
+                SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=f"0x{VPAD_VENDOR:04x}/0x{VPAD_PRODUCT:04x}")
 
 
 def qmp(path, command, **arguments):
@@ -113,9 +123,7 @@ def main():
         + (f"hdd_path = '{hdd}'\n" if a.hdd else ""))
     pad = VirtualPad()  # before xemu starts, so it is bound to a controller port at startup
     log = open(os.path.join(work, "xemu.log"), "w")
-    # SDL ignores gamepads while the xemu window is not focused unless told otherwise: without this, the test
-    # fails whenever focus moves elsewhere (e.g. back to the terminal).
-    env = dict(os.environ, SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="1")
+    env = xemu_env()
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
                             stdout=log, stderr=subprocess.STDOUT, env=env)
     ok = False

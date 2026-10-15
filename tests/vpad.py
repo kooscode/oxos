@@ -13,6 +13,7 @@ AXES = {"LX": (0x00, -32768, 32767), "LY": (0x01, -32768, 32767), "LT": (0x02, 0
         "HATX": (0x10, -1, 1), "HATY": (0x11, -1, 1)}
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT = 0x40045564, 0x40045565, 0x40045567
 UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
+VPAD_VENDOR, VPAD_PRODUCT = 0x045E, 0x028E  # an Xbox 360 pad: SDL maps it without a mapping string
 
 
 class VirtualPad:
@@ -26,7 +27,7 @@ class VirtualPad:
         for code, lo, hi in AXES.values():
             fcntl.ioctl(self.fd, UI_SET_ABSBIT, code)
             absmin[code], absmax[code] = lo, hi
-        dev = struct.pack("80sHHHHi", name.encode(), 3, 0x045E, 0x028E, 0x0110, 0)
+        dev = struct.pack("80sHHHHi", name.encode(), 3, VPAD_VENDOR, VPAD_PRODUCT, 0x0110, 0)
         dev += struct.pack("64i", *absmax) + struct.pack("64i", *absmin) + bytes(4 * 64 * 2)
         os.write(self.fd, dev)
         fcntl.ioctl(self.fd, UI_DEV_CREATE)
