@@ -4,6 +4,7 @@
 #include <xk/mm.h>
 #include <xk/rtl.h>
 
+constexpr ULONG MM_LOW_RESERVED_PFN = 0xF; // the page directory; page 0 is reserved too
 static ULONG *const MiPteArray = (ULONG *)0x83FF0000; // PTEs for 0x80000000-0x83FFFFFF
 static ULONG MiFreeBitmap[MM_PAGES / 32];             // bit set = free physical page
 ULONG MmAvailablePages;
@@ -182,10 +183,14 @@ void MmInitSystem(bool QuickReboot) {
 
     // 1. Build the PTE array for 0x80000000-0x83FFFFFF (still reachable through the 2BL large pages).
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
-    // A quick reboot re-adopts persisted allocations (PTE bit 10) between the image and the GPU memory.
+    // Pages 1-14 (below the page directory at 0xF000) and those between the image and the GPU memory are
+    // allocatable; a quick reboot re-adopts persisted allocations (PTE bit 10) there.
+    auto allocatable = [&](ULONG pfn) {
+        return (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
+    };
     ULONG persisted = 0;
     for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
-        bool keep = QuickReboot && pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN &&
+        bool keep = QuickReboot && allocatable(pfn) &&
                     (MiPteArray[pfn] & (PTE_PRESENT | PTE_PERSIST)) == (PTE_PRESENT | PTE_PERSIST);
         if (keep)
             persisted++;
@@ -194,7 +199,8 @@ void MmInitSystem(bool QuickReboot) {
     }
     MmPersistedPages = persisted;
     for (ULONG pfn = 0; pfn < imageEndPfn; pfn++)
-        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
+        if (!allocatable(pfn))
+            MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
     for (ULONG pfn = 0x10; pfn < textEndPfn; pfn++)
         MiPteArray[pfn] &= ~PTE_WRITE;
     for (ULONG pfn = MM_GPU_INSTANCE_FIRST_PFN; pfn < MM_PAGE_TABLES_FIRST_PFN; pfn++)
@@ -202,10 +208,10 @@ void MmInitSystem(bool QuickReboot) {
     for (ULONG pfn = MM_PAGE_TABLES_FIRST_PFN; pfn < MM_PAGES; pfn++)
         MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
 
-    // 2. Free list: everything between the kernel image and the GPU instance memory.
+    // 2. Free list: pages 1-14 and everything between the kernel image and the GPU instance memory.
     MmAvailablePages = 0;
-    for (ULONG pfn = imageEndPfn; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++)
-        if (!MiPteArray[pfn])
+    for (ULONG pfn = 1; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++)
+        if (allocatable(pfn) && !MiPteArray[pfn])
             MiMarkFree(pfn);
     MiNextLowPfn = imageEndPfn;
 

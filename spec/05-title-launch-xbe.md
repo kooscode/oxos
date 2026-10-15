@@ -8,6 +8,10 @@ Names marked (inferred) are not symbols in the binary.
 ## 1. Pre-launch checks, cold boot (`0x800551ef`, inferred name XeCheckFirstBoot)
 Returns a reason bit mask (0 = all good):
 - bit 0: the RTC is invalid, or the system time is outside **[2001-01-01, 2101-01-01)**.
+  "RTC valid" (0x800156a8) = a **CMOS signature**: with interrupts off, for indexes 0x10–0x6F and then 0x80–0xFF,
+  write the index to port **0x72** and read port **0x71**; the bytes must alternate **0x55, 0xAA, 0x55, …**
+  (restarting at 0x55 for the second range). `NtSetSystemTime` (ord 228) writes this pattern (0x800156e8) after
+  setting the RTC, so the check means "the clock has been set at least once".
 - Read EEPROM user settings (`ExQueryNonVolatileSetting(0xFF, …, 0x60 bytes)`):
   - read failure → bits 1|2
   - the dword at settings offset 0x30 is 0 → bit 2
@@ -44,7 +48,7 @@ B. Otherwise:
   (`MmAllocateContiguousMemory(4096)`), `MmPersistContiguousMemory(…, TRUE)`, zero it, set dwLaunchDataType = 1,
   `+0x400 = type`, `+0x408 = code`, then launch the dashboard.
 - `XeLaunchDashboard` (inferred, 0x8002f236): load **`\Device\Harddisk0\Partition2\xboxdash.xbe`** as
-  dashboard. On failure, cold boot only: an SMC write (0xE1), then **fatal error 13**, or **13 + LDP type**
+  dashboard. On failure, cold boot only: SMC LED sequence (SMC reg 0x08 = 0xE1, then reg 0x07 = 1, custom LED mode), then **fatal error 13**, or **13 + LDP type**
   if the LDP type is 1, or **20** if the title-disc flag is set. In every failure case it then calls
   `HalReturnToFirmware(4)` (fatal-error reboot).
 - Boot-flags 0x40 path (0x80055e75): poll SMC register 3 (tray state) every 250 ms until it is
@@ -153,6 +157,20 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
 - **Test:** with `relaunch.txt` on the test disc, the title allocates and persists a page, stores its results
   in LaunchData, requests `\Device\CdRom0\media;second.xbe` and calls `HalReturnToFirmware(2)`; the second run
   checks XeImageFileName, the D: link and the page contents, then frees it.
+
+## 10. Our implementation (milestone 5e): launch policy
+- `XepCheckFirstBoot` (§1, cold boot only; result in `XeLaunchReason`), `XepLaunchTitle` (§2 A/B including the
+  tray-state comparison and the error → LDP code mapping), `XepLaunchDashboardWithReason` / `XepLaunchDashboard`
+  (§3, LED + fatal error 13/13+type/20, then `HalReturnToFirmware(4)`), `XepPrepareToEnterTitle` (§5, LDP only).
+- Details confirmed in the reference: a nonzero reason still tries the disc first (and passes the reason to the loader);
+  only a failure goes to LDP(type 3, reason). Path A failures skip the tray checks and go straight to the code mapping.
+  The `;` split uses the first `;`.
+- The title-disc flag (0x8003B338) is set by DVD authentication, which is not implemented: it stays 0, so
+  media flag 2 and fatal error 20 never occur.
+- Not yet: the boot-flags paths (0x04/0x08/0x40/0x80), the AV saved-data move of §5, the logo, the fatal-error
+  reporter's EEPROM history and on-screen digits (ours bug-checks with the code).
+- Tests: the relaunch phase ends with a launch of a missing image → dashboard with LDP {1, 1, 1}; the dashboard
+  phase checks the no-disc reason path; the misc suite round-trips the CMOS signature.
 
 ## Open questions
 - 0x8002ebba (signature), 0x8002ecee (thunk resolve), 0x8002ec30 (media flags), 0x8002ea65/0x8002e9ad

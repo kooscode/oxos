@@ -10,7 +10,9 @@ XBAPI ULONG NTAPI PhyGetLinkState(BOOLEAN);
 extern volatile ULONG KiTestXcDone;
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
-    KiTestMiscPhyLink, KiTestMiscDone;
+    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscDone;
+bool HalpCmosSignatureValid();
+void HalpWriteCmosSignature();
 
 static NTSTATUS OpenClose(PCSZ path) {
     OBJECT_STRING s;
@@ -61,6 +63,15 @@ static void NTAPI MiscControllerThread(PVOID) {
     ok = FscSetCacheSize(0x801) == STATUS_INVALID_PARAMETER && FscSetCacheSize(32) == 0 && FscGetCacheSize() == 32;
     FscSetCacheSize(before);
     KiTestMiscFscOk = ok;
+
+    // CMOS "clock set" signature (spec/05 §1): written, detected, a damaged byte detected, restored.
+    HalpWriteCmosSignature();
+    ok = HalpCmosSignatureValid();
+    __asm__ volatile("cli; movb $0x90, %%al; outb %%al, $0x72; xorl %%eax, %%eax; outb %%al, $0x71; sti" ::: "eax");
+    ok &= !HalpCmosSignatureValid();
+    HalpWriteCmosSignature();
+    ok &= HalpCmosSignatureValid();
+    KiTestMiscCmosOk = ok;
 
     KiTestMiscPhyStatus = PhyInitialize(TRUE, nullptr);
     KiTestMiscPhyLink = PhyGetLinkState(TRUE);

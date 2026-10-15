@@ -118,6 +118,8 @@ static void Copy(volatile void *to, const volatile void *from, ULONG n) {
         ((volatile char *)to)[i] = ((const volatile char *)from)[i];
 }
 
+static void Relaunch(volatile RESULTS &r, const char *path);
+
 static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
     Copy(&r, ldp->LaunchData + 4, FirstRunBytes);
     r.Relaunched = 1;
@@ -125,19 +127,23 @@ static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
     for (ULONG i = 0; i < name->Length && i < sizeof(r.SecondName) - 1; i++)
         r.SecondName[i] = name->Buffer[i];
     r.LaunchPageOk = ldp->LaunchDataType == 1 && ldp->TitleId == 0x584B0001 && (ldp->Flags & 1) &&
-                     *(ULONG *)ldp->LaunchData == LaunchMarker;
+                     *(ULONG *)ldp->LaunchData == LaunchMarker && (ULONG)ldp < 0x80010000; // moved below the kernel
     char buf[64];
     ULONG got = 0;
     r.DriveLinkOk = ReadFile("\\??\\D:\\a.txt", buf, sizeof(buf), &got) == 0 && got == 9 && Equal(buf, "hello dvd", 9);
     *(PVOID *)XkThunks[I_LaunchDataPage] = nullptr;
     K(MmFreeContiguousMemory, void(NTAPI *)(PVOID))(ldp);
     r.Magic = 0x54544B58;
+    // Third launch (milestone 5e): an image that does not exist. The kernel falls back to the dashboard with
+    // LaunchDataPage = {type 1, reason 1, code 1}; the host has 8 s to collect the results above first.
+    Sleep(8000);
+    Relaunch(r, "\\Device\\CdRom0\\media;missing.xbe");
     for (;;)
         Sleep(1000);
 }
 
 // XLaunchNewImage, the way the XAPI does it: a persisted page describes the next title, then a quick reboot.
-static void Relaunch(volatile RESULTS &r) {
+static void Relaunch(volatile RESULTS &r, const char *path) {
     auto ldp = (LAUNCH_DATA_PAGE *)K(MmAllocateContiguousMemory, PVOID(NTAPI *)(ULONG))(4096);
     if (!ldp)
         return;
@@ -146,8 +152,10 @@ static void Relaunch(volatile RESULTS &r) {
     K(MmPersistContiguousMemory, void(NTAPI *)(PVOID, ULONG, BOOLEAN))(ldp, 4096, 1);
     ldp->LaunchDataType = 1;
     ldp->TitleId = 0x584B0001;
-    const char path[] = "\\Device\\CdRom0\\media;second.xbe";
-    Copy(ldp->LaunchPath, path, sizeof(path));
+    ULONG n = 0;
+    while (path[n])
+        n++;
+    Copy(ldp->LaunchPath, path, n + 1);
     *(ULONG *)ldp->LaunchData = LaunchMarker;
     Copy(ldp->LaunchData + 4, &r, FirstRunBytes);
     *(PVOID *)XkThunks[I_LaunchDataPage] = ldp;
@@ -216,7 +224,7 @@ extern "C" void __cdecl XkTitleEntry() {
     r.ShaOk = digest[0] == 0xA9 && digest[1] == 0x99 && digest[19] == 0x9D;
 
     if (ReadFile("\\Device\\CdRom0\\relaunch.txt", buf, sizeof(buf), &got) == 0) // the quick-reboot test disc
-        Relaunch(r);
+        Relaunch(r, "\\Device\\CdRom0\\media;second.xbe");
     r.Magic = 0x54544B58;
     for (;;)
         Sleep(1000);

@@ -106,6 +106,8 @@ void KiInitializeSystemTime() {
         KiSetSystemTime(t.QuadPart);
 }
 
+void HalpWriteCmosSignature();
+
 XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER PreviousTime) {
     LARGE_INTEGER t = *SystemTime;
     if (t.HighPart < 0 || t.HighPart > 0x20000000)
@@ -116,5 +118,6 @@ XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER P
     HAL_TIME_FIELDS f;
     RtlTimeToTimeFields(&t, &f);
     HalpSetRealTimeClock(&f);
+    HalpWriteCmosSignature();
     return STATUS_SUCCESS;
 }

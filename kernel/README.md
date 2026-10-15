@@ -51,6 +51,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 5c: Xc public-key (BSAFE RSA, PKCS#1, modexp) and DES/3DES crypto, replaceable crypto vector (spec 15). ✅ passes in xemu.
    - 5d-1: volume dismount/remount (FATX, XDVDFS, RAW), Fsc cache control, Ethernet PHY (spec 16). ✅ passes in xemu.
    - 5d-2: quick reboot (`.persist` section, device quiesce, persisted-memory re-adoption) + LaunchDataPage title-to-title launches (spec 02 §6, 05 §9; `make test-relaunch`). ✅ passes in xemu.
+   - 5e: launch policy — first-boot reasons (CMOS clock-set signature, settings), tray/error → dashboard LDP reasons, dashboard failure → LED + fatal error, LDP moved below the kernel (spec 05 §10). ✅ passes in xemu.
 6. Real-hardware validation (encoder mode tables, SMC events, microcode).
 
 ## Known deviations (tracked)
