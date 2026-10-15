@@ -40,3 +40,16 @@ KeResetEvent
 KeSetEvent
 KeSetTimer
 KeSetTimerEx
+KeBugCheck
+KeBugCheckEx
+KeDelayExecutionThread
+KeGetCurrentThread
+KeInitializeMutant
+KeInitializeSemaphore
+KePulseEvent
+KeQueryBasePriorityThread
+KeReleaseMutant
+KeReleaseSemaphore
+KeSetPriorityThread
+KeWaitForMultipleObjects
+KeWaitForSingleObject

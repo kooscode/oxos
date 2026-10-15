@@ -91,7 +91,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (HalpIsSpuriousIrq(irq))
         return;
     KIRQL old = KiPcr.Irql;
-    KIRQL level = HalpIrqToIrql(irq);
+    KIRQL level = HalpGetIrqLevel(irq);
     KiPcr.Irql = level;
     HalpSetIrqlMask(level);
     HalpEoi(irq);
@@ -99,7 +99,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
 
     sti();
     if (irq == 0) {
-        KiClockInterrupt();
+        KiClockInterrupt(old);
     } else if (PKINTERRUPT obj = KiInterruptObjects[irq]) {
         obj->ServiceCount++;
         obj->ServiceRoutine(obj, obj->ServiceContext);
@@ -135,6 +135,7 @@ XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt) {
     if (!Interrupt->Connected && level > 0 && level < 16 && !KiInterruptObjects[level]) {
         KiInterruptObjects[level] = Interrupt;
         Interrupt->Connected = TRUE;
+        HalpSetIrqLevel(level, (KIRQL)Interrupt->Irql);
         HalEnableSystemInterrupt(level, (KINTERRUPT_MODE)Interrupt->Mode);
         connected = TRUE;
     }
@@ -149,6 +150,7 @@ XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt) {
         ULONG level = Interrupt->BusInterruptLevel;
         HalDisableSystemInterrupt(level);
         KiInterruptObjects[level] = nullptr;
+        HalpResetIrqLevel(level);
         Interrupt->Connected = FALSE;
     }
     KfLowerIrql(old);

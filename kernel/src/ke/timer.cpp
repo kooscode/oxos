@@ -15,9 +15,6 @@ static ULONGLONG KiReadSystemTime(const volatile KSYSTEM_TIME &t) {
     }
 }
 
-// Satisfy threads waiting on a signalled object. Milestone 2b.
-void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment) {}
-
 static void KiQueueTimerDpc(PKDPC dpc) {
     ULONGLONG now = KiReadSystemTime(KeSystemTime);
     KeInsertQueueDpc(dpc, (PVOID)(ULONG)now, (PVOID)(ULONG)(now >> 32));
@@ -58,6 +55,14 @@ static void KiRemoveTimer(PKTIMER Timer) {
     restore_flags(flags);
 }
 
+// Wait timeouts use the thread's own timer (spec/07).
+bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime) { return KiInsertTimer(Timer, DueTime); }
+
+void KiRemoveTimerIfInserted(PKTIMER Timer) {
+    if (Timer->Header.Inserted)
+        KiRemoveTimer(Timer);
+}
+
 XBAPI void NTAPI KeInitializeTimerEx(PKTIMER Timer, TIMER_TYPE Type) {
     Timer->Header.Type = (UCHAR)(TimerNotificationObject + (UCHAR)Type);
     Timer->Header.Inserted = FALSE;
@@ -88,7 +93,7 @@ XBAPI BOOLEAN NTAPI KeSetTimerEx(PKTIMER Timer, LARGE_INTEGER DueTime, LONG Peri
             while (!KiInsertTimer(Timer, -(LONGLONG)Period * 10000)) {
             }
     }
-    KfLowerIrql(old);
+    KiUnlockDispatcherDatabase(old);
     return wasInserted;
 }
 

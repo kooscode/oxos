@@ -38,7 +38,9 @@ void HalpDetectHardware();
 
 // PIC: the effective mask is (disabled IRQs) | (IRQs whose IRQL <= current IRQL). See spec/06 §1.
 constexpr ULONG HAL_IRQ_BASE_VECTOR = 0x30;
-constexpr KIRQL HalpIrqToIrql(ULONG irq) { return (KIRQL)(26 - irq); }
+KIRQL HalpGetIrqLevel(ULONG irq);            // IRQL an IRQ is dispatched at
+void HalpSetIrqLevel(ULONG irq, KIRQL irql); // a connected KINTERRUPT overrides the default
+void HalpResetIrqLevel(ULONG irq);
 void HalpSetIrqlMask(KIRQL irql);
 void HalpEoi(ULONG irq);
 bool HalpIsSpuriousIrq(ULONG irq);

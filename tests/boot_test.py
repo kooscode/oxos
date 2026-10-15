@@ -47,6 +47,10 @@ class Monitor:
         out = self.hmp(f"x/1wx {self.addr(name):#x}")
         return int(out.split(":")[1].split()[0], 16)
 
+    def read_offset(self, name, offset):
+        out = self.hmp(f"x/1wx {self.addr(name) + offset:#x}")
+        return int(out.split(":")[1].split()[0], 16)
+
     def rate(self, name, seconds=2.0):
         v0, t0 = self.read(name), time.monotonic()
         time.sleep(seconds)
@@ -62,9 +66,17 @@ def run_checks(mon):
     values = {name: mon.read(name) for name in (
         "KiBootStage", "KiTestDpcCount", "KiTestOneShotFired", "KiTestEventState",
         "KiTestRtcCount", "KiTestRtcDisconnected", "KiTestRtcIrqlOk")}
+    m2b = {name: mon.read(name) for name in (
+        "KiBugCheckCode", "KiTestPingA", "KiTestPingB", "KiTestSleepMs", "KiTestSemaphoreConsumed",
+        "KiTestMutantOk", "KiTestWaitAnyIndex", "KiTestWaitAllStatus", "KiTestTimeoutStatus", "KiTestJoinOk",
+        "KiTestFpuOk", "KiTestThreadsDone")}
+    spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
+    switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
     print(f"exception vector {exc:#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, periodic timer DPC {timer_rate:.1f}/s")
     print("  " + ", ".join(f"{k}={v}" for k, v in values.items()))
+    print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
+    print(f"  spinner rates {spin_a:.0f}/s and {spin_b:.0f}/s, context switches {switches}")
     return {
         "M1": {
             "reached idle (stage 0x30)": values["KiBootStage"] == 0x30,
@@ -80,6 +92,21 @@ def run_checks(mon):
             "RTC KINTERRUPT serviced 16 times": values["KiTestRtcCount"] == 16,
             "ISR ran at its IRQL": values["KiTestRtcIrqlOk"] == 1,
             "interrupt disconnected from a DPC": values["KiTestRtcDisconnected"] == 1,
+        },
+        "M2b": {
+            "no bug check": m2b["KiBugCheckCode"] == 0,
+            "event ping-pong 1000 rounds each": m2b["KiTestPingA"] == 1000 and m2b["KiTestPingB"] == 1000,
+            "10 x 50 ms sleep ~500 ms": 495 <= m2b["KiTestSleepMs"] <= 530,
+            "semaphore: 100 releases consumed": m2b["KiTestSemaphoreConsumed"] == 100,
+            "mutant: recursion + hand-off to waiter": m2b["KiTestMutantOk"] == 1,
+            "WaitAny returns index of timer": m2b["KiTestWaitAnyIndex"] == 1,
+            "WaitAll on signalled events -> WAIT_0": m2b["KiTestWaitAllStatus"] == 0,
+            "wait timeout -> STATUS_TIMEOUT": m2b["KiTestTimeoutStatus"] == 0x102,
+            "join: terminated thread is signalled": m2b["KiTestJoinOk"] == 1,
+            "x87 state survives switches (2 threads)": m2b["KiTestFpuOk"] == 2,
+            "controller thread finished": m2b["KiTestThreadsDone"] == 1,
+            "equal-priority spinners both run (quantum)": spin_a > 0 and spin_b > 0
+                and min(spin_a, spin_b) / max(spin_a, spin_b) > 0.3,
         },
     }
 

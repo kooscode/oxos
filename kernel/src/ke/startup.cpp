@@ -5,6 +5,8 @@
 #include <xk/rtl.h>
 
 void KiInitializeDpcs();
+extern "C" UCHAR KiBootStack[];
+constexpr ULONG BOOT_STACK_SIZE = 0x3000;
 
 // Second boot key handed over by the 2BL (likely the certificate key; spec 01 §1).
 UCHAR KiCertKey[16];
@@ -33,6 +35,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
 
     KiInitializeDpcs();
     KiInitializeTimers();
+    KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
     HalEnableSystemInterrupt(0, Latched); // PIT clock
 
 #if XK_BOOT_SELFTEST
@@ -42,22 +45,6 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KfLowerIrql(DISPATCH_LEVEL);
     KiSetStage(post_code::Idle);
     KiIdleLoop();
-}
-
-// Runs at DISPATCH_LEVEL. Like the reference KiIdleLoop, it drains DPCs itself because lowering
-// IRQL never happens here (spec/01 §3).
-void KiIdleLoop() {
-    for (;;) {
-        cli();
-        if (!IsListEmpty(&KiPcr.PrcbData.DpcListHead)) {
-            HalClearSoftwareInterrupt(DISPATCH_LEVEL);
-            sti();
-            KiRetireDpcList();
-            continue;
-        }
-        // sti's one-instruction shadow makes "sti; hlt" race-free against the wake-up interrupt.
-        __asm__ volatile("sti\n\thlt" ::: "memory");
-    }
 }
 
 // --- Fatal paths

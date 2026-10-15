@@ -62,11 +62,4 @@ void KiRetireDpcList() {
     }
 }
 
-// DISPATCH_LEVEL software interrupt handler.
-void KiDispatchInterrupt() {
-    if (!IsListEmpty(&Prcb.DpcListHead))
-        KiRetireDpcList();
-    // Milestone 2b: quantum end and switching to Prcb.NextThread.
-}
-
 void KiInitializeDpcs() { InitializeListHead(&Prcb.DpcListHead); }

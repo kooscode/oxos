@@ -19,12 +19,23 @@ static void HalpWritePicMask(USHORT mask) {
     outb(PIC2_DATA, (UCHAR)(mask >> 8));
 }
 
-// IRQs whose IRQL (26 - irq) is at or below `irql`.
+// Dispatch IRQL per IRQ. Defaults reproduce the reference per-IRQL PIC mask table (spec/07):
+// IRQ0 (clock) 28, IRQ8 26, IRQ12 27, the cascade never, every other IRQ n at 26 - n.
+static constexpr KIRQL HalpDefaultIrqLevel[16] = {28, 25, 0xFF, 23, 22, 21, 20, 19,
+                                                  26, 17, 16, 15, 27, 13, 12, 11};
+static KIRQL HalpIrqLevel[16] = {28, 25, 0xFF, 23, 22, 21, 20, 19, 26, 17, 16, 15, 27, 13, 12, 11};
+
+KIRQL HalpGetIrqLevel(ULONG irq) { return HalpIrqLevel[irq]; }
+void HalpSetIrqLevel(ULONG irq, KIRQL irql) { HalpIrqLevel[irq] = irql; }
+void HalpResetIrqLevel(ULONG irq) { HalpIrqLevel[irq] = HalpDefaultIrqLevel[irq]; }
+
+// IRQs dispatched at or below `irql` must not interrupt it.
 static USHORT HalpLevelMask(KIRQL irql) {
-    if (irql >= 26)
-        return 0xFFFF;
-    ULONG first = 26 - irql; // lowest IRQ number that must be masked
-    return first > 15 ? 0 : (USHORT)(0xFFFF << first);
+    USHORT mask = 0;
+    for (ULONG irq = 0; irq < 16; irq++)
+        if (HalpIrqLevel[irq] <= irql)
+            mask |= 1u << irq;
+    return mask;
 }
 
 void HalpSetIrqlMask(KIRQL irql) {
