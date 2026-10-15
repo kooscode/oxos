@@ -84,10 +84,14 @@ def run_checks(mon):
         "KiTestObHandlesOk", "KiTestObNamedOk", "KiTestObNamespaceOk", "KiTestObNameErrorsOk", "KiTestPsThreadOk",
         "KiTestPsNotifyCount", "KiTestNtApcOk", "KiTestNtWaitMultipleOk", "KiTestObDuplicateOk", "KiTestObPoolBalanced",
         "KiTestObDone")}
+    m3b = {name: mon.read(name) for name in (
+        "KiTestIoOpenOk", "KiTestIoSyncRwOk", "KiTestIoQueryOk", "KiTestIoAsyncOk", "KiTestIoApcOk",
+        "KiTestIoPortOk", "KiTestIoIoctlOk", "KiTestIoRelativeOk", "KiTestIoErrorsOk", "KiTestIoStartIoOk",
+        "KiTestIoCloseOk", "KiTestIoDeleteOk", "KiTestIoPoolBalanced", "KiTestIoDone")}
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
-    print(f"exception vector {exc:#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, periodic timer DPC {timer_rate:.1f}/s")
+    print(f"exception vector {exc:#x} code {mon.read('KiLastExceptionCode'):#x} at {mon.read('KiLastExceptionEip'):#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, periodic timer DPC {timer_rate:.1f}/s")
     print("  " + ", ".join(f"{k}={v}" for k, v in values.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Status") or k.endswith("Timeout") else f"{k}={v}" for k, v in m2bp.items()))
@@ -171,6 +175,22 @@ def run_checks(mon):
             "NtDuplicateObject": m3a["KiTestObDuplicateOk"] == 1,
             "objects freed (pool balanced)": m3a["KiTestObPoolBalanced"] == 1,
             "object suite finished": m3a["KiTestObDone"] == 1,
+        },
+        "M3b": {
+            "open via \\??\\R: link, driver sees remaining path": m3b["KiTestIoOpenOk"] == 1,
+            "synchronous read/write + file pointer + pended sync read": m3b["KiTestIoSyncRwOk"] == 1,
+            "query/set information (I/O manager + driver classes)": m3b["KiTestIoQueryOk"] == 1,
+            "asynchronous read: STATUS_PENDING, event, IO_STATUS_BLOCK": m3b["KiTestIoAsyncOk"] == 1,
+            "APC completion routine": m3b["KiTestIoApcOk"] == 1,
+            "completion port: IRP + mini packet + timeout": m3b["KiTestIoPortOk"] == 1,
+            "IOCTL by handle and IoSynchronousDeviceIoControlRequest": m3b["KiTestIoIoctlOk"] == 1,
+            "relative open through a file handle": m3b["KiTestIoRelativeOk"] == 1,
+            "errors: sync failure, names, initializing, exclusive, access": m3b["KiTestIoErrorsOk"] == 1,
+            "StartIo serialisation in order": m3b["KiTestIoStartIoOk"] == 1,
+            "cleanup/close per file, device refs released": m3b["KiTestIoCloseOk"] == 1,
+            "IoDeleteDevice / IoDeleteSymbolicLink": m3b["KiTestIoDeleteOk"] == 1,
+            "I/O pool balanced": m3b["KiTestIoPoolBalanced"] == 1,
+            "I/O suite finished": m3b["KiTestIoDone"] == 1,
         },
     }
 

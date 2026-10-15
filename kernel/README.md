@@ -37,7 +37,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 2c part 2: title virtual memory (Nt*VirtualMemory), MmQueryStatistics, MmGlobalData. ✅ passes in xemu.
 3. Kernel services:
    - 3a: object manager, handles, namespace, symbolic links, Nt event/mutant/semaphore/timer objects, Ps threads (spec 10). ✅ passes in xemu.
-   - 3b: I/O manager (devices, IRPs, file objects, Nt*File).
+   - 3b: I/O manager — devices, IRPs, StartIo, file objects, Nt*File services, completion ports (spec 11). ✅ passes in xemu.
    - 3c: IDE + DVD + partitions (stock LBA28), FATX (spec 04).
 4. XBE loader and title launch (spec 05): boot the stock dashboard.
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).
