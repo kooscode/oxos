@@ -10,7 +10,9 @@ XBAPI ULONG NTAPI PhyGetLinkState(BOOLEAN);
 extern volatile ULONG KiTestXcDone;
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
-    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscDone;
+    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscDone;
+void HalpSmcHandleEvents(ULONG reason);
+XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 bool HalpCmosSignatureValid();
 void HalpWriteCmosSignature();
 
@@ -72,6 +74,16 @@ static void NTAPI MiscControllerThread(PVOID) {
     HalpWriteCmosSignature();
     ok &= HalpCmosSignatureValid();
     KiTestMiscCmosOk = ok;
+
+    // SMC tray events (spec/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC is
+    // read again: 0x60 with the test disc); each one counts a change.
+    ULONG tray, count0, count1, count2;
+    HalReadSMCTrayState(&tray, &count0);
+    HalpSmcHandleEvents(0x40);
+    ok = NT_SUCCESS(HalReadSMCTrayState(&tray, &count1)) && tray == 0 && count1 == count0 + 1;
+    HalpSmcHandleEvents(0x02);
+    ok &= NT_SUCCESS(HalReadSMCTrayState(&tray, &count2)) && tray == 0x60 && count2 == count1 + 1;
+    KiTestMiscSmcOk = ok;
 
     KiTestMiscPhyStatus = PhyInitialize(TRUE, nullptr);
     KiTestMiscPhyLink = PhyGetLinkState(TRUE);

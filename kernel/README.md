@@ -55,6 +55,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 5f: fatal-error reporter — LED, EEPROM error history, code drawn on screen (spec 05 §6; `make test-fatal`). ✅ passes in xemu.
 6. Real-hardware readiness:
    - 6a: ATA security unlock (HMAC-SHA1 drive password), IDE pass-through IOCTL, refurb power-cycle count (spec 04 §2/§5); LZX compression in `tools/lzx.py` so the kernel fits the 2BL's 256 KB bank. ✅ passes in xemu (its locked drive is unlocked).
+   - 6b: SMC events (power button, eject, tray, AV pack) on the ACPI SCI, boot flags from the SMC scratch register, the shutdown sequence, `HalReturnToFirmware`/`HalInitiateShutdown` as in the reference (spec 12 §4). ✅ passes in xemu (tray events and SCI delivery; xemu raises button events only from its UI).
    - Next: real-hardware validation (encoder mode tables, SMC events, microcode).
 
 ## Known deviations (tracked)

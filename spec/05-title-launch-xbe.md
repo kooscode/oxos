@@ -83,7 +83,8 @@ B. Otherwise:
 14. For PRELOAD sections that are not WRITABLE (bit 0 clear): post-load step 0x8002e9ad (probably
     digest check or protection). Then 0x8002ed7c.
 15. **If GameRegion lacks bit 31: zero `XboxEEPROMKey`** (16 bytes), so retail titles never see it.
-16. **SMC "reset on eject" (SMBus 0x20, command 0x19)**: write 0 for normal titles, 1 for the dashboard
+16. (Before this, 0x80014cc9 arms the SMC events, spec 12 §4; an eject handled during boot fails a disc title with
+   0xC000003A.) **SMC "reset on eject" (SMBus 0x20, command 0x19)**: write 0 for normal titles, 1 for the dashboard
     or titles allowed media 0x80000000 (and for boot-flags 4 / devkit). Boot-flags bit 3 records the
     current state, and the write is skipped on quick reboot if the state is unchanged. The write is
     retried until it succeeds.

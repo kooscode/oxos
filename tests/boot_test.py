@@ -391,6 +391,8 @@ def misc_checks(mon):
         "Fsc cache size limits": mon.read("KiTestMiscFscOk") == 1,
         "PhyInitialize completes (success or E_FAIL), link state read": mon.read("KiTestMiscPhyStatus") in (0, 0x801F0001),
         "CMOS clock-set signature: write, verify, damaged byte detected": mon.read("KiTestMiscCmosOk") == 1,
+        "SMC tray events update the tray cache and change count": mon.read("KiTestMiscSmcOk") == 1,
+        "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 

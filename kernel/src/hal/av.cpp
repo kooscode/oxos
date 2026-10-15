@@ -6,6 +6,7 @@
 #include <xk/ke.h>
 
 XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue, PULONG DataValue);
+XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG, PULONG, PVOID, ULONG, PULONG);
 
 XBAPI UCHAR HalBootSMCVideoMode;
@@ -25,6 +26,13 @@ void AvInit() {
             AvpEncoderAddress = a;
             break;
         }
+}
+
+// AV pack unplugged / plugged back (SMC events): the encoder's output control register 0xBA.
+static UCHAR AvpOutputControl = 0x0F;
+void AvpSmcSetOutputs(bool Enable) {
+    if (AvpEncoderAddress && (!Enable || AvpCurrentMode))
+        HalWriteSMBusValue(AvpEncoderAddress, 0xBA, FALSE, Enable ? (AvpOutputControl & 0x0F) | 0x20 : 0x3F);
 }
 
 XBAPI PVOID NTAPI AvGetSavedDataAddress() { return AvpSavedDataAddress; }

@@ -30,6 +30,12 @@ static_assert(sizeof(XBE_SECTION_HEADER) == 0x38);
 
 static ULONG XbeField(ULONG offset) { return *(ULONG *)(XBE_BASE + offset); }
 
+BOOLEAN HalpSmcArmEvents(BOOLEAN Dashboard);
+extern volatile ULONG HalpBootFlags;
+extern "C" volatile UCHAR KiQuickRebootFlag;
+XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
+XK_PERSIST ULONG XeDiscTitleId; // the title pinned to the current game disc (0 = none)
+
 // --- Exported state
 XBAPI OBJECT_STRING XeImageFileName;
 XBAPI XK_PERSIST PVOID LaunchDataPage;
@@ -255,11 +261,36 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         status = XepMediaFlags(h, &media);
         if (NT_SUCCESS(status) && !(*(ULONG *)(cert + 0x9C) & media))
             status = STATUS_MEDIA_MISMATCH;
+        if (NT_SUCCESS(status) && media == 2) { // an authenticated game disc runs one title until it is changed
+            ULONG titleId = *(ULONG *)(cert + 8);
+            if (!XeDiscTitleId)
+                XeDiscTitleId = titleId;
+            else if (XeDiscTitleId != titleId)
+                status = STATUS_MEDIA_MISMATCH;
+        }
     }
     auto sec = (XBE_SECTION_HEADER *)sections;
     for (ULONG i = 0; NT_SUCCESS(status) && i < count; i++)
         if (sec[i].Flags & XBE_SECTION_PRELOAD)
             status = XepLoadSection(h, &sec[i]);
+    // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard).
+    if (NT_SUCCESS(status) && HalpSmcArmEvents(Dashboard) && !Dashboard)
+        status = (NTSTATUS)0xC000003A;
+    // SMC "reset on eject" (spec/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
+    // non-secure media, boot flag 4 and manufacturing units; turned back on for everything else.
+    if (NT_SUCCESS(status)) {
+        bool keepOff = Dashboard || (*(ULONG *)(cert + 0x9C) & 0x80000000) || (HalpBootFlags & 4) ||
+                       (XeConsoleGameRegion & 0x80000000);
+        if (!keepOff && (!KiQuickRebootFlag || (HalpBootFlags & 8))) {
+            HalpBootFlags &= ~8;
+            while (!NT_SUCCESS(HalWriteSMBusValue(0x20, 0x19, FALSE, 0))) {
+            }
+        } else if (keepOff && !KiQuickRebootFlag && !(HalpBootFlags & 8)) {
+            HalpBootFlags |= 8;
+            while (!NT_SUCCESS(HalWriteSMBusValue(0x20, 0x19, FALSE, 1))) {
+            }
+        }
+    }
     if (NT_SUCCESS(status))
         status = XepResolveKernelThunks((PULONG)XbeField(0x158));
     if (NT_SUCCESS(status)) {
@@ -303,6 +334,8 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
                                                PULONG ResultLength);
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
+XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue, PULONG DataValue);
+XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject);
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
 bool HalpCmosSignatureValid();
@@ -466,6 +499,49 @@ static void XepPrepareToEnterTitle() {
     MmFreeContiguousMemory(old);
 }
 
+// Boot flag 0x40 (the tray was opened during boot, spec/05 §3): wait while the tray is closing or settling, then
+// the disc if one is in, otherwise the dashboard.
+static void XepWaitForTray() {
+    ULONG state;
+    for (;;) {
+        if (!NT_SUCCESS(HalReadSMBusValue(0x20, 0x03, FALSE, &state))) {
+            state = 0x10;
+            break;
+        }
+        state &= 0x70;
+        if (state != 0x50 && state != 0)
+            break;
+        LARGE_INTEGER t;
+        t.QuadPart = -250 * 10000LL;
+        KeDelayExecutionThread(KernelMode, FALSE, &t);
+    }
+    if (state == 0x60) {
+        extern PDEVICE_OBJECT IdexCdRomDeviceObject;
+        IoDismountVolume(IdexCdRomDeviceObject);
+        XepLaunchTitle(0);
+    } else {
+        XeTitleLaunched = 2;
+        XepLaunchDashboard();
+    }
+}
+
+// spec/03 §4: cold boot runs the pre-launch checks and honours the SMC boot flags; a quick reboot just launches.
+static void XepChooseTitle() {
+    if (KiQuickRebootFlag || (HalpBootFlags & 4) || (XeConsoleGameRegion & 0x80000000))
+        return XepLaunchTitle(0);
+    XeLaunchReason = XepCheckFirstBoot();
+    if (XeLaunchReason)
+        return XepLaunchTitle(XeLaunchReason);
+    XeTitleLaunched = 2;
+    if (HalpBootFlags & 0x80)
+        return XepLaunchDashboardWithReason(5, 0);
+    if (HalpBootFlags & 0x40)
+        return XepWaitForTray();
+    if (HalpBootFlags & 0x08)
+        return XepLaunchDashboard();
+    XepLaunchTitle(0);
+}
+
 static void NTAPI XepTitleThread(PVOID, PVOID) {
 #if XK_BOOT_SELFTEST
     extern volatile ULONG KiTestDvdDone;
@@ -475,10 +551,12 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
-    if (!KiQuickRebootFlag)
+    if (!KiQuickRebootFlag) {
+        if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
+            IdexFatalError(21);
         IdexDiskCountPowerCycle();
-    XeLaunchReason = KiQuickRebootFlag ? 0 : XepCheckFirstBoot();
-    XepLaunchTitle(XeLaunchReason);
+    }
+    XepChooseTitle();
     XepPrepareToEnterTitle();
     ((void(__cdecl *)())XbeField(0x128))();
     PsTerminateSystemThread(STATUS_SUCCESS);
