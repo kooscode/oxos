@@ -1,7 +1,7 @@
 // Basic NT-style types for the Xbox kernel ABI (i386, MSVC layout).
 #pragma once
 
-typedef unsigned char UCHAR, BOOLEAN, KIRQL, *PUCHAR, *PKIRQL;
+typedef unsigned char UCHAR, BOOLEAN, KIRQL, *PUCHAR, *PKIRQL, *PBOOLEAN;
 typedef char CHAR, *PCHAR;
 typedef unsigned short USHORT, WCHAR, *PUSHORT;
 typedef short SHORT, CSHORT;

@@ -80,6 +80,10 @@ def run_checks(mon):
         "KiTestMmPoolOk", "KiTestMmLayoutOk", "KiTestMmThreadChurnPages", "KiTestMmContiguousVa", "KiTestMmDone",
         "KiTestVmReserveCommitOk", "KiTestVmImageOk", "KiTestVmTopDownOk", "KiTestVmFreeRulesOk", "KiTestVmProtectOk",
         "KiTestVmPagesRestored", "KiTestVmStatsOk")}
+    m3a = {name: mon.read(name) for name in (
+        "KiTestObHandlesOk", "KiTestObNamedOk", "KiTestObNamespaceOk", "KiTestObNameErrorsOk", "KiTestPsThreadOk",
+        "KiTestPsNotifyCount", "KiTestNtApcOk", "KiTestNtWaitMultipleOk", "KiTestObDuplicateOk", "KiTestObPoolBalanced",
+        "KiTestObDone")}
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
@@ -88,6 +92,7 @@ def run_checks(mon):
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Status") or k.endswith("Timeout") else f"{k}={v}" for k, v in m2bp.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Va") else f"{k}={v}" for k, v in m2c.items()))
+    print("  " + ", ".join(f"{k}={v}" for k, v in m3a.items()))
     print(f"  spinner rates {spin_a:.0f}/s and {spin_b:.0f}/s, context switches {switches}")
     return {
         "M1": {
@@ -144,7 +149,7 @@ def run_checks(mon):
             "MmMapIoSpace alias + MMIO pass-through": m2c["KiTestMmIoSpaceOk"] == 1,
             "pool: 500 blocks + large block": m2c["KiTestMmPoolOk"] == 1,
             "no user mappings, RO text, stack guard page": m2c["KiTestMmLayoutOk"] == 1,
-            "50 thread lifetimes reclaim stacks (<= 8 pages kept)": m2c["KiTestMmThreadChurnPages"] <= 8,
+            "150 thread lifetimes: no per-thread leak (<= 4 pages)": m2c["KiTestMmThreadChurnPages"] <= 4,
             "VM: reserve 1 MB, commit 64 KB (zeroed, RW), query": m2c["KiTestVmReserveCommitOk"] == 1,
             "VM: NtProtectVirtualMemory RW -> RO": m2c["KiTestVmProtectOk"] == 1,
             "VM: free rules (not-at-base, decommit, release)": m2c["KiTestVmFreeRulesOk"] == 1,
@@ -153,6 +158,19 @@ def run_checks(mon):
             "VM: all pages returned": m2c["KiTestVmPagesRestored"] == 1,
             "MmQueryStatistics": m2c["KiTestVmStatsOk"] == 1,
             "memory suite finished": m2c["KiTestMmDone"] == 1,
+        },
+        "M3a": {
+            "handles: multiples of 4, LIFO reuse, invalid handle": m3a["KiTestObHandlesOk"] == 1,
+            "named objects: OPENIF, collision, open by name, root -4, deleted on last close": m3a["KiTestObNamedOk"] == 1,
+            "directory + \\??\\Q: symlink + link/dir queries": m3a["KiTestObNamespaceOk"] == 1,
+            "name errors: path/name not found, invalid": m3a["KiTestObNameErrorsOk"] == 1,
+            "PsCreateSystemThreadEx: TLS, id, exit status": m3a["KiTestPsThreadOk"] == 1,
+            "thread notify routine (create + exit)": m3a["KiTestPsNotifyCount"] >= 2,
+            "NtQueueApcThread -> STATUS_USER_APC": m3a["KiTestNtApcOk"] == 1,
+            "NtWaitForMultipleObjectsEx WaitAny": m3a["KiTestNtWaitMultipleOk"] == 1,
+            "NtDuplicateObject": m3a["KiTestObDuplicateOk"] == 1,
+            "objects freed (pool balanced)": m3a["KiTestObPoolBalanced"] == 1,
+            "object suite finished": m3a["KiTestObDone"] == 1,
         },
     }
 

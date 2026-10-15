@@ -20,6 +20,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, exported data |
 | `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection |
+| `src/ob/`, `src/ex/`, `src/ps/` | object manager, executive objects (Nt*), system threads |
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool |
 | `src/rtl/` | runtime library |
 | `exports.lst` | implemented exports; `../tools/gen_def.py` assigns the reference ordinals |
@@ -32,10 +33,12 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 2a: IRQL and PIC masking, software interrupts, KINTERRUPT, DPCs, timers, events. ✅ passes in xemu.
    - 2b: threads, scheduler, context switch, lazy FPU, waits, semaphores, mutants (spec 07). ✅ passes in xemu.
    - 2b+: APCs, alerts, suspend/resume, queues, device queues, wake-up boosts (spec 08). ✅ passes in xemu.
-   - PsCreateSystemThreadEx and the Nt* wrappers wait for object-manager handles (milestone 3).
    - 2c: memory manager part 1 — page tables, physical pages, contiguous/system memory, kernel stacks, I/O mapping, pool (spec 09). ✅ passes in xemu.
    - 2c part 2: title virtual memory (Nt*VirtualMemory), MmQueryStatistics, MmGlobalData. ✅ passes in xemu.
-3. Object manager, I/O manager, IDE + DVD + partitions (stock LBA28), FATX (spec 04).
+3. Kernel services:
+   - 3a: object manager, handles, namespace, symbolic links, Nt event/mutant/semaphore/timer objects, Ps threads (spec 10). ✅ passes in xemu.
+   - 3b: I/O manager (devices, IRPs, file objects, Nt*File).
+   - 3c: IDE + DVD + partitions (stock LBA28), FATX (spec 04).
 4. XBE loader and title launch (spec 05): boot the stock dashboard.
 5. Remaining exports, then real-hardware validation (SMC, video encoder, microcode).
 
@@ -44,6 +47,5 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 - `KeQueryPerformance*` / `KeStallExecutionProcessor` use the ACPI PM timer; the reference behaviour isn't confirmed yet.
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
-- Thread objects are never freed yet (needs Ob reference counting); their stacks are.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
 - The image uses LZX *uncompressed* blocks, so it is larger than a compressed one would be. Fine at this size; a real compressor may be needed as the kernel grows.

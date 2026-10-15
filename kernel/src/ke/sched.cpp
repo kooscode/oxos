@@ -116,6 +116,10 @@ static void KiSwapToThread(PKTHREAD Old, PKTHREAD Next) {
     Next->ContextSwitches++;
     Prcb.KeContextSwitches++;
     KiNpxPrepareSwitch(Next);
+    // Like the reference KiSwapContext: an incoming thread with kernel APCs queued (including a new thread
+    // created suspended) gets the APC interrupt as soon as it drops below APC_LEVEL.
+    if (Next->ApcState.KernelApcPending)
+        HalRequestSoftwareInterrupt(APC_LEVEL);
     KiSwapContext(Old, Next);
     // Back on Old's stack. Free stacks of threads that terminated (we're no longer running on them).
     KiReapDeadThreads();
