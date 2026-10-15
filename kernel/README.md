@@ -64,10 +64,13 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
    - 6d: performance counter as the reference: 3.375 MHz, 32-bit PM timer extended through the SCI (spec 06 §7). ✅ passes in xemu.
    - 6e: FATX scatter/gather I/O (`NtReadFileScatter`/`NtWriteFileGather`) (spec 04b). ✅ passes in xemu.
    - 8 (out of order): UDF 1.0x read-only file system for DVD-video discs, tried before XDVDFS (spec 04d; `make test-udf`). ✅ passes in xemu.
-   - Boot splash: our own emblem + caption fading in on cold boot (`src/hal/splash.cpp`); the reference's INIT-section 3D animation and its assets are not reproduced.
+   - Boot splash: a picture fading in on cold boot (`src/hal/splash.cpp`): `splash/splash.png`, reduced to 256 colours and stored by `mkbios.py` in flash bank 1, decoded by the kernel's own PNG/inflate decoder; without it (256 KB flash) a drawn emblem. The reference's INIT-section 3D animation and its assets are not reproduced (spec 17 §7).
    - 9: retail discs: Xbox DVD authentication (spec 04 §3a; xemu does not emulate it), modded-BIOS media/region policy by default (`RETAIL_MEDIA_POLICY=1` for strict), top-down physical page allocation and a low splash framebuffer so titles' fixed-address memory assumptions hold. Halo (XISO) now loads and runs its own code in xemu.
-   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools). **Halo reaches its main menu in xemu.**
+   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad`, a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
    - Next (7): video encoder mode tables for real TVs (spec 17: algorithm and table layout documented; values must be derived from the Conexant/Focus datasheets with the reference's row numbering), then real-hardware validation (encoder mode tables, SMC events, microcode).
+
+Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
+`DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
 
 ## Known deviations (tracked)
 - `KeStallExecutionProcessor` polls the PM timer instead of spinning a boot-calibrated loop (spec/06 §7).
