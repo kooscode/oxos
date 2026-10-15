@@ -49,6 +49,24 @@ Names marked (inferred) are not symbols in the binary.
    (`ExReadWriteRefurbInfo`, 16 bytes), increment its **power-cycle count** (dword 1) and write it back.
 Fatal errors 5/7/8/9 go through the reporter at 0x80055933 (spec 05 §6).
 
+## 3a. Xbox game disc authentication (IOCTL 0x24080, 0x80026146; milestone 9)
+Issued by the XDVDFS mount before mounting (result ignored). Synchronous in the CD-ROM dispatch, through SCSI
+pass-through (0x4D014):
+1. MODE SENSE(10) page 0x3E (28 bytes): byte 11 must be 1 (else STATUS_UNRECOGNIZED_MEDIA).
+2. READ DVD STRUCTURE `AD 00 FF 02 FD FF FE 00 06 64 00 C0` → the 0x664-byte security sector; its first data byte
+   must equal mode-page byte 13.
+3. SHA-1 of 0x4CB bytes at +4 must equal the digest at +0x4CF; the reference then verifies an RSA signature at
+   +0x4E3 with Microsoft's public key (**ours does not**: no Microsoft key data in the open kernel).
+4. RC4 key = first 7 bytes of SHA-1(+0x4A3, 0x2C); decrypt 0xFD bytes at +0x306: the challenge table (version byte
+   +0x304 = 1, count +0x305 in 1..23, 11-byte entries: type 1 = valid, id, 4-byte challenge, ..., 4-byte response at
+   +7).
+5. From a random entry (performance counter % count), each valid entry: MODE SELECT(10) page 0x3E with
+   {flags: last, 1, !first, sector[4], 1, id, challenge}, MODE SENSE back; byte 12 non-zero and the response must
+   match. The last valid entry is sent again with "last" set.
+6. Success: title-disc flag = 1 (XBE media type 2), pinned title ID = dword at +0x4AB. On quick reboot the flag is
+   re-checked with MODE SENSE (up to 5 tries); a tray event clears it.
+xemu 0.8.136 rejects page 0x3E (sense 5/24), so authentication fails there; see spec 05 §4 for the media policy.
+
 ## 3. DVD drive (device 1, slave), cold boot (0x80055d55)
 1. Unless boot-flags bit 0 is set: select the slave (`0x1F6 = 0xB0`) and poll until BSY clears, **up to 600 × 50 ms**.
    Timeout → **fatal error 10**.

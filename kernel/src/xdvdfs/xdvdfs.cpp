@@ -513,6 +513,8 @@ DRIVER_OBJECT XdvdfsDriverObject = {
 
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY g;
+    // Authenticate an Xbox game disc first (the result only matters to the XBE loader's media check).
+    IoSynchronousDeviceIoControlRequest(0x24080, TargetDevice, nullptr, 0, nullptr, 0, nullptr, FALSE);
     NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_CDROM_CHECK_VERIFY, TargetDevice, nullptr, 0, nullptr,
                                                           0, nullptr, FALSE);
     if (NT_SUCCESS(status))

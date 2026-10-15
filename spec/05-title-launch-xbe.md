@@ -73,7 +73,10 @@ B. Otherwise:
    KernelImageThunkAddress (+0x158) ^= **0xEFB1F152**.
 9. **Region**: certificate GameRegion (+0xA0) & the console's game region (**0x8003B158**, from the EEPROM;
    bit 31 = manufacturing) must overlap, otherwise **0xC0050001**.
-10. **Media**: get the launch device's media flags (0x8002ec30). Certificate AllowedMediaTypes (+0x9C) & flags
+10. (Ours, milestone 9: region and media checks are enforced only with `RETAIL_MEDIA_POLICY=1`; by default they
+   behave like a modded BIOS — the Complex 4627 2BL patches the stock kernel to OR the certificate's media types
+   with 0x00FFFFFF and relax the region — so unauthenticated discs (backups, XISOs in emulators) start.)
+   **Media**: get the launch device's media flags (0x8002ec30). Certificate AllowedMediaTypes (+0x9C) & flags
    must be non-zero, otherwise **0xC0050002**. For media flag 2 (game disc) the title ID is pinned: the
    first title ID launched from the disc is remembered (0x8003B344), and a different one → 0xC0050002.
 11. Cold boot: show the title logo bitmap (LogoBitmapAddress +0x170, size +0x174) using 0x800565f3.

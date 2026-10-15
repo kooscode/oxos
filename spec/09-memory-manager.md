@@ -110,7 +110,11 @@ WRITECOMBINE → |0x08 (PWT).
 
 ## Implementation notes (internal, ABI-neutral)
 - Free physical pages are tracked in a bitmap, not the reference's per-colour free lists encoded in not-present PTEs.
-  Single pages are allocated bottom-up and contiguous runs top-down.
+  Single pages are allocated top-down too (since milestone 9): titles claim fixed low physical ranges with
+  MmAllocateContiguousMemoryEx (Halo: 0x61000–0x19A5FFF) and some assume the top of RAM is barely used when they
+  start (an nxdk title clears a framebuffer at 0x3C00000 it never allocated), so the kernel's own pages must sit
+  at the top and stay few; the boot splash framebuffer is allocated below 16 MB (the reference keeps its boot
+  framebuffer in the freed INIT section, spec 05 §5).
 - Small pool blocks use exact-size free lists without coalescing.
 - VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob
