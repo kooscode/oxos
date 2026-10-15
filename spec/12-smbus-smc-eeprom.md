@@ -29,7 +29,10 @@ SMC interrupt state machine and the per-mode AV tables.**
   - routine 4 (fatal error): first SMC 0x1B ← 2
   - otherwise: run the shutdown notification list, then reset through the SMC
   - ours: SMC 0x02 ← 0x01 (reset) or 0x80 (halt = power off); quick reboot is not done yet
-- The SMC event state machine (power button, tray, AV pack; registers 0x11, 0x0B, 0x19…) is not implemented yet.
+- `HalReturnToFirmware` (0x80015299, confirmed): routine 2 runs the shutdown-notification list and quick-reboots;
+  **every other routine resets at once** without notifications: routine 4 first writes scratch (0x1B) ← 2, then
+  (below DISPATCH_LEVEL) SMC 0x02 ← 1, then port **0xCF9 ← 0x0E**, then spins. Routine 0 is not "power off".
+- See §4 for SMC events, boot flags and the shutdown sequence.
 
 ## 3. EEPROM (slave 0xA8, 256 bytes)
 - Read once into a 256-byte shadow (byte reads). Writes go word by word for the changed words, and update the shadow.
@@ -84,3 +87,50 @@ Evidence: `ev_179f3a58…` (AV capabilities 0x8002fc8f, AvSetSavedDataAddress, e
   (encoder at 0x8A Conexant / 0xD4 Focus / 0xE0 Xcalibur).
 - AvSetDisplayMode programs NV2A PRAMDAC/PCRTC (via the register file at 0xFD000000) and the encoder, from per-mode
   tables. The tables must be re-derived from hardware documentation, not copied.
+
+## 4. SMC events, boot flags, shutdown (milestone 6b; 0x80014800–0x80014e9b, 0x80054f2d, 0x80030c14)
+Evidence: disassembly of the SMBus completion chain (Ghidra does not see these as functions).
+
+**SMC registers used** (slave 0x20): 0x02 power/reset (1 reset, 0x80 power off), 0x03 tray, 0x04 AV pack (& 7, 7 =
+none), 0x0B ← 1 "shutting down", 0x0C tray (0 = open), **0x0D OS response** (1 ready to power off, 2 power button
+seen, 4 tray event seen, 8 reset for a new disc), **0x11 interrupt reason**, 0x19 reset-on-eject control (1 = the
+SMC does not reset on eject), **0x1B scratch** (survives the reset).
+
+**Interrupt path.** The SMC pulls EXTSMI#: ACPI GPE0 status (I/O 0x8020) bit 1, on the SCI = **IRQ 12**,
+level-triggered. The SCI handler also acknowledges PM1 status bit 0 (PM-timer overflow, I/O 0x8000) and folds it
+into the performance counter. GPE bit 1 → acknowledge (write 2) and queue the SMC DPC, which reads register 0x11
+(deferred if the SMBus is busy) and handles the bits one at a time, in this order:
+- **0x01 power button**: 0x0D ← 2, then the shutdown sequence ending in 0x0D ← 1.
+- **0x10 AV pack removed** (not on manufacturing units): encoder register 0xBA ← 0x3F (outputs off).
+- **0x08 AV pack inserted** (not manufacturing): read 0x04; none → ignore; a different pack than at boot → reset
+  (0x02 ← 1); else, once a mode is set, encoder 0xBA ← 0x20 | (saved & 0xF).
+- **0x20 eject button**: tray change count++, cached tray state = 0x20, 0x0D ← 4 (retried). Then:
+  boot flag 8 set → open the tray (0x0C ← 0); otherwise, before the first image load → flags |= 0x48, 0x19 ← 1,
+  remember "ejected before launch", open the tray; otherwise (a title is running) → scratch ← scratch | 1 and reset.
+- **0x04 tray closed / new media**: cached tray state = unknown (−1), count++, the CD-ROM driver forgets the
+  title-disc state (0x8002643e), the pinned disc title ID is cleared; if flag 8 is clear and a title runs → reset with
+  0x0D ← 8; else 0x0D ← 4 and, if flag 8 is clear, flags |= 8 and 0x19 ← 1.
+- **0x40**: count++, cached tray state = 0. **0x02**: count++, cached tray state = −1.
+
+**Shutdown sequence** (0x80014867): 0x0B ← 1; port 0x80D3 ← 5; for power-off (0x0D ← 1 or 0x02 ← 0x80): IDE FLUSH
+CACHE + STANDBY IMMEDIATE, wait 125 ms; then the final register write, retried until it succeeds; halt.
+`HalInitiateShutdown` = this sequence with 0x02 ← 0x80 (deferred to the DPC if the SMBus is busy);
+`HalIsResetOrShutdownPending` = a sequence has started.
+
+**Cold-boot SMC init → boot flags** (0x80054f2d; the flags at 0x8003B138 live next to the sticky keys):
+- save the AV pack (0x04 & 7); read 0x11: bit 0x20 → "eject"; 0x04 or 0x20 → 0x0D ← 4
+- read scratch 0x1B: bit 0 → "eject"; then `HalWriteSMCScratchRegister(4)`
+- scratch bit 2 → flags 0x10; bit 1 → **0x20** (the last boot ended in a fatal error: phase 1 shows **fatal error 21**);
+  bit 3 → **0x80** (start the dashboard with LDP type 5)
+- "eject" → flags |= **0x48**, 0x19 ← 1, open the tray, cached tray state 0x20. Flag **0x40** makes title selection
+  wait for the tray (spec 05 §3), flag **0x08** = reset-on-eject off.
+- `HalEnableSecureTrayEject` clears flag 8 and writes 0x19 ← 0 (retried).
+
+**Arming** (0x80014cc9, called by the XBE loader after the preload sections, spec 05 §4): marks "a title is loaded";
+on cold boot for the dashboard with flag 8 clear → flags |= 8, 0x19 ← 1; returns "ejected before launch", which makes
+a non-dashboard load fail with 0xC000003A (→ plain dashboard).
+
+**Ours** (`src/hal/smbus.cpp`): same register traffic, done synchronously by a system thread that the SCI DPC wakes;
+`HalInitiateShutdown` hands the sequence to that thread and returns. The disk standby is issued with polled port I/O.
+xemu raises SMC events only from its UI, so the boot tests feed tray events to the handler directly and check that
+the SCI (PM-timer overflows) is delivered and acknowledged.

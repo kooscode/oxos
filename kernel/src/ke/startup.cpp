@@ -5,6 +5,8 @@
 #include <xk/mm.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
+void HalpSmcInitColdBoot();
+void HalpSmcStartEvents();
 
 void KiInitializeDpcs();
 extern "C" UCHAR KiBootStack[];
@@ -64,8 +66,11 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiInitializeSystemTime();
     ExInitEeprom();
     AvInit();
+    if (!quick)
+        HalpSmcInitColdBoot();
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
+    HalpSmcStartEvents();
 
 #if XK_BOOT_SELFTEST
     if (!quick)

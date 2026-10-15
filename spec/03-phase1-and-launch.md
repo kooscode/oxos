@@ -16,8 +16,7 @@ Started by PsInitSystem (spec 02 §2.5) as a system thread. Runs these steps in 
 ## 2. Cold-only device and boot-UI init
 Runs only when the quick-reboot flag is 0, with the 0x80CF pulse between steps:
 - 0x800626e0, 0x8005510c, 0x80054ee1: INIT-section routines, **not yet decompiled**.
-- **Boot flags byte at 0x8003B138** (origin not yet traced; candidates are the 2BL or the SMC
-  scratch register). Observed uses:
+- **Boot flags at 0x8003B138**: derived from the SMC at cold boot (spec 12 §4). Observed uses:
   - bit 0x20 → SMC write (0x80014e0a with 0xE1), then 0x80055523(0x15)
   - bit 0x01 clear → run 0x80055fba(arg = bit 4). **Likely the boot animation** (inferred: the
     INIT section is ~443 KB, far more than init code needs, which fits an embedded logo animation
