@@ -213,6 +213,8 @@ def run_checks(mon, hdd=None, title_map=None):
         "M5b": {f"SEH {n}": mon.read(f"KiTestSeh{n}Ok") == 1
                 for n in ["Divide", "PageFault", "Raise", "Unwind", "Nested", "Capture"]}
                | {"SEH suite finished": mon.read("KiTestSehDone") == 1},
+        "M5c": {f"Xc {n}": mon.read(f"KiTestXc{n}Ok") == 1 for n in ["Des", "ModExp", "Rsa", "Pkcs1", "Vector"]}
+               | {"Xc suite finished": mon.read("KiTestXcDone") == 1},
     }
 
 

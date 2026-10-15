@@ -9,5 +9,6 @@ XBAPI void *memmove(void *dst, const void *src, SIZE_T n);
 XBAPI void NTAPI RtlZeroMemory(PVOID Destination, SIZE_T Length);
 XBAPI void NTAPI RtlFillMemory(PVOID Destination, ULONG Length, UCHAR Fill);
 XBAPI void NTAPI RtlMoveMemory(PVOID Destination, const VOID *Source, SIZE_T Length);
+XBAPI SIZE_T NTAPI RtlCompareMemory(const VOID *Source1, const VOID *Source2, SIZE_T Length);
 
 static inline void RtlCopyMemory(PVOID dst, const VOID *src, SIZE_T n) { memcpy(dst, src, n); }
