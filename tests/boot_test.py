@@ -379,6 +379,14 @@ def rtl_checks(mon):
     return out
 
 
+def hw_info_ok(mon):
+    flags, revs = mon.read("XboxHardwareInfo"), mon.read_offset("XboxHardwareInfo", 4)
+    boot_id = int(mon.hmp("xp/1wx 0xfd000000").split(":")[1].split()[0], 16)
+    print(f"  (XboxHardwareInfo: flags {flags:#x}, GPU {revs & 0xFF:#x}, MCPX {revs >> 8 & 0xFF:#x}; "
+          f"NV2A boot ID {boot_id:#x})")
+    return revs & 0xFF == boot_id & 0xFF and revs >> 8 & 0xFF != 0
+
+
 def misc_checks(mon):
     for _ in range(80):
         if mon.read("KiTestMiscDone"):
@@ -393,6 +401,7 @@ def misc_checks(mon):
         "CMOS clock-set signature: write, verify, damaged byte detected": mon.read("KiTestMiscCmosOk") == 1,
         "SMC tray events update the tray cache and change count": mon.read("KiTestMiscSmcOk") == 1,
         "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
+        "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 

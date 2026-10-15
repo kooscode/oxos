@@ -53,10 +53,9 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
 
     KiSetStage(post_code::HalPhase0);
     HalInitSystemPhase0(/*coldBoot=*/!quick);
+    MmInitSystem(quick);
     if (!quick)
         HalpDetectHardware();
-
-    MmInitSystem(quick);
     KiInitializeDpcs();
     KiInitializeTimers();
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);

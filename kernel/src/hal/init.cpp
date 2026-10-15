@@ -3,6 +3,7 @@
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 
 UCHAR HalBootFlags;
 
@@ -56,9 +57,23 @@ void HalInitSystemPhase0(bool coldBoot) {
 // once the MMIO mapping exists; the strap-derived flags 0x10/0x20/0x40/0x80 are also pending.
 XBOX_HARDWARE_INFO XboxHardwareInfo;
 
+// spec/02 §5 (confirmed from the assembly, 0x80055081).
 void HalpDetectHardware() {
+    auto flash = (volatile UCHAR *)MmMapIoSpace(0xFFF00078, 4, PAGE_READWRITE | PAGE_NOCACHE);
+    if (flash) {
+        if (*flash == 0x80) {
+            XboxHardwareInfo.Flags |= 0x10;
+            if (inb(0x80CE) & 0x20)
+                XboxHardwareInfo.Flags |= 0x20;
+        }
+        MmUnmapIoSpace((PVOID)flash, 4);
+    }
+    // NV2A straps, bits 25-26: 0 → 0x40. (The reference also tests the masked value against 1 for 0x80, which can
+    // never match; 0x80 is therefore never set.)
+    if (!(*(volatile ULONG *)0xFD101000 & 0x06000000))
+        XboxHardwareInfo.Flags |= 0x40;
     XboxHardwareInfo.McpRevision = HalpPciRead8(0, 1, 0x08);
-    XboxHardwareInfo.GpuRevision = HalpPciRead8(1, 0, 0x08);
-    if (XboxHardwareInfo.McpRevision < 0xB4)
+    XboxHardwareInfo.GpuRevision = *(volatile UCHAR *)0xFD000000; // NV2A boot ID, low byte
+    if (XboxHardwareInfo.McpRevision <= 0xB3)
         XboxHardwareInfo.Flags |= 0x01;
 }
