@@ -78,8 +78,9 @@ typedef struct _OBJECT_DIRECTORY {
 } OBJECT_DIRECTORY, *POBJECT_DIRECTORY;
 
 typedef struct _OBJECT_SYMBOLIC_LINK {
-    PVOID LinkTargetObject;
+    PVOID LinkTargetObject; // the target, or the device a path target continues into
     OBJECT_STRING LinkTarget;
+    BOOLEAN PathLink; // (ours) the target names a path inside LinkTargetObject: lookups reparse LinkTarget
 } OBJECT_SYMBOLIC_LINK, *POBJECT_SYMBOLIC_LINK;
 
 typedef struct _OBJECT_DIRECTORY_INFORMATION {

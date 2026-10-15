@@ -18,7 +18,10 @@ TREE = {
 }
 
 
-def build(path):
+def build(path, default_xbe=None):
+    tree = dict(TREE)
+    if default_xbe is not None:
+        tree["default.xbe"] = default_xbe
     sectors = {}  # sector -> bytes
     next_sector = [33]
 
@@ -75,7 +78,7 @@ def build(path):
         sectors[s] = bytes(table)
         return s, len(table)
 
-    root_sector, root_size = write_dir(TREE)
+    root_sector, root_size = write_dir(tree)
     total = next_sector[0] + 16
     img = bytearray(total * SECTOR)
     vd = bytearray(SECTOR)

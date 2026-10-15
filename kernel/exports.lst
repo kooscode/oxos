@@ -230,3 +230,17 @@ HalDiskModelNumber
 HalDiskSerialNumber
 RtlTimeFieldsToTime
 RtlTimeToTimeFields
+XeImageFileName
+LaunchDataPage
+XeLoadSection
+XeUnloadSection
+XboxSignatureKey
+XboxLANKey
+XboxAlternateSignatureKeys
+XePublicKeyData
+XcSHAInit
+XcSHAUpdate
+XcSHAFinal
+XcHMAC
+XcRC4Key
+XcRC4Crypt

@@ -63,7 +63,7 @@ class Monitor:
         return (v1 - v0) / (t1 - t0)
 
 
-def run_checks(mon, hdd=None):
+def run_checks(mon, hdd=None, title_map=None):
     exc = mon.read("KiLastExceptionVector")
     tick_rate = mon.rate("KeTickCount")
     timer_rate = mon.rate("KiTestTimerTicks")
@@ -200,6 +200,7 @@ def run_checks(mon, hdd=None):
         "M3c": idex_checks(mon, hdd),
         "M3c-2": fatx_checks(mon, hdd),
         "M3c-3": dvd_checks(mon),
+        "M4a": title_checks(mon, title_map),
     }
 
 
@@ -274,6 +275,33 @@ def dvd_checks(mon):
     }
 
 
+def title_checks(mon, title_map):
+    if not title_map:
+        return {"test title built": False}
+    syms = map_symbols(title_map)
+    base = syms["_XkTitleResults"]
+    for _ in range(40):  # the title starts after the kernel suites
+        if mon.read("XeTitleLaunched"):
+            break
+        time.sleep(0.25)
+    for _ in range(40):
+        if mon.hmp(f"x/1wx {base:#x}").split(":")[1].split()[0] == "0x54544b58":
+            break
+        time.sleep(0.25)
+    words = [int(mon.hmp(f"x/1wx {base + 4 * i:#x}").split(":")[1].split()[0], 16) for i in range(9 + 16)]
+    name = b"".join(struct.pack("<I", w) for w in words[9:]).split(b"\0")[0].decode("latin-1")
+    return {
+        "title launched from \\Device\\CdRom0\\default.xbe": mon.read("XeTitleLaunched") == 1 and words[1] == 1,
+        "XeImageFileName": name == "\\Device\\CdRom0\\default.xbe",
+        "kernel thunks resolved: KeTickCount (data) + sleep": words[2] == 1,
+        "pool, disc file read, system thread from the title": words[3] == 1 and words[4] == 1 and words[5] == 1,
+        "path symbolic link \\??\\T: -> Partition1\\XkTest": words[6] == 1,
+        "XeLoadSection / XeUnloadSection (digest-checked)": words[7] == 1,
+        "XcSHA known answer": words[8] == 1,
+        "title finished": words[0] == 0x54544B58,
+    }
+
+
 def disk_checks(hdd_copy):
     """After xemu exits: what the kernel wrote must read back with an independent FATX reader."""
     e = Fatx(Qcow2(hdd_copy), "E")
@@ -292,6 +320,8 @@ def main():
     ap.add_argument("--map", required=True)
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
+    ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
+    ap.add_argument("--title-map")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     a = ap.parse_args()
 
@@ -300,7 +330,7 @@ def main():
     cfg = os.path.join(work, "xemu.toml")
     hdd_copy = os.path.join(work, "hdd.qcow2")
     dvd = os.path.join(work, "test.iso")
-    mkxiso.build(dvd)
+    mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None)
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
@@ -320,7 +350,7 @@ def main():
                 break
             time.sleep(0.1)
         time.sleep(a.boot_wait)
-        results = run_checks(Monitor(sock, map_symbols(a.map)), a.hdd)
+        results = run_checks(Monitor(sock, map_symbols(a.map)), a.hdd, a.title_map)
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():

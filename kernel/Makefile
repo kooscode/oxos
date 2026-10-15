@@ -45,14 +45,29 @@ $(BUILD)/xboxkrnl.def: exports.lst $(ROOT)/xboxkrnl-4627-exports.tsv $(ROOT)/too
 $(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
 
+# Test title (milestone 4a): freestanding PE at 0x10000 -> XBE.
+TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
+                  -fno-stack-protector -nostdlib -O2 -Wall -Werror
+$(BUILD)/title/title.obj: $(ROOT)/tests/title/title.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(TITLE_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/title.exe: $(BUILD)/title/title.obj
+	$(LD) /NODEFAULTLIB /ENTRY:XkTitleEntry /SUBSYSTEM:NATIVE /BASE:0x10000 /FIXED /DEBUG:NONE \
+	    /MAP:$(BUILD)/title.map /OUT:$@ $<
+
+$(BUILD)/title.xbe: $(BUILD)/title.exe $(ROOT)/tools/mkxbe.py
+	python3 -I $(ROOT)/tools/mkxbe.py --pe $< --map $(BUILD)/title.map --out $@ --no-preload .extra
+
 bios: $(BUILD)/bios.bin
 
 $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
 	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe
 
-test: $(BUILD)/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE)
+test: $(BUILD)/bios.bin $(BUILD)/title.xbe
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
+	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map
 
 clean:
 	rm -rf $(BUILD)
