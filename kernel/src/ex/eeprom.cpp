@@ -15,9 +15,9 @@ constexpr NTSTATUS STATUS_OBJECT_NAME_NOT_FOUND_ = (NTSTATUS)0xC0000034, STATUS_
                    STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D, STATUS_DEVICE_DATA_ERROR_ = (NTSTATUS)0xC000009C;
 
 XBAPI UCHAR XboxHDKey[16];
-UCHAR XboxHDKey[16];
+XK_PERSIST UCHAR XboxHDKey[16];
 extern ULONG XeConsoleGameRegion;
-volatile ULONG ExpEepromSecurityValid; // 1 when the security section decrypted and authenticated
+XK_PERSIST volatile ULONG ExpEepromSecurityValid; // 1 when the security section decrypted and authenticated
 
 // Setting descriptors {type, index, size, offset-in-section}; layout of the EEPROM format.
 struct EEPROM_SETTING {

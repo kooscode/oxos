@@ -7,5 +7,6 @@ xboxkrnl.exe
 
 # Build output and local helpers
 kernel/build/
+kernel/build-release/
 __pycache__/
 claude-resume.sh

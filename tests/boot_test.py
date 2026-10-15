@@ -290,7 +290,7 @@ def dvd_checks(mon):
     }
 
 
-def title_checks(mon, title_map):
+def title_checks(mon, title_map, relaunch=False):
     if not title_map:
         return {"test title built": False}
     syms = map_symbols(title_map)
@@ -299,14 +299,18 @@ def title_checks(mon, title_map):
         if mon.read("XeTitleLaunched"):
             break
         time.sleep(0.25)
-    for _ in range(40):
+    for _ in range(160):  # includes the quick reboot into media\second.xbe
         if mon.hmp(f"x/1wx {base:#x}").split(":")[1].split()[0] == "0x54544b58":
             break
         time.sleep(0.25)
-    words = [int(mon.hmp(f"x/1wx {base + 4 * i:#x}").split(":")[1].split()[0], 16) for i in range(9 + 16)]
-    name = b"".join(struct.pack("<I", w) for w in words[9:]).split(b"\0")[0].decode("latin-1")
-    return {
-        "title launched from \\Device\\CdRom0\\default.xbe": mon.read("XeTitleLaunched") == 1 and words[1] == 1,
+    words = [int(mon.hmp(f"x/1wx {base + 4 * i:#x}").split(":")[1].split()[0], 16) for i in range(9 + 16 + 3 + 16)]
+
+    def text(ws):
+        return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
+    name, second = text(words[9:25]), text(words[28:44])
+    checks = {
+        "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
+            and mon.read("XeTitleLaunched") == (3 if relaunch else 1),
         "XeImageFileName": name == "\\Device\\CdRom0\\default.xbe",
         "kernel thunks resolved: KeTickCount (data) + sleep": words[2] == 1,
         "pool, disc file read, system thread from the title": words[3] == 1 and words[4] == 1 and words[5] == 1,
@@ -315,6 +319,19 @@ def title_checks(mon, title_map):
         "XcSHA known answer": words[8] == 1,
         "title finished": words[0] == 0x54544B58,
     }
+    if relaunch:
+        del checks["path symbolic link \\??\\T: -> Partition1\\XkTest"]  # keep.bin comes from the FATX self-test
+        checks |= {
+            "quick reboot (HalReturnToFirmware(2)): kernel re-entered once, LaunchDataPage re-adopted":
+                mon.read("KiQuickRebootCount") == 1 and mon.read("MmPersistedPages") >= 1,
+            "LaunchDataPage launch of media;second.xbe, first run's results carried over": words[25] == 1
+                and second == "\\Device\\CdRom0\\media\\second.xbe",
+            "persisted launch page contents (type, title id, flags, data)": words[27] == 1,
+            "\\??\\D: -> launch directory": words[26] == 1,
+        }
+    else:
+        checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
+    return checks
 
 
 def rtl_checks(mon):
@@ -390,6 +407,7 @@ def main():
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
     ap.add_argument("--title-map")
+    ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     a = ap.parse_args()
 
@@ -399,7 +417,7 @@ def main():
     hdd_copy = os.path.join(work, "hdd.qcow2")
     dvd = os.path.join(work, "test.iso")
     if not a.no_disc:
-        mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None)
+        mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
@@ -420,7 +438,12 @@ def main():
             time.sleep(0.1)
         time.sleep(a.boot_wait)
         mon = Monitor(sock, map_symbols(a.map))
-        results = dash_checks(mon) if a.dash else run_checks(mon, a.hdd, a.title_map)
+        if a.dash:
+            results = dash_checks(mon)
+        elif a.relaunch:
+            results = {"M5d-2": title_checks(mon, a.title_map, True)}
+        else:
+            results = run_checks(mon, a.hdd, a.title_map)
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():
@@ -433,7 +456,7 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
-    if ok and a.hdd and not a.dash:
+    if ok and a.hdd and not a.dash and not a.relaunch:
         for name, passed in disk_checks(hdd_copy).items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed

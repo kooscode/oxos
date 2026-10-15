@@ -32,14 +32,14 @@ static ULONG XbeField(ULONG offset) { return *(ULONG *)(XBE_BASE + offset); }
 
 // --- Exported state
 XBAPI OBJECT_STRING XeImageFileName;
-XBAPI PVOID LaunchDataPage;
+XBAPI XK_PERSIST PVOID LaunchDataPage;
 XBAPI UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 XBAPI UCHAR XePublicKeyData[284]; // not populated (signature checks are not enforced, spec/05 §4.5)
 OBJECT_STRING XeImageFileName;
 PVOID LaunchDataPage;
 UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 UCHAR XePublicKeyData[284];
-ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
+XK_PERSIST ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
 volatile NTSTATUS XeLastLoadStatus;
 volatile ULONG XeLastMissingOrdinal, XeDigestMismatches;
 
@@ -300,20 +300,76 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 
 // --- Launch (spec/05 §2-3, without the SMC tray handling and the LaunchDataPage paths)
 
-volatile ULONG XeTitleLaunched; // 1 = title entered, 2 = dashboard entered
+volatile ULONG XeTitleLaunched; // 1 = title entered, 2 = dashboard entered, 3 = launched from the LaunchDataPage
 [[noreturn]] void IdexFatalError(ULONG Code);
+extern "C" volatile UCHAR KiQuickRebootFlag;
+
+struct LAUNCH_DATA_PAGE {
+    ULONG LaunchDataType;
+    ULONG TitleId;
+    CHAR LaunchPath[520];
+    ULONG Flags;
+    UCHAR Pad[492];
+    UCHAR LaunchData[3072];
+};
+static_assert(sizeof(LAUNCH_DATA_PAGE) == 0x1000);
+
+static void XepFreeLaunchDataPage() {
+    MmFreeContiguousMemory(LaunchDataPage);
+    LaunchDataPage = nullptr;
+}
+
+// Path A (spec/05 §2): a title asked for another title. Returns the load status, or 1 when there is no request
+// (or the request is a dashboard launch).
+static NTSTATUS XepLaunchFromDataPage() {
+    auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+    if (!ldp)
+        return 1;
+    if (ldp->Flags & 1) { // already tried once: do not loop
+        XepFreeLaunchDataPage();
+        return 1;
+    }
+    ldp->Flags |= 1;
+    CHAR path[361];
+    ULONG n = 0;
+    while (n < 360 && ldp->LaunchPath[n])
+        path[n] = ldp->LaunchPath[n], n++;
+    path[n] = 0;
+    if (ldp->LaunchDataType == 0xFFFFFFFF)
+        XepFreeLaunchDataPage();
+    if (!n)
+        return 1; // the dashboard
+    // "\Device\...\dir;name.xbe": D: is the directory, the image is dir\name.xbe.
+    OBJECT_STRING dir = {0, 0, path}, link;
+    for (ULONG i = 0; i < n; i++)
+        if (path[i] == ';') {
+            dir.Length = dir.MaximumLength = (USHORT)i;
+            path[i] = '\\';
+        }
+    RtlInitAnsiString(&link, "\\??\\D:");
+    if (dir.Length)
+        IoCreateSymbolicLink(&link, &dir);
+    NTSTATUS status = XeLoadImage(path, FALSE);
+    if (!NT_SUCCESS(status) && dir.Length)
+        IoDeleteSymbolicLink(&link);
+    return status;
+}
 
 static void NTAPI XepTitleThread(PVOID, PVOID) {
 #if XK_BOOT_SELFTEST
     extern volatile ULONG KiTestDvdDone;
-    while (!KiTestDvdDone) {
+    while (!KiQuickRebootFlag && !KiTestDvdDone) {
         LARGE_INTEGER t;
         t.QuadPart = -20 * 10000;
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
-    ULONG launched = 1;
-    NTSTATUS status = XeLoadImage("\\Device\\CdRom0\\default.xbe", FALSE);
+    ULONG launched = 3;
+    NTSTATUS status = XepLaunchFromDataPage();
+    if (status == 1) {
+        launched = 1;
+        status = LaunchDataPage ? (NTSTATUS)0xC0000034 : XeLoadImage("\\Device\\CdRom0\\default.xbe", FALSE);
+    }
     if (!NT_SUCCESS(status)) {
         launched = 2;
         status = XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE);
