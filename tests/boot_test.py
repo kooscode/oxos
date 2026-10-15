@@ -70,12 +70,18 @@ def run_checks(mon):
         "KiBugCheckCode", "KiTestPingA", "KiTestPingB", "KiTestSleepMs", "KiTestSemaphoreConsumed",
         "KiTestMutantOk", "KiTestWaitAnyIndex", "KiTestWaitAllStatus", "KiTestTimeoutStatus", "KiTestJoinOk",
         "KiTestFpuOk", "KiTestThreadsDone")}
+    m2bp = {name: mon.read(name) for name in (
+        "KiTestApcKernelRan", "KiTestApcNormalAtPassive", "KiTestApcRewaitOk", "KiTestSpecialApcAtApcLevel",
+        "KiTestUserApcRan", "KiTestUserApcStatus", "KiTestAlertStatus", "KiTestCriticalRegionOk",
+        "KiTestSuspendOk", "KiTestQueueProcessed", "KiTestQueueTimeout", "KiTestDeviceQueueOk",
+        "KiTestBoostPriority", "KiTestApcSuiteDone")}
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
     print(f"exception vector {exc:#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, periodic timer DPC {timer_rate:.1f}/s")
     print("  " + ", ".join(f"{k}={v}" for k, v in values.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
+    print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Status") or k.endswith("Timeout") else f"{k}={v}" for k, v in m2bp.items()))
     print(f"  spinner rates {spin_a:.0f}/s and {spin_b:.0f}/s, context switches {switches}")
     return {
         "M1": {
@@ -107,6 +113,22 @@ def run_checks(mon):
             "controller thread finished": m2b["KiTestThreadsDone"] == 1,
             "equal-priority spinners both run (quantum)": spin_a > 0 and spin_b > 0
                 and min(spin_a, spin_b) / max(spin_a, spin_b) > 0.3,
+        },
+        "M2b+": {
+            "kernel APC routines ran (3 APCs share the counter)": m2bp["KiTestApcKernelRan"] == 3,
+            "normal kernel APC routine at PASSIVE": m2bp["KiTestApcNormalAtPassive"] == 1,
+            "wait resumed after kernel APC": m2bp["KiTestApcRewaitOk"] == 1,
+            "special APC at APC_LEVEL": m2bp["KiTestSpecialApcAtApcLevel"] == 1,
+            "user APC ran and ended alertable wait": m2bp["KiTestUserApcRan"] == 1
+                and m2bp["KiTestUserApcStatus"] == 0xC0,
+            "alert -> STATUS_ALERTED": m2bp["KiTestAlertStatus"] == 0x101,
+            "critical region defers kernel APC": m2bp["KiTestCriticalRegionOk"] == 1,
+            "suspend stops / resume restarts a thread": m2bp["KiTestSuspendOk"] == 1,
+            "queue: 10 items processed": m2bp["KiTestQueueProcessed"] == 10,
+            "queue: KeRemoveQueue timeout": m2bp["KiTestQueueTimeout"] == 0x102,
+            "device queue semantics": m2bp["KiTestDeviceQueueOk"] == 1,
+            "wake-up boost 8 + 2 = 10": m2bp["KiTestBoostPriority"] == 10,
+            "APC suite finished": m2bp["KiTestApcSuiteDone"] == 1,
         },
     }
 

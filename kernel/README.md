@@ -31,7 +31,8 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 2. Kernel core (spec 06):
    - 2a: IRQL and PIC masking, software interrupts, KINTERRUPT, DPCs, timers, events. ✅ passes in xemu.
    - 2b: threads, scheduler, context switch, lazy FPU, waits, semaphores, mutants (spec 07). ✅ passes in xemu.
-   - 2b+: APCs, alerts, suspend/resume, queues, wake-up boosts, PsCreateSystemThreadEx (needs Ob handles).
+   - 2b+: APCs, alerts, suspend/resume, queues, device queues, wake-up boosts (spec 08). ✅ passes in xemu.
+   - PsCreateSystemThreadEx and the Nt* wrappers wait for object-manager handles (milestone 3).
    - 2c: memory manager (paging, PFN database, pools, contiguous/system memory, virtual memory).
 3. Object manager, I/O manager, IDE + DVD + partitions (stock LBA28), FATX (spec 04).
 4. XBE loader and title launch (spec 05): boot the stock dashboard.

@@ -5,8 +5,7 @@ PsCreateSystemThreadEx, KiSwapContext, KiUnlockDispatcherDatabase, KiDispatchInt
 `ev_796a4236…` (context init, KiReadyThread, KeReadyThread, quantum end), `ev_bf895671…`
 (KeWaitForSingleObject, KeDelayExecutionThread, PsTerminateSystemThread), and objdump of the clock ISR
 (0x80030ea0), the #NM trap (0x8001b518) and the thread trampoline (0x8001cc78).
-**Status: implemented (milestone 2b), except alerts, APC-interrupted waits, queues and wake-up priority
-boosts, which come with APCs.** Implementation choices that differ internally but not in ABI:
+**Status: implemented (milestones 2b and 2b+; APCs, alerts, queues and boosts are specified in spec 08).** Implementation choices that differ internally but not in ABI:
 - the switch frame also saves ebp/ebx/esi/edi
 - IRQ dispatch levels: a connected KINTERRUPT's IRQL replaces the default level for its IRQ when the PIC mask is computed
 - kernel stacks and thread objects come from a boot-time bump allocator and are not yet reclaimed
