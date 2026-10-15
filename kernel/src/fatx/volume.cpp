@@ -370,4 +370,11 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
     return STATUS_SUCCESS;
 }
 
-void FsInitSystem() { IopFileSystems.Disk = FatxMountVolume; }
+NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
+NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice);
+
+void FsInitSystem() {
+    IopFileSystems.Disk = FatxMountVolume;
+    IopFileSystems.CdRom = XdvdfsMountVolume;
+    IopFileSystems.Raw = RawMountVolume;
+}
