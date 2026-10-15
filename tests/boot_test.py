@@ -209,6 +209,7 @@ def run_checks(mon, hdd=None, title_map=None):
             "SMC tray state with a disc = 0x60": mon.read("KiTestHalTrayState") == 0x60,
             "HAL suite finished": mon.read("KiTestHalDone") == 1,
         },
+        "M5a": rtl_checks(mon),
     }
 
 
@@ -308,6 +309,17 @@ def title_checks(mon, title_map):
         "XcSHA known answer": words[8] == 1,
         "title finished": words[0] == 0x54544B58,
     }
+
+
+def rtl_checks(mon):
+    for _ in range(80):
+        if mon.read("KiTestRtlDone"):
+            break
+        time.sleep(0.25)
+    names = ["Sprintf", "Interlocked", "CritSec", "RwLock", "Strings", "Math", "Refurb", "Time", "Dbg", "Boost", "Fpu"]
+    out = {f"Rtl {n}": mon.read(f"KiTestRtl{n}Ok") == 1 for n in names}
+    out["Rtl suite finished"] = mon.read("KiTestRtlDone") == 1
+    return out
 
 
 def dash_checks(mon):

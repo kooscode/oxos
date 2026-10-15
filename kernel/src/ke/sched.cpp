@@ -141,7 +141,7 @@ LONG KiSwapThread() {
     return old->WaitStatus;
 }
 
-void KiUnlockDispatcherDatabase(KIRQL OldIrql) {
+XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
     if (Prcb.NextThread) {
         if (OldIrql < DISPATCH_LEVEL && !Prcb.DpcRoutineActive) {
             PKTHREAD old = Prcb.CurrentThread, next = Prcb.NextThread;

@@ -80,3 +80,41 @@ XBAPI void NTAPI KeStallExecutionProcessor(ULONG MicroSeconds) {
         ticks = elapsed >= ticks ? 0 : ticks - elapsed;
     }
 }
+
+// --- System time: initialised from the RTC, changed by NtSetSystemTime (which also sets the RTC).
+struct HAL_TIME_FIELDS {
+    SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;
+};
+void HalpQueryRealTimeClock(HAL_TIME_FIELDS *t);
+void HalpSetRealTimeClock(const HAL_TIME_FIELDS *t);
+XBAPI BOOLEAN NTAPI RtlTimeFieldsToTime(HAL_TIME_FIELDS *TimeFields, PLARGE_INTEGER Time);
+XBAPI void NTAPI RtlTimeToTimeFields(PLARGE_INTEGER Time, HAL_TIME_FIELDS *TimeFields);
+
+static void KiSetSystemTime(LONGLONG t) {
+    ULONG flags = save_flags_cli();
+    KeSystemTime.High2Time = (LONG)(t >> 32);
+    KeSystemTime.LowPart = (ULONG)t;
+    KeSystemTime.High1Time = (LONG)(t >> 32);
+    restore_flags(flags);
+}
+
+void KiInitializeSystemTime() {
+    HAL_TIME_FIELDS f;
+    HalpQueryRealTimeClock(&f);
+    LARGE_INTEGER t;
+    if (RtlTimeFieldsToTime(&f, &t))
+        KiSetSystemTime(t.QuadPart);
+}
+
+XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER PreviousTime) {
+    LARGE_INTEGER t = *SystemTime;
+    if (t.HighPart < 0 || t.HighPart > 0x20000000)
+        return (NTSTATUS)0xC000000D;
+    if (PreviousTime)
+        KeQuerySystemTime(PreviousTime);
+    KiSetSystemTime(t.QuadPart);
+    HAL_TIME_FIELDS f;
+    RtlTimeToTimeFields(&t, &f);
+    HalpSetRealTimeClock(&f);
+    return STATUS_SUCCESS;
+}

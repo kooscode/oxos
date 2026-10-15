@@ -5,6 +5,8 @@
 
 volatile ULONG KiBugCheckCode;
 volatile ULONG KiBugCheckParameters[4];
+XBAPI ULONG KiBugCheckData[5]; // exported: code and the four parameters
+ULONG KiBugCheckData[5];
 
 XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4) {
     cli();
@@ -13,6 +15,9 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     KiBugCheckParameters[2] = P3;
     KiBugCheckParameters[3] = P4;
     KiBugCheckCode = BugCheckCode;
+    KiBugCheckData[0] = BugCheckCode;
+    for (int i = 0; i < 4; i++)
+        KiBugCheckData[i + 1] = KiBugCheckParameters[i];
     post(0xBC);
     for (;;)
         halt();

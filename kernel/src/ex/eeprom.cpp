@@ -212,3 +212,43 @@ void ExInitEeprom() {
     XeConsoleGameRegion = *(ULONG *)(plain + 24);
     ExpEepromSecurityValid = 1;
 }
+
+// Refurbishment record in sector 3 of the disk: {'RBRF', first-boot time (8), power cycle count}.
+#include <xk/io.h>
+XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength, BOOLEAN DoWrite) {
+    if (ValueLength != 16)
+        return STATUS_INVALID_PARAMETER_;
+    OBJECT_STRING name;
+    RtlInitAnsiString(&name, "\\Device\\Harddisk0\\partition0");
+    OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE h;
+    NTSTATUS status = NtOpenFile(&h, (DoWrite ? GENERIC_WRITE : 0) | GENERIC_READ | SYNCHRONIZE, &attrs, &iosb,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_ALERT);
+    if (!NT_SUCCESS(status))
+        return status;
+    auto sector = (PULONG)ExAllocatePoolWithTag(512, 'frxE');
+    if (!sector) {
+        NtClose(h);
+        return (NTSTATUS)0xC000009A;
+    }
+    RtlZeroMemory(sector, 512);
+    LARGE_INTEGER offset;
+    offset.QuadPart = 0x600;
+    if (!DoWrite) {
+        status = NtReadFile(h, nullptr, nullptr, nullptr, &iosb, sector, 512, &offset);
+        if (NT_SUCCESS(status)) {
+            bool valid = sector[0] == 0x52465242;
+            for (int i = 0; i < 4; i++)
+                RefurbInfo[i] = valid ? sector[i] : 0;
+        }
+    } else {
+        sector[0] = 0x52465242;
+        for (int i = 1; i < 4; i++)
+            sector[i] = RefurbInfo[i];
+        status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, sector, 512, &offset);
+    }
+    ExFreePool(sector);
+    NtClose(h);
+    return status;
+}

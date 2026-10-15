@@ -8,7 +8,7 @@ typedef short SHORT, CSHORT;
 typedef unsigned long ULONG, *PULONG;
 typedef long LONG, NTSTATUS, *PLONG;
 typedef unsigned long long ULONGLONG;
-typedef long long LONGLONG;
+typedef long long LONGLONG, *PLONGLONG;
 typedef void VOID, *PVOID;
 typedef ULONG ULONG_PTR, SIZE_T, *PSIZE_T;
 typedef ULONG PHYSICAL_ADDRESS;
