@@ -59,3 +59,10 @@ signs when idle.
   boot-progress breadcrumb for debugging).
 - The exact meaning of each of the 7 GDT entries, and the TSS layouts.
 - Executive init at 0x80015724: Hal/Mm/Ob/Io/Ps phases, IDE, FATX, XBE launch. This is the next spec.
+
+## Note: modded BIOS 2BL kernel patcher (found 2026-10-15)
+The "Complex 4627" BIOS used as our packing base has a 2BL stub that copies a table of
+`{u8 length, u32 address, bytes}` patches (0xFF ends it) onto the decompressed kernel before jumping to it. The
+code is `call $+5; pop esi; cld; xor ecx,ecx; add esi,imm8`, and the table is at 2BL+0x3B2E with 12 patches. The
+addresses are stock-kernel locations, so with our kernel they corrupt arbitrary code. `tools/mkbios.py` empties the
+table when it finds the stub.

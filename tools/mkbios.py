@@ -117,6 +117,25 @@ def lzx_uncompressed_stream(image):
     return bytes(out) + b"\0\0\0\0"
 
 
+# Modded BIOSes (e.g. "Complex 4627") carry a 2BL stub that patches the decompressed kernel at fixed addresses:
+#   call $+5; pop esi; cld; xor ecx,ecx; add esi,imm8   -> table of {u8 len, u32 address, len bytes}, 0xFF end
+# Those addresses belong to the stock kernel, so the table is emptied for our kernel.
+PATCHER_STUB = bytes.fromhex("e8000000005efc33c983c6")
+
+
+def disable_kernel_patcher(bl):
+    i = bl.find(PATCHER_STUB)
+    if i < 0:
+        return
+    table = i + 5 + bl[i + len(PATCHER_STUB)]
+    n, t = 0, table
+    while t < len(bl) and bl[t] != 0xFF:
+        t += 5 + bl[t]
+        n += 1
+    bl[table] = 0xFF
+    print(f"2BL kernel patcher found: disabled its table of {n} patches at 2BL+{table:#x}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", required=True)
@@ -133,6 +152,7 @@ def main():
     bl = bytearray(rc4(mcpx_key, bank[OFF_2BL:OFF_2BL + LEN_2BL]))
     if u32(bl, 0x5FE4) != BLDR_MAGIC or u32(bl, BLDR_PARAMS + 8) != BLDR_MAGIC:
         sys.exit("base image is not an MCPX 1.0 BIOS with a recognised 2BL (or wrong MCPX ROM)")
+    disable_kernel_patcher(bl)
     _old_dsz, itsz = struct.unpack_from("<II", bl, BLDR_PARAMS)
     kkey = bytes(bl[BLDR_KEYS + 32:BLDR_KEYS + 48])
 
