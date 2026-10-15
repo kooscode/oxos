@@ -4,8 +4,8 @@ Evidence: batch_decompile `ev_4cc1cd36…` (AvGetSavedDataAddress, AvSendTVEncod
 HalWriteSMBusValue, HalReturnToFirmware), `ev_6316410b…` (SMBus transaction start 0x8001460c / 0x800146df),
 `ev_1ae40f50…` (ExQueryNonVolatileSetting, ExSaveNonVolatileSetting, HalReadSMCTrayState), `ev_1f71a036…` (setting
 lookup, checksum, EEPROM shadow read/write), objdump of the SMBus DPC (0x80014bfa) and the SMC state machine
-(0x800147a8…), and the setting tables at 0x80010918 / 0x80010930. **Status: implemented (milestone 4b-1), except the
-SMC interrupt state machine and the AV mode tables.**
+(0x800147a8…), and the setting tables at 0x80010918 / 0x80010930. **Status: implemented (milestones 4b-1/4b-2), except the
+SMC interrupt state machine and the per-mode AV tables.**
 
 ## 1. SMBus host (MCPX, I/O 0xC000)
 - Registers: +0 status (written back to clear), +2 control, +4 address (slave << 1 | read), +6 data (byte/word),
@@ -54,7 +54,32 @@ SMC interrupt state machine and the AV mode tables.**
   RC4 key = HMAC-SHA1(XboxEEPROMKey, digest); plaintext authenticated by HMAC-SHA1(XboxEEPROMKey, plaintext) ==
   digest. This gives XboxHDKey and the console game region used by the XBE loader.
 
-## 4. AV (not yet implemented — milestone 4b-2)
+## 4. AV (milestone 4b-2: partial)
+Evidence: `ev_179f3a58…` (AV capabilities 0x8002fc8f, AvSetSavedDataAddress, encoder option write-back 0x8002fdd2),
+`ev_e1e1a834…` (AV pack mapping 0x8002fc57, macrovision table writer 0x8002fa11), `ev_82a2118e…` (AvSetDisplayMode).
+- **HalBootSMCVideoMode** = the SMC AV pack code (register 0x04). It maps to AV_PACK as 0→SCART(3), 1→HDTV(4),
+  2→VGA(5), 3→RFU(2), 4→S-Video(6), 6→standard(1), else none(0).
+- **AV_QUERY_AV_CAPABILITIES (option 6)** = (user setting 8 & 0xFFFF0000) | AV pack | (factory setting 0x103 &
+  0xC0FF00, default 0x400100 = NTSC-M, 60 Hz).
+- **Other options:**
+  - 9 blanks/unblanks via VGA sequencer register 1 (0x21 off / 0x01 on, plus port 0x80D3 = 4 when on)
+  - 0xC forgets the current mode
+  - 0x10 → encoder is Focus
+  - the rest program encoder registers over SMBus
+- **AvSetDisplayMode(regs, step, mode, format, pitch, framebuffer):**
+  - mode 0 = 0x0F010101
+  - format 0x10/0x1C → CRTC 0x28 depth code 2; 0x11 → code 2 and RAMDAC general control 0x101030; else code 3 with
+    control 0x100030
+  - same mode: only RAMDAC general control (0x680600), CRTC 0x13/0x19/0x25 (pitch / 8), CRTC 0x28 (depth | 0x80) and
+    the scanout start (0x600800) are rewritten, then the encoder flicker/size options
+  - new mode: wait for vblank, unlock CRTC (0x1F = 0x57), disable (0x21 = 0xFF, 0x28 = 0), program the encoder table
+    for the mode (mode & 0x7F), the RAMDAC/PCRTC register list ((mode >> 16) & 0xFF), the VGA attribute/graphics/
+    sequencer defaults and CRTC table ((mode >> 8) & 0xFF), then pitch/format, wait 3 vblanks, set the palette/scanout
+- **Ours:**
+  - AV capabilities, saved-data address, blank, null-mode and encoder-type options
+  - for every mode: VGA 640x480 timings from the public VGA register model, plus the stock pitch/format/start
+    programming. The per-mode encoder tables (needed on real hardware) still have to be derived.
+
 - AvGetSavedDataAddress returns the persisted framebuffer pointer. AvSendTVEncoderOption is a large option switch
   (encoder at 0x8A Conexant / 0xD4 Focus / 0xE0 Xcalibur).
 - AvSetDisplayMode programs NV2A PRAMDAC/PCRTC (via the register file at 0xFD000000) and the encoder, from per-mode

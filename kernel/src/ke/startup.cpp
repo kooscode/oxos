@@ -23,6 +23,7 @@ static void KiSetStage(UCHAR code) {
 
 void XeStartTitleLauncher(); // spec/05: load and enter the title
 void ExInitEeprom();          // spec/12: EEPROM shadow, HD key, game region
+void AvInit();                // spec/12: AV pack, video encoder
 
 extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     KiSetStage(post_code::Entry);
@@ -46,6 +47,7 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     IoInitSystem();
     FsInitSystem();
     ExInitEeprom();
+    AvInit();
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
 
