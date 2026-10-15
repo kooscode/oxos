@@ -29,12 +29,14 @@ struct LARGE_INTEGER {
 enum : ULONG {
     I_KeTickCount, I_XeImageFileName, I_ExAllocatePoolWithTag, I_ExFreePool, I_NtOpenFile, I_NtReadFile, I_NtClose,
     I_PsCreateSystemThread, I_NtWaitForSingleObject, I_KeDelayExecutionThread, I_IoCreateSymbolicLink,
-    I_XeLoadSection, I_XeUnloadSection, I_XcSHAInit, I_XcSHAUpdate, I_XcSHAFinal, I_COUNT
+    I_XeLoadSection, I_XeUnloadSection, I_XcSHAInit, I_XcSHAUpdate, I_XcSHAFinal, I_MmAllocateContiguousMemory,
+    I_MmPersistContiguousMemory, I_MmFreeContiguousMemory, I_LaunchDataPage, I_HalReturnToFirmware, I_COUNT
 };
 extern "C" ULONG XkThunks[I_COUNT + 1] = {
     0x80000000 | 156, 0x80000000 | 326, 0x80000000 | 15,  0x80000000 | 17,  0x80000000 | 202, 0x80000000 | 219,
     0x80000000 | 187, 0x80000000 | 254, 0x80000000 | 233, 0x80000000 | 99,  0x80000000 | 67,  0x80000000 | 327,
-    0x80000000 | 328, 0x80000000 | 335, 0x80000000 | 336, 0x80000000 | 337, 0};
+    0x80000000 | 328, 0x80000000 | 335, 0x80000000 | 336, 0x80000000 | 337,
+    0x80000000 | 165, 0x80000000 | 178, 0x80000000 | 171, 0x80000000 | 164, 0x80000000 | 49,  0};
 #define K(name, type) ((type)XkThunks[I_##name])
 
 struct RESULTS {
@@ -48,6 +50,12 @@ struct RESULTS {
     ULONG SectionOk;      // XeLoadSection of the non-preload section, content check, unload
     ULONG ShaOk;          // XcSHA* known answer ("abc")
     char ImageName[64];   // XeImageFileName
+    // Milestone 5d-2: the first run relaunches itself as media\second.xbe through a persisted LaunchDataPage and a
+    // quick reboot; the second run restores the fields above from LaunchData and checks the launch.
+    ULONG Relaunched;     // 1 in the second run, with the first run's results intact
+    ULONG DriveLinkOk;    // \??\D: -> \Device\CdRom0\media
+    ULONG LaunchPageOk;   // LaunchDataPage persisted with type, title id, flags and data
+    char SecondName[64];  // XeImageFileName of the second run
 };
 extern "C" volatile RESULTS XkTitleResults = {};
 __attribute__((section(".extra"))) extern "C" const char XkExtraData[] = "data from a section loaded on demand";
@@ -94,8 +102,63 @@ static void Sleep(LONG ms) {
     K(KeDelayExecutionThread, NTSTATUS(NTAPI *)(char, BOOLEAN, LARGE_INTEGER *))(0, 0, &t);
 }
 
+struct LAUNCH_DATA_PAGE {
+    ULONG LaunchDataType, TitleId;
+    char LaunchPath[520];
+    ULONG Flags;
+    UCHAR Pad[492];
+    UCHAR LaunchData[3072];
+};
+static_assert(sizeof(LAUNCH_DATA_PAGE) == 4096);
+static const ULONG LaunchMarker = 0x324B5858; // "XXK2"
+static const ULONG FirstRunBytes = 9 * 4 + 64;
+
+static void Copy(volatile void *to, const volatile void *from, ULONG n) {
+    for (ULONG i = 0; i < n; i++)
+        ((volatile char *)to)[i] = ((const volatile char *)from)[i];
+}
+
+static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
+    Copy(&r, ldp->LaunchData + 4, FirstRunBytes);
+    r.Relaunched = 1;
+    auto name = (STRING *)XkThunks[I_XeImageFileName];
+    for (ULONG i = 0; i < name->Length && i < sizeof(r.SecondName) - 1; i++)
+        r.SecondName[i] = name->Buffer[i];
+    r.LaunchPageOk = ldp->LaunchDataType == 1 && ldp->TitleId == 0x584B0001 && (ldp->Flags & 1) &&
+                     *(ULONG *)ldp->LaunchData == LaunchMarker;
+    char buf[64];
+    ULONG got = 0;
+    r.DriveLinkOk = ReadFile("\\??\\D:\\a.txt", buf, sizeof(buf), &got) == 0 && got == 9 && Equal(buf, "hello dvd", 9);
+    *(PVOID *)XkThunks[I_LaunchDataPage] = nullptr;
+    K(MmFreeContiguousMemory, void(NTAPI *)(PVOID))(ldp);
+    r.Magic = 0x54544B58;
+    for (;;)
+        Sleep(1000);
+}
+
+// XLaunchNewImage, the way the XAPI does it: a persisted page describes the next title, then a quick reboot.
+static void Relaunch(volatile RESULTS &r) {
+    auto ldp = (LAUNCH_DATA_PAGE *)K(MmAllocateContiguousMemory, PVOID(NTAPI *)(ULONG))(4096);
+    if (!ldp)
+        return;
+    for (ULONG i = 0; i < 4096; i++)
+        ((volatile char *)ldp)[i] = 0;
+    K(MmPersistContiguousMemory, void(NTAPI *)(PVOID, ULONG, BOOLEAN))(ldp, 4096, 1);
+    ldp->LaunchDataType = 1;
+    ldp->TitleId = 0x584B0001;
+    const char path[] = "\\Device\\CdRom0\\media;second.xbe";
+    Copy(ldp->LaunchPath, path, sizeof(path));
+    *(ULONG *)ldp->LaunchData = LaunchMarker;
+    Copy(ldp->LaunchData + 4, &r, FirstRunBytes);
+    *(PVOID *)XkThunks[I_LaunchDataPage] = ldp;
+    K(HalReturnToFirmware, void(NTAPI *)(ULONG))(2);
+}
+
 extern "C" void __cdecl XkTitleEntry() {
     volatile RESULTS &r = XkTitleResults;
+    auto ldp = *(LAUNCH_DATA_PAGE **)XkThunks[I_LaunchDataPage];
+    if (ldp)
+        SecondRun(r, ldp);
     r.Started = 1;
 
     auto name = (STRING *)XkThunks[I_XeImageFileName];
@@ -152,6 +215,8 @@ extern "C" void __cdecl XkTitleEntry() {
     K(XcSHAFinal, void(NTAPI *)(UCHAR *, UCHAR *))(ctx, digest);
     r.ShaOk = digest[0] == 0xA9 && digest[1] == 0x99 && digest[19] == 0x9D;
 
+    if (ReadFile("\\Device\\CdRom0\\relaunch.txt", buf, sizeof(buf), &got) == 0) // the quick-reboot test disc
+        Relaunch(r);
     r.Magic = 0x54544B58;
     for (;;)
         Sleep(1000);

@@ -9,9 +9,9 @@ XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BO
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG, PULONG, PVOID, ULONG, PULONG);
 
 XBAPI UCHAR HalBootSMCVideoMode;
-UCHAR HalBootSMCVideoMode = 7; // SMC AV pack code (7 = none) read at boot
-static PVOID AvpSavedDataAddress;
-static ULONG AvpCurrentMode;
+XK_PERSIST UCHAR HalBootSMCVideoMode = 7; // SMC AV pack code (7 = none) read at boot
+XK_PERSIST static PVOID AvpSavedDataAddress;
+XK_PERSIST static ULONG AvpCurrentMode;
 static UCHAR AvpEncoderAddress; // 0x8A Conexant, 0xD4 Focus, 0xE0 Xcalibur (0 = none found)
 volatile ULONG AvpSetDisplayModeCalls;
 

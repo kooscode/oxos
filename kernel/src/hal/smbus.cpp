@@ -162,13 +162,26 @@ XBAPI void NTAPI HalEnableSecureTrayEject() {
     }
 }
 
+// Stop bus masters that could write into memory the restarted kernel hands out again.
+extern "C" void KiQuickRebootQuiesce() {
+    outb(0x21, 0xFF); // mask both PICs
+    outb(0xA1, 0xFF);
+    outb(0xFF60, 0);  // IDE bus master off
+    *(volatile ULONG *)0xFED00008 = 1; // OHCI host controller resets (USB 0 and 1)
+    *(volatile ULONG *)0xFED08008 = 1;
+    *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
+    *(volatile ULONG *)0xFEF00084 = 0; // NIC: tx/rx DMA off
+}
+extern "C" void KiQuickReboot() __attribute__((noreturn));
+
 // Routines: 0 halt, 1 reboot, 2 quick reboot, 3 debugger reboot, 4 fatal-error reboot.
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         HalpRunShutdownNotifications();
+    if (Routine == 2)
+        KiQuickReboot();
     if (Routine == 4)
         HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, 2); // the dashboard shows the error on next boot
-    // Quick reboot (re-entering the kernel without the BIOS) is not supported yet: reset instead.
     HalWriteSMBusValue(SMC_ADDRESS, SMC_RESET, FALSE, Routine == 0 ? 0x80 : 0x01);
     for (;;) {
         cli();

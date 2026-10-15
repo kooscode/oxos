@@ -107,6 +107,17 @@ Classic NT x86 self-mapped paging: **page tables at 0xC0000000, page directory a
 - If McpRevision < 0xB4 → Flags |= 0x01 (probably marks early, 1.0-era hardware; meaning not confirmed).
 Titles read `XboxHardwareInfo`, so these bits must match on each console revision.
 
+## 6. Our implementation (milestone 5d-2)
+- Variables that must survive a quick reboot (EEPROM key, HD key, cert key, LaunchDataPage, console region,
+  AV mode state, the quick-reboot flag/count, a copy of the 2BL boot keys) are placed in a `.persist` section
+  (`XK_PERSIST`) after `.data`/`.bss`, so the header-driven re-copy/zero leaves them alone.
+- `src/arch/quick.S` `KiQuickReboot`: interrupts off, switch to a persisted stack, quiesce devices (PICs masked,
+  IDE bus master, OHCI, NV2A interrupts, NIC DMA stopped), re-copy `.data` from flash, zero the rest, set the
+  flag, re-enter `KernelEntry` with the persisted boot-key copy.
+- Quick path: HAL phase 0 skips hardware detection, `MmInitSystem(true)` keeps PTE-array entries that are
+  PRESENT|PERSIST above the image (`MmPersistedPages`) and clears the system-PTE window; self-tests are skipped.
+- Tested by `make test-relaunch` (spec 05 §9).
+
 ## Open questions
 - The pre-reset hook 0x8001eabc; the 0x80CF pulse; the 0x8003B138 skip-pulse bit (spec 03 §boot flags).
 - Meaning of XboxHardwareInfo flags 0x10/0x20/0x40/0x80/0x01 (check against several console revisions).

@@ -167,7 +167,9 @@ static inline void MiReloadCr3() {
     __asm__ volatile("mov %%cr3, %0\n\tmov %0, %%cr3" : "=r"(cr3)::"memory");
 }
 
-void MmInitSystem() {
+volatile ULONG MmPersistedPages; // pages re-adopted by the last quick reboot
+
+void MmInitSystem(bool QuickReboot) {
     // Kernel image extent from our own PE header; .text (first section) becomes read-only.
     auto image = (UCHAR *)0x80010000;
     ULONG lfanew = *(ULONG *)(image + 0x3C);
@@ -180,8 +182,17 @@ void MmInitSystem() {
 
     // 1. Build the PTE array for 0x80000000-0x83FFFFFF (still reachable through the 2BL large pages).
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
-    for (ULONG pfn = 0; pfn < MM_PAGES; pfn++)
-        MiPteArray[pfn] = 0;
+    // A quick reboot re-adopts persisted allocations (PTE bit 10) between the image and the GPU memory.
+    ULONG persisted = 0;
+    for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
+        bool keep = QuickReboot && pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN &&
+                    (MiPteArray[pfn] & (PTE_PRESENT | PTE_PERSIST)) == (PTE_PRESENT | PTE_PERSIST);
+        if (keep)
+            persisted++;
+        else
+            MiPteArray[pfn] = 0;
+    }
+    MmPersistedPages = persisted;
     for (ULONG pfn = 0; pfn < imageEndPfn; pfn++)
         MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
     for (ULONG pfn = 0x10; pfn < textEndPfn; pfn++)
@@ -194,7 +205,8 @@ void MmInitSystem() {
     // 2. Free list: everything between the kernel image and the GPU instance memory.
     MmAvailablePages = 0;
     for (ULONG pfn = imageEndPfn; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++)
-        MiMarkFree(pfn);
+        if (!MiPteArray[pfn])
+            MiMarkFree(pfn);
     MiNextLowPfn = imageEndPfn;
 
     // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above 64 MB, no user
@@ -204,7 +216,9 @@ void MmInitSystem() {
         pd[0x200 + i] = ((MM_PAGE_TABLES_FIRST_PFN + i) << PAGE_SHIFT) | rw;
     for (ULONG i = 0x210; i < 0x240; i++)
         pd[i] = 0;
-    for (ULONG i = 0; i < 0x200; i++)
+    for (ULONG i = 0; i < 0x200; i++) // no title mappings
+        pd[i] = 0;
+    for (ULONG i = 0x340; i < 0x3C0; i++) // system PTE window 0xD0000000-0xEFFFFFFF starts empty
         pd[i] = 0;
     for (ULONG i = 0x3C0; i < 0x3E0; i++) // 0xF0000000-0xF7FFFFFF: write-through large pages
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_LARGE;

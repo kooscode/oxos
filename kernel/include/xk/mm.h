@@ -26,7 +26,7 @@ static inline ULONG *MiGetPdeAddress(ULONG va) { return (ULONG *)(0xC0300000 + (
 static inline void MiInvalidatePage(ULONG va) { __asm__ volatile("invlpg (%0)" ::"r"(va) : "memory"); }
 static inline void MiFlushCaches() { __asm__ volatile("wbinvd" ::: "memory"); }
 
-void MmInitSystem();
+void MmInitSystem(bool QuickReboot = false);
 void MiInitializeVirtualMemory();
 extern ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 bool MiProtectToPte(ULONG protect, ULONG *pteBits);

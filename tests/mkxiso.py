@@ -18,10 +18,13 @@ TREE = {
 }
 
 
-def build(path, default_xbe=None):
+def build(path, default_xbe=None, relaunch=False):
     tree = dict(TREE)
     if default_xbe is not None:
         tree["default.xbe"] = default_xbe
+        tree["media"] = dict(tree["media"], **{"second.xbe": default_xbe})
+    if relaunch:  # the test title relaunches itself as media\\second.xbe
+        tree["relaunch.txt"] = b"quick reboot"
     sectors = {}  # sector -> bytes
     next_sector = [33]
 

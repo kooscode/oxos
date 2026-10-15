@@ -140,9 +140,19 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
   - Retail XOR keys (entry 0xA8FC57AB, thunk 0x5B6D40B6) are tried first, then the debug keys
     (0x94859D4B / 0xEFB1F152); the reference BIOS kernel used for RE carries the debug pair.
   - The console region is all regions until the EEPROM is read.
-  - No logo, SMC tray state, LaunchDataPage paths or quick reboot yet.
+  - No logo or SMC tray state yet (LaunchDataPage launches: §9).
 - Path symbolic links (`\??\D:` → a directory inside a device) reparse the link target plus the rest of the name.
 - **Test title:** `tests/title/title.cpp` → `tools/mkxbe.py` → `default.xbe` on the generated test disc.
+
+## 9. Our implementation (milestone 5d-2): LaunchDataPage launches
+- Title thread: if `LaunchDataPage` is set (only possible after a quick reboot), path A of §2:
+  - Flags bit 0 already set → free the page, fall back to the dashboard (loop guard); otherwise set it.
+  - Type 0xFFFFFFFF → the page is freed before the launch; an empty path → the dashboard.
+  - `dir;name.xbe` → `\??\D:` links to `dir`, the image `dir\name.xbe` is loaded (link removed on failure).
+- With a page present but no usable path the disc is not tried; the dashboard is.
+- **Test:** with `relaunch.txt` on the test disc, the title allocates and persists a page, stores its results
+  in LaunchData, requests `\Device\CdRom0\media;second.xbe` and calls `HalReturnToFirmware(2)`; the second run
+  checks XeImageFileName, the D: link and the page contents, then frees it.
 
 ## Open questions
 - 0x8002ebba (signature), 0x8002ecee (thunk resolve), 0x8002ec30 (media flags), 0x8002ea65/0x8002e9ad
