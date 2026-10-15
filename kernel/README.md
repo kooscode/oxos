@@ -10,6 +10,7 @@ make            # build/xboxkrnl.exe + build/xboxkrnl.map
 make bios       # build/bios.bin: kernel packed into the base BIOS (MCPX 1.0) with its stock 2BL
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
+make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 ```
 Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_ROM`
 (`../xbox-files/mcpx/mcpx_1.0.bin`). The xemu binary is found on PATH or at `~/.local/bin/xemu`.
