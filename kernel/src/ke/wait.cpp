@@ -1,6 +1,7 @@
 // Waits and synchronization objects (spec/07 "Waits", spec/08; NT semantics with the Xbox's
 // in-kernel delivery of user APCs).
 #include <xk/arch.h>
+#include <xk/hal.h>
 #include <xk/ke.h>
 
 #define Prcb (KiPcr.PrcbData)
@@ -151,6 +152,7 @@ static void KiBeginWait(PKTHREAD t) {
             t->WaitIrql = KeRaiseIrqlToDpcLevel();
         if (!t->ApcState.KernelApcPending || t->WaitIrql != PASSIVE_LEVEL)
             break;
+        HalRequestSoftwareInterrupt(APC_LEVEL);  // pending until IRQL drops
         KiUnlockDispatcherDatabase(t->WaitIrql); // delivers the APC
     }
     t->WaitStatus = 0;

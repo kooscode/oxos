@@ -3,6 +3,7 @@
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
+#include <xk/ob.h>
 
 volatile ULONG KiTestDpcCount;        // expect 1
 volatile ULONG KiTestTimerTicks;      // expect ~100/s (10 ms periodic timer)
@@ -354,7 +355,7 @@ volatile ULONG KiTestMmSystemOk;       // system memory in the PTE range, unmapp
 volatile ULONG KiTestMmIoSpaceOk;      // MmMapIoSpace alias + MMIO pass-through
 volatile ULONG KiTestMmPoolOk;         // 500 small blocks + a large block
 volatile ULONG KiTestMmLayoutOk;       // no user mappings, read-only kernel text, stack guard page
-volatile ULONG KiTestMmThreadChurnPages; // pages lost after 50 thread lifetimes (pool growth only)
+volatile ULONG KiTestMmThreadChurnPages; // pages lost after 150 thread lifetimes (one unreaped stack at most)
 volatile ULONG KiTestMmContiguousVa;
 volatile ULONG KiTestMmDone;
 volatile ULONG KiTestVmReserveCommitOk;  // reserve 1 MB, commit 64 KB inside, zeroed + writable, query states
@@ -444,11 +445,14 @@ static void NTAPI MmControllerThread(PVOID) {
     KiTestMmLayoutOk = !MmIsAddressValid((PVOID)0x10000) && MmQueryAddressProtect((PVOID)&KiRunBootSelfTests) == PAGE_READONLY &&
                        !MmIsAddressValid((UCHAR *)self->StackLimit - 1) && MmIsAddressValid(self->StackLimit);
 
-    // Thread churn: stacks come back (thread objects are kept until Ob reference counting exists).
+    // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return.
     ULONG baseline = MmAvailablePages;
-    for (int i = 0; i < 50; i++) {
-        PKTHREAD t = KiCreateSystemThread(ShortThread, nullptr, 0, 8);
-        KeWaitForSingleObject(t, Executive, KernelMode, FALSE, nullptr);
+    for (int i = 0; i < 150; i++) {
+        HANDLE h;
+        if (NT_SUCCESS(PsCreateSystemThread(&h, nullptr, (PVOID)ShortThread, nullptr, FALSE))) {
+            NtWaitForSingleObject(h, FALSE, nullptr);
+            NtClose(h);
+        }
     }
     Sleep(5);
     KiTestMmThreadChurnPages = baseline - MmAvailablePages;
@@ -530,7 +534,169 @@ static void NTAPI MmControllerThread(PVOID) {
     KiTestMmDone = 1;
 }
 
+// ---------------------------------------------------------------- milestone 3a: object manager, Nt objects, Ps
+
+volatile ULONG KiTestObHandlesOk, KiTestObNamedOk, KiTestObNamespaceOk, KiTestObNameErrorsOk;
+volatile ULONG KiTestPsThreadOk, KiTestPsNotifyCount, KiTestNtApcOk, KiTestNtWaitMultipleOk, KiTestObDuplicateOk;
+volatile ULONG KiTestObPoolBalanced, KiTestObDone;
+extern volatile ULONG ExpPoolBlocks;
+
+static OBJECT_ATTRIBUTES ObAttrs(OBJECT_STRING *s, PCSZ text, ULONG attributes = 0, HANDLE root = nullptr) {
+    RtlInitAnsiString(s, text);
+    return OBJECT_ATTRIBUTES{root, s, attributes | OBJ_CASE_INSENSITIVE};
+}
+
+static void NTAPI CountNotify(PVOID, HANDLE, BOOLEAN) { KiTestPsNotifyCount = KiTestPsNotifyCount + 1; }
+
+static volatile ULONG TlsSeenOk, ApcArgsOk;
+static void NTAPI TlsThreadBody(PVOID tlsSize, PVOID) {
+    PKTHREAD t = KeGetCurrentThread();
+    auto tls = (UCHAR *)t->TlsData;
+    bool ok = tls && tls + (ULONG)tlsSize == (UCHAR *)t->StackBase - NPX_FRAME_LENGTH;
+    for (ULONG i = 0; ok && i < (ULONG)tlsSize; i++)
+        ok = tls[i] == 0;
+    TlsSeenOk = ok;
+    PsTerminateSystemThread(0x1234);
+}
+
+static void NTAPI UserApcRoutine(PVOID a, PVOID b, PVOID c) { ApcArgsOk = a == (PVOID)1 && b == (PVOID)2 && c == (PVOID)3; }
+static volatile NTSTATUS AlertableWaitStatus;
+static HANDLE ApcWaitEventHandle;
+static void NTAPI AlertableWaiter(PVOID) {
+    AlertableWaitStatus = NtWaitForSingleObjectEx(ApcWaitEventHandle, UserMode, TRUE, nullptr);
+}
+
+static void NTAPI ObControllerThread(PVOID) {
+    Sleep(50); // let the other suites create their objects first
+    ULONG poolBefore = ExpPoolBlocks;
+
+    // Handles: multiples of 4, LIFO reuse.
+    HANDLE h1, h2, h3;
+    NtCreateEvent(&h1, nullptr, NotificationEvent, FALSE);
+    NtCreateEvent(&h2, nullptr, NotificationEvent, FALSE);
+    NtClose(h1);
+    NtCreateEvent(&h3, nullptr, NotificationEvent, FALSE);
+    KiTestObHandlesOk = ((ULONG)h2 & 3) == 0 && (ULONG)h2 >= 4 && h3 == h1 && NtClose((HANDLE)0x7FFC) == STATUS_INVALID_HANDLE;
+    NtClose(h2);
+    NtClose(h3);
+
+    // Named objects.
+    OBJECT_STRING s1, s2, s3;
+    OBJECT_ATTRIBUTES a = ObAttrs(&s1, "\\Win32NamedObjects\\XkEvent");
+    OBJECT_ATTRIBUTES aOpenIf = ObAttrs(&s2, "\\Win32NamedObjects\\XkEvent", OBJ_OPENIF);
+    OBJECT_ATTRIBUTES aRel = ObAttrs(&s3, "xkevent", 0, ObWin32NamedObjectsDirectory());
+    HANDLE ha, hb, hc, hd;
+    bool ok = NtCreateEvent(&ha, &a, NotificationEvent, FALSE) == 0;
+    ok &= NtCreateEvent(&hb, &aOpenIf, NotificationEvent, FALSE) == STATUS_OBJECT_NAME_EXISTS;
+    ok &= NtCreateEvent(&hc, &a, NotificationEvent, FALSE) == STATUS_OBJECT_NAME_COLLISION;
+    ok &= ObOpenObjectByName(&aRel, &ExEventObjectType, nullptr, &hd) == 0;
+    PVOID oa, ob, od;
+    ObReferenceObjectByHandle(ha, nullptr, &oa);
+    ObReferenceObjectByHandle(hb, nullptr, &ob);
+    ObReferenceObjectByHandle(hd, nullptr, &od);
+    ok &= oa == ob && ob == od;
+    ObfDereferenceObject(oa);
+    ObfDereferenceObject(ob);
+    ObfDereferenceObject(od);
+    NtSetEvent(hb, nullptr);
+    LARGE_INTEGER zero;
+    zero.QuadPart = 0;
+    ok &= NtWaitForSingleObject(ha, FALSE, &zero) == 0;
+    NtClose(ha);
+    NtClose(hb);
+    NtClose(hd);
+    PVOID gone;
+    ok &= ObReferenceObjectByName(&s1, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_NOT_FOUND;
+    KiTestObNamedOk = ok;
+
+    // Directory + symbolic link + queries.
+    OBJECT_STRING ds, es, ls, ts, ps;
+    OBJECT_ATTRIBUTES da = ObAttrs(&ds, "\\XkDir"), ea = ObAttrs(&es, "\\XkDir\\E1");
+    HANDLE hdir = nullptr, he = nullptr;
+    ok = NtCreateDirectoryObject(&hdir, &da) == 0 && NtCreateEvent(&he, &ea, NotificationEvent, FALSE) == 0;
+    RtlInitAnsiString(&ls, "\\??\\Q:");
+    RtlInitAnsiString(&ts, "\\XkDir");
+    ok &= ObpCreateSymbolicLink(&ls, &ts) == 0;
+    PVOID viaLink, direct;
+    RtlInitAnsiString(&ps, "\\??\\Q:\\E1");
+    ok &= ObReferenceObjectByName(&ps, 0, nullptr, nullptr, &viaLink) == 0;
+    ObReferenceObjectByHandle(he, nullptr, &direct);
+    ok &= viaLink == direct;
+    ObfDereferenceObject(viaLink);
+    ObfDereferenceObject(direct);
+    HANDLE hl;
+    OBJECT_ATTRIBUTES la = {nullptr, &ls, OBJ_CASE_INSENSITIVE};
+    char target[32];
+    OBJECT_STRING tgt = {0, sizeof(target), target};
+    ok &= NtOpenSymbolicLinkObject(&hl, &la) == 0 && NtQuerySymbolicLinkObject(hl, &tgt, nullptr) == 0 &&
+          RtlEqualString(&tgt, &ts, TRUE);
+    NtClose(hl);
+    ULONG ctx = 0, ret;
+    UCHAR buf[64];
+    ok &= NtQueryDirectoryObject(hdir, buf, sizeof(buf), TRUE, &ctx, &ret) == 0;
+    OBJECT_STRING e1;
+    RtlInitAnsiString(&e1, "E1");
+    ok &= RtlEqualString(&((POBJECT_DIRECTORY_INFORMATION)buf)->Name, &e1, TRUE);
+    ok &= NtQueryDirectoryObject(hdir, buf, sizeof(buf), FALSE, &ctx, &ret) == STATUS_NO_MORE_ENTRIES;
+    KiTestObNamespaceOk = ok;
+    NtClose(he);
+
+    // Name errors.
+    OBJECT_STRING n1, n2, n3;
+    RtlInitAnsiString(&n1, "\\XkDir\\Missing\\X");
+    RtlInitAnsiString(&n2, "\\XkDir\\Missing");
+    RtlInitAnsiString(&n3, "relative");
+    KiTestObNameErrorsOk = ObReferenceObjectByName(&n1, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_PATH_NOT_FOUND &&
+                           ObReferenceObjectByName(&n2, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_NOT_FOUND &&
+                           ObReferenceObjectByName(&n3, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_INVALID;
+    NtClose(hdir);
+
+    // Ps: TLS, extension, ids, notify routines, exit status.
+    PsSetCreateThreadNotifyRoutine(CountNotify);
+    HANDLE ht, tid;
+    ok = PsCreateSystemThreadEx(&ht, 32, 0x4000, 64, &tid, (PVOID)64, nullptr, FALSE, FALSE,
+                                (PKSYSTEM_ROUTINE)TlsThreadBody) == 0;
+    ok &= NtWaitForSingleObject(ht, FALSE, nullptr) == 0;
+    PVOID to;
+    ObReferenceObjectByHandle(ht, &PsThreadObjectType, &to);
+    ok &= *(NTSTATUS *)((UCHAR *)to + 0x120) == 0x1234 && ((ULONG)tid & 3) == 0 && TlsSeenOk;
+    ObfDereferenceObject(to);
+    NtClose(ht);
+    KiTestPsThreadOk = ok;
+
+    // NtQueueApcThread into an alertable user-mode wait.
+    NtCreateEvent(&ApcWaitEventHandle, nullptr, NotificationEvent, FALSE);
+    HANDLE hw;
+    PsCreateSystemThread(&hw, nullptr, (PVOID)AlertableWaiter, nullptr, FALSE);
+    Sleep(10);
+    NtQueueApcThread(hw, UserApcRoutine, (PVOID)1, (PVOID)2, (PVOID)3);
+    NtWaitForSingleObject(hw, FALSE, nullptr);
+    KiTestNtApcOk = AlertableWaitStatus == STATUS_USER_APC && ApcArgsOk;
+    NtClose(hw);
+
+    // WaitAny over handles: unsignalled event + semaphore with count 1 -> index 1.
+    HANDLE hs, waitHandles[2];
+    NtCreateSemaphore(&hs, nullptr, 1, 1);
+    waitHandles[0] = ApcWaitEventHandle;
+    waitHandles[1] = hs;
+    KiTestNtWaitMultipleOk = NtWaitForMultipleObjectsEx(2, waitHandles, WaitAny, KernelMode, FALSE, nullptr) == 1;
+
+    // Duplicate keeps the object alive after the source closes.
+    HANDLE hdup;
+    ok = NtDuplicateObject(hs, &hdup, 1 /*DUPLICATE_CLOSE_SOURCE*/) == 0 && NtClose(hs) == STATUS_INVALID_HANDLE;
+    ok &= NtReleaseSemaphore(hdup, 1, nullptr) == 0 && NtWaitForSingleObject(hdup, FALSE, &zero) == 0;
+    KiTestObDuplicateOk = ok;
+    NtClose(hdup);
+    NtClose(ApcWaitEventHandle);
+
+    // Everything created above was released (the Q: link and its directory are permanent).
+    Sleep(5);
+    KiTestObPoolBalanced = ExpPoolBlocks <= poolBefore + 6;
+    KiTestObDone = 1;
+}
+
 static void KiStartThreadSelfTests() {
+    KiCreateSystemThread(ObControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
     KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
     KeInitializeEvent(&PingEventA, SynchronizationEvent, TRUE);

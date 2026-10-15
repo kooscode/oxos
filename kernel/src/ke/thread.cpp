@@ -3,6 +3,7 @@
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
+#include <xk/ob.h>
 #include <xk/rtl.h>
 
 #define Prcb (KiPcr.PrcbData)
@@ -95,40 +96,8 @@ void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSiz
 
 XBAPI PKTHREAD NTAPI KeGetCurrentThread() { return Prcb.CurrentThread; }
 
-// --- Internal system threads (PsCreateSystemThreadEx wraps this once handles exist).
-
-static void NTAPI KiSystemThreadRoutine(PVOID startRoutine, PVOID startContext) {
-    ((void(NTAPI *)(PVOID))startRoutine)(startContext);
-    KeTerminateThread();
-}
-
-PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority) {
-    StackSize = (StackSize + 0xFFF) & ~0xFFFu;
-    if (StackSize < 0x3000)
-        StackSize = 0x3000;
-    auto thread = (PKTHREAD)ExAllocatePoolWithTag(0x140, 'erhT'); // ETHREAD-sized
-    auto stackTop = (UCHAR *)MmCreateKernelStack(StackSize, FALSE);
-    if (!thread || !stackTop) {
-        if (thread)
-            ExFreePool(thread);
-        if (stackTop)
-            MmDeleteKernelStack(stackTop, stackTop - StackSize);
-        return nullptr;
-    }
-    RtlZeroMemory(thread, 0x140);
-    KeInitializeThread(thread, stackTop, StackSize, 0, KiSystemThreadRoutine, (PVOID)StartRoutine, Context,
-                       &KiSystemProcess);
-    if (Priority >= 0)
-        thread->Priority = thread->BasePriority = (SCHAR)Priority;
-
-    KIRQL old = KeRaiseIrqlToDpcLevel();
-    KiReadyThread(thread);
-    KiUnlockDispatcherDatabase(old);
-    return thread;
-}
-
-// Dead threads keep their object (joiners may still look at it; freed with Ob reference counting in
-// milestone 3) but their stacks are released by the next thread to run.
+// Terminated threads: the next thread to run frees the stack and drops the thread object's
+// "running" reference (spec/10 §6); the object lives on while handles or references remain.
 static LIST_ENTRY KiDeadThreadListHead = {&KiDeadThreadListHead, &KiDeadThreadListHead};
 
 void KiReapDeadThreads() {
@@ -136,6 +105,8 @@ void KiReapDeadThreads() {
         PKTHREAD t = CONTAINING_RECORD(RemoveHeadList(&KiDeadThreadListHead), KTHREAD, ThreadListEntry);
         MmDeleteKernelStack(t->StackBase, t->StackLimit);
         t->StackBase = t->StackLimit = t->KernelStack = nullptr;
+        if (t != &KiIdleThread)
+            ObfDereferenceObject(t);
     }
 }
 
