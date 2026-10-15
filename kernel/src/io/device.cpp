@@ -235,3 +235,33 @@ XBAPI void NTAPI IoRemoveShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS Shar
     s->SharedWrite -= f->SharedWrite;
     s->SharedDelete -= f->SharedDelete;
 }
+
+// Dismount the file system mounted on DeviceObject (spec/11 §2): the volume driver detaches it; the volume device
+// is released when its last reference goes.
+XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    PDEVICE_OBJECT vol = DeviceObject->MountedOrSelfDevice;
+    NTSTATUS status = STATUS_SUCCESS;
+    if (!vol)
+        status = (NTSTATUS)0xC000026E; // STATUS_VOLUME_DISMOUNTED
+    else if (!vol->DriverObject->DriverDismountVolume)
+        status = STATUS_INVALID_DEVICE_REQUEST, vol = nullptr;
+    else
+        vol->ReferenceCount++;
+    KfLowerIrql(old);
+    if (vol) {
+        status = vol->DriverObject->DriverDismountVolume(vol);
+        IopDereferenceDevice(vol);
+    }
+    return status;
+}
+
+XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName) {
+    PVOID dev;
+    NTSTATUS status = ObReferenceObjectByName(DeviceName, 0, &IoDeviceObjectType, nullptr, &dev);
+    if (NT_SUCCESS(status)) {
+        status = IoDismountVolume((PDEVICE_OBJECT)dev);
+        ObfDereferenceObject(dev);
+    }
+    return status;
+}

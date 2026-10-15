@@ -487,10 +487,26 @@ static NTSTATUS NTAPI XdvdfsFsdPassDown(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 static NTSTATUS NTAPI XdvdfsFsdSuccess(PDEVICE_OBJECT, PIRP Irp) { return XdvdfsComplete(Irp, STATUS_SUCCESS); }
 
+static NTSTATUS NTAPI XdvdfsDismountVolume(PDEVICE_OBJECT DeviceObject) {
+    XDVDFS_VOLUME *v = XdvdfsVolume(DeviceObject);
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (v->TargetDevice->MountedOrSelfDevice == DeviceObject)
+        v->TargetDevice->MountedOrSelfDevice = nullptr;
+    KfLowerIrql(old);
+    IoDeleteDevice(DeviceObject);
+    return STATUS_SUCCESS;
+}
+
+static void NTAPI XdvdfsDeleteVolume(PDEVICE_OBJECT DeviceObject) {
+    XDVDFS_VOLUME *v = XdvdfsVolume(DeviceObject);
+    ExFreePool(v->Bounce);
+    ObfDereferenceObject(v->TargetDevice);
+}
+
 DRIVER_OBJECT XdvdfsDriverObject = {
     nullptr,
-    nullptr,
-    nullptr,
+    XdvdfsDeleteVolume,
+    XdvdfsDismountVolume,
     {XdvdfsFsdCreate, XdvdfsFsdClose, XdvdfsFsdRead, IoInvalidDeviceRequest, XdvdfsFsdQueryInformation,
      XdvdfsFsdSetInformation, XdvdfsFsdSuccess, XdvdfsFsdQueryVolume, XdvdfsFsdDirectoryControl,
      IoInvalidDeviceRequest, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};

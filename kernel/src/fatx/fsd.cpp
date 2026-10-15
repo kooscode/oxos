@@ -857,10 +857,30 @@ static NTSTATUS NTAPI FatxFsdFileSystemControl(PDEVICE_OBJECT, PIRP Irp) {
     return FatxComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
 }
 
+// Dismount: new opens remount; the volume device goes away with its last file object.
+static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject) {
+    FATX_VOLUME *v = FatxVolume(DeviceObject);
+    FatxAcquireVolume(v);
+    v->Dismounted = TRUE;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (v->TargetDevice->MountedOrSelfDevice == DeviceObject)
+        v->TargetDevice->MountedOrSelfDevice = nullptr;
+    KfLowerIrql(old);
+    FatxReleaseVolume(v);
+    IoDeleteDevice(DeviceObject);
+    return STATUS_SUCCESS;
+}
+
+static void NTAPI FatxDeleteVolume(PDEVICE_OBJECT DeviceObject) {
+    FATX_VOLUME *v = FatxVolume(DeviceObject);
+    ExFreePool(v->Cache[0].Data);
+    ObfDereferenceObject(v->TargetDevice);
+}
+
 DRIVER_OBJECT FatxDriverObject = {
     nullptr,
-    nullptr,
-    nullptr,
+    FatxDeleteVolume,
+    FatxDismountVolume,
     {FatxFsdCreate, FatxFsdClose, FatxFsdReadWrite, FatxFsdReadWrite, FatxFsdQueryInformation, FatxFsdSetInformation,
      FatxFsdFlushOrDeviceControl, FatxFsdQueryVolumeInformation, FatxFsdDirectoryControl, FatxFsdFileSystemControl,
      FatxFsdFlushOrDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest, FatxFsdCleanup}};
