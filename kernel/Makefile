@@ -68,7 +68,7 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
 test: $(BUILD)/bios.bin $(BUILD)/title.xbe
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
 	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map
-	$(MAKE) test-dash test-relaunch test-fatal
+	$(MAKE) test-dash test-relaunch test-fatal test-udf
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
 test-dash: $(BUILD)/title.xbe
@@ -90,7 +90,12 @@ test-fatal:
 	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
 	    --map build-release/xboxkrnl.map --no-disc --fatal --boot-wait 2
 
+# UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
+test-udf: $(BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map \
+	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
+
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch test-fatal clean
+.PHONY: all bios test test-dash test-relaunch test-fatal test-udf clean

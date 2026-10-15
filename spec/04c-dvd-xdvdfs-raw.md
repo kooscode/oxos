@@ -38,7 +38,7 @@ CD-ROM driver object at 0x800123d8, its READ dispatch (0x80025d9a) and the DEVIC
     choice for OPEN_IF of a missing name too)
   - a missing name → NAME_NOT_FOUND; a missing directory on the path → PATH_NOT_FOUND
 - Files are contiguous from their start sector. Enumeration is in tree order. Every time is the volume time.
-- Mounting: CD_ROM devices try XDVDFS (the reference then tries a second file system — UDF — which is not done yet).
+- Mounting: CD_ROM devices try XDVDFS (the reference tries **UDF first**, then XDVDFS — spec 04d).
 
 ## 3. RAW file system
 - Mounted when a whole device is opened and no file system recognises it: always for the RAW_MOUNT_ONLY whole disk

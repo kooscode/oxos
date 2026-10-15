@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2  # noqa: E402
 from fatx import Fatx  # noqa: E402
 import mkxiso  # noqa: E402
+import mkudf  # noqa: E402
 
 
 def map_symbols(path):
@@ -453,6 +454,28 @@ def fatal_checks(mon):
     }}, code
 
 
+def udf_checks(mon):
+    for _ in range(160):
+        if mon.read("KiTestDvdDone"):
+            break
+        time.sleep(0.25)
+    vob, ifo = mkudf.TREE["VIDEO_TS"]["VTS_01_1.VOB"], mkudf.TREE["VIDEO_TS"]["VIDEO_TS.IFO"]
+    names = "".join(mkudf.plain(n) + "|" for n in mkudf.TREE)
+    print(f"  (UDF mount: stage {mon.read('UdfMountStage')}, status {mon.read('UdfMountStatus'):#x}; "
+          f"names {read_string(mon, 'KiTestUdfDirNames', 64)!r})")
+    return {"M8": {
+        "UDF mounted on \\Device\\CdRom0 (volume attributes, offset read)": mon.read("KiTestUdfVolumeOk") == 1,
+        "UDF: 300 KB file in two long_ad extents": mon.read("KiTestUdfVobLength") == len(vob)
+            and mon.read("KiTestUdfVobSum") == mkxiso.checksum(vob),
+        "UDF: short_ad file, case-insensitive path": mon.read("KiTestUdfIfoSum") == mkxiso.checksum(ifo),
+        "UDF: data embedded in the File Entry": mon.read("KiTestUdfSmallOk") == 1,
+        "UDF: 16-bit OSTA CS0 file name": mon.read("KiTestUdfWideOk") == 1,
+        "UDF: root enumeration in on-disc order": mon.read("KiTestUdfDirOk") == 1
+            and read_string(mon, "KiTestUdfDirNames", 64) == names,
+        "UDF: read-only media and lookup errors": mon.read("KiTestUdfErrorsOk") == 1,
+    }}
+
+
 def launch_reason_checks(mon):
     reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
     page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
@@ -484,6 +507,7 @@ def main():
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
     ap.add_argument("--no-disc", action="store_true")
+    ap.add_argument("--udf", action="store_true", help="attach a UDF test disc (tests/mkudf.py) and check UDF")
     ap.add_argument("--fatal", action="store_true", help="boot without a hard disk: check the fatal-error report")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
@@ -498,7 +522,10 @@ def main():
     hdd_copy = os.path.join(work, "hdd.qcow2")
     dvd = os.path.join(work, "test.iso")
     if not a.no_disc:
-        mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
+        if a.udf:
+            mkudf.build(dvd)
+        else:
+            mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
@@ -519,7 +546,9 @@ def main():
             time.sleep(0.1)
         time.sleep(a.boot_wait)
         mon = Monitor(sock, map_symbols(a.map))
-        if a.fatal:
+        if a.udf:
+            results = udf_checks(mon)
+        elif a.fatal:
             results, fatal_code = fatal_checks(mon)
         elif a.dash:
             results = dash_checks(mon)
@@ -545,7 +574,7 @@ def main():
         passed = fatal_code > 4 and bool(history & (1 << (fatal_code - 5)))
         print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
         ok &= passed
-    if ok and a.hdd and not a.dash and not a.relaunch:
+    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf:
         for name, passed in disk_checks(hdd_copy).items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed

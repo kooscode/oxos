@@ -19,6 +19,77 @@ static NTSTATUS DvdOpen(HANDLE *h, PCSZ path, ACCESS_MASK access = GENERIC_READ,
                         options | FILE_SYNCHRONOUS_IO_NONALERT);
 }
 
+// UDF disc (milestone 8, boot_test.py --udf with tests/mkudf.py): fragmented, embedded and 16-bit-name files.
+volatile ULONG KiTestUdfVolumeOk, KiTestUdfVobSum, KiTestUdfVobLength, KiTestUdfIfoSum, KiTestUdfSmallOk,
+    KiTestUdfWideOk, KiTestUdfDirOk, KiTestUdfErrorsOk;
+volatile char KiTestUdfDirNames[64];
+
+static ULONG DvdReadAll(PCSZ path, PUCHAR buf, ULONG size, ULONG *got) {
+    HANDLE h;
+    IO_STATUS_BLOCK iosb;
+    *got = 0;
+    if (!NT_SUCCESS(DvdOpen(&h, path)))
+        return 0;
+    ULONG sum = 0;
+    if (NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf, size, nullptr) == 0) {
+        *got = iosb.Information;
+        for (ULONG i = 0; i < *got; i++)
+            sum = sum * 31 + buf[i];
+    }
+    NtClose(h);
+    return sum;
+}
+
+static void UdfSuite(PUCHAR buf) {
+    ULONG got;
+    KiTestUdfVobSum = DvdReadAll("\\Device\\CdRom0\\VIDEO_TS\\VTS_01_1.VOB", buf, 0x50000, &got);
+    KiTestUdfVobLength = got;
+    KiTestUdfIfoSum = DvdReadAll("\\Device\\CdRom0\\video_ts\\video_ts.ifo", buf, 0x50000, &got);
+    DvdReadAll("\\??\\CdRom0:\\VIDEO_TS\\small.txt", buf, 100, &got);
+    KiTestUdfSmallOk = got == 9 && RtlCompareMemory(buf, "hello udf", 9) == 9;
+    DvdReadAll("\\Device\\CdRom0\\wide", buf, 100, &got);
+    KiTestUdfWideOk = got == 16 && RtlCompareMemory(buf, "sixteen-bit name", 16) == 16;
+    // Volume attributes and a read at an offset.
+    HANDLE h;
+    IO_STATUS_BLOCK iosb;
+    bool ok = DvdOpen(&h, "\\Device\\CdRom0\\readme.txt") == 0;
+    if (ok) {
+        UCHAR attr[32];
+        ok &= NtQueryVolumeInformationFile(h, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
+              *(PULONG)(attr + 8) == 3 && RtlCompareMemory(attr + 12, "UDF", 3) == 3;
+        LARGE_INTEGER off;
+        off.QuadPart = 4;
+        ok &= NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 9 &&
+              buf[0] == 'r' && buf[8] == 'e';
+        NtClose(h);
+    }
+    KiTestUdfVolumeOk = ok;
+    // Root enumeration in on-disc order.
+    HANDLE hd;
+    if (DvdOpen(&hd, "\\Device\\CdRom0\\", FILE_READ_DATA, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
+        UCHAR e[0x40 + 64];
+        ULONG n = 0;
+        BOOLEAN restart = TRUE;
+        while (NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, e, sizeof(e), FileDirectoryInformation,
+                                    nullptr, restart) == 0) {
+            restart = FALSE;
+            for (ULONG i = 0; i < *(PULONG)(e + 0x3C) && n < 62; i++)
+                KiTestUdfDirNames[n++] = e[0x40 + i];
+            KiTestUdfDirNames[n++] = '|';
+        }
+        KiTestUdfDirOk = n > 0;
+        NtClose(hd);
+    }
+    HANDLE hx;
+    ok = DvdOpen(&hx, "\\Device\\CdRom0\\nofile") == STATUS_OBJECT_NAME_NOT_FOUND;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\nodir\\x") == STATUS_OBJECT_PATH_NOT_FOUND;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\readme.txt", GENERIC_WRITE) == (NTSTATUS)0xC00000A2;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\VIDEO_TS", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) ==
+          (NTSTATUS)0xC00000BA;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\readme.txt\\", GENERIC_READ) == (NTSTATUS)0xC0000103;
+    KiTestUdfErrorsOk = ok;
+}
+
 static void NTAPI DvdControllerThread(PVOID) {
     while (!KiTestFatxDone) {
         LARGE_INTEGER t;
@@ -38,6 +109,21 @@ static void NTAPI DvdControllerThread(PVOID) {
 
     // A 300 KB file: three DMA chunks of 128 KB and a partial last sector.
     auto buf = (PUCHAR)ExAllocatePoolWithTag(0x50000, 'tsvD');
+    {
+        HANDLE hr;
+        UCHAR attr[32];
+        if (buf && DvdOpen(&hr, "\\Device\\CdRom0\\", FILE_READ_DATA, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
+            bool udf = NtQueryVolumeInformationFile(hr, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
+                       RtlCompareMemory(attr + 12, "UDF", 3) == 3;
+            NtClose(hr);
+            if (udf) {
+                UdfSuite(buf);
+                ExFreePool(buf);
+                KiTestDvdDone = 1;
+                return;
+            }
+        }
+    }
     HANDLE h;
     KiTestDvdStatus[0] = DvdOpen(&h, "\\??\\CdRom0:\\media\\big.bin");
     if (buf && NT_SUCCESS(KiTestDvdStatus[0])) {
