@@ -1,12 +1,13 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
 #   make            -> build/xboxkrnl.exe (+ map)
 #   make bios       -> build/bios.bin (kernel packed into BIOS_BASE with the stock 2BL)
-#   make test-m1    -> boot build/bios.bin in xemu and check the milestone-1 conditions
+#   make test       -> boot build/bios.bin in xemu and check all milestone conditions (boot self-tests)
 
 ROOT      := ..
 BUILD     := build
 BIOS_BASE ?= $(ROOT)/xbox-files/bios/Complex_4627.bin
 MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
+SELFTEST  ?= 1
 
 CXX := clang++
 CC  := clang
@@ -16,7 +17,7 @@ TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -nostdlib -O2 -g0 \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST)
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
@@ -49,10 +50,10 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
 	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe
 
-test-m1: $(BUILD)/bios.bin
-	python3 -I $(ROOT)/tests/m1_boot.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map
+test: $(BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all bios test-m1 clean
+.PHONY: all bios test clean

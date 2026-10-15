@@ -59,54 +59,40 @@ KiTrapCommon:
     hlt
     jmp 1b
 
-// --- Hardware interrupts.
+// --- Hardware interrupts: push the IRQ number and dispatch in C (KiDispatchHardwareInterrupt).
+.macro IRQ n
     .p2align 2
-    .globl _KiClockIsr
-_KiClockIsr:                        // IRQ0, vector 0x30
+_KiIrq\n:
+    pushl $\n
+    jmp KiIrqCommon
+.endm
+
+IRQ 0
+IRQ 1
+IRQ 2
+IRQ 3
+IRQ 4
+IRQ 5
+IRQ 6
+IRQ 7
+IRQ 8
+IRQ 9
+IRQ 10
+IRQ 11
+IRQ 12
+IRQ 13
+IRQ 14
+IRQ 15
+
+KiIrqCommon:
     pushal
     cld
-    call _KiClockInterrupt
-    movb $0x20, %al
-    outb %al, $0x20
+    pushl 32(%esp)                  // IRQ number pushed by the stub
+    call _KiDispatchHardwareInterrupt
+    addl $4, %esp
     popal
+    addl $4, %esp
     iretl
-
-.macro IRQ_SPURIOUS_MASTER irq
-    .p2align 2
-_KiIrq\irq:
-    pushl %eax
-    movb $0x20, %al
-    outb %al, $0x20
-    popl %eax
-    iretl
-.endm
-
-.macro IRQ_SPURIOUS_SLAVE irq
-    .p2align 2
-_KiIrq\irq:
-    pushl %eax
-    movb $0x20, %al
-    outb %al, $0xA0
-    outb %al, $0x20
-    popl %eax
-    iretl
-.endm
-
-IRQ_SPURIOUS_MASTER 1
-IRQ_SPURIOUS_MASTER 2
-IRQ_SPURIOUS_MASTER 3
-IRQ_SPURIOUS_MASTER 4
-IRQ_SPURIOUS_MASTER 5
-IRQ_SPURIOUS_MASTER 6
-IRQ_SPURIOUS_MASTER 7
-IRQ_SPURIOUS_SLAVE 8
-IRQ_SPURIOUS_SLAVE 9
-IRQ_SPURIOUS_SLAVE 10
-IRQ_SPURIOUS_SLAVE 11
-IRQ_SPURIOUS_SLAVE 12
-IRQ_SPURIOUS_SLAVE 13
-IRQ_SPURIOUS_SLAVE 14
-IRQ_SPURIOUS_SLAVE 15
 
     .p2align 2
     .globl _KiIgnoreInterrupt
@@ -125,5 +111,5 @@ _KiTrapStubs:
 
     .globl _KiIrqStubs
 _KiIrqStubs:
-    .long _KiClockIsr, _KiIrq1, _KiIrq2, _KiIrq3, _KiIrq4, _KiIrq5, _KiIrq6, _KiIrq7
+    .long _KiIrq0, _KiIrq1, _KiIrq2, _KiIrq3, _KiIrq4, _KiIrq5, _KiIrq6, _KiIrq7
     .long _KiIrq8, _KiIrq9, _KiIrq10, _KiIrq11, _KiIrq12, _KiIrq13, _KiIrq14, _KiIrq15

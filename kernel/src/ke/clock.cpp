@@ -26,10 +26,12 @@ static LONGLONG ReadSystemTime(const volatile KSYSTEM_TIME &t) {
     }
 }
 
-extern "C" void KiClockInterrupt() {
+// IRQ0 at CLOCK_LEVEL (see KiDispatchHardwareInterrupt).
+void KiClockInterrupt() {
     AdvanceSystemTime(KeInterruptTime, CLOCK_INCREMENT);
     AdvanceSystemTime(KeSystemTime, CLOCK_INCREMENT);
     KeTickCount = KeTickCount + 1;
+    KiCheckTimers();
 }
 
 XBAPI ULONGLONG NTAPI KeQueryInterruptTime() { return ReadSystemTime(KeInterruptTime); }
