@@ -1,5 +1,6 @@
 # Copyrighted inputs: never commit (BIOS/MCPX dumps, HDD images, Microsoft kernel binaries)
 xbox-files/
+xiso/
 xboxkrnl.exe
 *.bin
 *.qcow2
