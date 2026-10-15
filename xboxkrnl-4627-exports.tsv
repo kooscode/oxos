@@ -1,0 +1,367 @@
+ordinal	name	convention	arg_bytes	kind	address	section
+1	AvGetSavedDataAddress	stdcall	0	func	0x8002fd09	.text
+2	AvSendTVEncoderOption	stdcall	16	func	0x8002ffde	.text
+3	AvSetDisplayMode	stdcall	24	func	0x8003045c	.text
+4	AvSetSavedDataAddress	stdcall	4	func	0x8002fd0f	.text
+5	DbgBreakPoint	stdcall	0	func	0x80021ce8	.text
+6	DbgBreakPointWithStatus	stdcall	4	func	0x80021cec	.text
+7	DbgLoadImageSymbols	stdcall	12	ABSENT	-	none
+8	DbgPrint	cdecl/data		func	0x80021cf4	.text
+9	HalReadSMCTrayState	stdcall	8	func	0x80014d86	.text
+10	DbgPrompt	stdcall	12	func	0x80021d4e	.text
+11	DbgUnLoadImageSymbols	stdcall	12	ABSENT	-	none
+12	ExAcquireReadWriteLockExclusive	stdcall	4	func	0x80012d18	.text
+13	ExAcquireReadWriteLockShared	stdcall	4	func	0x80012d3c	.text
+14	ExAllocatePool	stdcall	4	func	0x80013144	.text
+15	ExAllocatePoolWithTag	stdcall	8	func	0x80012e11	.text
+16	ExEventObjectType			data	0x800108cc	.text
+17	ExFreePool	stdcall	4	func	0x80012fc8	.text
+18	ExInitializeReadWriteLock	stdcall	4	func	0x800132b3	.text
+19	ExInterlockedAddLargeInteger	stdcall	16	func	0x800132ec	.text
+20	ExInterlockedAddLargeStatistic	fastcall	8	func	0x80012c10	.text
+21	ExInterlockedCompareExchange64	fastcall	12	func	0x80012cf4	.text
+22	ExMutantObjectType			data	0x800108e8	.text
+23	ExQueryPoolBlockSize	stdcall	4	func	0x80013125	.text
+24	ExQueryNonVolatileSetting	stdcall	20	func	0x800135c3	.text
+25	ExReadWriteRefurbInfo	stdcall	12	func	0x80013927	.text
+26	ExRaiseException	stdcall	4	func	0x80013a30	.text
+27	ExRaiseStatus	stdcall	4	func	0x80013ac8	.text
+28	ExReleaseReadWriteLock	stdcall	4	func	0x80012d6c	.text
+29	ExSaveNonVolatileSetting	stdcall	16	func	0x80013750	.text
+30	ExSemaphoreObjectType			data	0x800109a0	.text
+31	ExTimerObjectType			data	0x800109cc	.text
+32	ExfInterlockedInsertHeadList	fastcall	8	func	0x80012c18	.text
+33	ExfInterlockedInsertTailList	fastcall	8	func	0x80012c30	.text
+34	ExfInterlockedRemoveHeadList	fastcall	4	func	0x80012c48	.text
+35	FscGetCacheSize	stdcall	0	func	0x8001ceca	.text
+36	FscInvalidateIdleBlocks	stdcall	0	func	0x8001d09e	.text
+37	FscSetCacheSize	stdcall	4	func	0x8001d2b2	.text
+38	HalClearSoftwareInterrupt	fastcall	4	func	0x8001415c	.text
+39	HalDisableSystemInterrupt	stdcall	4	func	0x80014fb8	.text
+40	HalDiskCachePartitionCount			data	0x80012340	.text
+41	HalDiskModelNumber			data	0x8003b300	STICKY
+42	HalDiskSerialNumber			data	0x8003b2e0	STICKY
+43	HalEnableSystemInterrupt	stdcall	8	func	0x80014fe4	.text
+44	HalGetInterruptVector	stdcall	8	func	0x80015044	.text
+45	HalReadSMBusValue	stdcall	16	func	0x80014645	.text
+46	HalReadWritePCISpace	stdcall	24	func	0x80015178	.text
+47	HalRegisterShutdownNotification	stdcall	8	func	0x800151f1	.text
+48	HalRequestSoftwareInterrupt	fastcall	4	func	0x80014128	.text
+49	HalReturnToFirmware	stdcall	4	func	0x80015299	.text
+50	HalWriteSMBusValue	stdcall	16	func	0x80014723	.text
+51	InterlockedCompareExchange	fastcall	12	func	0x80012ce8	.text
+52	InterlockedDecrement	fastcall	4	func	0x80012cdc	.text
+53	InterlockedIncrement	fastcall	4	func	0x80012cd0	.text
+54	InterlockedExchange	fastcall	8	func	0x80012cc8	.text
+55	InterlockedExchangeAdd	fastcall	8	func	0x80012d10	.text
+56	InterlockedFlushSList	fastcall	4	func	0x80012ca4	.text
+57	InterlockedPopEntrySList	fastcall	4	func	0x80012c60	.text
+58	InterlockedPushEntrySList	fastcall	8	func	0x80012c84	.text
+59	IoAllocateIrp	stdcall	4	func	0x800158e7	.text
+60	IoBuildAsynchronousFsdRequest	stdcall	24	func	0x8001630d	.text
+61	IoBuildDeviceIoControlRequest	stdcall	36	func	0x8001637e	.text
+62	IoBuildSynchronousFsdRequest	stdcall	28	func	0x80016426	.text
+63	IoCheckShareAccess	stdcall	20	func	0x800159f7	.text
+64	IoCompletionObjectType			data	0x80010a28	.text
+65	IoCreateDevice	stdcall	24	func	0x80015b24	.text
+66	IoCreateFile	stdcall	40	func	0x80015c94	.text
+67	IoCreateSymbolicLink	stdcall	8	func	0x80015e2e	.text
+68	IoDeleteDevice	stdcall	4	func	0x80015e6b	.text
+69	IoDeleteSymbolicLink	stdcall	4	func	0x80015ea7	.text
+70	IoDeviceObjectType			data	0x80010a44	.text
+71	IoFileObjectType			data	0x80010a60	.text
+72	IoFreeIrp	stdcall	4	func	0x80015f78	.text
+73	IoInitializeIrp	stdcall	12	func	0x80015fa0	.text
+74	IoInvalidDeviceRequest	stdcall	8	func	0x80016667	.text
+75	IoQueryFileInformation	stdcall	20	func	0x80016036	.text
+76	IoQueryVolumeInformation	stdcall	20	func	0x80016053	.text
+77	IoQueueThreadIrp	stdcall	4	func	0x80016070	.text
+78	IoRemoveShareAccess	stdcall	8	func	0x800160a3	.text
+79	IoSetIoCompletion	stdcall	20	func	0x8001688e	.text
+80	IoSetShareAccess	stdcall	16	func	0x800160ec	.text
+81	IoStartNextPacket	stdcall	4	func	0x80016246	.text
+82	IoStartNextPacketByKey	stdcall	8	func	0x80016271	.text
+83	IoStartPacket	stdcall	12	func	0x800162a5	.text
+84	IoSynchronousDeviceIoControlRequest	stdcall	32	func	0x80016681	.text
+85	IoSynchronousFsdRequest	stdcall	20	func	0x800166ff	.text
+86	IofCallDriver	fastcall	8	func	0x80015959	.text
+87	IofCompleteRequest	fastcall	8	func	0x8001647e	.text
+88	KdDebuggerEnabled			data	0x8003b15c	STICKY
+89	KdDebuggerNotPresent			data	0x80035a84	.data
+90	IoDismountVolume	stdcall	4	func	0x80015eef	.text
+91	IoDismountVolumeByName	stdcall	4	func	0x80015f40	.text
+92	KeAlertResumeThread	stdcall	4	func	0x80018f95	.text
+93	KeAlertThread	stdcall	8	func	0x80018f44	.text
+94	KeBoostPriorityThread	stdcall	8	func	0x80018ffc	.text
+95	KeBugCheck	stdcall	4	func	0x800194b0	.text
+96	KeBugCheckEx	stdcall	20	func	0x80019442	.text
+97	KeCancelTimer	stdcall	4	func	0x800194ed	.text
+98	KeConnectInterrupt	stdcall	4	func	0x8001965d	.text
+99	KeDelayExecutionThread	stdcall	12	func	0x8001980a	.text
+100	KeDisconnectInterrupt	stdcall	4	func	0x800196dd	.text
+101	KeEnterCriticalRegion	stdcall	0	func	0x8001a0e3	.text
+102	MmGlobalData			data	0x80010d04	.text
+103	KeGetCurrentIrql	stdcall	0	func	0x800145a4	.text
+104	KeGetCurrentThread	stdcall	0	func	0x8001a120	.text
+105	KeInitializeApc	stdcall	28	func	0x8001a12e	.text
+106	KeInitializeDeviceQueue	stdcall	4	func	0x8001a24f	.text
+107	KeInitializeDpc	stdcall	12	func	0x8001a384	.text
+108	KeInitializeEvent	stdcall	12	func	0x8001a43b	.text
+109	KeInitializeInterrupt	stdcall	28	func	0x800195f0	.text
+110	KeInitializeMutant	stdcall	8	func	0x8001a58f	.text
+111	KeInitializeQueue	stdcall	8	func	0x8001a691	.text
+112	KeInitializeSemaphore	stdcall	12	func	0x8001aa14	.text
+113	KeInitializeTimerEx	stdcall	8	func	0x800194c0	.text
+114	KeInsertByKeyDeviceQueue	stdcall	12	func	0x8001a299	.text
+115	KeInsertDeviceQueue	stdcall	8	func	0x8001a26b	.text
+116	KeInsertHeadQueue	stdcall	8	func	0x8001a9ec	.text
+117	KeInsertQueue	stdcall	8	func	0x8001a9c4	.text
+118	KeInsertQueueApc	stdcall	16	func	0x8001a1b5	.text
+119	KeInsertQueueDpc	stdcall	12	func	0x8001a3c3	.text
+120	KeInterruptTime			data	0x8003a890	.data
+121	KeIsExecutingDpc	stdcall	0	func	0x8001a128	.text
+122	KeLeaveCriticalRegion	stdcall	0	func	0x8001a0ec	.text
+123	KePulseEvent	stdcall	12	func	0x8001a4c2	.text
+124	KeQueryBasePriorityThread	stdcall	4	func	0x800190bb	.text
+125	KeQueryInterruptTime	stdcall	0	func	0x80019f48	.text
+126	KeQueryPerformanceCounter	stdcall	0	func	0x80015314	.text
+127	KeQueryPerformanceFrequency	stdcall	0	func	0x80015350	.text
+128	KeQuerySystemTime	stdcall	4	func	0x80019f60	.text
+129	KeRaiseIrqlToDpcLevel	stdcall	0	func	0x80014348	.text
+130	KeRaiseIrqlToSynchLevel	stdcall	0	func	0x80014358	.text
+131	KeReleaseMutant	stdcall	16	func	0x8001a5ec	.text
+132	KeReleaseSemaphore	stdcall	16	func	0x8001aa38	.text
+133	KeRemoveByKeyDeviceQueue	stdcall	8	func	0x8001a306	.text
+134	KeRemoveDeviceQueue	stdcall	4	func	0x8001a2e1	.text
+135	KeRemoveEntryDeviceQueue	stdcall	8	func	0x8001a355	.text
+136	KeRemoveQueue	stdcall	12	func	0x8001a759	.text
+137	KeRemoveQueueDpc	stdcall	4	func	0x8001a3a2	.text
+138	KeResetEvent	stdcall	4	func	0x8001a45c	.text
+139	KeRestoreFloatingPointState	stdcall	4	func	0x8001abfd	.text
+140	KeResumeThread	stdcall	4	func	0x80019108	.text
+141	KeRundownQueue	stdcall	4	func	0x8001a6d3	.text
+142	KeSaveFloatingPointState	stdcall	4	func	0x8001aaad	.text
+143	KeSetBasePriorityThread	stdcall	8	func	0x80019147	.text
+144	KeSetDisableBoostThread	stdcall	8	func	0x80019215	.text
+145	KeSetEvent	stdcall	12	func	0x8001a518	.text
+146	KeSetEventBoostPriority	stdcall	8	func	0x8001a47a	.text
+147	KeSetPriorityProcess	stdcall	8	func	0x8001ad2d	.text
+148	KeSetPriorityThread	stdcall	8	func	0x80019237	.text
+149	KeSetTimer	stdcall	16	func	0x800195d6	.text
+150	KeSetTimerEx	stdcall	20	func	0x8001951c	.text
+151	KeStallExecutionProcessor	stdcall	4	func	0x800153a0	.text
+152	KeSuspendThread	stdcall	4	func	0x80019270	.text
+153	KeSynchronizeExecution	stdcall	12	func	0x8001ae30	.text
+154	KeSystemTime			data	0x8003a880	.data
+155	KeTestAlertThread	stdcall	4	func	0x80019365	.text
+156	KeTickCount			data	0x8003a89c	.data
+157	KeTimeIncrement			data	0x80010cb0	.text
+158	KeWaitForMultipleObjects	stdcall	32	func	0x800199db	.text
+159	KeWaitForSingleObject	stdcall	20	func	0x80019cdc	.text
+160	KfRaiseIrql	fastcall	4	func	0x80014338	.text
+161	KfLowerIrql	fastcall	4	func	0x80014368	.text
+162	KiBugCheckData			data	0x8003ab20	.data
+163	KiUnlockDispatcherDatabase	fastcall	4	func	0x80018ba0	.text
+164	LaunchDataPage			data	0x8003b348	STICKY
+165	MmAllocateContiguousMemory	stdcall	4	func	0x8001e31d	.text
+166	MmAllocateContiguousMemoryEx	stdcall	20	func	0x8001dc6c	.text
+167	MmAllocateSystemMemory	stdcall	8	func	0x8001e7de	.text
+168	MmClaimGpuInstanceMemory	stdcall	8	func	0x8001e261	.text
+169	MmCreateKernelStack	stdcall	8	func	0x8001e840	.text
+170	MmDeleteKernelStack	stdcall	8	func	0x8001e86a	.text
+171	MmFreeContiguousMemory	stdcall	4	func	0x8001e331	.text
+172	MmFreeSystemMemory	stdcall	8	func	0x8001e7fc	.text
+173	MmGetPhysicalAddress	stdcall	4	func	0x8001dc1e	.text
+174	MmIsAddressValid	stdcall	4	func	0x8001e394	.text
+175	MmLockUnlockBufferPages	stdcall	12	func	0x8001dfe7	.text
+176	MmLockUnlockPhysicalPage	stdcall	8	func	0x8001e076	.text
+177	MmMapIoSpace	stdcall	12	func	0x8001decb	.text
+178	MmPersistContiguousMemory	stdcall	12	func	0x8001de6b	.text
+179	MmQueryAddressProtect	stdcall	4	func	0x8001e4e6	.text
+180	MmQueryAllocationSize	stdcall	4	func	0x8001de2e	.text
+181	MmQueryStatistics	stdcall	4	func	0x8001e547	.text
+182	MmSetAddressProtect	stdcall	12	func	0x8001e75b	.text
+183	MmUnmapIoSpace	stdcall	8	func	0x8001df94	.text
+184	NtAllocateVirtualMemory	stdcall	20	func	0x8001eeac	.text
+185	NtCancelTimer	stdcall	8	func	0x80013d31	.text
+186	NtClearEvent	stdcall	4	func	0x80013155	.text
+187	NtClose	stdcall	4	func	0x80020696	.text
+188	NtCreateDirectoryObject	stdcall	8	func	0x800207d2	.text
+189	NtCreateEvent	stdcall	16	func	0x80013186	.text
+190	NtCreateFile	stdcall	36	func	0x8001694d	.text
+191	NtCreateIoCompletion	stdcall	16	func	0x8001676b	.text
+192	NtCreateMutant	stdcall	12	func	0x80013355	.text
+193	NtCreateSemaphore	stdcall	16	func	0x80013b7a	.text
+194	NtCreateTimer	stdcall	12	func	0x80013cc8	.text
+195	NtDeleteFile	stdcall	4	func	0x8001699b	.text
+196	NtDeviceIoControlFile	stdcall	40	func	0x80016b84	.text
+197	NtDuplicateObject	stdcall	12	func	0x8002071e	.text
+198	NtFlushBuffersFile	stdcall	8	func	0x80016aa4	.text
+199	NtFreeVirtualMemory	stdcall	12	func	0x8001f2e0	.text
+200	NtFsControlFile	stdcall	40	func	0x80016bb0	.text
+201	NtOpenDirectoryObject	stdcall	8	func	0x8002080c	.text
+202	NtOpenFile	stdcall	24	func	0x80016976	.text
+203	NtOpenSymbolicLinkObject	stdcall	8	func	0x80020da9	.text
+204	NtProtectVirtualMemory	stdcall	16	func	0x8001ed29	.text
+205	NtPulseEvent	stdcall	8	func	0x800131f1	.text
+206	NtQueueApcThread	stdcall	20	func	0x8002178a	.text
+207	NtQueryDirectoryFile	stdcall	40	func	0x80016bdc	.text
+208	NtQueryDirectoryObject	stdcall	24	func	0x80020823	.text
+209	NtQueryEvent	stdcall	8	func	0x80013234	.text
+210	NtQueryFullAttributesFile	stdcall	8	func	0x80016a09	.text
+211	NtQueryInformationFile	stdcall	20	func	0x80016d23	.text
+212	NtQueryIoCompletion	stdcall	8	func	0x800167b3	.text
+213	NtQueryMutant	stdcall	8	func	0x80013409	.text
+214	NtQuerySemaphore	stdcall	8	func	0x80013bcf	.text
+215	NtQuerySymbolicLinkObject	stdcall	12	func	0x80020dc0	.text
+216	NtQueryTimer	stdcall	8	func	0x80013dcd	.text
+217	NtQueryVirtualMemory	stdcall	8	func	0x8001eb25	.text
+218	NtQueryVolumeInformationFile	stdcall	20	func	0x80017318	.text
+219	NtReadFile	stdcall	32	func	0x80017467	.text
+220	NtReadFileScatter	stdcall	32	func	0x80017633	.text
+221	NtReleaseMutant	stdcall	8	func	0x8001338f	.text
+222	NtReleaseSemaphore	stdcall	12	func	0x80013c0b	.text
+223	NtRemoveIoCompletion	stdcall	20	func	0x800167e7	.text
+224	NtResumeThread	stdcall	8	func	0x80021804	.text
+225	NtSetEvent	stdcall	8	func	0x80013270	.text
+226	NtSetInformationFile	stdcall	20	func	0x80016f61	.text
+227	NtSetIoCompletion	stdcall	20	func	0x8001690d	.text
+228	NtSetSystemTime	stdcall	8	func	0x800140a8	.text
+229	NtSetTimerEx	stdcall	32	func	0x80013f3a	.text
+230	NtSignalAndWaitForSingleObjectEx	stdcall	20	func	0x80020e45	.text
+231	NtSuspendThread	stdcall	8	func	0x8002183f	.text
+232	NtUserIoApcDispatcher	stdcall	12	func	0x80016a76	.text
+233	NtWaitForSingleObject	stdcall	12	func	0x80021142	.text
+234	NtWaitForSingleObjectEx	stdcall	16	func	0x80020f5a	.text
+235	NtWaitForMultipleObjectsEx	stdcall	24	func	0x80020fcf	.text
+236	NtWriteFile	stdcall	32	func	0x80017828	.text
+237	NtWriteFileGather	stdcall	32	func	0x80017a0a	.text
+238	NtYieldExecution	stdcall	0	func	0x8001aef3	.text
+239	ObCreateObject	stdcall	16	func	0x80021158	.text
+240	ObDirectoryObjectType			data	0x80010d38	.text
+241	ObInsertObject	stdcall	16	func	0x80021266	.text
+242	ObMakeTemporaryObject	stdcall	4	func	0x8002076b	.text
+243	ObOpenObjectByName	stdcall	16	func	0x8002059b	.text
+244	ObOpenObjectByPointer	stdcall	12	func	0x800204d4	.text
+245	ObpObjectHandleTable			data	0x8003abc0	.data
+246	ObReferenceObjectByHandle	stdcall	12	func	0x80020524	.text
+247	ObReferenceObjectByName	stdcall	20	func	0x8002042b	.text
+248	ObReferenceObjectByPointer	stdcall	8	func	0x80020464	.text
+249	ObSymbolicLinkObjectType			data	0x80010d54	.text
+250	ObfDereferenceObject	fastcall	4	func	0x80020491	.text
+251	ObfReferenceObject	fastcall	4	func	0x80020448	.text
+252	PhyGetLinkState	stdcall	4	func	0x8002d8bf	.text
+253	PhyInitialize	stdcall	8	func	0x8002d718	.text
+254	PsCreateSystemThread	stdcall	20	func	0x80021add	.text
+255	PsCreateSystemThreadEx	stdcall	40	func	0x8002190e	.text
+256	PsQueryStatistics	stdcall	4	func	0x80021b07	.text
+257	PsSetCreateThreadNotifyRoutine	stdcall	4	func	0x80021aae	.text
+258	PsTerminateSystemThread	stdcall	4	func	0x80021b78	.text
+259	PsThreadObjectType			data	0x80010e0c	.text
+260	RtlAnsiStringToUnicodeString	stdcall	12	func	0x80021d8d	.text
+261	RtlAppendStringToString	stdcall	8	func	0x800227b1	.text
+262	RtlAppendUnicodeStringToString	stdcall	8	func	0x8002243f	.text
+263	RtlAppendUnicodeToString	stdcall	8	func	0x800223ce	.text
+264	RtlAssert	stdcall	16	func	0x800227fd	.text
+265	RtlCaptureContext	stdcall	4	func	0x800229dc	.text
+266	RtlCaptureStackBackTrace	stdcall	16	func	0x80022b50	.text
+267	RtlCharToInteger	stdcall	12	func	0x80022cb0	.text
+268	RtlCompareMemory	stdcall	12	func	0x80022fa0	.text
+269	RtlCompareMemoryUlong	stdcall	12	func	0x80022ff0	.text
+270	RtlCompareString	stdcall	12	func	0x800225ec	.text
+271	RtlCompareUnicodeString	stdcall	12	func	0x8002211e	.text
+272	RtlCopyString	stdcall	8	func	0x800224ef	.text
+273	RtlCopyUnicodeString	stdcall	8	func	0x80022370	.text
+274	RtlCreateUnicodeString	stdcall	8	func	0x800224a5	.text
+275	RtlDowncaseUnicodeChar	stdcall	4	func	0x800220b6	.text
+276	RtlDowncaseUnicodeString	stdcall	12	func	0x80021fa3	.text
+277	RtlEnterCriticalSection	stdcall	4	func	0x80023120	.text
+278	RtlEnterCriticalSectionAndRegion	stdcall	4	func	0x80023100	.text
+279	RtlEqualString	stdcall	12	func	0x80022678	.text
+280	RtlEqualUnicodeString	stdcall	12	func	0x8002226c	.text
+281	RtlExtendedIntegerMultiply	stdcall	12	func	0x8002333c	.text
+282	RtlExtendedLargeIntegerDivide	stdcall	16	func	0x80023250	.text
+283	RtlExtendedMagicDivide	stdcall	20	func	0x800232ac	.text
+284	RtlFillMemory	stdcall	12	func	0x80023020	.text
+285	RtlFillMemoryUlong	stdcall	12	func	0x80023060	.text
+286	RtlFreeAnsiString	stdcall	4	func	0x80022104	.text
+287	RtlFreeUnicodeString	stdcall	4	func	0x80022104	.text
+288	RtlGetCallersAddress	stdcall	8	func	0x80023394	.text
+289	RtlInitAnsiString	stdcall	8	func	0x8002342c	.text
+290	RtlInitUnicodeString	stdcall	8	func	0x80023458	.text
+291	RtlInitializeCriticalSection	stdcall	4	func	0x80023487	.text
+292	RtlIntegerToChar	stdcall	16	func	0x80022bc0	.text
+293	RtlIntegerToUnicodeString	stdcall	12	func	0x80022f52	.text
+294	RtlLeaveCriticalSection	stdcall	4	func	0x800231d0	.text
+295	RtlLeaveCriticalSectionAndRegion	stdcall	4	func	0x80023170	.text
+296	RtlLowerChar	stdcall	4	func	0x8002258d	.text
+297	RtlMapGenericMask	stdcall	8	func	0x800234ac	.text
+298	RtlMoveMemory	stdcall	12	func	0x800230b0	.text
+299	RtlMultiByteToUnicodeN	stdcall	20	func	0x800234fc	.text
+300	RtlMultiByteToUnicodeSize	stdcall	12	func	0x80023539	.text
+301	RtlNtStatusToDosError	stdcall	4	func	0x80023653	.text
+302	RtlRaiseException	stdcall	4	func	0x80023724	.text
+303	RtlRaiseStatus	stdcall	4	func	0x800237be	.text
+304	RtlTimeFieldsToTime	stdcall	8	func	0x800239bb	.text
+305	RtlTimeToTimeFields	stdcall	8	func	0x8002388e	.text
+306	RtlTryEnterCriticalSection	stdcall	4	func	0x80023208	.text
+307	RtlUlongByteSwap	fastcall	4	func	0x80021ce0	.text
+308	RtlUnicodeStringToAnsiString	stdcall	12	func	0x80021e2b	.text
+309	RtlUnicodeStringToInteger	stdcall	12	func	0x80022dd2	.text
+310	RtlUnicodeToMultiByteN	stdcall	20	func	0x8002355b	.text
+311	RtlUnicodeToMultiByteSize	stdcall	12	func	0x8002354a	.text
+312	RtlUnwind	stdcall	16	func	0x80023c41	.text
+313	RtlUpcaseUnicodeChar	stdcall	4	func	0x8002206b	.text
+314	RtlUpcaseUnicodeString	stdcall	12	func	0x80021ede	.text
+315	RtlUpcaseUnicodeToMultiByteN	stdcall	20	func	0x8002359f	.text
+316	RtlUpperChar	stdcall	4	func	0x80022531	.text
+317	RtlUpperString	stdcall	8	func	0x80022771	.text
+318	RtlUshortByteSwap	fastcall	4	func	0x80021cd0	.text
+319	RtlWalkFrameChain	stdcall	12	func	0x80022aa8	.text
+320	RtlZeroMemory	stdcall	8	func	0x80023080	.text
+321	XboxEEPROMKey			data	0x8003b140	STICKY
+322	XboxHardwareInfo			data	0x8003b150	STICKY
+323	XboxHDKey			data	0x8003b008	STICKY
+324	XboxKrnlVersion			data	0x80010a10	.text
+325	XboxSignatureKey			data	0x8003b118	STICKY
+326	XeImageFileName			data	0x8003aeb0	.data
+327	XeLoadSection	stdcall	4	func	0x8002eb0f	.text
+328	XeUnloadSection	stdcall	4	func	0x8002eb7e	.text
+329	READ_PORT_BUFFER_UCHAR	stdcall	12	func	0x800153d8	.text
+330	READ_PORT_BUFFER_USHORT	stdcall	12	func	0x800153f0	.text
+331	READ_PORT_BUFFER_ULONG	stdcall	12	func	0x80015408	.text
+332	WRITE_PORT_BUFFER_UCHAR	stdcall	12	func	0x80015420	.text
+333	WRITE_PORT_BUFFER_USHORT	stdcall	12	func	0x80015438	.text
+334	WRITE_PORT_BUFFER_ULONG	stdcall	12	func	0x80015450	.text
+335	XcSHAInit	stdcall	4	func	0x8002f937	.text
+336	XcSHAUpdate	stdcall	12	func	0x8002f93d	.text
+337	XcSHAFinal	stdcall	8	func	0x8002f943	.text
+338	XcRC4Key	stdcall	12	func	0x8002f949	.text
+339	XcRC4Crypt	stdcall	12	func	0x8002f94f	.text
+340	XcHMAC	stdcall	28	func	0x8002f955	.text
+341	XcPKEncPublic	stdcall	12	func	0x8002f977	.text
+342	XcPKDecPrivate	stdcall	12	func	0x8002f97d	.text
+343	XcPKGetKeyLen	stdcall	4	func	0x8002f983	.text
+344	XcVerifyPKCS1Signature	stdcall	12	func	0x8002f989	.text
+345	XcModExp	stdcall	20	func	0x8002f98f	.text
+346	XcDESKeyParity	stdcall	8	func	0x8002f9ab	.text
+347	XcKeyTable	stdcall	12	func	0x8002f9b1	.text
+348	XcBlockCrypt	stdcall	20	func	0x8002f9b7	.text
+349	XcBlockCryptCBC	stdcall	28	func	0x8002f9d3	.text
+350	XcCryptService	stdcall	8	func	0x8002f9f5	.text
+351	XcUpdateCrypto	stdcall	8	func	0x8002f84c	.text
+352	RtlRip	stdcall	12	func	0x8002289b	.text
+353	XboxLANKey			data	0x8003b128	STICKY
+354	XboxAlternateSignatureKeys			data	0x8003b018	STICKY
+355	XePublicKeyData			data	0x800126a0	.text
+356	HalBootSMCVideoMode			data	0x8003afec	STICKY
+357	IdexChannelObject			data	0x8003ad20	.data
+358	HalIsResetOrShutdownPending	stdcall	0	func	0x80014e29	.text
+359	IoMarkIrpMustComplete	stdcall	4	func	0x8001601a	.text
+360	HalInitiateShutdown	stdcall	0	func	0x80014e34	.text
+361	RtlSnprintf	cdecl/data		func	0x8002d8fe	.text
+362	RtlSprintf	cdecl/data		func	0x8002d955	.text
+363	RtlVsnprintf	cdecl/data		func	0x8002d9ad	.text
+364	RtlVsprintf	cdecl/data		func	0x8002da03	.text
+365	HalEnableSecureTrayEject	stdcall	0	func	0x80014e7a	.text
+366	HalWriteSMCScratchRegister	stdcall	4	func	0x80014e62	.text

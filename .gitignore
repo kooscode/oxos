@@ -1,0 +1,11 @@
+# Copyrighted inputs: never commit (BIOS/MCPX dumps, HDD images, Microsoft kernel binaries)
+xbox-files/
+xboxkrnl.exe
+*.bin
+*.qcow2
+*.cab
+
+# Build output and local helpers
+kernel/build/
+__pycache__/
+claude-resume.sh
