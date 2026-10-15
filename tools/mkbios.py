@@ -13,7 +13,7 @@ The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and
 fields 0x28..0x37 describe the .data copy used by quick reboot (spec/02 §1).
 
 Boot splash (optional, 1 MiB images only): the second 256 KiB bank (flash offset 0x40000, 0xFFF40000) holds
-  "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 8-bit RGB PNG with a single IDAT chunk.
+  "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 256-colour palette PNG with one IDAT chunk.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
 valid and falls back to its drawn emblem otherwise (spec/17 §7).
 
@@ -118,16 +118,28 @@ def disable_kernel_patcher(bl):
 SPLASH_BANK, SPLASH_W, SPLASH_H = 1, 640, 480
 
 
+SPLASH_BLACK = 6  # pixels no brighter than this become black: background noise costs bytes, not quality
+
+
 def splash_bank(path):
-    """The splash bank contents for an image file (any size/format Pillow reads; resized to 640x480 RGB)."""
+    """The splash bank contents for an image file. A 640x480 palette PNG is kept as it is; anything else Pillow
+    reads is resized to 640x480, its near-black noise cleared and reduced to 256 colours (median cut, no dither)."""
     from PIL import Image
-    im = Image.open(path).convert("RGB")
-    if im.size != (SPLASH_W, SPLASH_H):
-        im = im.resize((SPLASH_W, SPLASH_H), Image.LANCZOS)
+    im = Image.open(path)
+    if im.mode != "P" or im.size != (SPLASH_W, SPLASH_H):
+        im = im.convert("RGB")
+        if im.size != (SPLASH_W, SPLASH_H):
+            im = im.resize((SPLASH_W, SPLASH_H), Image.LANCZOS)
+        px = bytearray(im.tobytes())
+        for i in range(0, len(px), 3):
+            if max(px[i], px[i + 1], px[i + 2]) <= SPLASH_BLACK:
+                px[i] = px[i + 1] = px[i + 2] = 0
+        im = Image.frombytes("RGB", im.size, bytes(px))
+        im = im.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     buf = io.BytesIO()
     im.save(buf, "PNG", optimize=True)
     png = buf.getvalue()
-    # Re-chunk: signature, IHDR, one IDAT with the whole zlib stream, IEND (the kernel decoder wants one IDAT).
+    # Re-chunk: signature, IHDR, PLTE, one IDAT with the whole zlib stream, IEND (the decoder wants one IDAT).
     chunks, idat, o = [], b"", 8
     while o < len(png):
         n, kind = struct.unpack_from(">I4s", png, o)
@@ -135,7 +147,7 @@ def splash_bank(path):
         o += 12 + n
         if kind == b"IDAT":
             idat += data
-        elif kind == b"IHDR":
+        elif kind in (b"IHDR", b"PLTE"):
             chunks.append((kind, data))
     chunks += [(b"IDAT", idat), (b"IEND", b"")]
     png = png[:8] + b"".join(struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d)) for k, d in chunks)

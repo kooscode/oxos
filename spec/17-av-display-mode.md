@@ -94,15 +94,18 @@ encoder writes and are no-ops until the tables exist.
 The reference kernel's boot animation lives in its INIT section and is not reproduced. Ours shows a picture
 during cold boot (`src/hal/splash.cpp`):
 
-- `tools/mkbios.py --splash IMAGE` (the Makefile passes `kernel/splash/splash.png` when present) resizes the
-  image to 640×480 RGB, re-encodes it as a PNG with a single IDAT chunk and stores it in flash bank 1 (offset
+- `tools/mkbios.py --splash IMAGE` (the Makefile passes `kernel/splash/splash.png` when present) keeps a
+  640×480 palette PNG as it is; any other image is resized to 640×480, pixels with every channel ≤ 6 are set to
+  black (background noise that costs bytes but is invisible), and it is reduced to 256 colours (median cut, no
+  dithering: 42 KB for the current splash, against 147 KB as RGB). The PNG is re-chunked to a single IDAT and
+  stored in flash bank 1 (offset
   0x40000, physical 0xFFF40000) behind a 20-byte header: `"XKSPLASH"`, u32 version 1, u32 PNG length, u32
   CRC-32 of the PNG. Banks 0 and 3 must stay as they are: the MCPX boot ROM reads its init table at 0xFF000000
   (bank 0 of a 1 MiB chip) and the 2BL/kernel from the top bank. A 256 KiB image has no spare bank, so no splash.
 - The splash thread maps the bank with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)` and decodes it with
   `src/hal/png.cpp`: inflate (RFC 1951), Adler-32 check, PNG scanline un-filtering. Supported input is exactly
-  what mkbios writes: 8-bit RGB/RGBA, not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a
+  what mkbios writes, plus 8-bit RGB/RGBA: not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a
   temporary buffer below 16 MB.
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
   `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header,
-  0x102 bad header, 0x103 out of memory, 1–9 decoder step) record what happened.
+  0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
