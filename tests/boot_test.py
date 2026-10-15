@@ -77,7 +77,9 @@ def run_checks(mon):
         "KiTestBoostPriority", "KiTestApcSuiteDone")}
     m2c = {name: mon.read(name) for name in (
         "KiTestMmContiguousOk", "KiTestMmAlignedOk", "KiTestMmReuseOk", "KiTestMmSystemOk", "KiTestMmIoSpaceOk",
-        "KiTestMmPoolOk", "KiTestMmLayoutOk", "KiTestMmThreadChurnPages", "KiTestMmContiguousVa", "KiTestMmDone")}
+        "KiTestMmPoolOk", "KiTestMmLayoutOk", "KiTestMmThreadChurnPages", "KiTestMmContiguousVa", "KiTestMmDone",
+        "KiTestVmReserveCommitOk", "KiTestVmImageOk", "KiTestVmTopDownOk", "KiTestVmFreeRulesOk", "KiTestVmProtectOk",
+        "KiTestVmPagesRestored", "KiTestVmStatsOk")}
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
@@ -143,6 +145,13 @@ def run_checks(mon):
             "pool: 500 blocks + large block": m2c["KiTestMmPoolOk"] == 1,
             "no user mappings, RO text, stack guard page": m2c["KiTestMmLayoutOk"] == 1,
             "50 thread lifetimes reclaim stacks (<= 8 pages kept)": m2c["KiTestMmThreadChurnPages"] <= 8,
+            "VM: reserve 1 MB, commit 64 KB (zeroed, RW), query": m2c["KiTestVmReserveCommitOk"] == 1,
+            "VM: NtProtectVirtualMemory RW -> RO": m2c["KiTestVmProtectOk"] == 1,
+            "VM: free rules (not-at-base, decommit, release)": m2c["KiTestVmFreeRulesOk"] == 1,
+            "VM: XBE-style image at 0x10000 + conflict": m2c["KiTestVmImageOk"] == 1,
+            "VM: MEM_TOP_DOWN": m2c["KiTestVmTopDownOk"] == 1,
+            "VM: all pages returned": m2c["KiTestVmPagesRestored"] == 1,
+            "MmQueryStatistics": m2c["KiTestVmStatsOk"] == 1,
             "memory suite finished": m2c["KiTestMmDone"] == 1,
         },
     }

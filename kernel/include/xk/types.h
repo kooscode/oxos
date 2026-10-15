@@ -10,7 +10,7 @@ typedef long LONG, NTSTATUS, *PLONG;
 typedef unsigned long long ULONGLONG;
 typedef long long LONGLONG;
 typedef void VOID, *PVOID;
-typedef ULONG ULONG_PTR, SIZE_T;
+typedef ULONG ULONG_PTR, SIZE_T, *PSIZE_T;
 typedef ULONG PHYSICAL_ADDRESS;
 
 #define NTAPI __stdcall

@@ -5,8 +5,8 @@ MmAllocateContiguousMemoryEx, MmGetPhysicalAddress, MmCreateKernelStack), `ev_ef
 MmAllocateSystemMemory, MmMapIoSpace, MmFreeContiguousMemory, free-list helpers), `ev_dc8155bd…` (protect→PTE,
 MmPersistContiguousMemory, MmQueryAllocationSize, MmLockUnlockPhysicalPage, MmClaimGpuInstanceMemory,
 ExQueryPoolBlockSize), objdump of ExAllocatePoolWithTag, the system-PTE descriptor at 0x800360F0, MmGlobalData,
-and a live dump of the 2BL page directory. **Status: physical/system memory and pool implemented (2c part 1);
-virtual memory (Nt*VirtualMemory, MmQueryStatistics, MmGlobalData) is part 2.**
+and a live dump of the 2BL page directory. Virtual memory: batch_decompile `ev_e049cd4d…` (NtAllocateVirtualMemory, NtFreeVirtualMemory).
+**Status: implemented (2c parts 1 and 2).**
 
 ## 1. Hand-off from the 2BL
 - Page directory at physical 0xF000 (CR3), self-mapped at PDE 0x300 (0xC0300000). **Only 4 MB large pages**
@@ -68,9 +68,48 @@ WRITECOMBINE → |0x08 (PWT).
 - `ExQueryPoolBlockSize(p)`: page-aligned → MmQueryAllocationSize; else BlockSize × 32 − 8.
 - `ExAllocatePool(size)` uses tag 'None'. `ExFreePool`: page-aligned → MmFreeSystemMemory, else return the block.
 
+## 6. Title virtual memory (user range 0x00010000–0x7FFDFFFF)
+- `NtAllocateVirtualMemory(*Base, ZeroBits, *Size, Type, Protect)`:
+  - **Validation:** ZeroBits ≤ 21. Type ⊆ {COMMIT 0x1000, RESERVE 0x2000, RESET 0x80000, TOP_DOWN 0x100000, 0x400000,
+    **NOZERO 0x800000**} and must include COMMIT, RESERVE or RESET; RESET is only allowed on its own.
+    Base > 0x7FFDFFFF, size 0, or overflow → STATUS_INVALID_PARAMETER. A bad protection →
+    STATUS_INVALID_PAGE_PROTECTION.
+  - **Reserve** (base 0 or MEM_RESERVE):
+    - with base 0, the size is rounded to pages and placed on a **64 KB** boundary, bottom-up from 0x10000 or
+      top-down (MEM_TOP_DOWN) below 0x7FFDFFFF (or the ZeroBits limit)
+    - with an explicit base, the base is rounded down to 64 KB; an overlap → STATUS_CONFLICTING_ADDRESSES (0xC0000018)
+    - a VAD records the range (pool tag 'VadS'), and `VirtualMemoryBytesReserved` grows
+  - **Commit:**
+    - the range must lie inside one VAD, otherwise STATUS_CONFLICTING_ADDRESSES; MEM_RESET is a no-op success
+    - too few free pages → STATUS_NO_MEMORY
+    - page tables are created on demand (PDE flags 0x67)
+    - new pages are zeroed unless MEM_NOZERO is given
+    - already-committed pages take the new protection
+    - caches are flushed for NOCACHE/WRITECOMBINE
+    Returns the page-aligned base and size.
+- `NtFreeVirtualMemory(*Base, *Size, Type)`:
+  - **Validation:** Type must be exactly DECOMMIT (0x4000) or RELEASE (0x8000). No VAD → STATUS_MEMORY_NOT_ALLOCATED
+    (0xC00000A0); range past the VAD end → STATUS_UNABLE_TO_FREE_VM (0xC000001A).
+  - **Size 0:** the whole VAD; RELEASE must then be given the VAD base (STATUS_FREE_VM_NOT_AT_BASE 0xC000009F).
+  - Freeing decommits pages, and a page table is released when its last PTE goes. RELEASE removes, trims or
+    splits the VAD.
+- `NtQueryVirtualMemory(base, MEMORY_BASIC_INFORMATION*)`:
+  - inside a VAD: the run of pages with the same state and protection (Type MEM_PRIVATE, AllocationBase =
+    VAD start)
+  - outside: MEM_FREE up to the next VAD
+- `NtProtectVirtualMemory(*Base, *Size, New, *Old)`: every page must be committed and inside one VAD. Returns the
+  first page's old protection.
+- `MmQueryStatistics(MM_STATISTICS*)`: Length must equal 0x24. Fields: total and available pages, committed and
+  reserved VM bytes, pool and stack pages committed.
+- `MmGlobalData` (ordinal 102): a table of pointers into Mm internals for debug tools.
+- VM protections: NOACCESS (committed but not present), READONLY/EXECUTE/EXECUTE_READ → RO,
+  READWRITE/WRITECOPY/EXECUTE_READWRITE/EXECUTE_WRITECOPY → RW, plus NOCACHE/WRITECOMBINE. GUARD is accepted but not
+  enforced (no guard-page exception yet).
+
 ## Implementation notes (internal, ABI-neutral)
 - Free physical pages are tracked in a bitmap, not the reference's per-colour free lists encoded in not-present PTEs.
   Single pages are allocated bottom-up and contiguous runs top-down.
 - Small pool blocks use exact-size free lists without coalescing.
+- VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob
   reference counting exists (milestone 3).

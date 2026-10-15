@@ -27,10 +27,12 @@ static inline void MiInvalidatePage(ULONG va) { __asm__ volatile("invlpg (%0)" :
 static inline void MiFlushCaches() { __asm__ volatile("wbinvd" ::: "memory"); }
 
 void MmInitSystem();
+void MiInitializeVirtualMemory();
+extern ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 bool MiProtectToPte(ULONG protect, ULONG *pteBits);
 
 // Physical pages
-ULONG MiAllocatePhysicalPage();                  // returns PFN, or 0 when none left
+ULONG MiAllocatePhysicalPage(bool zero = true);   // returns PFN, or 0 when none left
 void MiFreePhysicalPage(ULONG pfn);
 bool MiAllocatePhysicalRange(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG *firstPfn);
 extern ULONG MmAvailablePages;
@@ -65,3 +67,42 @@ XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag);
 XBAPI void NTAPI ExFreePool(PVOID P);
 XBAPI ULONG NTAPI ExQueryPoolBlockSize(PVOID PoolBlock);
 void ExInitializePool();
+
+// --- Title virtual memory (spec/09 §6)
+constexpr ULONG MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_DECOMMIT = 0x4000, MEM_RELEASE = 0x8000,
+                MEM_FREE = 0x10000, MEM_PRIVATE = 0x20000, MEM_RESET = 0x80000, MEM_TOP_DOWN = 0x100000,
+                MEM_NOZERO = 0x800000;
+constexpr ULONG PAGE_NOACCESS = 0x01, PAGE_WRITECOPY = 0x08, PAGE_EXECUTE = 0x10, PAGE_EXECUTE_READ = 0x20,
+                PAGE_EXECUTE_READWRITE = 0x40, PAGE_EXECUTE_WRITECOPY = 0x80, PAGE_GUARD = 0x100;
+constexpr ULONG MM_LOWEST_USER_ADDRESS = 0x00010000, MM_HIGHEST_USER_ADDRESS = 0x7FFDFFFF;
+constexpr ULONG ALLOCATION_GRANULARITY = 0x10000;
+constexpr ULONG PTE_COMMITTED_NOACCESS = 0x800; // software bit: committed page with PAGE_NOACCESS
+
+typedef struct _MEMORY_BASIC_INFORMATION {
+    PVOID BaseAddress;
+    PVOID AllocationBase;
+    ULONG AllocationProtect;
+    ULONG RegionSize;
+    ULONG State;
+    ULONG Protect;
+    ULONG Type;
+} MEMORY_BASIC_INFORMATION, *PMEMORY_BASIC_INFORMATION;
+
+typedef struct _MM_STATISTICS {
+    ULONG Length;
+    ULONG TotalPhysicalPages;
+    ULONG AvailablePages;
+    ULONG VirtualMemoryBytesCommitted;
+    ULONG VirtualMemoryBytesReserved;
+    ULONG CachePagesCommitted;
+    ULONG PoolPagesCommitted;
+    ULONG StackPagesCommitted;
+    ULONG ImagePagesCommitted;
+} MM_STATISTICS, *PMM_STATISTICS;
+
+XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
+                                             ULONG AllocationType, ULONG Protect);
+XBAPI NTSTATUS NTAPI NtFreeVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG FreeType);
+XBAPI NTSTATUS NTAPI NtQueryVirtualMemory(PVOID BaseAddress, PMEMORY_BASIC_INFORMATION Info);
+XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG NewProtect, PULONG OldProtect);
+XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics);
