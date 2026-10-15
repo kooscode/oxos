@@ -102,7 +102,11 @@ run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-release/bios.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
+# The same session on the reference BIOS (A/B comparison; the BIOS file is the user's own, never committed).
+run-stock:
+	python3 -I $(ROOT)/tools/run.py $(ROOT)/xbox-files/bios/Complex_4627.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch test-fatal test-udf run clean
+.PHONY: all bios test test-dash test-relaunch test-fatal test-udf run run-stock clean
