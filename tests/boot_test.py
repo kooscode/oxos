@@ -11,6 +11,7 @@ import argparse, json, os, re, shutil, socket, struct, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2  # noqa: E402
 from fatx import Fatx  # noqa: E402
+import mkxiso  # noqa: E402
 
 
 def map_symbols(path):
@@ -198,6 +199,7 @@ def run_checks(mon, hdd=None):
         },
         "M3c": idex_checks(mon, hdd),
         "M3c-2": fatx_checks(mon, hdd),
+        "M3c-3": dvd_checks(mon),
     }
 
 
@@ -256,6 +258,22 @@ def fatx_checks(mon, hdd):
     }
 
 
+def dvd_checks(mon):
+    big = mkxiso.TREE["media"]["big.bin"]
+    names = "".join(n + "|" for n in sorted(mkxiso.TREE, key=lambda n: n.upper().encode()))
+    return {
+        "\\Device\\CdRom0 + CHECK_VERIFY with a disc": mon.read("KiTestDvdDeviceOk") == 1,
+        "XDVDFS: 300 KB file (DMA chunks) matches the image": mon.read("KiTestDvdBigLength") == len(big)
+            and mon.read("KiTestDvdBigSum") == mkxiso.checksum(big),
+        "XDVDFS: \\??\\CdRom0: link, nested dirs, offsets, EOF": mon.read("KiTestDvdReadOk") == 1,
+        "XDVDFS: root enumeration in tree order": mon.read("KiTestDvdDirOk") == 1
+            and read_string(mon, "KiTestDvdDirNames", 64) == names,
+        "XDVDFS: write-protected media, lookup errors": mon.read("KiTestDvdErrorsOk") == 1,
+        "RAW: Partition0 volume reads, sector alignment, no names": mon.read("KiTestDvdRawOk") == 1,
+        "DVD suite finished": mon.read("KiTestDvdDone") == 1,
+    }
+
+
 def disk_checks(hdd_copy):
     """After xemu exits: what the kernel wrote must read back with an independent FATX reader."""
     e = Fatx(Qcow2(hdd_copy), "E")
@@ -281,6 +299,8 @@ def main():
     sock = os.path.join(work, "qmp.sock")
     cfg = os.path.join(work, "xemu.toml")
     hdd_copy = os.path.join(work, "hdd.qcow2")
+    dvd = os.path.join(work, "test.iso")
+    mkxiso.build(dvd)
     if a.hdd:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
@@ -288,7 +308,8 @@ def main():
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
-        + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else ""))
+        + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else "")
+        + f"dvd_path = '{dvd}'\n")
     log = open(os.path.join(work, "xemu.log"), "w")
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
                             stdout=log, stderr=subprocess.STDOUT)

@@ -226,7 +226,9 @@ static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectN
             // Hand the rest of the path (with its leading '\') to the object's parse procedure.
             KfLowerIrql(old);
             OBJECT_STRING remaining = rest;
-            if (remaining.Length && remaining.Buffer > ObjectName->Buffer) {
+            // Give the parse procedure the separator in front of the rest: "\Device\CdRom0\" opens the
+            // root directory ("\"), "\Device\CdRom0" the volume itself ("").
+            if (ObjectName && remaining.Buffer > ObjectName->Buffer && remaining.Buffer[-1] == '\\') {
                 remaining.Buffer--;
                 remaining.Length++;
                 remaining.MaximumLength = remaining.Length;
