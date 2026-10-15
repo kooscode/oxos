@@ -140,7 +140,7 @@ static void KiInitializePcr() {
     constexpr ULONG BOOT_STACK_SIZE = 0x3000;
     KiPcr = {};
     KiPcr.NtTib.ExceptionList = (PVOID)0xFFFFFFFF;
-    KiPcr.NtTib.StackBase = KiBootStack + BOOT_STACK_SIZE;
+    KiPcr.NtTib.StackBase = KiBootStack + BOOT_STACK_SIZE - NPX_FRAME_LENGTH;
     KiPcr.NtTib.StackLimit = KiBootStack;
     KiPcr.NtTib.Self = &KiPcr.NtTib;
     KiPcr.SelfPcr = &KiPcr;

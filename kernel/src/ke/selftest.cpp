@@ -42,7 +42,157 @@ static BOOLEAN NTAPI OnRtcInterrupt(PKINTERRUPT, PVOID) {
     return TRUE;
 }
 
+// ---------------------------------------------------------------- milestone 2b: threads and waits
+
+volatile ULONG KiTestPingA, KiTestPingB;      // expect 1000 each
+volatile ULONG KiTestSleepMs;                 // expect ~500 (10 x 50 ms)
+volatile ULONG KiTestSpinA, KiTestSpinB;      // both advance (round robin at equal priority)
+volatile ULONG KiTestSemaphoreConsumed;       // expect 100
+volatile ULONG KiTestMutantOk;                // expect 1
+volatile ULONG KiTestWaitAnyIndex = 0xFF;     // expect 1 (timer signals first)
+volatile ULONG KiTestWaitAllStatus = 0xFF;    // expect 0
+volatile ULONG KiTestTimeoutStatus;           // expect 0x102
+volatile ULONG KiTestJoinOk;                  // expect 1
+volatile ULONG KiTestFpuOk;                   // expect 2 (both threads kept their x87 state)
+volatile ULONG KiTestThreadsDone;             // expect 1 once the controller finished
+
+static KEVENT PingEventA, PingEventB;
+
+static void Sleep(LONG ms) {
+    LARGE_INTEGER t;
+    t.QuadPart = -(LONGLONG)ms * 10000;
+    KeDelayExecutionThread(KernelMode, FALSE, &t);
+}
+
+static void NTAPI PingThreadA(PVOID) {
+    for (int i = 0; i < 1000; i++) {
+        KeWaitForSingleObject(&PingEventA, Executive, KernelMode, FALSE, nullptr);
+        KiTestPingA = KiTestPingA + 1;
+        KeSetEvent(&PingEventB, 0, FALSE);
+    }
+}
+
+static void NTAPI PingThreadB(PVOID) {
+    for (int i = 0; i < 1000; i++) {
+        KeWaitForSingleObject(&PingEventB, Executive, KernelMode, FALSE, nullptr);
+        KiTestPingB = KiTestPingB + 1;
+        KeSetEvent(&PingEventA, 0, FALSE);
+    }
+}
+
+static void NTAPI SleepThread(PVOID) {
+    ULONG start = KeTickCount;
+    for (int i = 0; i < 10; i++)
+        Sleep(50);
+    KiTestSleepMs = KeTickCount - start;
+}
+
+static void NTAPI SpinThread(PVOID counter) {
+    for (;;)
+        *(volatile ULONG *)counter = *(volatile ULONG *)counter + 1;
+}
+
+// x87 state must survive context switches: each thread keeps its own value in st(0) while sleeping.
+static void NTAPI FpuThread(PVOID value) {
+    LONG v = (LONG)(ULONG)value, out = 0;
+    __asm__ volatile("fninit\n\tfildl %0" ::"m"(v));
+    for (int i = 0; i < 50; i++)
+        Sleep(1);
+    __asm__ volatile("fistpl %0" : "=m"(out));
+    if (out == v)
+        KiTestFpuOk = KiTestFpuOk + 1;
+}
+
+static KSEMAPHORE TestSemaphore;
+static void NTAPI SemaphoreProducer(PVOID) {
+    for (int i = 0; i < 100; i++) {
+        KeReleaseSemaphore(&TestSemaphore, 0, 1, FALSE);
+        if (i % 10 == 0)
+            Sleep(1);
+    }
+}
+
+static KMUTANT TestMutant;
+static KEVENT MutantTaken;
+static volatile ULONG MutantWaiterGotIt;
+static void NTAPI MutantWaiter(PVOID) {
+    KeWaitForSingleObject(&TestMutant, Executive, KernelMode, FALSE, nullptr);
+    MutantWaiterGotIt = TestMutant.OwnerThread == KeGetCurrentThread();
+    KeReleaseMutant(&TestMutant, 0, FALSE, FALSE);
+    KeSetEvent(&MutantTaken, 0, FALSE);
+}
+
+static void NTAPI ShortLivedThread(PVOID) { Sleep(20); }
+
+// Runs the sequential checks at priority 9 so it isn't starved by the spinners.
+static void NTAPI ControllerThread(PVOID) {
+    // Semaphore: consume 100 releases from a producer thread.
+    KeInitializeSemaphore(&TestSemaphore, 0, 100);
+    KiCreateSystemThread(SemaphoreProducer, nullptr, 0, 8);
+    for (int i = 0; i < 100; i++) {
+        KeWaitForSingleObject(&TestSemaphore, Executive, KernelMode, FALSE, nullptr);
+        KiTestSemaphoreConsumed = KiTestSemaphoreConsumed + 1;
+    }
+
+    // Mutant: recursive acquire, then a waiter gets it after the final release.
+    KeInitializeMutant(&TestMutant, FALSE);
+    KeInitializeEvent(&MutantTaken, NotificationEvent, FALSE);
+    KeWaitForSingleObject(&TestMutant, Executive, KernelMode, FALSE, nullptr);
+    KeWaitForSingleObject(&TestMutant, Executive, KernelMode, FALSE, nullptr);
+    bool recursive = TestMutant.Header.SignalState == -1 && TestMutant.OwnerThread == KeGetCurrentThread();
+    KiCreateSystemThread(MutantWaiter, nullptr, 0, 8);
+    Sleep(10);
+    KeReleaseMutant(&TestMutant, 0, FALSE, FALSE);
+    bool stillOwned = TestMutant.OwnerThread == KeGetCurrentThread();
+    KeReleaseMutant(&TestMutant, 0, FALSE, FALSE);
+    KeWaitForSingleObject(&MutantTaken, Executive, KernelMode, FALSE, nullptr);
+    KiTestMutantOk = recursive && stillOwned && MutantWaiterGotIt;
+
+    // WaitAny: never-signalled event vs. a 20 ms timer -> index 1.
+    KEVENT never, e1, e2;
+    KTIMER timer;
+    KeInitializeEvent(&never, NotificationEvent, FALSE);
+    KeInitializeTimerEx(&timer, NotificationTimer);
+    LARGE_INTEGER due;
+    due.QuadPart = -20 * 10000;
+    KeSetTimer(&timer, due, nullptr);
+    PVOID anyObjects[2] = {&never, &timer};
+    KiTestWaitAnyIndex = KeWaitForMultipleObjects(2, anyObjects, WaitAny, Executive, KernelMode, FALSE, nullptr, nullptr);
+
+    // WaitAll on two signalled notification events -> STATUS_WAIT_0.
+    KeInitializeEvent(&e1, NotificationEvent, TRUE);
+    KeInitializeEvent(&e2, NotificationEvent, TRUE);
+    PVOID allObjects[2] = {&e1, &e2};
+    KiTestWaitAllStatus = KeWaitForMultipleObjects(2, allObjects, WaitAll, Executive, KernelMode, FALSE, nullptr, nullptr);
+
+    // Timeout on a never-signalled event.
+    due.QuadPart = -30 * 10000;
+    KiTestTimeoutStatus = KeWaitForSingleObject(&never, Executive, KernelMode, FALSE, &due);
+
+    // Join: a terminated thread's object is signalled.
+    PKTHREAD child = KiCreateSystemThread(ShortLivedThread, nullptr, 0, 8);
+    KiTestJoinOk = KeWaitForSingleObject(child, Executive, KernelMode, FALSE, nullptr) == STATUS_WAIT_0 &&
+                   child->State == Terminated;
+
+    KiTestThreadsDone = 1;
+}
+
+static void KiStartThreadSelfTests() {
+    KeInitializeEvent(&PingEventA, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&PingEventB, SynchronizationEvent, FALSE);
+    KiCreateSystemThread(PingThreadA, nullptr, 0, 8);
+    KiCreateSystemThread(PingThreadB, nullptr, 0, 8);
+    KiCreateSystemThread(SleepThread, nullptr, 0, 10);
+    KiCreateSystemThread(FpuThread, (PVOID)12345, 0, 8);
+    KiCreateSystemThread(FpuThread, (PVOID)67890, 0, 8);
+    KiCreateSystemThread(ControllerThread, nullptr, 0, 9);
+    KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinA, 0, 1);
+    KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinB, 0, 1);
+}
+
 void KiRunBootSelfTests() {
+    KiStartThreadSelfTests();
+
     KeInitializeDpc(&TestDpc, OnTestDpc, nullptr);
     KeInsertQueueDpc(&TestDpc, nullptr, nullptr);
 

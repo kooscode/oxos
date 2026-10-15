@@ -7,7 +7,7 @@
 #define APC_LEVEL 1
 #define DISPATCH_LEVEL 2
 #define PROFILE_LEVEL 26
-#define CLOCK_LEVEL 26
+#define CLOCK_LEVEL 0x1C
 #define SYNCH_LEVEL 0x1C
 #define HIGH_LEVEL 0x1F
 
@@ -107,10 +107,137 @@ typedef struct _NT_TIB {
 } NT_TIB;
 XK_SIZE(NT_TIB, 0x1C);
 
-// Placeholder until the scheduler exists (milestone 2b), sized like the reference KTHREAD.
+// --- Threads and processes (spec/07). Offsets are checked against the reference kernel's writes.
+
+struct _KTHREAD;
+
+typedef struct _KWAIT_BLOCK {
+    LIST_ENTRY WaitListEntry;
+    struct _KTHREAD *Thread;
+    PVOID Object;
+    struct _KWAIT_BLOCK *NextWaitBlock;
+    SHORT WaitKey;
+    SHORT WaitType; // WaitAll 0, WaitAny 1
+} KWAIT_BLOCK, *PKWAIT_BLOCK;
+XK_SIZE(KWAIT_BLOCK, 0x18);
+
+typedef enum _WAIT_TYPE { WaitAll, WaitAny } WAIT_TYPE;
+
+typedef struct _KPROCESS {
+    LIST_ENTRY ReadyListHead;
+    LIST_ENTRY ThreadListHead;
+    ULONG StackCount;
+    LONG ThreadQuantum;
+    SCHAR BasePriority;
+    UCHAR DisableBoost;
+    UCHAR DisableQuantum;
+} KPROCESS, *PKPROCESS;
+XK_OFFSET(KPROCESS, ThreadQuantum, 0x14);
+XK_OFFSET(KPROCESS, BasePriority, 0x18);
+XK_OFFSET(KPROCESS, DisableQuantum, 0x1A);
+
+typedef struct _KAPC_STATE {
+    LIST_ENTRY ApcListHead[2];
+    PKPROCESS Process;
+    BOOLEAN KernelApcInProgress;
+    BOOLEAN KernelApcPending;
+    BOOLEAN UserApcPending;
+    BOOLEAN ApcQueueable;
+} KAPC_STATE;
+XK_SIZE(KAPC_STATE, 0x18);
+
+typedef struct _KAPC {
+    CSHORT Type;
+    CHAR ApcMode;
+    BOOLEAN Inserted;
+    struct _KTHREAD *Thread;
+    LIST_ENTRY ApcListEntry;
+    PVOID KernelRoutine;
+    PVOID RundownRoutine;
+    PVOID NormalRoutine;
+    PVOID NormalContext;
+    PVOID SystemArgument1;
+    PVOID SystemArgument2;
+} KAPC, *PKAPC;
+XK_SIZE(KAPC, 0x28);
+
+typedef struct _KSEMAPHORE {
+    DISPATCHER_HEADER Header;
+    LONG Limit;
+} KSEMAPHORE, *PKSEMAPHORE;
+XK_SIZE(KSEMAPHORE, 0x14);
+
+typedef struct _KMUTANT {
+    DISPATCHER_HEADER Header;
+    LIST_ENTRY MutantListEntry;
+    struct _KTHREAD *OwnerThread;
+    BOOLEAN Abandoned;
+} KMUTANT, *PKMUTANT;
+XK_OFFSET(KMUTANT, OwnerThread, 0x18);
+XK_OFFSET(KMUTANT, Abandoned, 0x1C);
+
+enum KTHREAD_STATE : UCHAR { Initialized, Ready, Running, Standby, Terminated, Waiting };
+
 typedef struct _KTHREAD {
-    UCHAR Opaque[0x110];
+    DISPATCHER_HEADER Header;      // 0x00
+    LIST_ENTRY MutantListHead;     // 0x10
+    ULONG KernelTime;              // 0x18
+    PVOID StackBase;               // 0x1C
+    PVOID StackLimit;              // 0x20
+    PVOID KernelStack;             // 0x24
+    PVOID TlsData;                 // 0x28
+    UCHAR State;                   // 0x2C
+    BOOLEAN Alerted[2];            // 0x2D
+    BOOLEAN Alertable;             // 0x2F
+    UCHAR NpxState;                // 0x30
+    CHAR Saturation;               // 0x31
+    SCHAR Priority;                // 0x32
+    UCHAR Padding;                 // 0x33
+    KAPC_STATE ApcState;           // 0x34
+    ULONG ContextSwitches;         // 0x4C
+    LONG WaitStatus;               // 0x50
+    KIRQL WaitIrql;                // 0x54
+    CHAR WaitMode;                 // 0x55
+    BOOLEAN WaitNext;              // 0x56
+    UCHAR WaitReason;              // 0x57
+    PKWAIT_BLOCK WaitBlockList;    // 0x58
+    LIST_ENTRY WaitListEntry;      // 0x5C (also the ready-list link)
+    ULONG WaitTime;                // 0x64
+    ULONG KernelApcDisable;        // 0x68
+    LONG Quantum;                  // 0x6C
+    SCHAR BasePriority;            // 0x70
+    UCHAR DecrementCount;          // 0x71
+    SCHAR PriorityDecrement;       // 0x72
+    BOOLEAN DisableBoost;          // 0x73
+    UCHAR NpxIrql;                 // 0x74
+    CHAR SuspendCount;             // 0x75
+    BOOLEAN Preempted;             // 0x76
+    BOOLEAN HasTerminated;         // 0x77
+    PVOID Queue;                   // 0x78
+    LIST_ENTRY QueueListEntry;     // 0x7C
+    KTIMER Timer;                  // 0x88 (8-byte aligned)
+    KWAIT_BLOCK TimerWaitBlock;    // 0xB0
+    KAPC SuspendApc;               // 0xC8
+    KSEMAPHORE SuspendSemaphore;   // 0xF0
+    LIST_ENTRY ThreadListEntry;    // 0x104
 } KTHREAD, *PKTHREAD;
+XK_OFFSET(KTHREAD, TlsData, 0x28);
+XK_OFFSET(KTHREAD, NpxState, 0x30);
+XK_OFFSET(KTHREAD, Priority, 0x32);
+XK_OFFSET(KTHREAD, ApcState, 0x34);
+XK_OFFSET(KTHREAD, WaitIrql, 0x54);
+XK_OFFSET(KTHREAD, WaitListEntry, 0x5C);
+XK_OFFSET(KTHREAD, Quantum, 0x6C);
+XK_OFFSET(KTHREAD, HasTerminated, 0x77);
+XK_OFFSET(KTHREAD, Timer, 0x88);
+XK_OFFSET(KTHREAD, TimerWaitBlock, 0xB0);
+XK_OFFSET(KTHREAD, SuspendApc, 0xC8);
+XK_OFFSET(KTHREAD, SuspendSemaphore, 0xF0);
+XK_OFFSET(KTHREAD, ThreadListEntry, 0x104);
+XK_SIZE(KTHREAD, 0x110);
+
+constexpr ULONG NPX_FRAME_LENGTH = 0x210;
+constexpr UCHAR NPX_STATE_LOADED = 0, NPX_STATE_NOT_LOADED = 0x0A;
 
 typedef struct _KPRCB {
     PKTHREAD CurrentThread;      // +0x00
@@ -210,17 +337,66 @@ XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE 
 XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt);
 XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt);
 
+typedef enum _KWAIT_REASON { Executive = 0, DelayExecution = 4, WrEventPair = 0x0E } KWAIT_REASON;
+typedef CHAR KPROCESSOR_MODE;
+#define KernelMode 0
+#define UserMode 1
+
+constexpr NTSTATUS STATUS_WAIT_0 = 0, STATUS_ABANDONED = 0x80, STATUS_USER_APC = 0xC0, STATUS_KERNEL_APC = 0x100,
+                   STATUS_ALERTED = 0x101, STATUS_TIMEOUT = 0x102;
+
+XBAPI PKTHREAD NTAPI KeGetCurrentThread();
+XBAPI void NTAPI KeBugCheck(ULONG BugCheckCode) __attribute__((noreturn));
+XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4)
+    __attribute__((noreturn));
+XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
+                                           BOOLEAN Alertable, PLARGE_INTEGER Timeout);
+XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType,
+                                              KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
+                                              PLARGE_INTEGER Timeout, PKWAIT_BLOCK WaitBlockArray);
+XBAPI NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Interval);
+XBAPI LONG NTAPI KePulseEvent(PKEVENT Event, LONG Increment, BOOLEAN Wait);
+XBAPI void NTAPI KeInitializeSemaphore(PKSEMAPHORE Semaphore, LONG Count, LONG Limit);
+XBAPI LONG NTAPI KeReleaseSemaphore(PKSEMAPHORE Semaphore, LONG Increment, LONG Adjustment, BOOLEAN Wait);
+XBAPI void NTAPI KeInitializeMutant(PKMUTANT Mutant, BOOLEAN InitialOwner);
+XBAPI LONG NTAPI KeReleaseMutant(PKMUTANT Mutant, LONG Increment, BOOLEAN Abandoned, BOOLEAN Wait);
+XBAPI LONG NTAPI KeSetPriorityThread(PKTHREAD Thread, LONG Priority);
+XBAPI LONG NTAPI KeQueryBasePriorityThread(PKTHREAD Thread);
+
 // --- Internal
 extern volatile ULONG KiBootStage;
+extern KPROCESS KiIdleProcess, KiSystemProcess;
 XBAPI void KiSystemStartup(const UCHAR *bootKeys);
 void KiInitializeProcessor();
 void KiInitializeTimers();
+void KiInitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit);
 void KiIdleLoop() __attribute__((noreturn));
-void KiClockInterrupt();
+void KiClockInterrupt(KIRQL interruptedIrql);
 void KiCheckTimers();
 void KiDispatchInterrupt();
 void KiRetireDpcList();
 void KiDeliverSoftwareInterrupts(); // interrupts disabled on entry and exit
+
+// Scheduler (dispatcher "lock" = DISPATCH_LEVEL on this uniprocessor).
+void KiReadyThread(PKTHREAD Thread);
+void KiSetPriorityThread(PKTHREAD Thread, SCHAR Priority);
+bool KiSelectYieldThread(PKTHREAD Current);
+LONG KiSwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
+void KiUnlockDispatcherDatabase(KIRQL OldIrql);
+void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment);
+void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment);
+bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime);
+void KiRemoveTimerIfInserted(PKTIMER Timer);
+
+// Thread creation (Ps* exports wrap this once the object manager exists).
+typedef void(NTAPI *PKSYSTEM_ROUTINE)(PVOID StartRoutine, PVOID StartContext);
+void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
+                        PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process);
+PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
+void KeTerminateThread() __attribute__((noreturn));
+
+// Early memory until the memory manager exists (milestone 2c).
+PVOID MmEarlyAllocate(SIZE_T Size, SIZE_T Alignment);
 XBAPI void KiDispatchHardwareInterrupt(ULONG irq);
 XBAPI void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 

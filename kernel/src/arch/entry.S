@@ -9,7 +9,7 @@
 _KernelEntry:
     cli
     movl 8(%esp), %eax                          // keys
-    movl $(_KiBootStack + BOOT_STACK_SIZE), %esp
+    movl $(_KiBootStack + BOOT_STACK_SIZE - 0x210), %esp   // NPX save area of the idle thread above
     xorl %ebp, %ebp
     pushl %eax
     call _KiSystemStartup                       // never returns

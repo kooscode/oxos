@@ -20,6 +20,7 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, exported data |
 | `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection |
+| `src/mm/` | early boot allocator (memory manager comes in 2c) |
 | `src/rtl/` | runtime library |
 | `exports.lst` | implemented exports; `../tools/gen_def.py` assigns the reference ordinals |
 | `../tools/mkbios.py` | flattens the PE, LZX-packs (uncompressed blocks), encrypts, fixes the 2BL digest |
@@ -29,7 +30,8 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 1. **Boot to idle** (specs 00–02): CPU tables, PCR at FS, PIC/PIT/RTC/PCI/ACPI, 1 ms clock, idle loop. ✅ passes in xemu.
 2. Kernel core (spec 06):
    - 2a: IRQL and PIC masking, software interrupts, KINTERRUPT, DPCs, timers, events. ✅ passes in xemu.
-   - 2b: threads, scheduler and context switch, waits, semaphores/mutants/queues, APCs, PsCreateSystemThreadEx.
+   - 2b: threads, scheduler, context switch, lazy FPU, waits, semaphores, mutants (spec 07). ✅ passes in xemu.
+   - 2b+: APCs, alerts, suspend/resume, queues, wake-up boosts, PsCreateSystemThreadEx (needs Ob handles).
    - 2c: memory manager (paging, PFN database, pools, contiguous/system memory, virtual memory).
 3. Object manager, I/O manager, IDE + DVD + partitions (stock LBA28), FATX (spec 04).
 4. XBE loader and title launch (spec 05): boot the stock dashboard.
@@ -40,5 +42,5 @@ Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_RO
 - `KeQueryPerformance*` / `KeStallExecutionProcessor` use the ACPI PM timer; the reference behaviour isn't confirmed yet.
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
-- DPCs run on the interrupted stack rather than a dedicated PRCB DPC stack.
+- Thread objects and kernel stacks come from a boot-time bump allocator (0x80100000-0x80400000) until the memory manager exists, and are never freed.
 - The image uses LZX *uncompressed* blocks, so it is larger than a compressed one would be. Fine at this size; a real compressor may be needed as the kernel grows.

@@ -1,0 +1,24 @@
+// Bug checks: record the code and halt. (The reference also reports through the fatal-error path;
+// see spec/05 §6 — to be added with the video/SMC work.)
+#include <xk/arch.h>
+#include <xk/ke.h>
+
+volatile ULONG KiBugCheckCode;
+volatile ULONG KiBugCheckParameters[4];
+
+XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4) {
+    cli();
+    KiBugCheckParameters[0] = P1;
+    KiBugCheckParameters[1] = P2;
+    KiBugCheckParameters[2] = P3;
+    KiBugCheckParameters[3] = P4;
+    KiBugCheckCode = BugCheckCode;
+    post(0xBC);
+    for (;;)
+        halt();
+}
+
+XBAPI void NTAPI KeBugCheck(ULONG BugCheckCode) { KeBugCheckEx(BugCheckCode, 0, 0, 0, 0); }
+
+// A thread's system routine returned instead of terminating the thread (reference: bugcheck 0x0E).
+extern "C" void KiThreadReturned() { KeBugCheck(0x0E); }

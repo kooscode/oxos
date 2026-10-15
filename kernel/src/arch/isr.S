@@ -26,7 +26,13 @@ EXC_NOERR 3
 EXC_NOERR 4
 EXC_NOERR 5
 EXC_NOERR 6
-EXC_NOERR 7
+    .p2align 2
+_KiTrap7:                           // #NM: lazy FPU switch (spec/07), resumable
+    pushal
+    cld
+    call _KiNpxNotAvailable
+    popal
+    iretl
 EXC_ERR   8
 EXC_NOERR 9
 EXC_ERR   10
