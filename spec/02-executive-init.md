@@ -100,10 +100,13 @@ Classic NT x86 self-mapped paging: **page tables at 0xC0000000, page directory a
 - Map 4 bytes of physical **0xFFF00078**. If the byte == 0x80 → Flags |= 0x10; additionally if port
   **0x80CE bit 5** is set → Flags |= 0x30. (Meaning of 0x10/0x20 to be established; likely a
   devkit/debug-hardware indicator.)
-- NV2A register **0xFD101000 bits 25–26** (strap): value 0 → Flags |= 0x40; one other value → Flags |= 0x80.
-  The decompiler shows that comparison incorrectly, so confirm the exact value from the assembly.
+- NV2A register **0xFD101000 bits 25–26** (strap): value 0 → Flags |= 0x40. The assembly then compares the
+  *masked* value with 1 for Flags |= 0x80, which can never match: **0x80 is never set** (confirmed, 0x800550c1).
+- The 0xFFF00078 test sets 0x10, and 0x80CE bit 5 adds 0x20 (so 0x30 together).
 - **McpRevision** = PCI bus 0, device 1, config byte 0x08 (MCPX revision ID).
 - **GpuRevision** = low byte of NV2A register 0xFD000000 (boot ID).
+- Ours (milestone 6c) matches; it runs right after MM init (it needs `MmMapIoSpace`). In xemu: flags 0x41, GPU 0xA3,
+  MCPX 0xB2.
 - If McpRevision < 0xB4 → Flags |= 0x01 (probably marks early, 1.0-era hardware; meaning not confirmed).
 Titles read `XboxHardwareInfo`, so these bits must match on each console revision.
 
