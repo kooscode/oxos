@@ -445,7 +445,7 @@ void KiReadyThread(PKTHREAD Thread);
 void KiSetPriorityThread(PKTHREAD Thread, SCHAR Priority);
 bool KiSelectYieldThread(PKTHREAD Current);
 LONG KiSwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
-void KiUnlockDispatcherDatabase(KIRQL OldIrql);
+XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql);
 void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment);
 void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment);
 bool KiInsertQueueApc(PKAPC Apc, LONG Increment);

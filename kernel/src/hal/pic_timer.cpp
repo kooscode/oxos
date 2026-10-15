@@ -153,3 +153,48 @@ void HalpInitPit() {
     outb(0x40, PIT_COUNT & 0xFF);
     outb(0x40, PIT_COUNT >> 8);
 }
+
+// --- Real-time clock (BCD; century in register 0x7F). Fields: year, month, day, hour, minute, second, ms, weekday.
+struct HAL_TIME_FIELDS {
+    SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;
+};
+
+static UCHAR FromBcd(UCHAR v) { return (UCHAR)((v >> 4) * 10 + (v & 15)); }
+static UCHAR ToBcd(ULONG v) { return (UCHAR)(((v / 10) << 4) | (v % 10)); }
+
+static void HalpWaitRtcStable() {
+    for (int i = 0; i < 100000 && (HalpCmosRead(0x0A) & 0x80); i++) // update in progress
+        ;
+}
+
+void HalpQueryRealTimeClock(HAL_TIME_FIELDS *t) {
+    ULONG flags = save_flags_cli();
+    HalpWaitRtcStable();
+    t->Milliseconds = 500;
+    t->Second = FromBcd(HalpCmosRead(0x00));
+    t->Minute = FromBcd(HalpCmosRead(0x02));
+    t->Hour = FromBcd(HalpCmosRead(0x04));
+    t->Weekday = FromBcd(HalpCmosRead(0x06));
+    t->Day = FromBcd(HalpCmosRead(0x07));
+    t->Month = FromBcd(HalpCmosRead(0x08));
+    USHORT year = FromBcd(HalpCmosRead(0x09)) + FromBcd(HalpCmosRead(0x7F)) * 100;
+    if (year > 1899 && year < 1920)
+        year += 100;
+    t->Year = (SHORT)year;
+    restore_flags(flags);
+}
+
+void HalpSetRealTimeClock(const HAL_TIME_FIELDS *t) {
+    ULONG flags = save_flags_cli();
+    HalpWaitRtcStable();
+    HalpCmosWrite(0x00, ToBcd(t->Second));
+    HalpCmosWrite(0x02, ToBcd(t->Minute));
+    HalpCmosWrite(0x04, ToBcd(t->Hour));
+    HalpCmosWrite(0x06, ToBcd(t->Weekday));
+    HalpCmosWrite(0x07, ToBcd(t->Day));
+    HalpCmosWrite(0x08, ToBcd(t->Month));
+    ULONG year = t->Year > 9999 ? 9999 : t->Year;
+    HalpCmosWrite(0x7F, ToBcd(year / 100));
+    HalpCmosWrite(0x09, ToBcd(year % 100));
+    restore_flags(flags);
+}

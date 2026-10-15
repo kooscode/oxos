@@ -3,6 +3,7 @@
 // instruction raises #NM and the state is swapped here. Kernel C code is built without x87/SSE.
 #include <xk/arch.h>
 #include <xk/ke.h>
+#include <xk/mm.h>
 
 #define Prcb (KiPcr.PrcbData)
 
@@ -58,3 +59,63 @@ extern "C" void KiNpxNotAvailable() {
 }
 
 void KiInitializeNpx() { WriteCr0(ReadCr0() | CR0_TS); }
+
+// Kernel code that wants the FPU (DPCs, drivers) brackets it with these. The caller's 0x18-byte block holds
+// {flags, ..., +8 save buffer, +0x14 thread}; the FPU state is kept in an FXSAVE buffer from pool.
+struct KFLOATING_SAVE_ {
+    UCHAR Flags, Irql, Reserved[6];
+    PVOID Buffer;
+    ULONG Reserved2[2];
+    PKTHREAD Thread;
+};
+static_assert(sizeof(KFLOATING_SAVE_) == 0x18);
+
+XBAPI NTSTATUS NTAPI KeSaveFloatingPointState(KFLOATING_SAVE_ *FloatSave) {
+    auto buf = (UCHAR *)ExAllocatePoolWithTag(NPX_FRAME_LENGTH + 16, ' XPN');
+    if (!buf)
+        return (NTSTATUS)0xC000009A;
+    FloatSave->Buffer = buf;
+    FloatSave->Thread = KeGetCurrentThread();
+    FloatSave->Flags = 1;
+    auto area = (UCHAR *)(((ULONG)buf + 15) & ~15u);
+    ULONG flags = __builtin_ia32_readeflags_u32();
+    __asm__ volatile("cli");
+    WriteCr0(ReadCr0() & ~CR0_TS);
+    PKTHREAD current = Prcb.CurrentThread;
+    if (Prcb.NpxThread && Prcb.NpxThread != current) { // put the owner's state back where it belongs
+        __asm__ volatile("fxsave %0" : "=m"(*(UCHAR(*)[512])NpxArea(Prcb.NpxThread)));
+        Prcb.NpxThread->NpxState = NPX_STATE_NOT_LOADED;
+        Prcb.NpxThread = nullptr;
+    }
+    if (Prcb.NpxThread == current)
+        __asm__ volatile("fxsave %0" : "=m"(*(UCHAR(*)[512])area));
+    else
+        for (ULONG i = 0; i < 512; i++)
+            area[i] = NpxArea(current)[i];
+    // Fresh state for the caller: the current thread now owns the FPU with defaults.
+    __asm__ volatile("fninit");
+    ULONG mxcsr = 0x1F80;
+    __asm__ volatile("ldmxcsr %0" ::"m"(mxcsr));
+    current->NpxState = NPX_STATE_LOADED;
+    Prcb.NpxThread = current;
+    __builtin_ia32_writeeflags_u32(flags);
+    return STATUS_SUCCESS;
+}
+
+XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState(KFLOATING_SAVE_ *FloatSave) {
+    auto buf = (UCHAR *)FloatSave->Buffer;
+    if (!buf)
+        return STATUS_SUCCESS;
+    auto area = (UCHAR *)(((ULONG)buf + 15) & ~15u);
+    ULONG flags = __builtin_ia32_readeflags_u32();
+    __asm__ volatile("cli");
+    WriteCr0(ReadCr0() & ~CR0_TS);
+    PKTHREAD current = Prcb.CurrentThread;
+    __asm__ volatile("fxrstor %0" ::"m"(*(UCHAR(*)[512])area));
+    current->NpxState = NPX_STATE_LOADED;
+    Prcb.NpxThread = current;
+    __builtin_ia32_writeeflags_u32(flags);
+    ExFreePool(buf);
+    FloatSave->Buffer = nullptr;
+    return STATUS_SUCCESS;
+}

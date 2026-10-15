@@ -97,8 +97,75 @@ XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChang
     return status;
 }
 
+// --- Shutdown notifications (priority-ordered, highest first) and SMC housekeeping
+
+typedef void(NTAPI *PHAL_SHUTDOWN_NOTIFICATION)(struct _HAL_SHUTDOWN_REGISTRATION *ShutdownRegistration);
+typedef struct _HAL_SHUTDOWN_REGISTRATION {
+    PHAL_SHUTDOWN_NOTIFICATION NotificationRoutine;
+    LONG Priority;
+    LIST_ENTRY ListEntry;
+} HAL_SHUTDOWN_REGISTRATION, *PHAL_SHUTDOWN_REGISTRATION;
+
+static LIST_ENTRY HalpShutdownList = {&HalpShutdownList, &HalpShutdownList};
+static volatile UCHAR HalpShutdownPending;
+static ULONG HalpSmcScratch;
+volatile ULONG HalpResetOnEjectEnabled; // boot-flags bit 3 of the reference
+
+XBAPI void NTAPI HalRegisterShutdownNotification(PHAL_SHUTDOWN_REGISTRATION ShutdownRegistration, BOOLEAN Register) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (!Register) {
+        for (PLIST_ENTRY e = HalpShutdownList.Flink; e != &HalpShutdownList; e = e->Flink)
+            if (e == &ShutdownRegistration->ListEntry) {
+                RemoveEntryList(e);
+                break;
+            }
+    } else {
+        PLIST_ENTRY e = HalpShutdownList.Flink;
+        while (e != &HalpShutdownList &&
+               CONTAINING_RECORD(e, HAL_SHUTDOWN_REGISTRATION, ListEntry)->Priority >= ShutdownRegistration->Priority)
+            e = e->Flink;
+        InsertTailList(e, &ShutdownRegistration->ListEntry); // in front of the first lower priority
+    }
+    KfLowerIrql(old);
+}
+
+static void HalpRunShutdownNotifications() {
+    for (;;) {
+        KIRQL old = KeRaiseIrqlToDpcLevel();
+        PLIST_ENTRY e = IsListEmpty(&HalpShutdownList) ? nullptr : RemoveHeadList(&HalpShutdownList);
+        KfLowerIrql(old);
+        if (!e)
+            break;
+        auto r = CONTAINING_RECORD(e, HAL_SHUTDOWN_REGISTRATION, ListEntry);
+        r->NotificationRoutine(r);
+    }
+}
+
+XBAPI BOOLEAN NTAPI HalIsResetOrShutdownPending() { return HalpShutdownPending != 0; }
+
+XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
+XBAPI void NTAPI HalInitiateShutdown() {
+    HalpShutdownPending = 2;
+    HalReturnToFirmware(0);
+}
+
+XBAPI void NTAPI HalWriteSMCScratchRegister(ULONG ScratchRegister) {
+    HalpSmcScratch = ScratchRegister;
+    HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, ScratchRegister);
+}
+
+XBAPI void NTAPI HalEnableSecureTrayEject() {
+    if (HalpResetOnEjectEnabled) {
+        HalpResetOnEjectEnabled = 0;
+        while (!NT_SUCCESS(HalWriteSMBusValue(SMC_ADDRESS, 0x19, FALSE, 0))) {
+        }
+    }
+}
+
 // Routines: 0 halt, 1 reboot, 2 quick reboot, 3 debugger reboot, 4 fatal-error reboot.
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+        HalpRunShutdownNotifications();
     if (Routine == 4)
         HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, 2); // the dashboard shows the error on next boot
     // Quick reboot (re-entering the kernel without the BIOS) is not supported yet: reset instead.
