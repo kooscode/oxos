@@ -485,7 +485,10 @@ static void XepLaunchTitle(ULONG Reason) {
 }
 
 // §5: keep the LaunchDataPage below the kernel, out of the title's way.
+void HalpEndSplash();
+
 static void XepPrepareToEnterTitle() {
+    HalpEndSplash();
     if (!LaunchDataPage)
         return;
     ULONG kernelPhys = MmGetPhysicalAddress((PVOID)0x80010000);

@@ -432,6 +432,7 @@ def dash_checks(mon):
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
+        "boot splash shown (all fade frames) before the dashboard": mon.read("HalpSplashFrames") == 24,
     }, "M5e": launch_reason_checks(mon)}
 
 
