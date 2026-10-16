@@ -16,6 +16,15 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
+## Download
+**[Download the latest BIOS image (releases/latest)](https://github.com/kooscode/oxos/releases/latest)**: a ready
+1 MB `bios_vX.Y.bin`. To use it in xemu:
+1. Open *Machine → Settings → System*.
+2. Set *Flash (BIOS) File* to the image and leave *MCPX Boot ROM File* empty.
+3. Use the copyright-free [xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) as the hard disk.
+
+It has only been tested in xemu so far, not on a real console.
+
 ## How it was made
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
   (`spec/`), and the kernel is written from those specs only. No decompiled code, Microsoft keys or data tables are
