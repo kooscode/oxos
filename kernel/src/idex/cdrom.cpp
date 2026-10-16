@@ -186,6 +186,28 @@ struct SCSI_PASS_THROUGH_DIRECT_ {
     UCHAR Cdb[16];
 };
 
+#if XK_TRACE_IMPORTS
+// Diagnostics (trace builds): the last 16 drive control requests: code, status, bytes, CDB, first 32 response bytes.
+struct IDEX_CDROM_LOG {
+    ULONG Code, Status, Got, Length;
+    UCHAR Cdb[16], Data[32];
+};
+XK_PERSIST IDEX_CDROM_LOG IdexCdRomLog[16]; // kept across a quick reboot
+XK_PERSIST volatile ULONG IdexCdRomLogCount;
+static void IdexCdRomRecord(ULONG code, const UCHAR *cdb, const void *data, ULONG length, ULONG got, NTSTATUS status) {
+    ULONG n = IdexCdRomLogCount;
+    IdexCdRomLogCount = n + 1;
+    IDEX_CDROM_LOG &l = IdexCdRomLog[n % 16];
+    l.Code = code, l.Status = status, l.Got = got, l.Length = length;
+    RtlCopyMemory(l.Cdb, cdb, 12);
+    RtlZeroMemory(l.Data, 32);
+    if (data && NT_SUCCESS(status))
+        RtlCopyMemory(l.Data, data, got < 32 ? got : 32);
+}
+#else
+#define IdexCdRomRecord(...) ((void)0)
+#endif
+
 static void IdexCdRomControl(PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     ULONG outLen = s->Parameters.DeviceIoControl.OutputBufferLength;
@@ -197,6 +219,7 @@ static void IdexCdRomControl(PIRP Irp) {
         status = IdexAtapiPio(cdb, nullptr, 0, false, &got);
         if (NT_SUCCESS(status))
             IdexCdRomReadCapacity();
+        IdexCdRomRecord(IOCTL_CDROM_CHECK_VERIFY, cdb, nullptr, 0, got, status);
         IdexCdRomFinish(Irp, status, 0);
         return;
     case IOCTL_CDROM_GET_DRIVE_GEOMETRY:
@@ -213,6 +236,7 @@ static void IdexCdRomControl(PIRP Irp) {
             g->SectorsPerTrack = 1;
             g->BytesPerSector = 0x800;
         }
+        IdexCdRomRecord(IOCTL_CDROM_GET_DRIVE_GEOMETRY, cdb, Irp->UserBuffer, outLen, sizeof(DISK_GEOMETRY), status);
         IdexCdRomFinish(Irp, status, sizeof(DISK_GEOMETRY));
         return;
     case IOCTL_CDROM_READ_TOC:
@@ -220,6 +244,7 @@ static void IdexCdRomControl(PIRP Irp) {
         cdb[7] = (UCHAR)(outLen >> 8);
         cdb[8] = (UCHAR)outLen;
         status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
+        IdexCdRomRecord(IOCTL_CDROM_READ_TOC, cdb, Irp->UserBuffer, outLen, got, status);
         IdexCdRomFinish(Irp, status, got);
         return;
     case IOCTL_DVD_READ_STRUCTURE: {
@@ -230,19 +255,22 @@ static void IdexCdRomControl(PIRP Irp) {
         status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
         if (status == STATUS_INVALID_DEVICE_REQUEST)
             status = (NTSTATUS)0xC0000014; // STATUS_UNRECOGNIZED_MEDIA: not a DVD
+        IdexCdRomRecord(IOCTL_DVD_READ_STRUCTURE, cdb, Irp->UserBuffer, outLen, got, status);
         IdexCdRomFinish(Irp, status, got);
         return;
     }
     case IOCTL_SCSI_PASS_THROUGH_DIRECT: {
         auto p = (SCSI_PASS_THROUGH_DIRECT_ *)s->Parameters.DeviceIoControl.InputBuffer;
-        if (s->Parameters.DeviceIoControl.InputBufferLength < sizeof(*p) || p->CdbLength > 12) {
+        if (s->Parameters.DeviceIoControl.InputBufferLength < sizeof(*p)) {
             IdexCdRomFinish(Irp, STATUS_INVALID_PARAMETER, 0);
             return;
         }
-        RtlCopyMemory(cdb, p->Cdb, p->CdbLength);
+        // Always the 12-byte ATAPI packet: CdbLength is ignored, as the reference does (callers commonly leave it 0).
+        RtlCopyMemory(cdb, p->Cdb, 12);
         status = IdexAtapiPio(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength, p->DataIn == 0 /*SCSI_IOCTL_DATA_OUT*/,
                               &got);
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2; // CHECK CONDITION
+        IdexCdRomRecord(IOCTL_SCSI_PASS_THROUGH_DIRECT, p->Cdb, p->DataBuffer, p->DataTransferLength | p->CdbLength << 24 | p->DataIn << 16, got, status);
         p->DataTransferLength = got;
         IdexCdRomFinish(Irp, status, got);
         return;
