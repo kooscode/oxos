@@ -45,6 +45,22 @@ make run-stock ISO=...           # the same with your original BIOS, for compari
 See [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
 
+## About the BIOS image you build
+`make bios` produces a BIOS image that still contains parts of the BIOS you supplied: the X-code init table, the
+second-stage boot loader (2BL) and the keys inside it are Microsoft's; only the kernel (and the splash) are ours.
+**Do not distribute a built `bios.bin`.** Share the source and let everyone build from their own dump.
+
+## Next steps
+- **A fully open, shippable BIOS image.** Replace the remaining Microsoft parts:
+  - our own X-code init table (memory controller and chipset set-up; Cromwell's GPL tables are a reference);
+  - our own 2BL, started on MCPX 1.0 without the secret RC4 key (the X-code "visor" exit), and later MCPX 1.1
+    consoles (revisions 1.1–1.5), whose flash first-stage loader is checked by a TEA hash in the chip;
+  - no shipped keys: the kernel takes the EEPROM and certificate keys from the 2BL today, so an open image needs
+    a "bring your own key" install step, or must run without them (no EEPROM security section, so no hard-disk
+    unlock or region from it).
+- **Video encoder mode tables** (Conexant, Focus) for real TVs, then validation on real hardware.
+- **MCPX 1.1 support in `tools/mkbios.py`** (it only packs MCPX 1.0 images today).
+
 ## License
 GPL-2.0 (see [`LICENSE`](LICENSE)). `tests/padtest` builds against [nxdk](https://github.com/XboxDev/nxdk), which
 is fetched at build time and keeps its own licenses.
