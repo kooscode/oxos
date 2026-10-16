@@ -109,6 +109,9 @@ Timer confirmed in the reference).
   advances a 64-bit base by 2^31 (plus another 2^31 if bit 31 already toggled again); the base's high part is
   written high2/low/high so readers can retry on a torn read. `KeQueryPerformanceCounter` = base high part : (timer
   bits 0–30 | base bit 31), plus 2^31 if timer bit 31 differs from the base's (a toggle not handled yet).
-- `KeStallExecutionProcessor(us)`: `cpuid`, then a busy loop of us × (loops per µs, calibrated at boot,
-  0x8003AFF0). **Ours** polls the PM timer for us × 27/8 ticks instead (same duration, no calibration).
+- `KeStallExecutionProcessor(us)`: `cpuid`, then a busy loop of us × 367 iterations (`sub eax,1; jnz`; 32-bit
+  product). 0x8003AFF0 is a constant (0x16F, for the 733 MHz CPU), never written: no calibration. Ours does the
+  same. (Ours used to poll the PM timer for an exact duration; in xemu, which runs the loop much faster than the
+  console, that made stalls far longer than the reference's: Halo 2's PhyInitialize with no link waited 3.5 s
+  where the reference took a fraction of a second, delaying its intro.)
 - Measured in xemu: 3.378 M counts per second of KeTickCount; the timer goes past 24 bits (32-bit).

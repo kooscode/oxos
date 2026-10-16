@@ -82,16 +82,16 @@ XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency() {
     return r;
 }
 
+// A fixed busy loop, as the reference: cpuid, then MicroSeconds x 367 iterations (its constant at 0x8003AFF0, sized
+// for the 733 MHz CPU; the product is 32-bit). Not timed against a clock: an emulator that runs the loop faster
+// than the console also shortens the stalls, which titles and xemu are used to (e.g. PhyInitialize's 3.5 s of
+// waits with no link, spec/16, pass in a fraction of a second in xemu).
 XBAPI void NTAPI KeStallExecutionProcessor(ULONG MicroSeconds) {
-    // ticks = us * 3.375 = us * 27 / 8. (The reference spins a loop count calibrated at boot; ours polls the timer.)
-    ULONGLONG ticks = ((ULONGLONG)MicroSeconds * 27 >> 3) + 1;
-    ULONG last = inl(ACPI_PM_TIMER);
-    while (ticks) {
-        ULONG now = inl(ACPI_PM_TIMER);
-        ULONG elapsed = now - last;
-        last = now;
-        ticks = elapsed >= ticks ? 0 : ticks - elapsed;
-    }
+    ULONG a = 0, b, c, d;
+    __asm__ volatile("cpuid" : "+a"(a), "=b"(b), "=c"(c), "=d"(d));
+    ULONG loops = MicroSeconds * 367;
+    if (loops)
+        __asm__ volatile("1: subl $1, %0\n\tjnz 1b" : "+r"(loops));
 }
 
 // --- System time: initialised from the RTC, changed by NtSetSystemTime (which also sets the RTC).
