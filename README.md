@@ -51,13 +51,16 @@ second-stage boot loader (2BL) and the keys inside it are Microsoft's; only the 
 **Do not distribute a built `bios.bin`.** Share the source and let everyone build from their own dump.
 
 ## Next steps
-- **A fully open, shippable BIOS image.** Replace the remaining Microsoft parts:
-  - our own X-code init table (memory controller and chipset set-up; Cromwell's GPL tables are a reference);
-  - our own 2BL, started on MCPX 1.0 without the secret RC4 key (the X-code "visor" exit), and later MCPX 1.1
-    consoles (revisions 1.1–1.5), whose flash first-stage loader is checked by a TEA hash in the chip;
-  - no shipped keys: the kernel takes the EEPROM and certificate keys from the 2BL today, so an open image needs
-    a "bring your own key" install step, or must run without them (no EEPROM security section, so no hard-disk
-    unlock or region from it).
+- **A fully open, shippable BIOS image**, based on [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0,
+  fetched at build time and credited, not copied in):
+  - Cromwell's X-code init table, ending with its "overflow trick": the last X-code writes a jump into RAM at
+    address 0, the boot ROM's 2BL check then fails and switches the ROM off, and the CPU runs on into that jump.
+    No MCPX key and no TEA-hash weakness needed, so one image covers revisions 1.0–1.5 (1.6 with Cromwell's
+    MCPX-D5 values);
+  - our own reset stub in the top 512 bytes of flash that runs the same X-codes when no boot ROM is present
+    (xemu without an MCPX ROM file; on hardware the chip's ROM hides that area), so **no MCPX dump is needed**;
+  - our own 2BL that sets up paging and starts the kernel per `spec/01-boot.md`;
+  - EEPROM / hard-disk key handling from Cromwell, so stock locked drives unlock.
 - **Video encoder mode tables** (Conexant, Focus) for real TVs, then validation on real hardware.
 - **MCPX 1.1 support in `tools/mkbios.py`** (it only packs MCPX 1.0 images today).
 
