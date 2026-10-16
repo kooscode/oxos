@@ -41,6 +41,10 @@ make run-stock ISO=...           # the same with your original BIOS, for compari
 See [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
 
+## License
+GPL-2.0 (see [`LICENSE`](LICENSE)). `tests/padtest` builds against [nxdk](https://github.com/XboxDev/nxdk), which
+is fetched at build time and keeps its own licenses.
+
 ## Legal
 This is an independent project, not affiliated with or endorsed by Microsoft. "Xbox" is a trademark of
 Microsoft Corporation. Use it only with BIOS, boot ROM and game images you have dumped from hardware and discs you
