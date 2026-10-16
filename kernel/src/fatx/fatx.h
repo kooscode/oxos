@@ -7,7 +7,7 @@ constexpr ULONG FATX_SIGNATURE = 0x58544146; // "FATX"
 constexpr ULONG FATX_MAX_NAME = 42, FATX_MAX_PATH = 250;
 constexpr UCHAR FATX_DIRENT_NEVER_USED = 0x00, FATX_DIRENT_NEVER_USED2 = 0xFF, FATX_DIRENT_DELETED = 0xE5;
 constexpr ULONG FATX_CLUSTER_FREE = 0, FATX_CLUSTER_LAST = 0xFFFFFFFF, FATX_CLUSTER_BAD = 0xFFFFFFF7;
-constexpr ULONG FATX_BLOCK_SIZE = 0x1000, FATX_CACHE_BLOCKS = 32;
+constexpr ULONG FATX_BLOCK_SIZE = 0x1000;
 
 constexpr UCHAR FILE_ATTRIBUTE_READONLY = 0x01, FILE_ATTRIBUTE_HIDDEN = 0x02, FILE_ATTRIBUTE_SYSTEM = 0x04,
                 FILE_ATTRIBUTE_DIRECTORY = 0x10, FILE_ATTRIBUTE_ARCHIVE = 0x20;
@@ -55,8 +55,10 @@ struct FATX_CCB {
     CHAR Mask[FATX_MAX_NAME + 2];
 };
 
+struct FATX_VOLUME;
 struct FATX_CACHE_BLOCK {
-    LONGLONG Offset; // byte offset on the target device, -1 = empty
+    FATX_VOLUME *Volume; // nullptr = empty
+    LONGLONG Offset;     // byte offset on the volume's target device
     ULONG LastUse;
     PUCHAR Data;
 };
@@ -77,12 +79,14 @@ struct FATX_VOLUME {
     ULONG SerialNumber;
     FATX_FCB RootFcb;
     FATX_FCB VolumeFcb; // opens of the volume itself
-    KEVENT Lock;
-    ULONG CacheClock;
-    FATX_CACHE_BLOCK Cache[FATX_CACHE_BLOCKS];
 };
 
-// Volume layer (fatx/volume.cpp)
+// Volume layer (fatx/volume.cpp). One lock and one block cache serve all FATX volumes: mapped cache blocks are
+// used while the lock is held, and the cache is the reference's global file system cache (FscSetCacheSize).
+void FatxInitialize();
+NTSTATUS FatxSetCacheSize(ULONG Pages);
+ULONG FatxGetCacheSize();
+void FatxForgetVolume(FATX_VOLUME *v);
 void FatxAcquireVolume(FATX_VOLUME *v);
 void FatxReleaseVolume(FATX_VOLUME *v);
 NTSTATUS FatxDeviceIo(FATX_VOLUME *v, UCHAR Major, LONGLONG Offset, PVOID Buffer, ULONG Length);

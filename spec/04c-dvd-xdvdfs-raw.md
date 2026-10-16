@@ -38,6 +38,12 @@ CD-ROM driver object at 0x800123d8, its READ dispatch (0x80025d9a) and the DEVIC
     choice for OPEN_IF of a missing name too)
   - a missing name → NAME_NOT_FOUND; a missing directory on the path → PATH_NOT_FOUND
 - Files are contiguous from their start sector. Enumeration is in tree order. Every time is the volume time.
+- Read (reference dispatch 0x8002b430): dismounted volume → STATUS_VOLUME_DISMOUNTED; directory →
+  STATUS_INVALID_DEVICE_REQUEST; length 0 → success with 0 bytes; offset at or past the end of the file →
+  STATUS_END_OF_FILE; otherwise the length is clipped to the end of the file. Non-cached reads go to the device
+  with the transfer rounded up to whole sectors and the clipped length reported: **the length need not be a
+  multiple of 2048** (Halo 2 reads its map files' tails with lengths such as 0x27600 and shows "disc dirty or
+  damaged" when that fails). Ours checks only the offset's sector alignment for non-cached reads.
 - Mounting: CD_ROM devices try XDVDFS (the reference tries **UDF first**, then XDVDFS — spec 04d).
 
 ## 3. RAW file system

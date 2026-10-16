@@ -83,7 +83,8 @@ WRITECOMBINE → |0x08 (PWT).
     - a VAD records the range (pool tag 'VadS'), and `VirtualMemoryBytesReserved` grows
   - **Commit:**
     - the range must lie inside one VAD, otherwise STATUS_CONFLICTING_ADDRESSES; MEM_RESET is a no-op success
-    - too few free pages → STATUS_NO_MEMORY
+    - pages needed = uncommitted pages in the range + page tables to be created; more than AvailablePages →
+      STATUS_NO_MEMORY (no reserve is kept: titles such as Halo 2 commit down to the last free pages)
     - page tables are created on demand (PDE flags 0x67)
     - new pages are zeroed unless MEM_NOZERO is given
     - already-committed pages take the new protection

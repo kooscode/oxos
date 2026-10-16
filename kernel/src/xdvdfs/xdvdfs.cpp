@@ -298,7 +298,9 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return XdvdfsComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     LARGE_INTEGER offset = s->Parameters.Read.ByteOffset;
     ULONG length = s->Parameters.Read.Length;
-    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && ((offset.LowPart | length) & (XDVDFS_SECTOR - 1)))
+    // Non-cached reads start on a sector, but their length need not be whole sectors: the reference rounds the
+    // transfer up and reports the length clipped to the file (Halo 2 reads its map files' tails this way).
+    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1)))
         return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
     if (offset.HighPart || offset.LowPart >= f->Size)
         return XdvdfsComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);

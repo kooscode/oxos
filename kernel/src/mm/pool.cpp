@@ -43,9 +43,23 @@ XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag) {
     ULONG units = (NumberOfBytes + sizeof(POOL_HEADER) + POOL_UNIT - 1) / POOL_UNIT;
     KIRQL old = KeRaiseIrqlToDpcLevel();
     POOL_HEADER *h;
+    FreeBlock *larger = nullptr;
+    if (ExpCurrentUsed + units > POOL_UNITS_PER_PAGE && !ExpFreeLists[units])
+        for (ULONG u = units + 1; u < POOL_UNITS_PER_PAGE && !larger; u++)
+            larger = ExpFreeLists[u];
     if (FreeBlock *b = ExpFreeLists[units]) {
         ExpFreeLists[units] = b->Next;
         h = &b->Header;
+    } else if (larger) {
+        // Split the smallest larger free block rather than start a new page; the rest goes back by its size.
+        ULONG have = larger->Header.BlockSize;
+        ExpFreeLists[have] = larger->Next;
+        auto rest = (FreeBlock *)((UCHAR *)larger + units * POOL_UNIT);
+        rest->Header.PoolType = 0;
+        rest->Header.BlockSize = (UCHAR)(have - units);
+        rest->Next = ExpFreeLists[have - units];
+        ExpFreeLists[have - units] = rest;
+        h = &larger->Header;
     } else {
         if (ExpCurrentUsed + units > POOL_UNITS_PER_PAGE) {
             // Give the page's tail to the free list of its exact size, then start a new page.

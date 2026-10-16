@@ -65,7 +65,8 @@ ULONG __cdecl XkTraceLeave(ULONG result) {
 void __cdecl XkTraceRecord(ULONG index, PULONG frame) {
     switch (XkTraceOrdinals[index]) { // too frequent to be useful
     case 103: case 104: case 119: case 125: case 126: case 128: case 129: case 160: case 161:
-    case 277: case 278: case 294: case 295:
+    case 221: case 234: case 238: case 277: case 278: case 294: case 295: // Halo 2 spins on 238 (NtYieldExecution)
+    // and takes a mutant (221 release, 234 wait) around every step
         return;
     }
     if (!XkTraceRing)
@@ -91,6 +92,28 @@ void __cdecl XkTraceRecord(ULONG index, PULONG frame) {
     case 67: case 69:             // IoCreateSymbolicLink, IoDeleteSymbolicLink
         XkTraceName(e, frame[1], true);
         break;
+    case 219: case 236: {         // NtReadFile/NtWriteFile: ApcContext, IoStatusBlock, Buffer, Length, *ByteOffset,
+        e[7] = 0x10000000 | e[0]; // and the first dword of the buffer (written data, or what a read overwrites)
+        e[8] = frame[4];
+        e[9] = frame[5];
+        e[10] = frame[6];
+        e[11] = frame[7];
+        auto offset = (PULONG)frame[8];
+        e[12] = offset ? offset[0] : 0xFFFFFFFF;
+        e[13] = offset ? offset[1] : 0xFFFFFFFF;
+        e[14] = frame[6] ? *(PULONG)frame[6] : 0;
+        break;
+    }
+    case 226: {                   // NtSetInformationFile: class, length, the first 4 dwords of the information
+        e[7] = 0x10000000 | e[0];
+        e[8] = frame[5];
+        e[9] = frame[4];
+        auto info = (PULONG)frame[3];
+        for (int i = 0; i < 4; i++)
+            e[10 + i] = info[i];
+        e[14] = 0;
+        break;
+    }
     default:
         e[7] = 0;
     }
@@ -110,8 +133,17 @@ ULONG XkTraceWrap(USHORT ordinal, ULONG target) {
     static PUCHAR stubs;
     static ULONG used;
     if (!stubs) {
+#if XK_TRACE_IMPORTS == 2
+        // TRACE_IMPORTS=2 needs 128 MB (xemu mem_limit = '128'): ring and stubs live above the 64 MB the kernel
+        // manages, so the title sees exactly the memory of a release build.
+        ULONG ringBytes = XK_TRACE_RING * XK_TRACE_WORDS * 4;
+        auto high = (PUCHAR)MmMapIoSpace(0x4000000, ringBytes + XK_TRACE_MAX_IMPORTS * 10, PAGE_READWRITE);
+        XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])high;
+        stubs = high ? high + ringBytes : nullptr;
+#else
         stubs = (PUCHAR)ExAllocatePoolWithTag(XK_TRACE_MAX_IMPORTS * 10, 'crTX');
         XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])MmAllocateContiguousMemory(XK_TRACE_RING * XK_TRACE_WORDS * 4);
+#endif
     }
     if (!stubs || used == XK_TRACE_MAX_IMPORTS)
         return target;

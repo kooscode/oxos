@@ -895,7 +895,7 @@ static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject) {
 
 static void NTAPI FatxDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     FATX_VOLUME *v = FatxVolume(DeviceObject);
-    ExFreePool(v->Cache[0].Data);
+    FatxForgetVolume(v);
     ObfDereferenceObject(v->TargetDevice);
 }
 

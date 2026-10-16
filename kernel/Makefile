@@ -28,8 +28,11 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
 
-CXX_SRCS := $(wildcard src/*/*.cpp)
-ASM_SRCS := $(wildcard src/*/*.S)
+# Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and
+# take memory titles count on (Halo 2 needs nearly all of it).
+CXX_SRCS := $(filter-out $(if $(filter 0,$(SELFTEST)),src/ke/selftest%.cpp) \
+                         $(if $(filter 0,$(TRACE_IMPORTS)),src/xe/trace.cpp),$(wildcard src/*/*.cpp))
+ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
 OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj)
 
 all: $(BUILD)/xboxkrnl.exe
