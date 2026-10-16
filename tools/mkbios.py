@@ -96,7 +96,7 @@ def lzx_stream(image):
     return b"".join(struct.pack("<HH", len(c), u) + c for c, u in frames) + b"\0\0\0\0"
 
 
-# Modded BIOSes (e.g. "Complex 4627") carry a 2BL stub that patches the decompressed kernel at fixed addresses:
+# Some modded BIOSes carry a 2BL stub that patches the decompressed kernel at fixed addresses:
 #   call $+5; pop esi; cld; xor ecx,ecx; add esi,imm8   -> table of {u8 len, u32 address, len bytes}, 0xFF end
 # Those addresses belong to the stock kernel, so the table is emptied for our kernel.
 PATCHER_STUB = bytes.fromhex("e8000000005efc33c983c6")

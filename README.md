@@ -19,7 +19,7 @@ Nothing copyrighted is in this repository. Put your own dumps here (both folders
 
 | path | what |
 |---|---|
-| `xbox-files/bios/Complex_4627.bin` | a 1 MB MCPX 1.0 BIOS image; its init tables and 2BL are reused, the kernel is replaced |
+| `xbox-files/bios/*.bin` | a 1 MB MCPX 1.0 BIOS image (any name); its init tables and 2BL are reused, the kernel is replaced |
 | `xbox-files/mcpx/mcpx_1.0.bin` | the MCPX 1.0 boot ROM (for xemu, and to decrypt the 2BL) |
 | `xbox-files/hdd/xbox_hdd.qcow2` | an xemu hard-disk image (tests and `make run` only ever use a temporary copy) |
 | `xbox-files/xboxkrnl.exe` | optional: the reference kernel, for reverse-engineering work |

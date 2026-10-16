@@ -15,7 +15,7 @@ make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
-Inputs: `BIOS_BASE` (default `../xbox-files/bios/Complex_4627.bin`) and `MCPX_ROM`
+Inputs: `BIOS_BASE` (default: the `.bin` file in `../xbox-files/bios/`) and `MCPX_ROM`
 (`../xbox-files/mcpx/mcpx_1.0.bin`). The xemu binary is found on PATH or at `~/.local/bin/xemu`.
 
 ## Layout

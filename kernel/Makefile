@@ -5,7 +5,8 @@
 
 ROOT      := ..
 BUILD     := build
-BIOS_BASE ?= $(ROOT)/xbox-files/bios/Complex_4627.bin
+# Your MCPX 1.0 BIOS image (any name) in xbox-files/bios/.
+BIOS_BASE ?= $(firstword $(wildcard $(ROOT)/xbox-files/bios/*.bin))
 MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
 SPLASH    ?= splash/splash.png
@@ -45,9 +46,9 @@ $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/xboxkrnl.def: exports.lst $(ROOT)/xboxkrnl-4627-exports.tsv $(ROOT)/tools/gen_def.py
+$(BUILD)/xboxkrnl.def: exports.lst exports.tsv $(ROOT)/tools/gen_def.py
 	@mkdir -p $(BUILD)
-	python3 -I $(ROOT)/tools/gen_def.py $(ROOT)/xboxkrnl-4627-exports.tsv exports.lst $@
+	python3 -I $(ROOT)/tools/gen_def.py exports.tsv exports.lst $@
 
 $(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
@@ -130,7 +131,7 @@ test-pad: padtest
 
 # The same session on the reference BIOS (A/B comparison; the BIOS file is the user's own, never committed).
 run-stock:
-	python3 -I $(ROOT)/tools/run.py $(ROOT)/xbox-files/bios/Complex_4627.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
 clean:
 	rm -rf $(BUILD) build-release
