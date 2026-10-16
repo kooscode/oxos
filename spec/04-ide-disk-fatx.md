@@ -3,7 +3,7 @@
 Clean-room behavioural spec (no decompiled code). **Status: IDE channel + disk + partitions implemented (milestone 3c-1).** **Project rule: reproduce this exactly**
 (LBA28, fixed partition table) so stock drives and stock-formatted disks work. Extensions come later.
 Evidence: batch_decompile `ev_542cc685…` (0x80024ecc), `ev_9e7fc395…` (disk/DVD init),
-`ev_7012e098…` (FATX mount, transfer start, StartIo); objdump notes in `xboxkrnl-4627-notes.md`.
+`ev_7012e098…` (FATX mount, transfer start, StartIo).
 Names marked (inferred) are not symbols in the binary.
 
 ## 1. IDE channel init (`IdexChannelInit`, inferred, 0x80024ecc; runs on every boot)

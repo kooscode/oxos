@@ -11,7 +11,7 @@ def main():
     tsv, lst, out = sys.argv[1:4]
     table = {}
     for line in open(tsv).read().splitlines()[1:]:
-        ordinal, name, _conv, _args, kind, _addr, _sect = line.split("\t")
+        ordinal, name, _conv, _args, kind = line.split("\t")[:5]
         table[name] = (int(ordinal), kind)
 
     names = [l.strip() for l in open(lst) if l.strip() and not l.lstrip().startswith("#")]

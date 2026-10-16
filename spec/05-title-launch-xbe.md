@@ -74,7 +74,7 @@ B. Otherwise:
 9. **Region**: certificate GameRegion (+0xA0) & the console's game region (**0x8003B158**, from the EEPROM;
    bit 31 = manufacturing) must overlap, otherwise **0xC0050001**.
 10. (Ours, milestone 9: region and media checks are enforced only with `RETAIL_MEDIA_POLICY=1`; by default they
-   behave like a modded BIOS — the Complex 4627 2BL patches the stock kernel to OR the certificate's media types
+   behave like a modded BIOS — a modded BIOS's 2BL patches the stock kernel to OR the certificate's media types
    with 0x00FFFFFF and relax the region — so unauthenticated discs (backups, XISOs in emulators) start.)
    **Media**: get the launch device's media flags (0x8002ec30). Certificate AllowedMediaTypes (+0x9C) & flags
    must be non-zero, otherwise **0xC0050002**. For media flag 2 (game disc) the title ID is pinned: the

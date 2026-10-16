@@ -3,7 +3,7 @@ show_welcome = false
 
 [sys.files]
 bootrom_path = '/path/to/repo/xbox-files/mcpx/mcpx_1.0.bin'
-flashrom_path = '/path/to/repo/xbox-files/bios/Complex_4627.bin'
+flashrom_path = '/path/to/repo/xbox-files/bios/bios.bin'
 eeprom_path = '/path/to/eeprom.bin'
 hdd_path = '/path/to/hdd_copy.qcow2'
 
