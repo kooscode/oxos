@@ -219,19 +219,21 @@ static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectN
                                  nullptr);
 }
 
-// Follow a path link: look up LinkTarget + "\" + rest from the root.
-static NTSTATUS ObpReparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, ULONG Attributes,
+// Follow a path link: look up LinkTarget + "\" + rest from the root. `separator`: the link's name was followed by
+// a '\' even if nothing comes after it ("C:\" -> "<target>\", the root directory, not the volume itself).
+static NTSTATUS ObpReparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, bool separator, ULONG Attributes,
                            POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth) {
     if (Depth >= 8)
         return STATUS_OBJECT_PATH_NOT_FOUND;
-    ULONG len = link->LinkTarget.Length + (rest->Length ? 1 + rest->Length : 0);
+    separator |= rest->Length != 0;
+    ULONG len = link->LinkTarget.Length + (separator ? 1 + rest->Length : 0);
     if (len > 0xFFFF)
         return STATUS_OBJECT_NAME_INVALID;
     auto buf = (PCHAR)ExAllocatePoolWithTag(len ? len : 1, 'prbO');
     if (!buf)
         return STATUS_INSUFFICIENT_RESOURCES_OB;
     RtlCopyMemory(buf, link->LinkTarget.Buffer, link->LinkTarget.Length);
-    if (rest->Length) {
+    if (separator) {
         buf[link->LinkTarget.Length] = '\\';
         RtlCopyMemory(buf + link->LinkTarget.Length + 1, rest->Buffer, rest->Length);
     }
@@ -305,7 +307,8 @@ static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING Objec
                 ObfReferenceObject(link);
                 ObfDereferenceObject(current);
                 KfLowerIrql(old);
-                status = ObpReparse(link, &rest, Attributes, ObjectType, ParseContext, Object, Depth);
+                bool separator = rest.Buffer > element.Buffer + element.Length;
+                status = ObpReparse(link, &rest, separator, Attributes, ObjectType, ParseContext, Object, Depth);
                 ObfDereferenceObject(link);
                 return status;
             }

@@ -419,6 +419,8 @@ static void XepLaunchDashboard() {
     HalReturnToFirmware(4);
 }
 
+volatile ULONG XeDashboardLaunchData[3]; // diagnostics: {type, reason, code} as last written for the dashboard
+
 static void XepLaunchDashboardWithReason(ULONG Reason, ULONG Code) {
     if (!LaunchDataPage)
         LaunchDataPage = MmAllocateContiguousMemory(0x1000);
@@ -429,6 +431,9 @@ static void XepLaunchDashboardWithReason(ULONG Reason, ULONG Code) {
         ldp->LaunchDataType = 1;
         ldp->DashboardReason = Reason;
         ldp->DashboardCode = Code;
+        XeDashboardLaunchData[0] = 1;
+        XeDashboardLaunchData[1] = Reason;
+        XeDashboardLaunchData[2] = Code;
     }
     XepLaunchDashboard();
 }

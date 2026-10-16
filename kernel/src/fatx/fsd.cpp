@@ -394,10 +394,12 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         IoCopyCurrentIrpStackLocationToNext(Irp);
         return IofCallDriver(v->TargetDevice, Irp);
     }
-    if (Irp->SegmentArray && ((offset.LowPart | length) & (v->SectorSize - 1)))
-        return FatxComplete(Irp, STATUS_INVALID_PARAMETER); // scatter/gather is always sector-granular
-    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) &&
-        ((offset.LowPart | length) & (v->SectorSize - 1)))
+    // Non-cached and scatter/gather transfers must be sector-aligned (offset and requested length). For reads the
+    // reference checks this only after the end-of-file test: a read at the end of a file whose size is not whole
+    // sectors reports STATUS_END_OF_FILE, not an invalid parameter (the stock dashboard reads files that way).
+    bool unaligned = ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Irp->SegmentArray) &&
+                     ((offset.LowPart | length) & (v->SectorSize - 1));
+    if (write && unaligned)
         return FatxComplete(Irp, STATUS_INVALID_PARAMETER);
     FatxAcquireVolume(v);
     NTSTATUS status = STATUS_SUCCESS;
@@ -421,6 +423,8 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     } else {
         if (offset.HighPart || offset.LowPart >= f->FileSize) {
             status = length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
+        } else if (unaligned) {
+            status = STATUS_INVALID_PARAMETER;
         } else {
             done = f->FileSize - offset.LowPart < length ? f->FileSize - offset.LowPart : length;
             status = FatxTransferIrp(v, f, Irp, false, offset.LowPart, buffer, done);

@@ -78,3 +78,12 @@ FATX driver object at 0x80012470. **Status: implemented (milestone 3c-2).**
 - Scatter/gather (`NtReadFileScatter` / `NtWriteFileGather`): each FILE_SEGMENT_ELEMENT is one page of the transfer;
   offset and length must be sector multiples. Ours since milestone 6e (volume handles still reject segment arrays).
   The Fsc exports, dismount and RAW are covered by specs 16 and 04c.
+
+## Read/write argument checks (reference read/write dispatch 0x80029a01)
+- Read: length 0 → success with 0 bytes; offset at or past the end of the file → STATUS_END_OF_FILE; the length is
+  clipped to the end of the file. Only then do non-cached (IRP_NOCACHE) and scatter/gather reads require the offset
+  and the requested length to be sector multiples (else STATUS_INVALID_PARAMETER). The stock dashboard reads a
+  non-cached file in 64 KB pieces until it gets STATUS_END_OF_FILE, at an unaligned position; rejecting that read
+  makes it show error 21.
+- Write: the reference extends the file first and checks alignment afterwards; ours rejects a misaligned
+  non-cached write up front, without extending the file (deviation).

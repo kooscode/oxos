@@ -85,6 +85,9 @@ void __cdecl XkTraceRecord(ULONG index, PULONG frame) {
     switch (e[0]) {
     case 190: case 202:           // NtCreateFile, NtOpenFile (object attributes are the 3rd argument)
         XkTraceName(e, frame[3], false);
+        ((volatile UCHAR *)&e[12])[3] = 0; // name: 23 characters; then share access and create/open options
+        e[13] = e[0] == 202 ? frame[5] : frame[7];
+        e[14] = e[0] == 202 ? frame[6] : frame[9];
         break;
     case 210: case 195:           // NtQueryFullAttributesFile, NtDeleteFile (1st)
         XkTraceName(e, frame[1], false);

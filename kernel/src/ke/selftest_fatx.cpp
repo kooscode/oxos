@@ -46,12 +46,15 @@ static void NTAPI FatxControllerThread(PVOID) {
     ULONG_PTR info;
     NTSTATUS status = Open(&h, "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", GENERIC_READ, FILE_OPEN,
                            FILE_NON_DIRECTORY_FILE, &info);
-    auto buf = (PUCHAR)ExAllocatePoolWithTag(0x40000, 'tsxF');
-    if (NT_SUCCESS(status) && buf) {
-        ULONG standard[6];
+    ULONG standard[6] = {};
+    if (NT_SUCCESS(status))
         NtQueryInformationFile(h, &iosb, standard, sizeof(standard), FileStandardInformation);
+    // Large enough for the whole file (the stock dashboard's xboxdash.xbe is bigger than the xemu image's) and for
+    // the write tests below (0x40000).
+    auto buf = (PUCHAR)ExAllocatePoolWithTag(standard[2] > 0x40000 ? standard[2] : 0x40000, 'tsxF');
+    if (NT_SUCCESS(status) && buf) {
         ULONG size = standard[2];
-        bool ok = info == 1 && size <= 0x40000;
+        bool ok = info == 1;
         ULONG got = 0;
         // Odd-sized pieces exercise the unaligned paths.
         while (ok && got < size) {

@@ -89,3 +89,9 @@ NtCreateEvent, PsCreateSystemThread), plus `ev_17a6d736…` (PsCreateSystemThrea
 ## Implementation notes
 - A new thread with kernel APCs queued (e.g. created suspended) gets the APC interrupt when it is switched in. The
   reference does this in KiSwapContext.
+
+## Symbolic links and a trailing separator
+`\??\C:\` must reach the target's parse procedure as `<target>\`: the separator after the link's name is kept even
+when nothing follows it. Otherwise the file system sees an open of the volume itself, and an open with
+FILE_DIRECTORY_FILE fails with STATUS_NOT_A_DIRECTORY. The stock dashboard opens `C:\` with FILE_DIRECTORY_FILE |
+FILE_OPEN_FOR_FREE_SPACE_QUERY to size the hard disk; it showed 0 blocks until this was fixed.
