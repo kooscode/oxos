@@ -12,7 +12,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("bios")
 ap.add_argument("--iso", help="disc image (XISO) for the DVD drive")
 ap.add_argument("--hdd", default=os.path.join(root, "xbox-files/hdd/xbox_hdd.qcow2"))
-ap.add_argument("--mcpx-rom", default=os.path.join(root, "xbox-files/mcpx/mcpx_1.0.bin"))
+ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump (needed only for a Microsoft BIOS)")
 ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 a = ap.parse_args()
@@ -23,7 +23,7 @@ shutil.copyfile(a.hdd, hdd)
 cfg = os.path.join(work, "xemu.toml")
 open(cfg, "w").write(
     "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
-    f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\n"
+    f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
     f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
     f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
     f"hdd_path = '{hdd}'\n"

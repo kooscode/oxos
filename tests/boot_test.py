@@ -4,7 +4,7 @@
 The kernel's boot self-tests (kernel/src/ke/selftest.cpp) leave results in globals that are
 located through the linker map and read with HMP `x`.
 
-usage: boot_test.py --bios build/bios.bin --mcpx-rom mcpx.bin --map build/xboxkrnl.map [--xemu PATH]
+usage: boot_test.py --bios build/bios.bin --map build/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
 """
 import argparse
 import hashlib
@@ -505,7 +505,7 @@ def disk_checks(hdd_copy):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bios", required=True)
-    ap.add_argument("--mcpx-rom", required=True)
+    ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump; without it xemu starts at the open image's reset code")
     ap.add_argument("--map", required=True)
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--boot-wait", type=float, default=8.0)
@@ -533,7 +533,7 @@ def main():
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys.files]\n"
-        f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\n"
+        f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
         + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else "")

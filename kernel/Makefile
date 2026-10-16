@@ -1,13 +1,19 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
 #   make            -> build/xboxkrnl.exe (+ map)
-#   make bios       -> build/bios.bin (kernel packed into BIOS_BASE with the stock 2BL)
+#   make bios       -> build/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/01 §5)
 #   make test       -> boot build/bios.bin in xemu and check all milestone conditions (boot self-tests)
 
 ROOT      := ..
 BUILD     := build
-# Your MCPX 1.0 BIOS image (any name) in xbox-files/bios/.
+# IMAGE=open (default) needs no Microsoft files. IMAGE=base instead packs the kernel into your own MCPX 1.0 BIOS
+# image (BIOS_BASE, its 2BL decrypted with MCPX_ROM), as before the open image existed.
+IMAGE     ?= open
 BIOS_BASE ?= $(firstword $(wildcard $(ROOT)/xbox-files/bios/*.bin))
-MCPX_ROM  ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
+# An MCPX boot ROM dump is optional: without one xemu starts at our reset code in flash. With one (MCPX_ROM=...)
+# xemu runs the real ROM, which reaches our 2BL through the X-codes' overflow trick, as a console does.
+MCPX_ROM  ?=
+# The reference BIOS needs the real boot ROM (run-stock, PAD_BIOS=stock comparisons only).
+STOCK_MCPX ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
 SPLASH    ?= splash/splash.png
 SPLASH_QUANT ?= octree
@@ -67,46 +73,94 @@ $(BUILD)/title.exe: $(BUILD)/title/title.obj
 $(BUILD)/title.xbe: $(BUILD)/title.exe $(ROOT)/tools/mkxbe.py
 	python3 -I $(ROOT)/tools/mkxbe.py --pe $< --map $(BUILD)/title.map --out $@ --no-preload .extra
 
+# --- Open BIOS image parts (spec/01 §5). XboxDev/cromwell (GPL-2.0) is fetched at a pinned commit for its X-code
+# table and EEPROM key states. MCPX16=1 selects Cromwell's values for the 1.6 console's MCPX.
+CROMWELL_DIR    := $(abspath $(ROOT)/third_party/cromwell)
+CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
+MCPX16          ?= 0
+OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18/bin/llvm-objcopy)
+BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium3 -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
+              -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
+              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5)
+BOOT := $(BUILD)/boot
+
+$(CROMWELL_DIR)/boot_rom/Xcodes.h:
+	git clone -q https://github.com/XboxDev/cromwell $(CROMWELL_DIR)
+	git -C $(CROMWELL_DIR) checkout -q $(CROMWELL_COMMIT)
+
+$(BOOT)/xcodes.bin: boot/xcodes.S $(CROMWELL_DIR)/boot_rom/Xcodes.h
+	@mkdir -p $(dir $@)
+	$(CC) $(BOOT_FLAGS) -I$(CROMWELL_DIR)/boot_rom -c $< -o $(BOOT)/xcodes.o
+	$(OBJCOPY) -O binary -j .xcodes $(BOOT)/xcodes.o $@
+
+$(BOOT)/reset.bin: boot/reset.S
+	@mkdir -p $(dir $@)
+	$(CC) $(BOOT_FLAGS) -c $< -o $(BOOT)/reset.o
+	$(OBJCOPY) -O binary -j .reset $(BOOT)/reset.o $@
+
+$(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.ld include/xk/inflate.h
+	@mkdir -p $(dir $@)
+	$(CC) $(BOOT_FLAGS) -c boot/start.S -o $(BOOT)/start.o
+	$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/bl.cpp -o $(BOOT)/bl.o
+	ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o -o $(BOOT)/bl.elf
+	$(OBJCOPY) -O binary $(BOOT)/bl.elf $@
+
 bios: $(BUILD)/bios.bin
 
+SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
+ifeq ($(IMAGE),base)
 $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH))
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
+else
+$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
+                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin
+	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
+	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
+	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
+endif
 
 test: $(BUILD)/bios.bin $(BUILD)/title.xbe
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
 	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
+	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
+
+# With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
+test-mcpx: $(BUILD)/title.xbe
+	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
+	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
 test-dash: $(BUILD)/title.xbe
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
+	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Quick-reboot phase: the release build runs the title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2).
 test-relaunch: $(BUILD)/title.xbe
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
+	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map \
 	    --relaunch --boot-wait 1
 
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
 test-fatal:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
+	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map build-release/xboxkrnl.map --no-disc --fatal --boot-wait 2
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test-udf: $(BUILD)/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) --map $(BUILD)/xboxkrnl.map \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
 
 # Interactive: boot the release BIOS in xemu with a copy of the HDD; optional ISO=path/to/game.iso.
 run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-release/bios.bin --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
 # Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
 # reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
@@ -127,13 +181,14 @@ padtest: $(NXDK_DIR)/Makefile
 test-pad: padtest
 	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin)
 	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),build-release/bios.bin) \
-		--mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
+		$(if $(filter stock,$(PAD_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
+		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
 
-# The same session on the reference BIOS (A/B comparison; the BIOS file is the user's own, never committed).
+# The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed).
 run-stock:
-	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-relaunch test-fatal test-udf test-pad padtest run run-stock clean
+.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-stock clean

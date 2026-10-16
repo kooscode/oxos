@@ -7,7 +7,7 @@ Targets console revisions 1.0–1.5 (1.6 comes later). It builds on Linux with c
 ## Build and test
 ```
 make            # build/xboxkrnl.exe + build/xboxkrnl.map
-make bios       # build/bios.bin: kernel packed into the base BIOS (MCPX 1.0) with its stock 2BL
+make bios       # build/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
@@ -15,12 +15,15 @@ make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
-Inputs: `BIOS_BASE` (default: the `.bin` file in `../xbox-files/bios/`) and `MCPX_ROM`
-(`../xbox-files/mcpx/mcpx_1.0.bin`). The xemu binary is found on PATH or at `~/.local/bin/xemu`.
+Inputs: only `HDD_IMAGE` (`../xbox-files/hdd/xbox_hdd.qcow2`, e.g. the copyright-free xemu HDD image). Optional:
+`MCPX_ROM=...` boots through a real boot ROM (`make test-mcpx`); `IMAGE=base BIOS_BASE=... MCPX_ROM=...` packs
+the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The xemu binary is found on PATH or at
+`~/.local/bin/xemu`.
 
 ## Layout
 | path | contents |
 |---|---|
+| `boot/` | the open image's X-code wrapper (Cromwell's table), reset code and 2BL (spec 01 §5) |
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, exported data |
 | `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection |
@@ -68,6 +71,12 @@ Inputs: `BIOS_BASE` (default: the `.bin` file in `../xbox-files/bios/`) and `MCP
    - 9: retail discs: Xbox DVD authentication (spec 04 §3a; xemu does not emulate it), modded-BIOS media/region policy by default (`RETAIL_MEDIA_POLICY=1` for strict), top-down physical page allocation and a low splash framebuffer so titles' fixed-address memory assumptions hold. Halo (XISO) now loads and runs its own code in xemu.
    - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad`, a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
    - 11: **Halo 2 reaches its title screen in xemu.** Its "disc dirty or damaged" error had two causes: non-cached XDVDFS reads with a length that is not whole sectors (a map file's tail) were rejected, and the kernel used more memory than the reference (per-volume FATX caches instead of one shared FscSetCacheSize cache, an 8-page commit reserve, self-test/tracer code and a page-lock table in release builds). `make BUILD=build-trace2 SELFTEST=0 TRACE_IMPORTS=2` traces with the ring above 64 MB (xemu `mem_limit = '128'`), so the title's memory matches a release build.
+   - 12: **fully open BIOS image** (spec 01 §4–5).
+     - Our reset code (top 512 bytes) and 2BL, XboxDev/cromwell's X-codes with its overflow trick, and its
+       EEPROM key states, so stock locked drives unlock.
+     - No Microsoft files and no MCPX dump are needed. xemu boots it without a boot ROM, and with the real MCPX 1.0
+       ROM (`make test-mcpx`).
+     - The dashboard, Halo and Halo 2 run on it, and `make test` uses it by default.
    - Next (7): video encoder mode tables for real TVs (spec 17: algorithm and table layout documented; values must be derived from the Conexant/Focus datasheets with the reference's row numbering), then real-hardware validation (encoder mode tables, SMC events, microcode).
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,

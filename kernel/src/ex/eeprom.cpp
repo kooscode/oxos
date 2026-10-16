@@ -8,6 +8,10 @@ XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, B
 XBAPI void NTAPI XcHMAC(const UCHAR *, ULONG, const UCHAR *, ULONG, const UCHAR *, ULONG, PUCHAR);
 XBAPI void NTAPI XcRC4Key(PUCHAR, ULONG, const UCHAR *);
 XBAPI void NTAPI XcRC4Crypt(PUCHAR, ULONG, PUCHAR);
+XBAPI void NTAPI XcSHAInit(PUCHAR);
+XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
+XBAPI void NTAPI XcSHAFinal(PUCHAR, PUCHAR);
+extern ULONG KiEepromKeyStates[8][10], KiEepromKeyStateCount;
 
 constexpr UCHAR EEPROM_ADDRESS = 0xA8;
 constexpr ULONG REG_BINARY = 3, REG_DWORD = 4;
@@ -191,21 +195,61 @@ XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOI
 
 // Security section (0x00-0x2F): {HMAC-SHA1[20], confounder[8], HD key[16], game region[4]}, RC4-encrypted with
 // HMAC(EEPROM key, digest) and authenticated by HMAC(EEPROM key, plaintext).
+// HMAC-SHA1 from precomputed states (the SHA-1 state after the key ^ ipad block, and after the key ^ opad block):
+// how the open image's key block describes the EEPROM keys (spec/01 §5).
+static void ExpHmacFromStates(const ULONG *states, const UCHAR *data, ULONG length, PUCHAR digest) {
+    struct {
+        ULONG State[5];
+        ULONG CountLow, CountHigh;
+        UCHAR Buffer[64];
+    } ctx; // the XcSHA context layout
+    UCHAR inner[20];
+    XcSHAInit((PUCHAR)&ctx);
+    RtlCopyMemory(ctx.State, states, 20);
+    ctx.CountLow = 64;
+    XcSHAUpdate((PUCHAR)&ctx, data, length);
+    XcSHAFinal((PUCHAR)&ctx, inner);
+    XcSHAInit((PUCHAR)&ctx);
+    RtlCopyMemory(ctx.State, states + 5, 20);
+    ctx.CountLow = 64;
+    XcSHAUpdate((PUCHAR)&ctx, inner, 20);
+    XcSHAFinal((PUCHAR)&ctx, digest);
+}
+
+// One candidate EEPROM key (states == nullptr: XboxEEPROMKey). True when the section authenticates.
+static bool ExpDecryptSecurity(const ULONG *states, PUCHAR plain) {
+    UCHAR rc4Key[20], check[20], rc4[258];
+    if (states)
+        ExpHmacFromStates(states, ExpEeprom, 20, rc4Key);
+    else
+        XcHMAC(XboxEEPROMKey, 16, ExpEeprom, 20, nullptr, 0, rc4Key);
+    RtlCopyMemory(plain, ExpEeprom + 20, 28);
+    XcRC4Key(rc4, 20, rc4Key);
+    XcRC4Crypt(rc4, 28, plain);
+    if (states)
+        ExpHmacFromStates(states, plain, 28, check);
+    else
+        XcHMAC(XboxEEPROMKey, 16, plain, 28, nullptr, 0, check);
+    bool ok = true;
+    for (int i = 0; i < 20; i++)
+        ok &= check[i] == ExpEeprom[i];
+    return ok;
+}
+
+volatile ULONG ExpEepromKeySource; // diagnostics: 0 = none worked, 1 = EEPROM key, 2 + n = key state n
+
 void ExInitEeprom() {
     ExpLock();
     NTSTATUS status = ExpLoadEeprom();
     ExpUnlock();
     if (!NT_SUCCESS(status))
         return;
-    UCHAR rc4Key[20], plain[28], check[20], rc4[258];
-    XcHMAC(XboxEEPROMKey, 16, ExpEeprom, 20, nullptr, 0, rc4Key);
-    RtlCopyMemory(plain, ExpEeprom + 20, 28);
-    XcRC4Key(rc4, 20, rc4Key);
-    XcRC4Crypt(rc4, 28, plain);
-    XcHMAC(XboxEEPROMKey, 16, plain, 28, nullptr, 0, check);
-    bool ok = true;
-    for (int i = 0; i < 20; i++)
-        ok &= check[i] == ExpEeprom[i];
+    UCHAR plain[28];
+    bool ok = ExpDecryptSecurity(nullptr, plain);
+    ExpEepromKeySource = ok ? 1 : 0;
+    for (ULONG i = 0; !ok && i < KiEepromKeyStateCount; i++)
+        if ((ok = ExpDecryptSecurity(KiEepromKeyStates[i], plain)))
+            ExpEepromKeySource = 2 + i;
     if (!ok)
         return; // unknown EEPROM revision or key: keep the defaults
     RtlCopyMemory(XboxHDKey, plain + 8, 16);

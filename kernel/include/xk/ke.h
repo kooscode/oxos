@@ -429,7 +429,7 @@ XBAPI LONG NTAPI KeQueryBasePriorityThread(PKTHREAD Thread);
 // --- Internal
 extern volatile ULONG KiBootStage;
 extern KPROCESS KiIdleProcess, KiSystemProcess;
-XBAPI void KiSystemStartup(const UCHAR *bootKeys);
+XBAPI void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys);
 void KiInitializeProcessor();
 void KiInitializeTimers();
 void KiInitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit);
