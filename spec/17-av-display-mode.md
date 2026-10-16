@@ -111,3 +111,11 @@ during cold boot (`src/hal/splash.cpp`):
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
   `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header,
   0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
+- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time. Before entering the title
+  the launcher waits for the fade, frees the decode buffer and hands the screen block to the title as the persisted
+  display, like the reference does with its animation's last frame (0x8001e9f5 relocates it, 0x8003e550 frees it
+  after the first Present): `MmPersistContiguousMemory(…, TRUE)` + `AvSetSavedDataAddress(block)`. The block is a
+  4 KB header (dword 1 = physical address of the pixels, which the reference's relocation rewrites) followed by the
+  pixels. So the picture stays up while the title loads, until its video set-up (XDK D3D's first Present, nxdk
+  `XVideoSetMode`) frees it. Deviation: the reference also moves the block to the physical address of its freed
+  INIT section; ours stays where it was allocated (below 16 MB).
