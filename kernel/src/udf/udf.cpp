@@ -419,10 +419,12 @@ static NTSTATUS NTAPI UdfFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return UdfComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     LARGE_INTEGER offset = s->Parameters.Read.ByteOffset;
     ULONG length = s->Parameters.Read.Length;
-    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && ((offset.LowPart | length) & (UDF_BLOCK - 1)))
-        return UdfComplete(Irp, STATUS_INVALID_PARAMETER);
+    // As the reference (and XDVDFS): end of file first; a non-cached read's length need not be whole blocks (the
+    // reference rounds the transfer up and reports the clipped length), only its offset must be block-aligned.
     if (offset.HighPart || offset.LowPart >= f->Size)
         return UdfComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
+    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (UDF_BLOCK - 1)))
+        return UdfComplete(Irp, STATUS_INVALID_PARAMETER);
     if (length > f->Size - offset.LowPart)
         length = f->Size - offset.LowPart;
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);

@@ -40,3 +40,10 @@ set), 0x8002c49b (tag check); the recognition ID table at 0x80012538. Structure 
 - Not covered by the RE pass (our choices): directory size limit 1 MB, EntryOffset = FID offset as FileIndex.
 - Test: `tests/mkudf.py` builds a UDF 1.02 image; `make test-udf` boots with it and checks a fragmented long_ad file,
   short_ad, embedded data, a 16-bit name, enumeration order and errors.
+
+## Read (reference dispatch 0x8002ce74)
+As XDVDFS (spec 04c §2): dismounted → STATUS_VOLUME_DISMOUNTED; directory → STATUS_INVALID_DEVICE_REQUEST; length 0 →
+success; at or past the end → STATUS_END_OF_FILE; the length is clipped to the file, and non-cached reads go to the
+device rounded up to whole 2048-byte sectors with the clipped length reported, so their length need not be whole
+sectors. Ours checks only the offset's alignment for non-cached reads, after the end-of-file test. Scatter/gather
+reads are not supported on UDF (the reference allows them; deviation).

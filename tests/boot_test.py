@@ -350,9 +350,9 @@ def title_checks(mon, title_map, relaunch=False):
             if mon.read("KiQuickRebootCount") == 2 and mon.read("XeTitleLaunched") == 2:
                 break
             time.sleep(0.25)
-        ldp = mon.read("LaunchDataPage")
-        page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16)
-                for off in (0, 0x400, 0x408)] if ldp else []
+        # What the kernel wrote to the launch page for the dashboard (a dashboard may consume the page itself, as
+        # the stock one does).
+        page = [mon.read_offset("XeDashboardLaunchData", 4 * i) for i in range(3)]
         checks["missing image from the launch page: dashboard with LDP {type 1, reason 1, code 1}"] = \
             mon.read("XeTitleLaunched") == 2 and page == [1, 1, 1]
         del checks["path symbolic link \\??\\T: -> Partition1\\XkTest"]  # keep.bin comes from the FATX self-test
