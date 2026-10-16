@@ -4,6 +4,10 @@ A clean-room, ABI-compatible reimplementation of the original Xbox kernel (`xbox
 built on Linux with clang and lld. It packs into a standard 1 MB BIOS image and boots retail software in
 [xemu](https://xemu.app); console revisions 1.0–1.5 are the target.
 
+![OXOS boot splash in xemu](docs/splash-screenshot.png)
+
+*The OXOS boot splash, captured in xemu.*
+
 **Status:** every function and variable the 4627 kernel exports is implemented. In xemu it boots the dashboard,
 **Halo** and **Halo 2** (both playable), reads UDF (DVD-video) discs, and has its own boot splash. Real hardware has not
 been validated yet (the TV-encoder mode tables are still missing).
