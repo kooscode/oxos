@@ -1,21 +1,23 @@
-# Copyrighted inputs: never commit (BIOS/MCPX dumps, HDD images, Microsoft kernel binaries)
+# Copyrighted inputs: never commit (BIOS/MCPX dumps, HDD images, Microsoft kernel binaries, game discs).
+# Put them in xbox-files/ (see README.md) and game disc images in xiso/.
 xbox-files/
 xiso/
 xboxkrnl.exe
 *.bin
 *.qcow2
 *.cab
+*.iso
+*.bundle
 
-# Build output and local helpers
-kernel/build/
-kernel/build-release/
-kernel/build-trace/
-kernel/build-trace2/
-__pycache__/
-claude-resume.sh
+# Build output
+kernel/build*/
 third_party/
 tests/padtest/bin/
 tests/padtest/*.obj
 tests/padtest/*.d
 tests/padtest/*.exe
-tests/padtest/*.iso
+__pycache__/
+
+# Local tool state
+.claude/
+claude-resume.sh
