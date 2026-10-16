@@ -22,7 +22,12 @@ OBJECT_TYPE IoCompletionObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr
 
 IO_FILE_SYSTEM IopFileSystems;
 
-void IoInitSystem() { KeInitializeEvent(&IopDeviceDefaultObject, NotificationEvent, TRUE); }
+void FatxInitialize();
+
+void IoInitSystem() {
+    KeInitializeEvent(&IopDeviceDefaultObject, NotificationEvent, TRUE);
+    FatxInitialize();
+}
 
 static bool IopIsMountableDeviceType(ULONG type) {
     return type == FILE_DEVICE_DISK || type == FILE_DEVICE_CD_ROM || type == FILE_DEVICE_MEMORY_UNIT ||

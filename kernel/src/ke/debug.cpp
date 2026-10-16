@@ -11,7 +11,7 @@ BOOLEAN KdDebuggerEnabled = FALSE;
 BOOLEAN KdDebuggerNotPresent = TRUE;
 
 // Ring buffer of debug output, readable from the emulator monitor (XkDebugLog / XkDebugLogPosition).
-char XkDebugLog[8192];
+char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 1024]; // smaller in release builds: it stays resident
 volatile ULONG XkDebugLogPosition;
 
 static void XkLogWrite(const char *s, ULONG n) {

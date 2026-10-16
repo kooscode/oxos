@@ -6,7 +6,6 @@
 
 static ULONG *const MiPteArray = (ULONG *)0x83FF0000;
 static ULONG MiGpuInstanceSize = 0x10000; // reserved below the page tables (reference initial value)
-static USHORT MiLockCount[MM_PAGES];
 ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 
 static ULONG BytesToPages(ULONG bytes) { return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT; }
@@ -243,28 +242,13 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
     KfLowerIrql(old);
 }
 
-// --- Page locking (counts only: pages never move on the Xbox)
+// --- Page locking. Pages never move or get paged out on the Xbox, and nothing here frees memory based on a lock
+// count, so the counts the reference keeps in its PFN database would never be read: none are kept (a per-page
+// table cost 8 resident pages that titles such as Halo 2 need).
 
-XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {
-    ULONG pfn = PhysicalAddress >> PAGE_SHIFT;
-    if (pfn >= MM_PAGES)
-        return;
-    KIRQL old = KeRaiseIrqlToDpcLevel();
-    if (UnlockPage) {
-        if (MiLockCount[pfn])
-            MiLockCount[pfn]--;
-    } else {
-        MiLockCount[pfn]++;
-    }
-    KfLowerIrql(old);
-}
+XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {}
 
-XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN UnlockPages) {
-    ULONG va = (ULONG)BaseAddress & ~0xFFFu, end = (ULONG)BaseAddress + NumberOfBytes;
-    for (; va < end; va += PAGE_SIZE)
-        if (PHYSICAL_ADDRESS pa = MmGetPhysicalAddress((PVOID)va))
-            MmLockUnlockPhysicalPage(pa, UnlockPages);
-}
+XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN UnlockPages) {}
 
 // --- GPU instance memory: the region below the page tables; shrinking it returns pages to the pool.
 

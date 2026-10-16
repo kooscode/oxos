@@ -21,6 +21,7 @@ static LIST_ENTRY MiVadList;
 static KMUTANT MiAddressSpaceLock;
 static USHORT MiUserPageTableUse[0x200]; // committed PTEs per user page table
 ULONG MmVirtualMemoryBytesReserved, MmVirtualPagesCommitted;
+volatile ULONG MiCommitFailures, MiCommitFailNeeded, MiCommitFailAvailable; // diagnostics (tests, title bring-up)
 extern ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 
 static void Lock() { KeWaitForSingleObject(&MiAddressSpaceLock, Executive, KernelMode, FALSE, nullptr); }
@@ -157,8 +158,28 @@ static void MiDecommitRange(ULONG start, ULONG end) { // [start, end] page-align
     }
 }
 
+static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
+                                        ULONG AllocationType, ULONG Protect);
+
+volatile ULONG MiVmFailures, MiVmLastFailure[5]; // diagnostics: status, base, size, type, protect of the last one
+
 XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
                                              ULONG AllocationType, ULONG Protect) {
+    ULONG base = (ULONG)*BaseAddress, size = *RegionSize;
+    NTSTATUS status = MiAllocateVirtualMemory(BaseAddress, ZeroBits, RegionSize, AllocationType, Protect);
+    if (!NT_SUCCESS(status)) {
+        MiVmFailures = MiVmFailures + 1;
+        MiVmLastFailure[0] = (ULONG)status;
+        MiVmLastFailure[1] = base;
+        MiVmLastFailure[2] = size;
+        MiVmLastFailure[3] = AllocationType;
+        MiVmLastFailure[4] = Protect;
+    }
+    return status;
+}
+
+static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
+                                        ULONG AllocationType, ULONG Protect) {
     if (ZeroBits > 21 || (AllocationType & ~(MEM_COMMIT | MEM_RESERVE | MEM_RESET | MEM_TOP_DOWN | MEM_NOZERO | 0x400000)) ||
         !(AllocationType & (MEM_COMMIT | MEM_RESERVE | MEM_RESET)) ||
         ((AllocationType & MEM_RESET) && AllocationType != MEM_RESET))
@@ -224,13 +245,23 @@ XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits,
     } else if (AllocationType == MEM_RESET) {
         status = STATUS_SUCCESS;
     } else {
+        // Pages to allocate: every uncommitted page plus each page table that has to be created. The reference
+        // fails only when that exceeds the free pages (no reserve kept back: Halo 2 commits down to the last few).
         ULONG needed = 0;
         for (ULONG va = start; va <= end; va += PAGE_SIZE) {
             ULONG *pde = MiGetPdeAddress(va);
-            if (!(*pde & PTE_PRESENT) || !*MiGetPteAddress(va))
+            if (!(*pde & PTE_PRESENT)) {
+                if (va == start || !(va & 0x3FFFFF))
+                    needed++; // the page table
                 needed++;
+            } else if (!*MiGetPteAddress(va)) {
+                needed++;
+            }
         }
-        if (needed + 8 > MmAvailablePages) {
+        if (needed > MmAvailablePages) {
+            MiCommitFailures = MiCommitFailures + 1;
+            MiCommitFailNeeded = needed;
+            MiCommitFailAvailable = MmAvailablePages;
             status = STATUS_NO_MEMORY;
         } else {
             for (ULONG va = start; va <= end && NT_SUCCESS(status); va += PAGE_SIZE) {

@@ -10,6 +10,7 @@ xboxkrnl.exe
 kernel/build/
 kernel/build-release/
 kernel/build-trace/
+kernel/build-trace2/
 __pycache__/
 claude-resume.sh
 third_party/
