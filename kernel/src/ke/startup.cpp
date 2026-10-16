@@ -37,8 +37,23 @@ void ExInitEeprom();          // spec/12: EEPROM shadow, HD key, game region
 void AvInit();                // spec/12: AV pack, video encoder
 void KiInitializeSystemTime(); // system time from the RTC
 
-extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
+// MTRRs as the boot loader left them (we do not program our own): default type, then 8 base/mask pairs, each MSR
+// as {low, high}.
+volatile ULONG KiBootMtrr[2 + 32];
+
+// Open BIOS image (spec/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from XboxDev/cromwell)
+// that ExInitEeprom tries in turn. Kept across quick reboots, which re-enter with arg0 = 0.
+constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584F; // 'OXOS', 'OXBK'
+XK_PERSIST ULONG KiEepromKeyStates[8][10];
+XK_PERSIST ULONG KiEepromKeyStateCount;
+
+extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiSetStage(post_code::Entry);
+    for (ULONG i = 0; i < 17; i++) {
+        ULONGLONG v = rdmsr(i ? 0x200 + i - 1 : 0x2FF);
+        KiBootMtrr[2 * i] = (ULONG)v;
+        KiBootMtrr[2 * i + 1] = (ULONG)(v >> 32);
+    }
 
     // Take the keys, then erase the 2BL image (0x6000 bytes at 0x80400000), as the stock kernel does. A quick
     // reboot keeps memory: the keys come from the persisted copy and nothing is erased.
@@ -47,6 +62,13 @@ extern "C" void KiSystemStartup(const UCHAR *bootKeys) {
     RtlCopyMemory(KiCertKey, bootKeys + 16, 16);
     if (!quick) {
         RtlCopyMemory(KiPersistedBootKeys, bootKeys, 32);
+        KiEepromKeyStateCount = 0;
+        auto ext = (const ULONG *)(bootKeys + 32);
+        if (arg0 == XK_OPEN_BOOT_MAGIC && ext[0] == XK_KEY_STATES_MAGIC) {
+            ULONG n = ext[1] < 8 ? ext[1] : 8;
+            RtlCopyMemory(KiEepromKeyStates, ext + 2, n * sizeof(KiEepromKeyStates[0]));
+            KiEepromKeyStateCount = n;
+        }
         RtlZeroMemory((PVOID)0x80400000, 0x6000);
     }
 

@@ -3,6 +3,10 @@
 
 usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
                  [--flat-kernel OUT.exe] [--splash IMAGE]
+       mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel xboxkrnl.exe
+                 --out bios.bin [--flat-kernel OUT.exe] [--splash IMAGE]
+
+The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/01 §5), see build_open().
 
 Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00):
   [0, inittblSize)              init tables + X-codes (kept from the base image)
@@ -164,16 +168,106 @@ def splash_bank(path, quantize="octree"):
     return blob + b"\xff" * (BANK - len(blob)), len(blob)
 
 
+# --- Open image (spec/01 §5). Each 256 KiB bank:
+#   0x00000 MCPX header + X-codes (kernel/boot/xcodes.S: XboxDev/cromwell's table, ending in the overflow trick)
+#   0x01000 our 2BL (kernel/boot/start.S + bl.cpp), entered at 0xFFFC1000
+#   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size}
+#   0x06040 key block (below), then the kernel as a raw deflate stream
+#   ...     the kernel's .data initializer (quick reboot), ending at 0x3FE00
+#   0x3FE00 our reset code (kernel/boot/reset.S) for running without an MCPX boot ROM
+OPEN_LOADER, OPEN_PAYLOAD, OPEN_KEYS, OPEN_RESET = 0x1000, 0x6000, 0x6040, BANK - 0x200
+OPEN_FLASH = 0xFFFC0000
+
+
+def cromwell_key_states(cromwell_dir):
+    """EEPROM-key HMAC states from XboxDev/cromwell (drivers/ide/BootHddKey.c): for each EEPROM encryption version
+    9-12, the SHA-1 state after the inner (key ^ ipad) and outer (key ^ opad) block, five words each."""
+    import re
+    text = open(os.path.join(cromwell_dir, "drivers/ide/BootHddKey.c")).read()
+    states = {}
+    for fn, slot in (("HMAC1hddReset", 0), ("HMAC2hddReset", 1)):
+        body = text[text.index(f"int {fn}("):]
+        body = body[:body.index("\n}")]
+        for case in re.finditer(r"case\s+(\d+):(.*?)break;", body, re.S):
+            words = [int(v, 16) for v in re.findall(r"Intermediate_Hash\[\d\]\s*=\s*(0x[0-9a-fA-F]+)", case.group(2))]
+            if len(words) != 5:
+                sys.exit(f"unexpected Cromwell key state layout in {fn}, case {case.group(1)}")
+            states.setdefault(int(case.group(1)), [None, None])[slot] = words
+    out = [states[v][0] + states[v][1] for v in sorted(states) if None not in states[v]]
+    if not out:
+        sys.exit("no EEPROM key states found in the Cromwell sources")
+    return out
+
+
+def key_block(states):
+    """Handed to KernelEntry with arg0 = 'OXOS': no EEPROM/certificate key (32 zero bytes), then 'OXBK', the state
+    count and the states (spec/01 §1)."""
+    block = bytes(32) + struct.pack("<II", 0x4B42584F, len(states))
+    for s in states:
+        block += struct.pack("<10I", *s)
+    return block
+
+
+def build_open(a):
+    import zlib
+    xcodes, loader, reset = (open(p, "rb").read() for p in (a.xcodes, a.loader, a.reset))
+    if len(xcodes) > OPEN_LOADER or len(loader) > OPEN_PAYLOAD - OPEN_LOADER or len(reset) != 0x200:
+        sys.exit(f"open image parts do not fit: x-codes {len(xcodes):#x}, 2BL {len(loader):#x}, reset {len(reset):#x}")
+    pe = open(a.kernel, "rb").read()
+    data_end = OPEN_RESET
+    image, data_init = flatten(pe, lambda n: OPEN_FLASH + ((data_end - n) & ~0xF))
+    if a.flat_kernel:
+        open(a.flat_kernel, "wb").write(image)
+    dstart = (data_end - len(data_init)) & ~0xF
+    keys = key_block(cromwell_key_states(a.cromwell))
+    packer = zlib.compressobj(9, zlib.DEFLATED, -15)
+    packed = packer.compress(image) + packer.flush()
+    kstart = (OPEN_KEYS + len(keys) + 0xF) & ~0xF
+    if kstart + len(packed) > dstart:
+        sys.exit(f"kernel too large for the open image: {len(packed):#x} bytes packed, {dstart - kstart:#x} available")
+
+    bank = bytearray(b"\xff" * BANK)
+    bank[:len(xcodes)] = xcodes
+    bank[OPEN_LOADER:OPEN_LOADER + len(loader)] = loader
+    bank[OPEN_PAYLOAD:OPEN_PAYLOAD + 24] = struct.pack("<6I", 0x504B584F, kstart, len(packed), len(image),
+                                                       OPEN_KEYS, len(keys))
+    bank[OPEN_KEYS:OPEN_KEYS + len(keys)] = keys
+    bank[kstart:kstart + len(packed)] = packed
+    bank[dstart:dstart + len(data_init)] = data_init
+    bank[OPEN_RESET:] = reset
+
+    banks = [bytes(bank)] * 4
+    splash = ""
+    if a.splash:
+        banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize)
+        splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
+    out = b"".join(banks)
+    open(a.out, "wb").write(out)
+    print(f"{a.out}: {len(out):#x} bytes, open image; kernel image {len(image):#x} -> deflate {len(packed):#x} at "
+          f"{kstart:#x}, {len(keys) // 4 - 10} key-state words, free {dstart - kstart - len(packed):#x}{splash}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", required=True)
-    ap.add_argument("--mcpx-rom", required=True)
+    ap.add_argument("--base")
+    ap.add_argument("--mcpx-rom")
     ap.add_argument("--kernel", required=True)
+    ap.add_argument("--open", action="store_true", help="build the open image (no Microsoft parts)")
+    ap.add_argument("--xcodes")
+    ap.add_argument("--loader")
+    ap.add_argument("--reset")
+    ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
     ap.add_argument("--splash", help="boot splash image placed in flash bank 1 (1 MiB images only)")
     ap.add_argument("--splash-quantize", choices=("octree", "median"), default="octree")
     a = ap.parse_args()
+    if a.open:
+        if not (a.xcodes and a.loader and a.reset and a.cromwell):
+            sys.exit("--open needs --xcodes, --loader, --reset and --cromwell")
+        return build_open(a)
+    if not (a.base and a.mcpx_rom):
+        sys.exit("--base and --mcpx-rom are required (or --open)")
 
     raw = open(a.base, "rb").read()
     bank = bytearray(raw[:BANK])

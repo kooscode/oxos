@@ -5,7 +5,7 @@ which Xbox controller input the title receives for each.
 The title (tests/padtest) is built with nxdk and keeps its state in a block with the signature "XKPADTST"; this
 script finds it in a RAM dump (QMP pmemsave) and then reads it through its virtual address after each press.
 
-usage: pad_test.py --bios BIOS --mcpx-rom MCPX --iso padtest.iso [--hdd HDD] [--xemu PATH]
+usage: pad_test.py --bios BIOS --iso padtest.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
 """
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 
@@ -105,7 +105,7 @@ class PadState:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bios", required=True)
-    ap.add_argument("--mcpx-rom", required=True)
+    ap.add_argument("--mcpx-rom")
     ap.add_argument("--iso", required=True)
     ap.add_argument("--hdd")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
@@ -118,7 +118,7 @@ def main():
         shutil.copyfile(a.hdd, hdd)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
-        f"bootrom_path = '{os.path.abspath(a.mcpx_rom)}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
+        f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\ndvd_path = '{os.path.abspath(a.iso)}'\n"
         + (f"hdd_path = '{hdd}'\n" if a.hdd else ""))
     pad = VirtualPad()  # before xemu starts, so it is bound to a controller port at startup

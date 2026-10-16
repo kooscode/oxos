@@ -54,6 +54,56 @@ Runs forever at DISPATCH_LEVEL:
 EBX = 0x80035BDC (PCR), and KeTickCount rose by 1 per ms. A compatible kernel should show the same
 signs when idle.
 
+## 4. State at the kernel's entry point (observed, stock 2BL)
+Observed with a hardware breakpoint on our `KernelEntry` under the stock BIOS in xemu; the open image (§5)
+reproduces it:
+- Flat 32-bit protected mode: CS = 0x08, DS/ES/SS = 0x10, FS = GS = 0, interrupts off; the GDT/IDT registers
+  still point at the boot ROM's table (0xFFFFFFD8; the kernel loads its own at once).
+- CR0 = 0x80010031 (PG, WP, NE, ET, PE), CR4 = 0x610 (PSE, OSFXSR, OSXMMEXCPT), CR3 = 0xF000; FPU at reset
+  defaults (FCW 0x37F, MXCSR 0x1F80).
+- Page directory at 0xF000, 4 MB pages: entries 0x000-0x03F map 0-256 MB 1:1 and entries 0x200-0x23F map the same
+  at 0x80000000 (flags 0xE3); entry 0x300 = the directory itself (0xF063); 0x3F4-0x3F7 = NV2A registers
+  0xFD000000-0xFDFFFFFF uncached (0xFB); 0x3FF = flash 0xFFC00000 (0xE3).
+- MTRRs (recorded by the kernel at entry): default type uncached, enabled (0x800); range 0 = 0-64 MB write-back;
+  range 1 = 0xFFF80000-0xFFFFFFFF (512 KB of flash) write-protected; the others unused.
+- Stack 0x803FFFE8 = {return address, arg0 = 0x80400004, keys = 0x0040006C}. The 2BL itself occupies
+  0x80400000-0x80405FFF, which the kernel clears.
+
+## 5. The open BIOS image (ours)
+`make bios` (IMAGE=open) builds a 1 MB image with no Microsoft parts that boots with or without an MCPX boot ROM.
+Each 256 KB bank (`tools/mkbios.py`, `build_open`):
+
+| offset | contents |
+|---|---|
+| 0x00000 | MCPX header and X-code table (`kernel/boot/xcodes.S`): XboxDev/cromwell's `boot_rom/Xcodes.h` (GPL-2.0), fetched at build time |
+| 0x01000 | our 2BL (`kernel/boot/start.S`, `bl.cpp`), entered at 0xFFFC1000 |
+| 0x06000 | payload header {'OXKP', kernel offset, packed size, image size, key-block offset, key-block size} |
+| 0x06040 | key block, then the flat kernel image as a raw deflate stream |
+| … | the kernel's `.data` initializer (quick reboot), ending at 0x3FE00 |
+| 0x3FE00 | our reset code (`kernel/boot/reset.S`) |
+
+Bank 1 holds the splash instead (spec/17 §7).
+
+- **With an MCPX ROM** (a console, or xemu given a ROM dump): the ROM runs the X-codes. Their last two write
+  `mov eax, 0xFFFC1000; jmp eax` to RAM address 0 (Cromwell's "overflow trick"). The ROM's check of the
+  Microsoft 2BL then fails; it hides itself, and execution runs on from address 0 into our 2BL. No MCPX key is
+  involved, so the same image serves MCPX 1.0 and 1.1 (console revisions 1.0-1.5). `MCPX16=1` selects
+  Cromwell's header and X-code values for the 1.6's MCPX.
+- **Without a ROM** (xemu with an empty `bootrom_path`): the CPU starts at 0xFFFFFFF0, in our reset code. It
+  enters flat protected mode, interprets the same X-code table and jumps to 0xFFFC1000. On hardware the MCPX ROM
+  hides this range, so the code never runs there.
+- **2BL:**
+  - loads its own GDT, sets the MTRRs as in §4 and enables the caches;
+  - copies its C part to 0x400000;
+  - inflates the kernel to 0x10000 (`xk/inflate.h`, shared with the PNG decoder);
+  - builds the §4 page directory and sets CR4, CR3 and CR0 as in §4;
+  - calls `KernelEntry('OXOS', keys)`.
+- **Key block:** 32 zero bytes (no EEPROM or certificate key), then 'OXBK', a count, and per EEPROM key
+  version (Cromwell's versions 9-12) the SHA-1 states after the HMAC inner and outer pad blocks. These come from
+  Cromwell's `drivers/ide/BootHddKey.c`. The kernel keeps them across quick reboots, and `ExInitEeprom` tries
+  each one until the security section authenticates (`ExpEepromKeySource` = 2 + its index). The certificate key
+  stays zero, so titles' LAN and signature keys differ from a stock console's.
+
 ## Open questions
 - What the start-up routine's repeated writes of return addresses to 0x800395EC are for (likely a
   boot-progress breadcrumb for debugging).

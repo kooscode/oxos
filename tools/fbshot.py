@@ -13,7 +13,7 @@ work = tempfile.mkdtemp(prefix="xk-shot-")
 sock = os.path.join(work, "qmp.sock")
 shutil.copyfile(f"{root}/xbox-files/hdd/xbox_hdd.qcow2", f"{work}/hdd.qcow2")
 open(f"{work}/xemu.toml", "w").write("[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
-    f"bootrom_path = '{root}/xbox-files/mcpx/mcpx_1.0.bin'\nflashrom_path = '{bios}'\n"
+    f"bootrom_path = '{os.environ.get('MCPX_ROM', '')}'\nflashrom_path = '{bios}'\n"
     f"eeprom_path = '{work}/eeprom.bin'\nhdd_path = '{work}/hdd.qcow2'\n")
 p = subprocess.Popen([os.path.expanduser("~/.local/bin/xemu"), "-config_path", f"{work}/xemu.toml", "-qmp", f"unix:{sock},server,nowait"],
                      stdout=open(f"{work}/log", "w"), stderr=subprocess.STDOUT)
