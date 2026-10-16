@@ -10,7 +10,9 @@ ULONG XkTraceTargets[XK_TRACE_MAX_IMPORTS];
 USHORT XkTraceOrdinals[XK_TRACE_MAX_IMPORTS];
 // Ring entries: ordinal, caller, thread, first three stack arguments, return value, then 32 bytes of name.
 constexpr ULONG XK_TRACE_WORDS = 15;
-volatile ULONG (*XkTraceRing)[XK_TRACE_WORDS], XkTraceCount; // allocated at the top of RAM (not in the image)
+volatile ULONG (*XkTraceRing)[XK_TRACE_WORDS]; // allocated at the top of RAM (not in the image)
+// Persisted: with TRACE_IMPORTS=2 the ring above 64 MB keeps the calls from before a quick reboot too.
+XK_PERSIST volatile ULONG XkTraceCount;
 void XkTraceEntry();
 void XkTraceReturn();
 

@@ -66,6 +66,9 @@ pass-through (0x4D014):
 6. Success: title-disc flag = 1 (XBE media type 2), pinned title ID = dword at +0x4AB. On quick reboot the flag is
    re-checked with MODE SENSE (up to 5 tries); a tray event clears it.
 xemu 0.8.136 rejects page 0x3E (sense 5/24), so authentication fails there; see spec 05 §4 for the media policy.
+Titles send the same pass-through themselves (their own disc check, in the statically linked system library). The
+reference copies all **12 CDB bytes** and ignores `CdbLength`, which callers commonly leave 0; copying only
+`CdbLength` bytes turns every such command into TEST UNIT READY.
 
 ## 3. DVD drive (device 1, slave), cold boot (0x80055d55)
 1. Unless boot-flags bit 0 is set: select the slave (`0x1F6 = 0xB0`) and poll until BSY clears, **up to 600 × 50 ms**.
