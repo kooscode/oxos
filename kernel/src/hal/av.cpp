@@ -1,6 +1,6 @@
 // Audio/video: AV pack, encoder detection, display mode programming (spec/12 §4).
 // The per-mode encoder and CRTC/RAMDAC tables of the reference are not reproduced: modes are programmed from
-// the documented VGA/NV2A register model (640x480 timings for every mode for now; see the spec).
+// the documented VGA/NV2A register model with the standards' timings for each mode's picture size (spec/17 §7).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -118,14 +118,73 @@ static void AvpCrtc(volatile UCHAR *regs, UCHAR index, UCHAR value) {
     regs[0x6013D5] = value;
 }
 
-// Standard 640x480 VGA timings (25.175 MHz class): 800 x 525 total.
-static const UCHAR AvpVgaTimings[][2] = {
-    {0x00, 0x5F}, {0x01, 0x4F}, {0x02, 0x50}, {0x03, 0x82}, {0x04, 0x54}, {0x05, 0x80}, {0x06, 0x0B},
-    {0x07, 0x3E}, {0x08, 0x00}, {0x09, 0x40}, {0x10, 0xEA}, {0x11, 0x0C}, {0x12, 0xDF}, {0x14, 0x00},
-    {0x15, 0xE7}, {0x16, 0x04}, {0x17, 0xE3},
-    {0x18, 0xFF}, // line compare: never
-    {0x39, 0xFF}, // NV interlace half-line: 0xFF = progressive (xemu shows anything else as half-height fields)
+// Display timings per mode (spec/17 §7). The mode word's table (bits 30-31: 10b HDTV, 11b VGA, otherwise SDTV) and
+// CRTC row (bits 8-15) select the picture size; the row meanings follow the D3D mode words (as nxdk's table lists
+// them), and the timings are the public video standards' (CEA-861 480p, SMPTE 296M 720p, SMPTE 274M 1080i, VESA),
+// not the reference's tables. Interlaced modes are programmed per field. xemu sizes its display from these CRTC
+// registers (width = (CR01 + 1) * 8, height from CR12/CR07, doubled when CR39 says interlaced).
+struct AVP_TIMING {
+    UCHAR Table, Row;
+    USHORT HDisplay, HSyncStart, HSyncEnd, HTotal;
+    USHORT VDisplay, VSyncStart, VSyncEnd, VTotal; // per field when interlaced
+    BOOLEAN Interlaced;
 };
+static const AVP_TIMING AvpTimings[] = {
+    {2, 0x07, 640, 656, 752, 800, 480, 490, 492, 525, FALSE},      // 640x480p
+    {2, 0x08, 720, 736, 798, 858, 480, 489, 495, 525, FALSE},      // 720x480p
+    {2, 0x0A, 1280, 1390, 1430, 1650, 720, 725, 730, 750, FALSE},  // 1280x720p
+    {2, 0x0C, 1920, 2008, 2052, 2200, 540, 542, 547, 562, TRUE},   // 1920x1080i
+    {3, 0x06, 640, 656, 752, 800, 480, 490, 492, 525, FALSE},      // VGA 640x480
+    {3, 0x03, 800, 840, 968, 1056, 600, 601, 605, 628, FALSE},     // VGA 800x600
+    {3, 0x04, 1024, 1048, 1184, 1344, 768, 771, 777, 806, FALSE},  // VGA 1024x768
+    {0, 0x02, 720, 736, 798, 858, 480, 489, 495, 525, FALSE},      // SDTV 720x480 (NTSC)
+    {0, 0x04, 720, 736, 798, 864, 480, 489, 495, 525, FALSE},      // SDTV 720x480 (PAL)
+};
+static const AVP_TIMING AvpDefaultTiming = {0, 0, 640, 656, 752, 800, 480, 490, 492, 525, FALSE}; // SDTV 640x480
+
+static const AVP_TIMING *AvpFindTiming(ULONG Mode) {
+    UCHAR table = (UCHAR)(Mode >> 30), row = (UCHAR)(Mode >> 8);
+    if (table == 1)
+        table = 0;
+    for (auto &t : AvpTimings)
+        if (t.Table == table && t.Row == row)
+            return &t;
+    return &AvpDefaultTiming;
+}
+
+// VGA CRTC timing registers plus the NV extended bits (CR25 vertical bit 10s, CR2D horizontal bit 8s, CR39 the
+// interlace half-line: 0xFF = progressive). Horizontal values are in 8-pixel characters.
+XK_PERSIST static UCHAR AvpCr25; // CR25 timing bits (kept with AvpCurrentMode); pitch bit 5 is merged in at every mode set
+
+static void AvpProgramTiming(volatile UCHAR *regs, const AVP_TIMING &t) {
+    ULONG ht = t.HTotal / 8 - 5, hd = t.HDisplay / 8 - 1, hbs = t.HDisplay / 8 - 1, hbe = t.HTotal / 8 - 1;
+    ULONG hrs = t.HSyncStart / 8, hre = t.HSyncEnd / 8;
+    ULONG vt = t.VTotal - 2, vd = t.VDisplay - 1, vrs = t.VSyncStart, vre = t.VSyncEnd, vbs = t.VDisplay - 1,
+          vbe = t.VTotal - 1, lc = 0x3FF;
+    AvpCrtc(regs, 0x11, 0x00); // unlock CR0-7
+    AvpCrtc(regs, 0x00, (UCHAR)ht);
+    AvpCrtc(regs, 0x01, (UCHAR)hd);
+    AvpCrtc(regs, 0x02, (UCHAR)hbs);
+    AvpCrtc(regs, 0x03, (UCHAR)(0x80 | (hbe & 0x1F)));
+    AvpCrtc(regs, 0x04, (UCHAR)hrs);
+    AvpCrtc(regs, 0x05, (UCHAR)(((hbe & 0x20) << 2) | (hre & 0x1F)));
+    AvpCrtc(regs, 0x06, (UCHAR)vt);
+    AvpCrtc(regs, 0x07, (UCHAR)(((vt >> 8) & 1) | ((vd >> 7) & 2) | ((vrs >> 6) & 4) | ((vbs >> 5) & 8) |
+                                ((lc >> 4) & 0x10) | ((vt >> 4) & 0x20) | ((vd >> 3) & 0x40) | ((vrs >> 2) & 0x80)));
+    AvpCrtc(regs, 0x08, 0x00);
+    AvpCrtc(regs, 0x09, (UCHAR)(((vbs >> 4) & 0x20) | ((lc >> 3) & 0x40)));
+    AvpCrtc(regs, 0x10, (UCHAR)vrs);
+    AvpCrtc(regs, 0x11, (UCHAR)(vre & 0x0F));
+    AvpCrtc(regs, 0x12, (UCHAR)vd);
+    AvpCrtc(regs, 0x14, 0x00);
+    AvpCrtc(regs, 0x15, (UCHAR)vbs);
+    AvpCrtc(regs, 0x16, (UCHAR)vbe);
+    AvpCrtc(regs, 0x17, 0xE3);
+    AvpCrtc(regs, 0x18, (UCHAR)lc); // line compare: never
+    AvpCr25 = (UCHAR)(((vt >> 10) & 1) | ((vd >> 9) & 2) | ((vrs >> 8) & 4) | ((vbs >> 7) & 8) | ((hbe >> 2) & 0x10));
+    AvpCrtc(regs, 0x2D, (UCHAR)(((ht >> 8) & 1) | ((hd >> 7) & 2) | ((hbs >> 6) & 4) | ((hrs >> 5) & 8)));
+    AvpCrtc(regs, 0x39, t.Interlaced ? (UCHAR)(t.HTotal / 16 - 5) : 0xFF);
+}
 
 // Standard VGA graphics-mode state (spec/17 §5 step 9): sequencer, graphics controller, attribute controller with an
 // identity palette, then attribute index bit 5 (palette address source = display enabled). Without that last bit a
@@ -166,8 +225,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         AvpCrtc(regs, 0x1F, 0x57); // unlock extended CRTC registers
         AvpCrtc(regs, 0x21, 0xFF);
         AvpCrtc(regs, 0x28, 0x00); // display off while reprogramming
-        for (auto &t : AvpVgaTimings)
-            AvpCrtc(regs, t[0], t[1]);
+        AvpProgramTiming(regs, *AvpFindTiming(Mode));
         // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it).
         outb(0x80D6, (UCHAR)(((Mode >> 28) & 1) | 4));
         outb(0x80D8, 4);
@@ -179,7 +237,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
     *(volatile ULONG *)(regs + 0x680600) = generalControl;
     AvpCrtc(regs, 0x13, (UCHAR)pitch8);
     AvpCrtc(regs, 0x19, (UCHAR)((pitch8 >> 3) & 0xE0));
-    AvpCrtc(regs, 0x25, (UCHAR)((pitch8 >> 6) & 0x20));
+    AvpCrtc(regs, 0x25, (UCHAR)(AvpCr25 | ((pitch8 >> 6) & 0x20)));
     AvpCrtc(regs, 0x28, (UCHAR)((depth >> 24) | 0x80));
     *(volatile ULONG *)(regs + 0x600800) = FrameBuffer;
     return 0;
