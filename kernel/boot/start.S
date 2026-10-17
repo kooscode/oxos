@@ -18,6 +18,11 @@ _start:
     movl %eax, %fs
     movl %eax, %gs
 
+    // The overflow trick left `mov eax, 0xFFFC1000; jmp eax` in RAM at address 0: clear it, so physical page 0
+    // starts zeroed as a Microsoft BIOS leaves it (titles' USB library keeps its state there).
+    movl %eax, 0
+    movl %eax, 4
+
     // Caches off while the MTRRs change.
     movl %cr0, %eax
     orl $0x60000000, %eax
