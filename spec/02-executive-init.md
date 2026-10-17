@@ -115,6 +115,12 @@ Titles read `XboxHardwareInfo`, so these bits must match on each console revisio
   Half-Life 2's USB library (in `hl2_xbox.xbe`, launched by its `default.xbe`) sizes its endpoint descriptors by
   Flags bit 0; with the flags zeroed it ran out of them on the second hub and never enumerated the controller.
   Ours keeps it in the persistent section.
+- The rest of the reference's `STICKY` section (0x8003AEE0-0x8003C870) is kept the same way where ours does not
+  rebuild it on every boot: the cold-boot AV pack (0x8003AFEC, compared on AV-pack insertion), the SMC "title loaded"
+  flag (0x8003AFE8, set by the loader and never cleared) and the PHY-initialized flag (0x8003B340). Keys, boot flags,
+  console region, LaunchDataPage and the AV mode are persistent too; the EEPROM shadow, disk identity, partition
+  objects and encoder type are re-read at every boot in ours. The SMC scratch copy (0x80035A14) is in `.data`: it is
+  lost on a quick reboot in both.
 
 ## 6. Our implementation (milestone 5d-2)
 - Variables that must survive a quick reboot (EEPROM key, HD key, cert key, LaunchDataPage, console region,

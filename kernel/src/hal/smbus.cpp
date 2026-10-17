@@ -196,8 +196,11 @@ XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
 constexpr UCHAR SMC_AV_PACK = 0x04, SMC_SHUTDOWN_NOTICE = 0x0B, SMC_TRAY_EJECT = 0x0C, SMC_OS_RESPONSE = 0x0D,
                 SMC_INTERRUPT_REASON = 0x11, SMC_RESET_ON_EJECT = 0x19;
 volatile ULONG HalpSmcEventCount, HalpSmcLastReason, HalpSciCount; // diagnostics (boot tests)
-static ULONG HalpBootAvPack = 7;                     // AV pack at cold boot (7 = none)
-static volatile BOOLEAN HalpSmcEventsArmed;          // set once the first image is loaded
+// These two survive quick reboots, as in the reference (its STICKY section, 0x8003AFEC and 0x8003AFE8): a title
+// started from the dashboard still knows the cold-boot AV pack (re-plugging the same cable must not reset) and
+// counts as a running title for eject and tray events even before its image is loaded.
+XK_PERSIST static ULONG HalpBootAvPack = 7;          // AV pack at cold boot (7 = none)
+XK_PERSIST static volatile BOOLEAN HalpSmcEventsArmed; // set once the first image is loaded; never cleared
 static volatile BOOLEAN HalpEjectBeforeLaunch;       // eject handled before that: a title launch is refused
 static volatile UCHAR HalpRequestRegister, HalpRequestValue;
 static KEVENT HalpSmcWork;
