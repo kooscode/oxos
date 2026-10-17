@@ -6,7 +6,6 @@
 
 static ULONG *const MiPteArray = (ULONG *)0x83FF0000;
 static ULONG MiGpuInstanceSize = 0x10000; // reserved below the page tables (reference initial value)
-ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 
 static ULONG BytesToPages(ULONG bytes) { return (bytes + PAGE_SIZE - 1) >> PAGE_SHIFT; }
 
@@ -27,18 +26,10 @@ XBAPI PVOID NTAPI MmAllocateContiguousMemoryEx(ULONG NumberOfBytes, ULONG Lowest
     if (!alignPages)
         alignPages = 1;
     ULONG pages = BytesToPages(NumberOfBytes), first;
-    if (!MiAllocatePhysicalRange(pages, lowPfn, highPfn, alignPages, &first))
+    if (!MiAllocateContiguousPages(pages, lowPfn, highPfn, alignPages, pteBits, &first))
         return nullptr;
-
-    KIRQL old = KeRaiseIrqlToDpcLevel();
-    for (ULONG i = 0; i < pages; i++) {
-        ULONG pfn = first + i;
-        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | pteBits | (i == pages - 1 ? PTE_END_OF_ALLOCATION : 0);
-        MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
-    }
     if (Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
         MiFlushCaches();
-    KfLowerIrql(old);
     return (PVOID)(MM_SYSTEM_PHYSICAL_MAP | (first << PAGE_SHIFT));
 }
 
@@ -50,8 +41,10 @@ XBAPI void NTAPI MmFreeContiguousMemory(PVOID BaseAddress) {
     ULONG pfn = ((ULONG)BaseAddress & 0x7FFFFFFF) >> PAGE_SHIFT;
     for (;;) {
         ULONG pte = MiPteArray[pfn];
-        MiFreePhysicalPage(pfn);
-        if (pte & PTE_END_OF_ALLOCATION || !(pte & PTE_PRESENT))
+        if (!(pte & PTE_PRESENT))
+            break;
+        MiFreeContiguousPage(pfn);
+        if (pte & PTE_END_OF_ALLOCATION)
             break;
         pfn++;
     }
@@ -95,7 +88,8 @@ XBAPI BOOLEAN NTAPI MmIsAddressValid(PVOID VirtualAddress) {
 
 // --- System PTE range: system memory, kernel stacks, I/O mappings.
 
-static PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage) {
+// Pages mapped in the system PTE range, each recorded with its usage (system memory, pool, stacks).
+PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage) {
     ULONG slots = pages + (guardPage ? 1 : 0);
     if (pages > MmAvailablePages)
         return nullptr;
@@ -104,19 +98,17 @@ static PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage) {
         return nullptr;
     ULONG va = base + (guardPage ? PAGE_SIZE : 0);
     for (ULONG i = 0; i < pages; i++) {
-        ULONG pfn = MiAllocatePhysicalPage();
+        ULONG a = va + (i << PAGE_SHIFT);
+        ULONG pfn = MiAllocatePage(usage, MiGetPteAddress(a), false);
         if (!pfn) {
             for (ULONG j = 0; j < i; j++) { // undo
-                ULONG a = va + (j << PAGE_SHIFT);
-                MiFreePhysicalPage(*MiGetPteAddress(a) >> PAGE_SHIFT);
+                ULONG b = va + (j << PAGE_SHIFT);
+                MiFreePage(*MiGetPteAddress(b) >> PAGE_SHIFT);
+                *MiGetPteAddress(b) = 0;
             }
             MiReleaseSystemPtes((PVOID)base, slots);
             return nullptr;
         }
-        // The page is now owned through the system mapping only.
-        MiPteArray[pfn] = 0;
-        MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
-        ULONG a = va + (i << PAGE_SHIFT);
         *MiGetPteAddress(a) = (pfn << PAGE_SHIFT) | pteBits | (i == pages - 1 ? PTE_END_OF_ALLOCATION : 0);
         MiInvalidatePage(a);
     }
@@ -125,12 +117,15 @@ static PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage) {
     return (PVOID)va;
 }
 
-static ULONG MiFreeMappedPages(ULONG va, ULONG pages) {
+ULONG MiFreeMappedPages(ULONG va, ULONG pages) {
     for (ULONG i = 0; i < pages; i++) {
         ULONG a = va + (i << PAGE_SHIFT);
-        ULONG pte = *MiGetPteAddress(a);
-        if (pte & PTE_PRESENT) {
-            MiFreePhysicalPage(pte >> PAGE_SHIFT);
+        ULONG *pte = MiGetPteAddress(a);
+        if (*pte & PTE_PRESENT) {
+            ULONG pfn = *pte >> PAGE_SHIFT;
+            *pte = 0;
+            MiInvalidatePage(a);
+            MiFreePage(pfn);
         }
     }
     return pages;
@@ -140,7 +135,7 @@ XBAPI PVOID NTAPI MmAllocateSystemMemory(ULONG NumberOfBytes, ULONG Protect) {
     ULONG pteBits;
     if (!NumberOfBytes || !MiProtectToPte(Protect, &pteBits))
         return nullptr;
-    return MiAllocateMappedPages(BytesToPages(NumberOfBytes), pteBits, false);
+    return MiAllocateMappedPages(BytesToPages(NumberOfBytes), pteBits, false, MmSystemMemoryUsage);
 }
 
 XBAPI ULONG NTAPI MmFreeSystemMemory(PVOID BaseAddress, ULONG NumberOfBytes) {
@@ -153,16 +148,15 @@ XBAPI ULONG NTAPI MmFreeSystemMemory(PVOID BaseAddress, ULONG NumberOfBytes) {
 // Returns the stack top; a not-present guard page sits below the stack.
 XBAPI PVOID NTAPI MmCreateKernelStack(ULONG NumberOfBytes, BOOLEAN DebuggerThread) {
     ULONG pages = BytesToPages(NumberOfBytes);
-    auto stack = (UCHAR *)MiAllocateMappedPages(pages, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, true);
+    auto stack = (UCHAR *)MiAllocateMappedPages(pages, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, true,
+                                                MmStackUsage);
     if (!stack)
         return nullptr;
-    MmStackPagesCommitted += pages;
     return stack + (pages << PAGE_SHIFT);
 }
 
 XBAPI void NTAPI MmDeleteKernelStack(PVOID KernelStackBase, PVOID KernelStackLimit) {
     ULONG pages = ((ULONG)KernelStackBase - (ULONG)KernelStackLimit) >> PAGE_SHIFT;
-    MmStackPagesCommitted -= pages;
     MiFreeMappedPages((ULONG)KernelStackLimit, pages);
     MiReleaseSystemPtes((UCHAR *)KernelStackLimit - PAGE_SIZE, pages + 1);
 }
@@ -242,13 +236,32 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
     KfLowerIrql(old);
 }
 
-// --- Page locking. Pages never move or get paged out on the Xbox, and nothing here frees memory based on a lock
-// count, so the counts the reference keeps in its PFN database would never be read: none are kept (a per-page
-// table cost 8 resident pages that titles such as Halo 2 need).
+// --- Page locking, as the reference: a lock count in the low word of a page's busy entry, in steps of 2. Locked
+// pages are not moved by contiguous allocations. Mapped pages (contiguous memory, the kernel) never move and keep
+// no count.
 
-XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {}
+XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    ULONG pfn = PhysicalAddress >> PAGE_SHIFT;
+    if (pfn < MM_PAGES && !(MiPteArray[pfn] & PTE_PRESENT))
+        ((USHORT *)&MiPteArray[pfn])[0] += UnlockPage ? -2 : 2;
+    KfLowerIrql(old);
+}
 
-XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN UnlockPages) {}
+// Every page of the buffer, outside the 0x80000000 mapping and large pages.
+XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN UnlockPages) {
+    ULONG va = (ULONG)BaseAddress;
+    if (!NumberOfBytes || (va >= MM_SYSTEM_PHYSICAL_MAP && va < MM_SYSTEM_PHYSICAL_MAP + 0x10000000) ||
+        (*MiGetPdeAddress(va) & PTE_LARGE))
+        return;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    for (ULONG *pte = MiGetPteAddress(va), *last = MiGetPteAddress(va + NumberOfBytes - 1); pte <= last; pte++) {
+        ULONG pfn = *pte >> PAGE_SHIFT;
+        if ((*pte & PTE_PRESENT) && pfn < MM_PAGES && !(MiPteArray[pfn] & PTE_PRESENT))
+            ((USHORT *)&MiPteArray[pfn])[0] += UnlockPages ? -2 : 2;
+    }
+    KfLowerIrql(old);
+}
 
 // --- GPU instance memory: the region below the page tables; shrinking it returns pages to the pool.
 
@@ -259,7 +272,7 @@ XBAPI PVOID NTAPI MmClaimGpuInstanceMemory(ULONG NumberOfBytes, ULONG *NumberOfP
         ULONG oldFirst = MM_PAGE_TABLES_FIRST_PFN - BytesToPages(MiGpuInstanceSize);
         ULONG newFirst = MM_PAGE_TABLES_FIRST_PFN - BytesToPages(NumberOfBytes);
         for (ULONG pfn = oldFirst; pfn < newFirst; pfn++)
-            MiFreePhysicalPage(pfn);
+            MiFreeContiguousPage(pfn);
         MiGpuInstanceSize = (NumberOfBytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         KfLowerIrql(old);
     }

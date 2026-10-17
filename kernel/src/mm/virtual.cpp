@@ -18,18 +18,25 @@ struct MMVAD {
 };
 
 static LIST_ENTRY MiVadList;
-static KMUTANT MiAddressSpaceLock;
+struct RTL_CRITICAL_SECTION_ {
+    UCHAR Event[16];
+    LONG LockCount, RecursionCount;
+    PVOID OwningThread;
+};
+XBAPI void NTAPI RtlInitializeCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSection);
+XBAPI void NTAPI RtlEnterCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSection);
+XBAPI void NTAPI RtlLeaveCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSection);
+static RTL_CRITICAL_SECTION_ MiAddressSpaceLock; // the reference's type (MmGlobalData->AddressSpaceLock)
 static USHORT MiUserPageTableUse[0x200]; // committed PTEs per user page table
-ULONG MmVirtualMemoryBytesReserved, MmVirtualPagesCommitted;
+ULONG MmVirtualMemoryBytesReserved;
 volatile ULONG MiCommitFailures, MiCommitFailNeeded, MiCommitFailAvailable; // diagnostics (tests, title bring-up)
-extern ULONG MmStackPagesCommitted, MmPoolPagesCommitted;
 
-static void Lock() { KeWaitForSingleObject(&MiAddressSpaceLock, Executive, KernelMode, FALSE, nullptr); }
-static void Unlock() { KeReleaseMutant(&MiAddressSpaceLock, 0, FALSE, FALSE); }
+static void Lock() { RtlEnterCriticalSection(&MiAddressSpaceLock); }
+static void Unlock() { RtlLeaveCriticalSection(&MiAddressSpaceLock); }
 
 void MiInitializeVirtualMemory() {
     InitializeListHead(&MiVadList);
-    KeInitializeMutant(&MiAddressSpaceLock, FALSE);
+    RtlInitializeCriticalSection(&MiAddressSpaceLock);
 }
 
 // Protection for user pages. One base protection; GUARD is accepted but not enforced.
@@ -126,7 +133,7 @@ static bool MiEnsureUserPageTable(ULONG va) {
     ULONG *pde = MiGetPdeAddress(va);
     if (*pde & PTE_PRESENT)
         return true;
-    ULONG pfn = MiAllocatePhysicalPage();
+    ULONG pfn = MiAllocatePage(MmVirtualPageTableUsage, pde); // zeroed: all PTEs not present
     if (!pfn)
         return false;
     *pde = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | 0x04 /*US*/ | PTE_ACCESSED | PTE_DIRTY;
@@ -147,26 +154,26 @@ static void MiDecommitRange(ULONG start, ULONG end) { // [start, end] page-align
         ULONG pfn = *pte >> PAGE_SHIFT;
         *pte = 0;
         MiInvalidatePage(va);
-        MiFreePhysicalPage(pfn);
-        MmVirtualPagesCommitted--;
+        MiFreePage(pfn);
         if (--MiUserPageTableUse[va >> 22] == 0) {
             ULONG ptPfn = *pde >> PAGE_SHIFT;
             *pde = 0;
             MiInvalidatePage((ULONG)MiGetPteAddress(va) & ~(PAGE_SIZE - 1));
-            MiFreePhysicalPage(ptPfn);
+            MiFreePage(ptPfn);
         }
     }
 }
 
 static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
-                                        ULONG AllocationType, ULONG Protect);
+                                        ULONG AllocationType, ULONG Protect, ULONG Usage);
 
 volatile ULONG MiVmFailures, MiVmLastFailure[5]; // diagnostics: status, base, size, type, protect of the last one
 
 XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
                                              ULONG AllocationType, ULONG Protect) {
     ULONG base = (ULONG)*BaseAddress, size = *RegionSize;
-    NTSTATUS status = MiAllocateVirtualMemory(BaseAddress, ZeroBits, RegionSize, AllocationType, Protect);
+    NTSTATUS status =
+        MiAllocateVirtualMemory(BaseAddress, ZeroBits, RegionSize, AllocationType, Protect, MmVirtualMemoryUsage);
     if (!NT_SUCCESS(status)) {
         MiVmFailures = MiVmFailures + 1;
         MiVmLastFailure[0] = (ULONG)status;
@@ -178,8 +185,13 @@ XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits,
     return status;
 }
 
+// The XBE loader commits the title image with this (counted as image pages, as the reference).
+NTSTATUS MiCommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize) {
+    return MiAllocateVirtualMemory(BaseAddress, 0, RegionSize, MEM_COMMIT, PAGE_READWRITE, MmImageUsage);
+}
+
 static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
-                                        ULONG AllocationType, ULONG Protect) {
+                                        ULONG AllocationType, ULONG Protect, ULONG Usage) {
     if (ZeroBits > 21 || (AllocationType & ~(MEM_COMMIT | MEM_RESERVE | MEM_RESET | MEM_TOP_DOWN | MEM_NOZERO | 0x400000)) ||
         !(AllocationType & (MEM_COMMIT | MEM_RESERVE | MEM_RESET)) ||
         ((AllocationType & MEM_RESET) && AllocationType != MEM_RESET))
@@ -275,18 +287,14 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
                     MiInvalidatePage(va);
                     continue;
                 }
-                ULONG pfn = MiAllocatePhysicalPage(!(AllocationType & MEM_NOZERO));
+                ULONG pfn = MiAllocatePage(Usage, pte, !(AllocationType & MEM_NOZERO));
                 if (!pfn) {
                     status = STATUS_NO_MEMORY;
                     break;
                 }
-                // Owned through the user mapping only.
-                *(ULONG *)(0x83FF0000 + pfn * 4) = 0;
-                MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
                 *pte = (pfn << PAGE_SHIFT) | pteBits;
                 MiInvalidatePage(va);
                 MiUserPageTableUse[va >> 22]++;
-                MmVirtualPagesCommitted++;
             }
             if (Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
                 MiFlushCaches();
@@ -452,24 +460,30 @@ XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSi
 XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics) {
     if (Statistics->Length != sizeof(MM_STATISTICS))
         return STATUS_INVALID_PARAMETER;
-    Statistics->TotalPhysicalPages = MM_PAGES;
+    Statistics->TotalPhysicalPages = MmNumberOfPhysicalPages;
     Statistics->AvailablePages = MmAvailablePages;
-    Statistics->VirtualMemoryBytesCommitted = MmVirtualPagesCommitted << PAGE_SHIFT;
+    Statistics->VirtualMemoryBytesCommitted =
+        (MmAllocatedPagesByUsage[MmVirtualMemoryUsage] + MmAllocatedPagesByUsage[MmImageUsage]) << PAGE_SHIFT;
     Statistics->VirtualMemoryBytesReserved = MmVirtualMemoryBytesReserved;
-    Statistics->CachePagesCommitted = 0;
-    Statistics->PoolPagesCommitted = MmPoolPagesCommitted;
-    Statistics->StackPagesCommitted = MmStackPagesCommitted;
-    Statistics->ImagePagesCommitted = 0;
+    Statistics->CachePagesCommitted = MmAllocatedPagesByUsage[MmFsCacheUsage];
+    Statistics->PoolPagesCommitted = MmAllocatedPagesByUsage[MmPoolUsage];
+    Statistics->StackPagesCommitted = MmAllocatedPagesByUsage[MmStackUsage];
+    Statistics->ImagePagesCommitted = MmAllocatedPagesByUsage[MmImageUsage];
     return STATUS_SUCCESS;
 }
 
-// Exported pointer table (ordinal 102). Debug tools read it; titles do not. Entries point at our
-// equivalents of the reference globals: free-page list heads, system PTE range, available pages,
-// and the address-space lock (spec/09).
+// Exported pointer table (ordinal 102), read by debug tools (spec/09 §9). The first five entries point at structures
+// in the reference's formats; our VADs are a list, not the reference's address-node tree, so the three VAD entries
+// point at an empty tree.
+struct MMPFNREGION;
+struct MMPTERANGE;
+extern MMPFNREGION MmRetailPfnRegion;
+extern MMPTERANGE MiSystemPteRange;
 struct MM_GLOBAL_DATA {
     PVOID RetailPfnRegion, SystemPteRange, AvailablePages, AllocatedPagesByUsage, AddressSpaceLock,
         VadRoot, VadHint, VadFreeHint;
 };
+static PVOID MiNoVadTree;
 extern "C" MM_GLOBAL_DATA MmGlobalData;
-MM_GLOBAL_DATA MmGlobalData = {(PVOID)0x83FF0000, nullptr, &MmAvailablePages, nullptr, &MiAddressSpaceLock,
-                               &MiVadList, nullptr, nullptr};
+MM_GLOBAL_DATA MmGlobalData = {&MmRetailPfnRegion, &MiSystemPteRange, &MmAvailablePages, MmAllocatedPagesByUsage,
+                               &MiAddressSpaceLock, &MiNoVadTree, &MiNoVadTree, &MiNoVadTree};

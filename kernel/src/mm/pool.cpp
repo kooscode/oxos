@@ -4,6 +4,15 @@
 #include <xk/ke.h>
 #include <xk/mm.h>
 
+PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage);
+ULONG MiFreeMappedPages(ULONG va, ULONG pages);
+
+// Pool pages: system PTE range pages recorded as pool (MmQueryStatistics.PoolPagesCommitted).
+static PVOID ExpAllocatePages(ULONG bytes) {
+    return MiAllocateMappedPages((bytes + PAGE_SIZE - 1) >> PAGE_SHIFT,
+                                 PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, false, MmPoolUsage);
+}
+
 struct POOL_HEADER {
     UCHAR PreviousSize;
     UCHAR PoolIndex;
@@ -34,10 +43,7 @@ void ExInitializePool() {
 
 XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag) {
     if (NumberOfBytes > POOL_SMALL_LIMIT) {
-        PVOID p = MmAllocateSystemMemory(NumberOfBytes, PAGE_READWRITE);
-        if (p)
-            MmPoolPagesCommitted += (NumberOfBytes + PAGE_SIZE - 1) >> PAGE_SHIFT;
-        return p;
+        return ExpAllocatePages(NumberOfBytes);
     }
 
     ULONG units = (NumberOfBytes + sizeof(POOL_HEADER) + POOL_UNIT - 1) / POOL_UNIT;
@@ -71,14 +77,13 @@ XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag) {
                 ExpFreeLists[tailUnits] = tail;
             }
             KfLowerIrql(old);
-            auto page = (UCHAR *)MmAllocateSystemMemory(PAGE_SIZE, PAGE_READWRITE);
+            auto page = (UCHAR *)ExpAllocatePages(PAGE_SIZE);
             if (!page)
                 return nullptr;
             old = KeRaiseIrqlToDpcLevel();
             ExpCurrentPage = page;
             ExpCurrentUsed = 0;
             ExpPoolPages = ExpPoolPages + 1;
-            MmPoolPagesCommitted++;
         }
         h = (POOL_HEADER *)(ExpCurrentPage + ExpCurrentUsed * POOL_UNIT);
         ExpCurrentUsed += units;
@@ -97,7 +102,7 @@ XBAPI PVOID NTAPI ExAllocatePool(SIZE_T NumberOfBytes) { return ExAllocatePoolWi
 
 XBAPI void NTAPI ExFreePool(PVOID P) {
     if (((ULONG)P & (PAGE_SIZE - 1)) == 0) {
-        MmPoolPagesCommitted -= MmFreeSystemMemory(P, MmQueryAllocationSize(P));
+        MmFreeSystemMemory(P, MmQueryAllocationSize(P));
         return;
     }
     auto b = (FreeBlock *)((POOL_HEADER *)P - 1);

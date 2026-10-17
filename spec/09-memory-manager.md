@@ -37,7 +37,8 @@ WRITECOMBINE → |0x08 (PWT).
 ## 4. APIs
 - `MmAllocateContiguousMemoryEx(size, low, high, align, protect)`:
   - high is capped at PFN 0x3FDF (below the GPU instance memory)
-  - finds the **highest** run of free pages that starts on an `align` boundary
+  - finds the **highest** run that starts on an `align` boundary and whose pages are free or in use but unlocked;
+    pages in use are moved out of the way (§8)
   - maps them with the protection bits and sets bit 9 on the last page
   - flushes caches for NOCACHE/WRITECOMBINE
   - returns **0x80000000 | PA**
@@ -146,13 +147,85 @@ thread (3 pages, no reference counterpart), the system PTE slot bitmap (4 pages)
 pool pages fewer. Now the splash is freed before the title starts (spec/17 §7) and the launcher stack is 0x3000 ("after" column;
 the dashboard is still 5 pages short: our SMC thread and a lingering terminated-thread stack).
 
+## 8. Page database and allocation order (milestone 13)
+Evidence: `ev_e3d73cd7…` (0x800557f4 physical init), `ev_c2735117…` (0x8001dc6c MmAllocateContiguousMemoryEx,
+0x8001e331 MmFreeContiguousMemory), `ev_18eb456e…` (0x8001f93b unlink, 0x8001f899 insert, 0x8001fb3c relocate,
+0x8001e5bd system-PTE page allocation), objdump of 0x8001f9af (page picker), 0x8001fa21 / 0x8001fa52 (allocate /
+free a page by usage), 0x8001fabd (zeroed page), 0x8001fcbc (copy and switch), 0x8001f91a (boot-time insert),
+`ev_d465a17f…` (0x8001f745 / 0x8001f664 system PTE runs, 0x8001e076 MmLockUnlockPhysicalPage, 0x8001e6a1 free
+mapped pages), `ev_bf671c80…` (0x8001dfe7 MmLockUnlockBufferPages), `ev_c2735117…` (0x8001e547 MmQueryStatistics).
+
+**Reference behaviour.**
+- **One entry per physical page**, the PTE at 0x83FF0000 + 4·PFN (observed). Three forms:
+  - *present* (bit 0): the page's own mapping at 0x80000000|PA: kernel image, page 0, page directory, GPU memory, the
+    page tables, contiguous allocations (bit 9 = last page, bit 10 = persist);
+  - *free* (bit 0 and bit 16 clear): low word = next, high word = previous free page **of the same colour**, packed as
+    `(PFN >> 5) * 2` (0xFFFE = none); PFN = packed·16 + colour. The packing keeps bits 0 and 16 clear;
+  - *busy* (bit 0 clear, bit 16 set): low word = lock count in steps of 2 (MmLockUnlockPhysicalPage/BufferPages add or
+    subtract 2), bits 18–27 = index of the PTE that maps the page within its page table (for a system page table: its
+    PDE index; for the file cache: bits 17–27 = cache element index), bits 28–31 = usage: 0 unknown, 1 stack,
+    2 title page table, 3 system page table, 4 pool, 5 VM, 6 system memory, 7 image, 8 file cache, 9 contiguous,
+    10 debugger. Per-usage page counts at 0x8003AB40[11], AvailablePages at 0x8003AB6C (inferred names from the
+    MmQueryStatistics mapping and the counters each routine updates).
+- **Colours (observed):** 32 lists (colour = PFN & 31), heads at 0x80036108 {USHORT head, tail} ×32, region count at
+  +0x80. At boot 0x8001f91a inserts pages 0–15 and image end–0x3FDF **ascending at the tails**, then unlinks page 0
+  and 0xF; the INIT section is inserted later (tail), so it is used last.
+- **Single pages (observed, 0x8001f9af):** the head of the next non-empty list, starting at the colour after the
+  previous allocation (0x8003AB70); so consecutive pages rotate through the colours and come out **bottom-up**.
+  Why (inferred): rotating colours spreads consecutive allocations over the CPU cache's sets. A page in use is
+  freed to the **head** of its list (reused next); contiguous pages and the boot-time pages go to the **tail**.
+- **Allocating a page (0x8001fa21 / 0x8001fabd):** pick a page, write the busy entry (usage, owner PTE index), bump
+  the usage count; zeroed pages are cleared through a temporary present entry (pa|0x63) at 0x80000000|PA. The caller
+  maps the page (system PTE range, title PTE or PDE). Pages in use are **not** reachable at 0x80000000|PA.
+- **Contiguous requests (0x8001dc6c):** high capped at 0x3FDF; from the top, the highest aligned run whose pages are
+  free or busy with lock count 0 (present pages and locked pages stop the run). Free pages of the run are unlinked
+  first, then each busy page is **moved** (0x8001fb3c): its mapping is found from the usage (page tables through
+  the PDEs, VM/image pages through the title page tables at the recorded index, cache pages through the cache
+  element, everything else through the system PTE range), a replacement of the same colour is taken, and
+  0x8001fcbc copies the page and rewrites the PTE with interrupts off (CR3 reload for page tables, else `invlpg`).
+  Why (inferred): titles claim fixed physical ranges (Halo 0x61000–0x19A5FFF, Halo 2 0x61000–0x3144FFF) after the
+  kernel has already put its own pages there; moving them lets single pages be handed out bottom-up.
+- **System PTE range (0x800360F0, observed):** {Head, FirstCommittedPte 0xC0340000, LastCommittedPte,
+  LastPte 0xC03C0000, &AvailablePages, page-table allocator}. Free runs live in their own not-present PTEs, sorted by
+  address: the first PTE holds the next run's first PTE address (0xFFFFFFFC = end) and bit 1 for a one-PTE run; a
+  longer run keeps its length << 2 in its second PTE. Reserve = first fit (split from the front); release zeroes the
+  PTEs and merges with both neighbours; when nothing fits, whole page tables (usage 3, PDE 0x67) are added at
+  LastCommittedPte (the request minus a free run ending there, rounded to 1024 PTEs) and never removed. Kernel stacks
+  take one more PTE, left zero, as the guard page.
+- **MmQueryStatistics (0x8001e547):** Total = pages counted at boot (16384), Available, VM committed =
+  (VM + image pages)·4096, reserved bytes (0x8003AB78), cache, pool, stack and image pages from the usage counts.
+- Stock contiguous request sequence for the D3D start-up of Halo 2 (QMP/gdb log): 0x2000→0x3FDE000, 0x6000→
+  0x3FD8000, 4→0x3FD7000, 0x8000 (align 0x8000)→0x3FC8000, 0x4020 (align 0x4000)→0x3FD0000, … — each the highest
+  aligned run, holes reused.
+
+**Ours.** The same database format, colour lists, picker, free order, relocation and system PTE runs
+(`src/mm/init.cpp`); usage counts feed MmQueryStatistics; page locks are kept as the reference does. Differences:
+- Measured layout at Halo's entry: the kernel (45 pages), page 0, PD, GPU memory and page tables as stock; the title
+  image starts at PFN 0x3D (stock 0xAC: its INIT section, 0x3D–0xAB, is still allocated while the title loads and
+  is freed afterwards). Our extra stacks (SMC thread, a terminated thread's stack waiting to be freed) sit in pages
+  1–14 like the reference's early pages.
+- System page tables use PDE flags 0x63 (the reference 0x67, user bit set); not visible to titles.
+- MmLockUnlockBufferPages counts only present PTEs (the reference also adjusts the page a not-present PTE's frame
+  bits happen to name).
+- The same contiguous call sequence gives the same relative placement as stock; absolute addresses differ by what
+  was allocated before (our splash buffers vs the reference's boot animation).
+
+## 9. MmGlobalData (ordinal 102) (milestone 13)
+Evidence: the 13 dwords at 0x80010d04 read from the image, and the data they point to (initial values in .data).
+**Reference behaviour (observed):** 8 pointers: RetailPfnRegion 0x80036108 (§8 colour heads + count),
+SystemPteRange 0x800360F0 (§8), AvailablePages 0x8003AB6C, AllocatedPagesByUsage 0x8003AB40 (ULONG[11]),
+AddressSpaceLock 0x800360D4 (an RTL_CRITICAL_SECTION: synchronization event {1, 0, 4, 0}, LockCount −1,
+RecursionCount 0, OwningThread 0), VadRoot 0x8003AB84, VadHint 0x8003AB80, VadFreeHint 0x8003AB7C (pointers to
+the VAD tree's address nodes). Who reads it (inferred): the debug monitor and memory-dump tools on development
+kits; no retail title we traced imports it.
+**Ours, and why:** the first five entries point at structures **in the reference's format** (our page database and
+system PTE range are now built that way for allocation-order parity, and the address-space lock is an
+RTL_CRITICAL_SECTION), so tools that walk them see the same data. Our VADs are an address-sorted list, not the
+reference's address-node tree; rather than hand tools a list they would misread as a tree, the three VAD entries
+point at a NULL root (an empty tree). Making the VADs a tree would only serve those tools, so it is left undone.
+
 ## Implementation notes (internal, ABI-neutral)
-- Free physical pages are tracked in a bitmap, not the reference's per-colour free lists encoded in not-present PTEs.
-  Single pages are allocated top-down too (since milestone 9): titles claim fixed low physical ranges with
-  MmAllocateContiguousMemoryEx (Halo: 0x61000–0x19A5FFF) and some assume the top of RAM is barely used when they
-  start (an nxdk title clears a framebuffer at 0x3C00000 it never allocated), so the kernel's own pages must sit
-  at the top and stay few; the boot splash framebuffer is allocated below 16 MB (the reference keeps its boot
-  framebuffer in the freed INIT section, spec 05 §5).
+- The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/17 §7).
 - Small pool blocks use exact-size free lists without coalescing.
 - VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob
