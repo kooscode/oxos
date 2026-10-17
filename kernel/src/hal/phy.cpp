@@ -9,7 +9,7 @@ constexpr ULONG E_PHY_FAIL = 0x801F0001, E_PHY_BUSY = 0x800700AA;
 
 static volatile LONG PhypBusy;
 static ULONG PhypLinkState;
-static BOOLEAN PhypInitialized;
+XK_PERSIST static BOOLEAN PhypInitialized; // kept across quick reboots (reference 0x8003B340): no new negotiation per title
 
 static volatile ULONG &Nic(ULONG offset) { return *(volatile ULONG *)(NIC_BASE + offset); }
 
