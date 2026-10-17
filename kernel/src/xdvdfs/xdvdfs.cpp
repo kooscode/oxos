@@ -1,4 +1,5 @@
 // XDVDFS (Xbox game disc file system), read-only (spec/04c).
+#include <xk/fsc.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
 
@@ -34,12 +35,14 @@ struct XDVDFS_VOLUME {
     KEVENT Lock;
     LIST_ENTRY Fcbs;
     PUCHAR Bounce; // one sector
+    FSCACHE_EXTENSION CacheExtension; // the volume's key in the file system cache
 };
 
 extern DRIVER_OBJECT XdvdfsDriverObject;
 static XDVDFS_VOLUME *XdvdfsVolume(PDEVICE_OBJECT d) { return (XDVDFS_VOLUME *)d->DeviceExtension; }
 
-static NTSTATUS XdvdfsRead(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULONG length) {
+// Non-cached reads: straight to the device for whole sectors, partial sectors through the bounce sector.
+static NTSTATUS XdvdfsReadDirect(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULONG length) {
     PUCHAR out = (PUCHAR)buffer;
     while (length) {
         ULONG within = (ULONG)(offset & (XDVDFS_SECTOR - 1));
@@ -64,6 +67,11 @@ static NTSTATUS XdvdfsRead(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULON
         offset += n, out += n, length -= n;
     }
     return STATUS_SUCCESS;
+}
+
+// Directory entries: through the file system cache, as the reference.
+static NTSTATUS XdvdfsRead(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULONG length) {
+    return FscCachedRead(&v->CacheExtension, FO_RANDOM_ACCESS, offset, length, buffer, false);
 }
 
 static CHAR XdvdfsUpper(CHAR c) { return c >= 'a' && c <= 'z' ? (CHAR)(c - 0x20) : c; }
@@ -306,11 +314,17 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return XdvdfsComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
     if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1)))
         return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
+    // The reference rounds a read that ends the file up to whole sectors only when the caller asked for at least
+    // that much (0x8002b4e0): then the transfer may fill the buffer up to the sector's end.
+    bool toEnd = length >= ((f->Size + XDVDFS_SECTOR - 1) & ~(XDVDFS_SECTOR - 1)) - offset.LowPart;
     if (length > f->Size - offset.LowPart)
         length = f->Size - offset.LowPart;
+    LONGLONG disc = (LONGLONG)f->StartSector * XDVDFS_SECTOR + offset.LowPart;
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);
-    NTSTATUS status = XdvdfsRead(v, (LONGLONG)f->StartSector * XDVDFS_SECTOR + offset.LowPart, Irp->UserBuffer,
-                                 length);
+    // Cached reads go through the file system cache (FscCachedRead decides what is copied from cache buffers).
+    NTSTATUS status = (fo->Flags & FO_NO_INTERMEDIATE_BUFFERING)
+                          ? XdvdfsReadDirect(v, disc, Irp->UserBuffer, length)
+                          : FscCachedRead(&v->CacheExtension, fo->Flags, disc, length, Irp->UserBuffer, toEnd);
     KeSetEvent(&v->Lock, 0, FALSE);
     if (NT_SUCCESS(status) && (fo->Flags & FO_SYNCHRONOUS_IO))
         fo->CurrentByteOffset.QuadPart = offset.QuadPart + length;
@@ -503,6 +517,7 @@ static NTSTATUS NTAPI XdvdfsDismountVolume(PDEVICE_OBJECT DeviceObject) {
 
 static void NTAPI XdvdfsDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     XDVDFS_VOLUME *v = XdvdfsVolume(DeviceObject);
+    FscInvalidateDevice(&v->CacheExtension);
     ExFreePool(v->Bounce);
     ObfDereferenceObject(v->TargetDevice);
 }
@@ -552,6 +567,9 @@ NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     v->RootSize = *(ULONG *)(sector + 24);
     v->Time = *(PLARGE_INTEGER)(sector + 28);
     v->MediaLength = g.Cylinders.QuadPart * XDVDFS_SECTOR;
+    v->CacheExtension.TargetDeviceObject = TargetDevice;
+    v->CacheExtension.PartitionLength.QuadPart = v->MediaLength;
+    v->CacheExtension.SectorSize = XDVDFS_SECTOR;
     v->Bounce = sector;
     KeInitializeEvent(&v->Lock, SynchronizationEvent, TRUE);
     InitializeListHead(&v->Fcbs);

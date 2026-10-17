@@ -1,5 +1,6 @@
 // UDF 1.0x (ECMA-167, OSTA UDF 1.02/1.50), read-only, for DVD-video discs (spec/04d). The CD-ROM mount tries
 // this file system before XDVDFS.
+#include <xk/fsc.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
 
@@ -44,6 +45,7 @@ struct UDF_VOLUME {
     KEVENT Lock;
     LIST_ENTRY Fcbs;
     PUCHAR Block; // one block of scratch
+    FSCACHE_EXTENSION CacheExtension; // the volume's key in the file system cache
 };
 
 extern DRIVER_OBJECT UdfDriverObject;
@@ -112,7 +114,11 @@ static NTSTATUS UdfLoadFileEntry(UDF_VOLUME *v, UDF_FCB *f) {
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out, ULONG length) {
+// File data. Cached reads (fileFlags without FO_NO_INTERMEDIATE_BUFFERING) go through the file system cache per
+// extent; `toEnd` = the read runs to the end of the file.
+static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out, ULONG length,
+                            UCHAR fileFlags = FO_RANDOM_ACCESS, bool toEnd = false) {
+    bool cached = !(fileFlags & FO_NO_INTERMEDIATE_BUFFERING);
     if (f->Embedded) {
         NTSTATUS status = UdfReadSector(v->TargetDevice, v->PartitionStart + f->IcbBlock, v->Block);
         if (NT_SUCCESS(status))
@@ -129,6 +135,15 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
         ULONG within = offset - base, run = e->Length - within < length ? e->Length - within : length;
         if (e->Block == 0xFFFFFFFF) {
             RtlZeroMemory(out, run);
+        } else if (cached) {
+            ULONG first = e->Block + within / UDF_BLOCK, last = e->Block + (within + run - 1) / UDF_BLOCK;
+            if (first >= v->PartitionLength || last >= v->PartitionLength)
+                return STATUS_DISK_CORRUPT;
+            NTSTATUS status = FscCachedRead(&v->CacheExtension, fileFlags,
+                                            (LONGLONG)(v->PartitionStart + e->Block) * UDF_BLOCK + within, run, out,
+                                            toEnd && run == length);
+            if (!NT_SUCCESS(status))
+                return status;
         } else {
             ULONG pos = within;
             for (ULONG left = run; left;) {
@@ -425,10 +440,11 @@ static NTSTATUS NTAPI UdfFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return UdfComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
     if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (UDF_BLOCK - 1)))
         return UdfComplete(Irp, STATUS_INVALID_PARAMETER);
+    bool toEnd = length >= ((f->Size + UDF_BLOCK - 1) & ~(UDF_BLOCK - 1)) - offset.LowPart; // as XDVDFS
     if (length > f->Size - offset.LowPart)
         length = f->Size - offset.LowPart;
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);
-    NTSTATUS status = UdfReadData(v, f, offset.LowPart, (PUCHAR)Irp->UserBuffer, length);
+    NTSTATUS status = UdfReadData(v, f, offset.LowPart, (PUCHAR)Irp->UserBuffer, length, fo->Flags, toEnd);
     KeSetEvent(&v->Lock, 0, FALSE);
     if (NT_SUCCESS(status) && (fo->Flags & FO_SYNCHRONOUS_IO))
         fo->CurrentByteOffset.QuadPart = offset.QuadPart + length;
@@ -632,6 +648,7 @@ static NTSTATUS NTAPI UdfDismountVolume(PDEVICE_OBJECT DeviceObject) {
 
 static void NTAPI UdfDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     UDF_VOLUME *v = UdfVolume(DeviceObject);
+    FscInvalidateDevice(&v->CacheExtension);
     ExFreePool(v->Block);
     ObfDereferenceObject(v->TargetDevice);
 }
@@ -824,6 +841,9 @@ NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice) {
     v->PartitionLength = partLength;
     v->RootIcb = root;
     v->MediaLength = g.Cylinders.QuadPart * UDF_BLOCK;
+    v->CacheExtension.TargetDeviceObject = TargetDevice;
+    v->CacheExtension.PartitionLength.QuadPart = v->MediaLength;
+    v->CacheExtension.SectorSize = UDF_BLOCK;
     v->Block = b;
     KeInitializeEvent(&v->Lock, SynchronizationEvent, TRUE);
     InitializeListHead(&v->Fcbs);
