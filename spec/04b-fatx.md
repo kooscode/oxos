@@ -41,6 +41,11 @@ FATX driver object at 0x80012470. **Status: implemented (milestone 3c-2).**
   - shared volume share-access; Information = FILE_OPENED
 - **Path walk:**
   - an invalid element → OBJECT_NAME_INVALID
+  - a doubled separator (`dir\\name`) is accepted **once** (reference create 0x8002a37a, name splitter 0x80021709,
+    which drops one leading `\`): the walk through already-open directory FCBs stops at the first `\\` or at the
+    first directory not open; the slower walk that continues splits the rest again (dropping the extra `\`) and
+    from then on rejects a rest that starts with `\` (OBJECT_NAME_INVALID). Brute Force opens
+    `z:\splash_screen\\textures-splash_screen.tex`; rejecting it left its menu textures unloaded (garbage).
   - a missing or non-directory intermediate → OBJECT_PATH_NOT_FOUND
   - a missing final element:
     - DELETE_PENDING if the parent is being deleted
