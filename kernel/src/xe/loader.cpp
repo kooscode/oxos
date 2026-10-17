@@ -605,7 +605,7 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
 
 void XeStartTitleLauncher() {
     HANDLE h;
-    if (NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, 0x10000, 0, nullptr, nullptr, nullptr, FALSE, FALSE,
+    if (NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, 0x3000, 0, nullptr, nullptr, nullptr, FALSE, FALSE,
                                           XepTitleThread)))
         NtClose(h);
 }

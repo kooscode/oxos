@@ -1,13 +1,11 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
 // 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/17 §7), or, without one, a
-// drawn emblem and caption. The title launcher waits for it and, as the reference does with its animation, hands the
-// last frame to the title as the persisted display (AvGetSavedDataAddress): it stays on screen while the title loads,
-// and the title's video library frees it once it shows its own first frame.
+// drawn emblem and caption. The title launcher waits for it and frees its memory before the title starts, leaving the
+// last frame on screen, as the reference does with its animation.
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>
 
-XBAPI void NTAPI AvSetSavedDataAddress(PVOID Address);
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
@@ -18,10 +16,7 @@ constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
 constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40;
 
 static KEVENT HalpSplashDone;
-// The screen block has the persisted-display layout the title libraries free: a header (dword 1 = physical address
-// of the pixels, as a D3D surface's Data) followed by the pixels.
-constexpr ULONG SPLASH_BLOCK_HEADER = 0x1000;
-static ULONG *HalpSplashBlock, *HalpSplashScreen, *HalpSplashImage;
+static ULONG *HalpSplashScreen, *HalpSplashImage;
 volatile ULONG HalpSplashFrames; // frames shown (boot tests)
 volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = flash image (boot tests)
 volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header 0x100+, HalpDecodePng step 1-9)
@@ -146,26 +141,28 @@ void HalpStartSplash() {
     // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/05 §5): titles
     // assume the top of RAM holds only a little of the kernel's own memory when they start (an nxdk title clears a
     // framebuffer at 0x3C00000 it never allocated).
-    HalpSplashBlock = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_BLOCK_HEADER + SPLASH_PITCH * SPLASH_H, 0,
-                                                           0xFFFFFF, 0x1000, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    HalpSplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0,
+                                                            PAGE_READWRITE | PAGE_WRITECOMBINE);
     HalpSplashImage = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
-    if (!HalpSplashBlock || !HalpSplashImage)
+    if (!HalpSplashScreen || !HalpSplashImage) {
+        if (HalpSplashScreen)
+            MmFreeContiguousMemory(HalpSplashScreen);
+        HalpSplashScreen = nullptr;
         return;
-    RtlZeroMemory(HalpSplashBlock, SPLASH_BLOCK_HEADER);
-    HalpSplashScreen = HalpSplashBlock + SPLASH_BLOCK_HEADER / 4;
-    HalpSplashBlock[1] = MmGetPhysicalAddress(HalpSplashScreen);
+    }
     KeResetEvent(&HalpSplashDone);
     KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
 }
 
-// Before the title starts: wait for the splash, then leave its last frame on screen as the persisted display. The
-// title's video set-up (XDK D3D, nxdk XVideoSetMode) frees it; it survives a quick reboot until something does.
+// Before the title starts: wait for the splash and free its memory, but leave the scanout on its last frame. The
+// reference does the same with its boot animation (its framebuffer is in the INIT section, freed before the title
+// starts), so the title gets the whole budget; freed pages go to the end of the free lists, so the picture usually
+// stays up until the title sets its own display mode (spec/09 §7).
 void HalpEndSplash() {
     if (!HalpSplashScreen)
         return;
     KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
     MmFreeContiguousMemory(HalpSplashImage);
-    MmPersistContiguousMemory(HalpSplashBlock, SPLASH_BLOCK_HEADER + SPLASH_PITCH * SPLASH_H, TRUE);
-    AvSetSavedDataAddress(HalpSplashBlock);
-    HalpSplashBlock = HalpSplashScreen = HalpSplashImage = nullptr;
+    MmFreeContiguousMemory(HalpSplashScreen);
+    HalpSplashScreen = HalpSplashImage = nullptr;
 }

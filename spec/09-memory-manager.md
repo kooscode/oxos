@@ -109,6 +109,43 @@ WRITECOMBINE → |0x08 (PWT).
   READWRITE/WRITECOPY/EXECUTE_READWRITE/EXECUTE_WRITECOPY → RW, plus NOCACHE/WRITECOMBINE. GUARD is accepted but not
   enforced (no guard-page exception yet).
 
+## 7. Memory budget at the title's entry point (milestone 13)
+Evidence: `ev_e3d73cd7…` (0x800557f4, physical init), `ev_c2735117…` (MmAllocateContiguousMemoryEx,
+MmQueryStatistics, MmFreeContiguousMemory), `ev_18eb456e…` (free-list routines), objdump of the stack creation
+sites (0x8001c73d, 0x80021cb6, 0x80055fe5). Measurements: xemu 0.8.136, retail BIOS vs ours, stopped by a
+hardware breakpoint on the `call [0x10128]` that enters the title (stock 0x800158da), PTE array and Mm counters
+read through the gdb stub (scratch tool `mmstat.py`).
+
+**Reference behaviour.**
+- Physical pages the kernel keeps for itself (observed, 0x800557f4): page 0 (0x663), the page directory (page
+  0xF, 0xF663), the kernel image from 0x10000 (pa|0x463, .text read-only; **45 pages** once INIT is freed), the GPU
+  instance memory 0x3FE0000–0x3FEFFFF (16 pages, pa|0x7B) and the 16 page tables at 0x3FF0000–0x3FFFFFF (pa|0x463)
+  that map 0x80000000–0x83FFFFFF. Those 16 pages are the **only** page bookkeeping: the PTE array at 0x83FF0000 is
+  the page database (§8). Everything else is counted as available. TotalPhysicalPages = 16384 (every page is counted
+  once, as free or as contiguous).
+- At the entry point (observed): 2 kernel stacks of 3 pages (the DPC stack, 0x3000 at 0x8001c73d; the phase-1 thread
+  that calls the title, `PsCreateSystemThread` default 0x3000 at 0x80021cb6; the boot-animation thread's 0x4000
+  stack, 0x80055fe5, is gone by then), 5 pool pages, 2 page tables, 16 file-cache pages (§16), the title image, and
+  no boot framebuffer (spec/17 §7).
+
+| Title (at entry) | Stock available | Ours before | Ours after |
+|---|---|---|---|
+| Dashboard (MS) | 15876 | 15560 | 15871 |
+| Halo | 15347 | 15042 | 15356 |
+| Halo 2 | 14880 | 14575 | 14892 |
+| Half-Life 2 | 16166 | 15861 | 16178 |
+
+Stock at Halo's entry, by usage: Stack 6, VirtualPageTable 1, SystemPageTable 1, Pool 5, VirtualMemory 1, Image 928,
+Cache 16, Contiguous 79. During play (QMP snapshots every 10 s, scratch tool `snaplog.py`) the titles run close to
+the limit: Halo 2 keeps 209–217 pages free, Halo ~273, Half-Life 2 drops to 69 (it loads sections on demand:
+Image 109 → 2470 pages, VirtualMemory and Contiguous rise and fall); the dashboard sets the file cache to 256 pages.
+
+**Ours.** Before milestone 13 the difference (−305 pages for every title) was: the boot splash kept as the persisted
+display (301 pages), a 16-page stack for the title launcher thread (the reference runs it on 3 pages), our SMC
+thread (3 pages, no reference counterpart), the system PTE slot bitmap (4 pages), against 16 cache pages and ~3
+pool pages fewer. Now the splash is freed before the title starts (spec/17 §7) and the launcher stack is 0x3000 ("after" column;
+the dashboard is still 5 pages short: our SMC thread and a lingering terminated-thread stack).
+
 ## Implementation notes (internal, ABI-neutral)
 - Free physical pages are tracked in a bitmap, not the reference's per-colour free lists encoded in not-present PTEs.
   Single pages are allocated top-down too (since milestone 9): titles claim fixed low physical ranges with
