@@ -227,7 +227,10 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         AvpCrtc(regs, 0x28, 0x00); // display off while reprogramming
         AvpProgramTiming(regs, *AvpFindTiming(Mode));
         // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it).
-        outb(0x80D6, (UCHAR)(((Mode >> 28) & 1) | 4));
+        // Deviation (spec/17 §6): also raised for 720p and 1080i, which are always 16:9, although titles leave bit
+        // 28 clear in those mode words and the reference keeps the line low; so "Auto" shows HD pictures at 16:9.
+        bool hd = (Mode >> 30) == 2 && ((UCHAR)(Mode >> 8) == 0x0A || (UCHAR)(Mode >> 8) == 0x0C);
+        outb(0x80D6, (UCHAR)((((Mode >> 28) & 1) | hd) | 4));
         outb(0x80D8, 4);
         regs[0xC03C3] = 0x01;
         AvpVgaGraphicsMode(regs);

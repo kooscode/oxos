@@ -91,7 +91,9 @@ value written there is 5. Without the write every title shows 4:3 in xemu (anamo
 The line is raised only for SDTV modes: in the reference, option 0x13 just updates bit 28 of the stored mode word
 and the WSS encoder registers (0x8002fdd2, SDTV only; nothing for HDTV-table modes), and titles' D3D leaves bit 28
 clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480p/720p/1080i xemu's "auto" shows
-4:3 under both kernels; we keep that behaviour.
+4:3 under both kernels. **Ours (deviation since milestone 13):** the line is also raised for 720p and 1080i mode words
+(HDTV table, CRTC rows 0x0A and 0x0C), which are always 16:9, so xemu's "auto" shows them at 16:9; 480p keeps the
+reference rule (bit 28 only), since 480p can be 4:3 or 16:9.
 
 `AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
 bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),
@@ -116,6 +118,9 @@ above (before: 640×480 for every mode).
 `surface_download_to_buffer`: one of the title's render surfaces has a pitch smaller than width × bytes per
 pixel, which xemu's downscale path rejects); at scale 1 it runs. The retail BIOS we have returns this title to the
 dashboard within 0.3 s in xemu, so there is no reference run to compare.
+**1080i scanout (observed):** the title renders each field as 1920×540 with 8192-byte lines and passes half of that
+(0x1000) as the pitch: in interlaced mode the CRTC offset is stepped twice per field line. xemu's display code
+expects this (it divides the surface pitch by the CRTC offset); ours programs the pitch as given.
 
 ## 7. Boot splash image (ours; no reference counterpart)
 The reference kernel's boot animation lives in its INIT section and is not reproduced. Ours shows a picture
