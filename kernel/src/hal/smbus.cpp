@@ -203,8 +203,8 @@ XK_PERSIST static ULONG HalpBootAvPack = 7;          // AV pack at cold boot (7 
 XK_PERSIST static volatile BOOLEAN HalpSmcEventsArmed; // set once the first image is loaded; never cleared
 static volatile BOOLEAN HalpEjectBeforeLaunch;       // eject handled before that: a title launch is refused
 static volatile UCHAR HalpRequestRegister, HalpRequestValue;
-static KEVENT HalpSmcWork;
 static KDPC HalpSmcDpc;
+static KTIMER HalpSmcRetryTimer; // the SMBus was in use when the DPC ran
 static KINTERRUPT HalpSciInterrupt;
 extern ULONG XeConsoleGameRegion;
 extern UCHAR XeTitleDiscAuthenticated;
@@ -268,7 +268,7 @@ static void HalpSmcRequest(UCHAR Register, UCHAR Value) {
     HalpShutdownPending = 1;
     HalpRequestRegister = Register;
     HalpRequestValue = Value;
-    KeSetEvent(&HalpSmcWork, 0, FALSE);
+    KeInsertQueueDpc(&HalpSmcDpc, nullptr, nullptr);
 }
 
 void HalpSmcHandleEvents(ULONG reason) {
@@ -326,21 +326,28 @@ void HalpSmcHandleEvents(ULONG reason) {
     }
 }
 
-static void NTAPI HalpSmcThread(PVOID) {
-    for (;;) {
-        KeWaitForSingleObject(&HalpSmcWork, Executive, KernelMode, FALSE, nullptr);
-        if (HalpRequestRegister)
-            HalpSmcShutdown(HalpRequestRegister, HalpRequestValue);
-        ULONG reason;
-        if (!NT_SUCCESS(HalReadSMBusValue(SMC_ADDRESS, SMC_INTERRUPT_REASON, FALSE, &reason)))
-            continue;
+// SMC events and shutdown requests run in a DPC, as the reference's (no thread: its stack would cost the title
+// 3 pages, spec/09 §7). The SMBus is polled, so it works at DISPATCH_LEVEL; when a passive-level caller is in the
+// middle of a transaction (its lock is taken), the DPC tries again 1 ms later.
+static void NTAPI HalpSmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) {
+    HalpAcquireSMBus(); // initialises the lock on first use; no wait at DISPATCH_LEVEL
+    if (!HalpSMBusLock.Header.SignalState) {
+        LARGE_INTEGER due;
+        due.QuadPart = -10000;
+        KeSetTimer(&HalpSmcRetryTimer, due, &HalpSmcDpc);
+        return;
+    }
+    KeResetEvent(&HalpSMBusLock);
+    if (HalpRequestRegister)
+        HalpSmcShutdown(HalpRequestRegister, HalpRequestValue);
+    ULONG reason;
+    if (NT_SUCCESS(HalReadSMBusValue(SMC_ADDRESS, SMC_INTERRUPT_REASON, FALSE, &reason))) {
         HalpSmcLastReason = reason;
         HalpSmcEventCount = HalpSmcEventCount + 1;
         HalpSmcHandleEvents(reason);
     }
+    KeSetEvent(&HalpSMBusLock, 0, FALSE);
 }
-
-static void NTAPI HalpSmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) { KeSetEvent(&HalpSmcWork, 0, FALSE); }
 
 // SCI: the PM timer overflow (folded into the performance counter) and the SMC's GPE.
 void KiPerfCounterOverflow();
@@ -361,12 +368,9 @@ static BOOLEAN NTAPI HalpSciService(PKINTERRUPT, PVOID) {
 }
 
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
-PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
-
 void HalpSmcStartEvents() {
-    KeInitializeEvent(&HalpSmcWork, SynchronizationEvent, FALSE);
     KeInitializeDpc(&HalpSmcDpc, HalpSmcDpcRoutine, nullptr);
-    KiCreateSystemThread(HalpSmcThread, nullptr, 0, 16);
+    KeInitializeTimerEx(&HalpSmcRetryTimer, NotificationTimer);
     KIRQL irql;
     ULONG vector = HalGetInterruptVector(12, &irql);
     KeInitializeInterrupt(&HalpSciInterrupt, HalpSciService, nullptr, vector, irql, LevelSensitive, TRUE);
