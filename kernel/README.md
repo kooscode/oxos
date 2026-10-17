@@ -88,7 +88,6 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
 
 ## Known deviations (tracked)
-- `KeStallExecutionProcessor` polls the PM timer instead of spinning a boot-calibrated loop (spec/06 §7).
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
