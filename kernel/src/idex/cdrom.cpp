@@ -299,6 +299,98 @@ void IdexCdRomShowLog() {
 #define IdexCdRomRecord(...) ((void)0)
 #endif
 
+// --- Xbox drive security for titles (spec/04 §3a). Titles built with later XDKs check the disc themselves: MODE SENSE
+// page 0x3E must report an authenticated Xbox disc, and the security sector's timestamp (+0x4AB, against the
+// certificate's), SHA-1 (+0x4CF) and RSA signature (+0x4E3, under XePublicKeyData) must all hold.
+// - XePublicKeyData is an open exponent-1 key (src/xe/loader.cpp), so every security sector handed to a title gets
+//   the signature block of its own digest in place of Microsoft's signature, which this kernel cannot check.
+// - A drive without the Xbox security commands (emulators: xemu rejects page 0x3E and answers the security read with
+//   the ordinary physical-format block) gets them emulated: an authenticated page, and a security sector built for the
+//   running title.
+XBAPI void NTAPI XcSHAInit(PUCHAR);
+XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
+XBAPI void NTAPI XcSHAFinal(PUCHAR, PUCHAR);
+XBAPI BOOLEAN NTAPI MmIsAddressValid(PVOID VirtualAddress);
+constexpr ULONG SECURITY_SECTOR_SIZE = 0x664;
+static UCHAR IdexCdRomSecurityMode; // 0 = not probed yet, 1 = the drive implements page 0x3E, 2 = emulated
+
+static bool IdexCdRomIsSecurityRead(const UCHAR *cdb) {
+    return cdb[0] == 0xAD && cdb[2] == 0xFF && cdb[3] == 0x02 && cdb[4] == 0xFD && cdb[5] == 0xFF && cdb[6] == 0xFE;
+}
+
+static bool IdexCdRomEmulatingSecurity() {
+    if (!IdexCdRomSecurityMode) {
+        static const UCHAR sense[12] = {0x5A, 0, 0x3E, 0, 0, 0, 0, 0, 0x1C};
+        UCHAR page[28];
+        ULONG got;
+        NTSTATUS status = IdexAtapiPio(sense, page, sizeof(page), false, &got);
+        if (NT_SUCCESS(status))
+            IdexCdRomSecurityMode = 1;
+        else if (status == STATUS_INVALID_DEVICE_REQUEST) // ILLEGAL REQUEST: no such page
+            IdexCdRomSecurityMode = 2;
+    }
+    return IdexCdRomSecurityMode == 2;
+}
+
+// The PKCS#1 block of the digest at +0x4CF, little-endian as XcVerifyPKCS1Signature decodes it with the exponent-1 key:
+// digest reversed | SHA-1 DigestInfo reversed | 00 | FF.. | 01 | 00 (256 bytes).
+static void IdexCdRomSignSecuritySector(PUCHAR sector) {
+    static const UCHAR sha1Prefix[] = {0x14, 0x04, 0x00, 0x05, 0x1A, 0x02, 0x03, 0x0E,
+                                       0x2B, 0x05, 0x06, 0x09, 0x30, 0x21, 0x30};
+    PUCHAR sig = sector + 0x4E3;
+    for (ULONG i = 0; i < 20; i++)
+        sig[i] = sector[0x4CF + 19 - i];
+    RtlCopyMemory(sig + 20, sha1Prefix, sizeof(sha1Prefix));
+    sig[35] = 0;
+    RtlFillMemory(sig + 36, 254 - 36, 0xFF);
+    sig[254] = 1;
+    sig[255] = 0;
+}
+
+// An emulated security sector for the running title: its certificate timestamp at +0x4AB, the SHA-1 of the length
+// (dword 0x4CB) and the 0x4CB bytes at +4 at +0x4CF (as titles compute it), no challenge table.
+static void IdexCdRomBuildSecuritySector(PUCHAR sector) {
+    RtlZeroMemory(sector, SECURITY_SECTOR_SIZE);
+    sector[4] = 1; // the disc's id byte, as in the emulated mode page (byte 13)
+    auto header = (PUCHAR)0x10000; // the running XBE's header; not mapped while no title is loaded
+    if (MmIsAddressValid(header + 0x118) && *(ULONG *)header == 0x48454258 /*XBEH*/) {
+        auto cert = *(PUCHAR *)(header + 0x118);
+        if (MmIsAddressValid(cert) && MmIsAddressValid(cert + 7))
+            RtlCopyMemory(sector + 0x4AB, cert + 4, 4);
+    }
+    UCHAR sha[116];
+    ULONG length = 0x4CB;
+    XcSHAInit(sha);
+    XcSHAUpdate(sha, (PUCHAR)&length, 4);
+    XcSHAUpdate(sha, sector + 4, 0x4CB);
+    XcSHAFinal(sha, sector + 0x4CF);
+}
+
+// SCSI pass-through for the security commands on an emulating drive; false = send the command to the drive.
+static bool IdexCdRomEmulateSecurity(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got) {
+    bool sense = cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E;
+    bool select = cdb[0] == 0x55 && data && length >= 9 && (data[8] & 0x3F) == 0x3E;
+    bool read = IdexCdRomIsSecurityRead(cdb);
+    if (!(sense || select || read) || !IdexCdRomEmulatingSecurity())
+        return false;
+    *status = STATUS_SUCCESS;
+    *got = 0;
+    if (sense) {
+        // Challenges done (10), Xbox disc (11), authenticated (12), disc id byte (13).
+        static const UCHAR page[28] = {0, 0x1A, 0, 0, 0, 0, 0, 0, 0x3E, 0x12, 1, 1, 1, 1};
+        *got = length < sizeof(page) ? length : sizeof(page);
+        RtlCopyMemory(data, page, *got);
+    } else if (read) {
+        if (!data || length < SECURITY_SECTOR_SIZE) {
+            *status = STATUS_INVALID_PARAMETER;
+            return true;
+        }
+        IdexCdRomBuildSecuritySector(data);
+        *got = SECURITY_SECTOR_SIZE;
+    } // MODE SELECT (a challenge): accepted
+    return true;
+}
+
 static void IdexCdRomControl(PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     ULONG outLen = s->Parameters.DeviceIoControl.OutputBufferLength;
@@ -359,8 +451,11 @@ static void IdexCdRomControl(PIRP Irp) {
         }
         // Always the 12-byte ATAPI packet: CdbLength is ignored, as the reference does (callers commonly leave it 0).
         RtlCopyMemory(cdb, p->Cdb, 12);
-        status = IdexAtapiPio(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength, p->DataIn == 0 /*SCSI_IOCTL_DATA_OUT*/,
-                              &got);
+        if (!IdexCdRomEmulateSecurity(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength, &status, &got))
+            status = IdexAtapiPio(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength,
+                                  p->DataIn == 0 /*SCSI_IOCTL_DATA_OUT*/, &got);
+        if (NT_SUCCESS(status) && got >= 0x4E3 + 256 && IdexCdRomIsSecurityRead(cdb))
+            IdexCdRomSignSecuritySector((PUCHAR)p->DataBuffer);
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2; // CHECK CONDITION
         IdexCdRomRecord(IOCTL_SCSI_PASS_THROUGH_DIRECT, p->Cdb, p->DataBuffer, p->DataTransferLength | p->CdbLength << 24 | p->DataIn << 16, got, status);
         p->DataTransferLength = got;
@@ -375,15 +470,11 @@ static void IdexCdRomControl(PIRP Irp) {
 // sector (READ DVD STRUCTURE 0xFF02FDFF, layer 0xFE) provide a challenge table; replaying it proves a pressed Xbox
 // disc. Success marks the media as "title disc" (XBE media type 2) and pins the disc's title.
 
-XBAPI void NTAPI XcSHAInit(PUCHAR);
-XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
-XBAPI void NTAPI XcSHAFinal(PUCHAR, PUCHAR);
 XBAPI void NTAPI XcRC4Key(PUCHAR, ULONG, const UCHAR *);
 XBAPI void NTAPI XcRC4Crypt(PUCHAR, ULONG, PUCHAR);
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
 extern UCHAR XeTitleDiscAuthenticated;
 extern ULONG XeDiscTitleId;
-constexpr ULONG SECURITY_SECTOR_SIZE = 0x664;
 constexpr NTSTATUS STATUS_TOO_MANY_SECRETS = (NTSTATUS)0xC0000156, STATUS_UNRECOGNIZED_MEDIA_ = (NTSTATUS)0xC0000014;
 
 static NTSTATUS IdexCdRomPassThrough(const UCHAR *cdb, PVOID data, ULONG length, bool dataIn) {
@@ -441,6 +532,8 @@ static NTSTATUS IdexCdRomAuthenticate() {
         return STATUS_SUCCESS;
     UCHAR page[28];
     NTSTATUS status = IdexCdRomSecurityPage(page);
+    if (IdexCdRomSecurityMode == 2) // a drive without Xbox security (emulator): no disc to authenticate
+        status = STATUS_UNRECOGNIZED_MEDIA_;
     for (int i = 0; i < 28; i++)
         IdexCdRomAuthPage[i] = page[i];
     IdexCdRomAuthStatus = status;

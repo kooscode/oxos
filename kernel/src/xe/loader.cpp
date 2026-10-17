@@ -44,11 +44,14 @@ XK_PERSIST UCHAR XeTitleDiscAuthenticated; // set by the DVD authentication (src
 XBAPI OBJECT_STRING XeImageFileName;
 XBAPI XK_PERSIST PVOID LaunchDataPage;
 XBAPI UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
-XBAPI UCHAR XePublicKeyData[284]; // not populated (signature checks are not enforced, spec/05 §4.5)
+XBAPI UCHAR XePublicKeyData[284];
 OBJECT_STRING XeImageFileName;
 PVOID LaunchDataPage;
 UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
-UCHAR XePublicKeyData[284];
+// No Microsoft key: an open BSAFE key with public exponent 1 (2048 bits, modulus unused), so a valid signature is the
+// PKCS#1 block of the digest itself. The CD-ROM driver signs the disc security sectors titles read this way
+// (spec/04 §3a); anything signed by Microsoft does not verify, as with no key at all (spec/05 §4.5).
+UCHAR XePublicKeyData[284] = {'R', 'S', 'A', '1', 0x08, 0x01, 0, 0, 0, 0x08, 0, 0, 0xFF, 0, 0, 0, 1, 0, 0, 0};
 XK_PERSIST ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
 volatile NTSTATUS XeLastLoadStatus, XeLoadHistory[4];
 volatile ULONG XeLoadCount;

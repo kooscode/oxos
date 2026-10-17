@@ -43,7 +43,10 @@ CD-ROM driver object at 0x800123d8, its READ dispatch (0x80025d9a) and the DEVIC
   STATUS_END_OF_FILE; otherwise the length is clipped to the end of the file. Non-cached reads go to the device
   with the transfer rounded up to whole sectors and the clipped length reported: **the length need not be a
   multiple of 2048** (Halo 2 reads its map files' tails with lengths such as 0x27600 and shows "disc dirty or
-  damaged" when that fails). Ours checks only the offset's sector alignment for non-cached reads.
+  damaged" when that fails). Ours checks only the offset's sector alignment for non-cached reads, and only after
+  the end-of-file test: after a non-cached read of a file's tail the position is the unaligned file size, and the
+  next read must return STATUS_END_OF_FILE (Brute Force copies its .tgz archives to Z: until it sees it; an invalid
+  parameter there ended its copy threads and left it on "Loading" for ever).
 - Mounting: CD_ROM devices try XDVDFS (the reference tries **UDF first**, then XDVDFS — spec 04d).
 
 ## 3. RAW file system

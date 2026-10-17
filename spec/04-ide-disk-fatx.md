@@ -66,6 +66,20 @@ pass-through (0x4D014):
 6. Success: title-disc flag = 1 (XBE media type 2), pinned title ID = dword at +0x4AB. On quick reboot the flag is
    re-checked with MODE SENSE (up to 5 tries); a tray event clears it.
 xemu 0.8.136 rejects page 0x3E (sense 5/24), so authentication fails there; see spec 05 §4 for the media policy.
+**Titles' own check** (XDK startup code in later titles, e.g. Brute Force; enabled by certificate +0x1D8 bit 0 when
+the certificate is larger than 0x1D8): MODE SENSE page 0x3E (5 tries) must have bytes 10, 11 and 12 set; then the
+security sector is read (5 tries) and must carry the certificate's **timestamp** (cert +4) at +0x4AB, at +0x4CF the
+SHA-1 of the dword 0x4CB followed by the 0x4CB bytes at +4, and at +0x4E3 a signature of that digest under
+`XePublicKeyData` (XcVerifyPKCS1Signature). Failure ends the title. Ours (src/idex/cdrom.cpp):
+- every successful security-sector read in a pass-through gets the signature block of its stored digest under our
+  open exponent-1 key (spec 05 §8), replacing Microsoft's;
+- the first page-0x3E / security-sector request probes the drive with MODE SENSE page 0x3E. A drive that rejects it
+  (ILLEGAL REQUEST: emulators) gets these commands emulated: MODE SENSE returns an authenticated page (bytes 10–13
+  = 1), MODE SELECT of the page is accepted, and the security sector is built for the running XBE (timestamp,
+  digest, no challenge table). The kernel's own authentication fails at once on such a drive (as before).
+Open: the kernel's own check above hashes the 0x4CB bytes without the length dword the titles' check includes;
+one of the two is likely wrong (verify against the reference), and +0x4AB is the certificate timestamp to titles,
+while the kernel pins it as the title ID.
 Titles send the same pass-through themselves (their own disc check, in the statically linked system library). The
 reference copies all **12 CDB bytes** and ignores `CdbLength`, which callers commonly leave 0; copying only
 `CdbLength` bytes turns every such command into TEST UNIT READY.
