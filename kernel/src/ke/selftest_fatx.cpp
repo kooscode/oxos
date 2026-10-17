@@ -179,6 +179,13 @@ static void NTAPI FatxControllerThread(PVOID) {
           STATUS_OBJECT_NAME_INVALID;
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\a23456789012345678901234567890123456789012x", GENERIC_READ,
                FILE_OPEN_IF, 0) == STATUS_OBJECT_NAME_INVALID; // 43 characters
+    // One doubled separator is accepted (as the reference); a tripled one is not.
+    bool doubled = Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\\\keep.bin", GENERIC_READ, FILE_OPEN, 0) ==
+                   STATUS_SUCCESS;
+    if (doubled)
+        NtClose(hx);
+    ok &= doubled && Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\\\\\keep.bin", GENERIC_READ, FILE_OPEN,
+                          0) == STATUS_OBJECT_NAME_INVALID;
     KiTestFatxErrorsOk = ok;
 
     // Volume information; every cluster used above came back except keep.bin's one.

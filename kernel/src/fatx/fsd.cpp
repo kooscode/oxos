@@ -116,16 +116,31 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
     parent->ReferenceCount++; // held while walking
     OBJECT_STRING element;
     NTSTATUS status = STATUS_SUCCESS;
+    // A doubled separator ("dir\\name") is accepted once, as the reference does: its walk through already-open
+    // directories stops at the first "\\" or at the first directory it must look up on disk, and the slower walk
+    // that takes over drops one leading '\' of the rest; after that a doubled separator is invalid. Brute Force
+    // opens its textures as "z:\splash_screen\\textures-splash_screen.tex".
+    bool slow = false;
     for (;;) {
         FatxSplitElement(&rest, &element);
         if (!FatxIsValidName(&element)) {
             status = STATUS_OBJECT_NAME_INVALID;
             break;
         }
+        if (rest.Length >= 2 && rest.Buffer[1] == '\\') {
+            if (slow) {
+                status = STATUS_OBJECT_NAME_INVALID;
+                break;
+            }
+            rest.Buffer++;
+            rest.Length--;
+            slow = true;
+        }
         if (!rest.Length)
             break;
         FATX_FCB *child = FatxFindOpenFcb(parent, element.Buffer, element.Length);
         if (!child) {
+            slow = true;
             FATX_DIRENT e;
             ULONG index;
             status = FatxLookup(v, parent, &element, &e, &index);
