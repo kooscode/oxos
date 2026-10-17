@@ -76,10 +76,9 @@ framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(
 13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; 0x8002FDD2 (saved-data / splash bookkeeping).
 
 ## 6. Ours (status)
-`src/hal/av.cpp` programs a fixed 640×480 VGA timing on the NV2A CRTC and ignores the mode word's table rows: enough
-for xemu (which does not emulate the encoders) and for the nxdk dashboard. For real hardware the tables above must
-be built from datasheets with the same row numbering — tracked as milestone 7 (needs encoder datasheets and a way
-to learn the row ↔ video-standard mapping that the D3D library uses).
+`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7) and ignores the
+encoder and NV2A table rows: enough for xemu (which does not emulate the encoders). For real hardware the encoder
+tables must be built from datasheets with the same row numbering — tracked as milestone 7.
 
 The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF for progressive output: the
 reference leaves it at 0xFF, and xemu treats any other value as interlaced and shows each field at half height
@@ -98,6 +97,25 @@ clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480
 bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),
 0x11 (mode table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (mode flag 0x10000000). Other options are
 encoder writes and are no-ops until the tables exist.
+
+## 7a. Display timings per mode (ours; milestone 13)
+**Row meanings (observed, not from the reference's tables):** the D3D mode words for each picture size, as listed
+by nxdk's `lib/hal/video.c` (MIT) and seen in titles' AvSetDisplayMode calls: the table bits 30–31 (10b HDTV,
+11b VGA, else SDTV) and the CRTC row (bits 8–15) give the size. HDTV: row 7 = 640×480p (0x88070701), 8 =
+720×480p (0x88080801), 0x0A = 1280×720p (0x880B0A02), 0x0C = 1920×1080i (0x880E0C03); VGA: 6 = 640×480, 3 =
+800×600, 4 = 1024×768; SDTV: 1/3 = 640×480 (NTSC/PAL), 2/4 = 720×480. Enter the Matrix with 1080i allowed asks for
+0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with pitch 0x1400 (logged with a gdb breakpoint on
+AvSetDisplayMode).
+**Ours:** timings from the public standards for those sizes (CEA-861 480p, SMPTE 296M 720p: 1650×750 total,
+SMPTE 274M 1080i: 2200×1125, programmed per field with CR39 = interlace half-line, VESA 800×600/1024×768); unknown
+rows fall back to 640×480. High bits in the NV extended CRTC registers CR25 (vertical bit 10s, kept with the mode
+across quick reboots and merged with the pitch bit) and CR2D (horizontal bit 8s). xemu sizes its display from
+CR01, CR12/CR07 and CR39 (doubling interlaced heights): measured 1920×1080 interlaced and 1280×720 for the two modes
+above (before: 640×480 for every mode).
+**xemu note:** Enter the Matrix in 720p or 1080i aborts xemu at render scale 2 or more (assertion in
+`surface_download_to_buffer`: one of the title's render surfaces has a pitch smaller than width × bytes per
+pixel, which xemu's downscale path rejects); at scale 1 it runs. The retail BIOS we have returns this title to the
+dashboard within 0.3 s in xemu, so there is no reference run to compare.
 
 ## 7. Boot splash image (ours; no reference counterpart)
 The reference kernel's boot animation lives in its INIT section and is not reproduced. Ours shows a picture
