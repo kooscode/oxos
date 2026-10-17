@@ -110,6 +110,11 @@ Classic NT x86 self-mapped paging: **page tables at 0xC0000000, page directory a
   MCPX 0xB2.
 - If McpRevision < 0xB4 → Flags |= 0x01 (probably marks early, 1.0-era hardware; meaning not confirmed).
 Titles read `XboxHardwareInfo`, so these bits must match on each console revision.
+- It is filled at cold boot only and **survives quick reboots**: 0x8003B150 lies past the `.data`/BSS range the quick
+  reboot re-copies and zeroes (§1), so a title launched by another title sees the same values. Titles depend on it:
+  Half-Life 2's USB library (in `hl2_xbox.xbe`, launched by its `default.xbe`) sizes its endpoint descriptors by
+  Flags bit 0; with the flags zeroed it ran out of them on the second hub and never enumerated the controller.
+  Ours keeps it in the persistent section.
 
 ## 6. Our implementation (milestone 5d-2)
 - Variables that must survive a quick reboot (EEPROM key, HD key, cert key, LaunchDataPage, console region,

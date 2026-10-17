@@ -55,7 +55,10 @@ void HalInitSystemPhase0(bool coldBoot) {
 
 // spec/02 §5 (subset). TODO(spec): GpuRevision should come from NV2A PMC_BOOT_0 (0xFD000000)
 // once the MMIO mapping exists; the strap-derived flags 0x10/0x20/0x40/0x80 are also pending.
-XBOX_HARDWARE_INFO XboxHardwareInfo;
+// Filled at cold boot only and kept across quick reboots, as in the reference (0x8003B150 lies past the .data/BSS
+// range the quick reboot re-initializes). Titles launched by another title read it too: Half-Life 2's USB library
+// reserves its descriptors by Flags bit 0 and, with the flags zeroed, ran out of them and never found the pad.
+XK_PERSIST XBOX_HARDWARE_INFO XboxHardwareInfo;
 
 // spec/02 §5 (confirmed from the assembly, 0x80055081).
 void HalpDetectHardware() {
