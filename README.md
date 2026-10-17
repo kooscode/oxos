@@ -11,8 +11,8 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 
 **Status:**
 - Every function and variable the 4627 kernel exports is implemented.
-- In xemu it boots the dashboard, **Halo** and **Halo 2** (both playable), reads UDF (DVD-video) discs and has its
-  own boot splash.
+- In xemu it boots the dashboard, **Halo** and **Halo 2** (both playable) and **Brute Force** (to its main menu),
+  reads UDF (DVD-video) discs and has its own boot splash.
 - The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 

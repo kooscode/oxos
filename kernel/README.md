@@ -78,6 +78,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - No Microsoft files and no MCPX dump are needed. xemu boots it without a boot ROM, and with the real MCPX 1.0
        ROM (`make test-mcpx`).
      - The dashboard, Halo and Halo 2 run on it, and `make test` uses it by default.
+   - 13: **Brute Force reaches its main menu in xemu.** Three fixes: titles from later XDKs check the disc themselves
+     (security page and an RSA-signed security sector; `XePublicKeyData` is now an open exponent-1 key, and on a drive
+     without Xbox security, such as xemu's, the CD-ROM driver emulates it, spec 04 §3a); XDVDFS reads test end of file
+     before the non-cached alignment rule; FATX accepts one doubled path separator, as the reference (spec 04b).
    - Next (7): video encoder mode tables for real TVs (spec 17: algorithm and table layout documented; values must be derived from the Conexant/Focus datasheets with the reference's row numbering), then real-hardware validation (encoder mode tables, SMC events, microcode).
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
