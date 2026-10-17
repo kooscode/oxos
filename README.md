@@ -66,6 +66,12 @@ make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace ISO=...           # optional: a trace build, for troubleshooting disc boots
 ```
+`make run` keeps its hard-disk copy and EEPROM in `xbox-files/play/oxos/`, so saves and settings survive between
+runs (`FRESH=1` starts over from your HDD image, which is never written; `make run-stock` uses `xbox-files/play/stock/`).
+It starts widescreen (the EEPROM's widescreen flag and a 16:9 picture) in a 1920x1080 window at twice the render
+resolution; change that with `WIDE=0`, `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). Games still output 480
+lines: the HD video modes (720p/1080i) are not implemented yet.
+
 `make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to
 `/dev/uinput`; it fetches [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
