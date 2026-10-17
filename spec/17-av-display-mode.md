@@ -120,11 +120,14 @@ during cold boot (`src/hal/splash.cpp`):
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
   `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header,
   0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
-- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time. Before entering the title
-  the launcher waits for the fade, frees the decode buffer and hands the screen block to the title as the persisted
-  display, like the reference does with its animation's last frame (0x8001e9f5 relocates it, 0x8003e550 frees it
-  after the first Present): `MmPersistContiguousMemory(…, TRUE)` + `AvSetSavedDataAddress(block)`. The block is a
-  4 KB header (dword 1 = physical address of the pixels, which the reference's relocation rewrites) followed by the
-  pixels. So the picture stays up while the title loads, until its video set-up (XDK D3D's first Present, nxdk
-  `XVideoSetMode`) frees it. Deviation: the reference also moves the block to the physical address of its freed
-  INIT section; ours stays where it was allocated (below 16 MB).
+- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time.
+- **Reference behaviour (observed: objdump of 0x8001e990–0x8001e9e2):** the boot screen costs the
+  title nothing. 0x8001e9f5 takes the saved display block, records the physical address of its pixels at
+  0x8003b2d0 and **returns its pages to the free lists** (tail insertion, contiguous count decremented) while the
+  scanout keeps showing them. Measured at the XBE entry point with the boot animation on and off: no pages besides
+  the kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec/09 §7).
+  Why (inferred): freed pages go to the end of the colour lists, so the picture survives until the title's video
+  set-up replaces it, at no cost to the title's budget.
+- **Ours:** the launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the
+  scanout on the screen buffer. Until 2026-10-17 the screen buffer was kept as the persisted display
+  (`AvSetSavedDataAddress`), which held 301 pages (1.2 MB) at the title's entry point that the reference does not.
