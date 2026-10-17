@@ -89,6 +89,10 @@ Of step 6 ours does the GPIO writes (`0x80D6 ← (bit 28) | 4`, `0x80D8 ← 4`) 
 ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen line: titles that render 16:9 set
 mode bit 28 (option 0x13 or their D3D mode word), and xemu's "auto" aspect ratio shows 16:9 exactly when the last
 value written there is 5. Without the write every title shows 4:3 in xemu (anamorphic pictures look squashed).
+The line is raised only for SDTV modes: in the reference, option 0x13 just updates bit 28 of the stored mode word
+and the WSS encoder registers (0x8002fdd2, SDTV only; nothing for HDTV-table modes), and titles' D3D leaves bit 28
+clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480p/720p/1080i xemu's "auto" shows
+4:3 under both kernels; we keep that behaviour.
 
 `AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
 bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),

@@ -74,7 +74,9 @@ survive between runs (`FRESH=1` starts over from the image, which is never writt
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
 support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
 with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
-(full screen). Games still output 480
+(full screen). Games only send that signal in standard-definition modes (the reference kernel
+does the same): with 480p/720p/1080i enabled in the dashboard a widescreen game such as Halo 2 shows 4:3 under
+`auto`, so run it with `ASPECT=16x9` (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Games still output 480
 lines: the HD video modes (720p/1080i) are not implemented yet.
 
 `make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to
