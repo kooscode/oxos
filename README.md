@@ -64,6 +64,7 @@ make test                        # boot it in xemu and check every milestone
 make run ISO=../xiso/game.iso    # play: the release BIOS in an interactive xemu window
 make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real MCPX boot ROM
 make run-stock ISO=...           # optional: your original BIOS, for comparison
+make run-trace ISO=...           # optional: a trace build, for troubleshooting disc boots
 ```
 `make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to
 `/dev/uinput`; it fetches [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.

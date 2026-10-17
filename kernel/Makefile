@@ -162,6 +162,11 @@ run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
 
+# The same with a trace build (import tracing, the CD-ROM request log on screen before the dashboard).
+run-trace:
+	$(MAKE) BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1 build-trace/bios.bin
+	python3 -I $(ROOT)/tools/run.py build-trace/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+
 # Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
 # reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
 # reference BIOS.
@@ -191,4 +196,4 @@ run-stock:
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-stock clean
+.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace run-stock clean

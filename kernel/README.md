@@ -12,6 +12,7 @@ make test       # boot bios.bin in xemu; check every milestone's boot self-tests
 make SELFTEST=0 # build without the boot self-tests
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison)
+make run-trace [ISO=game.iso]  # the same session on a trace build (CD-ROM request log before the dashboard)
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
