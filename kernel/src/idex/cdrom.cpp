@@ -186,8 +186,8 @@ struct SCSI_PASS_THROUGH_DIRECT_ {
     UCHAR Cdb[16];
 };
 
-#if XK_TRACE_IMPORTS
-// Diagnostics (trace builds): the last 16 drive control requests: code, status, bytes, CDB, first 32 response bytes.
+#if XK_DRIVE_LOG
+// Diagnostics (DRIVE_LOG builds): the last 16 drive control requests: code, status, bytes, CDB, first 32 response bytes.
 struct IDEX_CDROM_LOG {
     ULONG Code, Status, Got, Length;
     UCHAR Cdb[16], Data[32];
@@ -246,7 +246,7 @@ static char *IdexLogHex(char *p, ULONG v, ULONG digits) {
     return p;
 }
 
-// Trace builds, before the dashboard starts: the last drive control requests on screen for 20 s, oldest first, so a
+// DRIVE_LOG builds, before the dashboard starts: the last drive control requests on screen for 20 s, oldest first, so a
 // failed disc boot can be read on hardware without a debugger. One row each: sequence, IOCTL, the 12 CDB bytes,
 // status, bytes transferred. Response data is not shown.
 void IdexCdRomShowLog() {
@@ -584,7 +584,7 @@ DRIVER_OBJECT IdexCdRomDriverObject = {
      IoInvalidDeviceRequest}};
 
 void IdexCdRomInit() {
-#if XK_TRACE_IMPORTS
+#if XK_DRIVE_LOG
     if (!KiQuickRebootFlag) { // the persisted log holds whatever RAM held at power-on
         RtlZeroMemory(IdexCdRomLog, sizeof(IdexCdRomLog));
         IdexCdRomLogCount = 0;

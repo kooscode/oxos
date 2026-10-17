@@ -404,13 +404,13 @@ static ULONG XepCheckFirstBoot() {
     return reason;
 }
 
-#if XK_TRACE_IMPORTS
+#if XK_DRIVE_LOG
 void IdexCdRomShowLog();
 void HalpEndSplash();
 #endif
 
 static void XepLaunchDashboard() {
-#if XK_TRACE_IMPORTS
+#if XK_DRIVE_LOG
     HalpEndSplash();
     IdexCdRomShowLog();
 #endif
