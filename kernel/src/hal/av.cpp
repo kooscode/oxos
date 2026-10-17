@@ -168,6 +168,9 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         AvpCrtc(regs, 0x28, 0x00); // display off while reprogramming
         for (auto &t : AvpVgaTimings)
             AvpCrtc(regs, t[0], t[1]);
+        // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it).
+        outb(0x80D6, (UCHAR)(((Mode >> 28) & 1) | 4));
+        outb(0x80D8, 4);
         regs[0xC03C3] = 0x01;
         AvpVgaGraphicsMode(regs);
         regs[0xC03C2] = 0xE3; // misc output: 25 MHz clock, negative syncs

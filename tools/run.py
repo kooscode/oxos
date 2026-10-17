@@ -11,7 +11,9 @@ Disk and EEPROM:
 The --hdd image itself is never written.
 
 Display:
-- --widescreen sets the widescreen video flag in the EEPROM (games then render 16:9) and shows the picture at 16:9;
+- --widescreen sets the widescreen video flag in the EEPROM; games that support it then render 16:9 and tell the AV
+  connector so, and xemu's default ("auto") aspect follows that signal per game (4:3 games keep 4:3);
+- --aspect forces xemu's aspect ratio instead (auto, native, 4x3, 16x9);
 - --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier
   (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
 The kernel has no HD (720p/1080i) video modes yet, so games output 480 lines and xemu scales them.
@@ -29,7 +31,8 @@ ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump (needed only for a Micros
 ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
 ap.add_argument("--state", help="directory for a persistent HDD copy and EEPROM")
 ap.add_argument("--fresh", action="store_true", help="start the --state directory over from --hdd")
-ap.add_argument("--widescreen", action="store_true", help="EEPROM widescreen flag and a 16:9 picture")
+ap.add_argument("--widescreen", action="store_true", help="EEPROM widescreen flag (16:9 in games that support it)")
+ap.add_argument("--aspect", choices=["auto", "native", "4x3", "16x9"], help="xemu aspect ratio (default auto)")
 ap.add_argument("--size", choices=SIZES, help="window size")
 ap.add_argument("--scale", type=int, choices=range(1, 11), metavar="1-10", help="render resolution multiplier")
 ap.add_argument("--fullscreen", action="store_true")
@@ -55,8 +58,7 @@ else:
 
 def config(path, extra=""):
     display = []
-    if a.widescreen:
-        display.append("[display.ui]\naspect_ratio = '16x9'\n")
+    display.append(f"[display.ui]\naspect_ratio = '{a.aspect or 'auto'}'\n")
     if a.size or a.fullscreen:
         display.append("[display.window]\n" + (f"startup_size = '{a.size}'\n" if a.size else "")
                        + ("fullscreen_on_startup = true\n" if a.fullscreen else ""))

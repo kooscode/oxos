@@ -71,8 +71,10 @@ dashboard, whose Settings set up video modes, clock and language), otherwise fro
 `PLAY_HDD=...`. It keeps its hard-disk copy and EEPROM in `xbox-files/play/oxos-<image>/`, so saves and settings
 survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
 `xbox-files/play/stock-<image>/`).
-It starts widescreen (the EEPROM's widescreen flag and a 16:9 picture) in a 1920x1080 window at twice the render
-resolution; change that with `WIDE=0`, `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). Games still output 480
+It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
+support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
+with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
+(full screen). Games still output 480
 lines: the HD video modes (720p/1080i) are not implemented yet.
 
 `make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to

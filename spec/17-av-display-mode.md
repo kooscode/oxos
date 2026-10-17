@@ -85,6 +85,11 @@ The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF f
 reference leaves it at 0xFF, and xemu treats any other value as interlaced and shows each field at half height
 (observed: Halo's menu squished into the top half of the window). Line compare (CR18) is likewise 0xFF (never).
 
+Of step 6 ours does the GPIO writes (`0x80D6 ← (bit 28) | 4`, `0x80D8 ← 4`) on every mode change. Port 0x80D6 is
+ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen line: titles that render 16:9 set
+mode bit 28 (option 0x13 or their D3D mode word), and xemu's "auto" aspect ratio shows 16:9 exactly when the last
+value written there is 5. Without the write every title shows 4:3 in xemu (anamorphic pictures look squashed).
+
 `AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
 bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),
 0x11 (mode table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (mode flag 0x10000000). Other options are
