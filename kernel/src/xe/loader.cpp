@@ -404,7 +404,16 @@ static ULONG XepCheckFirstBoot() {
     return reason;
 }
 
+#if XK_TRACE_IMPORTS
+void IdexCdRomShowLog();
+void HalpEndSplash();
+#endif
+
 static void XepLaunchDashboard() {
+#if XK_TRACE_IMPORTS
+    HalpEndSplash();
+    IdexCdRomShowLog();
+#endif
     if (NT_SUCCESS(XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE)))
         return;
     if (!KiQuickRebootFlag) {

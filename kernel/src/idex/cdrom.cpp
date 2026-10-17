@@ -204,6 +204,97 @@ static void IdexCdRomRecord(ULONG code, const UCHAR *cdb, const void *data, ULON
     if (data && NT_SUCCESS(status))
         RtlCopyMemory(l.Data, data, got < 32 ? got : 32);
 }
+
+XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
+                                   ULONG FrameBuffer);
+XBAPI PVOID NTAPI AvGetSavedDataAddress();
+XBAPI void NTAPI AvSetSavedDataAddress(PVOID Address);
+XBAPI UCHAR HalBootSMCVideoMode;
+extern "C" volatile UCHAR KiQuickRebootFlag;
+
+// 5x7 glyphs (bit 4 = leftmost column) for the log screen.
+static const char IdexLogChars[] = "0123456789ABCDEFGILORV";
+static const UCHAR IdexLogGlyphs[][7] = {
+    {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}, {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E},
+    {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}, {0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E},
+    {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}, {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E},
+    {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}, {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},
+    {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}, {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C},
+    {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}, {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E},
+    {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}, {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E},
+    {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}, {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10},
+    {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F}, {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E},
+    {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}, {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
+    {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}, {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04},
+};
+
+static void IdexLogText(ULONG *fb, ULONG x, ULONG y, const char *text, ULONG color) {
+    for (; *text; text++, x += 12)
+        for (ULONG g = 0; IdexLogChars[g]; g++) {
+            if (IdexLogChars[g] != *text)
+                continue;
+            for (ULONG r = 0; r < 14; r++)
+                for (ULONG c = 0; c < 10; c++)
+                    if (IdexLogGlyphs[g][r / 2] & (0x10 >> c / 2))
+                        fb[(y + r) * 640 + x + c] = color;
+        }
+}
+
+static char *IdexLogHex(char *p, ULONG v, ULONG digits) {
+    for (ULONG i = digits; i--;)
+        *p++ = "0123456789ABCDEF"[v >> i * 4 & 0xF];
+    return p;
+}
+
+// Trace builds, before the dashboard starts: the last drive control requests on screen for 20 s, oldest first, so a
+// failed disc boot can be read on hardware without a debugger. One row each: sequence, IOCTL, the 12 CDB bytes,
+// status, bytes transferred. Response data is not shown.
+void IdexCdRomShowLog() {
+    ULONG count = IdexCdRomLogCount;
+    if (!count || HalBootSMCVideoMode == 7)
+        return;
+    const ULONG pitch = 640 * 4, header = 0x1000;
+    auto block = (ULONG *)MmAllocateContiguousMemoryEx(header + pitch * 480, 0, 0xFFFFFF, 0x1000,
+                                                       PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (!block)
+        return;
+    ULONG *fb = block + header / 4;
+    RtlZeroMemory(block, header + pitch * 480);
+    block[1] = MmGetPhysicalAddress(fb);
+    char line[64];
+    IdexLogText(fb, 40, 40, "DRIVE LOG", 0x40FF40);
+    *IdexLogHex(line, count, 8) = 0;
+    IdexLogText(fb, 160, 40, line, 0x40FF40);
+    ULONG first = count > 16 ? count - 16 : 0;
+    for (ULONG i = first, y = 70; i < count; i++, y += 22) {
+        const IDEX_CDROM_LOG &l = IdexCdRomLog[i % 16];
+        char *p = IdexLogHex(line, i & 0xFF, 2);
+        *p++ = ' ';
+        p = IdexLogHex(p, l.Code, 6);
+        *p++ = ' ';
+        for (ULONG b = 0; b < 12; b++)
+            p = IdexLogHex(p, l.Cdb[b], 2);
+        *p++ = ' ';
+        p = IdexLogHex(p, l.Status, 8);
+        *p++ = ' ';
+        p = IdexLogHex(p, l.Got, 4);
+        *p = 0;
+        IdexLogText(fb, 40, y, line, NT_SUCCESS(l.Status) ? 0xE0E0E0 : 0xFF6060);
+    }
+    AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, pitch, block[1]);
+    LARGE_INTEGER t;
+    t.QuadPart = -10000LL * 20000;
+    KeDelayExecutionThread(KernelMode, FALSE, &t);
+    // Leave it up as the persisted display (the dashboard's video set-up frees it), or go back to the one there was.
+    auto saved = (ULONG *)AvGetSavedDataAddress();
+    if (saved) {
+        AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, pitch, saved[1]);
+        MmFreeContiguousMemory(block);
+    } else {
+        MmPersistContiguousMemory(block, header + pitch * 480, TRUE);
+        AvSetSavedDataAddress(block);
+    }
+}
 #else
 #define IdexCdRomRecord(...) ((void)0)
 #endif
@@ -493,6 +584,12 @@ DRIVER_OBJECT IdexCdRomDriverObject = {
      IoInvalidDeviceRequest}};
 
 void IdexCdRomInit() {
+#if XK_TRACE_IMPORTS
+    if (!KiQuickRebootFlag) { // the persisted log holds whatever RAM held at power-on
+        RtlZeroMemory(IdexCdRomLog, sizeof(IdexCdRomLog));
+        IdexCdRomLogCount = 0;
+    }
+#endif
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     outb(IDE_DRIVE, 0xB0);
     ULONG tries = 0;
