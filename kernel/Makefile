@@ -159,16 +159,27 @@ test-udf: $(BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
 
-# Interactive: boot the release BIOS in xemu with a copy of the HDD; optional ISO=path/to/game.iso.
+# Interactive: boot the release BIOS in xemu; optional ISO=path/to/game.iso.
+# The HDD copy and EEPROM persist in STATE (saves and settings survive; made from HDD_IMAGE the first time, which is
+# never written): FRESH=1 starts it over, STATE= (empty) uses a throwaway copy. Display, by default widescreen in a
+# 1920x1080 window at twice the render resolution: WIDE=0 (no EEPROM widescreen flag or 16:9 picture; a flag already
+# saved in STATE stays until FRESH=1 or the dashboard clears it), SIZE= (window size), SCALE=1..10, FULL=1 (full screen).
+STATE       ?= $(ROOT)/xbox-files/play/oxos
+STATE_STOCK ?= $(ROOT)/xbox-files/play/stock
+WIDE        ?= 1
+SIZE        ?= 1920x1080
+SCALE       ?= 2
+RUN_OPTS     = --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO)) $(if $(FRESH),--fresh) $(if $(filter 1,$(WIDE)),--widescreen) \
+               $(if $(SIZE),--size $(SIZE)) $(if $(SCALE),--scale $(SCALE)) $(if $(FULL),--fullscreen)
 run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
 # The same with the CD-ROM request log on screen before the dashboard. No import tracing, so titles see the memory
 # of a release build; also the build to flash for troubleshooting disc boots on hardware.
 run-trace:
 	$(MAKE) BUILD=build-drivelog SELFTEST=0 DRIVE_LOG=1 build-drivelog/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-drivelog/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py build-drivelog/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
 # Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
 # reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
@@ -192,9 +203,10 @@ test-pad: padtest
 		$(if $(filter stock,$(PAD_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
 		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
 
-# The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed).
+# The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own
+# state directory: the stock kernel signs saves with keys OXOS does not have, so the two cannot share saves.
 run-stock:
-	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) --hdd $(HDD_IMAGE) $(if $(ISO),--iso $(ISO))
+	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) $(if $(STATE_STOCK),--state $(STATE_STOCK)) $(RUN_OPTS)
 
 clean:
 	rm -rf $(BUILD) build-release
