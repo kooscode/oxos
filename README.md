@@ -66,8 +66,11 @@ make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace ISO=...           # optional: a trace build, for troubleshooting disc boots
 ```
-`make run` keeps its hard-disk copy and EEPROM in `xbox-files/play/oxos/`, so saves and settings survive between
-runs (`FRESH=1` starts over from your HDD image, which is never written; `make run-stock` uses `xbox-files/play/stock/`).
+`make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
+dashboard, whose Settings set up video modes, clock and language), otherwise from the test image; pick another with
+`PLAY_HDD=...`. It keeps its hard-disk copy and EEPROM in `xbox-files/play/oxos-<image>/`, so saves and settings
+survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
+`xbox-files/play/stock-<image>/`).
 It starts widescreen (the EEPROM's widescreen flag and a 16:9 picture) in a 1920x1080 window at twice the render
 resolution; change that with `WIDE=0`, `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). Games still output 480
 lines: the HD video modes (720p/1080i) are not implemented yet.
