@@ -318,6 +318,7 @@ static void IdexCdRomControl(PIRP Irp) {
             IdexCdRomFinish(Irp, STATUS_BUFFER_TOO_SMALL_IO, 0);
             return;
         }
+        cdb[0] = 0x25; // as IdexCdRomReadCapacity sends it (for the log)
         status = IdexCdRomReadCapacity();
         if (NT_SUCCESS(status)) {
             auto g = (PDISK_GEOMETRY)Irp->UserBuffer;
