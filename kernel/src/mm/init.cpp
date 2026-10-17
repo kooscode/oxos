@@ -1,24 +1,11 @@
-// Memory manager initialisation, physical pages and the system PTE range (spec/09 §1-3).
+// Memory manager initialisation, the page database and the system PTE range (spec/09 §1-3, §7).
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>
 
 constexpr ULONG MM_LOW_RESERVED_PFN = 0xF; // the page directory; page 0 is reserved too
-static ULONG *const MiPteArray = (ULONG *)0x83FF0000; // PTEs for 0x80000000-0x83FFFFFF
-static ULONG MiFreeBitmap[MM_PAGES / 32];             // bit set = free physical page
-ULONG MmAvailablePages;
-static ULONG MiNextHighPfn;                           // single-page allocations go top-down
-
-static bool MiIsFree(ULONG pfn) { return MiFreeBitmap[pfn >> 5] & (1u << (pfn & 31)); }
-static void MiMarkFree(ULONG pfn) {
-    MiFreeBitmap[pfn >> 5] |= 1u << (pfn & 31);
-    MmAvailablePages++;
-}
-static void MiMarkUsed(ULONG pfn) {
-    MiFreeBitmap[pfn >> 5] &= ~(1u << (pfn & 31));
-    MmAvailablePages--;
-}
+static ULONG *const MiPteArray = (ULONG *)0x83FF0000; // PTEs for 0x80000000-0x83FFFFFF = the page database
 
 bool MiProtectToPte(ULONG protect, ULONG *pteBits) {
     if (protect & ~(ULONG)(PAGE_READONLY | PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE))
@@ -39,126 +26,355 @@ bool MiProtectToPte(ULONG protect, ULONG *pteBits) {
     return true;
 }
 
-// Single pages come from the top of memory, like the reference: titles claim fixed physical ranges just above the
-// kernel image with MmAllocateContiguousMemoryEx (Halo takes 0x61000-0x19A5FFF), so the kernel's own pages must not
-// sit there. The page stays mapped at 0x80000000|PA (callers use that alias) and is zeroed.
-ULONG MiAllocatePhysicalPage(bool zero) {
-    KIRQL old = KeRaiseIrqlToDpcLevel();
-    ULONG pfn = 0;
-    for (ULONG p = MiNextHighPfn; p >= 1; p--)
-        if (MiIsFree(p)) {
-            pfn = p;
-            break;
-        }
-    if (pfn) {
-        MiMarkUsed(pfn);
-        MiNextHighPfn = pfn - 1;
-        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY | PTE_END_OF_ALLOCATION;
-        MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
+// --- Page database entries (not-present ones; a present entry is the page's own mapping).
+// Free: low word = next, high word = previous page of the same colour, packed as (pfn >> 5) * 2 (MM_PACKED_NULL
+// ends the list). Busy: bit 16, lock count in the low word (steps of 2, so bit 0 stays clear), bits 18-27 = index
+// of the PTE that maps the page within its page table (a page table: its PDE index), bits 28-31 = usage.
+constexpr USHORT MM_PACKED_NULL = 0xFFFE;
+constexpr ULONG MM_PFN_BUSY = 0x10000, MM_COLORS = 32;
+static inline USHORT MiPack(ULONG pfn) { return (USHORT)((pfn >> 4) & 0xFFFE); }
+static inline ULONG MiUnpack(USHORT packed, ULONG color) { return ((ULONG)packed << 4) | color; }
+static inline USHORT &MiFlink(ULONG pfn) { return ((USHORT *)&MiPteArray[pfn])[0]; }
+static inline USHORT &MiBlink(ULONG pfn) { return ((USHORT *)&MiPteArray[pfn])[1]; }
+static inline ULONG MiBusyUsage(ULONG e) { return e >> 28; }
+static inline ULONG MiBusyIndex(ULONG e) { return (e >> 18) & 0x3FF; }
+
+// The reference's free-page region (MmGlobalData->RetailPfnRegion): per-colour list heads, then the page count.
+struct MMPFNFREE {
+    USHORT PackedPfnFlink, PackedPfnBlink;
+};
+struct MMPFNREGION {
+    MMPFNFREE FreePagesByColor[MM_COLORS];
+    ULONG AvailablePages;
+};
+MMPFNREGION MmRetailPfnRegion;
+ULONG MmAvailablePages, MmNumberOfPhysicalPages;
+ULONG MmAllocatedPagesByUsage[MmMaximumUsage];
+static ULONG MiNextColor; // single pages take the colours in turn
+
+// Callers hold DISPATCH_LEVEL for all of these.
+static void MiInsertFreePage(ULONG pfn, bool atHead) {
+    ULONG color = pfn & (MM_COLORS - 1);
+    MMPFNFREE &list = MmRetailPfnRegion.FreePagesByColor[color];
+    USHORT me = MiPack(pfn);
+    if (list.PackedPfnFlink == MM_PACKED_NULL) {
+        MiFlink(pfn) = MiBlink(pfn) = MM_PACKED_NULL;
+        list.PackedPfnFlink = list.PackedPfnBlink = me;
+    } else if (atHead) {
+        MiFlink(pfn) = list.PackedPfnFlink;
+        MiBlink(pfn) = MM_PACKED_NULL;
+        MiBlink(MiUnpack(list.PackedPfnFlink, color)) = me;
+        list.PackedPfnFlink = me;
+    } else {
+        MiFlink(pfn) = MM_PACKED_NULL;
+        MiBlink(pfn) = list.PackedPfnBlink;
+        MiFlink(MiUnpack(list.PackedPfnBlink, color)) = me;
+        list.PackedPfnBlink = me;
     }
-    KfLowerIrql(old);
-    if (pfn && zero)
-        RtlZeroMemory((PVOID)(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT)), PAGE_SIZE);
+    MmRetailPfnRegion.AvailablePages++;
+    MmAvailablePages++;
+}
+
+static void MiUnlinkFreePage(ULONG pfn) {
+    ULONG color = pfn & (MM_COLORS - 1);
+    MMPFNFREE &list = MmRetailPfnRegion.FreePagesByColor[color];
+    USHORT next = MiFlink(pfn), prev = MiBlink(pfn);
+    if (prev == MM_PACKED_NULL)
+        list.PackedPfnFlink = next;
+    else
+        MiFlink(MiUnpack(prev, color)) = next;
+    if (next == MM_PACKED_NULL)
+        list.PackedPfnBlink = prev;
+    else
+        MiBlink(MiUnpack(next, color)) = prev;
+    MmRetailPfnRegion.AvailablePages--;
+    MmAvailablePages--;
+}
+
+// The head of the next non-empty colour list, as the reference: colours in turn, so consecutive pages differ in
+// colour, and each list in insertion order (boot-time pages ascending, freed system pages first).
+static ULONG MiRemoveAnyPage() {
+    ULONG color = MiNextColor;
+    while (MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL)
+        color = (color + 1) & (MM_COLORS - 1);
+    ULONG pfn = MiUnpack(MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, color);
+    MiUnlinkFreePage(pfn);
+    MiNextColor = (color + 1) & (MM_COLORS - 1);
     return pfn;
 }
 
-void MiFreePhysicalPage(ULONG pfn) {
+static ULONG MiBusyEntry(ULONG usage, ULONG *ownerPte) {
+    return usage << 28 | (((ULONG)ownerPte & 0xFFC) << 16) | MM_PFN_BUSY;
+}
+
+ULONG MiAllocatePage(ULONG usage, ULONG *ownerPte, bool zero) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    MiPteArray[pfn] = 0;
-    MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
-    MiMarkFree(pfn);
-    if (pfn > MiNextHighPfn)
-        MiNextHighPfn = pfn;
+    if (!MmAvailablePages) {
+        KfLowerIrql(old);
+        return 0;
+    }
+    ULONG pfn = MiRemoveAnyPage();
+    ULONG alias = MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT);
+    if (zero) { // through a temporary mapping at 0x80000000|PA, as the reference
+        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
+        RtlZeroMemory((PVOID)alias, PAGE_SIZE);
+    }
+    MiPteArray[pfn] = MiBusyEntry(usage, usage == MmVirtualPageTableUsage ? nullptr : ownerPte);
+    MiInvalidatePage(alias);
+    MmAllocatedPagesByUsage[usage]++;
+    KfLowerIrql(old);
+    return pfn;
+}
+
+// Single pages go back to the head of their list (reused first).
+void MiFreePage(ULONG pfn) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    MmAllocatedPagesByUsage[MiBusyUsage(MiPteArray[pfn])]--;
+    MiInsertFreePage(pfn, true);
     KfLowerIrql(old);
 }
 
-// Highest run of `count` free pages within [lowPfn, highPfn] whose first page is aligned.
-bool MiAllocatePhysicalRange(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG *firstPfn) {
+// Contiguous pages go to the tail (reused last).
+void MiFreeContiguousPage(ULONG pfn) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
+    MmAllocatedPagesByUsage[MmContiguousUsage]--;
+    MiInsertFreePage(pfn, false);
+    KfLowerIrql(old);
+}
+
+// --- Moving a page that is in use (for a contiguous request). Its mapping is found from the busy entry: page
+// tables through the page directory, title pages through the title page tables, the rest through the system PTE
+// range. The copy and the switch run with interrupts off, so the page may be the current stack.
+
+static ULONG *MiFindOwnerPte(ULONG pfn, ULONG e) {
+    ULONG *pd = (ULONG *)0xC0300000, index = MiBusyIndex(e);
+    auto frame = [&](ULONG pte) { return pte >> PAGE_SHIFT == pfn; };
+    switch (MiBusyUsage(e)) {
+    case MmVirtualPageTableUsage:
+        for (ULONG i = 0; i < 0x200; i++)
+            if ((pd[i] & PTE_PRESENT) && frame(pd[i]))
+                return &pd[i];
+        return nullptr;
+    case MmSystemPageTableUsage:
+        return &pd[index];
+    case MmVirtualMemoryUsage:
+    case MmImageUsage:
+        for (ULONG i = 0; i < 0x200; i++) {
+            ULONG *pte = (ULONG *)(0xC0000000 + (i << PAGE_SHIFT)) + index;
+            if ((pd[i] & PTE_PRESENT) && *pte && frame(*pte)) // committed no-access pages are not present
+                return pte;
+        }
+        return nullptr;
+    default:
+        for (ULONG i = MM_SYSTEM_PTE_BASE >> 22; i < MM_SYSTEM_PTE_END >> 22; i++) {
+            ULONG *pte = (ULONG *)(0xC0000000 + (i << PAGE_SHIFT)) + index;
+            if ((pd[i] & PTE_PRESENT) && (*pte & PTE_PRESENT) && frame(*pte))
+                return pte;
+        }
+        return nullptr;
+    }
+}
+
+// Fixed registers: the compiler must not share one between the copy source (advanced by rep movsl) and the address
+// to invalidate, although they start out equal.
+static void MiCopyAndSwitch(ULONG src, ULONG dst, ULONG *pte, ULONG value, bool pageTable) {
+    ULONG flags, n = PAGE_SIZE / 4, va = (ULONG)pte << 10;
+    __asm__ volatile("pushfl\n\tpopl %0\n\tcli" : "=r"(flags)::"memory");
+    if (pageTable) // its self-map entries change too
+        __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tmovl %%cr3, %%eax\n\tmovl %%eax, %%cr3"
+                         : "+S"(src), "+D"(dst), "+c"(n), "+a"(va)
+                         : "b"(pte), "d"(value)
+                         : "memory");
+    else
+        __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tinvlpg (%%eax)"
+                         : "+S"(src), "+D"(dst), "+c"(n)
+                         : "b"(pte), "d"(value), "a"(va)
+                         : "memory");
+    __asm__ volatile("pushl %0\n\tpopfl" ::"r"(flags) : "memory", "cc");
+}
+
+volatile ULONG MiRelocations, MiLastRelocation[5]; // diagnostics: pages moved; the last one {from, to, pte, entry, va}
+
+static bool MiRelocatePage(ULONG pfn) {
+    ULONG e = MiPteArray[pfn];
+    ULONG *pte = MiFindOwnerPte(pfn, e);
+    MiRelocations = MiRelocations + 1;
+    MiLastRelocation[0] = pfn;
+    MiLastRelocation[2] = (ULONG)pte;
+    MiLastRelocation[3] = e;
+    if (!pte || !MmAvailablePages)
+        return false;
+    MiNextColor = pfn & (MM_COLORS - 1); // the replacement keeps the colour
+    ULONG to = MiRemoveAnyPage();
+    MiPteArray[to] = (to << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
+    ULONG usage = MiBusyUsage(e);
+    bool pageTable = usage == MmVirtualPageTableUsage || usage == MmSystemPageTableUsage;
+    MiCopyAndSwitch((ULONG)pte << 10, MM_SYSTEM_PHYSICAL_MAP | (to << PAGE_SHIFT), pte,
+                    (*pte & 0xFFF) | (to << PAGE_SHIFT), pageTable);
+    MiPteArray[to] = e;
+    MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (to << PAGE_SHIFT));
+    MiLastRelocation[1] = to;
+    MiLastRelocation[4] = (ULONG)pte << 10;
+    return true;
+}
+
+// A page a contiguous request may take: free, or busy and unlocked (it is moved).
+static inline bool MiCanTake(ULONG e) {
+    return !(e & PTE_PRESENT) && (!(e & MM_PFN_BUSY) || !(USHORT)e);
+}
+
+bool MiAllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits,
+                               ULONG *firstPfn) {
     if (!count || highPfn < lowPfn || count > highPfn - lowPfn + 1)
         return false;
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    LONG start = (LONG)(((highPfn - count + 1)) & ~(alignPages - 1));
     bool found = false;
-    while (start >= (LONG)lowPfn) {
-        ULONG i = 0;
-        while (i < count && MiIsFree(start + i))
-            i++;
-        if (i == count) {
-            found = true;
-            break;
+    LONG start = (LONG)((highPfn - count + 1) & ~(alignPages - 1));
+    if (count <= MmAvailablePages)
+        while (start >= (LONG)lowPfn) {
+            ULONG i = count;
+            while (i && MiCanTake(MiPteArray[start + i - 1]))
+                i--;
+            if (!i) {
+                found = true;
+                break;
+            }
+            // Below the page that is in the way, re-aligned.
+            LONG next = (LONG)(start + i - 1) - (LONG)count;
+            start = next < 0 ? -1 : (LONG)((ULONG)next & ~(alignPages - 1));
         }
-        // Skip below the used page and re-align.
-        LONG next = (LONG)(start + i) - (LONG)count;
-        start = next < 0 ? -1 : (LONG)((ULONG)next & ~(alignPages - 1));
-    }
+    // Take the free pages first, so that a moved page cannot land inside the run, then move the rest.
+    ULONG busy = 0;
     if (found) {
         for (ULONG i = 0; i < count; i++)
-            MiMarkUsed(start + i);
+            if (MiPteArray[start + i] & MM_PFN_BUSY)
+                busy++;
+        found = busy <= MmAvailablePages - (count - busy);
+    }
+    if (found) {
+        for (ULONG i = 0; i < count; i++) {
+            ULONG pfn = start + i;
+            if (!(MiPteArray[pfn] & MM_PFN_BUSY)) {
+                MiUnlinkFreePage(pfn);
+                MiPteArray[pfn] = MM_PFN_BUSY | 2; // held (locked) until mapped below
+            }
+        }
+        for (ULONG i = 0; i < count && found; i++) {
+            ULONG pfn = start + i;
+            if (MiPteArray[pfn] != (MM_PFN_BUSY | 2))
+                found = MiRelocatePage(pfn);
+        }
+        for (ULONG i = 0; i < count; i++) {
+            ULONG pfn = start + i;
+            if (found) {
+                MiPteArray[pfn] = (pfn << PAGE_SHIFT) | pteBits | (i == count - 1 ? PTE_END_OF_ALLOCATION : 0);
+                MmAllocatedPagesByUsage[MmContiguousUsage]++;
+            } else if (MiPteArray[pfn] == (MM_PFN_BUSY | 2)) {
+                MiInsertFreePage(pfn, false);
+            }
+            MiInvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT));
+        }
         *firstPfn = start;
     }
     KfLowerIrql(old);
     return found;
 }
 
-// --- System PTE range 0xD0000000-0xEFFFFFFF: slot bitmap + page tables allocated on demand.
+// --- System PTE range 0xD0000000-0xEFFFFFFF, in the reference's format (MmGlobalData->SystemPteRange): free runs
+// are kept in their own not-present PTEs, in address order. The first PTE of a run holds the address of the next
+// run's first PTE (0xFFFFFFFC ends the list) and bit 1 when the run is one PTE long; otherwise the second PTE holds
+// the length << 2. Page tables are added at the end of the committed part as needed and never freed.
 
-constexpr ULONG SYSTEM_PTES = (MM_SYSTEM_PTE_END - MM_SYSTEM_PTE_BASE) >> PAGE_SHIFT; // 131072
-static ULONG *MiSystemPteBitmap; // bit set = slot in use
-static ULONG MiSystemPteHint;
+struct MMPTERANGE {
+    ULONG Head; // as a run's first PTE: the first free run
+    ULONG *FirstCommittedPte, *LastCommittedPte, *LastPte;
+    ULONG *AvailablePages;
+    ULONG (*AllocatePageTable)(ULONG usage, ULONG *ownerPte, bool zero);
+};
+constexpr ULONG MM_PTE_LIST_END = 0xFFFFFFFC;
+MMPTERANGE MiSystemPteRange = {MM_PTE_LIST_END, MiGetPteAddress(MM_SYSTEM_PTE_BASE),
+                               MiGetPteAddress(MM_SYSTEM_PTE_BASE), MiGetPteAddress(MM_SYSTEM_PTE_END),
+                               &MmAvailablePages, MiAllocatePage};
 
-static bool MiSlotUsed(ULONG i) { return MiSystemPteBitmap[i >> 5] & (1u << (i & 31)); }
+static inline ULONG MiRunLength(ULONG *run) { return (run[0] & 2) ? 1 : run[1] >> 2; }
+static inline ULONG *MiRunNext(ULONG link) { return (ULONG *)(link & ~3u); }
+static inline void MiSetRun(ULONG *run, ULONG length, ULONG nextLink) {
+    run[0] = (nextLink & ~3u) | (length == 1 ? 2 : 0);
+    if (length > 1)
+        run[1] = length << 2;
+}
+static inline void MiSetLink(ULONG *link, ULONG *to) { *link = (ULONG)to | (*link & 3); }
 
-static bool MiEnsurePageTable(ULONG va) {
-    ULONG *pde = MiGetPdeAddress(va);
-    if (*pde & PTE_PRESENT)
-        return true;
-    ULONG pfn = MiAllocatePhysicalPage(); // zeroed: all PTEs not present
-    if (!pfn)
-        return false;
-    *pde = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
-    MiInvalidatePage((ULONG)MiGetPteAddress(va) & ~(PAGE_SIZE - 1));
-    return true;
+static void MiInsertPteRun(ULONG *start, ULONG count) {
+    RtlZeroMemory(start, count * 4);
+    ULONG *link = &MiSystemPteRange.Head, *prev = nullptr;
+    while ((*link & ~3u) != MM_PTE_LIST_END && MiRunNext(*link) < start) {
+        prev = MiRunNext(*link);
+        link = prev;
+    }
+    ULONG next = *link & ~3u;
+    if (next != MM_PTE_LIST_END && start + count == MiRunNext(next)) { // join the following run
+        ULONG *following = MiRunNext(next);
+        count += MiRunLength(following);
+        next = following[0] & ~3u;
+    }
+    if (prev && prev + MiRunLength(prev) == start) { // join the previous run
+        MiSetRun(prev, MiRunLength(prev) + count, next);
+        return;
+    }
+    MiSetRun(start, count, next);
+    MiSetLink(link, start);
 }
 
 PVOID MiReserveSystemPtes(ULONG count) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    PVOID result = nullptr;
-    for (int pass = 0; pass < 2 && !result; pass++) {
-        ULONG i = pass == 0 ? MiSystemPteHint : 0;
-        ULONG run = 0;
-        for (; i < SYSTEM_PTES; i++) {
-            run = MiSlotUsed(i) ? 0 : run + 1;
-            if (run == count) {
-                ULONG first = i - count + 1;
-                ULONG va = MM_SYSTEM_PTE_BASE + (first << PAGE_SHIFT);
-                bool ok = true;
-                for (ULONG a = va & ~0x3FFFFFu; a < va + (count << PAGE_SHIFT) && ok; a += 0x400000)
-                    ok = MiEnsurePageTable(a);
-                if (!ok)
-                    break;
-                for (ULONG s = first; s <= i; s++)
-                    MiSystemPteBitmap[s >> 5] |= 1u << (s & 31);
-                MiSystemPteHint = i + 1;
-                result = (PVOID)va;
-                break;
+    MMPTERANGE &r = MiSystemPteRange;
+    for (;;) {
+        ULONG *link = &r.Head, *last = nullptr;
+        while ((*link & ~3u) != MM_PTE_LIST_END) { // first fit, lowest address first
+            ULONG *run = MiRunNext(*link), length = MiRunLength(run), next = run[0] & ~3u;
+            if (length >= count) {
+                if (length == count) {
+                    *link = (*link & 3) | next;
+                } else {
+                    MiSetRun(run + count, length - count, next);
+                    *link = (*link & 3) | (ULONG)(run + count);
+                }
+                RtlZeroMemory(run, count * 4);
+                KfLowerIrql(old);
+                return (PVOID)((ULONG)run << 10);
             }
+            last = run;
+            link = run;
         }
+        // Commit page tables at the end; a free run ending there counts towards the request.
+        ULONG needed = count;
+        if (last && last + MiRunLength(last) == r.LastCommittedPte)
+            needed -= MiRunLength(last);
+        ULONG ptes = (needed + 0x3FF) & ~0x3FFu, tables = ptes >> 10;
+        if ((ULONG)(r.LastPte - r.LastCommittedPte) < ptes || tables > *r.AvailablePages) {
+            KfLowerIrql(old);
+            return nullptr;
+        }
+        ULONG *first = r.LastCommittedPte;
+        for (ULONG i = 0; i < tables; i++) {
+            ULONG *pde = (ULONG *)(((ULONG)r.LastCommittedPte >> 10 & 0x3FFFFC) + 0xC0000000);
+            ULONG pfn = r.AllocatePageTable(MmSystemPageTableUsage, pde, true);
+            *pde = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
+            MiInvalidatePage((ULONG)r.LastCommittedPte);
+            r.LastCommittedPte += 0x400;
+        }
+        MiInsertPteRun(first, ptes);
     }
-    KfLowerIrql(old);
-    return result;
 }
 
 void MiReleaseSystemPtes(PVOID va, ULONG count) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    ULONG first = ((ULONG)va - MM_SYSTEM_PTE_BASE) >> PAGE_SHIFT;
-    for (ULONG s = first; s < first + count; s++) {
-        ULONG a = (ULONG)va + ((s - first) << PAGE_SHIFT);
-        *MiGetPteAddress(a) = 0;
-        MiInvalidatePage(a);
-        MiSystemPteBitmap[s >> 5] &= ~(1u << (s & 31));
-    }
-    if (first < MiSystemPteHint)
-        MiSystemPteHint = first;
+    ULONG *first = MiGetPteAddress((ULONG)va);
+    for (ULONG i = 0; i < count; i++)
+        MiInvalidatePage((ULONG)va + (i << PAGE_SHIFT));
+    MiInsertPteRun(first, count);
     KfLowerIrql(old);
 }
 
@@ -182,13 +398,14 @@ void MmInitSystem(bool QuickReboot) {
     ULONG imageEndPfn = (0x10000 + sizeOfImage + PAGE_SIZE - 1) >> PAGE_SHIFT;
     ULONG textEndPfn = (0x10000 + (textEnd & ~(PAGE_SIZE - 1))) >> PAGE_SHIFT;
 
-    // 1. Build the PTE array for 0x80000000-0x83FFFFFF (still reachable through the 2BL large pages).
+    // 1. The page database (still reachable through the 2BL large pages). Pages 1-14 (below the page directory)
+    //    and those between the image and the GPU memory are allocatable; a quick reboot re-adopts persisted
+    //    allocations (PTE bit 10) there.
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
-    // Pages 1-14 (below the page directory at 0xF000) and those between the image and the GPU memory are
-    // allocatable; a quick reboot re-adopts persisted allocations (PTE bit 10) there.
     auto allocatable = [&](ULONG pfn) {
         return (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
     };
+    RtlZeroMemory(MmAllocatedPagesByUsage, sizeof(MmAllocatedPagesByUsage));
     ULONG persisted = 0;
     for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
         bool keep = QuickReboot && allocatable(pfn) &&
@@ -209,12 +426,19 @@ void MmInitSystem(bool QuickReboot) {
     for (ULONG pfn = MM_PAGE_TABLES_FIRST_PFN; pfn < MM_PAGES; pfn++)
         MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
 
-    // 2. Free list: pages 1-14 and everything between the kernel image and the GPU instance memory.
-    MmAvailablePages = 0;
-    for (ULONG pfn = 1; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++)
-        if (allocatable(pfn) && !MiPteArray[pfn])
-            MiMarkFree(pfn);
-    MiNextHighPfn = MM_HIGHEST_CONTIGUOUS_PFN;
+    // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
+    //    count as contiguous memory.
+    for (ULONG c = 0; c < MM_COLORS; c++)
+        MmRetailPfnRegion.FreePagesByColor[c] = {MM_PACKED_NULL, MM_PACKED_NULL};
+    MmRetailPfnRegion.AvailablePages = MmAvailablePages = 0;
+    MiNextColor = 0;
+    for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
+        if (!MiPteArray[pfn])
+            MiInsertFreePage(pfn, false);
+        else
+            MmAllocatedPagesByUsage[MmContiguousUsage]++;
+    }
+    MmNumberOfPhysicalPages = MM_PAGES;
 
     // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above 64 MB, no user
     //    mappings, and the reference MMIO windows (spec/02 §4).
@@ -234,17 +458,8 @@ void MmInitSystem(bool QuickReboot) {
     // PDE 0x3FF (flash) is kept for the quick-reboot .data copy (the reference clears it; spec/09).
     MiReloadCr3();
 
-    // 4. System PTE slot bitmap (16 KB) from physical pages.
-    MiSystemPteBitmap = nullptr;
-    ULONG first;
-    if (!MiAllocatePhysicalRange(4, imageEndPfn, MM_HIGHEST_CONTIGUOUS_PFN, 1, &first))
-        KeBugCheck(0x7D); // INSTALL_MORE_MEMORY
-    for (ULONG i = 0; i < 4; i++)
-        MiPteArray[first + i] = ((first + i) << PAGE_SHIFT) | rw | (i == 3 ? PTE_END_OF_ALLOCATION : 0);
-    MiReloadCr3();
-    MiSystemPteBitmap = (ULONG *)(MM_SYSTEM_PHYSICAL_MAP | (first << PAGE_SHIFT));
-    RtlZeroMemory(MiSystemPteBitmap, 4 * PAGE_SIZE);
-
+    MiSystemPteRange.Head = MM_PTE_LIST_END;
+    MiSystemPteRange.LastCommittedPte = MiSystemPteRange.FirstCommittedPte;
     ExInitializePool();
     MiInitializeVirtualMemory();
 }

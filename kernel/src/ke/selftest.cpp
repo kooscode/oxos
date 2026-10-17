@@ -351,6 +351,7 @@ static void NTAPI ApcControllerThread(PVOID) {
 volatile ULONG KiTestMmContiguousOk;   // VA = 0x80000000|PA, top-down, size query, data
 volatile ULONG KiTestMmAlignedOk;      // Ex: below 16 MB, 64 KB aligned, write-combine protect
 volatile ULONG KiTestMmReuseOk;        // free + reallocate returns the same block, page count restored
+volatile ULONG KiTestMmRelocateOk;     // a contiguous request moves an unlocked page in use, not a locked one
 volatile ULONG KiTestMmSystemOk;       // system memory in the PTE range, unmapped after free
 volatile ULONG KiTestMmIoSpaceOk;      // MmMapIoSpace alias + MMIO pass-through
 volatile ULONG KiTestMmPoolOk;         // 500 small blocks + a large block
@@ -391,6 +392,24 @@ static void NTAPI MmControllerThread(PVOID) {
     ULONG afterFree = MmAvailablePages;
     auto a2 = MmAllocateContiguousMemory(0x3000);
     KiTestMmReuseOk = a2 == a && afterFree == before + 3;
+
+    // A contiguous request over a page in use: the page moves (contents kept, same VA); a locked page does not.
+    auto sp = (ULONG *)MmAllocateSystemMemory(PAGE_SIZE, PAGE_READWRITE);
+    ok = sp != nullptr;
+    if (ok) {
+        sp[0] = 0x12345678, sp[1023] = 0x9ABCDEF0;
+        PHYSICAL_ADDRESS old = MmGetPhysicalAddress(sp);
+        MmLockUnlockBufferPages(sp, PAGE_SIZE, FALSE);
+        ok = !MmAllocateContiguousMemoryEx(PAGE_SIZE, old, old + PAGE_SIZE - 1, 0, PAGE_READWRITE);
+        MmLockUnlockBufferPages(sp, PAGE_SIZE, TRUE);
+        PVOID c = MmAllocateContiguousMemoryEx(PAGE_SIZE, old, old + PAGE_SIZE - 1, 0, PAGE_READWRITE);
+        ok = ok && c && MmGetPhysicalAddress(c) == old && MmGetPhysicalAddress(sp) != old && sp[0] == 0x12345678 &&
+             sp[1023] == 0x9ABCDEF0;
+        if (c)
+            MmFreeContiguousMemory(c);
+        MmFreeSystemMemory(sp, PAGE_SIZE);
+    }
+    KiTestMmRelocateOk = ok;
 
     // System memory.
     auto s = (ULONG *)MmAllocateSystemMemory(0x5000, PAGE_READWRITE);

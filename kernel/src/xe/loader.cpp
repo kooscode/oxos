@@ -10,6 +10,7 @@ XBAPI void NTAPI XcHMAC(const UCHAR *, ULONG, const UCHAR *, ULONG, const UCHAR 
 XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
                                              ULONG AllocationType, ULONG Protect);
 XBAPI NTSTATUS NTAPI NtFreeVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG FreeType);
+NTSTATUS MiCommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize); // committed as title image pages
 XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG NewProtect,
                                             PULONG OldProtect);
 extern UCHAR KiCertKey[16];
@@ -79,7 +80,7 @@ static NTSTATUS XeOpenImage(HANDLE *h) {
 static NTSTATUS XepLoadSection(HANDLE file, XBE_SECTION_HEADER *s) {
     PVOID base = (PVOID)s->VirtualAddress;
     SIZE_T size = s->VirtualSize;
-    NTSTATUS status = NtAllocateVirtualMemory(&base, 0, &size, MEM_COMMIT, PAGE_READWRITE);
+    NTSTATUS status = MiCommitImageMemory(&base, &size);
     if (!NT_SUCCESS(status))
         return status;
     (*s->HeadSharedPageReferenceCount)++;
@@ -248,7 +249,7 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         reserved = NT_SUCCESS(status);
         size = sizeOfHeaders;
         if (reserved)
-            status = NtAllocateVirtualMemory(&base, 0, &size, MEM_COMMIT, PAGE_READWRITE);
+            status = MiCommitImageMemory(&base, &size);
     }
     if (NT_SUCCESS(status)) {
         RtlCopyMemory((PVOID)XBE_BASE, head, got < sizeOfHeaders ? got : sizeOfHeaders);

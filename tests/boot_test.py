@@ -84,7 +84,7 @@ def run_checks(mon, hdd=None, title_map=None):
         "KiTestSuspendOk", "KiTestQueueProcessed", "KiTestQueueTimeout", "KiTestDeviceQueueOk",
         "KiTestBoostPriority", "KiTestApcSuiteDone")}
     m2c = {name: mon.read(name) for name in (
-        "KiTestMmContiguousOk", "KiTestMmAlignedOk", "KiTestMmReuseOk", "KiTestMmSystemOk", "KiTestMmIoSpaceOk",
+        "KiTestMmContiguousOk", "KiTestMmAlignedOk", "KiTestMmReuseOk", "KiTestMmRelocateOk", "KiTestMmSystemOk", "KiTestMmIoSpaceOk",
         "KiTestMmPoolOk", "KiTestMmLayoutOk", "KiTestMmThreadChurnPages", "KiTestMmContiguousVa", "KiTestMmDone",
         "KiTestVmReserveCommitOk", "KiTestVmImageOk", "KiTestVmTopDownOk", "KiTestVmFreeRulesOk", "KiTestVmProtectOk",
         "KiTestVmPagesRestored", "KiTestVmStatsOk")}
@@ -157,6 +157,7 @@ def run_checks(mon, hdd=None, title_map=None):
             "contiguous: VA=0x80000000|PA, top-down, size, data": m2c["KiTestMmContiguousOk"] == 1,
             "contiguous Ex: <16 MB, 64 KB aligned, write-combine": m2c["KiTestMmAlignedOk"] == 1,
             "free + realloc reuses block, pages restored": m2c["KiTestMmReuseOk"] == 1,
+            "contiguous request moves an unlocked page in use, not a locked one": m2c["KiTestMmRelocateOk"] == 1,
             "system memory mapped/unmapped": m2c["KiTestMmSystemOk"] == 1,
             "MmMapIoSpace alias + MMIO pass-through": m2c["KiTestMmIoSpaceOk"] == 1,
             "pool: 500 blocks + large block": m2c["KiTestMmPoolOk"] == 1,
