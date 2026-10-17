@@ -4,6 +4,7 @@
 // last frame on screen, as the reference does with its animation.
 #include <xk/ke.h>
 #include <xk/mm.h>
+#include <xk/ob.h>
 #include <xk/rtl.h>
 
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
@@ -16,6 +17,7 @@ constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
 constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40;
 
 static KEVENT HalpSplashDone;
+static PKTHREAD HalpSplashThreadObject; // waited for before the title starts, so its stack is freed by then
 static ULONG *HalpSplashScreen, *HalpSplashImage;
 volatile ULONG HalpSplashFrames; // frames shown (boot tests)
 volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = flash image (boot tests)
@@ -151,7 +153,7 @@ void HalpStartSplash() {
         return;
     }
     KeResetEvent(&HalpSplashDone);
-    KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
+    HalpSplashThreadObject = KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
 }
 
 // Before the title starts: wait for the splash and free its memory, but leave the scanout on its last frame. The
@@ -162,6 +164,11 @@ void HalpEndSplash() {
     if (!HalpSplashScreen)
         return;
     KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
+    if (HalpSplashThreadObject) { // until it has exited: the next switch back frees its stack
+        KeWaitForSingleObject(HalpSplashThreadObject, Executive, KernelMode, FALSE, nullptr);
+        ObfDereferenceObject(HalpSplashThreadObject);
+        HalpSplashThreadObject = nullptr;
+    }
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = nullptr;

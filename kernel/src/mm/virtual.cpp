@@ -27,7 +27,11 @@ XBAPI void NTAPI RtlInitializeCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSec
 XBAPI void NTAPI RtlEnterCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSection);
 XBAPI void NTAPI RtlLeaveCriticalSection(RTL_CRITICAL_SECTION_ *CriticalSection);
 static RTL_CRITICAL_SECTION_ MiAddressSpaceLock; // the reference's type (MmGlobalData->AddressSpaceLock)
-static USHORT MiUserPageTableUse[0x200]; // committed PTEs per user page table
+// Committed PTEs of a title page table, kept in bits 17-27 of the page table's page database entry (unused for that
+// usage): no resident table for it.
+static ULONG &MiPageTableEntry(ULONG va) { return ((ULONG *)0x83FF0000)[*MiGetPdeAddress(va) >> PAGE_SHIFT]; }
+static ULONG MiPageTableUse(ULONG va) { return (MiPageTableEntry(va) >> 17) & 0x7FF; }
+static void MiAdjustPageTableUse(ULONG va, LONG delta) { MiPageTableEntry(va) += (ULONG)delta << 17; }
 ULONG MmVirtualMemoryBytesReserved;
 volatile ULONG MiCommitFailures, MiCommitFailNeeded, MiCommitFailAvailable; // diagnostics (tests, title bring-up)
 
@@ -155,7 +159,8 @@ static void MiDecommitRange(ULONG start, ULONG end) { // [start, end] page-align
         *pte = 0;
         MiInvalidatePage(va);
         MiFreePage(pfn);
-        if (--MiUserPageTableUse[va >> 22] == 0) {
+        MiAdjustPageTableUse(va, -1);
+        if (MiPageTableUse(va) == 0) {
             ULONG ptPfn = *pde >> PAGE_SHIFT;
             *pde = 0;
             MiInvalidatePage((ULONG)MiGetPteAddress(va) & ~(PAGE_SIZE - 1));
@@ -294,7 +299,7 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
                 }
                 *pte = (pfn << PAGE_SHIFT) | pteBits;
                 MiInvalidatePage(va);
-                MiUserPageTableUse[va >> 22]++;
+                MiAdjustPageTableUse(va, 1);
             }
             if (Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
                 MiFlushCaches();

@@ -131,21 +131,30 @@ read through the gdb stub (scratch tool `mmstat.py`).
 
 | Title (at entry) | Stock available | Ours before | Ours after |
 |---|---|---|---|
-| Dashboard (MS) | 15876 | 15560 | 15871 |
-| Halo | 15347 | 15042 | 15356 |
-| Halo 2 | 14880 | 14575 | 14892 |
-| Half-Life 2 | 16166 | 15861 | 16178 |
+| Dashboard (MS) | 15876 | 15560 | 15881 |
+| Halo | 15347 | 15042 | 15350 |
+| Halo 2 | 14880 | 14575 | 14883 |
+| Half-Life 2 | 16166 | 15861 | 16169 |
 
 Stock at Halo's entry, by usage: Stack 6, VirtualPageTable 1, SystemPageTable 1, Pool 5, VirtualMemory 1, Image 928,
 Cache 16, Contiguous 79. During play (QMP snapshots every 10 s, scratch tool `snaplog.py`) the titles run close to
 the limit: Halo 2 keeps 209–217 pages free, Halo ~273, Half-Life 2 drops to 69 (it loads sections on demand:
 Image 109 → 2470 pages, VirtualMemory and Contiguous rise and fall); the dashboard sets the file cache to 256 pages.
 
+During play the same sessions on ours (QMP snapshots; the user played each title for a few minutes) give the same
+usage breakdown: Halo 2 steady at 211 free (stock 217) with Stack 74/71, Pool 239/237, Image+VM 1965/1965,
+Contiguous 13874/13873, Cache 16/16; Halo 269 free (stock 273), Stack 146/143, Pool 147/147; Half-Life 2 Pool 131/131,
+title page tables 59/59, Image 2471/2470, Cache 16/16; the dashboard idles at 9688 (stock 9691) with its cache at
+256 pages. Those snapshots predate the last change below (the SMC thread, 3 stack pages).
+
 **Ours.** Before milestone 13 the difference (−305 pages for every title) was: the boot splash kept as the persisted
 display (301 pages), a 16-page stack for the title launcher thread (the reference runs it on 3 pages), our SMC
 thread (3 pages, no reference counterpart), the system PTE slot bitmap (4 pages), against 16 cache pages and ~3
-pool pages fewer. Now the splash is freed before the title starts (spec/17 §7) and the launcher stack is 0x3000 ("after" column;
-the dashboard is still 5 pages short: our SMC thread and a lingering terminated-thread stack).
+pool pages fewer. Now: the splash is freed before the title starts and its thread is waited for, so its stack is
+gone (spec/17 §7); the launcher stack is 0x3000; SMC events run in a DPC (spec/12); system PTE runs live in the PTEs
+(§8); the 16 cache pages are allocated at boot (spec/16); the image is 45 resident pages again (title page-table
+use counts moved into the page database, bits 17–27 of a title page table's entry; the disk unlock buffer moved to
+the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5).
 
 ## 8. Page database and allocation order (milestone 13)
 Evidence: `ev_e3d73cd7…` (0x800557f4 physical init), `ev_c2735117…` (0x8001dc6c MmAllocateContiguousMemoryEx,

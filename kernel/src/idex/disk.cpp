@@ -395,7 +395,7 @@ static NTSTATUS IdexDiskExecutePassThrough(ATA_PASS_THROUGH *p);
 // INITIALIZE DEVICE PARAMETERS (16 heads, 63 sectors). Failures: fatal error 6 (unlock, except on manufacturing
 // units) or 8 (the follow-up commands).
 static void IdexDiskUnlock(const UCHAR *Password) {
-    static UCHAR block[512];
+    UCHAR block[512]; // on the boot stack: a static buffer would cost a resident image page (spec/09 §7)
     RtlZeroMemory(block, sizeof(block));
     RtlCopyMemory(block + 2, Password, 32);
     ATA_PASS_THROUGH p = {};
