@@ -69,6 +69,9 @@ xemu 0.8.136 rejects page 0x3E (sense 5/24), so authentication fails there; see 
 Titles send the same pass-through themselves (their own disc check, in the statically linked system library). The
 reference copies all **12 CDB bytes** and ignores `CdbLength`, which callers commonly leave 0; copying only
 `CdbLength` bytes turns every such command into TEST UNIT READY.
+Trace builds (`TRACE_IMPORTS=1`, ours only) keep the last 16 CD-ROM control requests across quick reboots and,
+before starting the dashboard, show them for 20 s: sequence, IOCTL, the 12 CDB bytes, status (red on failure),
+bytes transferred. The log is cleared on a cold boot.
 
 ## 3. DVD drive (device 1, slave), cold boot (0x80055d55)
 1. Unless boot-flags bit 0 is set: select the slave (`0x1F6 = 0xB0`) and poll until BSY clears, **up to 600 × 50 ms**.
