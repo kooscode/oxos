@@ -158,6 +158,11 @@ static ULONG *MiFindOwnerPte(ULONG pfn, ULONG e) {
         return nullptr;
     case MmSystemPageTableUsage:
         return &pd[index];
+    case MmFsCacheUsage: { // bits 17-27 = cache element
+        ULONG *FscCachePte(ULONG elementIndex);
+        ULONG *pte = FscCachePte((e >> 17) & 0x7FF);
+        return pte && frame(*pte) ? pte : nullptr;
+    }
     case MmVirtualMemoryUsage:
     case MmImageUsage:
         for (ULONG i = 0; i < 0x200; i++) {

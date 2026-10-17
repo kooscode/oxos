@@ -1,5 +1,6 @@
 // FATX file system driver, internal definitions (spec/04 §6, spec/04b).
 #pragma once
+#include <xk/fsc.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
 
@@ -55,14 +56,6 @@ struct FATX_CCB {
     CHAR Mask[FATX_MAX_NAME + 2];
 };
 
-struct FATX_VOLUME;
-struct FATX_CACHE_BLOCK {
-    FATX_VOLUME *Volume; // nullptr = empty
-    LONGLONG Offset;     // byte offset on the volume's target device
-    ULONG LastUse;
-    PUCHAR Data;
-};
-
 struct FATX_VOLUME {
     PDEVICE_OBJECT TargetDevice;
     LONGLONG PartitionLength;
@@ -79,13 +72,12 @@ struct FATX_VOLUME {
     ULONG SerialNumber;
     FATX_FCB RootFcb;
     FATX_FCB VolumeFcb; // opens of the volume itself
+    FSCACHE_EXTENSION CacheExtension; // the volume's key in the file system cache
 };
 
-// Volume layer (fatx/volume.cpp). One lock and one block cache serve all FATX volumes: mapped cache blocks are
-// used while the lock is held, and the cache is the reference's global file system cache (FscSetCacheSize).
+// Volume layer (fatx/volume.cpp). One lock serves all FATX volumes; blocks come from the file system cache
+// (io/fsc.cpp) and a block mapped while the lock is held stays usable until the lock is released.
 void FatxInitialize();
-NTSTATUS FatxSetCacheSize(ULONG Pages);
-ULONG FatxGetCacheSize();
 void FatxForgetVolume(FATX_VOLUME *v);
 void FatxAcquireVolume(FATX_VOLUME *v);
 void FatxReleaseVolume(FATX_VOLUME *v);

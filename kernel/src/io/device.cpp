@@ -23,9 +23,11 @@ OBJECT_TYPE IoCompletionObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr
 IO_FILE_SYSTEM IopFileSystems;
 
 void FatxInitialize();
+void FscInitialize();
 
 void IoInitSystem() {
     KeInitializeEvent(&IopDeviceDefaultObject, NotificationEvent, TRUE);
+    FscInitialize();
     FatxInitialize();
 }
 

@@ -2,17 +2,26 @@
 #include "fatx.h"
 
 static KEVENT FatxLock;
-static FATX_CACHE_BLOCK *FatxCache;   // FatxCacheBlocks entries, data in one system-memory allocation
-static ULONG FatxCacheBlocks, FatxCacheSize = 16, FatxCacheClock;
+// Blocks mapped under the lock; unmapped when it is released (the oldest earlier if many are mapped).
+constexpr ULONG FATX_MAX_HELD = 12;
+static struct {
+    PVOID Buffer;
+    FATX_VOLUME *Volume;
+    LONGLONG Block;
+} FatxHeld[FATX_MAX_HELD];
+static ULONG FatxHeldCount;
 
 void FatxInitialize() {
     KeInitializeEvent(&FatxLock, SynchronizationEvent, TRUE);
-    FatxCache = nullptr;
-    FatxCacheBlocks = FatxCacheClock = 0;
+    FatxHeldCount = 0;
 }
 
 void FatxAcquireVolume(FATX_VOLUME *) { KeWaitForSingleObject(&FatxLock, Executive, KernelMode, FALSE, nullptr); }
-void FatxReleaseVolume(FATX_VOLUME *) { KeSetEvent(&FatxLock, 0, FALSE); }
+void FatxReleaseVolume(FATX_VOLUME *) {
+    while (FatxHeldCount)
+        FscUnmapBuffer(FatxHeld[--FatxHeldCount].Buffer);
+    KeSetEvent(&FatxLock, 0, FALSE);
+}
 
 NTSTATUS FatxDeviceIo(FATX_VOLUME *v, UCHAR Major, LONGLONG Offset, PVOID Buffer, ULONG Length) {
     LARGE_INTEGER o;
@@ -20,66 +29,26 @@ NTSTATUS FatxDeviceIo(FATX_VOLUME *v, UCHAR Major, LONGLONG Offset, PVOID Buffer
     return IoSynchronousFsdRequest(Major, v->TargetDevice, Buffer, Length, &o);
 }
 
-// --- Block cache: 4 KB blocks, write-through (blocks are never dirty), shared by all volumes; the lock is held.
-
-static void FatxFreeCache() {
-    if (FatxCache) {
-        MmFreeSystemMemory(FatxCache[0].Data, FatxCacheBlocks * FATX_BLOCK_SIZE);
-        ExFreePool(FatxCache);
-    }
-    FatxCache = nullptr;
-    FatxCacheBlocks = 0;
-}
-
-static bool FatxAllocateCache() {
-    ULONG n = FatxCacheSize ? FatxCacheSize : 1;
-    auto blocks = (FATX_CACHE_BLOCK *)ExAllocatePoolWithTag(n * sizeof(FATX_CACHE_BLOCK), 'cxtF');
-    auto data = blocks ? (PUCHAR)MmAllocateSystemMemory(n * FATX_BLOCK_SIZE, PAGE_READWRITE) : nullptr;
-    if (!data) {
-        if (blocks)
-            ExFreePool(blocks);
-        return false;
-    }
-    for (ULONG i = 0; i < n; i++)
-        blocks[i] = {nullptr, -1, 0, data + i * FATX_BLOCK_SIZE};
-    FatxCache = blocks;
-    FatxCacheBlocks = n;
-    return true;
-}
-
-// Takes effect for the next block mapped; the cached blocks are dropped (nothing is dirty).
-NTSTATUS FatxSetCacheSize(ULONG Pages) {
-    FatxAcquireVolume(nullptr);
-    FatxCacheSize = Pages;
-    FatxFreeCache();
-    FatxReleaseVolume(nullptr);
-    return STATUS_SUCCESS;
-}
-
-ULONG FatxGetCacheSize() { return FatxCacheSize; }
+// --- Blocks (4 KB, through the file system cache; written through, never dirty). The lock is held.
 
 NTSTATUS FatxMapBlock(FATX_VOLUME *v, LONGLONG Offset, PUCHAR *Data) {
-    if (!FatxCache && !FatxAllocateCache())
-        return STATUS_INSUFFICIENT_RESOURCES;
-    FATX_CACHE_BLOCK *victim = &FatxCache[0];
-    for (ULONG i = 0; i < FatxCacheBlocks; i++) {
-        FATX_CACHE_BLOCK &b = FatxCache[i];
-        if (b.Volume == v && b.Offset == Offset) {
-            b.LastUse = ++FatxCacheClock;
-            *Data = b.Data;
+    LONGLONG block = Offset & ~(LONGLONG)(FATX_BLOCK_SIZE - 1);
+    for (ULONG i = FatxHeldCount; i--;) // already held under this lock (FAT scans map the same block repeatedly)
+        if (FatxHeld[i].Volume == v && FatxHeld[i].Block == block) {
+            *Data = (PUCHAR)FatxHeld[i].Buffer + (ULONG)(Offset - block);
             return STATUS_SUCCESS;
         }
-        if (b.LastUse < victim->LastUse)
-            victim = &b;
-    }
-    victim->Volume = nullptr;
-    NTSTATUS status = FatxDeviceIo(v, IRP_MJ_READ, Offset, victim->Data, FATX_BLOCK_SIZE);
+    PVOID p;
+    NTSTATUS status = FscMapBuffer(&v->CacheExtension, block, TRUE, &p);
     if (!NT_SUCCESS(status))
         return status;
-    victim->Volume = v;
-    victim->Offset = Offset;
-    victim->LastUse = ++FatxCacheClock;
-    *Data = victim->Data;
+    if (FatxHeldCount == FATX_MAX_HELD) {
+        FscUnmapBuffer(FatxHeld[0].Buffer);
+        RtlMoveMemory(FatxHeld, FatxHeld + 1, (FATX_MAX_HELD - 1) * sizeof(FatxHeld[0]));
+        FatxHeldCount--;
+    }
+    FatxHeld[FatxHeldCount++] = {p, v, block};
+    *Data = (PUCHAR)p + (ULONG)(Offset - block);
     return STATUS_SUCCESS;
 }
 
@@ -94,25 +63,14 @@ NTSTATUS FatxWriteBlockRange(FATX_VOLUME *v, LONGLONG BlockOffset, ULONG Start, 
 }
 
 void FatxInvalidateRange(FATX_VOLUME *v, LONGLONG Offset, ULONG Length) {
-    for (ULONG i = 0; i < FatxCacheBlocks; i++) {
-        FATX_CACHE_BLOCK &b = FatxCache[i];
-        if (b.Volume == v && b.Offset + FATX_BLOCK_SIZE > Offset && b.Offset < Offset + Length) {
-            b.Volume = nullptr;
-            b.LastUse = 0;
-        }
-    }
+    for (ULONG i = 0; i < FatxHeldCount; i++) // held blocks of the range are not reused either
+        if (FatxHeld[i].Volume == v && FatxHeld[i].Block + FATX_BLOCK_SIZE > Offset && FatxHeld[i].Block < Offset + Length)
+            FatxHeld[i].Volume = nullptr;
+    FscInvalidateByteRange(&v->CacheExtension, Offset, Length);
 }
 
 // The volume is going away: its blocks must not match a later volume allocated at the same address.
-void FatxForgetVolume(FATX_VOLUME *v) {
-    FatxAcquireVolume(v);
-    for (ULONG i = 0; i < FatxCacheBlocks; i++)
-        if (FatxCache[i].Volume == v) {
-            FatxCache[i].Volume = nullptr;
-            FatxCache[i].LastUse = 0;
-        }
-    FatxReleaseVolume(v);
-}
+void FatxForgetVolume(FATX_VOLUME *v) { FscInvalidateDevice(&v->CacheExtension); }
 
 // --- FAT
 
@@ -362,6 +320,7 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
     v->TargetDevice = TargetDevice;
     v->PartitionLength = partition.PartitionLength.QuadPart;
     v->SectorSize = geometry.BytesPerSector;
+    v->CacheExtension = {TargetDevice, partition.PartitionLength, geometry.BytesPerSector};
     FatxInitFcb(&v->RootFcb, FCB_DIRECTORY | FCB_ROOT);
     FatxInitFcb(&v->VolumeFcb, FCB_VOLUME);
     v->RootFcb.Attributes = FILE_ATTRIBUTE_DIRECTORY;
