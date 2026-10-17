@@ -153,6 +153,9 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
   - the launch order: `\Device\CdRom0\default.xbe`, then the dashboard
 - **Policy differences:**
   - The header signature is not verified, and the non-secure-HDD fatal error 5 is not raised.
+  - `XePublicKeyData` holds no Microsoft key but an open BSAFE key with public exponent 1 ('RSA1', 2048 bits,
+    DataLength 0xFF, modulus unused): a signature under it is the PKCS#1 block of the digest itself. The CD-ROM driver
+    signs the disc security sectors titles read this way (spec 04 §3a); Microsoft signatures do not verify.
   - Section digest mismatches are counted (`XeDigestMismatches`) but not fatal: homebrew XBEs (nxdk/cxbe)
     carry no valid digests. The reference reboots with fatal-error firmware return.
   - Retail XOR keys (entry 0xA8FC57AB, thunk 0x5B6D40B6) are tried first, then the debug keys

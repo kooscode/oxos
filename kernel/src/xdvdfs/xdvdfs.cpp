@@ -300,10 +300,12 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONG length = s->Parameters.Read.Length;
     // Non-cached reads start on a sector, but their length need not be whole sectors: the reference rounds the
     // transfer up and reports the length clipped to the file (Halo 2 reads its map files' tails this way).
-    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1)))
-        return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
+    // End of file comes first: after such a tail the file position is the (unaligned) file size, and the next read
+    // must report END_OF_FILE (Brute Force copies its .tgz files to the cache partition until it sees it).
     if (offset.HighPart || offset.LowPart >= f->Size)
         return XdvdfsComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
+    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1)))
+        return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
     if (length > f->Size - offset.LowPart)
         length = f->Size - offset.LowPart;
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);
