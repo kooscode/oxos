@@ -10,6 +10,9 @@
 
 void KiInitializeNpxArea(PKTHREAD t);
 void KiNpxRelease(PKTHREAD t);
+#if XK_TRACE_IMPORTS
+extern "C" void XkTraceThreadExit(PKTHREAD Thread);
+#endif
 extern "C" void KiThreadStartup();
 void NTAPI KiSuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *);
 void NTAPI KiSuspendThread(PVOID, PVOID, PVOID);
@@ -114,6 +117,9 @@ void KiReapDeadThreads() {
 void KeTerminateThread() {
     KeRaiseIrqlToDpcLevel();
     PKTHREAD t = Prcb.CurrentThread;
+#if XK_TRACE_IMPORTS
+    XkTraceThreadExit(t); // it may have ended inside a traced call that will never return
+#endif
     t->HasTerminated = TRUE;
     t->State = Terminated;
     t->Header.SignalState = 1;

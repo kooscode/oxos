@@ -190,6 +190,23 @@ run-trace:
 	$(MAKE) BUILD=build-trace SELFTEST=0 SERIAL=1 build-trace/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-trace/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
+# Import tracing: the same as run-trace, plus a record of the title's last 32768 kernel calls; while it runs (or
+# after it crashed or hung), `make trace-dump` in another terminal prints them (tools/trace.py; LAST=N calls,
+# ONLY=Name,Name, ALL=1 shows the common calls too). TRACE=2 (default) keeps the record above 64 MB, with xemu set
+# to 128 MB, so titles get the memory of a release build (Halo 2 needs it) and the calls from before a quick reboot
+# are kept. TRACE=1 keeps it in the console's 64 MB (2 MB less for the title). Each mode has its own build folder,
+# because make does not rebuild when only the flags change; pass the same TRACE to trace-dump.
+TRACE       ?= 2
+TRACE_BUILD := build-imports$(TRACE)
+run-imports:
+	$(MAKE) BUILD=$(TRACE_BUILD) SELFTEST=0 TRACE_IMPORTS=$(TRACE) SERIAL=1 $(TRACE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/run.py $(TRACE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
+	    --serial --qmp $(TRACE_BUILD)/qmp.sock $(if $(filter 2,$(TRACE)),--memory 128)
+
+trace-dump:
+	python3 -I $(ROOT)/tools/trace.py --qmp $(TRACE_BUILD)/qmp.sock --map $(TRACE_BUILD)/xboxkrnl.map \
+	    --exports exports.tsv $(if $(LAST),--last $(LAST)) $(if $(ONLY),--only $(ONLY)) $(if $(filter 1,$(ALL)),--all)
+
 # Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
 # reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
 # reference BIOS.
@@ -220,4 +237,4 @@ run-stock:
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace run-stock clean
+.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace run-imports trace-dump run-stock clean
