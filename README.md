@@ -65,7 +65,8 @@ make run ISO=../xiso/game.iso    # play: the release BIOS in an interactive xemu
 make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real MCPX boot ROM
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace-basic ISO=...     # optional: a trace build, for troubleshooting (debug serial output)
-make run-trace-full ISO=...      # optional: also records the title's kernel calls; `make print-trace-dump` prints them
+make run-trace-full ISO=...      # optional: also records the title's last kernel calls, dumped on a crash and on exit
+make print-trace-dump            # optional: print those calls at any time, from a second terminal (LAST=, ONLY=, ALL=1)
 make run-gdb ISO=...             # optional: the debug kernel, paused for gdb (see "Debugging" below)
 ```
 `make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
@@ -84,7 +85,7 @@ lines: the HD video modes (720p/1080i) are not implemented yet.
 `make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to
 `/dev/uinput`; it fetches [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
-See [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
+See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
 
 ## Debugging with gdb or VS Code
