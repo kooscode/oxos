@@ -4,6 +4,8 @@ xbox-files/
 xiso/
 # xemu's persistent hard-disk copies and EEPROMs for make run and the other run targets
 xemu-state/
+# Local notes, ideas and discussions for future work (never committed)
+experimental/
 xboxkrnl.exe
 *.bin
 *.qcow2
