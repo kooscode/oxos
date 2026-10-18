@@ -186,9 +186,15 @@ static void NTAPI RtlControllerThread(PVOID) {
     ok &= RtlCompareMemory("abcdef", "abcxef", 6) == 3 && RtlUlongByteSwap(0x11223344) == 0x44332211;
     KiTestRtlMathOk = ok;
 
-    // Refurb record (sector 3 of the test disk carries one)
+    // Refurb record (sector 3): read it; a disk without a valid one (an invalid signature reads as zeros) gets one
+    // written first, as on a console's first boot (the tests only ever use a copy of the disk image).
     ULONG refurb[4] = {};
-    KiTestRtlRefurbOk = ExReadWriteRefurbInfo(refurb, 16, FALSE) == 0 && refurb[0] == 0x52465242 &&
+    bool read = ExReadWriteRefurbInfo(refurb, 16, FALSE) == 0;
+    if (read && refurb[0] != 0x52465242) {
+        ULONG fresh[4] = {0x52465242, 0, 0, 0};
+        read = ExReadWriteRefurbInfo(fresh, 16, TRUE) == 0 && ExReadWriteRefurbInfo(refurb, 16, FALSE) == 0;
+    }
+    KiTestRtlRefurbOk = read && refurb[0] == 0x52465242 &&
                         ExReadWriteRefurbInfo(refurb, 8, FALSE) == (NTSTATUS)0xC000000D;
 
     // System time comes from the RTC; setting it updates the RTC.

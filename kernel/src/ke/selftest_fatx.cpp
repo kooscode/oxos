@@ -82,23 +82,28 @@ static void NTAPI FatxControllerThread(PVOID) {
         NtClose(h);
     }
 
-    // E:\ enumeration with the default mask, one entry per call.
+    // E:\ enumeration with the default mask, one entry per call, to the end (an empty E:\ is fine: boot_test.py
+    // compares the names with the disk image's).
     HANDLE hd;
     if (NT_SUCCESS(Open(&hd, "\\Device\\Harddisk0\\Partition1\\", FILE_READ_DATA, FILE_OPEN,
                         FILE_DIRECTORY_FILE))) {
         ULONG n = 0, entries = 0;
         UCHAR dir[0x40 + 64];
         bool restart = TRUE;
-        while (NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, dir, sizeof(dir), FileDirectoryInformation,
-                                    nullptr, restart) == 0) {
+        NTSTATUS last;
+        while ((last = NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, dir, sizeof(dir),
+                                            FileDirectoryInformation, nullptr, restart)) == 0) {
             restart = FALSE;
             ULONG len = *(PULONG)(dir + 0x3C);
             for (ULONG i = 0; i < len && n < sizeof(KiTestFatxDirNames) - 2; i++)
                 KiTestFatxDirNames[n++] = dir[0x40 + i];
-            KiTestFatxDirNames[n++] = '|';
+            if (n < sizeof(KiTestFatxDirNames) - 2) // at most 62 characters, as boot_test.py compares; stays terminated
+                KiTestFatxDirNames[n++] = '|';
             entries++;
         }
-        KiTestFatxDirOk = entries >= 1;
+        // The end of the listing is STATUS_NO_MORE_FILES; an empty directory answers the first call with
+        // STATUS_NO_SUCH_FILE.
+        KiTestFatxDirOk = last == (entries ? (NTSTATUS)0x80000006 : (NTSTATUS)0xC000000F);
         NtClose(hd);
     }
 
@@ -171,8 +176,8 @@ static void NTAPI FatxControllerThread(PVOID) {
           STATUS_OBJECT_PATH_NOT_FOUND;
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\keep.bin", GENERIC_READ, FILE_CREATE, 0) ==
           STATUS_OBJECT_NAME_COLLISION;
-    ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\TDATA", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) ==
-          (NTSTATUS)0xC00000BA; // STATUS_FILE_IS_A_DIRECTORY
+    ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) ==
+          (NTSTATUS)0xC00000BA; // STATUS_FILE_IS_A_DIRECTORY (XkTest: created above, so on any disk)
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\keep.bin", GENERIC_READ, FILE_OPEN,
                FILE_DIRECTORY_FILE) == (NTSTATUS)0xC0000103; // STATUS_NOT_A_DIRECTORY
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\bad*name", GENERIC_READ, FILE_OPEN_IF, 0) ==

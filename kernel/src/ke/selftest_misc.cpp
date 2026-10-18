@@ -8,7 +8,7 @@ XBAPI ULONG NTAPI FscGetCacheSize();
 XBAPI NTSTATUS NTAPI FscSetCacheSize(ULONG);
 XBAPI NTSTATUS NTAPI PhyInitialize(BOOLEAN, PVOID);
 XBAPI ULONG NTAPI PhyGetLinkState(BOOLEAN);
-extern volatile ULONG KiTestXcDone;
+extern volatile ULONG KiTestXcDone, KiTestFatxDone;
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
     KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscScatterOk, KiTestMiscDone;
@@ -47,7 +47,9 @@ static PDEVICE_OBJECT Device(PCSZ path) {
 }
 
 static void NTAPI MiscControllerThread(PVOID) {
-    while (!KiTestXcDone) {
+    // After the FATX suite too: the scatter/gather test writes in its E:\XkTest, and E:\ must not change while that
+    // suite lists it and balances its free clusters.
+    while (!KiTestXcDone || !KiTestFatxDone) {
         LARGE_INTEGER t;
         t.QuadPart = -10 * 10000;
         KeDelayExecutionThread(KernelMode, FALSE, &t);
@@ -56,11 +58,12 @@ static void NTAPI MiscControllerThread(PVOID) {
     RtlInitAnsiString(&e, "\\Device\\Harddisk0\\Partition1");
     RtlInitAnsiString(&z, "\\Device\\Harddisk0\\Partition5");
     RtlInitAnsiString(&cd, "\\Device\\CdRom0");
-    bool ok = OpenClose("\\Device\\Harddisk0\\Partition1\\TDATA") == 0;
+    // Any open mounts the volume; E:'s root exists on every disk.
+    bool ok = OpenClose("\\Device\\Harddisk0\\Partition1\\") == 0;
     PDEVICE_OBJECT part = Device("\\Device\\Harddisk0\\Partition1");
     ok &= part && part->MountedOrSelfDevice != nullptr;
     ok &= IoDismountVolumeByName(&e) == 0 && part->MountedOrSelfDevice == nullptr;
-    ok &= OpenClose("\\Device\\Harddisk0\\Partition1\\TDATA") == 0 && part->MountedOrSelfDevice != nullptr;
+    ok &= OpenClose("\\Device\\Harddisk0\\Partition1\\") == 0 && part->MountedOrSelfDevice != nullptr;
     ok &= IoDismountVolumeByName(&z) == (NTSTATUS)0xC000026E; // never mounted
     KiTestMiscDismountOk = ok;
 
