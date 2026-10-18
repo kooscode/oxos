@@ -1,4 +1,4 @@
-// Debugger services without a kernel debugger: DbgPrint goes to an in-memory log (spec/13).
+// Debugger services without a kernel debugger: DbgPrint goes to an in-memory log (spec/stock/13).
 #include <xk/ke.h>
 #include <xk/serial.h>
 
@@ -12,7 +12,7 @@ BOOLEAN KdDebuggerEnabled = FALSE;
 BOOLEAN KdDebuggerNotPresent = TRUE;
 
 // Ring buffer of debug output, readable from the emulator monitor (XkDebugLog / XkDebugLogPosition).
-char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it stays resident (spec/09 §7)
+char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it stays resident (spec/stock/09 §7)
 volatile ULONG XkDebugLogPosition;
 
 static void XkLogWrite(const char *s, ULONG n) {

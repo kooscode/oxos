@@ -1,4 +1,4 @@
-// IDE DVD drive (ATAPI, device 1): \Device\CdRom0, READ via bus-master DMA, packet IOCTLs (spec/04 §3).
+// IDE DVD drive (ATAPI, device 1): \Device\CdRom0, READ via bus-master DMA, packet IOCTLs (spec/stock/04 §3).
 #include <xk/arch.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -15,7 +15,7 @@ constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE = (NTSTATUS)0xC0000013;
 
 // --- Polled ATAPI packet command (PIO data phase). Called with the channel owned (StartIo) or at init.
 
-// Sense mapping and retries (spec/04c §1, as the reference's): UNIT ATTENTION (the disc changed) and NOT READY with
+// Sense mapping and retries (spec/stock/04c §1, as the reference's): UNIT ATTENTION (the disc changed) and NOT READY with
 // ASC 04 (becoming ready) are retried, the latter after 100 ms; a status is reported only once the retries are used.
 enum IDEX_RETRY { IdexNoRetry, IdexRetryNow, IdexRetryLater };
 
@@ -209,7 +209,7 @@ struct SCSI_PASS_THROUGH_DIRECT_ {
 };
 
 
-// --- Xbox drive security for titles (spec/04 §3a). Titles built with later XDKs check the disc themselves: MODE SENSE
+// --- Xbox drive security for titles (spec/stock/04 §3a). Titles built with later XDKs check the disc themselves: MODE SENSE
 // page 0x3E must report an authenticated Xbox disc, and the security sector's timestamp (+0x4AB, against the
 // certificate's), SHA-1 (+0x4CF) and RSA signature (+0x4E3, under XePublicKeyData) must all hold.
 // - XePublicKeyData is an open exponent-1 key (src/xe/loader.cpp), so every security sector handed to a title gets
@@ -377,7 +377,7 @@ static void IdexCdRomControl(PIRP Irp) {
     IdexCdRomFinish(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
 }
 
-// --- Xbox game disc authentication (spec/04 §3a). The drive's security mode page (0x3E) and the disc's security
+// --- Xbox game disc authentication (spec/stock/04 §3a). The drive's security mode page (0x3E) and the disc's security
 // sector (READ DVD STRUCTURE 0xFF02FDFF, layer 0xFE) provide a challenge table; replaying it proves a pressed Xbox
 // disc. Success marks the media as "title disc" (XBE media type 2) and pins the disc's title.
 
@@ -466,7 +466,7 @@ static NTSTATUS IdexCdRomAuthenticate() {
         XcSHAUpdate(sha, sector + 4, 0x4CB);
         XcSHAFinal(sha, digest);
         // The digest must match; the reference also checks an RSA signature over it with Microsoft's public key,
-        // which this open kernel does not carry (spec/04 §3a).
+        // which this open kernel does not carry (spec/stock/04 §3a).
         if (page[13] == sector[4] && RtlCompareMemory(digest, sector + 0x4CF, 20) == 20) {
             XcSHAInit(sha);
             XcSHAUpdate(sha, sector + 0x4A3, 0x2C);

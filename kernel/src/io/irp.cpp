@@ -1,4 +1,4 @@
-// I/O manager: IRP allocation, dispatch, completion and request builders (spec/11 §3).
+// I/O manager: IRP allocation, dispatch, completion and request builders (spec/stock/11 §3).
 #include <xk/io.h>
 #include <xk/ps.h>
 #include <xk/rtl.h>
@@ -137,7 +137,7 @@ void NTAPI IopCompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *Sys
         ObfDereferenceObject(fo);
 }
 
-// Deferred completion: the dispatch routine returned without pending, finish in the caller (spec/11 §5).
+// Deferred completion: the dispatch routine returned without pending, finish in the caller (spec/stock/11 §5).
 void IopCompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject) {
     KIRQL old = KfRaiseIrql(APC_LEVEL);
     PVOID arg = FileObject;

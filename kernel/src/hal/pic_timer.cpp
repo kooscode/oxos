@@ -1,4 +1,4 @@
-// 8259 PIC, interrupt enable/disable, 8254 PIT and CMOS RTC (spec/02 §3.3-3.6, spec/06 §1, §3).
+// 8259 PIC, interrupt enable/disable, 8254 PIT and CMOS RTC (spec/stock/02 §3.3-3.6, spec/stock/06 §1, §3).
 #include <xk/arch.h>
 #include <xk/hal.h>
 
@@ -19,7 +19,7 @@ static void HalpWritePicMask(USHORT mask) {
     outb(PIC2_DATA, (UCHAR)(mask >> 8));
 }
 
-// Dispatch IRQL per IRQ. Defaults reproduce the reference per-IRQL PIC mask table (spec/07):
+// Dispatch IRQL per IRQ. Defaults reproduce the reference per-IRQL PIC mask table (spec/stock/07):
 // IRQ0 (clock) 28, IRQ8 26, IRQ12 27, the cascade never, every other IRQ n at 26 - n.
 static constexpr KIRQL HalpDefaultIrqLevel[16] = {28, 25, 0xFF, 23, 22, 21, 20, 19,
                                                   26, 17, 16, 15, 27, 13, 12, 11};
@@ -199,7 +199,7 @@ void HalpSetRealTimeClock(const HAL_TIME_FIELDS *t) {
     restore_flags(flags);
 }
 
-// The "clock has been set" signature in the second CMOS bank (spec/05 §1): bytes 0x10-0x6F and 0x80-0xFF hold
+// The "clock has been set" signature in the second CMOS bank (spec/stock/05 §1): bytes 0x10-0x6F and 0x80-0xFF hold
 // 0x55, 0xAA, 0x55, ... Written by NtSetSystemTime; checked before the first title launch.
 static bool HalpCmosPattern(UCHAR first, ULONG count, bool write) {
     ULONG flags;

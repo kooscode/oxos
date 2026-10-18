@@ -1,4 +1,4 @@
-// Interrupt and exception entry stubs. IDT layout (spec/02 §3.3): 0x00-0x1F CPU exceptions,
+// Interrupt and exception entry stubs. IDT layout (spec/stock/02 §3.3): 0x00-0x1F CPU exceptions,
 // 0x30-0x37 master PIC (IRQ0-7), 0x38-0x3F slave PIC (IRQ8-15), 64 vectors total.
 
     .text
@@ -27,7 +27,7 @@ EXC_NOERR 4
 EXC_NOERR 5
 EXC_NOERR 6
     .p2align 2
-_KiTrap7:                           // #NM: lazy FPU switch (spec/07), resumable
+_KiTrap7:                           // #NM: lazy FPU switch (spec/stock/07), resumable
     pushal
     cld
     call _KiNpxNotAvailable

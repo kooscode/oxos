@@ -1,4 +1,4 @@
-// Deferred procedure calls (spec/06 §4).
+// Deferred procedure calls (spec/stock/06 §4).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>

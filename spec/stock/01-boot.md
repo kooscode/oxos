@@ -82,7 +82,7 @@ Each 256 KB bank (`tools/mkbios.py`, `build_open`):
 | … | the kernel's `.data` initializer (quick reboot), ending at 0x3FE00 |
 | 0x3FE00 | our reset code (`kernel/boot/reset.S`) |
 
-Bank 1 holds the splash instead (spec/17 §7).
+Bank 1 holds the splash instead (spec/stock/17 §7).
 
 - **With an MCPX ROM** (a console, or xemu given a ROM dump): the ROM runs the X-codes. Their last two write
   `mov eax, 0xFFFC1000; jmp eax` to RAM address 0 (Cromwell's "overflow trick"). The ROM's check of the

@@ -1,4 +1,4 @@
-// FATX file system driver, internal definitions (spec/04 §6, spec/04b).
+// FATX file system driver, internal definitions (spec/stock/04 §6, spec/stock/04b).
 #pragma once
 #include <xk/fsc.h>
 #include <xk/idex.h>

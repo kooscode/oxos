@@ -1,4 +1,4 @@
-// Scheduler (spec/07 "Scheduling"). Uniprocessor: the dispatcher database is protected by running
+// Scheduler (spec/stock/07 "Scheduling"). Uniprocessor: the dispatcher database is protected by running
 // at DISPATCH_LEVEL; KiUnlockDispatcherDatabase performs any pending switch when IRQL drops.
 #include <xk/arch.h>
 #include <xk/hal.h>
@@ -159,7 +159,7 @@ XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
     KfLowerIrql(OldIrql);
 }
 
-// Quantum expired (spec/07 KiQuantumEnd): refill, decay priority, pick a same-or-higher thread.
+// Quantum expired (spec/stock/07 KiQuantumEnd): refill, decay priority, pick a same-or-higher thread.
 static void KiQuantumEnd() {
     PKTHREAD t = Prcb.CurrentThread;
     if (t == Prcb.IdleThread || t->Quantum > 0)
@@ -214,7 +214,7 @@ void KiDispatchInterrupt() {
     KiSwapToThread(old, next);
 }
 
-// Clock tick bookkeeping (spec/07 "Clock tick"), at CLOCK_LEVEL.
+// Clock tick bookkeeping (spec/stock/07 "Clock tick"), at CLOCK_LEVEL.
 void KiUpdateRunTime(KIRQL interruptedIrql) {
     PKTHREAD t = Prcb.CurrentThread;
     if (interruptedIrql > DISPATCH_LEVEL)

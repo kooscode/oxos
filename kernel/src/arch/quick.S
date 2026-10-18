@@ -1,4 +1,4 @@
-// Quick reboot (spec/02 §1): restart the kernel in place. Runs on a small stack in the persisted section,
+// Quick reboot (spec/stock/02 §1): restart the kernel in place. Runs on a small stack in the persisted section,
 // quiesces DMA hardware, restores initialised .data from the flash copy described by our DOS-header fields
 // (0x28 bytes to zero, 0x2C bytes to copy, 0x30 flash source, 0x34 destination), zeroes BSS, then re-enters
 // KernelEntry with the persisted boot keys.

@@ -1,4 +1,4 @@
-// Lazy FPU/SSE context switching (spec/07): each thread's FXSAVE area is the 0x210 bytes below its
+// Lazy FPU/SSE context switching (spec/stock/07): each thread's FXSAVE area is the 0x210 bytes below its
 // StackBase. CR0.TS is set whenever the running thread doesn't own the FPU, so its first FPU/SSE
 // instruction raises #NM and the state is swapped here. Kernel C code is built without x87/SSE.
 #include <xk/arch.h>

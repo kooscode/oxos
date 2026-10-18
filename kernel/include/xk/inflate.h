@@ -1,4 +1,4 @@
-// Inflate (RFC 1951) for the boot splash PNG and the open BIOS image's compressed kernel (spec/01 §5). Canonical
+// Inflate (RFC 1951) for the boot splash PNG and the open BIOS image's compressed kernel (spec/stock/01 §5). Canonical
 // Huffman decoding one bit at a time: each user decodes once per boot, so table speed-ups are not worth the code.
 // Header-only with plain C++ types, so the 2BL (built without the kernel headers) can include it.
 #pragma once

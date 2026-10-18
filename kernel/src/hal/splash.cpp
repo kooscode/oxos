@@ -1,5 +1,5 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
-// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/17 §7), or, without one, a
+// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/stock/17 §7), or, without one, a
 // drawn emblem and caption. The title launcher waits for it and frees its memory before the title starts, leaving the
 // last frame on screen, as the reference does with its animation.
 #include <xk/ke.h>
@@ -140,7 +140,7 @@ void HalpStartSplash() {
     KeInitializeEvent(&HalpSplashDone, NotificationEvent, TRUE);
     if (HalBootSMCVideoMode == 7)
         return;
-    // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/05 §5): titles
+    // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/stock/05 §5): titles
     // assume the top of RAM holds only a little of the kernel's own memory when they start (an nxdk title clears a
     // framebuffer at 0x3C00000 it never allocated).
     HalpSplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0,
@@ -159,7 +159,7 @@ void HalpStartSplash() {
 // Before the title starts: wait for the splash and free its memory, but leave the scanout on its last frame. The
 // reference does the same with its boot animation (its framebuffer is in the INIT section, freed before the title
 // starts), so the title gets the whole budget; freed pages go to the end of the free lists, so the picture usually
-// stays up until the title sets its own display mode (spec/09 §7).
+// stays up until the title sets its own display mode (spec/stock/09 §7).
 void HalpEndSplash() {
     if (!HalpSplashScreen)
         return;

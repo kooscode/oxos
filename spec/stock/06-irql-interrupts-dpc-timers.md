@@ -10,7 +10,7 @@ Structure layouts follow nxdk `xboxkrnl.h` (CC0). They match the field writes ob
   the byte at **KPCR+0x24**.
 - **Device IRQ n ↔ vector 0x30+n ↔ IRQL 26 − n** (`HalGetInterruptVector`: accepts bus levels
   0–26, returns vector 0x30+level and IRQL 0x4A − vector; anything else → vector 0). IDE (IRQ14) is
-  at 12, NV2A (IRQ3) at 23, USB0 (IRQ1) at 25, USB1 (IRQ9) at 17. **Correction (spec/07):** the
+  at 12, NV2A (IRQ3) at 23, USB0 (IRQ1) at 25, USB1 (IRQ9) at 17. **Correction (spec/stock/07):** the
   reference per-IRQL PIC mask table masks IRQ0 (clock) only from **IRQL 28**, IRQ8 from 26 and
   IRQ12 from 27. The clock interrupt runs at 0x1C.
 - The reference uses the NT "lazy IRQL" PIC scheme:

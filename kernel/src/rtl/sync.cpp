@@ -1,4 +1,4 @@
-// RTL critical sections and executive read/write locks (spec/13). Layouts are the Xbox ABI.
+// RTL critical sections and executive read/write locks (spec/stock/13). Layouts are the Xbox ABI.
 #include <xk/ke.h>
 
 typedef struct _RTL_CRITICAL_SECTION {

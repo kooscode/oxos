@@ -1,4 +1,4 @@
-// Asynchronous procedure calls, alerts, suspend/resume (spec/08).
+// Asynchronous procedure calls, alerts, suspend/resume (spec/stock/08).
 //
 // Kernel APCs (ApcListHead[KernelMode]) are delivered by the APC_LEVEL software interrupt. "User"
 // APCs (ApcListHead[UserMode]) only run when an alertable user-mode wait returns STATUS_USER_APC:

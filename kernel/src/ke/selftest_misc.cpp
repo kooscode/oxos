@@ -77,7 +77,7 @@ static void NTAPI MiscControllerThread(PVOID) {
     FscSetCacheSize(before);
     KiTestMiscFscOk = ok;
 
-    // CMOS "clock set" signature (spec/05 §1): written, detected, a damaged byte detected, restored.
+    // CMOS "clock set" signature (spec/stock/05 §1): written, detected, a damaged byte detected, restored.
     HalpWriteCmosSignature();
     ok = HalpCmosSignatureValid();
     __asm__ volatile("cli; movb $0x90, %%al; outb %%al, $0x72; xorl %%eax, %%eax; outb %%al, $0x71; sti" ::: "eax");
@@ -86,7 +86,7 @@ static void NTAPI MiscControllerThread(PVOID) {
     ok &= HalpCmosSignatureValid();
     KiTestMiscCmosOk = ok;
 
-    // SMC tray events (spec/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC is
+    // SMC tray events (spec/stock/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC is
     // read again: 0x60 with the test disc); each one counts a change.
     ULONG tray, count0, count1, count2;
     HalReadSMCTrayState(&tray, &count0);

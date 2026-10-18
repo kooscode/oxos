@@ -1,7 +1,7 @@
 # Open Xbox kernel
 
 A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with
-retail 1.0.4627.1. It is built from the behavioural specs in `../spec/`; no decompiled code is used.
+retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/`; no decompiled code is used.
 Targets console revisions 1.0–1.5 (1.6 comes later). It builds on Linux with clang + lld-link.
 
 ## Build and test
@@ -105,6 +105,6 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 
 ## Known deviations (tracked)
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
-- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
+- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.

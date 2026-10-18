@@ -1,4 +1,4 @@
-// XDVDFS (Xbox game disc file system), read-only (spec/04c).
+// XDVDFS (Xbox game disc file system), read-only (spec/stock/04c).
 #include <xk/fsc.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>

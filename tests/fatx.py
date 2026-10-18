@@ -1,6 +1,6 @@
 """FATX reader over a Qcow2 image, for checking the kernel's file system results in tests, and a small writer
 (FatxWriter: create directories, write files, copy a host folder) for preparing disk images; the changes go
-through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/04b for the format).
+through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/stock/04b for the format).
 
 usage: fatx.py IMAGE                                   list each partition's root
        fatx.py IMAGE --add DRIVE:\\PATH=HOST_PATH ... --out NEW_IMAGE

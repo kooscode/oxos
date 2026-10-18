@@ -1,4 +1,4 @@
-// Thread and process objects (spec/07 "Thread creation").
+// Thread and process objects (spec/stock/07 "Thread creation").
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -21,7 +21,7 @@ KPROCESS KiIdleProcess, KiSystemProcess;
 
 static void KiInitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum);
 
-// Reference values (spec/01 §2.8): idle process base 0 / quantum 0x7F; system process base 8 / 0x3C.
+// Reference values (spec/stock/01 §2.8): idle process base 0 / quantum 0x7F; system process base 8 / 0x3C.
 void KiInitializeProcesses() {
     KiInitializeProcess(&KiIdleProcess, 0, 0x7F);
     KiInitializeProcess(&KiSystemProcess, 8, 0x3C);
@@ -100,7 +100,7 @@ void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSiz
 XBAPI PKTHREAD NTAPI KeGetCurrentThread() { return Prcb.CurrentThread; }
 
 // Terminated threads: the next thread to run frees the stack and drops the thread object's
-// "running" reference (spec/10 §6); the object lives on while handles or references remain.
+// "running" reference (spec/stock/10 §6); the object lives on while handles or references remain.
 static LIST_ENTRY KiDeadThreadListHead = {&KiDeadThreadListHead, &KiDeadThreadListHead};
 
 void KiReapDeadThreads() {

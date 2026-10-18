@@ -1,4 +1,4 @@
-// I/O manager: opening files, file objects, Nt file services, completion ports (spec/11 §4-6).
+// I/O manager: opening files, file objects, Nt file services, completion ports (spec/stock/11 §4-6).
 #include <xk/io.h>
 #include <xk/ps.h>
 #include <xk/rtl.h>
@@ -339,7 +339,7 @@ XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, P
                         FILE_OPEN, OpenOptions, 0);
 }
 
-// --- Common service plumbing (spec/11 §5)
+// --- Common service plumbing (spec/stock/11 §5)
 
 struct IOP_REQUEST {
     PFILE_OBJECT File;
@@ -793,7 +793,7 @@ XBAPI NTSTATUS NTAPI NtQueryFullAttributesFile(POBJECT_ATTRIBUTES ObjectAttribut
     return status;
 }
 
-// --- Completion ports (spec/11 §6)
+// --- Completion ports (spec/stock/11 §6)
 
 struct IO_MINI_COMPLETION_PACKET {
     LIST_ENTRY ListEntry;

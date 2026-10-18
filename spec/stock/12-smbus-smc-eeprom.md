@@ -133,6 +133,6 @@ a non-dashboard load fail with 0xC000003A (→ plain dashboard).
 **Ours** (`src/hal/smbus.cpp`): same register traffic, done synchronously (polled SMBus) in the SCI DPC, like the
 reference's DPC-driven handling; when a passive-level caller holds the SMBus the DPC retries 1 ms later from a timer.
 `HalInitiateShutdown` queues the DPC with the request and returns. (Until milestone 13 a system thread did this; its
-3-page stack counted against the title's memory, spec/09 §7.) The disk standby is issued with polled port I/O.
+3-page stack counted against the title's memory, spec/stock/09 §7.) The disk standby is issued with polled port I/O.
 xemu raises SMC events only from its UI, so the boot tests feed tray events to the handler directly and check that
 the SCI (PM-timer overflows) is delivered and acknowledged.

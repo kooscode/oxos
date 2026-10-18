@@ -481,7 +481,7 @@ def udf_checks(mon):
 
 
 def serial_checks(path):
-    """Debug serial port (spec/18): the boot banner, the start-up steps and the title load reach the SuperIO."""
+    """Debug serial port (spec/stock/18): the boot banner, the start-up steps and the title load reach the SuperIO."""
     text = open(path, "rb").read().decode("latin1") if os.path.exists(path) else ""
     print(f"  (serial log: {len(text)} bytes, {text.count(chr(10))} lines)")
     return {
@@ -501,7 +501,7 @@ def launch_reason_checks(mon):
     return {
         "no disc + launch reason: dashboard gets LDP {type 1, reason 3, code = reason} (or none if 0)":
             page == [1, 3, reason] if reason else ldp == 0,
-        "the launch page sits below the kernel (spec/05 §5)": ldp == 0 or ldp < 0x80010000,
+        "the launch page sits below the kernel (spec/stock/05 §5)": ldp == 0 or ldp < 0x80010000,
     }
 
 

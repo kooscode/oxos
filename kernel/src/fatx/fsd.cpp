@@ -1,4 +1,4 @@
-// FATX: IRP dispatch — create, cleanup/close, read/write, information, directory and volume queries (spec/04b).
+// FATX: IRP dispatch — create, cleanup/close, read/write, information, directory and volume queries (spec/stock/04b).
 #include "fatx.h"
 
 static NTSTATUS FatxComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0) {
@@ -377,7 +377,7 @@ static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONG offs
     return STATUS_SUCCESS;
 }
 
-// Scatter/gather: one page-sized piece of the transfer per segment element (spec/11 §5).
+// Scatter/gather: one page-sized piece of the transfer per segment element (spec/stock/11 §5).
 static NTSTATUS FatxTransferIrp(FATX_VOLUME *v, FATX_FCB *f, PIRP Irp, bool write, ULONG offset, PUCHAR buffer,
                                 ULONG length) {
     if (!Irp->SegmentArray)

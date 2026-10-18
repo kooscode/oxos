@@ -45,7 +45,7 @@ boot call (0x8001e96a) and the XDVDFS caller (0x8002b4e0–0x8002b52a). Names ar
   or without a whole page after the start is rounded up, are copied from the cache; larger ones read the unaligned
   head through the cache, the whole pages directly into the caller's buffer, and the short tail through the cache.
   When the caller's length covers the file's end rounded up to a sector (0x8002b4e0), the direct part is rounded up
-  to whole sectors (the device fills the buffer to the sector's end). Non-cached opens bypass the cache (spec/04c).
+  to whole sectors (the device fills the buffer to the sector's end). Non-cached opens bypass the cache (spec/stock/04c).
 - FATX maps FAT and directory blocks (map, modify, write the covering sectors from the buffer, unmap); file data in
   whole sectors goes straight to the device.
 

@@ -1,4 +1,4 @@
-// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/04 §2, §4, §5).
+// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5).
 #include <xk/arch.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -183,7 +183,7 @@ static NTSTATUS NTAPI IdexDiskDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Ir
     }
 }
 
-// IDE pass-through (spec/04 §5): the task file is written as given (the drive select is ours), PIO data follows
+// IDE pass-through (spec/stock/04 §5): the task file is written as given (the drive select is ours), PIO data follows
 // in the direction HostSendsData says, and the returned registers are copied back. The command itself may fail
 // (status ERR): the IRP still succeeds. Ours polls at the channel IRQL, up to 10 s like the reference timeout.
 static NTSTATUS IdexDiskExecutePassThrough(ATA_PASS_THROUGH *p) {
@@ -395,7 +395,7 @@ static NTSTATUS IdexDiskExecutePassThrough(ATA_PASS_THROUGH *p);
 // INITIALIZE DEVICE PARAMETERS (16 heads, 63 sectors). Failures: fatal error 6 (unlock, except on manufacturing
 // units) or 8 (the follow-up commands).
 static void IdexDiskUnlock(const UCHAR *Password) {
-    UCHAR block[512]; // on the boot stack: a static buffer would cost a resident image page (spec/09 §7)
+    UCHAR block[512]; // on the boot stack: a static buffer would cost a resident image page (spec/stock/09 §7)
     RtlZeroMemory(block, sizeof(block));
     RtlCopyMemory(block + 2, Password, 32);
     ATA_PASS_THROUGH p = {};

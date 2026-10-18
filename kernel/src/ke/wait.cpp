@@ -1,4 +1,4 @@
-// Waits and synchronization objects (spec/07 "Waits", spec/08; NT semantics with the Xbox's
+// Waits and synchronization objects (spec/stock/07 "Waits", spec/stock/08; NT semantics with the Xbox's
 // in-kernel delivery of user APCs).
 #include <xk/arch.h>
 #include <xk/hal.h>
@@ -158,7 +158,7 @@ static void KiBeginWait(PKTHREAD t) {
     t->WaitStatus = 0;
 }
 
-// Alertable/user-APC checks done before blocking (spec/07). 0 = go ahead and wait.
+// Alertable/user-APC checks done before blocking (spec/stock/07). 0 = go ahead and wait.
 static NTSTATUS KiCheckAlertable(PKTHREAD t, KPROCESSOR_MODE mode, BOOLEAN alertable) {
     if (alertable) {
         if (t->Alerted[(UCHAR)mode]) {
@@ -316,7 +316,7 @@ XBAPI NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Al
 
         t->Timer.Header.SignalState = 0;
         if (!KiInsertTimerRelative(&t->Timer, timeout.Remaining()->QuadPart)) {
-            // Already elapsed: yield to a ready thread of equal or higher priority (spec/07).
+            // Already elapsed: yield to a ready thread of equal or higher priority (spec/stock/07).
             if (t->Priority < 16 && t->Priority != t->BasePriority) {
                 t->PriorityDecrement = 0;
                 KiSetPriorityThread(t, t->BasePriority);

@@ -1,4 +1,4 @@
-// SMBus host controller (MCPX, I/O 0xC000), SMC services, firmware return (spec/12).
+// SMBus host controller (MCPX, I/O 0xC000), SMC services, firmware return (spec/stock/12).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -109,7 +109,7 @@ typedef struct _HAL_SHUTDOWN_REGISTRATION {
 static LIST_ENTRY HalpShutdownList = {&HalpShutdownList, &HalpShutdownList};
 static volatile UCHAR HalpShutdownPending;
 static ULONG HalpSmcScratch;
-// Boot flags (the reference's 0x8003B138, kept across quick reboots), derived from the SMC at cold boot (spec/12 §4):
+// Boot flags (the reference's 0x8003B138, kept across quick reboots), derived from the SMC at cold boot (spec/stock/12 §4):
 // 0x08 SMC "reset on eject" off (0x19 = 1), 0x10/0x20/0x80 from the scratch register, 0x40 tray ejected at boot.
 XK_PERSIST volatile ULONG HalpBootFlags;
 
@@ -175,7 +175,7 @@ extern "C" void KiQuickReboot() __attribute__((noreturn));
 extern "C" volatile UCHAR KiQuickRebootFlag;
 
 // Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at
-// once: 4 (fatal error) first leaves scratch 2 for the next boot (spec/12 §2).
+// once: 4 (fatal error) first leaves scratch 2 for the next boot (spec/stock/12 §2).
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     if (Routine != 2) {
         if (Routine == 4)
@@ -190,7 +190,7 @@ XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     KiQuickReboot();
 }
 
-// --- SMC events (spec/12 §4). The SMC raises EXTSMI# (ACPI GPE0 bit 1) on the SCI, IRQ 12. The reference runs an
+// --- SMC events (spec/stock/12 §4). The SMC raises EXTSMI# (ACPI GPE0 bit 1) on the SCI, IRQ 12. The reference runs an
 // asynchronous SMBus state machine; ours hands the work to a system thread that uses the same register writes.
 
 constexpr UCHAR SMC_AV_PACK = 0x04, SMC_SHUTDOWN_NOTICE = 0x0B, SMC_TRAY_EJECT = 0x0C, SMC_OS_RESPONSE = 0x0D,
@@ -327,7 +327,7 @@ void HalpSmcHandleEvents(ULONG reason) {
 }
 
 // SMC events and shutdown requests run in a DPC, as the reference's (no thread: its stack would cost the title
-// 3 pages, spec/09 §7). The SMBus is polled, so it works at DISPATCH_LEVEL; when a passive-level caller is in the
+// 3 pages, spec/stock/09 §7). The SMBus is polled, so it works at DISPATCH_LEVEL; when a passive-level caller is in the
 // middle of a transaction (its lock is taken), the DPC tries again 1 ms later.
 static void NTAPI HalpSmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) {
     HalpAcquireSMBus(); // initialises the lock on first use; no wait at DISPATCH_LEVEL

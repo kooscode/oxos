@@ -1,5 +1,5 @@
 // Runtime exports: interlocked operations, S-lists, memory/integer helpers, ANSI/Unicode strings and conversions,
-// port buffers (spec/13). Semantics follow the documented NT runtime; Xbox strings are ANSI, Unicode is UTF-16
+// port buffers (spec/stock/13). Semantics follow the documented NT runtime; Xbox strings are ANSI, Unicode is UTF-16
 // with a Latin-1 multibyte mapping.
 #include <xk/arch.h>
 #include <xk/ob.h>

@@ -1,4 +1,4 @@
-// IDE channel: interrupt, completion DPC, timeout timer, packet serialisation, bus-master DMA (spec/04 §1, §5).
+// IDE channel: interrupt, completion DPC, timeout timer, packet serialisation, bus-master DMA (spec/stock/04 §1, §5).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/idex.h>

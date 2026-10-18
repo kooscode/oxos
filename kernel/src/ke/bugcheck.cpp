@@ -1,5 +1,5 @@
 // Bug checks: record the code and halt. (The reference also reports through the fatal-error path;
-// see spec/05 §6 — to be added with the video/SMC work.)
+// see spec/stock/05 §6 — to be added with the video/SMC work.)
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/serial.h>

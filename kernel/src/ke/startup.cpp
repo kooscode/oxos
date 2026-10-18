@@ -1,4 +1,4 @@
-// Kernel start-up after the 2BL hand-off (spec/01-boot.md, spec/02-executive-init.md).
+// Kernel start-up after the 2BL hand-off (spec/stock/01-boot.md, spec/stock/02-executive-init.md).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -17,7 +17,7 @@ constexpr ULONG BOOT_STACK_SIZE = 0x3000;
 // Second boot key handed over by the 2BL (likely the certificate key; spec 01 §1).
 XK_PERSIST UCHAR KiCertKey[16];
 
-// Quick reboot (spec/02 §1): flag, count, and the boot keys kept for the restart.
+// Quick reboot (spec/stock/02 §1): flag, count, and the boot keys kept for the restart.
 extern "C" XK_PERSIST volatile UCHAR KiQuickRebootFlag;
 extern "C" XK_PERSIST volatile ULONG KiQuickRebootCount;
 XK_PERSIST volatile UCHAR KiQuickRebootFlag;
@@ -33,22 +33,22 @@ static void KiSetStage(UCHAR code) {
     post(code);
 }
 
-void XeStartTitleLauncher(); // spec/05: load and enter the title
-void ExInitEeprom();          // spec/12: EEPROM shadow, HD key, game region
-void AvInit();                // spec/12: AV pack, video encoder
+void XeStartTitleLauncher(); // spec/stock/05: load and enter the title
+void ExInitEeprom();          // spec/stock/12: EEPROM shadow, HD key, game region
+void AvInit();                // spec/stock/12: AV pack, video encoder
 void KiInitializeSystemTime(); // system time from the RTC
 
 // MTRRs as the boot loader left them (we do not program our own): default type, then 8 base/mask pairs, each MSR
 // as {low, high}.
 volatile ULONG KiBootMtrr[2 + 32];
 
-// Open BIOS image (spec/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from XboxDev/cromwell)
+// Open BIOS image (spec/stock/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from XboxDev/cromwell)
 // that ExInitEeprom tries in turn. Kept across quick reboots, which re-enter with arg0 = 0.
 constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584F; // 'OXOS', 'OXBK'
 XK_PERSIST ULONG KiEepromKeyStates[8][10];
 XK_PERSIST ULONG KiEepromKeyStateCount;
 
-// Serial log of the start-up steps (SERIAL=1 builds, spec/18).
+// Serial log of the start-up steps (SERIAL=1 builds, spec/stock/18).
 #define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {

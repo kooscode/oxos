@@ -42,8 +42,11 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
 
 ### How it was made
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
-  (`spec/`), and the kernel is written from those specs only. No decompiled code, Microsoft keys or data tables are
-  included.
+  (`spec/stock/`), and the kernel is written from those specs only. No decompiled code, Microsoft keys or data tables
+  are included.
+- **Planned features** (`spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its
+  features (128 MB, large disks, a second hard disk, virtual discs, IGR and more) were written up as behavioural
+  specs for later OXOS work.
 - **The boot chain** (`kernel/boot`, spec 01 §5):
   - our own reset code and 2BL;
   - the hardware set-up table (X-codes) and the EEPROM key handling of
@@ -142,7 +145,7 @@ game that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it 
 `make test-controller` needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
 [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
-See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`tests/README.md`](tests/README.md) for what each test checks, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
+See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`tests/README.md`](tests/README.md) for what each test checks, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and [`spec/README.md`](spec/README.md) for the
 behavioural specifications.
 
 ## Debugging with gdb or VS Code

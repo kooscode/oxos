@@ -1,4 +1,4 @@
-// Memory manager (spec/09). 64 MB retail layout:
+// Memory manager (spec/stock/09). 64 MB retail layout:
 //   physical 0x00000-0x0FFFF reserved (page directory at 0xF000), kernel image from 0x10000,
 //   free RAM up to 0x3FDFFFF, GPU instance memory 0x3FE0000-0x3FEFFFF (uncached),
 //   page tables for the 0x80000000 mapping at 0x3FF0000-0x3FFFFFF.
@@ -30,7 +30,7 @@ void MmInitSystem(bool QuickReboot = false);
 void MiInitializeVirtualMemory();
 bool MiProtectToPte(ULONG protect, ULONG *pteBits);
 
-// Physical pages (spec/09 §7). The PTE array at 0x83FF0000 is also the page database, in the reference's format:
+// Physical pages (spec/stock/09 §7). The PTE array at 0x83FF0000 is also the page database, in the reference's format:
 // a present entry maps the page at 0x80000000|PA (kernel image, contiguous memory); a free page holds its colour
 // list links; any other page in use holds a busy entry with its usage and lock count.
 enum MMPFN_USAGE : ULONG {
@@ -81,7 +81,7 @@ XBAPI void NTAPI ExFreePool(PVOID P);
 XBAPI ULONG NTAPI ExQueryPoolBlockSize(PVOID PoolBlock);
 void ExInitializePool();
 
-// --- Title virtual memory (spec/09 §6)
+// --- Title virtual memory (spec/stock/09 §6)
 constexpr ULONG MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_DECOMMIT = 0x4000, MEM_RELEASE = 0x8000,
                 MEM_FREE = 0x10000, MEM_PRIVATE = 0x20000, MEM_RESET = 0x80000, MEM_TOP_DOWN = 0x100000,
                 MEM_NOZERO = 0x800000;

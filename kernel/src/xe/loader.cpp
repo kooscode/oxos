@@ -1,4 +1,4 @@
-// XBE loader and title launch (spec/05 §2-4).
+// XBE loader and title launch (spec/stock/05 §2-4).
 #include <xk/io.h>
 #include <xk/ps.h>
 #include <xk/rtl.h>
@@ -52,7 +52,7 @@ PVOID LaunchDataPage;
 UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 // No Microsoft key: an open BSAFE key with public exponent 1 (2048 bits, modulus unused), so a valid signature is the
 // PKCS#1 block of the digest itself. The CD-ROM driver signs the disc security sectors titles read this way
-// (spec/04 §3a); anything signed by Microsoft does not verify, as with no key at all (spec/05 §4.5).
+// (spec/stock/04 §3a); anything signed by Microsoft does not verify, as with no key at all (spec/stock/05 §4.5).
 UCHAR XePublicKeyData[284] = {'R', 'S', 'A', '1', 0x08, 0x01, 0, 0, 0, 0x08, 0, 0, 0xFF, 0, 0, 0, 1, 0, 0, 0};
 XK_PERSIST ULONG XeConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
 volatile NTSTATUS XeLastLoadStatus, XeLoadHistory[4];
@@ -97,7 +97,7 @@ static NTSTATUS XepLoadSection(HANDLE file, XBE_SECTION_HEADER *s) {
         XcSHAUpdate(ctx, (PUCHAR)&raw, 4);
         XcSHAUpdate(ctx, (PUCHAR)s->VirtualAddress, raw);
         XcSHAFinal(ctx, digest);
-        // Homebrew images carry no valid digests; like the header signature this is not enforced (policy, spec/05).
+        // Homebrew images carry no valid digests; like the header signature this is not enforced (policy, spec/stock/05).
         for (int i = 0; i < 20; i++)
             if (digest[i] != s->SectionDigest[i]) {
                 XeDigestMismatches = XeDigestMismatches + 1;
@@ -179,7 +179,7 @@ static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
     return status;
 }
 
-// Media of the launch device (spec/05 §4.10): 1 hard disk, CD 0xC, DVD variants otherwise.
+// Media of the launch device (spec/stock/05 §4.10): 1 hard disk, CD 0xC, DVD variants otherwise.
 static NTSTATUS XepMediaFlags(HANDLE file, ULONG *flags) {
     IO_STATUS_BLOCK iosb;
     ULONG dev[2];
@@ -301,7 +301,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard).
     if (NT_SUCCESS(status) && HalpSmcArmEvents(Dashboard) && !Dashboard)
         status = (NTSTATUS)0xC000003A;
-    // SMC "reset on eject" (spec/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
+    // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
     // non-secure media, boot flag 4 and manufacturing units; turned back on for everything else.
     if (NT_SUCCESS(status)) {
         bool keepOff = Dashboard || (*(ULONG *)(cert + 0x9C) & 0x80000000) || (HalpBootFlags & 4) ||
@@ -362,7 +362,7 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     return status;
 }
 
-// --- Launch (spec/05 §1-3, §5)
+// --- Launch (spec/stock/05 §1-3, §5)
 
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
                                                PULONG ResultLength);
@@ -539,7 +539,7 @@ static void XepPrepareToEnterTitle() {
     MmFreeContiguousMemory(old);
 }
 
-// Boot flag 0x40 (the tray was opened during boot, spec/05 §3): wait while the tray is closing or settling, then
+// Boot flag 0x40 (the tray was opened during boot, spec/stock/05 §3): wait while the tray is closing or settling, then
 // the disc if one is in, otherwise the dashboard.
 static void XepWaitForTray() {
     ULONG state;
@@ -565,7 +565,7 @@ static void XepWaitForTray() {
     }
 }
 
-// spec/03 §4: cold boot runs the pre-launch checks and honours the SMC boot flags; a quick reboot just launches.
+// spec/stock/03 §4: cold boot runs the pre-launch checks and honours the SMC boot flags; a quick reboot just launches.
 static void XepChooseTitle() {
     if (KiQuickRebootFlag || (HalpBootFlags & 4) || (XeConsoleGameRegion & 0x80000000))
         return XepLaunchTitle(0);

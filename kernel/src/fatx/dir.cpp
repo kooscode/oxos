@@ -1,4 +1,4 @@
-// FATX: directory entries, FCB tree, file size changes (spec/04b).
+// FATX: directory entries, FCB tree, file size changes (spec/stock/04b).
 #include "fatx.h"
 
 

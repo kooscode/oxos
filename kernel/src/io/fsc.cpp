@@ -1,4 +1,4 @@
-// File system cache (spec/16 §Fsc): one pool of 4 KB buffers shared by FATX, XDVDFS and UDF, in the reference's
+// File system cache (spec/stock/16 §Fsc): one pool of 4 KB buffers shared by FATX, XDVDFS and UDF, in the reference's
 // structure. Each buffer is a page of system memory counted as file-cache pages (MmQueryStatistics), mapped
 // read-only except while a caller writes it, described by a 20-byte element; the elements form one most-recently-
 // used list. 16 pages at boot; FscSetCacheSize changes it (the dashboard asks for 256).

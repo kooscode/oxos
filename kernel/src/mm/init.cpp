@@ -1,4 +1,4 @@
-// Memory manager initialisation, the page database and the system PTE range (spec/09 §1-3, §7).
+// Memory manager initialisation, the page database and the system PTE range (spec/stock/09 §1-3, §7).
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
@@ -446,7 +446,7 @@ void MmInitSystem(bool QuickReboot) {
     MmNumberOfPhysicalPages = MM_PAGES;
 
     // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above 64 MB, no user
-    //    mappings, and the reference MMIO windows (spec/02 §4).
+    //    mappings, and the reference MMIO windows (spec/stock/02 §4).
     ULONG *pd = (ULONG *)0xC0300000;
     for (ULONG i = 0; i < 16; i++)
         pd[0x200 + i] = ((MM_PAGE_TABLES_FIRST_PFN + i) << PAGE_SHIFT) | rw;
@@ -460,7 +460,7 @@ void MmInitSystem(bool QuickReboot) {
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_LARGE;
     for (ULONG i = 0x3E0; i < 0x3FE; i++) // 0xF8000000-0xFF7FFFFF: uncached large pages
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_PCD | PTE_LARGE;
-    // PDE 0x3FF (flash) is kept for the quick-reboot .data copy (the reference clears it; spec/09).
+    // PDE 0x3FF (flash) is kept for the quick-reboot .data copy (the reference clears it; spec/stock/09).
     MiReloadCr3();
 
     MiSystemPteRange.Head = MM_PTE_LIST_END;

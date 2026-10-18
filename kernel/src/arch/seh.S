@@ -1,4 +1,4 @@
-// Structured exception support: context capture, continue, raise and unwind entry points (spec/14).
+// Structured exception support: context capture, continue, raise and unwind entry points (spec/stock/14).
 // CONTEXT (Xbox, 0x238 bytes): ContextFlags, FloatSave[0x204], Edi Esi Ebx Edx Ecx Eax Ebp Eip SegCs EFlags Esp SegSs.
 
 #define CX_FLAGS  0x000

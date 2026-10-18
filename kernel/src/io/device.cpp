@@ -1,4 +1,4 @@
-// I/O manager: device objects, symbolic links, StartIo queueing, share access (spec/11 §2).
+// I/O manager: device objects, symbolic links, StartIo queueing, share access (spec/stock/11 §2).
 #include <xk/io.h>
 #include <xk/rtl.h>
 
@@ -243,7 +243,7 @@ XBAPI void NTAPI IoRemoveShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS Shar
     s->SharedDelete -= f->SharedDelete;
 }
 
-// Dismount the file system mounted on DeviceObject (spec/11 §2): the volume driver detaches it; the volume device
+// Dismount the file system mounted on DeviceObject (spec/stock/11 §2): the volume driver detaches it; the volume device
 // is released when its last reference goes.
 XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject) {
     KIRQL old = KeRaiseIrqlToDpcLevel();

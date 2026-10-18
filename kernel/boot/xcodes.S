@@ -1,4 +1,4 @@
-// Open BIOS image, bytes 0x000-0xFFF of each 256 KB bank: the MCPX header and the X-code table (spec/01 §5).
+// Open BIOS image, bytes 0x000-0xFFF of each 256 KB bank: the MCPX header and the X-code table (spec/stock/01 §5).
 //
 // The X-codes are XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0, https://github.com/XboxDev/cromwell), included
 // from the copy the build fetches into third_party/cromwell. They set up the memory controller, chipset and SMBus

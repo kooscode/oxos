@@ -1,4 +1,4 @@
-// Fatal boot errors (spec/05 §6): LED sequence, EEPROM error history, the code drawn on screen, then halt.
+// Fatal boot errors (spec/stock/05 §6): LED sequence, EEPROM error history, the code drawn on screen, then halt.
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>

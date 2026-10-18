@@ -1,4 +1,4 @@
-// PNG decoder for the boot splash (spec/17 §7): 8-bit palette/RGB/RGBA, non-interlaced, one IDAT chunk
+// PNG decoder for the boot splash (spec/stock/17 §7): 8-bit palette/RGB/RGBA, non-interlaced, one IDAT chunk
 // (tools/mkbios.py writes a 256-colour palette image). Inflate is shared with the open-image 2BL (xk/inflate.h).
 #include <xk/arch.h>
 

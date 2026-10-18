@@ -1,4 +1,4 @@
-// EEPROM (SMBus 0xA8): settings access and the encrypted security section (spec/12).
+// EEPROM (SMBus 0xA8): settings access and the encrypted security section (spec/stock/12).
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/rtl.h>
@@ -196,7 +196,7 @@ XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOI
 // Security section (0x00-0x2F): {HMAC-SHA1[20], confounder[8], HD key[16], game region[4]}, RC4-encrypted with
 // HMAC(EEPROM key, digest) and authenticated by HMAC(EEPROM key, plaintext).
 // HMAC-SHA1 from precomputed states (the SHA-1 state after the key ^ ipad block, and after the key ^ opad block):
-// how the open image's key block describes the EEPROM keys (spec/01 §5).
+// how the open image's key block describes the EEPROM keys (spec/stock/01 §5).
 static void ExpHmacFromStates(const ULONG *states, const UCHAR *data, ULONG length, PUCHAR digest) {
     struct {
         ULONG State[5];

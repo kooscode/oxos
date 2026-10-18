@@ -1,4 +1,4 @@
-// HAL phase 0, cold path (spec/02-executive-init.md §3). Order matches the reference kernel;
+// HAL phase 0, cold path (spec/stock/02-executive-init.md §3). Order matches the reference kernel;
 // the 0x80CF pulse runs between steps.
 #include <xk/arch.h>
 #include <xk/hal.h>
@@ -53,14 +53,14 @@ void HalInitSystemPhase0(bool coldBoot) {
     post(post_code::AcpiPm);
 }
 
-// spec/02 §5 (subset). TODO(spec): GpuRevision should come from NV2A PMC_BOOT_0 (0xFD000000)
+// spec/stock/02 §5 (subset). TODO(spec): GpuRevision should come from NV2A PMC_BOOT_0 (0xFD000000)
 // once the MMIO mapping exists; the strap-derived flags 0x10/0x20/0x40/0x80 are also pending.
 // Filled at cold boot only and kept across quick reboots, as in the reference (0x8003B150 lies past the .data/BSS
 // range the quick reboot re-initializes). Titles launched by another title read it too: Half-Life 2's USB library
 // reserves its descriptors by Flags bit 0 and, with the flags zeroed, ran out of them and never found the pad.
 XK_PERSIST XBOX_HARDWARE_INFO XboxHardwareInfo;
 
-// spec/02 §5 (confirmed from the assembly, 0x80055081).
+// spec/stock/02 §5 (confirmed from the assembly, 0x80055081).
 void HalpDetectHardware() {
     auto flash = (volatile UCHAR *)MmMapIoSpace(0xFFF00078, 4, PAGE_READWRITE | PAGE_NOCACHE);
     if (flash) {

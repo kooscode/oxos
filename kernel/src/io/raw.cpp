@@ -1,4 +1,4 @@
-// RAW file system: whole-volume access when no file system recognises the media (spec/11 §4).
+// RAW file system: whole-volume access when no file system recognises the media (spec/stock/11 §4).
 #include <xk/io.h>
 
 struct RAW_VOLUME {

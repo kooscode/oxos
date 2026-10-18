@@ -1,4 +1,4 @@
-// IDE channel, hard disk and DVD drivers (spec/04).
+// IDE channel, hard disk and DVD drivers (spec/stock/04).
 #pragma once
 #include <xk/io.h>
 
@@ -95,7 +95,7 @@ constexpr NTSTATUS STATUS_REQUEST_ABORTED = (NTSTATUS)0xC0000240;
 void IdexChannelReset();
 void IdexDiskComputePassword(PUCHAR Password);
 
-// Fixed retail partition table (spec/04 §4); slot 0 is the whole disk.
+// Fixed retail partition table (spec/stock/04 §4); slot 0 is the whole disk.
 constexpr ULONG IDE_MAX_PARTITIONS = 20;
 XBAPI ULONG IdexDiskLengthInSectors;
 XBAPI BOOLEAN IdexDiskSecurityUnlocked;

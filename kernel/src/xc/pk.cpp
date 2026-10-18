@@ -1,5 +1,5 @@
 // Xc public-key and block ciphers: BSAFE-format RSA keys, modular exponentiation, PKCS#1 signature check, DES/3DES
-// (FIPS 46-3), and the replaceable crypto vector (spec/15). Numbers are little-endian arrays of 32-bit words.
+// (FIPS 46-3), and the replaceable crypto vector (spec/stock/15). Numbers are little-endian arrays of 32-bit words.
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>

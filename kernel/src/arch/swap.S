@@ -1,4 +1,4 @@
-// Context switch, thread start-up and stack switching (spec/07 "Scheduling").
+// Context switch, thread start-up and stack switching (spec/stock/07 "Scheduling").
 //
 // Switch frame, from KernelStack upwards (all threads, including new ones built by
 // KiInitializeContextThread):  ExceptionList, EFLAGS, edi, esi, ebx, ebp, return address.

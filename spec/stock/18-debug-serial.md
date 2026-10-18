@@ -35,7 +35,7 @@ device and Team-Resurgent/Modxo's `superio` module), and the standard 16550 UART
 
 ## 4. What is sent
 - A banner at each boot (cold or quick), then each start-up step of KiSystemStartup.
-- Everything passed to DbgPrint (titles' and the kernel's own), as well as the in-memory log (spec/13).
+- Everything passed to DbgPrint (titles' and the kernel's own), as well as the in-memory log (spec/stock/13).
 - Title loads: the image path and the loader's status.
 - Fatal paths: unexpected CPU exceptions (vector, error code, EIP), bug checks (code and four parameters), and
   fatal errors reported through the fatal-error screen (code).

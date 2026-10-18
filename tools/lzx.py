@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """LZX compressor (and a small decoder for self-checks) for the 2BL's kernel stream.
 
-Format: Microsoft LZX as used in CAB files, window 2^17, 32 KiB frames (spec/00, spec/01). Every frame is one
+Format: Microsoft LZX as used in CAB files, window 2^17, 32 KiB frames (spec/stock/00, spec/stock/01). Every frame is one
 *verbatim* block; the stream state (tree lengths, window, repeated offsets) carries over between frames, the bit
 stream is realigned to 16 bits at each frame end, and no match crosses a frame end. Matches are found with a
 hash chain (greedy plus one step of lazy evaluation). Repeated-offset slots are never emitted.
