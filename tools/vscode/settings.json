@@ -1,5 +1,8 @@
 {
     // Where OXOS and nxdk live (used by tasks.json and launch.json).
     "oxos.dir": "/path/to/oxos",
-    "oxos.nxdkDir": "/path/to/nxdk"
+    "oxos.nxdkDir": "/path/to/nxdk",
+    // Start debugging even when the Problems panel lists errors (VS Code counts every error in the workspace after
+    // the pre-launch task, not just the task's own).
+    "debug.onTaskErrors": "debugAnyway"
 }

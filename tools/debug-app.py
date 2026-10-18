@@ -3,6 +3,8 @@
 
 usage: debug-app.py APP [--port 1234] [--hdd HDD.qcow2]
        debug-app.py APP --stop
+       debug-app.py [--iso GAME.iso] [--port 1234] [--hdd HDD.qcow2]     (the kernel alone)
+       debug-app.py --stop
 
 APP is the app's folder, built with `make DEBUG=y` (main.exe and bin/), or an XISO of it.
 1. Builds the debug kernel (kernel/build-gdb, the same as `make run-gdb`) when it is out of date.
@@ -12,6 +14,8 @@ APP is the app's folder, built with `make DEBUG=y` (main.exe and bin/), or an XI
    power-on. "OXOS debug: ready" is printed once a debugger can attach; the kernel boots the disc's default.xbe when
    the debugger continues. Symbols: APP/.oxos/main.elf and kernel/build-gdb/xboxkrnl.elf.
 --stop closes the xemu this script started for APP (VS Code's postDebugTask).
+Without APP it debugs the kernel alone (the repository's .vscode/ uses this): the same debug kernel, booting --iso
+if given, otherwise the hard disk's dashboard; the state is kept in kernel/build-gdb/.
 """
 import argparse, importlib.util, os, signal, subprocess, sys, time
 
@@ -93,13 +97,17 @@ def stop(pid_file):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("app", help="the nxdk app's folder (or an XISO)")
+    ap.add_argument("app", nargs="?", help="the nxdk app's folder (or an XISO); none: the kernel alone")
+    ap.add_argument("--iso", help="without APP: a disc image to boot (default: none, the dashboard)")
     ap.add_argument("--port", type=int, default=1234, help="GDB server port (default 1234)")
     ap.add_argument("--hdd", help="hard disk image (default: tools/run.py's)")
     ap.add_argument("--stop", action="store_true", help="close the xemu started for this app")
     a = ap.parse_args()
-    app = os.path.abspath(a.app)
-    out = os.path.join(app if os.path.isdir(app) else os.path.dirname(app), ".oxos")
+    app = os.path.abspath(a.app) if a.app else None
+    if app:
+        out = os.path.join(app if os.path.isdir(app) else os.path.dirname(app), ".oxos")
+    else:
+        out = os.path.join(kernel, "build-gdb")
     pid_file = os.path.join(out, "run.pid")
     if a.stop:
         stop(pid_file)
@@ -109,10 +117,19 @@ def main():
     if listening(a.port):
         fail(f"port {a.port} is in use (another debug session?)")
     build_kernel()
-    iso, elf = prepare(app, out)
+    if app:
+        iso, elf = prepare(app, out)
+    else:
+        iso, elf = (os.path.abspath(a.iso) if a.iso else None), None  # an empty --iso (VS Code prompt): no disc
+        if iso and not os.path.isfile(iso):
+            fail(f"no disc image {iso}")
     bios = os.path.join(kernel, "build-gdb/bios.bin")
-    cmd = [sys.executable, "-I", os.path.join(root, "tools/run.py"), bios, "--iso", iso, "--serial",
-           "--gdb", str(a.port)] + (["--hdd", a.hdd] if a.hdd else [])
+    cmd = [sys.executable, "-I", os.path.join(root, "tools/run.py"), bios, "--serial", "--gdb", str(a.port)]
+    hdd = a.hdd
+    msdash = os.path.join(root, "xbox-files/hdd/xbox_hdd_msdash.qcow2")
+    if not hdd and not app and os.path.isfile(msdash):
+        hdd = msdash  # like make run: the stock dashboard when there is one (a copy is used, never the image)
+    cmd += (["--iso", iso] if iso else []) + (["--hdd", hdd] if hdd else [])
     run = subprocess.Popen(cmd)
     open(pid_file, "w").write(str(run.pid))
     signal.signal(signal.SIGTERM, lambda *_: run.terminate())
@@ -121,7 +138,8 @@ def main():
         if run.poll() is not None:
             fail("xemu did not start")
         time.sleep(0.1)
-    say(f"symbols: {elf or '(none for the app)'} and {os.path.join(kernel, 'build-gdb/xboxkrnl.elf')}")
+    say(f"symbols: {elf or ('(none for the app)' if app else '(kernel only)')} and "
+        f"{os.path.join(kernel, 'build-gdb/xboxkrnl.elf')}")
     say(f"ready: gdb server on localhost:{a.port} (paused at power-on)")
     run.wait()
     try:

@@ -1,0 +1,36 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            // Builds the debug kernel (kernel/build-gdb) and starts xemu paused, with the GDB server on
+            // localhost:1234 and the kernel's debug serial output in this terminal.
+            "label": "oxos: start debug kernel",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug-app.py", "--port", "1234", "--iso=${input:disc}"],
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                // VS Code needs a pattern naming file and message groups; this one never matches (errors show in the
+                // terminal). Only the background part matters: it tells VS Code when xemu is ready.
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            "label": "oxos: stop debug kernel",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug-app.py", "--stop"],
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "disc",
+            "type": "promptString",
+            "description": "Disc image to boot (empty: none, the dashboard)",
+            "default": ""
+        }
+    ]
+}
