@@ -54,7 +54,7 @@ CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtt
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
-           /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
+           /Brepro /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and
 # take memory titles count on (Halo 2 needs nearly all of it).
@@ -100,7 +100,7 @@ $(TEST_TITLE).obj: $(ROOT)/tests/kernel-test-title/kernel_test_title.cpp
 	$(CXX) $(TEST_TITLE_CXXFLAGS) -c $< -o $@
 
 $(TEST_TITLE).exe: $(TEST_TITLE).obj
-	$(LD) /NODEFAULTLIB /ENTRY:XkTitleEntry /SUBSYSTEM:NATIVE /BASE:0x10000 /FIXED /DEBUG:NONE \
+	$(LD) /NODEFAULTLIB /ENTRY:XkTitleEntry /SUBSYSTEM:NATIVE /BASE:0x10000 /FIXED /Brepro /DEBUG:NONE \
 	    /MAP:$(TEST_TITLE).map /OUT:$@ $<
 
 $(TEST_TITLE).xbe: $(TEST_TITLE).exe $(ROOT)/tools/mkxbe.py
