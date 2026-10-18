@@ -15,6 +15,8 @@ MCPX_ROM  ?=
 # The reference BIOS needs the real boot ROM (run-stock, PAD_BIOS=stock comparisons only).
 STOCK_MCPX ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
+# Boot splash: a 640x480 256-colour PNG is used as it is; any other picture is converted with Pillow (e.g.
+# SPLASH=splash/splash-source.png, the original art, with SPLASH_QUANT=median).
 SPLASH    ?= splash/splash.png
 SPLASH_QUANT ?= octree
 SELFTEST  ?= 1
