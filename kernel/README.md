@@ -30,15 +30,22 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 | path | contents |
 |---|---|
 | `boot/` | the open image's X-code wrapper (Cromwell's table), reset code and 2BL (spec 01 §5) |
-| `src/arch/` | entry from the 2BL, exception/IRQ stubs (GNU as) |
-| `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, exported data |
-| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection, debug serial port (spec 18) |
-| `src/ob/`, `src/ex/`, `src/ps/` | object manager, executive objects (Nt*), system threads |
-| `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool |
+| `src/arch/` | entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as) |
+| `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads, scheduler, waits, bug checks; the boot self-tests (`selftest*.cpp`, self-test build only) |
+| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, AV (video modes), network PHY, boot splash, debug serial port (spec 18) |
+| `src/ob/`, `src/ex/`, `src/ps/` | object manager; executive objects (Nt*), EEPROM, fatal errors; system threads |
+| `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
+| `src/io/` | I/O manager: devices, IRPs, files, the file-system cache, the RAW file system |
+| `src/idex/` | IDE channel, hard disk and DVD drive |
+| `src/fatx/`, `src/xdvdfs/`, `src/udf/` | file systems: FATX (hard disk), XDVDFS (Xbox discs), UDF (DVD-video) |
+| `src/xc/` | crypto: SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
+| `src/xe/` | the title (XBE) loader and launcher; the kernel call tracer (`trace.cpp`, trace builds only) |
 | `src/rtl/` | runtime library |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
-| `../tools/mkbios.py`, `../tools/lzx.py` | flattens the PE, LZX-compresses it, encrypts, fixes the 2BL digest |
-| `../tests/` | `boot_test.py` (xemu/QMP milestone checks), `test_lzx_frames.py` (packer round-trip) |
+| `splash/splash.png` | the boot splash picture (640x480, 256 colours) |
+| `build/` | all build output, one folder per kind of build (`selftest`, `release`, `debug`, `trace-basic`, `trace-full`, `trace-full-64mb`; see the Makefile's header); `make clean` removes it |
+| `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
+| `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
 
 ## Milestones
 1. **Boot to idle** (specs 00–02): CPU tables, PCR at FS, PIC/PIT/RTC/PCI/ACPI, 1 ms clock, idle loop. ✅ passes in xemu.
