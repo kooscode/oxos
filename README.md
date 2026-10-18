@@ -13,6 +13,12 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - Every function and variable the 4627 kernel exports is implemented.
 - In xemu it boots the dashboard, So far played **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2** and **Enter The Matrix**
 - The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
+- **Boot chain:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, with full glitch
+  support (the X-code overflow trick): no Microsoft key or boot-ROM dump needed.
+- **Memory:** titles start with slightly more free memory than on the stock kernel (in every title measured).
+- **SuperIO serial support:** boot log, `DbgPrint` output and crash reports over the serial port.
+- **Kernel call tracing:** a record of the kernel calls a title makes, saved automatically when it crashes.
+- **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
 ## Download
