@@ -127,9 +127,9 @@ make run-gdb ISO=...             # optional: the debug kernel, paused for gdb (s
 `make run` starts from `xbox-files/hdd/msdash.qcow2` when you have it (a hard disk with the stock Microsoft
 dashboard, whose Settings set up video modes, clock and language), otherwise from the default xemu-dashboard disk;
 pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set). It keeps its
-hard-disk copy and EEPROM in `xemu-state/oxos-<disk>/` (`oxos-msdash`, or `oxos-xemu` for the default disk), so saves
-and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
-`xemu-state/stock-<disk>/`).
+hard-disk copy and EEPROM in `xemu-state/oxos-<instance>/`: `oxos-msdash`, `oxos-xemu` for the default disk, or
+`INSTANCE=name` for any other. Saves and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
+`xemu-state/stock-<instance>/`).
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
 support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
 with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
