@@ -7,15 +7,15 @@ usage: debug-app.py APP [--port 1234] [--hdd HDD.qcow2]
        debug-app.py --stop
 
 APP is the app's folder, built with `make DEBUG=y` (main.exe and bin/), or an XISO of it.
-1. Builds the debug kernel (kernel/build-gdb, the same as `make run-gdb`) when it is out of date.
+1. Builds the debug kernel (kernel/build/debug, the same as `make run-gdb`) when it is out of date.
 2. Writes APP/.oxos/main.elf (main.exe's debug info in the form gdb reads best) and APP/.oxos/app.iso (bin/ as a
    disc image; an ISO given as APP is used as it is).
 3. Starts xemu with that disc, the debug serial port printed here, and the GDB server on localhost:PORT, paused at
    power-on. "OXOS debug: ready" is printed once a debugger can attach; the kernel boots the disc's default.xbe when
-   the debugger continues. Symbols: APP/.oxos/main.elf and kernel/build-gdb/xboxkrnl.elf.
+   the debugger continues. Symbols: APP/.oxos/main.elf and kernel/build/debug/xboxkrnl.elf.
 --stop closes the xemu this script started for APP (VS Code's postDebugTask).
 Without APP it debugs the kernel alone (the repository's .vscode/ uses this): the same debug kernel, booting --iso
-if given, otherwise the hard disk's dashboard; the state is kept in kernel/build-gdb/.
+if given, otherwise the hard disk's dashboard; the state is kept in kernel/build/debug/.
 """
 import argparse, importlib.util, os, signal, subprocess, sys, time
 
@@ -47,8 +47,8 @@ def listening(port):
 
 
 def build_kernel():
-    r = subprocess.run(["make", "-s", "-C", kernel, "BUILD=build-gdb", "SELFTEST=0", "SERIAL=1", "DEBUG=1",
-                        "build-gdb/bios.bin"])
+    r = subprocess.run(["make", "-s", "-C", kernel, "BUILD=build/debug", "SELFTEST=0", "SERIAL=1", "DEBUG=1",
+                        "build/debug/bios.bin"])
     if r.returncode:
         fail("building the debug kernel failed")
 
@@ -107,7 +107,7 @@ def main():
     if app:
         out = os.path.join(app if os.path.isdir(app) else os.path.dirname(app), ".oxos")
     else:
-        out = os.path.join(kernel, "build-gdb")
+        out = os.path.join(kernel, "build/debug")
     pid_file = os.path.join(out, "run.pid")
     if a.stop:
         stop(pid_file)
@@ -123,7 +123,7 @@ def main():
         iso, elf = (os.path.abspath(a.iso) if a.iso else None), None  # an empty --iso (VS Code prompt): no disc
         if iso and not os.path.isfile(iso):
             fail(f"no disc image {iso}")
-    bios = os.path.join(kernel, "build-gdb/bios.bin")
+    bios = os.path.join(kernel, "build/debug/bios.bin")
     cmd = [sys.executable, "-I", os.path.join(root, "tools/run.py"), bios, "--serial", "--gdb", str(a.port)]
     hdd = a.hdd
     msdash = os.path.join(root, "xbox-files/hdd/xbox_hdd_msdash.qcow2")
@@ -139,7 +139,7 @@ def main():
             fail("xemu did not start")
         time.sleep(0.1)
     say(f"symbols: {elf or ('(none for the app)' if app else '(kernel only)')} and "
-        f"{os.path.join(kernel, 'build-gdb/xboxkrnl.elf')}")
+        f"{os.path.join(kernel, 'build/debug/xboxkrnl.elf')}")
     say(f"ready: gdb server on localhost:{a.port} (paused at power-on)")
     run.wait()
     try:

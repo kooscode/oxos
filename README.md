@@ -96,7 +96,7 @@ disk with it as `xbox-files/hdd/xbox_hdd_msdash.qcow2`; `make run` then prefers 
 **5. Build and boot.**
 ```
 cd kernel
-make bios      # kernel/build/bios.bin, the open BIOS image
+make bios      # kernel/build/selftest/bios.bin, the open BIOS image
 make test      # boots it in xemu and checks every milestone (a few minutes; xemu windows open and close)
 make run       # an interactive xemu window: the dashboard, or a game with ISO=../xiso/game.iso
 ```
@@ -114,7 +114,7 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
 ## Build and run
 ```
 cd kernel
-make bios                        # build/bios.bin, the open BIOS image
+make bios                        # build/selftest/bios.bin, the open BIOS image
 make test                        # boot it in xemu and check every milestone
 make run ISO=../xiso/game.iso    # play: the release BIOS in an interactive xemu window
 make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real MCPX boot ROM
@@ -170,9 +170,9 @@ with its call stack, locals, the title's name and path in watches, and the kerne
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
 **From a terminal:** `make -C kernel run-gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with
-`gdb-multiarch kernel/build-gdb/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`.
+`gdb-multiarch kernel/build/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`.
 For an nxdk app, `python3 tools/debug-app.py path/to/app` does the app steps above; then attach with
-`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file kernel/build-gdb/xboxkrnl.elf'
+`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file kernel/build/debug/xboxkrnl.elf'
 -ex 'target remote localhost:1234'`.
 
 Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
