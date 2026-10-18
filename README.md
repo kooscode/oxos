@@ -65,6 +65,7 @@ make run ISO=../xiso/game.iso    # play: the release BIOS in an interactive xemu
 make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real MCPX boot ROM
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace ISO=...           # optional: a trace build, for troubleshooting (debug serial output)
+make run-imports ISO=...         # optional: also records the title's kernel calls; `make trace-dump` prints them
 ```
 `make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
 dashboard, whose Settings set up video modes, clock and language), otherwise from the test image; pick another with

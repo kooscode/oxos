@@ -2,7 +2,7 @@
 """Boot a BIOS in xemu interactively, with an optional disc image.
 
 usage: run.py BIOS [--iso GAME.iso] [--hdd HDD.qcow2] [--state DIR [--fresh]] [--widescreen] [--size WxH]
-              [--scale N] [--fullscreen] [--keep]
+              [--scale N] [--fullscreen] [--serial] [--qmp SOCK] [--memory 128] [--keep]
 
 Disk and EEPROM:
 - default: a temporary copy of the HDD image and a new EEPROM, deleted when xemu exits (unless --keep);
@@ -16,9 +16,11 @@ Display:
 - --aspect forces xemu's aspect ratio instead (auto, native, 4x3, 16x9);
 - --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier
   (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
+Debugging: --serial prints the debug serial port (spec/18) here; --qmp opens xemu's QMP socket at SOCK (used by
+tools/trace.py); --memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds).
 The kernel has no HD (720p/1080i) video modes yet, so games output 480 lines and xemu scales them.
 """
-import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, threading, time
+import argparse, json, os, shutil, signal, socket, struct, subprocess, sys, tempfile, threading, time
 
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", "2560x1440", "2560x1600",
@@ -37,6 +39,8 @@ ap.add_argument("--size", choices=SIZES, help="window size")
 ap.add_argument("--scale", type=int, choices=range(1, 11), metavar="1-10", help="render resolution multiplier")
 ap.add_argument("--fullscreen", action="store_true")
 ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and print the debug serial port here")
+ap.add_argument("--qmp", help="open xemu's QMP socket at this path (tools/trace.py reads the import trace there)")
+ap.add_argument("--memory", choices=["64", "128"], help="console memory in MB (default xemu's setting)")
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 a = ap.parse_args()
 
@@ -66,7 +70,8 @@ def config(path, extra=""):
     if a.scale:
         display.append(f"[display.quality]\nsurface_scale = {a.scale}\n")
     open(path, "w").write(
-        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n" + "\n".join(display) + "\n[sys.files]\n"
+        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n" + "\n".join(display)
+        + (f"\n[sys]\nmem_limit = '{a.memory}'\n" if a.memory else "") + "\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.abspath(eeprom)}'\n"
@@ -124,6 +129,10 @@ def set_widescreen():
     print("EEPROM: widescreen on")
 
 
+# Stopped with a signal (kill, closing the terminal): close xemu too and clean up, instead of leaving it running.
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
+signal.signal(signal.SIGHUP, lambda *_: sys.exit(1))
+p = None
 try:
     if a.widescreen:
         if os.path.exists(eeprom) or create_eeprom():
@@ -138,12 +147,24 @@ try:
     # in raw mode).
     serial_log = os.path.join(work, "serial.log")
     serial = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
-    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial, stdout=open(os.path.join(work, "xemu.log"), "w"),
+    qmp = []
+    if a.qmp:
+        if os.path.exists(a.qmp):
+            os.remove(a.qmp)  # left by an earlier run
+        qmp = ["-qmp", f"unix:{os.path.abspath(a.qmp)},server,nowait"]
+        print(f"QMP socket: {a.qmp}")
+    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp, stdout=open(os.path.join(work, "xemu.log"), "w"),
                          stderr=subprocess.STDOUT)
     if a.serial:
         threading.Thread(target=follow, args=(serial_log, p), daemon=True).start()
     p.wait()
     time.sleep(0.3)  # the last lines
 finally:
+    if p and p.poll() is None:
+        p.terminate()
+        try:
+            p.wait(10)
+        except subprocess.TimeoutExpired:
+            p.kill()
     if not a.keep:
         shutil.rmtree(work, ignore_errors=True)

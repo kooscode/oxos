@@ -16,11 +16,21 @@ XK_PERSIST volatile ULONG XkTraceCount;
 void XkTraceEntry();
 void XkTraceReturn();
 
-// Calls in flight per thread (title APCs can nest calls), to find the original return address again.
+// Calls in flight per thread (title APCs can nest calls), to find the original return address again. Titles keep
+// dozens of threads blocked in a wait call, each holding a slot until its thread exits.
 struct XK_TRACE_SLOT {
     ULONG Thread, Depth, Return[8], Entry[8];
 };
-static XK_TRACE_SLOT XkTraceSlots[32];
+static XK_TRACE_SLOT XkTraceSlots[128];
+
+void XkTraceThreadExit(PKTHREAD Thread) {
+    ULONG flags;
+    __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags)); // a title's interrupt routine may be recording
+    for (auto &s : XkTraceSlots)
+        if (s.Thread == (ULONG)Thread)
+            s.Thread = s.Depth = 0;
+    __asm__ volatile("pushl %0; popfl" ::"r"(flags) : "cc");
+}
 
 static XK_TRACE_SLOT *XkTraceSlot(ULONG thread) {
     for (auto &s : XkTraceSlots)
@@ -148,6 +158,9 @@ ULONG XkTraceWrap(USHORT ordinal, ULONG target) {
 #else
         stubs = (PUCHAR)ExAllocatePoolWithTag(XK_TRACE_MAX_IMPORTS * 10, 'crTX');
         XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])MmAllocateContiguousMemory(XK_TRACE_RING * XK_TRACE_WORDS * 4);
+        // The count survives a quick reboot but this ring does not: clear it, so older entries read as empty.
+        if (XkTraceRing)
+            RtlZeroMemory((PVOID)XkTraceRing, XK_TRACE_RING * XK_TRACE_WORDS * 4);
 #endif
     }
     if (!stubs || used == XK_TRACE_MAX_IMPORTS)
