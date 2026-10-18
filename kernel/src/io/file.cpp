@@ -50,6 +50,10 @@ static PIRP IopAllocateIrpMustSucceed(CCHAR StackSize) {
     }
 }
 
+#if XK_DRIVE_LOG
+void IdexCdRomRecordOpen(PDEVICE_OBJECT dev, POBJECT_STRING name, bool related, ULONG value);
+#endif
+
 // --- Mounting
 
 static NTSTATUS IopMountDevice(PDEVICE_OBJECT dev, bool allowRaw) {
@@ -112,9 +116,15 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
         return status;
     }
     PDEVICE_OBJECT vol;
+#if XK_DRIVE_LOG
+    IdexCdRomRecordOpen(dev, RemainingName, op->RelatedFileObject != nullptr, (ULONG)(ULONG_PTR)dev->MountedOrSelfDevice);
+#endif
     while (!(vol = dev->MountedOrSelfDevice)) {
         KfLowerIrql(old);
         status = IopMountDevice(dev, !RemainingName->Length && !op->RelatedFileObject);
+#if XK_DRIVE_LOG
+        IdexCdRomRecordOpen(dev, nullptr, 0, (ULONG)status);
+#endif
         if (!NT_SUCCESS(status)) {
             op->FinalStatus = status;
             return status;

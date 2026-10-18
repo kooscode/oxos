@@ -11,19 +11,30 @@ volatile UCHAR IdexCdRomLastSense[3]; // key, ASC, ASCQ of the last failed comma
 
 constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C,
                 IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014, IOCTL_DVD_READ_STRUCTURE = 0x335140;
-constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE = (NTSTATUS)0xC0000013, STATUS_VERIFY_REQUIRED = (NTSTATUS)0x80000016;
+constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE = (NTSTATUS)0xC0000013;
 
 // --- Polled ATAPI packet command (PIO data phase). Called with the channel owned (StartIo) or at init.
+
+// Sense mapping and retries (spec/04c §1, as the reference's): UNIT ATTENTION (the disc changed) and NOT READY with
+// ASC 04 (becoming ready) are retried, the latter after 100 ms; a status is reported only once the retries are used.
+enum IDEX_RETRY { IdexNoRetry, IdexRetryNow, IdexRetryLater };
+
+static IDEX_RETRY IdexCdRomSenseRetry() {
+    UCHAR key = IdexCdRomLastSense[0] & 0x0F, asc = IdexCdRomLastSense[1];
+    if (key == 6)
+        return IdexRetryNow;
+    if (key == 2 && asc == 0x04)
+        return IdexRetryLater;
+    return IdexNoRetry;
+}
 
 static NTSTATUS IdexCdRomMapSense() {
     UCHAR key = IdexCdRomLastSense[0] & 0x0F, asc = IdexCdRomLastSense[1];
     if (key == 2)
         return asc == 0x3A ? STATUS_NO_MEDIA_IN_DEVICE : STATUS_DEVICE_NOT_READY;
-    if (key == 6)
-        return STATUS_VERIFY_REQUIRED;
     if (key == 5)
         return STATUS_INVALID_DEVICE_REQUEST;
-    return STATUS_IO_DEVICE_ERROR;
+    return STATUS_IO_DEVICE_ERROR; // UNIT ATTENTION too, once its retries are used up
 }
 
 static bool IdexAtapiIssue(const UCHAR *cdb, bool dma, ULONG byteLimit) {
@@ -58,7 +69,7 @@ static void IdexAtapiRequestSense() {
     }
 }
 
-static NTSTATUS IdexAtapiPio(const UCHAR *cdb, PUCHAR data, ULONG length, bool toDevice, ULONG *transferred) {
+static NTSTATUS IdexAtapiPioOnce(const UCHAR *cdb, PUCHAR data, ULONG length, bool toDevice, ULONG *transferred) {
     *transferred = 0;
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     NTSTATUS status = STATUS_SUCCESS;
@@ -97,11 +108,22 @@ static NTSTATUS IdexAtapiPio(const UCHAR *cdb, PUCHAR data, ULONG length, bool t
         inb(IDE_STATUS);
     }
     KfLowerIrql(old);
-    if (status == STATUS_IO_DEVICE_ERROR && cdb[0] != 0x03) {
+    if (status == STATUS_IO_DEVICE_ERROR && cdb[0] != 0x03)
         IdexAtapiRequestSense();
-        status = IdexCdRomMapSense();
-    }
     return status;
+}
+
+static NTSTATUS IdexAtapiPio(const UCHAR *cdb, PUCHAR data, ULONG length, bool toDevice, ULONG *transferred) {
+    for (ULONG retries = 0;; retries++) {
+        NTSTATUS status = IdexAtapiPioOnce(cdb, data, length, toDevice, transferred);
+        if (status != STATUS_IO_DEVICE_ERROR || cdb[0] == 0x03)
+            return status;
+        IDEX_RETRY retry = IdexCdRomSenseRetry();
+        if (retry == IdexNoRetry || retries == IdexChannelObject.MaximumIoRetries)
+            return IdexCdRomMapSense();
+        if (retry == IdexRetryLater)
+            KeStallExecutionProcessor(100000);
+    }
 }
 
 static NTSTATUS IdexCdRomReadCapacity() {
@@ -203,6 +225,20 @@ static void IdexCdRomRecord(ULONG code, const UCHAR *cdb, const void *data, ULON
     RtlZeroMemory(l.Data, 32);
     if (data && NT_SUCCESS(status))
         RtlCopyMemory(l.Data, data, got < 32 ? got : 32);
+}
+
+// Opens of \\Device\\CdRom0 (code 1: name, related flag, mounted volume; code 3: the mount's status).
+void IdexCdRomRecordOpen(PDEVICE_OBJECT dev, POBJECT_STRING name, bool related, ULONG value) {
+    if (dev != IdexCdRomDeviceObject)
+        return;
+    UCHAR text[44] = {};
+    ULONG n = 0;
+    if (name)
+        for (; n < name->Length && n < sizeof(text); n++)
+            text[n] = name->Buffer[n];
+    ULONG k = IdexCdRomLogCount;
+    IdexCdRomRecord(name ? 1 : 3, text, nullptr, 0, related, (NTSTATUS)value);
+    RtlCopyMemory(IdexCdRomLog[k % 16].Data, text + 12, 32);
 }
 
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
@@ -376,6 +412,12 @@ static bool IdexCdRomEmulateSecurity(const UCHAR *cdb, PUCHAR data, ULONG length
     *status = STATUS_SUCCESS;
     *got = 0;
     if (sense) {
+        // The drive still gets the command, as with a drive that has the page: its answer is dropped. After a disc
+        // change the first command reports it (xemu: "no media" once, then UNIT ATTENTION), and the mount's
+        // authentication is the command that takes it, as on the reference.
+        UCHAR scratch[28];
+        ULONG ignored;
+        IdexAtapiPio(cdb, scratch, sizeof(scratch), false, &ignored);
         // Challenges done (10), Xbox disc (11), authenticated (12), disc id byte (13).
         static const UCHAR page[28] = {0, 0x1A, 0, 0, 0, 0, 0, 0, 0x3E, 0x12, 1, 1, 1, 1};
         *got = length < sizeof(page) ? length : sizeof(page);
@@ -616,6 +658,23 @@ static void IdexCdRomStartTransfer(PIRP Irp) {
     KfLowerIrql(old);
 }
 
+// Reads in the drive log: code 2, the CDB holds the LBA and the remaining length.
+static void IdexCdRomRecordRead(PIRP Irp, NTSTATUS Status) {
+#if XK_DRIVE_LOG
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    ULONG v[3] = {s->Parameters.Read.ByteOffset.LowPart, s->Parameters.Read.Length, 0};
+    IdexCdRomRecord(2, (const UCHAR *)v, nullptr, 0, 0, Status);
+#endif
+}
+
+// A read retried 100 ms later (the drive was becoming ready).
+static KTIMER IdexCdRomRetryTimer;
+static KDPC IdexCdRomRetryDpc;
+static void NTAPI IdexCdRomRetryRoutine(PKDPC, PVOID, PVOID, PVOID) {
+    if (IdexChannelObject.CurrentIrp)
+        IdexCdRomStartTransfer(IdexChannelObject.CurrentIrp);
+}
+
 static void NTAPI IdexCdRomFinishIo() {
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     PIRP irp = ch->CurrentIrp;
@@ -626,10 +685,18 @@ static void NTAPI IdexCdRomFinishIo() {
     if ((ata & IDE_STATUS_ERR) || (bm & 2)) {
         IdexAtapiRequestSense();
         NTSTATUS status = IdexCdRomMapSense();
-        if (status == STATUS_IO_DEVICE_ERROR && ch->IoRetries++ < ch->MaximumIoRetries) {
-            IdexCdRomStartTransfer(irp);
+        IDEX_RETRY retry = IdexCdRomSenseRetry();
+        if ((status == STATUS_IO_DEVICE_ERROR || retry != IdexNoRetry) && ch->IoRetries++ < ch->MaximumIoRetries) {
+            if (retry == IdexRetryLater) {
+                LARGE_INTEGER due;
+                due.QuadPart = -10000LL * 100;
+                KeSetTimer(&IdexCdRomRetryTimer, due, &IdexCdRomRetryDpc);
+            } else {
+                IdexCdRomStartTransfer(irp);
+            }
             return;
         }
+        IdexCdRomRecordRead(irp, status);
         IdexCdRomFinish(irp, status, 0);
         return;
     }
@@ -656,9 +723,11 @@ static void NTAPI IdexCdRomStartIo(PDEVICE_OBJECT, PIRP Irp) {
         IdexCdRomReadCapacity();
     LONGLONG end = ((LONGLONG)s->Parameters.Read.ByteOffset.LowPart << 11) + s->Parameters.Read.Length;
     if (!IdexCdRomLength) {
+        IdexCdRomRecordRead(Irp, IdexCdRomMapSense());
         IdexCdRomFinish(Irp, IdexCdRomMapSense(), 0);
         return;
     }
+    IdexCdRomRecordRead(Irp, end > IdexCdRomLength ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS);
     if (end > IdexCdRomLength) {
         IdexCdRomFinish(Irp, STATUS_INVALID_PARAMETER, 0);
         return;
@@ -721,4 +790,6 @@ void IdexCdRomInit() {
     dev->SectorSize = 0x800;
     dev->Flags &= ~DO_DEVICE_INITIALIZING;
     IdexCdRomDeviceObject = dev;
+    KeInitializeTimerEx(&IdexCdRomRetryTimer, NotificationTimer);
+    KeInitializeDpc(&IdexCdRomRetryDpc, IdexCdRomRetryRoutine, nullptr);
 }
