@@ -1,0 +1,17 @@
+{
+    // IntelliSense for the kernel: the same compiler, target and defines as kernel/Makefile (32-bit x86,
+    // Windows ABI: stdcall/fastcall, 4-byte pointers), so declarations and size checks read as the compiler sees them.
+    "configurations": [
+        {
+            "name": "OXOS kernel",
+            "compilerPath": "/usr/bin/clang++",
+            "compilerArgs": ["--target=i386-pc-win32", "-march=pentium3", "-ffreestanding", "-fno-builtin", "-nostdlib"],
+            "intelliSenseMode": "windows-clang-x86",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "includePath": ["${workspaceFolder}/kernel/include", "${workspaceFolder}/kernel/src"],
+            "defines": ["XK_BOOT_SELFTEST=0", "XK_RETAIL_MEDIA_POLICY=0", "XK_TRACE_IMPORTS=0", "XK_DEBUG_SERIAL=1"]
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,5 @@
+{
+    // Start debugging even when the Problems panel lists errors: VS Code counts every error in the workspace (such
+    // as IntelliSense's) after the pre-launch task, not just the task's own.
+    "debug.onTaskErrors": "debugAnyway"
+}

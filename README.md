@@ -143,6 +143,12 @@ apps and in the kernel, in one session (step from your app into a kernel call an
    debugger closes xemu.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
+**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel
+source and press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts
+xemu paused and runs to your breakpoint. For example, line 281 of `kernel/src/xe/loader.cpp` (in `XepLoadImage`)
+stops on every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and
+`XeImageFileName` its path.
+
 **From a terminal:** `python3 tools/debug-app.py path/to/app` (the same steps), then in another terminal
 `gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off'
 -ex 'add-symbol-file kernel/build-gdb/xboxkrnl.elf' -ex 'target remote localhost:1234'`, set breakpoints and `continue`. `make run-gdb` does the same for the kernel

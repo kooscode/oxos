@@ -26,8 +26,10 @@
             "isBackground": true,
             "problemMatcher": {
                 "owner": "oxos",
-                "pattern": {"regexp": "^OXOS debug: error: (.*)$", "message": 1},
-                "background": {"beginsPattern": "^OXOS debug: starting", "endsPattern": "^OXOS debug: (ready|error)"}
+                // VS Code needs a pattern naming file and message groups; this one never matches (errors show in the
+                // terminal). Only the background part matters: it tells VS Code when xemu is ready.
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
             }
         },
         {
