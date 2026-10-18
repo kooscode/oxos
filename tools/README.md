@@ -12,6 +12,7 @@ docstring give the details).
 | `vscode/` | `launch.json`, `tasks.json` and `settings.json` to copy into an nxdk app's `.vscode/` folder: F5 builds the app, starts xemu through `debug-app.py`, attaches gdb and runs to the first breakpoint (see the main README's "Debugging" section). |
 | `fbshot.py` | Boots a BIOS with no disc, waits, and saves the screen (the NV2A scanout surface) as a PNG; for checking what the kernel or dashboard drew without a window. |
 | `qmphmp.py` | Sends monitor (HMP) commands to a running xemu through its QMP socket, with optional `sleep:N` steps; a small helper for poking at a running console by hand. |
+| `fetch.py` | Downloads a file and saves it only if its SHA-256 matches the pinned one; the Makefile uses it to fetch the default hard-disk image (`make hdd-image`). Python standard library only. |
 | `xemu.toml.example` | An example xemu configuration file (boot ROM, BIOS, EEPROM and hard-disk paths), for running xemu by hand. |
 
 ## Building the BIOS and test titles

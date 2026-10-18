@@ -2,6 +2,8 @@
 # Put them in xbox-files/ (see README.md) and game disc images in xiso/.
 xbox-files/
 xiso/
+# xemu's persistent hard-disk copies and EEPROMs for make run and the other run targets
+xemu-state/
 xboxkrnl.exe
 *.bin
 *.qcow2

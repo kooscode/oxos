@@ -48,7 +48,7 @@ def listening(port):
 
 def build_kernel():
     r = subprocess.run(["make", "-s", "-C", kernel, "BUILD=build/debug", "SELFTEST=0", "SERIAL=1", "DEBUG=1",
-                        "build/debug/bios.bin"])
+                        "build/debug/bios.bin", "hdd-image"])  # hdd-image: the default disk, fetched once
     if r.returncode:
         fail("building the debug kernel failed")
 
