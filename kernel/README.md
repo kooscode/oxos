@@ -36,7 +36,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 | `src/ob/`, `src/ex/`, `src/ps/` | object manager, executive objects (Nt*), system threads |
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool |
 | `src/rtl/` | runtime library |
-| `exports.lst` | implemented exports; `../tools/gen_def.py` assigns the reference ordinals |
+| `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `../tools/mkbios.py`, `../tools/lzx.py` | flattens the PE, LZX-compresses it, encrypts, fixes the 2BL digest |
 | `../tests/` | `boot_test.py` (xemu/QMP milestone checks), `test_lzx_frames.py` (packer round-trip) |
 

@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
-"""Generate the kernel's NONAME ordinal .def file from the reference export table.
+"""Generate the kernel's NONAME ordinal .def file from the export table (kernel/exports.tsv).
 
-usage: gen_def.py EXPORTS_TSV EXPORTS_LST OUT_DEF
-Every name in EXPORTS_LST must exist in the TSV; data exports get the DATA keyword.
+usage: gen_def.py EXPORTS_TSV OUT_DEF
+
+The table has one row per ordinal of the 4627 kernel: ordinal, name, calling convention, argument bytes, kind.
+Kinds:
+  func   a function, exported at its ordinal;
+  data   a variable, exported at its ordinal with the DATA keyword;
+  debug  a debugger-only export (DbgLoadImageSymbols, DbgUnLoadImageSymbols) that the retail kernel leaves out;
+         kept in the table for a future debug build, not exported.
 """
 import sys
 
+KINDS = ("func", "data", "debug")
+
 
 def main():
-    tsv, lst, out = sys.argv[1:4]
-    table = {}
-    for line in open(tsv).read().splitlines()[1:]:
-        ordinal, name, _conv, _args, kind = line.split("\t")[:5]
-        table[name] = (int(ordinal), kind)
-
-    names = [l.strip() for l in open(lst) if l.strip() and not l.lstrip().startswith("#")]
-    missing = [n for n in names if n not in table]
-    if missing:
-        sys.exit(f"unknown export(s): {', '.join(missing)}")
-
+    if len(sys.argv) != 3:
+        sys.exit(__doc__.split("\n\n")[1])
+    tsv, out = sys.argv[1:3]
     lines = ["LIBRARY xboxkrnl.exe", "EXPORTS"]
-    for n in sorted(names, key=lambda n: table[n][0]):
-        ordinal, kind = table[n]
-        lines.append(f"    {n:<40} @{ordinal} NONAME{' DATA' if kind == 'data' else ''}")
+    count = 0
+    for n, line in enumerate(open(tsv).read().splitlines()[1:], 2):
+        ordinal, name, _conv, _args, kind = line.split("\t")[:5]
+        if kind not in KINDS:
+            sys.exit(f"{tsv}:{n}: unknown kind {kind!r} (one of {', '.join(KINDS)})")
+        if kind == "debug":
+            continue
+        lines.append(f"    {name:<40} @{int(ordinal)} NONAME{' DATA' if kind == 'data' else ''}")
+        count += 1
     open(out, "w").write("\n".join(lines) + "\n")
-    print(f"{out}: {len(names)} exports")
+    print(f"{out}: {count} exports")
 
 
 if __name__ == "__main__":
