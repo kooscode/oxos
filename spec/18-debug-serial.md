@@ -42,8 +42,8 @@ device and Team-Resurgent/Modxo's `superio` module), and the standard 16550 UART
 
 ## 5. Builds
 - `SERIAL=1` compiles it in (`XK_DEBUG_SERIAL`). On by default in the self-test build (`make`, `make test`) and
-  the troubleshooting build (`make run-trace`); off in release builds, where it would cost resident memory.
-- `make run-trace` starts xemu with the SuperIO and prints the serial output in the terminal.
+  the troubleshooting builds (`make run-trace-basic`, `make run-trace-full`); off in release builds, where it would cost resident memory.
+- `make run-trace-basic` and `make run-trace-full` start xemu with the SuperIO and prints the serial output in the terminal.
 - `make test` checks the serial log of the self-test phase.
 
 ## 6. Open questions (hardware)
