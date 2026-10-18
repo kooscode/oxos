@@ -1,5 +1,5 @@
 """Build a small XDVDFS (XISO) test image: volume descriptor at sector 32, binary-tree directories."""
-import struct
+import os, struct
 
 SECTOR = 2048
 MAGIC = b"MICROSOFT*XBOX*MEDIA"
@@ -25,6 +25,20 @@ def build(path, default_xbe=None, relaunch=False):
         tree["media"] = dict(tree["media"], **{"second.xbe": default_xbe})
     if relaunch:  # the test title relaunches itself as media\\second.xbe
         tree["relaunch.txt"] = b"quick reboot"
+    return write_image(path, tree)
+
+
+def tree_from_dir(path):
+    """name -> bytes or dict for every file under path (e.g. an nxdk app's bin/ folder)."""
+    tree = {}
+    for name in os.listdir(path):
+        full = os.path.join(path, name)
+        tree[name] = tree_from_dir(full) if os.path.isdir(full) else open(full, "rb").read()
+    return tree
+
+
+def write_image(path, tree):
+    """An XISO of tree (name -> bytes or dict) at path."""
     sectors = {}  # sector -> bytes
     next_sector = [33]
 

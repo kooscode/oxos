@@ -15,6 +15,8 @@ make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
 make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
 make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
 make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
+make run-gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build-gdb/) paused for gdb on xemu's
+                                # GDB server; symbols in build-gdb/xboxkrnl.elf. nxdk apps: ../tools/debug-app.py
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```

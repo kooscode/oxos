@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "oxos: build (debug)",
+            "type": "shell",
+            "command": "make",
+            "args": ["-j8", "DEBUG=y"],
+            "options": {
+                "env": {
+                    "NXDK_DIR": "${config:oxos.nxdkDir}",
+                    "PATH": "${config:oxos.nxdkDir}/bin:/usr/lib/llvm-18/bin:${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            // Builds OXOS's debug kernel if needed, packs bin/ as a disc and starts xemu paused, with the GDB server
+            // on localhost:1234 and the kernel's debug serial output in this terminal.
+            "label": "oxos: start xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug-app.py", "${workspaceFolder}", "--port", "1234"],
+            "dependsOn": "oxos: build (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^OXOS debug: error: (.*)$", "message": 1},
+                "background": {"beginsPattern": "^OXOS debug: starting", "endsPattern": "^OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            "label": "oxos: stop xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug-app.py", "${workspaceFolder}", "--stop"],
+            "problemMatcher": []
+        }
+    ]
+}

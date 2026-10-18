@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // F5: build with DEBUG=y, start xemu on OXOS's debug kernel with the app's disc, attach, continue to
+            // the first breakpoint. Needs the C/C++ extension (ms-vscode.cpptools) and gdb-multiarch.
+            "name": "OXOS: debug in xemu",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/.oxos/main.elf",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                // OXOS kernel source too: step into kernel calls, break in kernel functions.
+                {"text": "add-symbol-file ${config:oxos.dir}/kernel/build-gdb/xboxkrnl.elf", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start xemu",
+            "postDebugTask": "oxos: stop xemu"
+        }
+    ]
+}
