@@ -21,16 +21,24 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
-## Download
-**[Download the latest BIOS image (releases/latest)](https://github.com/kooscode/oxos/releases/latest)**: a ready
-1 MB `bios_vX.Y.bin`. To use it in xemu:
-1. Open *Machine → Settings → System*.
-2. Set *Flash (BIOS) File* to the image and leave *MCPX Boot ROM File* empty.
-3. Use the copyright-free [xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) as the hard disk.
+## Try OXOS in xemu today
+No building, no code and no Microsoft files: download the ready BIOS image and drop it into xemu.
 
-It has only been tested in xemu so far, not on a real console.
+1. Install [xemu](https://xemu.app).
+2. **[Download the latest OXOS BIOS](https://github.com/kooscode/oxos/releases/latest)**, a 1 MB `bios_vX.Y.bin`.
+3. In xemu, open *Machine → Settings → System*: set *Flash (BIOS) File* to the downloaded image and leave
+   *MCPX Boot ROM File* empty.
+4. Set the hard disk to the copyright-free [xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) (or
+   your own Xbox disk image).
+5. Start the machine: the OXOS splash fades in and the dashboard starts. Load your own game discs (XISO) from
+   xemu's *Machine* menu.
 
-## How it was made
+OXOS has only been tested in xemu so far, not on a real console.
+
+## Getting Started (Kernel Developer)
+To build OXOS yourself, change it, run its tests or debug the kernel and your own nxdk titles.
+
+### How it was made
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
   (`spec/`), and the kernel is written from those specs only. No decompiled code, Microsoft keys or data tables are
   included.
@@ -43,7 +51,7 @@ It has only been tested in xemu so far, not on a real console.
   any Microsoft key. Without a boot ROM (xemu), our reset code runs the same X-codes. The hard disk unlocks with
   Cromwell's EEPROM key states, as Cromwell has done for twenty years.
 
-## Getting started
+### Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
 same packages under their own names.
 
@@ -127,7 +135,7 @@ does the same): with 480p/720p/1080i enabled in the dashboard a widescreen game 
 `auto`, so run it with `ASPECT=16x9` (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Games still output 480
 lines: the HD video modes (720p/1080i) are not implemented yet.
 
-`make test-pad` (controller test) needs the extras listed under "Getting started"; it fetches
+`make test-pad` (controller test) needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
 [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
 See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
