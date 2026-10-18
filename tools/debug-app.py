@@ -126,7 +126,7 @@ def main():
     bios = os.path.join(kernel, "build/debug/bios.bin")
     cmd = [sys.executable, "-I", os.path.join(root, "tools/run.py"), bios, "--serial", "--gdb", str(a.port)]
     hdd = a.hdd
-    msdash = os.path.join(root, "xbox-files/hdd/xbox_hdd_msdash.qcow2")
+    msdash = os.path.join(root, "xbox-files/hdd/msdash.qcow2")
     if not hdd and not app and os.path.isfile(msdash):
         hdd = msdash  # like make run: the stock dashboard when there is one (a copy is used, never the image)
     cmd += (["--iso", iso] if iso else []) + (["--hdd", hdd] if hdd else [])
