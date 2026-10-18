@@ -8,7 +8,7 @@ usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out
 
 The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/01 §5), see build_open().
 
-Layout (one 256 KiB bank, see xbox-files/../tmp4/xbox_bios_unpack.py and spec/00):
+Layout (one 256 KiB bank, see spec/00):
   [0, inittblSize)              init tables + X-codes (kept from the base image)
   [kstart, dstart)              kernel: RC4(kernel key, LDI stream of LZX frames)
   [dstart, 0x39E00)             kernel .data initializer (plaintext)

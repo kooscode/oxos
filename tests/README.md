@@ -27,4 +27,4 @@ compiled into the self-test build only), which leave their results in kernel var
 | `mkudf.py` | Builds the UDF test disc for `make test-udf`, covering the different ways UDF stores files and names. |
 | `fatx.py` | A read-only FATX reader for the Xbox hard-disk partitions, to check files the kernel wrote. |
 | `qcow2.py` | A read-only reader for xemu's qcow2 disk images, used by `fatx.py`. |
-| `test_lzx_frames.py` | A standalone check (not part of `make test`) that the BIOS packer's LZX compression (`tools/lzx.py`) decodes correctly across several frames. It needs an unpacker script that is not in this repository (`../tmp4/xbox_bios_unpack.py`), so it only runs where that script exists. |
+| `test_lzx_frames.py` | A standalone check (not part of `make test`: `python3 tests/test_lzx_frames.py`) that the BIOS packer's LZX compression (`tools/lzx.py`) decodes correctly across several frames, with `tools/lzx.py`'s own decoder and, independently, with the system's libarchive (a CAB file the test builds) when it is installed. |
