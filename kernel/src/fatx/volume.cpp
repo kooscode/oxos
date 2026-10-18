@@ -1,4 +1,4 @@
-// FATX: block cache, FAT access, cluster allocation, mount, names and timestamps (spec/04 §6, spec/04b).
+// FATX: block cache, FAT access, cluster allocation, mount, names and timestamps (spec/stock/04 §6, spec/stock/04b).
 #include "fatx.h"
 
 static KEVENT FatxLock;
@@ -285,7 +285,7 @@ ULONG FatxCurrentTimestamp() {
     return FatxTimeToTimestamp(&now);
 }
 
-// --- Mount (spec/04 §6)
+// --- Mount (spec/stock/04 §6)
 
 static void FatxInitFcb(FATX_FCB *f, ULONG Flags) {
     RtlZeroMemory(f, sizeof(*f));
@@ -381,7 +381,7 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
 NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice);
 
-// CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/04c §2, spec/04d).
+// CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/stock/04c §2, spec/stock/04d).
 static NTSTATUS IopMountCdRom(PDEVICE_OBJECT TargetDevice) {
     NTSTATUS status = XdvdfsMountVolume(TargetDevice);
     return status == STATUS_UNRECOGNIZED_VOLUME ? UdfMountVolume(TargetDevice) : status;

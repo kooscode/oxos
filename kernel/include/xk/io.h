@@ -1,4 +1,4 @@
-// I/O manager (spec/11).
+// I/O manager (spec/stock/11).
 #pragma once
 #include <xk/ob.h>
 

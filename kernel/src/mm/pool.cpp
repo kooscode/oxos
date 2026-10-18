@@ -1,4 +1,4 @@
-// Executive pool (spec/09 §6). Same block format as the reference: an 8-byte header in front of each
+// Executive pool (spec/stock/09 §6). Same block format as the reference: an 8-byte header in front of each
 // small block, with the block size in 32-byte units (header included) at byte 3, so callers see
 // ExQueryPoolBlockSize == units * 32 - 8. Requests above 0xFD8 bytes get whole pages.
 #include <xk/ke.h>

@@ -1,6 +1,6 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
 #   make            -> build/selftest/xboxkrnl.exe (+ map)
-#   make bios       -> build/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/01 §5)
+#   make bios       -> build/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/stock/01 §5)
 #   make test       -> boot build/selftest/bios.bin in xemu and check all milestone conditions (boot self-tests)
 # All build output goes under build/, one folder per kind of build:
 #   build/selftest         make, make bios, make test (the kernel with its boot self-tests)
@@ -48,7 +48,7 @@ TRACE_IMPORTS ?= 0
 # converted to ELF, which gdb reads better than PE) is the symbol file for gdb.
 DEBUG     ?= 0
 OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-O2 -g0)
-# Debug serial port (spec/18): on in the self-test and trace builds, off in release builds.
+# Debug serial port (spec/stock/18): on in the self-test and trace builds, off in release builds.
 SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 
 CXX := clang++
@@ -116,7 +116,7 @@ $(TEST_TITLE).xbe: $(TEST_TITLE).exe $(ROOT)/tools/mkxbe.py
 	python3 -I $(ROOT)/tools/mkxbe.py --pe $< --map $(TEST_TITLE).map --out $@ --no-preload .extra \
 	    --name "OXOS kernel test title"
 
-# --- Open BIOS image parts (spec/01 §5). XboxDev/cromwell (GPL-2.0) is fetched at a pinned commit for its X-code
+# --- Open BIOS image parts (spec/stock/01 §5). XboxDev/cromwell (GPL-2.0) is fetched at a pinned commit for its X-code
 # table and EEPROM key states. MCPX16=1 selects Cromwell's values for the 1.6 console's MCPX.
 CROMWELL_DIR    := $(abspath $(ROOT)/third_party/cromwell)
 CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
@@ -239,7 +239,7 @@ run: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
-# The same with the debug serial port (spec/18), whose output is printed in this terminal. No import tracing, so
+# The same with the debug serial port (spec/stock/18), whose output is printed in this terminal. No import tracing, so
 # titles see the memory of a release build (plus the serial code); also the build to flash for troubleshooting on
 # hardware.
 run-trace-basic: $(PLAY_FETCH)

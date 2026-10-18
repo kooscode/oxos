@@ -1,4 +1,4 @@
-// Debug serial port (spec/18): an SMSC LPC47M15x-compatible SuperIO on the LPC bus (XboxDev serial-usb-adapter,
+// Debug serial port (spec/stock/18): an SMSC LPC47M15x-compatible SuperIO on the LPC bus (XboxDev serial-usb-adapter,
 // Modxo, xemu's lpc47m157), serial port 1 at 0x3F8, polled 16550. Only in SERIAL=1 builds.
 #include <xk/arch.h>
 #include <xk/serial.h>

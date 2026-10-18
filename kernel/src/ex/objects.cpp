@@ -1,4 +1,4 @@
-// Executive objects behind handles: events, mutants, semaphores, timers, and the Nt wait calls (spec/10 §5).
+// Executive objects behind handles: events, mutants, semaphores, timers, and the Nt wait calls (spec/stock/10 §5).
 #include <xk/ob.h>
 #include <xk/rtl.h>
 

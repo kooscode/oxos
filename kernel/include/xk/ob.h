@@ -1,4 +1,4 @@
-// Object manager (spec/10). Object names are ANSI counted strings on the Xbox.
+// Object manager (spec/stock/10). Object names are ANSI counted strings on the Xbox.
 #pragma once
 #include <xk/ke.h>
 #include <xk/mm.h>
@@ -143,7 +143,7 @@ XBAPI BOOLEAN NTAPI RtlEqualString(const ANSI_STRING *String1, const ANSI_STRING
 XBAPI LONG NTAPI RtlCompareString(const ANSI_STRING *String1, const ANSI_STRING *String2, BOOLEAN CaseInSensitive);
 XBAPI CHAR NTAPI RtlUpperChar(CHAR Character);
 
-// Executive objects and Ps (spec/10 §5-6)
+// Executive objects and Ps (spec/stock/10 §5-6)
 XBAPI NTSTATUS NTAPI NtCreateEvent(PHANDLE EventHandle, POBJECT_ATTRIBUTES ObjectAttributes, EVENT_TYPE EventType,
                                    BOOLEAN InitialState);
 XBAPI NTSTATUS NTAPI NtSetEvent(HANDLE EventHandle, PLONG PreviousState);

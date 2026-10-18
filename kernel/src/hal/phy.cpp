@@ -1,4 +1,4 @@
-// Ethernet PHY over the NIC's MII management interface (NIC registers at 0xFEF00000) (spec/16).
+// Ethernet PHY over the NIC's MII management interface (NIC registers at 0xFEF00000) (spec/stock/16).
 #include <xk/hal.h>
 #include <xk/ke.h>
 

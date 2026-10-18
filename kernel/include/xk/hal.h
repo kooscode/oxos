@@ -1,4 +1,4 @@
-// Hardware abstraction layer (spec/02-executive-init.md §3, spec/06).
+// Hardware abstraction layer (spec/stock/02-executive-init.md §3, spec/stock/06).
 #pragma once
 #include <xk/ke.h>
 #include <xk/types.h>
@@ -36,7 +36,7 @@ void HalpInitAcpiPm();
 void HalpPulse();
 void HalpDetectHardware();
 
-// PIC: the effective mask is (disabled IRQs) | (IRQs whose IRQL <= current IRQL). See spec/06 §1.
+// PIC: the effective mask is (disabled IRQs) | (IRQs whose IRQL <= current IRQL). See spec/stock/06 §1.
 constexpr ULONG HAL_IRQ_BASE_VECTOR = 0x30;
 KIRQL HalpGetIrqLevel(ULONG irq);            // IRQL an IRQ is dispatched at
 void HalpSetIrqLevel(ULONG irq, KIRQL irql); // a connected KINTERRUPT overrides the default

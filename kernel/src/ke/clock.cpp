@@ -1,4 +1,4 @@
-// Clock interrupt and time keeping. PIT channel 0 ticks every 1 ms (spec/02 §3.5).
+// Clock interrupt and time keeping. PIT channel 0 ticks every 1 ms (spec/stock/02 §3.5).
 #include <xk/arch.h>
 #include <xk/ke.h>
 
@@ -44,7 +44,7 @@ XBAPI void NTAPI KeQuerySystemTime(PLARGE_INTEGER CurrentTime) {
 }
 
 // --- Performance counter and short delays: the MCPX ACPI PM timer, 32 bits at 3.375 MHz (27 MHz / 8), I/O 0x8008
-// (spec/06 §7). Bits 63-31 of the counter are kept in software: the SCI reports every toggle of timer bit 31
+// (spec/stock/06 §7). Bits 63-31 of the counter are kept in software: the SCI reports every toggle of timer bit 31
 // (PM1 status bit 0), and a reader corrects for a toggle not handled yet.
 
 constexpr USHORT ACPI_PM_TIMER = 0x8008;
@@ -85,7 +85,7 @@ XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency() {
 // A fixed busy loop, as the reference: cpuid, then MicroSeconds x 367 iterations (its constant at 0x8003AFF0, sized
 // for the 733 MHz CPU; the product is 32-bit). Not timed against a clock: an emulator that runs the loop faster
 // than the console also shortens the stalls, which titles and xemu are used to (e.g. PhyInitialize's 3.5 s of
-// waits with no link, spec/16, pass in a fraction of a second in xemu).
+// waits with no link, spec/stock/16, pass in a fraction of a second in xemu).
 XBAPI void NTAPI KeStallExecutionProcessor(ULONG MicroSeconds) {
     ULONG a = 0, b, c, d;
     __asm__ volatile("cpuid" : "+a"(a), "=b"(b), "=c"(c), "=d"(d));

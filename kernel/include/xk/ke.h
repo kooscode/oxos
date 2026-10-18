@@ -1,5 +1,5 @@
 // Kernel core structures. Layouts are ABI: titles allocate these objects and XDK libraries read
-// fs:[...] directly. Offsets from spec/01, spec/06 (observed in xboxkrnl 4627) and nxdk headers.
+// fs:[...] directly. Offsets from spec/stock/01, spec/stock/06 (observed in xboxkrnl 4627) and nxdk headers.
 #pragma once
 #include <xk/types.h>
 
@@ -13,7 +13,7 @@
 
 typedef char SCHAR;
 
-// --- Dispatcher objects (spec/06)
+// --- Dispatcher objects (spec/stock/06)
 
 enum KOBJECTS : UCHAR {
     EventNotificationObject = 0,
@@ -107,7 +107,7 @@ typedef struct _NT_TIB {
 } NT_TIB;
 XK_SIZE(NT_TIB, 0x1C);
 
-// --- Threads and processes (spec/07). Offsets are checked against the reference kernel's writes.
+// --- Threads and processes (spec/stock/07). Offsets are checked against the reference kernel's writes.
 
 struct _KTHREAD;
 

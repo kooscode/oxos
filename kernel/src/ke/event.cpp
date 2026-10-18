@@ -1,4 +1,4 @@
-// Event objects (spec/06 §6, waits in spec/07).
+// Event objects (spec/stock/06 §6, waits in spec/stock/07).
 #include <xk/ke.h>
 
 XBAPI void NTAPI KeInitializeEvent(PKEVENT Event, EVENT_TYPE Type, BOOLEAN State) {

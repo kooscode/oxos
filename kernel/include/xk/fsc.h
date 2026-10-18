@@ -1,4 +1,4 @@
-// File system cache (spec/16 §Fsc): shared 4 KB buffers for the file systems.
+// File system cache (spec/stock/16 §Fsc): shared 4 KB buffers for the file systems.
 #pragma once
 #include <xk/io.h>
 

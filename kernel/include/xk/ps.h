@@ -1,4 +1,4 @@
-// Process structure: executive thread (spec/07, spec/10 §5).
+// Process structure: executive thread (spec/stock/07, spec/stock/10 §5).
 #pragma once
 #include <xk/ob.h>
 

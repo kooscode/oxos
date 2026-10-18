@@ -1,4 +1,4 @@
-// UDF 1.0x (ECMA-167, OSTA UDF 1.02/1.50), read-only, for DVD-video discs (spec/04d). The CD-ROM mount tries
+// UDF 1.0x (ECMA-167, OSTA UDF 1.02/1.50), read-only, for DVD-video discs (spec/stock/04d). The CD-ROM mount tries
 // this file system before XDVDFS.
 #include <xk/fsc.h>
 #include <xk/idex.h>
@@ -661,7 +661,7 @@ DRIVER_OBJECT UdfDriverObject = {
      UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, IoFsControlDismountOnly, UdfFsdPassDown,
      IoInvalidDeviceRequest, IoInvalidDeviceRequest, UdfFsdSuccess}};
 
-// --- Mount (spec/04d §1)
+// --- Mount (spec/stock/04d §1)
 
 static const struct {
     char Id[6];

@@ -1,4 +1,4 @@
-// PCI configuration access and the Xbox chipset set-up (spec/02-executive-init.md §3.7-3.8).
+// PCI configuration access and the Xbox chipset set-up (spec/stock/02-executive-init.md §3.7-3.8).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>

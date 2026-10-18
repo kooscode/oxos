@@ -6,20 +6,20 @@ usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out
        mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel xboxkrnl.exe
                  --out bios.bin [--flat-kernel OUT.exe] [--splash IMAGE]
 
-The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/01 §5), see build_open().
+The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/stock/01 §5), see build_open().
 
-Layout (one 256 KiB bank, see spec/00):
+Layout (one 256 KiB bank, see spec/stock/00):
   [0, inittblSize)              init tables + X-codes (kept from the base image)
   [kstart, dstart)              kernel: RC4(kernel key, LDI stream of LZX frames)
   [dstart, 0x39E00)             kernel .data initializer (plaintext)
   [0x39E00, 0x3FE00)            2BL, RC4(MCPX 1.0 key); boot params + digest updated here
 The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
-fields 0x28..0x37 describe the .data copy used by quick reboot (spec/02 §1).
+fields 0x28..0x37 describe the .data copy used by quick reboot (spec/stock/02 §1).
 
 Boot splash (optional, 1 MiB images only): the second 256 KiB bank (flash offset 0x40000, 0xFFF40000) holds
   "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 256-colour palette PNG with one IDAT chunk.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
-valid and falls back to its drawn emblem otherwise (spec/17 §7).
+valid and falls back to its drawn emblem otherwise (spec/stock/17 §7).
 
 LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
 stream); its own decoder checks the result before the image is written.
@@ -193,7 +193,7 @@ def splash_bank(path, quantize="octree", save=None):
     return blob + b"\xff" * (BANK - len(blob)), len(blob)
 
 
-# --- Open image (spec/01 §5). Each 256 KiB bank:
+# --- Open image (spec/stock/01 §5). Each 256 KiB bank:
 #   0x00000 MCPX header + X-codes (kernel/boot/xcodes.S: XboxDev/cromwell's table, ending in the overflow trick)
 #   0x01000 our 2BL (kernel/boot/start.S + bl.cpp), entered at 0xFFFC1000
 #   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size}
@@ -226,7 +226,7 @@ def cromwell_key_states(cromwell_dir):
 
 def key_block(states):
     """Handed to KernelEntry with arg0 = 'OXOS': no EEPROM/certificate key (32 zero bytes), then 'OXBK', the state
-    count and the states (spec/01 §1)."""
+    count and the states (spec/stock/01 §1)."""
     block = bytes(32) + struct.pack("<II", 0x4B42584F, len(states))
     for s in states:
         block += struct.pack("<10I", *s)

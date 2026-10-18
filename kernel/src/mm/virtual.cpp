@@ -1,4 +1,4 @@
-// Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/09 §6).
+// Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/stock/09 §6).
 // One address space (0x00010000-0x7FFDFFFF); reservations are VADs kept in an address-sorted list.
 #include <xk/arch.h>
 #include <xk/ke.h>
@@ -477,7 +477,7 @@ XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics) {
     return STATUS_SUCCESS;
 }
 
-// Exported pointer table (ordinal 102), read by debug tools (spec/09 §9). The first five entries point at structures
+// Exported pointer table (ordinal 102), read by debug tools (spec/stock/09 §9). The first five entries point at structures
 // in the reference's formats; our VADs are a list, not the reference's address-node tree, so the three VAD entries
 // point at an empty tree.
 struct MMPFNREGION;

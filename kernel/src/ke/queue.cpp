@@ -1,4 +1,4 @@
-// Queue objects (I/O completion back-end; NT semantics, spec/08) and device queues.
+// Queue objects (I/O completion back-end; NT semantics, spec/stock/08) and device queues.
 #include <xk/arch.h>
 #include <xk/ke.h>
 

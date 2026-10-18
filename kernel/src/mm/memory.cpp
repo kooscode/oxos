@@ -1,4 +1,4 @@
-// Exported memory-manager routines (spec/09 §2-5).
+// Exported memory-manager routines (spec/stock/09 §2-5).
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/mm.h>

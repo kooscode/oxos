@@ -1,4 +1,4 @@
-// Process structure: system threads as objects (spec/07 "Thread creation", spec/10 §6).
+// Process structure: system threads as objects (spec/stock/07 "Thread creation", spec/stock/10 §6).
 #include <xk/ps.h>
 #include <xk/rtl.h>
 

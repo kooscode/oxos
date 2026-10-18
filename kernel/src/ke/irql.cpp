@@ -1,4 +1,4 @@
-// IRQL, software interrupts and hardware interrupt dispatch (spec/06 §1-3).
+// IRQL, software interrupts and hardware interrupt dispatch (spec/stock/06 §1-3).
 //
 // Device interrupts are masked in the PIC as soon as IRQL reaches their level (eager masking), so
 // a hardware interrupt never arrives at or below the current IRQL and nothing has to be replayed.
@@ -108,7 +108,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         KiDeliverSoftwareInterrupts();
 }
 
-// --- Interrupt objects (spec/06 §3). The IDT keeps fixed per-IRQ stubs that look up the
+// --- Interrupt objects (spec/stock/06 §3). The IDT keeps fixed per-IRQ stubs that look up the
 // connected object, so DispatchCode is only filled with a recognisable marker.
 
 XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext,

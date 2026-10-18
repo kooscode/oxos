@@ -149,7 +149,7 @@ during cold boot (`src/hal/splash.cpp`):
   title nothing. 0x8001e9f5 takes the saved display block, records the physical address of its pixels at
   0x8003b2d0 and **returns its pages to the free lists** (tail insertion, contiguous count decremented) while the
   scanout keeps showing them. Measured at the XBE entry point with the boot animation on and off: no pages besides
-  the kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec/09 §7).
+  the kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec/stock/09 §7).
   Why (inferred): freed pages go to the end of the colour lists, so the picture survives until the title's video
   set-up replaces it, at no cost to the title's budget.
 - **Ours:** the launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the

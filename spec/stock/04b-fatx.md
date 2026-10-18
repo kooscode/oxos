@@ -7,7 +7,7 @@ FATX driver object at 0x80012470. **Status: implemented (milestone 3c-2).**
 
 ## 1. On-disk format
 - **Superblock** (partition offset 0, 4 KB reserved): 'FATX', serial number, sectors per cluster, root directory
-  cluster (1). Layout and cluster arithmetic: spec/04 §6. Data cluster N (N ≥ 1) sits at data start + (N−1) × cluster size.
+  cluster (1). Layout and cluster arithmetic: spec/stock/04 §6. Data cluster N (N ≥ 1) sits at data start + (N−1) × cluster size.
 - **FAT:**
   - entries are 16-bit (FATX16, fewer than 0xFFF0 clusters) or 32-bit
   - 0 = free; ≥ 0xFFF8 (sign-extended for 16-bit entries) = end of chain; 0xFFF7 = bad

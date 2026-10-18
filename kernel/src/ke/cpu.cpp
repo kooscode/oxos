@@ -1,4 +1,4 @@
-// Processor bring-up: GDT, TSSs, IDT and the processor control region (spec/01-boot.md §2).
+// Processor bring-up: GDT, TSSs, IDT and the processor control region (spec/stock/01-boot.md §2).
 // Selector layout matches the reference kernel:
 //   0x08 code, 0x10 data, 0x18 main TSS, 0x20 FS -> KPCR, 0x28 double-fault TSS, 0x30 NMI TSS.
 #include <xk/arch.h>

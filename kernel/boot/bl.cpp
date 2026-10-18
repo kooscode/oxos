@@ -1,10 +1,10 @@
-// Open BIOS image: the 2BL's C part, running from RAM at 0x400000 (spec/01 §5). It does what the reference 2BL
+// Open BIOS image: the 2BL's C part, running from RAM at 0x400000 (spec/stock/01 §5). It does what the reference 2BL
 // does for the kernel, as observed at the kernel's entry point:
 //   - the kernel image, decompressed to physical 0x10000 (it runs at 0x80010000);
 //   - a page directory at 0xF000: 0-256 MB identity-mapped and again at 0x80000000 with 4 MB pages, entry 0x300
 //     mapping the directory itself, the NV2A registers (0xFD000000, 16 MB) uncached, the top 4 MB (flash);
 //   - CR4 = PSE | OSFXSR | OSXMMEXCPT, CR3 = 0xF000, CR0 = PG | WP | NE | ET | PE;
-//   - KernelEntry(arg0, keys) called with cdecl. arg0 = 'OXOS' marks our key block (spec/01 §1): no EEPROM or
+//   - KernelEntry(arg0, keys) called with cdecl. arg0 = 'OXOS' marks our key block (spec/stock/01 §1): no EEPROM or
 //     certificate key, but the EEPROM HMAC states taken from XboxDev/cromwell at build time.
 #include <xk/inflate.h>
 

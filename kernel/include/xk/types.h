@@ -16,7 +16,7 @@ typedef ULONG PHYSICAL_ADDRESS;
 #define NTAPI __stdcall
 #define FASTCALL __fastcall
 #define XBAPI extern "C"
-// State that survives a quick reboot (spec/02 §1): neither re-copied from flash nor zeroed.
+// State that survives a quick reboot (spec/stock/02 §1): neither re-copied from flash nor zeroed.
 #define XK_PERSIST __attribute__((section(".persist")))
 
 #define TRUE 1

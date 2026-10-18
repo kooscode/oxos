@@ -127,7 +127,7 @@ read through the gdb stub (scratch tool `mmstat.py`).
 - At the entry point (observed): 2 kernel stacks of 3 pages (the DPC stack, 0x3000 at 0x8001c73d; the phase-1 thread
   that calls the title, `PsCreateSystemThread` default 0x3000 at 0x80021cb6; the boot-animation thread's 0x4000
   stack, 0x80055fe5, is gone by then), 5 pool pages, 2 page tables, 16 file-cache pages (§16), the title image, and
-  no boot framebuffer (spec/17 §7).
+  no boot framebuffer (spec/stock/17 §7).
 
 | Title (at entry) | Stock available | Ours before | Ours after |
 |---|---|---|---|
@@ -151,8 +151,8 @@ title page tables 59/59, Image 2471/2470, Cache 16/16; the dashboard idles at 96
 display (301 pages), a 16-page stack for the title launcher thread (the reference runs it on 3 pages), our SMC
 thread (3 pages, no reference counterpart), the system PTE slot bitmap (4 pages), against 16 cache pages and ~3
 pool pages fewer. Now: the splash is freed before the title starts and its thread is waited for, so its stack is
-gone (spec/17 §7); the launcher stack is 0x3000; SMC events run in a DPC (spec/12); system PTE runs live in the PTEs
-(§8); the 16 cache pages are allocated at boot (spec/16); the image is 45 resident pages again (title page-table
+gone (spec/stock/17 §7); the launcher stack is 0x3000; SMC events run in a DPC (spec/stock/12); system PTE runs live in the PTEs
+(§8); the 16 cache pages are allocated at boot (spec/stock/16); the image is 45 resident pages again (title page-table
 use counts moved into the page database, bits 17–27 of a title page table's entry; the disk unlock buffer moved to
 the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5).
 
@@ -234,7 +234,7 @@ reference's address-node tree; rather than hand tools a list they would misread 
 point at a NULL root (an empty tree). Making the VADs a tree would only serve those tools, so it is left undone.
 
 ## Implementation notes (internal, ABI-neutral)
-- The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/17 §7).
+- The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/stock/17 §7).
 - Small pool blocks use exact-size free lists without coalescing.
 - VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob

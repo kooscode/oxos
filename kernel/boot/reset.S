@@ -1,6 +1,6 @@
 // Open BIOS image, the top 512 bytes of each 256 KB bank (0xFFFFFE00-0xFFFFFFFF): our own reset code for when no
 // MCPX boot ROM is present (xemu without a boot-ROM file). On a console the MCPX ROM hides this range, runs the
-// X-codes itself and reaches the 2BL through the overflow trick, so this code never runs there (spec/01 §5).
+// X-codes itself and reaches the 2BL through the overflow trick, so this code never runs there (spec/stock/01 §5).
 //
 // It does what the boot ROM does for us: real mode -> flat 32-bit protected mode, run the X-code table at bank
 // offset 0x80 (the same table the ROM would run), then jump to the 2BL at 0xFFFC1000.

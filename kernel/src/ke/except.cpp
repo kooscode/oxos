@@ -1,4 +1,4 @@
-// Structured exception handling: trap translation, handler dispatch, raise, unwind, stack walks (spec/14).
+// Structured exception handling: trap translation, handler dispatch, raise, unwind, stack walks (spec/stock/14).
 #include <xk/arch.h>
 #include <xk/ke.h>
 

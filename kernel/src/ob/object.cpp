@@ -1,4 +1,4 @@
-// Object manager (spec/10): headers, handle table, namespace, directories and symbolic links.
+// Object manager (spec/stock/10): headers, handle table, namespace, directories and symbolic links.
 // The Ob "lock" is DISPATCH_LEVEL, as in the reference.
 #include <xk/arch.h>
 #include <xk/ob.h>
@@ -187,7 +187,7 @@ static void ObpSplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
     rest->MaximumLength = rest->Length;
 }
 
-// Resolve the starting directory/object for a name (Root handle rules, spec/10 §3). Referenced on success.
+// Resolve the starting directory/object for a name (Root handle rules, spec/stock/10 §3). Referenced on success.
 static NTSTATUS ObpResolveRoot(HANDLE RootDirectory, OBJECT_STRING *rest, PVOID *start) {
     if (!RootDirectory) {
         if (!rest->Length || rest->Buffer[0] != '\\')
@@ -695,7 +695,7 @@ XBAPI NTSTATUS NTAPI NtQuerySymbolicLinkObject(HANDLE LinkHandle, POBJECT_STRING
     return status;
 }
 
-// --- Initialisation (spec/02 §2.4): root, \??, \Device, \Win32NamedObjects.
+// --- Initialisation (spec/stock/02 §2.4): root, \??, \Device, \Win32NamedObjects.
 
 static POBJECT_DIRECTORY ObpCreatePermanentDirectory(PCSZ path) {
     OBJECT_STRING name;

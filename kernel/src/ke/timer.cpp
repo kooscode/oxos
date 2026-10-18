@@ -1,4 +1,4 @@
-// Kernel timers (spec/06 §5). Inserted timers sit in one list sorted by due interrupt time; the clock
+// Kernel timers (spec/stock/06 §5). Inserted timers sit in one list sorted by due interrupt time; the clock
 // interrupt queues an expiry DPC when the head is due.
 #include <xk/arch.h>
 #include <xk/ke.h>
@@ -55,7 +55,7 @@ static void KiRemoveTimer(PKTIMER Timer) {
     restore_flags(flags);
 }
 
-// Wait timeouts use the thread's own timer (spec/07).
+// Wait timeouts use the thread's own timer (spec/stock/07).
 bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime) { return KiInsertTimer(Timer, DueTime); }
 
 void KiRemoveTimerIfInserted(PKTIMER Timer) {
