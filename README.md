@@ -105,7 +105,7 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
 - **Controller test** (`make test-controller`): `sudo apt install cmake flex bison`, and write access to `/dev/uinput`
   (e.g. a udev rule, or `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
 - **Debugging with gdb or VS Code** (see below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an
-  nxdk checkout (`make controller-test-title` fetches one into `third_party/nxdk`).
+  nxdk checkout (`make -C kernel nxdk` fetches one into `third_party/nxdk`).
 - **Your own boot splash:** `make bios SPLASH=my-picture.jpg` converts any picture with Pillow
   (`sudo apt install python3-pil`); the committed `kernel/splash/splash.png` is already converted and needs nothing.
 - **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or

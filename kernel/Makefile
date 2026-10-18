@@ -273,26 +273,30 @@ print-trace-dump:
 	    --exports exports.tsv $(if $(LAST),--last $(LAST)) $(if $(ONLY),--only $(ONLY)) $(if $(filter 1,$(ALL)),--all)
 
 # Controller input test (tests/controller-test-title, an nxdk title): a virtual uinput gamepad presses every input
-# and the title reports what it received. nxdk is fetched into third_party/ (not committed). CONTROLLER_BIOS=stock compares with the
-# reference BIOS.
+# and the title reports what it received. The title is built on demand (its disc image below) with nxdk, which
+# `make nxdk` (or the first make test-controller) fetches into third_party/ (not committed). CONTROLLER_BIOS=stock
+# compares with the reference BIOS.
 NXDK_DIR    := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_COMMIT := 14d5ee97e73347c973f1f57b68b79ec08c9e77f2
 NXDK_ENV    := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
 CONTROLLER_BIOS ?= ours
+CONTROLLER_DIR  := $(ROOT)/tests/controller-test-title
+CONTROLLER_ISO  := $(CONTROLLER_DIR)/controller-test-title.iso
 
 $(NXDK_DIR)/Makefile:
 	git clone -q https://github.com/XboxDev/nxdk $(NXDK_DIR)
 	git -C $(NXDK_DIR) checkout -q $(NXDK_COMMIT)
 	git -C $(NXDK_DIR) submodule update -q --init --recursive
+nxdk: $(NXDK_DIR)/Makefile
 
-controller-test-title: $(NXDK_DIR)/Makefile
-	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/controller-test-title -j8
+$(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.c $(CONTROLLER_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(CONTROLLER_DIR) -j8
 
-test-controller: controller-test-title $(HDD_FETCH)
+test-controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 	$(if $(filter stock,$(CONTROLLER_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
 	python3 -I $(ROOT)/tests/controller_test.py --bios $(if $(filter stock,$(CONTROLLER_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
 		$(if $(filter stock,$(CONTROLLER_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
-		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/controller-test-title/controller-test-title.iso
+		--hdd $(HDD_IMAGE) --iso $(CONTROLLER_ISO)
 
 # The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own
 # state directory: the stock kernel signs saves with keys OXOS does not have, so the two cannot share saves.
@@ -302,4 +306,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller controller-test-title run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller nxdk run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
