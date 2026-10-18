@@ -127,7 +127,8 @@ The reference kernel's boot animation lives in its INIT section and is not repro
 during cold boot (`src/hal/splash.cpp`):
 
 - `tools/mkbios.py --splash IMAGE` (the Makefile passes `kernel/splash/splash.png` when present) keeps a
-  640×480 palette PNG as it is; any other image is scaled to fit 640×480 keeping its aspect ratio (black bars),
+  640×480 palette PNG as it is (no Pillow needed; the committed splash is one, converted from
+  `kernel/splash/splash-source.png`, and `--save-splash PNG` writes such a file); any other image needs Pillow and is scaled to fit 640×480 keeping its aspect ratio (black bars),
   pixels with every channel ≤ 6 are set to black (background noise that costs bytes but is invisible), and it is
   reduced to 256 colours without dithering: octree by default (`SPLASH_QUANT=octree`; smallest, suits textured
   art: 93 KB for the current splash against 241 KB with median cut), or `SPLASH_QUANT=median` for images with

@@ -44,10 +44,10 @@ same packages under their own names.
 
 **1. Install the build tools.**
 ```
-sudo apt install git make clang lld llvm python3-pil
+sudo apt install git make clang lld llvm
 ```
-(`clang` and `lld` build the kernel, `llvm` provides `llvm-objcopy`, Pillow converts the boot splash; Python 3
-itself comes with Ubuntu.)
+(`clang` and `lld` build the kernel, `llvm` provides `llvm-objcopy`; the build scripts use the Python 3 that comes
+with Ubuntu.)
 
 **2. Install xemu.** Download the AppImage from [xemu.app](https://xemu.app) (0.8.136 tested) and put it at
 `~/.local/bin/xemu` (or anywhere on `PATH` as `xemu`):
@@ -91,6 +91,8 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
   (e.g. a udev rule, or `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
 - **Debugging with gdb or VS Code** (see below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an
   nxdk checkout (`make padtest` fetches one into `third_party/nxdk`).
+- **Your own boot splash:** `make bios SPLASH=my-picture.jpg` converts any picture with Pillow
+  (`sudo apt install python3-pil`); the committed `kernel/splash/splash.png` is already converted and needs nothing.
 - **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or
   `MCPX_ROM=...` to boot OXOS through the real ROM as a console does) for `make run-stock` and `make test-mcpx`.
 

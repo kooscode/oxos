@@ -125,12 +125,39 @@ SPLASH_BANK, SPLASH_W, SPLASH_H = 1, 640, 480
 SPLASH_BLACK = 6  # pixels no brighter than this become black: background noise costs bytes, not quality
 
 
-def splash_bank(path, quantize="octree"):
-    """The splash bank contents for an image file. A 640x480 palette PNG is kept as it is; anything else Pillow
-    reads is scaled to fit 640x480 keeping its aspect ratio (black bars), its near-black noise cleared and reduced
-    to 256 colours without dithering. `quantize`: "octree" (smallest; suits textured art) or "median" (median cut:
-    larger, but no banding in smooth gradients)."""
-    from PIL import Image
+def png_chunks(png):
+    """(kind, data) for each chunk of a PNG file."""
+    if png[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    chunks, o = [], 8
+    while o + 8 <= len(png):
+        n, kind = struct.unpack_from(">I4s", png, o)
+        chunks.append((kind, png[o + 8:o + 8 + n]))
+        o += 12 + n
+    return chunks
+
+
+def splash_png(chunks):
+    """The splash PNG the kernel decodes: signature, IHDR, PLTE, one IDAT with the whole zlib stream, IEND (the
+    decoder wants one IDAT); None unless chunks are a 640x480 8-bit palette image, not interlaced."""
+    ihdr = next((d for k, d in chunks if k == b"IHDR"), b"")
+    if len(ihdr) != 13 or struct.unpack(">IIBBBBB", ihdr) != (SPLASH_W, SPLASH_H, 8, 3, 0, 0, 0):
+        return None
+    out = [(k, d) for k, d in chunks if k in (b"IHDR", b"PLTE")]
+    out += [(b"IDAT", b"".join(d for k, d in chunks if k == b"IDAT")), (b"IEND", b"")]
+    return b"\x89PNG\r\n\x1a\n" + b"".join(struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
+                                          for k, d in out)
+
+
+def convert_splash(path, quantize):
+    """Any image Pillow reads, as a 640x480 palette PNG: scaled to fit keeping its aspect ratio (black bars), its
+    near-black noise cleared and reduced to 256 colours without dithering. `quantize`: "octree" (smallest; suits
+    textured art) or "median" (median cut: larger, but no banding in smooth gradients)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        sys.exit(f"{path} is not a 640x480 256-colour PNG: converting it needs Pillow (sudo apt install "
+                 "python3-pil). The converted image can be saved with --save-splash and used without Pillow.")
     im = Image.open(path)
     if im.mode != "P" or im.size != (SPLASH_W, SPLASH_H):
         im = im.convert("RGB")
@@ -149,19 +176,17 @@ def splash_bank(path, quantize="octree"):
         im = im.quantize(256, method=method, dither=Image.Dither.NONE)
     buf = io.BytesIO()
     im.save(buf, "PNG", optimize=True)
-    png = buf.getvalue()
-    # Re-chunk: signature, IHDR, PLTE, one IDAT with the whole zlib stream, IEND (the decoder wants one IDAT).
-    chunks, idat, o = [], b"", 8
-    while o < len(png):
-        n, kind = struct.unpack_from(">I4s", png, o)
-        data = png[o + 8:o + 8 + n]
-        o += 12 + n
-        if kind == b"IDAT":
-            idat += data
-        elif kind in (b"IHDR", b"PLTE"):
-            chunks.append((kind, data))
-    chunks += [(b"IDAT", idat), (b"IEND", b"")]
-    png = png[:8] + b"".join(struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d)) for k, d in chunks)
+    return splash_png(png_chunks(buf.getvalue()))
+
+
+def splash_bank(path, quantize="octree", save=None):
+    """The splash bank contents for an image file. A 640x480 256-colour PNG (such as kernel/splash/splash.png, or
+    one written by --save-splash) is used as it is, without Pillow; anything else is converted with Pillow."""
+    raw = open(path, "rb").read()
+    chunks = png_chunks(raw)
+    png = (splash_png(chunks) if chunks else None) or convert_splash(path, quantize)
+    if save:
+        open(save, "wb").write(png)
     blob = b"XKSPLASH" + struct.pack("<III", 1, len(png), zlib.crc32(png)) + png
     if len(blob) > BANK:
         sys.exit(f"splash image too large: {len(blob):#x} bytes after compression, {BANK:#x} available")
@@ -239,7 +264,7 @@ def build_open(a):
     banks = [bytes(bank)] * 4
     splash = ""
     if a.splash:
-        banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize)
+        banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
         splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
     out = b"".join(banks)
     open(a.out, "wb").write(out)
@@ -261,6 +286,7 @@ def main():
     ap.add_argument("--flat-kernel")
     ap.add_argument("--splash", help="boot splash image placed in flash bank 1 (1 MiB images only)")
     ap.add_argument("--splash-quantize", choices=("octree", "median"), default="octree")
+    ap.add_argument("--save-splash", metavar="PNG", help="also write the splash as converted (usable without Pillow)")
     a = ap.parse_args()
     if a.open:
         if not (a.xcodes and a.loader and a.reset and a.cromwell):
@@ -307,7 +333,7 @@ def main():
     splash = ""
     if a.splash:
         if len(banks) > SPLASH_BANK + 1:
-            banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize)
+            banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
             splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
         else:
             print(f"warning: {len(raw):#x}-byte image has no spare bank for the splash; not included")
