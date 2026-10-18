@@ -30,8 +30,8 @@ Free, Legal and Open Source!!
 2. **[Download the latest OXOS BIOS](https://github.com/kooscode/oxos/releases/latest)**, a 1 MB `bios_vX.Y.bin`.
 3. In xemu, open *Machine → Settings → System*: set *Flash (BIOS) File* to the downloaded image and leave
    *MCPX Boot ROM File* empty.
-4. Set the hard disk to the copyright-free [xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) (or
-   your own Xbox disk image).
+4. Set the hard disk to the free [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk image
+   (`xbox_hdd.qcow2` from its latest release; MIT-licensed, with an open dashboard), or your own Xbox disk image.
 5. Start the machine: the OXOS splash fades in and the dashboard starts. Load your own game discs (XISO) from
    xemu's *Machine* menu.
 
@@ -77,21 +77,21 @@ sudo apt install libfuse2t64     # AppImages need FUSE 2 on Ubuntu 24.04
 git clone https://github.com/kooscode/oxos.git
 cd oxos
 ```
-Nothing else needs fetching by hand: the first `make bios` clones XboxDev/cromwell (its X-code table and EEPROM key
-states) into `third_party/`, and the first controller test clones nxdk, each at a pinned commit (so the first build
-needs internet access).
+Nothing else needs fetching by hand. On first use the build fetches into `third_party/`, each at a pinned version
+(so the first build needs internet access):
+- [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (its X-code table and EEPROM key states), by `make bios`;
+- the [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) hard-disk image (MIT-licensed, an open
+  dashboard on a formatted drive), checked by SHA-256, by `make test` and `make run`: the default hard disk;
+- [nxdk](https://github.com/XboxDev/nxdk), by the controller test.
 
-**4. Add a hard-disk image and, optionally, games.**
-```
-mkdir -p xbox-files/hdd xiso
-```
-Put a hard-disk image at `xbox-files/hdd/xbox_hdd.qcow2`. The copyright-free
-[xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) (download it from its releases page and unzip it)
-works, with its open dashboard. Tests and `make run` only ever use a copy, never the image itself. Put your own game
-discs (XISO) in `xiso/`. For the stock Microsoft dashboard (its Settings set video modes, clock and language), add a
-disk with it as `xbox-files/hdd/xbox_hdd_msdash.qcow2`; `make run` then prefers it.
+**4. Optionally, add games and your own files.**
+- Your game discs (XISO) go in `xiso/`.
+- `xbox-files/` holds your own copyrighted files, which are never committed: for example a disk with the stock
+  Microsoft dashboard (its Settings set video modes, clock and language) as `xbox-files/hdd/xbox_hdd_msdash.qcow2`,
+  which `make run` then prefers over the default disk.
 
-**No BIOS and no MCPX boot ROM are needed.** `xbox-files/` and `xiso/` are git-ignored.
+**No BIOS, no MCPX boot ROM and no hard-disk image are needed.** `xbox-files/`, `xiso/` and `xemu-state/` (below)
+are git-ignored.
 
 **5. Build and boot.**
 ```
@@ -125,10 +125,10 @@ make print-trace-dump            # optional: print those calls at any time, from
 make run-gdb ISO=...             # optional: the debug kernel, paused for gdb (see "Debugging" below)
 ```
 `make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
-dashboard, whose Settings set up video modes, clock and language), otherwise from the test image; pick another with
-`PLAY_HDD=...`. It keeps its hard-disk copy and EEPROM in `xbox-files/play/oxos-<image>/`, so saves and settings
-survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
-`xbox-files/play/stock-<image>/`).
+dashboard, whose Settings set up video modes, clock and language), otherwise from the default xemu-dashboard disk;
+pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set). It keeps its
+hard-disk copy and EEPROM in `xemu-state/oxos-<image>/`, so saves and settings survive between runs (`FRESH=1` starts
+over from the image, which is never written; `make run-stock` uses `xemu-state/stock-<image>/`).
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
 support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
 with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
@@ -196,8 +196,10 @@ Microsoft's 2BL and keys: do not distribute that one.
 
 ## License
 GPL-2.0 (see [`LICENSE`](LICENSE)). The build fetches [XboxDev/cromwell](https://github.com/XboxDev/cromwell)
-(GPL-2.0) for the X-codes and EEPROM key states, and `tests/padtest` builds against
-[nxdk](https://github.com/XboxDev/nxdk); both keep their own licenses and copyrights.
+(GPL-2.0) for the X-codes and EEPROM key states, and the
+[xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) hard-disk image (MIT, with its components' licenses
+in `third_party/xemu-dashboard/LICENSE`) as the default disk; `tests/padtest` builds against
+[nxdk](https://github.com/XboxDev/nxdk). All keep their own licenses and copyrights; none of them is committed here.
 
 ## Legal
 This is an independent project, not affiliated with or endorsed by Microsoft. "Xbox" is a trademark of

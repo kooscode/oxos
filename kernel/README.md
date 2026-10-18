@@ -20,7 +20,8 @@ make run-gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build/
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
-Inputs: only `HDD_IMAGE` (`../xbox-files/hdd/xbox_hdd.qcow2`, e.g. the copyright-free xemu HDD image). Optional:
+Inputs: none to provide. The default hard disk (`HDD_IMAGE`) is the free xemu-dashboard image, fetched on first use
+into `../third_party/xemu-dashboard/` (`make hdd-image`); set `HDD_IMAGE=...` for another. Optional:
 `MCPX_ROM=...` boots through a real boot ROM (`make test-mcpx`); `IMAGE=base BIOS_BASE=... MCPX_ROM=...` packs
 the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The xemu binary is found on PATH or at
 `~/.local/bin/xemu`.

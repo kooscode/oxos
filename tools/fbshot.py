@@ -11,7 +11,7 @@ root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 bios, out = sys.argv[1], sys.argv[2]
 work = tempfile.mkdtemp(prefix="xk-shot-")
 sock = os.path.join(work, "qmp.sock")
-shutil.copyfile(f"{root}/xbox-files/hdd/xbox_hdd.qcow2", f"{work}/hdd.qcow2")
+shutil.copyfile(f"{root}/third_party/xemu-dashboard/xemu-dashboard.qcow2", f"{work}/hdd.qcow2")  # make -C kernel hdd-image
 open(f"{work}/xemu.toml", "w").write("[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
     f"bootrom_path = '{os.environ.get('MCPX_ROM', '')}'\nflashrom_path = '{bios}'\n"
     f"eeprom_path = '{work}/eeprom.bin'\nhdd_path = '{work}/hdd.qcow2'\n")

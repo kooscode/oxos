@@ -25,7 +25,16 @@ BIOS_BASE ?= $(firstword $(wildcard $(ROOT)/xbox-files/bios/*.bin))
 MCPX_ROM  ?=
 # The reference BIOS needs the real boot ROM (run-stock, PAD_BIOS=stock comparisons only).
 STOCK_MCPX ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
-HDD_IMAGE ?= $(ROOT)/xbox-files/hdd/xbox_hdd.qcow2
+# Default hard disk: xemu-dashboard's free, MIT-licensed disk image (an open dashboard on a formatted 8 GB drive),
+# fetched into third_party/ on first use, at a pinned release, and checked by SHA-256 (tools/fetch.py). The tests
+# and the run targets only ever use a copy. HDD_IMAGE=... uses another disk.
+XDASH_VERSION := v20260516-0955
+XDASH_URL     := https://github.com/xemu-project/xemu-dashboard/releases/download/$(XDASH_VERSION)
+XDASH_DIR     := $(abspath $(ROOT)/third_party/xemu-dashboard)
+XDASH_HDD     := $(XDASH_DIR)/xemu-dashboard.qcow2
+HDD_IMAGE ?= $(XDASH_HDD)
+# The fetch, as a prerequisite of the targets that boot from the default disk (nothing when HDD_IMAGE is another).
+HDD_FETCH  = $(filter $(XDASH_HDD),$(HDD_IMAGE))
 # Boot splash: a 640x480 256-colour PNG is used as it is; any other picture (SPLASH=my-picture.jpg) is converted
 # with Pillow, reduced to 256 colours with SPLASH_QUANT (octree or median).
 SPLASH    ?= splash/splash.png
@@ -155,27 +164,34 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SP
 	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
 endif
 
-test: $(BUILD)/bios.bin $(TEST_TITLE).xbe
+$(XDASH_HDD):
+	python3 -I $(ROOT)/tools/fetch.py $(XDASH_URL)/LICENSE \
+	    3c4d8c95fdcd47f61e106f1e597d8c9db37a57193d0239346edcbc9f4f2334f6 $(XDASH_DIR)/LICENSE
+	python3 -I $(ROOT)/tools/fetch.py $(XDASH_URL)/xbox_hdd.qcow2 \
+	    00d7df7a2bc235f8801764f00b7f40e194d1e392f7a9619d6b2396c89770f6dd $@
+hdd-image: $(XDASH_HDD)
+
+test: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
 	    --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map $(if $(filter 1,$(SERIAL)),--serial)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
-test-mcpx:
+test-mcpx: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
-test-dash:
+test-dash: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2).
-test-relaunch: $(TEST_TITLE).xbe
+test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
@@ -188,7 +204,7 @@ test-fatal:
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --fatal --boot-wait 2
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
-test-udf: $(BUILD)/bios.bin
+test-udf: $(BUILD)/bios.bin $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
 
@@ -203,8 +219,9 @@ test-udf: $(BUILD)/bios.bin
 # image, so switching images never mixes saves.
 PLAY_HDD    ?= $(firstword $(wildcard $(ROOT)/xbox-files/hdd/xbox_hdd_msdash.qcow2) $(HDD_IMAGE))
 PLAY_NAME    = $(basename $(notdir $(PLAY_HDD)))
-STATE       ?= $(ROOT)/xbox-files/play/oxos-$(PLAY_NAME)
-STATE_STOCK ?= $(ROOT)/xbox-files/play/stock-$(PLAY_NAME)
+STATE       ?= $(ROOT)/xemu-state/oxos-$(PLAY_NAME)
+STATE_STOCK ?= $(ROOT)/xemu-state/stock-$(PLAY_NAME)
+PLAY_FETCH   = $(filter $(XDASH_HDD),$(PLAY_HDD))
 WIDE        ?= 1
 SIZE        ?= 1920x1080
 SCALE       ?= 2
@@ -212,14 +229,14 @@ ASPECT      ?= auto
 RUN_OPTS     = --hdd $(PLAY_HDD) $(if $(ISO),--iso $(ISO)) $(if $(FRESH),--fresh) $(if $(filter 1,$(WIDE)),--widescreen) \
                $(if $(ASPECT),--aspect $(ASPECT)) \
                $(if $(SIZE),--size $(SIZE)) $(if $(SCALE),--scale $(SCALE)) $(if $(FULL),--fullscreen)
-run:
+run: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
 # The same with the debug serial port (spec/18), whose output is printed in this terminal. No import tracing, so
 # titles see the memory of a release build (plus the serial code); also the build to flash for troubleshooting on
 # hardware.
-run-trace-basic:
+run-trace-basic: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(TRACE_BASIC_BUILD) SELFTEST=0 SERIAL=1 $(TRACE_BASIC_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BASIC_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
@@ -227,7 +244,7 @@ run-trace-basic:
 # localhost:$(GDB_PORT), paused at power-on. Attach with gdb-multiarch (symbols: $(DEBUG_BUILD)/xboxkrnl.elf, plus an
 # app's own); tools/debug-app.py does the same for an nxdk app, and tools/vscode/ sets it up for VS Code.
 GDB_PORT    ?= 1234
-run-gdb:
+run-gdb: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(DEBUG_BUILD) SELFTEST=0 SERIAL=1 DEBUG=1 $(DEBUG_BUILD)/bios.bin
 	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/$(DEBUG_BUILD)/xboxkrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
 	python3 -I $(ROOT)/tools/run.py $(DEBUG_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
@@ -242,7 +259,7 @@ run-gdb:
 # because make does not rebuild when only the flags change; pass the same TRACE to print-trace-dump.
 TRACE       ?= 2
 TRACE_BUILD := $(OUT)/trace-full$(if $(filter 1,$(TRACE)),-64mb)
-run-trace-full:
+run-trace-full: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(TRACE_BUILD) SELFTEST=0 TRACE_IMPORTS=$(TRACE) SERIAL=1 $(TRACE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
 	    --serial --qmp $(TRACE_BUILD)/qmp.sock $(if $(filter 2,$(TRACE)),--memory 128) \
@@ -268,7 +285,7 @@ $(NXDK_DIR)/Makefile:
 padtest: $(NXDK_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/padtest -j8
 
-test-pad: padtest
+test-pad: padtest $(HDD_FETCH)
 	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
 	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
 		$(if $(filter stock,$(PAD_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
@@ -276,10 +293,10 @@ test-pad: padtest
 
 # The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own
 # state directory: the stock kernel signs saves with keys OXOS does not have, so the two cannot share saves.
-run-stock:
+run-stock: $(PLAY_FETCH)
 	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) $(if $(STATE_STOCK),--state $(STATE_STOCK)) $(RUN_OPTS)
 
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean

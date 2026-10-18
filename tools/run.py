@@ -35,7 +35,8 @@ SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", 
 ap = argparse.ArgumentParser()
 ap.add_argument("bios")
 ap.add_argument("--iso", help="disc image (XISO) for the DVD drive")
-ap.add_argument("--hdd", default=os.path.join(root, "xbox-files/hdd/xbox_hdd.qcow2"))
+ap.add_argument("--hdd", default=os.path.join(root, "third_party/xemu-dashboard/xemu-dashboard.qcow2"),
+                help="hard-disk image (default: the xemu-dashboard disk; `make -C kernel hdd-image` fetches it)")
 ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump (needed only for a Microsoft BIOS)")
 ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
 ap.add_argument("--state", help="directory for a persistent HDD copy and EEPROM")
