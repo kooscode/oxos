@@ -134,27 +134,31 @@ level: breakpoints, stepping, variables and the call stack, in your own [nxdk](h
 apps and in the kernel, in one session (step from your app into a kernel call and back). You need `gdb-multiarch`
 (Ubuntu: `sudo apt install gdb-multiarch`) and GNU `objcopy` (binutils).
 
-**An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
-1. Copy `tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in
-   `settings.json`.
-2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug-app.py` builds the
-   debug kernel (once), packs the app's `bin/` folder as a disc, and starts xemu paused with the kernel's serial log in
-   the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your first breakpoint. Stopping the
-   debugger closes xemu.
-3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
-
-![Debugging the kernel in VS Code: stopped in XepLoadImage, with the loaded title's name in a watch](docs/kernel-debugging.jpg)
-
 **The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel
 source and press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts
 xemu paused and runs to your breakpoint. For example, line 281 of `kernel/src/xe/loader.cpp` (in `XepLoadImage`)
 stops on every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and
 `XeImageFileName` its path.
 
-**From a terminal:** `python3 tools/debug-app.py path/to/app` (the same steps), then in another terminal
-`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off'
--ex 'add-symbol-file kernel/build-gdb/xboxkrnl.elf' -ex 'target remote localhost:1234'`, set breakpoints and `continue`. `make run-gdb` does the same for the kernel
-alone (any disc, or the dashboard).
+![Kernel debugging in VS Code: stopped in XepLoadImage, with the loaded title's name in a watch](docs/kernel-debugging.jpg)
+
+*Kernel debugging in VS Code: the OXOS kernel stopped at a breakpoint in `XepLoadImage` while loading the dashboard,
+with its call stack, locals, the title's name and path in watches, and the kernel's boot log in the terminal.*
+
+**An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
+1. Copy `tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in
+   `settings.json`.
+2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug-app.py` builds the
+   debug kernel (once), packs the app's `bin/` folder as a disc, and starts xemu paused with the kernel's serial log in
+   the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your first breakpoint. Stopping the
+   debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel calls.
+3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
+
+**From a terminal:** `make -C kernel run-gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with
+`gdb-multiarch kernel/build-gdb/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`.
+For an nxdk app, `python3 tools/debug-app.py path/to/app` does the app steps above; then attach with
+`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file kernel/build-gdb/xboxkrnl.elf'
+-ex 'target remote localhost:1234'`.
 
 Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
 `CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to their Makefile, so that gdb shows function names (it cannot
