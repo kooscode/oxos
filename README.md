@@ -21,8 +21,10 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
-## Try OXOS in xemu today
-No building, no code and no Microsoft files: download the ready BIOS image and drop it into xemu.
+## Running OXOS in xemu today !!
+No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
+
+Free, Legal and Open Source!!
 
 1. Install [xemu](https://xemu.app).
 2. **[Download the latest OXOS BIOS](https://github.com/kooscode/oxos/releases/latest)**, a 1 MB `bios_vX.Y.bin`.
