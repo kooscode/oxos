@@ -5,6 +5,7 @@
 #include <xk/mm.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
+#include <xk/serial.h>
 void HalpSmcInitColdBoot();
 void HalpSmcStartEvents();
 void HalpStartSplash();
@@ -47,8 +48,15 @@ constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584
 XK_PERSIST ULONG KiEepromKeyStates[8][10];
 XK_PERSIST ULONG KiEepromKeyStateCount;
 
+// Serial log of the start-up steps (SERIAL=1 builds, spec/18).
+#define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
+
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiSetStage(post_code::Entry);
+#if XK_DEBUG_SERIAL
+    HalpSerialInit();
+    XK_SERIAL("\nOXOS kernel (" __DATE__ " " __TIME__ "): %s boot\n", KiQuickRebootFlag ? "quick" : "cold");
+#endif
     for (ULONG i = 0; i < 17; i++) {
         ULONGLONG v = rdmsr(i ? 0x200 + i - 1 : 0x2FF);
         KiBootMtrr[2 * i] = (ULONG)v;
@@ -72,24 +80,33 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         RtlZeroMemory((PVOID)0x80400000, 0x6000);
     }
 
+    KiBootStep("processor");
     KiInitializeProcessor();
 
     KiSetStage(post_code::HalPhase0);
+    KiBootStep("HAL phase 0");
     HalInitSystemPhase0(/*coldBoot=*/!quick);
+    KiBootStep("memory manager");
     MmInitSystem(quick);
     if (!quick)
         HalpDetectHardware();
     KiInitializeDpcs();
     KiInitializeTimers();
+    KiBootStep("scheduler");
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
+    KiBootStep("object manager");
     ObInitSystem();
+    KiBootStep("I/O manager");
     IoInitSystem();
     FsInitSystem();
     KiInitializeSystemTime();
+    KiBootStep("EEPROM");
     ExInitEeprom();
+    KiBootStep("AV");
     AvInit();
     if (!quick)
         HalpSmcInitColdBoot();
+    KiBootStep("IDE");
     IdexChannelInit();
     HalEnableSystemInterrupt(0, Latched); // PIT clock
     HalpSmcStartEvents();
@@ -100,6 +117,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     if (!quick)
         KiRunBootSelfTests();
 #endif
+    KiBootStep("title launcher");
     XeStartTitleLauncher();
 
     KfLowerIrql(DISPATCH_LEVEL);
@@ -114,6 +132,7 @@ volatile ULONG KiLastExceptionCode;
 volatile ULONG KiLastExceptionEip;
 
 extern "C" void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip) {
+    XK_SERIAL("*** unexpected exception %lu, error code %#lx, eip %#lx\n", vector, errorCode, eip);
     KiLastExceptionVector = vector;
     KiLastExceptionCode = errorCode;
     KiLastExceptionEip = eip;

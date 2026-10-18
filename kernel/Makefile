@@ -22,6 +22,8 @@ RETAIL_MEDIA_POLICY ?= 0
 TRACE_IMPORTS ?= 0
 # The CD-ROM request log shown before the dashboard (spec/04 §3a); on in every trace build.
 DRIVE_LOG ?= $(if $(filter 0,$(TRACE_IMPORTS)),0,1)
+# Debug serial port (spec/18): on in the self-test and troubleshooting builds, off in release builds.
+SERIAL ?= $(if $(filter 1,$(SELFTEST) $(DRIVE_LOG)),1,0)
 
 CXX := clang++
 CC  := clang
@@ -31,7 +33,7 @@ TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib -O2 -g0 \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DRIVE_LOG=$(DRIVE_LOG)
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DRIVE_LOG=$(DRIVE_LOG) -DXK_DEBUG_SERIAL=$(SERIAL)
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
@@ -124,7 +126,7 @@ endif
 
 test: $(BUILD)/bios.bin $(BUILD)/title.xbe
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
-	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map
+	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map $(if $(filter 1,$(SERIAL)),--serial)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
@@ -183,11 +185,12 @@ run:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
-# The same with the CD-ROM request log on screen before the dashboard. No import tracing, so titles see the memory
-# of a release build; also the build to flash for troubleshooting disc boots on hardware.
+# The same with the CD-ROM request log on screen before the dashboard and the debug serial port (spec/18), whose
+# output is printed in this terminal. No import tracing, so titles see the memory of a release build (plus the two
+# logs); also the build to flash for troubleshooting on hardware.
 run-trace:
-	$(MAKE) BUILD=build-drivelog SELFTEST=0 DRIVE_LOG=1 build-drivelog/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-drivelog/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
+	$(MAKE) BUILD=build-drivelog SELFTEST=0 DRIVE_LOG=1 SERIAL=1 build-drivelog/bios.bin
+	python3 -I $(ROOT)/tools/run.py build-drivelog/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
 # Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
 # reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the

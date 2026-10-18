@@ -2,6 +2,7 @@
 // see spec/05 §6 — to be added with the video/SMC work.)
 #include <xk/arch.h>
 #include <xk/ke.h>
+#include <xk/serial.h>
 
 volatile ULONG KiBugCheckCode;
 volatile ULONG KiBugCheckParameters[4];
@@ -10,6 +11,7 @@ ULONG KiBugCheckData[5];
 
 XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4) {
     cli();
+    XK_SERIAL("*** bug check %#lx (%#lx, %#lx, %#lx, %#lx)\n", BugCheckCode, P1, P2, P3, P4);
     KiBugCheckParameters[0] = P1;
     KiBugCheckParameters[1] = P2;
     KiBugCheckParameters[2] = P3;

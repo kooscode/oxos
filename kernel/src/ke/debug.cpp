@@ -1,5 +1,6 @@
 // Debugger services without a kernel debugger: DbgPrint goes to an in-memory log (spec/13).
 #include <xk/ke.h>
+#include <xk/serial.h>
 
 typedef __builtin_va_list va_list;
 #define va_start(v, l) __builtin_va_start(v, l)
@@ -21,6 +22,9 @@ static void XkLogWrite(const char *s, ULONG n) {
         XkDebugLog[(XkDebugLogPosition + i) % sizeof(XkDebugLog)] = s[i];
     XkDebugLogPosition = XkDebugLogPosition + n;
     __builtin_ia32_writeeflags_u32(flags);
+#if XK_DEBUG_SERIAL
+    HalpSerialWrite(s, n);
+#endif
 }
 
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...) {

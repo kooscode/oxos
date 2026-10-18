@@ -480,6 +480,19 @@ def udf_checks(mon):
     }}
 
 
+def serial_checks(path):
+    """Debug serial port (spec/18): the boot banner, the start-up steps and the title load reach the SuperIO."""
+    text = open(path, "rb").read().decode("latin1") if os.path.exists(path) else ""
+    print(f"  (serial log: {len(text)} bytes, {text.count(chr(10))} lines)")
+    return {
+        "boot banner (cold boot)": "OXOS kernel (" in text and "): cold boot" in text,
+        "start-up steps in order": all(f"boot: {s}" in text for s in ("processor", "memory manager", "IDE", "title launcher"))
+            and text.index("boot: processor") < text.index("boot: title launcher"),
+        "lines end in CR LF": "\r\n" in text and "\n" not in text.replace("\r\n", ""),
+        "title load reported": "load \\Device\\CdRom0\\default.xbe: 0" in text,
+    }
+
+
 def launch_reason_checks(mon):
     reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
     page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
@@ -518,6 +531,7 @@ def main():
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
+    ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
     a = ap.parse_args()
 
     work = tempfile.mkdtemp(prefix="xk-boot-")
@@ -540,7 +554,9 @@ def main():
         + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else "")
         + ("" if a.no_disc else f"dvd_path = '{dvd}'\n"))
     log = open(os.path.join(work, "xemu.log"), "w")
-    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
+    serial_log = os.path.join(work, "serial.log")
+    serial_args = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
+    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"] + serial_args,
                             stdout=log, stderr=subprocess.STDOUT)
     ok = False
     try:
@@ -560,6 +576,8 @@ def main():
             results = {"M5d-2": title_checks(mon, a.title_map, True)}
         else:
             results = run_checks(mon, a.hdd, a.title_map)
+        if a.serial:
+            results["serial"] = serial_checks(serial_log)
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():
