@@ -133,10 +133,11 @@ hard-disk copy and EEPROM in `xemu-state/oxos-<instance>/`: `oxos-msdash`, `oxos
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
 support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
 with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
-(full screen). Games only send that signal in standard-definition modes (the reference kernel
-does the same): with 480p/720p/1080i enabled in the dashboard a widescreen game such as Halo 2 shows 4:3 under
-`auto`, so run it with `ASPECT=16x9` (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Games still output 480
-lines: the HD video modes (720p/1080i) are not implemented yet.
+(full screen). With HD modes enabled in the dashboard, games run in 480p, 720p or 1080i (spec 17): 720p and 1080i
+always show at 16:9, while 480p follows the game's own widescreen signal as on the original kernel, so a widescreen
+game that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`
+(`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Enter the Matrix in 720p or 1080i crashes xemu at render scale
+2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
 
 `make test-pad` (controller test) needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
 [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
@@ -194,6 +195,8 @@ Microsoft's 2BL and keys: do not distribute that one.
 - **Real hardware:** video encoder mode tables (Conexant, Focus) for TVs, then validation on revisions 1.0–1.5
   (the open image's 1.6 values, `MCPX16=1`, are untested).
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.
+- **Debugging on real hardware:** a GDB stub in the kernel over the SuperIO serial port, with the debugger-only
+  exports, so the same gdb and VS Code debugging works on a console.
 
 ## License
 GPL-2.0 (see [`LICENSE`](LICENSE)). The build fetches [XboxDev/cromwell](https://github.com/XboxDev/cromwell)
