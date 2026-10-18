@@ -4,7 +4,7 @@ Clean-room behavioural spec. Evidence: batch_decompile of 0x8002c0dc (mount), 0x
 0x8002bb81 (anchor), 0x8002bd6b (VDS), 0x8002bbee (PVD), 0x8002bc3b (partition), 0x8002bcb0 (LVD), 0x8002bec9 (file
 set), 0x8002c49b (tag check); the recognition ID table at 0x80012538. Structure offsets are ECMA-167 / OSTA UDF.
 
-## 1. Mount (CD-ROM devices: UDF is tried first, then XDVDFS)
+## 1. Mount (CD-ROM devices: XDVDFS is tried first, then UDF when XDVDFS does not recognise the media; spec 04c §2)
 1. Drive geometry (IOCTL 0x2404C) gives the sector count.
 2. **Volume recognition** from sector 16 to the end: each sector's 5-character identifier must be one of BEA01 (1),
    TEA01 (2), CDROM (3), CD001 (4), CDW01 (5), CDW02 (6), NSR01 (7), NSR02 (8), BOOT2 (9), else unrecognized.

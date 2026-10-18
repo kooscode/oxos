@@ -381,10 +381,10 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
 NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice);
 
-// CD-ROM: UDF first (DVD-video), then XDVDFS (spec/11 §4, spec/04d).
+// CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/04c §2, spec/04d).
 static NTSTATUS IopMountCdRom(PDEVICE_OBJECT TargetDevice) {
-    NTSTATUS status = UdfMountVolume(TargetDevice);
-    return status == STATUS_UNRECOGNIZED_VOLUME ? XdvdfsMountVolume(TargetDevice) : status;
+    NTSTATUS status = XdvdfsMountVolume(TargetDevice);
+    return status == STATUS_UNRECOGNIZED_VOLUME ? UdfMountVolume(TargetDevice) : status;
 }
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice);
 

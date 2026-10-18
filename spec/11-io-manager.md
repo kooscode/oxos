@@ -106,7 +106,7 @@ Structure layouts follow nxdk where they agree with the offsets used by the code
   device object). Otherwise:
   - DeletePending or DEVICE_INITIALIZING → STATUS_NO_SUCH_DEVICE; exclusive device already referenced and not a
     relative open → STATUS_ACCESS_DENIED.
-  - Mount: while MountedOrSelfDevice is NULL, IopMountDevice under DeviceLock (CD-ROM: UDF then XDVDFS; disk: FATX;
+  - Mount: while MountedOrSelfDevice is NULL, IopMountDevice under DeviceLock (CD-ROM: XDVDFS then UDF; disk: FATX;
     on failure, and only when opening the device itself, the RAW file system). The mounted volume device's
     ReferenceCount++.
   - Build a create IRP for the volume device (Flags 0x8C, UserIosb = local, AllocationSize in Overlay,
