@@ -218,9 +218,11 @@ test-udf: $(BUILD)/bios.bin $(HDD_FETCH)
 # one (its Settings set up video modes, clock, language); the tests keep using HDD_IMAGE. One state directory per
 # image, so switching images never mixes saves.
 PLAY_HDD    ?= $(firstword $(wildcard $(ROOT)/xbox-files/hdd/xbox_hdd_msdash.qcow2) $(HDD_IMAGE))
-PLAY_NAME    = $(basename $(notdir $(PLAY_HDD)))
-STATE       ?= $(ROOT)/xemu-state/oxos-$(PLAY_NAME)
-STATE_STOCK ?= $(ROOT)/xemu-state/stock-$(PLAY_NAME)
+# State folders are named <bios>-<disk>: oxos-xemu (the default xemu-dashboard disk), oxos-msdash (a disk whose
+# file name contains "msdash"), otherwise oxos-<disk file name> with "_" as "-"; stock-... for make run-stock.
+PLAY_TAG     = $(if $(filter $(XDASH_HDD),$(abspath $(PLAY_HDD))),xemu,$(if $(findstring msdash,$(notdir $(PLAY_HDD))),msdash,$(subst _,-,$(basename $(notdir $(PLAY_HDD))))))
+STATE       ?= $(ROOT)/xemu-state/oxos-$(PLAY_TAG)
+STATE_STOCK ?= $(ROOT)/xemu-state/stock-$(PLAY_TAG)
 PLAY_FETCH   = $(filter $(XDASH_HDD),$(PLAY_HDD))
 WIDE        ?= 1
 SIZE        ?= 1920x1080
