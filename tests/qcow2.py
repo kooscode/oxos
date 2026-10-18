@@ -1,5 +1,10 @@
-"""Minimal read-only qcow2 reader for checking disk contents in tests: plain, zero and deflate-compressed clusters
-(the xemu-dashboard disk image is compressed)."""
+"""Minimal qcow2 reader for checking disk contents in tests (plain, zero and deflate-compressed clusters; the
+xemu-dashboard disk image is compressed), with copy-with-changes writing: write() keeps changes in memory, save()
+writes a new image. The source image is never modified.
+
+save() writes a fresh qcow2 version 2 image with the same cluster size and virtual size: header, L1 table,
+reference-count table and blocks (every used cluster counted once), L2 tables and the data clusters, uncompressed;
+clusters that are entirely zero are left out."""
 import struct, zlib
 
 
@@ -26,6 +31,7 @@ class Qcow2:
         self.f.seek(l1_offset)
         self.l1 = struct.unpack(f">{l1_size}Q", self.f.read(8 * l1_size))
         self._cached = (None, None)  # (cluster index, decompressed bytes)
+        self.changed = {}  # guest cluster index -> bytearray, the changes made with write()
 
     def _compressed(self, index, e):
         """A compressed cluster's contents: the entry holds the host offset and the number of extra 512-byte
@@ -54,11 +60,101 @@ class Qcow2:
             return None
         return off or None
 
+    def _source_cluster(self, idx):
+        """Guest cluster idx as stored in the source image."""
+        host = self._cluster(idx)
+        if host is None:
+            return bytes(self.cluster_size)
+        if isinstance(host, bytes):
+            return host
+        self.f.seek(host)
+        return self.f.read(self.cluster_size).ljust(self.cluster_size, b"\0")
+
+    def write(self, offset, data):
+        """Change guest bytes (kept in memory until save())."""
+        data = memoryview(data)
+        while len(data):
+            idx, within = divmod(offset, self.cluster_size)
+            n = min(len(data), self.cluster_size - within)
+            if idx not in self.changed:
+                self.changed[idx] = bytearray(self._source_cluster(idx))
+            self.changed[idx][within:within + n] = data[:n]
+            offset += n
+            data = data[n:]
+
+    def _used_clusters(self):
+        """Guest cluster indices that may hold data: allocated in the source, or changed."""
+        used = set(self.changed)
+        for i1, l1 in enumerate(self.l1):
+            table = l1 & 0x00FFFFFFFFFFFE00
+            if not table:
+                continue
+            self.f.seek(table)
+            entries = struct.unpack(f">{self.l2_entries}Q", self.f.read(8 * self.l2_entries))
+            for i2, e in enumerate(entries):
+                if e & ~1:  # an allocated or compressed cluster (not unallocated or a v3 zero cluster)
+                    used.add(i1 * self.l2_entries + i2)
+        return used
+
+    def save(self, path):
+        """Write the image, with the changes, as a new qcow2 file at path."""
+        cs, l2n = self.cluster_size, self.l2_entries
+        data = {}
+        for idx in sorted(self._used_clusters()):
+            c = bytes(self.changed[idx]) if idx in self.changed else self._source_cluster(idx)
+            if any(c):
+                data[idx] = c
+        l1_size = (self.size + cs * l2n - 1) // (cs * l2n)
+        l2_tables = sorted({idx // l2n for idx in data})
+        l1_clusters = (8 * l1_size + cs - 1) // cs
+        rc_per_block = cs // 2  # 16-bit reference counts (version 2)
+        rt_clusters = rb_count = 1
+        while True:  # the reference-count structures count themselves
+            total = 1 + l1_clusters + rt_clusters + rb_count + len(l2_tables) + len(data)
+            need_rb = (total + rc_per_block - 1) // rc_per_block
+            need_rt = (8 * need_rb + cs - 1) // cs
+            if (need_rb, need_rt) == (rb_count, rt_clusters):
+                break
+            rb_count, rt_clusters = need_rb, need_rt
+        # Layout: header, L1, reference-count table, reference-count blocks, L2 tables, data.
+        l1_at, rt_at = 1, 1 + l1_clusters
+        rb_at = rt_at + rt_clusters
+        l2_at = rb_at + rb_count
+        data_at = l2_at + len(l2_tables)
+        copied = 1 << 63  # reference count exactly 1
+        l1 = [0] * l1_size
+        l2 = {t: [0] * l2n for t in l2_tables}
+        for n, t in enumerate(l2_tables):
+            l1[t] = ((l2_at + n) * cs) | copied
+        for n, idx in enumerate(sorted(data)):
+            l2[idx // l2n][idx % l2n] = ((data_at + n) * cs) | copied
+        header = struct.pack(">4sIQIIQIIQQIIQ", b"QFI\xfb", 2, 0, 0, self.cluster_bits, self.size, 0, l1_size,
+                             l1_at * cs, rt_at * cs, rt_clusters, 0, 0)
+        refcounts = bytearray(rb_count * cs)
+        for c in range(total):
+            struct.pack_into(">H", refcounts, 2 * c, 1)
+        with open(path + ".part", "wb") as f:
+            f.write(header.ljust(cs, b"\0"))
+            f.write(struct.pack(f">{l1_size}Q", *l1).ljust(l1_clusters * cs, b"\0"))
+            f.write(struct.pack(f">{rb_count}Q", *((rb_at + i) * cs for i in range(rb_count))).ljust(rt_clusters * cs, b"\0"))
+            f.write(refcounts)
+            for t in l2_tables:
+                f.write(struct.pack(f">{l2n}Q", *l2[t]))
+            for idx in sorted(data):
+                f.write(data[idx])
+        import os
+        os.replace(path + ".part", path)
+
     def read(self, offset, length):
         out = bytearray()
         while length:
             idx, within = divmod(offset, self.cluster_size)
             n = min(length, self.cluster_size - within)
+            if idx in self.changed:
+                out += self.changed[idx][within:within + n]
+                offset += n
+                length -= n
+                continue
             host = self._cluster(idx)
             if host is None:
                 out += bytes(n)

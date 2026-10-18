@@ -223,13 +223,16 @@ PLAY_HDD    ?= $(firstword $(wildcard $(ROOT)/xbox-files/hdd/msdash.qcow2) $(HDD
 # (default: its file name); stock-<INSTANCE> for make run-stock.
 INSTANCE    ?= $(if $(filter $(XDASH_HDD),$(abspath $(PLAY_HDD))),xemu,$(if $(findstring msdash,$(notdir $(PLAY_HDD))),msdash,$(subst _,-,$(basename $(notdir $(PLAY_HDD))))))
 STATE       ?= $(ROOT)/xemu-state/oxos-$(INSTANCE)
-STATE_STOCK ?= $(ROOT)/xemu-state/stock-$(INSTANCE)
+# run-stock with another BIOS (BIOS_BASE=...): BIOS_NAME names its state, e.g. BIOS_NAME=cerbios -> cerbios-<INSTANCE>.
+BIOS_NAME   ?= stock
+STATE_STOCK ?= $(ROOT)/xemu-state/$(BIOS_NAME)-$(INSTANCE)
 PLAY_FETCH   = $(filter $(XDASH_HDD),$(PLAY_HDD))
 WIDE        ?= 1
 SIZE        ?= 1920x1080
 SCALE       ?= 2
 ASPECT      ?= auto
 RUN_OPTS     = --hdd $(PLAY_HDD) $(if $(ISO),--iso $(ISO)) $(if $(FRESH),--fresh) $(if $(filter 1,$(WIDE)),--widescreen) \
+               $(if $(MEMORY),--memory $(MEMORY)) \
                $(if $(ASPECT),--aspect $(ASPECT)) \
                $(if $(SIZE),--size $(SIZE)) $(if $(SCALE),--scale $(SCALE)) $(if $(FULL),--fullscreen)
 run: $(PLAY_FETCH)
@@ -298,12 +301,28 @@ test-controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 		$(if $(filter stock,$(CONTROLLER_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
 		--hdd $(HDD_IMAGE) --iso $(CONTROLLER_ISO)
 
+# Memory test (tests/memory-test-title, an nxdk title): how much memory a title is given, as built (XBE flag
+# "limit to 64 MB") and with the flag cleared. MEMORY=128 for a 128 MB console; MEMORY_BIOS=... (with MCPX_ROM=...)
+# runs another BIOS instead of the release build, e.g. for comparison.
+MEMORY_DIR  := $(ROOT)/tests/memory-test-title
+MEMORY_XBE  := $(MEMORY_DIR)/bin/default.xbe
+
+$(MEMORY_XBE): $(NXDK_DIR)/Makefile $(MEMORY_DIR)/memory_test_title.c $(MEMORY_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(MEMORY_DIR) -j8
+
+test-memory: $(MEMORY_XBE) $(HDD_FETCH)
+	$(if $(MEMORY_BIOS),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
+	python3 -I $(ROOT)/tests/memory_test.py --bios $(or $(MEMORY_BIOS),$(RELEASE_BUILD)/bios.bin) --xbe $(MEMORY_XBE) \
+	    --both --memory $(or $(MEMORY),64) --hdd $(HDD_IMAGE) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
+
 # The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own
 # state directory: the stock kernel signs saves with keys OXOS does not have, so the two cannot share saves.
+# Another BIOS to compare with: BIOS_BASE=its image BIOS_NAME=name (state xemu-state/<name>-<INSTANCE>); MEMORY=128
+# for a 128 MB console (any run target).
 run-stock: $(PLAY_FETCH)
 	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) $(if $(STATE_STOCK),--state $(STATE_STOCK)) $(RUN_OPTS)
 
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller nxdk run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
