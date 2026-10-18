@@ -16,10 +16,11 @@ xboxkrnl.exe
 # Build output
 kernel/build*/
 third_party/
-tests/controller-test-title/bin/
-tests/controller-test-title/*.obj
-tests/controller-test-title/*.d
-tests/controller-test-title/*.exe
+tests/*-test-title/bin/
+tests/*-test-title/*.obj
+tests/*-test-title/*.d
+tests/*-test-title/*.exe
+tests/*-test-title/*.pdb
 __pycache__/
 
 # Local tool state

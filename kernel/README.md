@@ -11,12 +11,16 @@ make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset 
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
-make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison)
+make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
+                                # BIOS_BASE=its.bin BIOS_NAME=name (state xemu-state/<name>-<instance>)
+                                # MEMORY=128 on any run target: a 128 MB console
 make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
 make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
 make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
 make run-gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build/debug/) paused for gdb on xemu's
                                 # GDB server; symbols in build/debug/xboxkrnl.elf. nxdk apps: ../tools/debug-app.py
+make test-memory [MEMORY=128] [MEMORY_BIOS=... MCPX_ROM=...]  # memory a title is given, with and without the
+                                # XBE's "limit to 64 MB" flag (tests/memory-test-title, nxdk)
 make test-controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
                                 # the tests/controller-test-title title (nxdk, fetched into ../third_party) checks each one
 ```
