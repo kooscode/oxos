@@ -143,6 +143,8 @@ apps and in the kernel, in one session (step from your app into a kernel call an
    debugger closes xemu.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
+![Debugging the kernel in VS Code: stopped in XepLoadImage, with the loaded title's name in a watch](docs/kernel-debugging.jpg)
+
 **The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel
 source and press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts
 xemu paused and runs to your breakpoint. For example, line 281 of `kernel/src/xe/loader.cpp` (in `XepLoadImage`)
