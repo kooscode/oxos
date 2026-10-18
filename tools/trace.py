@@ -4,11 +4,12 @@
 usage: trace.py --qmp SOCK --map xboxkrnl.map [--exports exports.tsv] [--last N] [--only NAMES] [--hide NAMES]
                 [--all] [--thread ID] [--save FILE | --load FILE]
 
-Run the title with `make run-imports` (xemu with a QMP socket), then `make trace-dump` while it runs, or after it
-crashed or hung. xemu is paused while the ring is copied (a fraction of a second) and then resumed.
+`make run-imports` runs a title in xemu and dumps the ring by itself when the kernel reports a crash on the serial
+port and when xemu is closed (tools/run.py --trace-map). Any time in between, `make trace-dump` in another terminal
+prints it. xemu is paused while the ring is copied (a fraction of a second) and then resumed.
 
-Each line: sequence number, function, return value (DEADDEAD while the call has not returned, e.g. the thread is
-blocked in it or crashed there), caller's return address, thread, the first three stack arguments, and:
+Each line: sequence number, function, return value ("(no return)" while the call has not returned: the thread is
+blocked in it, ended in it, or crashed there), caller's return address, thread, the first three stack arguments, and:
 - NtCreateFile/NtOpenFile: the end of the path, share access and create/open options;
 - NtQueryFullAttributesFile, NtDeleteFile, IoCreate/DeleteSymbolicLink: the end of the name;
 - NtReadFile/NtWriteFile: APC context, I/O status block, buffer, length, byte offset, the buffer's first dword;
@@ -30,24 +31,34 @@ HIDDEN = ("KeSetEvent KeResetEvent KeDelayExecutionThread KeWaitForSingleObject 
 NAMED = {190, 202, 210, 195, 67, 69}  # entries that carry a name in words 7-14
 
 
+class TraceError(Exception):
+    pass
+
+
 class Qmp:
     def __init__(self, path):
         self.s = socket.socket(socket.AF_UNIX)
         try:
             self.s.connect(path)
         except OSError as e:
-            sys.exit(f"cannot connect to xemu at {path} ({e.strerror}): start it with `make run-imports`")
+            raise TraceError(f"cannot connect to xemu at {path} ({e.strerror}): start it with `make run-imports`")
         self.f = self.s.makefile("rw")
         self.f.readline()
         self.command("qmp_capabilities")
+
+    def close(self):
+        self.s.close()
 
     def command(self, name, **args):
         self.f.write(json.dumps({"execute": name, "arguments": args}) + "\n")
         self.f.flush()
         while True:
-            r = json.loads(self.f.readline())
+            line = self.f.readline()
+            if not line:
+                raise TraceError("xemu closed the QMP connection")
+            r = json.loads(line)
             if "error" in r:
-                sys.exit(f"xemu: {r['error'].get('desc', r['error'])}")
+                raise TraceError(f"xemu: {r['error'].get('desc', r['error'])}")
             if "return" in r:
                 return r["return"]
 
@@ -71,34 +82,58 @@ def symbol(syms, name):
     for k in ("_" + name, name):
         if k in syms:
             return syms[k]
-    sys.exit(f"{name} is not in the map: is this a TRACE_IMPORTS build?")
+    raise TraceError(f"{name} is not in the map: is this a TRACE_IMPORTS build?")
 
 
-def grab(a):
-    """The count and the raw ring, from the running xemu."""
-    syms = symbols(a.map)
-    q = Qmp(a.qmp)
-    q.command("stop")
+def names(exports):
+    table = {}
+    for line in open(exports).read().splitlines()[1:]:
+        f = line.split("\t")
+        table[int(f[0])] = f[1]
+    return table
+
+
+def grab(qmp, map_path, pause=True):
+    """The count and the raw ring, from the running xemu (qmp: a socket path or a connected Qmp). Without pause,
+    the newest few entries may be half written."""
+    syms = symbols(map_path)
+    q = Qmp(qmp) if isinstance(qmp, str) else qmp
     try:
-        count = q.word(symbol(syms, "XkTraceCount"))
-        ring = q.word(symbol(syms, "XkTraceRing"))
-        if not ring:
-            sys.exit("the ring is not allocated yet: no title has been loaded")
-        fd, tmp = tempfile.mkstemp(prefix="xk-ring-")
-        os.close(fd)
+        if pause:
+            q.command("stop")
         try:
-            # Quoted: unquoted, the monitor reads the path's slashes as division.
-            out = q.hmp(f'memsave {ring:#x} {RING * WORDS * 4} "{tmp}"').strip()
-            if out:
-                sys.exit(f"xemu memsave: {out}")
-            data = open(tmp, "rb").read()
+            count = q.word(symbol(syms, "XkTraceCount"))
+            ring = q.word(symbol(syms, "XkTraceRing"))
+            if not ring:
+                raise TraceError("nothing recorded yet: no title has been loaded")
+            fd, tmp = tempfile.mkstemp(prefix="xk-ring-")
+            os.close(fd)
+            try:
+                # Quoted: unquoted, the monitor reads the path's slashes as division.
+                out = q.hmp(f'memsave {ring:#x} {RING * WORDS * 4} "{tmp}"').strip()
+                if out:
+                    raise TraceError(f"xemu memsave: {out}")
+                data = open(tmp, "rb").read()
+            finally:
+                os.remove(tmp)
         finally:
-            os.remove(tmp)
+            if pause:
+                q.command("cont")
     finally:
-        q.command("cont")
+        if q is not qmp:
+            q.close()
     if len(data) != RING * WORDS * 4:
-        sys.exit(f"short read of the ring ({len(data)} bytes)")
+        raise TraceError(f"short read of the ring ({len(data)} bytes)")
     return count, data
+
+
+def save(path, count, data):
+    open(path, "wb").write(struct.pack("<I", count) + data)
+
+
+def load(path):
+    raw = open(path, "rb").read()
+    return struct.unpack_from("<I", raw)[0], raw[4:]
 
 
 def text(words):
@@ -121,6 +156,28 @@ def detail(e):
     return ""
 
 
+def report(count, data, table, last=200, only=None, hide=(), show_all=False, thread=None):
+    """A header line and the selected calls, oldest first."""
+    only = set(only) if only else None
+    hidden = (set() if show_all or only else set(HIDDEN)) | set(hide)
+    lines = []
+    for seq in range(count - 1, max(0, count - RING) - 1, -1):  # newest first, until enough are found
+        e = struct.unpack_from(f"<{WORDS}I", data, (seq % RING) * WORDS * 4)
+        if not e[0]:
+            continue  # cleared: from before a quick reboot
+        name = table.get(e[0], f"#{e[0]}")
+        if (only and name not in only) or name in hidden or (thread is not None and e[2] != thread):
+            continue
+        ret = "(no return)" if e[6] == NOT_RETURNED else f"{e[6]:#010x}"
+        lines.append(f"{seq:7d} {name:30s} -> {ret:11s} from {e[1]:#010x} thr {e[2]:#010x} "
+                     f"args {e[3]:#x} {e[4]:#x} {e[5]:#x}  {detail(e)}".rstrip())
+        if last and len(lines) == last:
+            break
+    header = (f"{count} calls recorded, the last {min(count, RING)} kept; showing {len(lines)}"
+              + ("" if show_all or only else " (common calls hidden: --all shows them)"))
+    return [header] + lines[::-1]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--qmp", help="xemu's QMP socket (make run-imports: kernel/build-imports2/qmp.sock)")
@@ -132,46 +189,22 @@ def main():
     ap.add_argument("--all", action="store_true", help="do not hide the default list of common calls")
     ap.add_argument("--thread", type=lambda s: int(s, 16), help="only this thread (hex KTHREAD address)")
     ap.add_argument("--save", help="also write the raw ring to FILE (decode later with --load)")
-    ap.add_argument("--load", help="decode a ring saved with --save instead of reading xemu")
+    ap.add_argument("--load", help="decode a ring saved with --save (or by run-imports) instead of reading xemu")
     a = ap.parse_args()
-
-    names = {}
-    for line in open(a.exports).read().splitlines()[1:]:
-        f = line.split("\t")
-        names[int(f[0])] = f[1]
-
-    if a.load:
-        raw = open(a.load, "rb").read()
-        count, data = struct.unpack_from("<I", raw)[0], raw[4:]
-    else:
-        if not a.qmp:
-            sys.exit("--qmp SOCK (or --load FILE) is needed")
-        count, data = grab(a)
-        if a.save:
-            open(a.save, "wb").write(struct.pack("<I", count) + data)
-            print(f"ring saved to {a.save}")
-
-    only = set(a.only.split(",")) if a.only else None
-    hidden = set() if a.all or only else set(HIDDEN)
-    if a.hide:
-        hidden |= set(a.hide.split(","))
-    first = max(0, count - RING)
-    lines = []
-    for seq in range(count - 1, first - 1, -1):  # newest first, until enough are found
-        e = struct.unpack_from(f"<{WORDS}I", data, (seq % RING) * WORDS * 4)
-        if not e[0]:
-            continue  # cleared: from before a quick reboot
-        name = names.get(e[0], f"#{e[0]}")
-        if (only and name not in only) or name in hidden or (a.thread is not None and e[2] != a.thread):
-            continue
-        ret = "(no return)" if e[6] == NOT_RETURNED else f"{e[6]:#010x}"
-        lines.append(f"{seq:7d} {name:30s} -> {ret:11s} from {e[1]:#010x} thr {e[2]:#010x} "
-                     f"args {e[3]:#x} {e[4]:#x} {e[5]:#x}  {detail(e)}".rstrip())
-        if a.last and len(lines) == a.last:
-            break
-    print(f"{count} calls recorded, the last {min(count, RING)} kept; showing {len(lines)}"
-          + ("" if a.all or only else " (common calls hidden: --all shows them)"))
-    print("\n".join(reversed(lines)))
+    try:
+        if a.load:
+            count, data = load(a.load)
+        else:
+            if not a.qmp:
+                sys.exit("--qmp SOCK (or --load FILE) is needed")
+            count, data = grab(a.qmp, a.map)
+            if a.save:
+                save(a.save, count, data)
+                print(f"ring saved to {a.save}")
+    except TraceError as e:
+        sys.exit(str(e))
+    print("\n".join(report(count, data, names(a.exports), a.last, a.only.split(",") if a.only else None,
+                           a.hide.split(",") if a.hide else (), a.all, a.thread)))
 
 
 if __name__ == "__main__":
