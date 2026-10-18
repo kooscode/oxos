@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Controller input test: boot a BIOS with the padtest disc, press every input of a virtual gamepad and check
+"""Controller input test: boot a BIOS with the controller test title's disc, press every input of a virtual gamepad and check
 which Xbox controller input the title receives for each.
 
-The title (tests/padtest) is built with nxdk and keeps its state in a block with the signature "XKPADTST"; this
+The title (tests/controller-test-title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this
 script finds it in a RAM dump (QMP pmemsave) and then reads it through its virtual address after each press.
 
-usage: pad_test.py --bios BIOS --iso padtest.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
+usage: controller_test.py --bios BIOS --iso controller-test-title.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
 """
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vpad import VPAD_PRODUCT, VPAD_VENDOR, VirtualPad  # noqa: E402
+from virtual_gamepad import VPAD_PRODUCT, VPAD_VENDOR, VirtualPad  # noqa: E402
 
 ANALOG = ["A", "B", "X", "Y", "BLACK", "WHITE", "LT", "RT"]
 DIGITAL = ["UP", "DOWN", "LEFT", "RIGHT", "START", "BACK", "LS", "RS"]
@@ -80,12 +80,12 @@ class PadState:
             sys.exit(f"pmemsave failed: {out}")
         data = open(ram, "rb").read()
         os.remove(ram)
-        at = data.find(b"XKPADTST\x01\x00\x00\x00")
+        at = data.find(b"XKCTLTST\x01\x00\x00\x00")
         while at >= 0:  # copies of the title image (file cache) still hold Self = 0
             self.addr = struct.unpack_from("<I", data, at + 12)[0]
             if self.addr:
                 return True
-            at = data.find(b"XKPADTST\x01\x00\x00\x00", at + 1)
+            at = data.find(b"XKCTLTST\x01\x00\x00\x00", at + 1)
         return False
 
     def read(self):
@@ -136,9 +136,9 @@ def main():
         deadline = time.time() + 60
         while not state.locate():
             if time.time() > deadline:
-                sys.exit(f"padtest title did not start (logs in {work})")
+                sys.exit(f"controller test title did not start (logs in {work})")
             time.sleep(2)
-        print(f"  padtest running, state at {state.addr:#x}")
+        print(f"  controller test title running, state at {state.addr:#x}")
         while not any(sl["present"] and sl["reports"] > 50 for sl in state.slots()):
             if time.time() > deadline + 30:
                 sys.exit(f"  [FAIL] no controller connected (logs in {work})")
