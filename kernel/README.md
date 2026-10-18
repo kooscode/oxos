@@ -54,7 +54,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
    - 3c-2: FATX file system — create/read/write/rename/delete, directory and volume queries (spec 04b). ✅ passes in xemu; written files verified on the disk copy by an independent reader.
    - 3c-3: DVD (ATAPI), XDVDFS, RAW file system (spec 04c). ✅ passes in xemu with a generated XISO.
 4. XBE loader and title launch (spec 05):
-   - 4a: XBE loader, kernel thunks, section load/digests, media/region checks, title keys, path symlinks, test title from disc. ✅ passes in xemu.
+   - 4a: XBE loader, kernel thunks, section load/digests, media/region checks, title keys, path symlinks, kernel test title from disc (`tests/kernel-test-title`). ✅ passes in xemu.
    - 4b-1: SMBus, SMC tray/reset, EEPROM settings + security section (HD key, region), HalReturnToFirmware (spec 12). ✅ passes in xemu.
    - 4b-2: AV options/capabilities + basic display mode; the nxdk dashboard on C: boots and draws (`make test-dash`, `tools/fbshot.py` for a framebuffer PNG). ✅ passes in xemu. Real-hardware encoder tables pending.
 5. Remaining exports:

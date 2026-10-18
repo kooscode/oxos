@@ -163,7 +163,8 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
   - The console region is all regions until the EEPROM is read.
   - No logo or SMC tray state yet (LaunchDataPage launches: §9).
 - Path symbolic links (`\??\D:` → a directory inside a device) reparse the link target plus the rest of the name.
-- **Test title:** `tests/title/title.cpp` → `tools/mkxbe.py` → `default.xbe` on the generated test disc.
+- **Kernel test title:** `tests/kernel-test-title/kernel_test_title.cpp` → `tools/mkxbe.py` → `default.xbe` on the
+  generated test disc (what it checks: the comment at the top of the file).
 
 ## 9. Our implementation (milestone 5d-2): LaunchDataPage launches
 - Title thread: if `LaunchDataPage` is set (only possible after a quick reboot), path A of §2:
