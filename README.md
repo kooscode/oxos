@@ -87,7 +87,7 @@ Nothing else needs fetching by hand. On first use the build fetches into `third_
 **4. Optionally, add games and your own files.**
 - Your game discs (XISO) go in `xiso/`.
 - `xbox-files/` holds your own copyrighted files, which are never committed: for example a disk with the stock
-  Microsoft dashboard (its Settings set video modes, clock and language) as `xbox-files/hdd/xbox_hdd_msdash.qcow2`,
+  Microsoft dashboard (its Settings set video modes, clock and language) as `xbox-files/hdd/msdash.qcow2`,
   which `make run` then prefers over the default disk.
 
 **No BIOS, no MCPX boot ROM and no hard-disk image are needed.** `xbox-files/`, `xiso/` and `xemu-state/` (below)
@@ -124,7 +124,7 @@ make run-trace-full ISO=...      # optional: also records the title's last kerne
 make print-trace-dump            # optional: print those calls at any time, from a second terminal (LAST=, ONLY=, ALL=1)
 make run-gdb ISO=...             # optional: the debug kernel, paused for gdb (see "Debugging" below)
 ```
-`make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
+`make run` starts from `xbox-files/hdd/msdash.qcow2` when you have it (a hard disk with the stock Microsoft
 dashboard, whose Settings set up video modes, clock and language), otherwise from the default xemu-dashboard disk;
 pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set). It keeps its
 hard-disk copy and EEPROM in `xemu-state/oxos-<disk>/` (`oxos-msdash`, or `oxos-xemu` for the default disk), so saves
