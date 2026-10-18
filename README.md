@@ -38,23 +38,60 @@ It has only been tested in xemu so far, not on a real console.
   any Microsoft key. Without a boot ROM (xemu), our reset code runs the same X-codes. The hard disk unlocks with
   Cromwell's EEPROM key states, as Cromwell has done for twenty years.
 
-## What you need
-- **To build:** clang/lld (18 tested), Python 3 with Pillow and git. Cromwell (and, for the controller test, nxdk)
-  is fetched into `third_party/` automatically.
-- **To run in xemu:**
-  - xemu, on `PATH` or at `~/.local/bin/xemu`;
-  - a hard-disk image at `xbox-files/hdd/xbox_hdd.qcow2`. The copyright-free
-    [xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) with its open dashboard works; tests and
-    `make run` only ever use a temporary copy;
-  - your own game discs (XISO) in `xiso/`.
+## Getting started
+Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
+same packages under their own names.
 
-  **No BIOS and no MCPX boot ROM are needed.**
+**1. Install the build tools.**
+```
+sudo apt install git make clang lld llvm python3 python3-pil
+```
+(`clang` and `lld` build the kernel, `llvm` provides `llvm-objcopy`, Pillow converts the boot splash.)
 
-Optional, for comparing against the original:
-- your own BIOS dump in `xbox-files/bios/`;
-- the MCPX boot ROM: `STOCK_MCPX`, or `MCPX_ROM=...` to boot OXOS through the real ROM as a console does.
+**2. Install xemu.** Download the AppImage from [xemu.app](https://xemu.app) (0.8.136 tested) and put it at
+`~/.local/bin/xemu` (or anywhere on `PATH` as `xemu`):
+```
+mkdir -p ~/.local/bin
+mv ~/Downloads/xemu-*-x86_64.AppImage ~/.local/bin/xemu && chmod +x ~/.local/bin/xemu
+sudo apt install libfuse2t64     # AppImages need FUSE 2 on Ubuntu 24.04
+```
 
-`xbox-files/` and `xiso/` are git-ignored.
+**3. Clone the repository.**
+```
+git clone https://github.com/kooscode/oxos.git
+cd oxos
+```
+Nothing else needs fetching by hand: the first `make bios` clones XboxDev/cromwell (its X-code table and EEPROM key
+states) into `third_party/`, and the first controller test clones nxdk, each at a pinned commit (so the first build
+needs internet access).
+
+**4. Add a hard-disk image and, optionally, games.**
+```
+mkdir -p xbox-files/hdd xiso
+```
+Put a hard-disk image at `xbox-files/hdd/xbox_hdd.qcow2`. The copyright-free
+[xemu HDD image](https://github.com/xemu-project/xemu-hdd-image) (download it from its releases page and unzip it)
+works, with its open dashboard. Tests and `make run` only ever use a copy, never the image itself. Put your own game
+discs (XISO) in `xiso/`. For the stock Microsoft dashboard (its Settings set video modes, clock and language), add a
+disk with it as `xbox-files/hdd/xbox_hdd_msdash.qcow2`; `make run` then prefers it.
+
+**No BIOS and no MCPX boot ROM are needed.** `xbox-files/` and `xiso/` are git-ignored.
+
+**5. Build and boot.**
+```
+cd kernel
+make bios      # kernel/build/bios.bin, the open BIOS image
+make test      # boots it in xemu and checks every milestone (a few minutes; xemu windows open and close)
+make run       # an interactive xemu window: the dashboard, or a game with ISO=../xiso/game.iso
+```
+
+**Optional extras:**
+- **Controller test** (`make test-pad`): `sudo apt install cmake flex bison`, and write access to `/dev/uinput`
+  (e.g. a udev rule, or `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
+- **Debugging with gdb or VS Code** (see below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an
+  nxdk checkout (`make padtest` fetches one into `third_party/nxdk`).
+- **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or
+  `MCPX_ROM=...` to boot OXOS through the real ROM as a console does) for `make run-stock` and `make test-mcpx`.
 
 ## Build and run
 ```
@@ -82,8 +119,8 @@ does the same): with 480p/720p/1080i enabled in the dashboard a widescreen game 
 `auto`, so run it with `ASPECT=16x9` (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Games still output 480
 lines: the HD video modes (720p/1080i) are not implemented yet.
 
-`make test-pad` (controller test) also needs cmake, flex, bison, the LLVM 18 tools and write access to
-`/dev/uinput`; it fetches [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
+`make test-pad` (controller test) needs the extras listed under "Getting started"; it fetches
+[nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
 See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
