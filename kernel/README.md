@@ -27,7 +27,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 | `boot/` | the open image's X-code wrapper (Cromwell's table), reset code and 2BL (spec 01 §5) |
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, exported data |
-| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection |
+| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, hardware detection, debug serial port (spec 18) |
 | `src/ob/`, `src/ex/`, `src/ps/` | object manager, executive objects (Nt*), system threads |
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool |
 | `src/rtl/` | runtime library |

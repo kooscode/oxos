@@ -2,6 +2,7 @@
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>
+#include <xk/serial.h>
 
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG, PULONG, PVOID, ULONG, PULONG);
 XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG, ULONG, PVOID, ULONG);
@@ -77,6 +78,7 @@ static void XkpShowCode(ULONG Code) {
 }
 
 [[noreturn]] void IdexFatalError(ULONG Code) {
+    XK_SERIAL("*** fatal error %lu\n", Code);
     IdexFatalErrorCode = Code;
     if (KeGetCurrentIrql() > PASSIVE_LEVEL)
         KfLowerIrql(PASSIVE_LEVEL);

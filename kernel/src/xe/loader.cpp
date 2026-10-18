@@ -2,6 +2,7 @@
 #include <xk/io.h>
 #include <xk/ps.h>
 #include <xk/rtl.h>
+#include <xk/serial.h>
 
 XBAPI void NTAPI XcSHAInit(PUCHAR);
 XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
@@ -213,7 +214,7 @@ static void XepReleaseImage() {
     NtFreeVirtualMemory(&base, &size, 0x8000 /*MEM_RELEASE*/);
 }
 
-NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
+static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     if (XeImageFileName.Buffer)
         ExFreePool(XeImageFileName.Buffer);
     ULONG n = 0;
@@ -352,6 +353,12 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     XeLastLoadStatus = status;
     XeLoadHistory[XeLoadCount & 3] = status; // diagnostics: the last four load results
     XeLoadCount = XeLoadCount + 1;
+    return status;
+}
+
+NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
+    NTSTATUS status = XepLoadImage(Path, Dashboard);
+    XK_SERIAL("load %s: %#lx\n", Path, status);
     return status;
 }
 

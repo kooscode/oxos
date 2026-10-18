@@ -18,7 +18,7 @@ Display:
   (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
 The kernel has no HD (720p/1080i) video modes yet, so games output 480 lines and xemu scales them.
 """
-import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
+import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, threading, time
 
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", "2560x1440", "2560x1600",
@@ -36,6 +36,7 @@ ap.add_argument("--aspect", choices=["auto", "native", "4x3", "16x9"], help="xem
 ap.add_argument("--size", choices=SIZES, help="window size")
 ap.add_argument("--scale", type=int, choices=range(1, 11), metavar="1-10", help="render resolution multiplier")
 ap.add_argument("--fullscreen", action="store_true")
+ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and print the debug serial port here")
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 a = ap.parse_args()
 
@@ -70,6 +71,22 @@ def config(path, extra=""):
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.abspath(eeprom)}'\n"
         f"hdd_path = '{os.path.abspath(hdd)}'\n" + extra)
+
+
+def follow(path, proc):
+    """Print what xemu writes to the serial log file as it arrives."""
+    while not os.path.exists(path) and proc.poll() is None:
+        time.sleep(0.1)
+    with open(path, "rb") as f:
+        while True:
+            data = f.read()
+            if data:
+                sys.stdout.write(data.decode("latin1").replace("\r\n", "\n"))
+                sys.stdout.flush()
+            elif proc.poll() is not None:
+                return
+            else:
+                time.sleep(0.1)
 
 
 def create_eeprom():
@@ -117,8 +134,16 @@ try:
     config(cfg, f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "")
     print(f"xemu: {a.bios}" + (f" + {a.iso}" if a.iso else " (no disc)")
           + (f"; state {a.state}" if a.state else f"; work dir {work}"))
-    subprocess.run([a.xemu, "-config_path", cfg], stdout=open(os.path.join(work, "xemu.log"), "w"),
-                   stderr=subprocess.STDOUT)
+    # The serial port goes to a file that a thread copies to this terminal (a stdio chardev would put the terminal
+    # in raw mode).
+    serial_log = os.path.join(work, "serial.log")
+    serial = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
+    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial, stdout=open(os.path.join(work, "xemu.log"), "w"),
+                         stderr=subprocess.STDOUT)
+    if a.serial:
+        threading.Thread(target=follow, args=(serial_log, p), daemon=True).start()
+    p.wait()
+    time.sleep(0.3)  # the last lines
 finally:
     if not a.keep:
         shutil.rmtree(work, ignore_errors=True)
