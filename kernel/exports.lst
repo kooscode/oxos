@@ -1,5 +1,5 @@
 # Kernel exports implemented so far. Ordinals and kinds come from exports.tsv;
-# tools/gen_def.py turns this list into build/xboxkrnl.def.
+# tools/gen_def.py turns this list into build/<kind>/xboxkrnl.def.
 HalReadWritePCISpace
 KeGetCurrentIrql
 KeInterruptTime

@@ -4,7 +4,7 @@
 The kernel's boot self-tests (kernel/src/ke/selftest.cpp) leave results in globals that are
 located through the linker map and read with HMP `x`.
 
-usage: boot_test.py --bios build/bios.bin --map build/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
+usage: boot_test.py --bios build/selftest/bios.bin --map build/selftest/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
 """
 import argparse
 import hashlib

@@ -7,7 +7,7 @@
             "name": "OXOS kernel: debug in xemu",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/kernel/build-gdb/xboxkrnl.elf",
+            "program": "${workspaceFolder}/kernel/build/debug/xboxkrnl.elf",
             "cwd": "${workspaceFolder}/kernel",
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb-multiarch",

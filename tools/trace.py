@@ -180,8 +180,8 @@ def report(count, data, table, last=200, only=None, hide=(), show_all=False, thr
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--qmp", help="xemu's QMP socket (make run-trace-full: kernel/build-trace-full2/qmp.sock)")
-    ap.add_argument("--map", default=os.path.join(root, "kernel/build-trace-full2/xboxkrnl.map"))
+    ap.add_argument("--qmp", help="xemu's QMP socket (make run-trace-full: kernel/build/trace-full/qmp.sock)")
+    ap.add_argument("--map", default=os.path.join(root, "kernel/build/trace-full/xboxkrnl.map"))
     ap.add_argument("--exports", default=os.path.join(root, "kernel/exports.tsv"))
     ap.add_argument("--last", type=int, default=200, help="how many calls to print (0 = the whole ring)")
     ap.add_argument("--only", help="comma-separated function names to show")

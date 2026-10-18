@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            // Builds the debug kernel (kernel/build-gdb) and starts xemu paused, with the GDB server on
+            // Builds the debug kernel (kernel/build/debug) and starts xemu paused, with the GDB server on
             // localhost:1234 and the kernel's debug serial output in this terminal.
             "label": "oxos: start debug kernel",
             "type": "shell",

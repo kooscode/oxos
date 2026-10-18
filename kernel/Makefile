@@ -1,10 +1,21 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
-#   make            -> build/xboxkrnl.exe (+ map)
-#   make bios       -> build/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/01 §5)
-#   make test       -> boot build/bios.bin in xemu and check all milestone conditions (boot self-tests)
+#   make            -> build/selftest/xboxkrnl.exe (+ map)
+#   make bios       -> build/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/01 §5)
+#   make test       -> boot build/selftest/bios.bin in xemu and check all milestone conditions (boot self-tests)
+# All build output goes under build/, one folder per kind of build:
+#   build/selftest         make, make bios, make test (the kernel with its boot self-tests)
+#   build/release          make run and the published BIOS (no self-tests, no debug code)
+#   build/debug            make run-gdb, tools/debug-app.py, VS Code (DEBUG=1: debug info for gdb)
+#   build/trace-basic      make run-trace-basic (the debug serial log)
+#   build/trace-full       make run-trace-full (serial log + kernel call tracer, xemu at 128 MB)
+#   build/trace-full-64mb  make run-trace-full TRACE=1 (the call tracer within the console's 64 MB)
 
 ROOT      := ..
-BUILD     := build
+OUT       := build
+BUILD     := $(OUT)/selftest
+RELEASE_BUILD := $(OUT)/release
+DEBUG_BUILD   := $(OUT)/debug
+TRACE_BASIC_BUILD := $(OUT)/trace-basic
 # IMAGE=open (default) needs no Microsoft files. IMAGE=base instead packs the kernel into your own MCPX 1.0 BIOS
 # image (BIOS_BASE, its 2BL decrypted with MCPX_ROM), as before the open image existed.
 IMAGE     ?= open
@@ -152,29 +163,29 @@ test: $(BUILD)/bios.bin $(TEST_TITLE).xbe
 
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
 test-mcpx:
-	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
-	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) \
+	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
 test-dash:
-	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2).
 test-relaunch: $(TEST_TITLE).xbe
-	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
 	    --relaunch --boot-wait 1
 
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
 test-fatal:
-	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map build-release/xboxkrnl.map --no-disc --fatal --boot-wait 2
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --fatal --boot-wait 2
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test-udf: $(BUILD)/bios.bin
@@ -202,24 +213,24 @@ RUN_OPTS     = --hdd $(PLAY_HDD) $(if $(ISO),--iso $(ISO)) $(if $(FRESH),--fresh
                $(if $(ASPECT),--aspect $(ASPECT)) \
                $(if $(SIZE),--size $(SIZE)) $(if $(SCALE),--scale $(SCALE)) $(if $(FULL),--fullscreen)
 run:
-	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
 # The same with the debug serial port (spec/18), whose output is printed in this terminal. No import tracing, so
 # titles see the memory of a release build (plus the serial code); also the build to flash for troubleshooting on
 # hardware.
 run-trace-basic:
-	$(MAKE) BUILD=build-trace-basic SELFTEST=0 SERIAL=1 build-trace-basic/bios.bin
-	python3 -I $(ROOT)/tools/run.py build-trace-basic/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
+	$(MAKE) BUILD=$(TRACE_BASIC_BUILD) SELFTEST=0 SERIAL=1 $(TRACE_BASIC_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/run.py $(TRACE_BASIC_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
 # Source-level debugging: the same as run-trace-basic with the debug kernel (DEBUG=1) and xemu's GDB server on
-# localhost:$(GDB_PORT), paused at power-on. Attach with gdb-multiarch (symbols: build-gdb/xboxkrnl.elf, plus an
+# localhost:$(GDB_PORT), paused at power-on. Attach with gdb-multiarch (symbols: $(DEBUG_BUILD)/xboxkrnl.elf, plus an
 # app's own); tools/debug-app.py does the same for an nxdk app, and tools/vscode/ sets it up for VS Code.
 GDB_PORT    ?= 1234
 run-gdb:
-	$(MAKE) BUILD=build-gdb SELFTEST=0 SERIAL=1 DEBUG=1 build-gdb/bios.bin
-	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/build-gdb/xboxkrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
-	python3 -I $(ROOT)/tools/run.py build-gdb/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
+	$(MAKE) BUILD=$(DEBUG_BUILD) SELFTEST=0 SERIAL=1 DEBUG=1 $(DEBUG_BUILD)/bios.bin
+	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/$(DEBUG_BUILD)/xboxkrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
+	python3 -I $(ROOT)/tools/run.py $(DEBUG_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
 	    --serial --gdb $(GDB_PORT)
 
 # Import tracing: the same as run-trace-basic, plus a record of the title's last 32768 kernel calls. They are dumped by
@@ -230,7 +241,7 @@ run-gdb:
 # are kept. TRACE=1 keeps it in the console's 64 MB (2 MB less for the title). Each mode has its own build folder,
 # because make does not rebuild when only the flags change; pass the same TRACE to print-trace-dump.
 TRACE       ?= 2
-TRACE_BUILD := build-trace-full$(TRACE)
+TRACE_BUILD := $(OUT)/trace-full$(if $(filter 1,$(TRACE)),-64mb)
 run-trace-full:
 	$(MAKE) BUILD=$(TRACE_BUILD) SELFTEST=0 TRACE_IMPORTS=$(TRACE) SERIAL=1 $(TRACE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
@@ -258,8 +269,8 @@ padtest: $(NXDK_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/padtest -j8
 
 test-pad: padtest
-	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin)
-	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),build-release/bios.bin) \
+	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
+	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
 		$(if $(filter stock,$(PAD_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
 		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
 
@@ -269,6 +280,6 @@ run-stock:
 	python3 -I $(ROOT)/tools/run.py $(BIOS_BASE) --mcpx-rom $(STOCK_MCPX) $(if $(STATE_STOCK),--state $(STATE_STOCK)) $(RUN_OPTS)
 
 clean:
-	rm -rf $(BUILD) build-release
+	rm -rf $(OUT)
 
 .PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
