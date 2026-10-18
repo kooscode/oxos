@@ -12,9 +12,9 @@ make test       # boot bios.bin in xemu; check every milestone's boot self-tests
 make SELFTEST=0 # build without the boot self-tests
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison)
-make run-trace [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
-make run-imports [ISO=game.iso] [TRACE=1|2]  # run-trace plus a record of the title's last 32768 kernel calls
-make trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
+make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
+make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
+make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
 make test-pad [PAD_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs; the
                                 # tests/padtest title (nxdk, fetched into ../third_party) checks each one
 ```
@@ -72,7 +72,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
    - 8 (out of order): UDF 1.0x read-only file system for DVD-video discs, tried before XDVDFS (spec 04d; `make test-udf`). ✅ passes in xemu.
    - Boot splash: a picture fading in on cold boot (`src/hal/splash.cpp`): `splash/splash.png`, reduced to 256 colours and stored by `mkbios.py` in flash bank 1, decoded by the kernel's own PNG/inflate decoder; without it (256 KB flash) a drawn emblem. The reference's INIT-section 3D animation and its assets are not reproduced (spec 17 §7).
    - 9: retail discs: Xbox DVD authentication (spec 04 §3a; xemu does not emulate it), modded-BIOS media/region policy by default (`RETAIL_MEDIA_POLICY=1` for strict), top-down physical page allocation and a low splash framebuffer so titles' fixed-address memory assumptions hold. Halo (XISO) now loads and runs its own code in xemu.
-   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad`, a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
+   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools; today `make run-trace-full`). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad`, a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
    - 11: **Halo 2 reaches its title screen in xemu.** Its "disc dirty or damaged" error had two causes: non-cached XDVDFS reads with a length that is not whole sectors (a map file's tail) were rejected, and the kernel used more memory than the reference (per-volume FATX caches instead of one shared FscSetCacheSize cache, an 8-page commit reserve, self-test/tracer code and a page-lock table in release builds). `make BUILD=build-trace2 SELFTEST=0 TRACE_IMPORTS=2` traces with the ring above 64 MB (xemu `mem_limit = '128'`), so the title's memory matches a release build.
    - 12: **fully open BIOS image** (spec 01 §4–5).
      - Our reset code (top 512 bytes) and 2BL, XboxDev/cromwell's X-codes with its overflow trick, and its

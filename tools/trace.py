@@ -4,8 +4,8 @@
 usage: trace.py --qmp SOCK --map xboxkrnl.map [--exports exports.tsv] [--last N] [--only NAMES] [--hide NAMES]
                 [--all] [--thread ID] [--save FILE | --load FILE]
 
-`make run-imports` runs a title in xemu and dumps the ring by itself when the kernel reports a crash on the serial
-port and when xemu is closed (tools/run.py --trace-map). Any time in between, `make trace-dump` in another terminal
+`make run-trace-full` runs a title in xemu and dumps the ring by itself when the kernel reports a crash on the serial
+port and when xemu is closed (tools/run.py --trace-map). Any time in between, `make print-trace-dump` in another terminal
 prints it. xemu is paused while the ring is copied (a fraction of a second) and then resumed.
 
 Each line: sequence number, function, return value ("(no return)" while the call has not returned: the thread is
@@ -41,7 +41,7 @@ class Qmp:
         try:
             self.s.connect(path)
         except OSError as e:
-            raise TraceError(f"cannot connect to xemu at {path} ({e.strerror}): start it with `make run-imports`")
+            raise TraceError(f"cannot connect to xemu at {path} ({e.strerror}): start it with `make run-trace-full`")
         self.f = self.s.makefile("rw")
         self.f.readline()
         self.command("qmp_capabilities")
@@ -180,8 +180,8 @@ def report(count, data, table, last=200, only=None, hide=(), show_all=False, thr
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--qmp", help="xemu's QMP socket (make run-imports: kernel/build-imports2/qmp.sock)")
-    ap.add_argument("--map", default=os.path.join(root, "kernel/build-imports2/xboxkrnl.map"))
+    ap.add_argument("--qmp", help="xemu's QMP socket (make run-trace-full: kernel/build-trace-full2/qmp.sock)")
+    ap.add_argument("--map", default=os.path.join(root, "kernel/build-trace-full2/xboxkrnl.map"))
     ap.add_argument("--exports", default=os.path.join(root, "kernel/exports.tsv"))
     ap.add_argument("--last", type=int, default=200, help="how many calls to print (0 = the whole ring)")
     ap.add_argument("--only", help="comma-separated function names to show")
@@ -189,7 +189,7 @@ def main():
     ap.add_argument("--all", action="store_true", help="do not hide the default list of common calls")
     ap.add_argument("--thread", type=lambda s: int(s, 16), help="only this thread (hex KTHREAD address)")
     ap.add_argument("--save", help="also write the raw ring to FILE (decode later with --load)")
-    ap.add_argument("--load", help="decode a ring saved with --save (or by run-imports) instead of reading xemu")
+    ap.add_argument("--load", help="decode a ring saved with --save (or by run-trace-full) instead of reading xemu")
     a = ap.parse_args()
     try:
         if a.load:
