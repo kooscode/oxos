@@ -140,7 +140,7 @@ lines: the HD video modes (720p/1080i) are not implemented yet.
 `make test-pad` (controller test) needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
 [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
-See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
+See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`tests/README.md`](tests/README.md) for what each test checks, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
 
 ## Debugging with gdb or VS Code
