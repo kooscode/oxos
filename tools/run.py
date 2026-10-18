@@ -3,7 +3,7 @@
 
 usage: run.py BIOS [--iso GAME.iso] [--hdd HDD.qcow2] [--state DIR [--fresh]] [--widescreen] [--size WxH]
               [--scale N] [--fullscreen] [--serial] [--qmp SOCK] [--memory 128] [--trace-map MAP [--dump-dir DIR]]
-              [--keep]
+              [--gdb PORT] [--keep]
 
 Disk and EEPROM:
 - default: a temporary copy of the HDD image and a new EEPROM, deleted when xemu exits (unless --keep);
@@ -24,7 +24,8 @@ crash on the serial port (a line starting with "***", needs --serial) and when x
 of them in DIR/calls-<time>-<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load).
 xemu quits at once when its window is closed, so run.py also copies the record every second while the title runs
 (without pausing it) and saves the latest copy as the exit dump when xemu is gone.
-The kernel has no HD (720p/1080i) video modes yet, so games output 480 lines and xemu scales them.
+--gdb PORT starts xemu's GDB server on localhost:PORT, paused at power-on until a debugger continues it (see
+tools/debug-app.py).
 """
 import argparse, json, os, shutil, signal, socket, struct, subprocess, sys, tempfile, threading, time
 
@@ -50,6 +51,7 @@ ap.add_argument("--memory", choices=["64", "128"], help="console memory in MB (d
 ap.add_argument("--trace-map", help="import-trace build's map: dump the kernel calls on a crash and on exit")
 ap.add_argument("--dump-dir", default=".", help="where --trace-map writes the dumps (default: here)")
 ap.add_argument("--exports", default=os.path.join(root, "kernel/exports.tsv"), help="export names for the dumps")
+ap.add_argument("--gdb", type=int, metavar="PORT", help="GDB server on localhost:PORT, paused at power-on")
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 a = ap.parse_args()
 
@@ -281,7 +283,11 @@ try:
         dumper = CallDumper(a.trace_map, a.exports, a.dump_dir, events, cmd)
         qmp += ["-qmp", f"unix:{events},server,nowait", "-qmp", f"unix:{cmd},server,nowait", "-no-shutdown"]
         print(f"kernel call dumps (on a crash and on exit): {a.dump_dir}")
-    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp, stdout=open(os.path.join(work, "xemu.log"), "w"),
+    gdb = []
+    if a.gdb:
+        gdb = ["-gdb", f"tcp:127.0.0.1:{a.gdb}", "-S"]
+        print(f"GDB server: localhost:{a.gdb} (paused at power-on until the debugger continues)")
+    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb, stdout=open(os.path.join(work, "xemu.log"), "w"),
                          stderr=subprocess.STDOUT, start_new_session=True)
     if a.serial:
         threading.Thread(target=follow, args=(serial_log, p, dumper.on_serial if dumper else None),

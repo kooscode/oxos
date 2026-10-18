@@ -66,6 +66,7 @@ make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace-basic ISO=...     # optional: a trace build, for troubleshooting (debug serial output)
 make run-trace-full ISO=...      # optional: also records the title's kernel calls; `make print-trace-dump` prints them
+make run-gdb ISO=...             # optional: the debug kernel, paused for gdb (see "Debugging" below)
 ```
 `make run` starts from `xbox-files/hdd/xbox_hdd_msdash.qcow2` when you have it (a hard disk with the stock Microsoft
 dashboard, whose Settings set up video modes, clock and language), otherwise from the test image; pick another with
@@ -85,6 +86,31 @@ lines: the HD video modes (720p/1080i) are not implemented yet.
 
 See [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
 behavioural specifications.
+
+## Debugging with gdb or VS Code
+xemu's GDB server and a debug build of the kernel (`DEBUG=1`: DWARF debug info, `-Og`) let you debug at source
+level: breakpoints, stepping, variables and the call stack, in your own [nxdk](https://github.com/XboxDev/nxdk)
+apps and in the kernel, in one session (step from your app into a kernel call and back). You need `gdb-multiarch`
+(Ubuntu: `sudo apt install gdb-multiarch`) and GNU `objcopy` (binutils).
+
+**An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
+1. Copy `tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in
+   `settings.json`.
+2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug-app.py` builds the
+   debug kernel (once), packs the app's `bin/` folder as a disc, and starts xemu paused with the kernel's serial log in
+   the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your first breakpoint. Stopping the
+   debugger closes xemu.
+3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
+
+**From a terminal:** `python3 tools/debug-app.py path/to/app` (the same steps), then in another terminal
+`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off'
+-ex 'add-symbol-file kernel/build-gdb/xboxkrnl.elf' -ex 'target remote localhost:1234'`, set breakpoints and `continue`. `make run-gdb` does the same for the kernel
+alone (any disc, or the dashboard).
+
+Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
+`CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to their Makefile, so that gdb shows function names (it cannot
+read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox (a GDB stub in the kernel, over the SuperIO
+serial port) is not implemented yet.
 
 ## About the BIOS image you build
 `make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0;

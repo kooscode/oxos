@@ -20,6 +20,12 @@ SPLASH_QUANT ?= octree
 SELFTEST  ?= 1
 RETAIL_MEDIA_POLICY ?= 0
 TRACE_IMPORTS ?= 0
+# Source-level debugging with gdb (make run-gdb, tools/debug-app.py): DWARF debug info, and -Og so that stepping
+# follows the source. C++ functions get no (MSVC-style) linkage names, which gdb cannot demangle, so gdb names
+# them from the source. The BIOS packs the kernel as usual; xboxkrnl.elf (the same link with the debug info kept,
+# converted to ELF, which gdb reads better than PE) is the symbol file for gdb.
+DEBUG     ?= 0
+OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-O2 -g0)
 # Debug serial port (spec/18): on in the self-test and trace builds, off in release builds.
 SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 
@@ -30,9 +36,9 @@ LD  := lld-link
 TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
-            -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib -O2 -g0 \
+            -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL)
-ASFLAGS := $(TARGET) $(ARCH) -Iinclude
+ASFLAGS := $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
@@ -58,8 +64,18 @@ $(BUILD)/xboxkrnl.def: exports.lst exports.tsv $(ROOT)/tools/gen_def.py
 	@mkdir -p $(BUILD)
 	python3 -I $(ROOT)/tools/gen_def.py exports.tsv exports.lst $@
 
+ifeq ($(DEBUG),1)
+# One link with the debug info; the kernel is the same file with the debug sections stripped, so its code and data
+# sit at exactly the addresses gdb reads from xboxkrnl.dbg.exe.
+$(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
+	$(LD) $(filter-out /DEBUG:NONE,$(LDFLAGS)) /DEBUG:DWARF /DEF:$(BUILD)/xboxkrnl.def \
+	    /OUT:$(BUILD)/xboxkrnl.dbg.exe $(OBJS)
+	$(OBJCOPY) --strip-all $(BUILD)/xboxkrnl.dbg.exe $@
+	$(GNU_OBJCOPY) -O elf32-i386 $(BUILD)/xboxkrnl.dbg.exe $(BUILD)/xboxkrnl.elf
+else
 $(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
+endif
 
 # Test title (milestone 4a): freestanding PE at 0x10000 -> XBE.
 TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
@@ -81,6 +97,7 @@ CROMWELL_DIR    := $(abspath $(ROOT)/third_party/cromwell)
 CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
 MCPX16          ?= 0
 OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18/bin/llvm-objcopy)
+GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium3 -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
               $(if $(filter 1,$(MCPX16)),-DMCPXREVD5)
@@ -190,6 +207,16 @@ run-trace-basic:
 	$(MAKE) BUILD=build-trace-basic SELFTEST=0 SERIAL=1 build-trace-basic/bios.bin
 	python3 -I $(ROOT)/tools/run.py build-trace-basic/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
+# Source-level debugging: the same as run-trace-basic with the debug kernel (DEBUG=1) and xemu's GDB server on
+# localhost:$(GDB_PORT), paused at power-on. Attach with gdb-multiarch (symbols: build-gdb/xboxkrnl.elf, plus an
+# app's own); tools/debug-app.py does the same for an nxdk app, and tools/vscode/ sets it up for VS Code.
+GDB_PORT    ?= 1234
+run-gdb:
+	$(MAKE) BUILD=build-gdb SELFTEST=0 SERIAL=1 DEBUG=1 build-gdb/bios.bin
+	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/build-gdb/xboxkrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
+	python3 -I $(ROOT)/tools/run.py build-gdb/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
+	    --serial --gdb $(GDB_PORT)
+
 # Import tracing: the same as run-trace-basic, plus a record of the title's last 32768 kernel calls. They are dumped by
 # themselves when the kernel reports a crash and when xemu is closed (the last 30 in this terminal, all of them in
 # $(TRACE_BUILD)/dumps/); at any other time, `make print-trace-dump` in another terminal prints them (tools/trace.py; LAST=N calls,
@@ -239,4 +266,4 @@ run-stock:
 clean:
 	rm -rf $(BUILD) build-release
 
-.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-stock clean
+.PHONY: all bios test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
