@@ -102,10 +102,10 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
 ```
 
 **Optional extras:**
-- **Controller test** (`make test-pad`): `sudo apt install cmake flex bison`, and write access to `/dev/uinput`
+- **Controller test** (`make test-controller`): `sudo apt install cmake flex bison`, and write access to `/dev/uinput`
   (e.g. a udev rule, or `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
 - **Debugging with gdb or VS Code** (see below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an
-  nxdk checkout (`make padtest` fetches one into `third_party/nxdk`).
+  nxdk checkout (`make controller-test-title` fetches one into `third_party/nxdk`).
 - **Your own boot splash:** `make bios SPLASH=my-picture.jpg` converts any picture with Pillow
   (`sudo apt install python3-pil`); the committed `kernel/splash/splash.png` is already converted and needs nothing.
 - **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or
@@ -139,7 +139,7 @@ game that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it 
 (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Enter the Matrix in 720p or 1080i crashes xemu at render scale
 2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
 
-`make test-pad` (controller test) needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
+`make test-controller` needs the extras listed under "Getting Started (Kernel Developer)"; it fetches
 [nxdk](https://github.com/XboxDev/nxdk) into `third_party/`.
 
 See [`tools/README.md`](tools/README.md) for the host tools behind these targets, [`tests/README.md`](tests/README.md) for what each test checks, [`kernel/README.md`](kernel/README.md) for the layout, milestones and known deviations, and `spec/` for the
@@ -202,7 +202,7 @@ Microsoft's 2BL and keys: do not distribute that one.
 GPL-2.0 (see [`LICENSE`](LICENSE)). The build fetches [XboxDev/cromwell](https://github.com/XboxDev/cromwell)
 (GPL-2.0) for the X-codes and EEPROM key states, and the
 [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) hard-disk image (MIT, with its components' licenses
-in `third_party/xemu-dashboard/LICENSE`) as the default disk; `tests/padtest` builds against
+in `third_party/xemu-dashboard/LICENSE`) as the default disk; `tests/controller-test-title` builds against
 [nxdk](https://github.com/XboxDev/nxdk). All keep their own licenses and copyrights; none of them is committed here.
 
 ## Legal

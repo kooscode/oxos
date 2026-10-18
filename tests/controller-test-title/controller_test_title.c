@@ -1,5 +1,5 @@
 // Controller test title (nxdk, open source): shows every Xbox controller input live, with a checklist of the inputs
-// seen so far, and keeps the same state in XkPadTest for tests/pad_test.py (found in RAM by its signature).
+// seen so far, and keeps the same state in XkControllerTest for tests/controller_test.py (found in RAM by its signature).
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <string.h>
@@ -18,14 +18,14 @@ typedef struct {
 } PadSlot;
 
 volatile struct {
-    char Magic[8]; // "XKPADTST"
+    char Magic[8]; // "XKCTLTST"
     unsigned int Version, Self, Connects, Disconnects, Frames; // Self: this block's virtual address
     PadSlot Slot[SLOTS];
-} XkPadTest = {{'X', 'K', 'P', 'A', 'D', 'T', 'S', 'T'}, 1};
+} XkControllerTest = {{'X', 'K', 'C', 'T', 'L', 'T', 'S', 'T'}, 1};
 
 static int SlotOf(xid_dev_t *dev) {
     for (int i = 0; i < SLOTS; i++)
-        if (XkPadTest.Slot[i].Present && XkPadTest.Slot[i].Uid == dev->uid)
+        if (XkControllerTest.Slot[i].Present && XkControllerTest.Slot[i].Uid == dev->uid)
             return i;
     return -1;
 }
@@ -36,7 +36,7 @@ static void ReadDone(UTR_T *utr) {
         return;
     int s = SlotOf(dev);
     if (s >= 0 && utr->xfer_len >= sizeof(xid_gamepad_in)) {
-        volatile PadSlot *p = &XkPadTest.Slot[s];
+        volatile PadSlot *p = &XkControllerTest.Slot[s];
         const xid_gamepad_in *in = (const xid_gamepad_in *)utr->buff;
         for (int i = 0; i < 20; i++)
             p->Last[i] = utr->buff[i];
@@ -60,10 +60,10 @@ static void ReadDone(UTR_T *utr) {
 }
 
 static void Connected(xid_dev_t *dev, int status) {
-    XkPadTest.Connects++;
+    XkControllerTest.Connects++;
     for (int i = 0; i < SLOTS; i++)
-        if (!XkPadTest.Slot[i].Present) {
-            volatile PadSlot *p = &XkPadTest.Slot[i];
+        if (!XkControllerTest.Slot[i].Present) {
+            volatile PadSlot *p = &XkControllerTest.Slot[i];
             memset((void *)p, 0, sizeof(*p));
             p->Uid = dev->uid;
             p->Type = usbh_xid_get_type(dev);
@@ -75,10 +75,10 @@ static void Connected(xid_dev_t *dev, int status) {
 }
 
 static void Disconnected(xid_dev_t *dev, int status) {
-    XkPadTest.Disconnects++;
+    XkControllerTest.Disconnects++;
     int s = SlotOf(dev);
     if (s >= 0)
-        XkPadTest.Slot[s].Present = 0;
+        XkControllerTest.Slot[s].Present = 0;
 }
 
 static const char *const DigitalNames[8] = {"UP", "DOWN", "LEFT", "RIGHT", "START", "BACK", "LS", "RS"};
@@ -86,9 +86,9 @@ static const char *const AnalogNames[8] = {"A", "B", "X", "Y", "BLACK", "WHITE",
 
 static void Show(void) {
     debugResetCursor();
-    debugPrint("Open Xbox Kernel - controller test         frame %-8u\n\n", XkPadTest.Frames);
+    debugPrint("Open Xbox Kernel - controller test         frame %-8u\n\n", XkControllerTest.Frames);
     for (int s = 0; s < SLOTS; s++) {
-        volatile PadSlot *p = &XkPadTest.Slot[s];
+        volatile PadSlot *p = &XkControllerTest.Slot[s];
         if (!p->Present) {
             debugPrint("Controller %d: -                                                    \n\n\n\n\n", s + 1);
             continue;
@@ -114,7 +114,7 @@ static void Show(void) {
 }
 
 int main(void) {
-    XkPadTest.Self = (unsigned int)&XkPadTest;
+    XkControllerTest.Self = (unsigned int)&XkControllerTest;
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     debugClearScreen();
     usbh_core_init();
@@ -122,8 +122,8 @@ int main(void) {
     usbh_install_xid_conn_callback(Connected, Disconnected);
     for (;;) {
         usbh_pooling_hubs();
-        XkPadTest.Frames++;
-        if (XkPadTest.Frames % 4 == 0)
+        XkControllerTest.Frames++;
+        if (XkControllerTest.Frames % 4 == 0)
             Show();
         XVideoWaitForVBlank();
     }

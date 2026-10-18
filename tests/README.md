@@ -13,16 +13,16 @@ compiled into the self-test build only), which leave their results in kernel var
 | `make test-fatal` | With no hard disk, the kernel reports a fatal error the way the original does (LED, error history in the EEPROM, code on screen). |
 | `make test-udf` | A UDF (DVD-video style) disc instead of an Xbox one: mounting and reading files from it. |
 | `make test-mcpx` | Only with `MCPX_ROM=...`: the dashboard phase again, booted through a real MCPX boot ROM. |
-| `make test-pad` | Separate (not part of `make test`): every input of a virtual gamepad reaches an nxdk title as the right Xbox controller input. Needs cmake, flex, bison and access to `/dev/uinput`. |
+| `make test-controller` | Separate (not part of `make test`): every input of a virtual gamepad reaches an nxdk title as the right Xbox controller input. Needs cmake, flex, bison and access to `/dev/uinput`. |
 
 ## Files
 | File | What it is |
 |---|---|
-| `boot_test.py` | The test runner behind every phase except `test-pad`: makes the test disc and a copy of the hard disk, boots the BIOS in xemu, reads the results through xemu's QMP monitor and the kernel's map file, and prints the checks. |
+| `boot_test.py` | The test runner behind every phase except `test-controller`: makes the test disc and a copy of the hard disk, boots the BIOS in xemu, reads the results through xemu's QMP monitor and the kernel's map file, and prints the checks. |
 | `kernel-test-title/` | The kernel test title: a minimal freestanding Xbox "game" run from the test disc. It checks that the kernel loads and starts titles and that the kernel functions games rely on work (clock, memory pool, disc reads, threads, drive letters, on-demand sections, SHA-1), and does the relaunch test. The comment at the top of the file lists each test. |
-| `padtest/` | The controller test title, built with nxdk: shows every controller input live and records which inputs arrived, for `pad_test.py`. |
-| `pad_test.py` | The `make test-pad` runner: boots the padtest disc, presses each input of a virtual gamepad and checks what the title received. |
-| `vpad.py` | A virtual gamepad through Linux uinput, which xemu sees as an ordinary USB pad. Used by `pad_test.py`. |
+| `controller-test-title/` | The controller test title, built with nxdk: shows every controller input live and records which inputs arrived, for `controller_test.py`. |
+| `controller_test.py` | The `make test-controller` runner: boots the controller test title's disc, presses each input of a virtual gamepad and checks what the title received. |
+| `virtual_gamepad.py` | A virtual gamepad through Linux uinput, which xemu sees as an ordinary USB pad. Used by `controller_test.py`. |
 | `mkxiso.py` | Builds the Xbox (XDVDFS) test disc: test files plus the kernel test title as `default.xbe`. Can also pack any folder as a disc (used by `tools/debug-app.py`). |
 | `mkudf.py` | Builds the UDF test disc for `make test-udf`, covering the different ways UDF stores files and names. |
 | `fatx.py` | A read-only FATX reader for the Xbox hard-disk partitions, to check files the kernel wrote. |

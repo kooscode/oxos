@@ -23,7 +23,7 @@ BIOS_BASE ?= $(firstword $(wildcard $(ROOT)/xbox-files/bios/*.bin))
 # An MCPX boot ROM dump is optional: without one xemu starts at our reset code in flash. With one (MCPX_ROM=...)
 # xemu runs the real ROM, which reaches our 2BL through the X-codes' overflow trick, as a console does.
 MCPX_ROM  ?=
-# The reference BIOS needs the real boot ROM (run-stock, PAD_BIOS=stock comparisons only).
+# The reference BIOS needs the real boot ROM (run-stock, CONTROLLER_BIOS=stock comparisons only).
 STOCK_MCPX ?= $(ROOT)/xbox-files/mcpx/mcpx_1.0.bin
 # Default hard disk: xemu-dashboard's free, MIT-licensed disk image (an open dashboard on a formatted 8 GB drive),
 # fetched into third_party/ on first use, at a pinned release, and checked by SHA-256 (tools/fetch.py). The tests
@@ -272,27 +272,27 @@ print-trace-dump:
 	python3 -I $(ROOT)/tools/trace.py --qmp $(TRACE_BUILD)/qmp.sock --map $(TRACE_BUILD)/xboxkrnl.map \
 	    --exports exports.tsv $(if $(LAST),--last $(LAST)) $(if $(ONLY),--only $(ONLY)) $(if $(filter 1,$(ALL)),--all)
 
-# Controller input test (tests/padtest, an nxdk title): a virtual uinput gamepad presses every input and the title
-# reports what it received. nxdk is fetched into third_party/ (not committed). PAD_BIOS=stock compares with the
+# Controller input test (tests/controller-test-title, an nxdk title): a virtual uinput gamepad presses every input
+# and the title reports what it received. nxdk is fetched into third_party/ (not committed). CONTROLLER_BIOS=stock compares with the
 # reference BIOS.
 NXDK_DIR    := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_COMMIT := 14d5ee97e73347c973f1f57b68b79ec08c9e77f2
 NXDK_ENV    := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
-PAD_BIOS    ?= ours
+CONTROLLER_BIOS ?= ours
 
 $(NXDK_DIR)/Makefile:
 	git clone -q https://github.com/XboxDev/nxdk $(NXDK_DIR)
 	git -C $(NXDK_DIR) checkout -q $(NXDK_COMMIT)
 	git -C $(NXDK_DIR) submodule update -q --init --recursive
 
-padtest: $(NXDK_DIR)/Makefile
-	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/padtest -j8
+controller-test-title: $(NXDK_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(ROOT)/tests/controller-test-title -j8
 
-test-pad: padtest $(HDD_FETCH)
-	$(if $(filter stock,$(PAD_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
-	python3 -I $(ROOT)/tests/pad_test.py --bios $(if $(filter stock,$(PAD_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
-		$(if $(filter stock,$(PAD_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
-		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/padtest/padtest.iso
+test-controller: controller-test-title $(HDD_FETCH)
+	$(if $(filter stock,$(CONTROLLER_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
+	python3 -I $(ROOT)/tests/controller_test.py --bios $(if $(filter stock,$(CONTROLLER_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
+		$(if $(filter stock,$(CONTROLLER_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
+		--hdd $(HDD_IMAGE) --iso $(ROOT)/tests/controller-test-title/controller-test-title.iso
 
 # The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own
 # state directory: the stock kernel signs saves with keys OXOS does not have, so the two cannot share saves.
@@ -302,4 +302,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-pad padtest run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller controller-test-title run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
