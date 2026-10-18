@@ -527,7 +527,7 @@ def main():
     ap.add_argument("--udf", action="store_true", help="attach a UDF test disc (tests/mkudf.py) and check UDF")
     ap.add_argument("--fatal", action="store_true", help="boot without a hard disk: check the fatal-error report")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
-    ap.add_argument("--title", help="test title XBE placed on the disc as default.xbe")
+    ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel-test-title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")

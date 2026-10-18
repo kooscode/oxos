@@ -79,19 +79,22 @@ $(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
 endif
 
-# Test title (milestone 4a): freestanding PE at 0x10000 -> XBE.
-TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
-                  -fno-stack-protector -nostdlib -O2 -Wall -Werror
-$(BUILD)/title/title.obj: $(ROOT)/tests/title/title.cpp
+# Kernel test title (tests/kernel-test-title): a minimal freestanding "game" the boot tests run from a disc to check
+# the title loader and the kernel functions titles rely on. PE at 0x10000 -> XBE.
+TEST_TITLE := $(BUILD)/kernel-test-title
+TEST_TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
+                       -fno-stack-protector -nostdlib -O2 -Wall -Werror
+$(TEST_TITLE).obj: $(ROOT)/tests/kernel-test-title/kernel_test_title.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(TITLE_CXXFLAGS) -c $< -o $@
+	$(CXX) $(TEST_TITLE_CXXFLAGS) -c $< -o $@
 
-$(BUILD)/title.exe: $(BUILD)/title/title.obj
+$(TEST_TITLE).exe: $(TEST_TITLE).obj
 	$(LD) /NODEFAULTLIB /ENTRY:XkTitleEntry /SUBSYSTEM:NATIVE /BASE:0x10000 /FIXED /DEBUG:NONE \
-	    /MAP:$(BUILD)/title.map /OUT:$@ $<
+	    /MAP:$(TEST_TITLE).map /OUT:$@ $<
 
-$(BUILD)/title.xbe: $(BUILD)/title.exe $(ROOT)/tools/mkxbe.py
-	python3 -I $(ROOT)/tools/mkxbe.py --pe $< --map $(BUILD)/title.map --out $@ --no-preload .extra
+$(TEST_TITLE).xbe: $(TEST_TITLE).exe $(ROOT)/tools/mkxbe.py
+	python3 -I $(ROOT)/tools/mkxbe.py --pe $< --map $(TEST_TITLE).map --out $@ --no-preload .extra \
+	    --name "OXOS kernel test title"
 
 # --- Open BIOS image parts (spec/01 §5). XboxDev/cromwell (GPL-2.0) is fetched at a pinned commit for its X-code
 # table and EEPROM key states. MCPX16=1 selects Cromwell's values for the 1.6 console's MCPX.
@@ -141,30 +144,30 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SP
 	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
 endif
 
-test: $(BUILD)/bios.bin $(BUILD)/title.xbe
+test: $(BUILD)/bios.bin $(TEST_TITLE).xbe
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
-	    --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map $(if $(filter 1,$(SERIAL)),--serial)
+	    --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map $(if $(filter 1,$(SERIAL)),--serial)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
-test-mcpx: $(BUILD)/title.xbe
+test-mcpx:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin --mcpx-rom $(MCPX_ROM) \
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
-test-dash: $(BUILD)/title.xbe
+test-dash:
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
-# Quick-reboot phase: the release build runs the title from a disc with relaunch.txt; it relaunches itself as
+# Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2).
-test-relaunch: $(BUILD)/title.xbe
+test-relaunch: $(TEST_TITLE).xbe
 	$(MAKE) BUILD=build-release SELFTEST=0 build-release/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios build-release/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(BUILD)/title.xbe --title-map $(BUILD)/title.map \
+	    --map build-release/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
 	    --relaunch --boot-wait 1
 
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
