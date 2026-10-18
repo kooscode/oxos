@@ -5,11 +5,11 @@ ordinal	name	convention	arg_bytes	kind
 4	AvSetSavedDataAddress	stdcall	4	func
 5	DbgBreakPoint	stdcall	0	func
 6	DbgBreakPointWithStatus	stdcall	4	func
-7	DbgLoadImageSymbols	stdcall	12	ABSENT
+7	DbgLoadImageSymbols	stdcall	12	debug
 8	DbgPrint	cdecl/data		func
 9	HalReadSMCTrayState	stdcall	8	func
 10	DbgPrompt	stdcall	12	func
-11	DbgUnLoadImageSymbols	stdcall	12	ABSENT
+11	DbgUnLoadImageSymbols	stdcall	12	debug
 12	ExAcquireReadWriteLockExclusive	stdcall	4	func
 13	ExAcquireReadWriteLockShared	stdcall	4	func
 14	ExAllocatePool	stdcall	4	func

@@ -82,9 +82,9 @@ $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/xboxkrnl.def: exports.lst exports.tsv $(ROOT)/tools/gen_def.py
+$(BUILD)/xboxkrnl.def: exports.tsv $(ROOT)/tools/gen_def.py
 	@mkdir -p $(BUILD)
-	python3 -I $(ROOT)/tools/gen_def.py exports.tsv exports.lst $@
+	python3 -I $(ROOT)/tools/gen_def.py exports.tsv $@
 
 ifeq ($(DEBUG),1)
 # One link with the debug info; the kernel is the same file with the debug sections stripped, so its code and data
