@@ -208,132 +208,6 @@ struct SCSI_PASS_THROUGH_DIRECT_ {
     UCHAR Cdb[16];
 };
 
-#if XK_DRIVE_LOG
-// Diagnostics (DRIVE_LOG builds): the last 16 drive control requests: code, status, bytes, CDB, first 32 response bytes.
-struct IDEX_CDROM_LOG {
-    ULONG Code, Status, Got, Length;
-    UCHAR Cdb[16], Data[32];
-};
-XK_PERSIST IDEX_CDROM_LOG IdexCdRomLog[16]; // kept across a quick reboot
-XK_PERSIST volatile ULONG IdexCdRomLogCount;
-static void IdexCdRomRecord(ULONG code, const UCHAR *cdb, const void *data, ULONG length, ULONG got, NTSTATUS status) {
-    ULONG n = IdexCdRomLogCount;
-    IdexCdRomLogCount = n + 1;
-    IDEX_CDROM_LOG &l = IdexCdRomLog[n % 16];
-    l.Code = code, l.Status = status, l.Got = got, l.Length = length;
-    RtlCopyMemory(l.Cdb, cdb, 12);
-    RtlZeroMemory(l.Data, 32);
-    if (data && NT_SUCCESS(status))
-        RtlCopyMemory(l.Data, data, got < 32 ? got : 32);
-}
-
-// Opens of \\Device\\CdRom0 (code 1: name, related flag, mounted volume; code 3: the mount's status).
-void IdexCdRomRecordOpen(PDEVICE_OBJECT dev, POBJECT_STRING name, bool related, ULONG value) {
-    if (dev != IdexCdRomDeviceObject)
-        return;
-    UCHAR text[44] = {};
-    ULONG n = 0;
-    if (name)
-        for (; n < name->Length && n < sizeof(text); n++)
-            text[n] = name->Buffer[n];
-    ULONG k = IdexCdRomLogCount;
-    IdexCdRomRecord(name ? 1 : 3, text, nullptr, 0, related, (NTSTATUS)value);
-    RtlCopyMemory(IdexCdRomLog[k % 16].Data, text + 12, 32);
-}
-
-XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
-                                   ULONG FrameBuffer);
-XBAPI PVOID NTAPI AvGetSavedDataAddress();
-XBAPI void NTAPI AvSetSavedDataAddress(PVOID Address);
-XBAPI UCHAR HalBootSMCVideoMode;
-extern "C" volatile UCHAR KiQuickRebootFlag;
-
-// 5x7 glyphs (bit 4 = leftmost column) for the log screen.
-static const char IdexLogChars[] = "0123456789ABCDEFGILORV";
-static const UCHAR IdexLogGlyphs[][7] = {
-    {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}, {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E},
-    {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}, {0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E},
-    {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}, {0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E},
-    {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}, {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},
-    {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}, {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C},
-    {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}, {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E},
-    {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}, {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E},
-    {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}, {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10},
-    {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F}, {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E},
-    {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}, {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E},
-    {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}, {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04},
-};
-
-static void IdexLogText(ULONG *fb, ULONG x, ULONG y, const char *text, ULONG color) {
-    for (; *text; text++, x += 12)
-        for (ULONG g = 0; IdexLogChars[g]; g++) {
-            if (IdexLogChars[g] != *text)
-                continue;
-            for (ULONG r = 0; r < 14; r++)
-                for (ULONG c = 0; c < 10; c++)
-                    if (IdexLogGlyphs[g][r / 2] & (0x10 >> c / 2))
-                        fb[(y + r) * 640 + x + c] = color;
-        }
-}
-
-static char *IdexLogHex(char *p, ULONG v, ULONG digits) {
-    for (ULONG i = digits; i--;)
-        *p++ = "0123456789ABCDEF"[v >> i * 4 & 0xF];
-    return p;
-}
-
-// DRIVE_LOG builds, before the dashboard starts: the last drive control requests on screen for 20 s, oldest first, so a
-// failed disc boot can be read on hardware without a debugger. One row each: sequence, IOCTL, the 12 CDB bytes,
-// status, bytes transferred. Response data is not shown.
-void IdexCdRomShowLog() {
-    ULONG count = IdexCdRomLogCount;
-    if (!count || HalBootSMCVideoMode == 7)
-        return;
-    const ULONG pitch = 640 * 4, header = 0x1000;
-    auto block = (ULONG *)MmAllocateContiguousMemoryEx(header + pitch * 480, 0, 0xFFFFFF, 0x1000,
-                                                       PAGE_READWRITE | PAGE_WRITECOMBINE);
-    if (!block)
-        return;
-    ULONG *fb = block + header / 4;
-    RtlZeroMemory(block, header + pitch * 480);
-    block[1] = MmGetPhysicalAddress(fb);
-    char line[64];
-    IdexLogText(fb, 40, 40, "DRIVE LOG", 0x40FF40);
-    *IdexLogHex(line, count, 8) = 0;
-    IdexLogText(fb, 160, 40, line, 0x40FF40);
-    ULONG first = count > 16 ? count - 16 : 0;
-    for (ULONG i = first, y = 70; i < count; i++, y += 22) {
-        const IDEX_CDROM_LOG &l = IdexCdRomLog[i % 16];
-        char *p = IdexLogHex(line, i & 0xFF, 2);
-        *p++ = ' ';
-        p = IdexLogHex(p, l.Code, 6);
-        *p++ = ' ';
-        for (ULONG b = 0; b < 12; b++)
-            p = IdexLogHex(p, l.Cdb[b], 2);
-        *p++ = ' ';
-        p = IdexLogHex(p, l.Status, 8);
-        *p++ = ' ';
-        p = IdexLogHex(p, l.Got, 4);
-        *p = 0;
-        IdexLogText(fb, 40, y, line, NT_SUCCESS(l.Status) ? 0xE0E0E0 : 0xFF6060);
-    }
-    AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, pitch, block[1]);
-    LARGE_INTEGER t;
-    t.QuadPart = -10000LL * 20000;
-    KeDelayExecutionThread(KernelMode, FALSE, &t);
-    // Leave it up as the persisted display (the dashboard's video set-up frees it), or go back to the one there was.
-    auto saved = (ULONG *)AvGetSavedDataAddress();
-    if (saved) {
-        AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, pitch, saved[1]);
-        MmFreeContiguousMemory(block);
-    } else {
-        MmPersistContiguousMemory(block, header + pitch * 480, TRUE);
-        AvSetSavedDataAddress(block);
-    }
-}
-#else
-#define IdexCdRomRecord(...) ((void)0)
-#endif
 
 // --- Xbox drive security for titles (spec/04 §3a). Titles built with later XDKs check the disc themselves: MODE SENSE
 // page 0x3E must report an authenticated Xbox disc, and the security sector's timestamp (+0x4AB, against the
@@ -444,7 +318,6 @@ static void IdexCdRomControl(PIRP Irp) {
         status = IdexAtapiPio(cdb, nullptr, 0, false, &got);
         if (NT_SUCCESS(status))
             IdexCdRomReadCapacity();
-        IdexCdRomRecord(IOCTL_CDROM_CHECK_VERIFY, cdb, nullptr, 0, got, status);
         IdexCdRomFinish(Irp, status, 0);
         return;
     case IOCTL_CDROM_GET_DRIVE_GEOMETRY:
@@ -462,7 +335,6 @@ static void IdexCdRomControl(PIRP Irp) {
             g->SectorsPerTrack = 1;
             g->BytesPerSector = 0x800;
         }
-        IdexCdRomRecord(IOCTL_CDROM_GET_DRIVE_GEOMETRY, cdb, Irp->UserBuffer, outLen, sizeof(DISK_GEOMETRY), status);
         IdexCdRomFinish(Irp, status, sizeof(DISK_GEOMETRY));
         return;
     case IOCTL_CDROM_READ_TOC:
@@ -470,7 +342,6 @@ static void IdexCdRomControl(PIRP Irp) {
         cdb[7] = (UCHAR)(outLen >> 8);
         cdb[8] = (UCHAR)outLen;
         status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
-        IdexCdRomRecord(IOCTL_CDROM_READ_TOC, cdb, Irp->UserBuffer, outLen, got, status);
         IdexCdRomFinish(Irp, status, got);
         return;
     case IOCTL_DVD_READ_STRUCTURE: {
@@ -481,7 +352,6 @@ static void IdexCdRomControl(PIRP Irp) {
         status = IdexAtapiPio(cdb, (PUCHAR)Irp->UserBuffer, outLen, false, &got);
         if (status == STATUS_INVALID_DEVICE_REQUEST)
             status = (NTSTATUS)0xC0000014; // STATUS_UNRECOGNIZED_MEDIA: not a DVD
-        IdexCdRomRecord(IOCTL_DVD_READ_STRUCTURE, cdb, Irp->UserBuffer, outLen, got, status);
         IdexCdRomFinish(Irp, status, got);
         return;
     }
@@ -499,7 +369,6 @@ static void IdexCdRomControl(PIRP Irp) {
         if (NT_SUCCESS(status) && got >= 0x4E3 + 256 && IdexCdRomIsSecurityRead(cdb))
             IdexCdRomSignSecuritySector((PUCHAR)p->DataBuffer);
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2; // CHECK CONDITION
-        IdexCdRomRecord(IOCTL_SCSI_PASS_THROUGH_DIRECT, p->Cdb, p->DataBuffer, p->DataTransferLength | p->CdbLength << 24 | p->DataIn << 16, got, status);
         p->DataTransferLength = got;
         IdexCdRomFinish(Irp, status, got);
         return;
@@ -658,15 +527,6 @@ static void IdexCdRomStartTransfer(PIRP Irp) {
     KfLowerIrql(old);
 }
 
-// Reads in the drive log: code 2, the CDB holds the LBA and the remaining length.
-static void IdexCdRomRecordRead(PIRP Irp, NTSTATUS Status) {
-#if XK_DRIVE_LOG
-    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
-    ULONG v[3] = {s->Parameters.Read.ByteOffset.LowPart, s->Parameters.Read.Length, 0};
-    IdexCdRomRecord(2, (const UCHAR *)v, nullptr, 0, 0, Status);
-#endif
-}
-
 // A read retried 100 ms later (the drive was becoming ready).
 static KTIMER IdexCdRomRetryTimer;
 static KDPC IdexCdRomRetryDpc;
@@ -696,7 +556,6 @@ static void NTAPI IdexCdRomFinishIo() {
             }
             return;
         }
-        IdexCdRomRecordRead(irp, status);
         IdexCdRomFinish(irp, status, 0);
         return;
     }
@@ -723,11 +582,9 @@ static void NTAPI IdexCdRomStartIo(PDEVICE_OBJECT, PIRP Irp) {
         IdexCdRomReadCapacity();
     LONGLONG end = ((LONGLONG)s->Parameters.Read.ByteOffset.LowPart << 11) + s->Parameters.Read.Length;
     if (!IdexCdRomLength) {
-        IdexCdRomRecordRead(Irp, IdexCdRomMapSense());
         IdexCdRomFinish(Irp, IdexCdRomMapSense(), 0);
         return;
     }
-    IdexCdRomRecordRead(Irp, end > IdexCdRomLength ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS);
     if (end > IdexCdRomLength) {
         IdexCdRomFinish(Irp, STATUS_INVALID_PARAMETER, 0);
         return;
@@ -747,12 +604,6 @@ DRIVER_OBJECT IdexCdRomDriverObject = {
      IoInvalidDeviceRequest}};
 
 void IdexCdRomInit() {
-#if XK_DRIVE_LOG
-    if (!KiQuickRebootFlag) { // the persisted log holds whatever RAM held at power-on
-        RtlZeroMemory(IdexCdRomLog, sizeof(IdexCdRomLog));
-        IdexCdRomLogCount = 0;
-    }
-#endif
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     outb(IDE_DRIVE, 0xB0);
     ULONG tries = 0;
