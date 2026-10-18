@@ -121,6 +121,7 @@ class CallDumper:
         self.events, self.cmd = events_sock, cmd_sock
         self.lock, self.last_crash, self.exit_dumped = threading.Lock(), 0.0, False
         self.latest = None  # (count, data, time) of the last background copy
+        self.dumped = None  # (count, file) of the last dump written
 
     def snapshots(self, proc):
         """Copy the record every second, for the exit dump when xemu quits before it can be read."""
@@ -150,11 +151,15 @@ class CallDumper:
                     return
                 count, data, taken = self.latest  # xemu already quit: the last background copy
                 note = f" (copied {time.monotonic() - taken:.1f} s before xemu quit)"
+            if self.dumped and self.dumped[0] == count:  # e.g. closed after a crash: nothing new to show
+                print(f"\n[{reason}: no kernel calls since the dump above ({self.dumped[1]})]", flush=True)
+                return
             os.makedirs(self.out, exist_ok=True)
             base = os.path.join(self.out, f"calls-{time.strftime('%Y%m%d-%H%M%S')}-{reason}")
             self.trace.save(base + ".bin", count, data)
             full = self.trace.report(count, data, self.table, last=0, show_all=True)
             open(base + ".txt", "w").write("\n".join(full) + "\n")
+            self.dumped = (count, base + ".txt")
             print(f"\n=== {reason}: the title's last kernel calls{note} (all of them: {base}.txt) ===")
             print("\n".join(self.trace.report(count, data, self.table, last=30)))
             print("===", flush=True)
