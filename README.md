@@ -44,9 +44,10 @@ same packages under their own names.
 
 **1. Install the build tools.**
 ```
-sudo apt install git make clang lld llvm python3 python3-pil
+sudo apt install git make clang lld llvm python3-pil
 ```
-(`clang` and `lld` build the kernel, `llvm` provides `llvm-objcopy`, Pillow converts the boot splash.)
+(`clang` and `lld` build the kernel, `llvm` provides `llvm-objcopy`, Pillow converts the boot splash; Python 3
+itself comes with Ubuntu.)
 
 **2. Install xemu.** Download the AppImage from [xemu.app](https://xemu.app) (0.8.136 tested) and put it at
 `~/.local/bin/xemu` (or anywhere on `PATH` as `xemu`):
