@@ -347,6 +347,10 @@ run-xbe: $(LAUNCHER_XBE) $(PLAY_FETCH)
 	@test -n '$(XBE)' || { printf '%s\n' "usage: make run-xbe XBE='F:\\apps\\demo\\default.xbe' [STATE=...]"; exit 1; }
 	@test -f $(XBE_STATE)/hdd.qcow2 || { mkdir -p $(XBE_STATE) && \
 	    python3 -I $(ROOT)/tests/exfat.py --from-fatx $(PLAY_HDD) $(XBE_STATE)/hdd.qcow2 --size 256G --cluster 16K; }
+	@echo "disk: $(XBE_STATE)/hdd.qcow2"
+	@python3 -I $(ROOT)/tests/exfat.py --has $(XBE_STATE)/hdd.qcow2 '$(XBE)'; r=$$?; \
+	    if [ $$r = 1 ]; then printf '%s\n' "$(XBE) is not on that disk (STATE=... picks another state folder)"; \
+	        echo "F: holds:"; python3 -I $(ROOT)/tests/exfat.py --ls $(XBE_STATE)/hdd.qcow2 /F | grep . || echo "  (nothing)"; exit 1; fi
 	@mkdir -p $(OUT)/run-xbe
 	python3 -I $(ROOT)/tests/mkxiso.py $(OUT)/run-xbe/launcher.iso --add default.xbe=$(LAUNCHER_XBE) --text 'launch.txt=$(XBE)'
 	$(MAKE) run ISO=$(OUT)/run-xbe/launcher.iso STATE=$(XBE_STATE)

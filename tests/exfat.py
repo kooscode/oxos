@@ -15,6 +15,7 @@ Shell:
   exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E;
        [--add /F/dir=HOST ...]                                              also copy a host file or folder in
   exfat.py --check IMG.qcow2                                                check a volume, list problems
+  exfat.py --has IMG.qcow2 'F:\\dir\\x.xbe'                                    is that file there (exit 0)
   exfat.py --ls IMG.qcow2 [/path]                                           list a directory
 """
 import os, struct, sys, zlib
@@ -559,6 +560,17 @@ if __name__ == "__main__":
         for p in problems:
             print("PROBLEM:", p)
         sys.exit(1 if problems else 0)
+    elif a[:1] == ["--has"]:
+        # --has IMG 'F:\\dir\\x.xbe' (or /F/dir/x.xbe): exit 0 if the file is there, 1 if not, 2 if not an exFAT disk
+        path = a[2].replace("\\", "/")
+        if len(path) > 1 and path[1] == ":":
+            path = "/" + path[0].upper() + path[2:]
+        try:
+            v = Exfat(Qcow2(a[1]))
+        except Exception:
+            sys.exit(2)
+        e = v.lookup(path)
+        sys.exit(0 if e is not None and e != "root" and not e.is_dir else 1)
     elif a[:1] == ["--ls"]:
         v = Exfat(Qcow2(a[1]))
         for e in v.listdir(a[2] if len(a) > 2 else "/") or []:
