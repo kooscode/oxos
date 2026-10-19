@@ -19,8 +19,8 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - **SuperIO serial support:** boot log, `DbgPrint` output and crash reports over the serial port.
 - **Kernel call tracing:** a record of the kernel calls a title makes, saved automatically when it crashes.
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
-- **IDE LBA48 Support** Added support to allow large disks beyond 2TB (i.e NO size limit)
-- **exFAT Support** Full support for standard exFAT formatted disks - No size limit and no more proprietary MS-FATX!
+- **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
+- **exFAT Support** for standard exFAT formatted disks, No size limit. (No more FATX)
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
 ## Running OXOS in xemu today !!
