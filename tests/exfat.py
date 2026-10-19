@@ -12,7 +12,8 @@ the up-case table checksum, every entry set's checksum and name hash, FAT chains
 and that the allocation bitmap marks exactly the clusters in use.
 
 Shell:
-  exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E
+  exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E;
+       [--add /F/dir=HOST ...]                                              also copy a host file or folder in
   exfat.py --check IMG.qcow2                                                check a volume, list problems
   exfat.py --ls IMG.qcow2 [/path]                                           list a directory
 """
@@ -519,7 +520,7 @@ class Exfat:
         return self.problems, files, self.count - len(marked)
 
 
-def from_fatx(src, out, size, cluster):
+def from_fatx(src, out, size, cluster, extra=()):
     import fatx
     disk = Qcow2(src)
     b = Builder(size, cluster)
@@ -535,14 +536,21 @@ def from_fatx(src, out, size, cluster):
 
     for letter in ("C", "E"):
         copy(fatx.Fatx(disk, letter), letter)
+    for dest, host in extra:  # --add /F/apps/demo=HOST: a host file or folder copied in
+        if os.path.isdir(host):
+            b.add_tree(dest, host)
+        else:
+            b.add(dest, open(host, "rb").read())
     b.write(out, disk.read(0, 0x400 * SECTOR))
 
 
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["--from-fatx"]:
-        opts = dict(zip(a[3::2], a[4::2]))
-        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")))
+        pairs = list(zip(a[3::2], a[4::2]))
+        opts = dict(pairs)
+        extra = [tuple(v.split("=", 1)) for k, v in pairs if k == "--add"]
+        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")), extra)
         print(f"{a[2]}: written")
     elif a[:1] == ["--check"]:
         v = Exfat(Qcow2(a[1]))

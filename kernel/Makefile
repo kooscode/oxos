@@ -331,6 +331,26 @@ test-controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 		$(if $(filter stock,$(CONTROLLER_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
 		--hdd $(HDD_IMAGE) --iso $(CONTROLLER_ISO)
 
+# Run an XBE from the hard disk, e.g. a homebrew app copied to F: on an exFAT disk: a disc with the XBE launcher
+# (tools/xbe-launcher, nxdk) and launch.txt = XBE boots, and the launcher starts that XBE the way a dashboard does (the
+# XBE then runs from the disk, with D: its folder). XBE='F:\apps\demo\default.xbe' (quoted, for the backslashes).
+# The disk: xemu-state/oxos-exfat/hdd.qcow2, an exFAT copy of PLAY_HDD made the first time (mount it on the PC to copy
+# files in; unmount it before running), or STATE=... for another state folder.
+LAUNCHER_DIR := $(ROOT)/tools/xbe-launcher
+LAUNCHER_XBE := $(LAUNCHER_DIR)/bin/default.xbe
+XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xemu-state/oxos-exfat)
+
+$(LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(LAUNCHER_DIR)/xbe_launcher.c $(LAUNCHER_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(LAUNCHER_DIR) -j8
+
+run-xbe: $(LAUNCHER_XBE) $(PLAY_FETCH)
+	@test -n '$(XBE)' || { printf '%s\n' "usage: make run-xbe XBE='F:\\apps\\demo\\default.xbe' [STATE=...]"; exit 1; }
+	@test -f $(XBE_STATE)/hdd.qcow2 || { mkdir -p $(XBE_STATE) && \
+	    python3 -I $(ROOT)/tests/exfat.py --from-fatx $(PLAY_HDD) $(XBE_STATE)/hdd.qcow2 --size 256G --cluster 16K; }
+	@mkdir -p $(OUT)/run-xbe
+	python3 -I $(ROOT)/tests/mkxiso.py $(OUT)/run-xbe/launcher.iso --add default.xbe=$(LAUNCHER_XBE) --text 'launch.txt=$(XBE)'
+	$(MAKE) run ISO=$(OUT)/run-xbe/launcher.iso STATE=$(XBE_STATE)
+
 # Memory test (tests/memory-test-title, an nxdk title): how much memory a title is given, as built (XBE flag
 # "limit to 64 MB") and with the flag cleared. MEMORY=128 for a 128 MB console; MEMORY_BIOS=... (with MCPX_ROM=...)
 # runs another BIOS instead of the release build, e.g. for comparison.
@@ -355,4 +375,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean

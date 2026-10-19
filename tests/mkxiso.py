@@ -118,5 +118,20 @@ def checksum(data):
 
 
 if __name__ == "__main__":
+    # mkxiso.py OUT.iso                                the test image above
+    # mkxiso.py OUT.iso --add NAME=FILE --text NAME=TEXT ...   an image of just those files (e.g. make run-xbe)
     import sys
-    build(sys.argv[1])
+    args = sys.argv[2:]
+    if not args:
+        build(sys.argv[1])
+        sys.exit(0)
+    tree = {}
+    for flag, spec in zip(args[::2], args[1::2]):
+        name, value = spec.split("=", 1)
+        if flag == "--add":
+            tree[name] = open(value, "rb").read()
+        elif flag == "--text":
+            tree[name] = value.encode() + b"\r\n"
+        else:
+            sys.exit(f"unknown option {flag}")
+    write_image(sys.argv[1], tree)
