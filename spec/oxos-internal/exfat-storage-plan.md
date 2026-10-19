@@ -48,8 +48,8 @@ After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT di
 ## Risks
 - **Titles with unusual disk use:** raw reads of E:/C:, their own cache handling. The tracer shows these quickly;
   the fallback is to log and fail the raw access, as the spec says.
-- **Free-space arithmetic** in titles: covered by the bounded sizes; to confirm with a title known to misbehave on
-  big FATX partitions.
+- **Free-space arithmetic** in titles and the stock dashboard on E:/C: (32-bit wrap): covered by the 2 TB cap; the
+  compatibility pass checks it, and the cap can be lowered if a title needs it.
 - **Performance of directory walks** for usage accounting on large folders: cache the totals in
   `/OXOS/partitions.ini` and update them incrementally.
 - **Power loss:** exFAT has no journal. Keep writes ordered (data, then bitmap, then directory entry) and mark the
@@ -58,8 +58,9 @@ After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT di
 ## Decided
 - **GPT and MBR** (spec §2): GPT is the documented layout that our tools create; MBR is read too, so disks
   formatted with a PC's defaults work as they are.
+- **Free-space reporting** (spec §6): E: and C: report real free space capped at 2 TB (a setting); X/Y/Z their
+  retail 750 MB; F:, G: and up the real free space, no cap.
 
 ## Decisions to make
-- Default caps for F:/G: free-space reporting (1 TB proposed).
 - The default format for new memory units (FATX proposed) and the size cap for USB sticks (1 GB proposed).
 - Whether `/E` should be the volume root instead of a folder (shorter paths on the PC, but mixes Xbox and PC files).
