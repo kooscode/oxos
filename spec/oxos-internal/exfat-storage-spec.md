@@ -45,7 +45,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
   | `/C` | `\Device\Harddisk0\Partition2` | C: | dashboard |
   | `/X`, `/Y`, `/Z` | Partition3, 4, 5 | X:, Y:, Z: | title cache partitions (§5) |
   | `/F` | Partition6 | F: | games and apps: the rest of the disk (§2.1) |
-  | `/OXOS` | none | none | kernel files: `partition0.bin` (§4), settings |
+  | `/OXOS` | none | none | kernel files (settings) |
 
   Folder names are matched case-insensitively. A user can copy a game folder to `/F/Games/Halo` from a PC and
   launch it from a dashboard as `F:\Games\Halo\default.xbe`.
@@ -74,12 +74,15 @@ On one exFAT volume every folder shares the same free space, so a single F: alre
 ## 4. The whole-disk device (Partition0)
 Titles open `\Device\Harddisk0\partition0` raw to keep the cache database (traced: one 512-byte read and one write at
 byte offset 0x800, sector 4, §8). On an exFAT disk the real sector 4 belongs to the partition table, so:
-- byte offsets **0 to 0x7FFFF** (the retail reserved area before X: at sector 0x400) are backed by
-  `/OXOS/partition0.bin` (512 KB, created zero-filled);
-- other raw reads and writes of Partition0 fail with STATUS_INVALID_PARAMETER and are logged on the debug serial
-  port (none were seen);
+- byte offsets **0 to 0x7FFFF** (the retail reserved area before X: at sector 0x400) are kept in **disk sectors
+  1024–2047**, between the partition table and the exFAT partition, which must therefore start at sector 2048 or
+  later (the usual 1 MiB alignment); a disk whose partition starts earlier is not used as an exFAT disk;
+- other raw reads and writes of Partition0 fail with STATUS_INVALID_PARAMETER;
 - geometry and partition-info queries describe a disk of the real size.
-The kernel's own uses of the reserved area (for example sector 3) read the same file.
+The kernel's own uses of the reserved area (for example the refurb record in sector 3) go through Partition0 by name
+and see the same sectors. tests/exfat.py copies a FATX disk's reserved area there when it converts a disk. (Kept
+outside the file system so the disk driver needs no file I/O; a PC that repartitions the disk may lose it, which
+costs only the cache database and the power-cycle count.)
 
 ## 5. Cache partitions and title formatting
 A title formats its cache partition itself, through kernel calls (traced, §8). On a virtual partition the kernel
@@ -107,9 +110,9 @@ Every virtual partition shares the one exFAT volume, so each reports its own siz
 
 | Partitions | Reported free space | Reported total size |
 |---|---|---|
-| **E:, C:** (Partition1, 2: legacy, present on every retail disk) | the volume's real free space, **capped at 2 TB** | the folder's used space + the reported free space |
+| **E:, C:** (Partition1, 2: legacy, present on every retail disk) | the volume's real free space, **capped at 2 TB** | the volume's size, **capped at 2 TB** |
 | **X:, Y:, Z:** (Partition3–5: legacy cache drives) | retail size minus the folder's used space | the **retail 750 MB** (0x177000 sectors), always |
-| **F:** (Partition6: added by modders, never on retail disks; the only extra drive, §2.1) | the volume's real free space, **no cap** | the folder's used space + the real free space |
+| **F:** (Partition6: added by modders, never on retail disks; the only extra drive, §2.1) | the volume's real free space, **no cap** | the volume's size |
 
 - **Why the cap on E: and C::** games and the stock dashboard look at these and were only ever tested with a few GB;
   free space kept in 32-bit variables wraps around. At 2 TB, counts in 16 KB blocks or clusters (128 M) still fit in

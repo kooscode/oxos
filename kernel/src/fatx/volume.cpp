@@ -74,10 +74,12 @@ void FatxForgetVolume(FATX_VOLUME *v) { FscInvalidateDevice(&v->CacheExtension);
 
 // --- FAT
 
-bool FatxIsValidCluster(FATX_VOLUME *v, ULONG Cluster) { return Cluster >= 1 && Cluster <= v->NumberOfClusters; }
+bool FatxIsValidCluster(FATX_VOLUME *v, ULONG Cluster) {
+    return Cluster >= v->FirstClusterNumber && Cluster - v->FirstClusterNumber < v->NumberOfClusters;
+}
 
 LONGLONG FatxClusterOffset(FATX_VOLUME *v, ULONG Cluster) {
-    return v->DataByteOffset + ((LONGLONG)(Cluster - 1) << v->ClusterShift);
+    return v->DataByteOffset + ((LONGLONG)(Cluster - v->FirstClusterNumber) << v->ClusterShift);
 }
 
 static void FatxFatLocation(FATX_VOLUME *v, ULONG Cluster, LONGLONG *Block, ULONG *Within) {
@@ -122,18 +124,22 @@ static bool FatxIsLast(ULONG e) { return e >= 0xFFFFFFF8; }
 
 // Allocate Count clusters chained together; link them after PreviousLast (0 = new chain).
 NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, ULONG *First) {
-    if (Count > v->FreeClusters)
+    if (Count > v->Alloc->FreeClusters)
         return (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
-    ULONG first = 0, prev = PreviousLast, c = v->AllocationHint;
+    ULONG first = 0, prev = PreviousLast, c = v->Alloc->AllocationHint;
     for (ULONG n = 0; n < Count;) {
         if (!FatxIsValidCluster(v, c))
-            c = 1;
-        ULONG e;
-        NTSTATUS status = FatxGetFatEntry(v, c, &e);
+            c = v->FirstClusterNumber;
+        ULONG e = 1;
+        NTSTATUS status = STATUS_SUCCESS;
+        bool free = v->Exfat ? ExfatClusterFree(v, c, &status) : (status = FatxGetFatEntry(v, c, &e), e == FATX_CLUSTER_FREE);
         if (!NT_SUCCESS(status))
             return status;
-        if (e == FATX_CLUSTER_FREE) {
-            status = FatxSetFatEntry(v, c, FATX_CLUSTER_LAST);
+        if (free) { // exFAT: the allocation bitmap says which clusters are free; the FAT links them
+            if (v->Exfat)
+                status = ExfatMarkCluster(v, c, true);
+            if (NT_SUCCESS(status))
+                status = FatxSetFatEntry(v, c, FATX_CLUSTER_LAST);
             if (NT_SUCCESS(status) && prev)
                 status = FatxSetFatEntry(v, prev, c);
             if (!NT_SUCCESS(status))
@@ -141,12 +147,12 @@ NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, U
             if (!first)
                 first = c;
             prev = c;
-            v->FreeClusters--;
+            v->Alloc->FreeClusters--;
             n++;
         }
         c++;
     }
-    v->AllocationHint = c;
+    v->Alloc->AllocationHint = c;
     *First = first;
     return STATUS_SUCCESS;
 }
@@ -158,12 +164,12 @@ NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First) {
         NTSTATUS status = FatxGetFatEntry(v, c, &next);
         if (!NT_SUCCESS(status))
             return status;
-        status = FatxSetFatEntry(v, c, FATX_CLUSTER_FREE);
+        status = v->Exfat ? ExfatMarkCluster(v, c, false) : FatxSetFatEntry(v, c, FATX_CLUSTER_FREE);
         if (!NT_SUCCESS(status))
             return status;
-        v->FreeClusters++;
-        if (c < v->AllocationHint)
-            v->AllocationHint = c;
+        v->Alloc->FreeClusters++;
+        if (c < v->Alloc->AllocationHint)
+            v->Alloc->AllocationHint = c;
         if (FatxIsLast(next))
             break;
         c = next;
@@ -189,6 +195,12 @@ NTSTATUS FatxChainLength(FATX_VOLUME *v, ULONG First, ULONG *Count, ULONG *Last)
 
 // Cluster number of the Index-th cluster of a file; STATUS_END_OF_FILE past the chain.
 NTSTATUS FatxClusterAtIndex(FATX_VOLUME *v, FATX_FCB *f, ULONG Index, ULONG *Cluster) {
+    if (f->ExFlags & EXFAT_NOFATCHAIN) { // consecutive clusters
+        if (Index >= f->ExAllocClusters)
+            return STATUS_END_OF_FILE;
+        *Cluster = f->FirstCluster + Index;
+        return STATUS_SUCCESS;
+    }
     ULONG i = 0, c = f->FirstCluster;
     if (f->HintCluster && f->HintClusterIndex <= Index) {
         i = f->HintClusterIndex;
@@ -208,6 +220,24 @@ NTSTATUS FatxClusterAtIndex(FATX_VOLUME *v, FATX_FCB *f, ULONG Index, ULONG *Clu
     f->HintCluster = c;
     *Cluster = c;
     return STATUS_SUCCESS;
+}
+
+// The cluster after Cluster in f's allocation (FATX_CLUSTER_LAST at the end).
+NTSTATUS FatxNextCluster(FATX_VOLUME *v, FATX_FCB *f, ULONG Cluster, ULONG *Next) {
+    if (f->ExFlags & EXFAT_NOFATCHAIN) {
+        *Next = Cluster + 1 < f->FirstCluster + f->ExAllocClusters ? Cluster + 1 : FATX_CLUSTER_LAST;
+        return STATUS_SUCCESS;
+    }
+    return FatxGetFatEntry(v, Cluster, Next);
+}
+
+// FileFsSizeInformation: total and free allocation units and sectors per unit.
+void FatxVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit) {
+    if (v->Exfat)
+        return ExfatVolumeSize(v, Total, Free, SectorsPerUnit);
+    *Total = v->NumberOfClusters;
+    *Free = v->Alloc->FreeClusters;
+    *SectorsPerUnit = v->BytesPerCluster / v->SectorSize;
 }
 
 // --- Names and timestamps
@@ -317,7 +347,9 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
     dev->Flags |= TargetDevice->Flags & 0x40;
     dev->SectorSize = geometry.BytesPerSector;
     FATX_VOLUME *v = FatxVolume(dev);
-    v->TargetDevice = TargetDevice;
+    v->TargetDevice = v->MountTarget = TargetDevice;
+    v->FirstClusterNumber = 1;
+    v->Alloc = &v->OwnAlloc;
     v->PartitionLength = partition.PartitionLength.QuadPart;
     v->SectorSize = geometry.BytesPerSector;
     v->CacheExtension = {TargetDevice, partition.PartitionLength, geometry.BytesPerSector};
@@ -361,9 +393,9 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
         ULONG e;
         status = FatxGetFatEntry(v, c, &e);
         if (NT_SUCCESS(status) && e == FATX_CLUSTER_FREE) {
-            if (!v->FreeClusters)
-                v->AllocationHint = c;
-            v->FreeClusters++;
+            if (!v->Alloc->FreeClusters)
+                v->Alloc->AllocationHint = c;
+            v->Alloc->FreeClusters++;
         }
     }
     FatxReleaseVolume(v);
@@ -388,8 +420,14 @@ static NTSTATUS IopMountCdRom(PDEVICE_OBJECT TargetDevice) {
 }
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice);
 
+// Disks: the folder partitions of an exFAT disk mount as exFAT views; every other partition as FATX.
+static NTSTATUS IopMountDisk(PDEVICE_OBJECT TargetDevice) {
+    PCSZ folder = IdexDiskFolderOf(TargetDevice);
+    return folder ? ExfatMountVolume(TargetDevice, folder) : FatxMountVolume(TargetDevice);
+}
+
 void FsInitSystem() {
-    IopFileSystems.Disk = FatxMountVolume;
+    IopFileSystems.Disk = IopMountDisk;
     IopFileSystems.CdRom = IopMountCdRom;
     IopFileSystems.Raw = RawMountVolume;
 }

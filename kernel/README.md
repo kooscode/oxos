@@ -21,6 +21,7 @@ make run-gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build/
                                 # GDB server; symbols in build/debug/xboxkrnl.elf. nxdk apps: ../tools/debug-app.py
 make test-memory [MEMORY=128] [MEMORY_BIOS=... MCPX_ROM=...]  # memory a title is given, with and without the
                                 # XBE's "limit to 64 MB" flag (tests/memory-test-title, nxdk)
+make test-exfat                 # the self-tests on an exFAT disk (xemu-state/oxos-xemu-exfat/): E: as a folder
 make test-lba48                 # the self-tests on a 2 TB disk (xemu-state/oxos-xemu-lba48/): 48-bit addressing
 make test-controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
                                 # the tests/controller-test-title title (nxdk, fetched into ../third_party) checks each one

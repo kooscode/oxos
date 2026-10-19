@@ -1,4 +1,5 @@
-// FATX file system driver, internal definitions (spec/stock/04 §6, spec/stock/04b).
+// FATX file system driver, internal definitions (spec/stock/04 §6, spec/stock/04b). The same dispatcher serves exFAT
+// volumes (spec/oxos-internal/exfat-driver.md): the volume and directory layers branch on FATX_VOLUME::Exfat.
 #pragma once
 #include <xk/fsc.h>
 #include <xk/idex.h>
@@ -27,6 +28,15 @@ struct FATX_DIRENT {
 };
 static_assert(sizeof(FATX_DIRENT) == 64);
 
+// A directory entry as the layers exchange it: the FATX fields, plus what an exFAT entry set adds.
+constexpr UCHAR EXFAT_NOFATCHAIN = 0x01; // the file's clusters are consecutive; its FAT entries are not used
+struct FATX_ENTRY : FATX_DIRENT {
+    UCHAR ExFlags;
+    UCHAR ExEntries;       // entries in the set (file, stream, names)
+    ULONG ExAllocClusters; // clusters allocated (DataLength rounded up)
+    ULONG ExDirLength;     // directories: DataLength
+};
+
 constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40,
                 FCB_DIRENT_DIRTY = 0x80;
 
@@ -46,6 +56,8 @@ struct FATX_FCB {
     ULONG DirentIndex; // position of the entry in the parent directory
     ULONG CreationTime, LastWriteTime, LastAccessTime;
     ULONG HintClusterIndex, HintCluster; // last chain position looked up
+    UCHAR ExFlags, ExEntries;             // exFAT (FATX_ENTRY)
+    ULONG ExAllocClusters, ExDirLength;
 };
 
 // Per file object (FsContext2): directory enumeration state.
@@ -56,17 +68,28 @@ struct FATX_CCB {
     CHAR Mask[FATX_MAX_NAME + 2];
 };
 
+struct FATX_ALLOC {
+    ULONG FreeClusters;
+    ULONG AllocationHint;
+};
+struct EXFAT_DISK;
+
 struct FATX_VOLUME {
-    PDEVICE_OBJECT TargetDevice;
+    PDEVICE_OBJECT TargetDevice; // where the blocks are (exFAT: the exFAT partition)
+    PDEVICE_OBJECT MountTarget;  // the device mounted (FATX: TargetDevice; exFAT: the folder partition)
+    BOOLEAN Exfat;
+    ULONG FirstClusterNumber;    // 1 (FATX) or 2 (exFAT)
+    FATX_ALLOC *Alloc;           // FATX: OwnAlloc; exFAT: shared by the disk's folder partitions
+    FATX_ALLOC OwnAlloc;
+    EXFAT_DISK *Ex;
+    ULONG PartitionNumber;       // exFAT: the folder partition's number
     LONGLONG PartitionLength;
     ULONG SectorSize;
     UCHAR ClusterShift;
     UCHAR FatEntryShift; // 1 = FATX16, 2 = FATX32
     BOOLEAN Dismounted;
     ULONG BytesPerCluster;
-    ULONG NumberOfClusters; // data clusters are numbered 1..NumberOfClusters
-    ULONG FreeClusters;
-    ULONG AllocationHint;
+    ULONG NumberOfClusters; // data clusters are numbered FirstClusterNumber..FirstClusterNumber+NumberOfClusters-1
     ULONG FatByteOffset;
     LONGLONG DataByteOffset;
     ULONG SerialNumber;
@@ -101,20 +124,45 @@ bool FatxNameEqual(const CHAR *a, ULONG alen, const CHAR *b, ULONG blen);
 bool FatxWildcardMatch(const CHAR *mask, ULONG mlen, const CHAR *name, ULONG nlen);
 NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice);
 
-// Directory layer (fatx/dir.cpp)
+NTSTATUS FatxNextCluster(FATX_VOLUME *v, FATX_FCB *f, ULONG Cluster, ULONG *Next);
+void FatxVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit);
+
+// Directory layer (fatx/dir.cpp; exFAT in fatx/exfat.cpp)
 NTSTATUS FatxMapDirent(FATX_VOLUME *v, FATX_FCB *dir, ULONG Index, FATX_DIRENT **Entry, LONGLONG *BlockOffset,
                        bool Extend);
 NTSTATUS FatxWriteDirent(FATX_VOLUME *v, LONGLONG BlockOffset, FATX_DIRENT *Entry);
-NTSTATUS FatxLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FATX_DIRENT *Found, ULONG *Index);
+NTSTATUS FatxLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FATX_ENTRY *Found, ULONG *Index);
+NTSTATUS FatxReadEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG Index, FATX_ENTRY *Entry);
+NTSTATUS FatxNextEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG *Index, FATX_ENTRY *Entry); // END_OF_FILE at the end
+NTSTATUS FatxInitDirectory(FATX_VOLUME *v, ULONG *First); // one cluster for a new directory
+NTSTATUS FatxRemoveDirent(FATX_VOLUME *v, FATX_FCB *f);   // drop the entry only (a move)
 NTSTATUS FatxCreateDirent(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
                           ULONG FirstCluster, ULONG *Index);
 NTSTATUS FatxFlushFcb(FATX_VOLUME *v, FATX_FCB *f);
 NTSTATUS FatxDeleteDirent(FATX_VOLUME *v, FATX_FCB *f);
 NTSTATUS FatxIsDirectoryEmpty(FATX_VOLUME *v, FATX_FCB *dir);
 FATX_FCB *FatxFindOpenFcb(FATX_FCB *dir, const CHAR *Name, ULONG Length);
-FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_DIRENT *e, ULONG Index);
+FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_ENTRY *e, ULONG Index);
 void FatxDereferenceFcb(FATX_FCB *f);
 NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize);
+
+// exFAT (fatx/exfat.cpp)
+NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder);
+NTSTATUS ExfatLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FATX_ENTRY *Found, ULONG *Index);
+NTSTATUS ExfatReadEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG Index, FATX_ENTRY *Entry);
+NTSTATUS ExfatNextEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG *Index, FATX_ENTRY *Entry);
+NTSTATUS ExfatCreateDirent(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
+                           ULONG FirstCluster, ULONG *Index);
+NTSTATUS ExfatFlushFcb(FATX_VOLUME *v, FATX_FCB *f);
+NTSTATUS ExfatRemoveDirent(FATX_VOLUME *v, FATX_FCB *f);
+NTSTATUS ExfatIsDirectoryEmpty(FATX_VOLUME *v, FATX_FCB *dir);
+NTSTATUS ExfatInitDirectory(FATX_VOLUME *v, ULONG *First);
+NTSTATUS ExfatMakeChain(FATX_VOLUME *v, FATX_FCB *f); // a NoFatChain file gets FAT entries (before it changes size)
+NTSTATUS ExfatFreeFile(FATX_VOLUME *v, FATX_FCB *f);
+bool ExfatClusterFree(FATX_VOLUME *v, ULONG Cluster, NTSTATUS *Status);
+NTSTATUS ExfatMarkCluster(FATX_VOLUME *v, ULONG Cluster, bool Used);
+NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp);
+void ExfatVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit);
 
 extern DRIVER_OBJECT FatxDriverObject;
 static inline FATX_VOLUME *FatxVolume(PDEVICE_OBJECT dev) { return (FATX_VOLUME *)dev->DeviceExtension; }

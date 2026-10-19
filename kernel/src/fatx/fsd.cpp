@@ -141,7 +141,7 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
         FATX_FCB *child = FatxFindOpenFcb(parent, element.Buffer, element.Length);
         if (!child) {
             slow = true;
-            FATX_DIRENT e;
+            FATX_ENTRY e;
             ULONG index;
             status = FatxLookup(v, parent, &element, &e, &index);
             if (status == STATUS_OBJECT_NAME_NOT_FOUND)
@@ -167,7 +167,7 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
 
     if (openTarget) {
         // Rename target: open the parent directory; Information says whether the final name exists.
-        FATX_DIRENT e;
+        FATX_ENTRY e;
         ULONG index;
         NTSTATUS look = FatxLookup(v, parent, &element, &e, &index);
         status = FatxOpenFcb(v, s, parent, fo);
@@ -184,7 +184,7 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
         return (NTSTATUS)0xC0000056; // STATUS_DELETE_PENDING
     }
     if (!f) {
-        FATX_DIRENT e;
+        FATX_ENTRY e;
         ULONG index;
         status = FatxLookup(v, parent, &element, &e, &index);
         if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
@@ -199,28 +199,16 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
                 UCHAR attrs = (UCHAR)(attributes | (isDir ? FILE_ATTRIBUTE_DIRECTORY : 0));
                 status = FatxCheckAttributes(access, options, attrs);
                 ULONG first = 0;
-                if (NT_SUCCESS(status) && isDir) {
-                    // A new directory gets one cluster of end markers.
-                    status = FatxAllocateClusters(v, 0, 1, &first);
-                    LONGLONG base = NT_SUCCESS(status) ? FatxClusterOffset(v, first) : 0;
-                    for (ULONG off = 0; NT_SUCCESS(status) && off < v->BytesPerCluster; off += FATX_BLOCK_SIZE) {
-                        PUCHAR data;
-                        status = FatxMapBlock(v, base + off, &data);
-                        if (NT_SUCCESS(status)) {
-                            RtlFillMemory(data, FATX_BLOCK_SIZE, FATX_DIRENT_NEVER_USED2);
-                            status = FatxWriteBlockRange(v, base + off, 0, FATX_BLOCK_SIZE);
-                        }
-                    }
-                }
+                if (NT_SUCCESS(status) && isDir) // a new directory gets one cluster of end markers
+                    status = FatxInitDirectory(v, &first);
                 if (NT_SUCCESS(status))
                     status = FatxCreateDirent(v, parent, &element, attrs, first, &index);
                 if (!NT_SUCCESS(status) && first)
                     FatxFreeChain(v, first);
                 if (NT_SUCCESS(status)) {
-                    FATX_DIRENT *pe;
-                    LONGLONG block;
-                    status = FatxMapDirent(v, parent, index, &pe, &block, false);
-                    if (NT_SUCCESS(status) && !(f = FatxCreateFcb(parent, pe, index)))
+                    FATX_ENTRY pe;
+                    status = FatxReadEntry(v, parent, index, &pe);
+                    if (NT_SUCCESS(status) && !(f = FatxCreateFcb(parent, &pe, index)))
                         status = STATUS_INSUFFICIENT_RESOURCES;
                     created = true;
                     if (NT_SUCCESS(status) && Irp->Overlay.AllocationSize.LowPart && !isDir) {
@@ -336,7 +324,7 @@ static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONG offs
         ULONG run = v->BytesPerCluster - within, c = cluster;
         while (run < length) {
             ULONG next;
-            status = FatxGetFatEntry(v, c, &next);
+            status = FatxNextCluster(v, f, c, &next);
             if (!NT_SUCCESS(status) || next != c + 1)
                 break;
             c = next;
@@ -405,7 +393,10 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (!f || (f->Flags & FCB_DIRECTORY))
         return FatxComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     if (f->Flags & FCB_VOLUME) {
-        // Raw access to the partition through a volume handle: pass down unchanged.
+        // Raw access to the partition through a volume handle: pass down unchanged (exFAT: a folder partition has
+        // no sectors of its own, see ExfatVolumeTransfer).
+        if (v->Exfat)
+            return ExfatVolumeTransfer(v, Irp);
         IoCopyCurrentIrpStackLocationToNext(Irp);
         return IofCallDriver(v->TargetDevice, Irp);
     }
@@ -592,7 +583,7 @@ static NTSTATUS FatxRename(FATX_VOLUME *v, FATX_FCB *f, PFILE_OBJECT target, PUC
             return STATUS_INVALID_PARAMETER; // into its own subtree
     if (f->Flags & FCB_DIRECTORY && !IsListEmpty(&f->ChildList))
         return STATUS_ACCESS_DENIED; // open children
-    FATX_DIRENT existing;
+    FATX_ENTRY existing;
     ULONG index;
     NTSTATUS status = FatxLookup(v, dir, &element, &existing, &index);
     bool same = dir == f->Parent && index == f->DirentIndex;
@@ -604,6 +595,9 @@ static NTSTATUS FatxRename(FATX_VOLUME *v, FATX_FCB *f, PFILE_OBJECT target, PUC
         tmp.Parent = dir;
         tmp.DirentIndex = index;
         tmp.FirstCluster = existing.FirstCluster;
+        tmp.ExFlags = existing.ExFlags;
+        tmp.ExEntries = existing.ExEntries;
+        tmp.ExAllocClusters = existing.ExAllocClusters;
         status = FatxDeleteDirent(v, &tmp);
         if (!NT_SUCCESS(status))
             return status;
@@ -619,13 +613,7 @@ static NTSTATUS FatxRename(FATX_VOLUME *v, FATX_FCB *f, PFILE_OBJECT target, PUC
     status = FatxCreateDirent(v, dir, &element, f->Attributes, f->FirstCluster, &index);
     if (!NT_SUCCESS(status))
         return status;
-    FATX_DIRENT *old;
-    LONGLONG block;
-    status = FatxMapDirent(v, f->Parent, f->DirentIndex, &old, &block, false);
-    if (NT_SUCCESS(status)) {
-        old->FileNameLength = FATX_DIRENT_DELETED;
-        status = FatxWriteDirent(v, block, old);
-    }
+    status = FatxRemoveDirent(v, f);
     RemoveEntryList(&f->SiblingLink);
     FATX_FCB *oldParent = f->Parent;
     InsertTailList(&dir->ChildList, &f->SiblingLink);
@@ -748,17 +736,15 @@ static NTSTATUS NTAPI FatxFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP 
     bool single = s->Flags & SL_RETURN_SINGLE_ENTRY, any = false;
     NTSTATUS status = STATUS_SUCCESS;
     for (;;) {
-        FATX_DIRENT *e;
-        LONGLONG block;
-        NTSTATUS st = FatxMapDirent(v, f, ccb->NextIndex, &e, &block, false);
-        if (st == STATUS_END_OF_FILE || (NT_SUCCESS(st) && (e->FileNameLength == 0 || e->FileNameLength == 0xFF)))
+        FATX_ENTRY entry, *e = &entry;
+        NTSTATUS st = FatxNextEntry(v, f, &ccb->NextIndex, e);
+        if (st == STATUS_END_OF_FILE)
             break;
         if (!NT_SUCCESS(st)) {
             status = st;
             break;
         }
-        if (e->FileNameLength == FATX_DIRENT_DELETED || e->FileNameLength > FATX_MAX_NAME ||
-            !FatxWildcardMatch(ccb->Mask, ccb->MaskLength, e->FileName, e->FileNameLength)) {
+        if (!FatxWildcardMatch(ccb->Mask, ccb->MaskLength, e->FileName, e->FileNameLength)) {
             ccb->NextIndex++;
             continue;
         }
@@ -818,7 +804,8 @@ static NTSTATUS NTAPI FatxFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject,
     ULONG len = s->Parameters.QueryVolume.Length, info = 0;
     NTSTATUS status = STATUS_SUCCESS;
     FatxAcquireVolume(v);
-    ULONG spc = v->BytesPerCluster / v->SectorSize;
+    ULONG spc, total, free;
+    FatxVolumeSize(v, &total, &free, &spc);
     switch (s->Parameters.QueryVolume.FsInformationClass) {
     case FileFsVolumeInformation: // {CreationTime, SerialNumber, LabelLength, SupportsObjects, Label[]}
         if (len < 18) {
@@ -838,10 +825,10 @@ static NTSTATUS NTAPI FatxFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject,
             break;
         }
         auto p = (PULONG)out;
-        p[0] = v->NumberOfClusters, p[1] = 0;
-        p[2] = v->FreeClusters, p[3] = 0;
+        p[0] = total, p[1] = 0;
+        p[2] = free, p[3] = 0;
         if (full) {
-            p[4] = v->FreeClusters, p[5] = 0;
+            p[4] = free, p[5] = 0;
             p[6] = spc, p[7] = v->SectorSize;
         } else {
             p[4] = spc, p[5] = v->SectorSize;
@@ -885,7 +872,7 @@ static NTSTATUS NTAPI FatxFsdFlushOrDeviceControl(PDEVICE_OBJECT DeviceObject, P
     // Flushing: the cache is write-through, so only the drive cache is left: pass down. Device controls on a
     // volume handle go to the partition.
     IoCopyCurrentIrpStackLocationToNext(Irp);
-    return IofCallDriver(FatxVolume(DeviceObject)->TargetDevice, Irp);
+    return IofCallDriver(FatxVolume(DeviceObject)->MountTarget, Irp);
 }
 
 static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject);
@@ -904,8 +891,8 @@ static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject) {
     FatxAcquireVolume(v);
     v->Dismounted = TRUE;
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    if (v->TargetDevice->MountedOrSelfDevice == DeviceObject)
-        v->TargetDevice->MountedOrSelfDevice = nullptr;
+    if (v->MountTarget->MountedOrSelfDevice == DeviceObject)
+        v->MountTarget->MountedOrSelfDevice = nullptr;
     KfLowerIrql(old);
     FatxReleaseVolume(v);
     IoDeleteDevice(DeviceObject);
@@ -915,7 +902,7 @@ static NTSTATUS NTAPI FatxDismountVolume(PDEVICE_OBJECT DeviceObject) {
 static void NTAPI FatxDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     FATX_VOLUME *v = FatxVolume(DeviceObject);
     FatxForgetVolume(v);
-    ObfDereferenceObject(v->TargetDevice);
+    ObfDereferenceObject(v->MountTarget);
 }
 
 DRIVER_OBJECT FatxDriverObject = {

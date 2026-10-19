@@ -11,6 +11,7 @@ volatile UCHAR KiTestIdexPassword[32]; // the derived drive password (boot_test.
 // 48-bit addressing (spec/oxos-internal/lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the
 // writes were made, 2 when skipped because a target sector held other data; Ok = every pattern read back.
 volatile ULONG KiTestIdexLba48Ran, KiTestIdexLba48Ok;
+volatile ULONG KiTestIdexFolderOk; // exFAT disk: raw access refused where it must be
 static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major = IRP_MJ_READ);
 
 // Each test sector: 'LB48', its LBA (low, high), the write's tag, then dwords derived from the LBA. The host side
@@ -42,7 +43,7 @@ static bool IdexLba48Free(PDEVICE_OBJECT disk, PUCHAR buf, ULONGLONG lba, ULONG 
 
 static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
     ULONGLONG last = IdexDiskLengthInSectors - 1;
-    if (!IdexDiskLba48 || IdexDiskLengthInSectors < 0x20001000)
+    if (!IdexDiskLba48 || IdexDiskLengthInSectors < 0x20001000 || IdexDiskExfatLayout) // needs raw Partition0
         return;
     struct {
         ULONGLONG lba;
@@ -130,6 +131,14 @@ static void NTAPI IdexControllerThread(PVOID) {
     if (!parts[0] || !parts[1] || !parts[2]) {
         KiTestIdexDone = 1;
         return;
+    }
+
+    // exFAT disk (spec/oxos-internal/exfat-storage-spec.md): folder partitions have no sectors of their own, and
+    // Partition0 reaches only the retail reserved area (0-0x7FFFF).
+    if (IdexDiskExfatLayout) {
+        KiTestIdexFolderOk = IdexTestRead(parts[1], buf, 512, 0) == STATUS_INVALID_DEVICE_REQUEST &&
+                             IdexTestRead(parts[0], buf, 512, 0x80000) == STATUS_INVALID_PARAMETER &&
+                             IdexTestRead(parts[0], buf, 512, 0x7FE00) == STATUS_SUCCESS;
     }
 
     // Two 128 KB DMA chunks in one request, buffer from non-contiguous pool pages too.

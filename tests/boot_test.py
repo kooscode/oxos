@@ -11,7 +11,8 @@ import hashlib
 import hmac, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from qcow2 import Qcow2  # noqa: E402
+from qcow2 import Qcow2
+import exfat  # noqa: E402
 from fatx import Fatx  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
@@ -223,10 +224,18 @@ def run_checks(mon, hdd=None, title_map=None):
     }
 
 
+def is_exfat_disk(q):
+    """A GPT disk (protective MBR): the exFAT layout (spec/oxos-internal/exfat-storage-spec.md)."""
+    s0 = q.read(0, 512)
+    return s0[510:512] == b"\x55\xAA" and s0[446 + 4] == 0xEE
+
+
 def idex_checks(mon, hdd):
     if hdd is None:
         return {"HDD image attached": False}
     q = Qcow2(hdd)
+    if is_exfat_disk(q):
+        return idex_exfat_checks(mon, q)
     starts = [0, 0x55F400, 0x465400, 0x400, 0x177400, 0x2EE400]
     sigs_ok = all(
         [mon.read_offset("KiTestIdexPartitionSig", 16 * i + 4 * w) for w in range(4)]
@@ -263,6 +272,22 @@ def idex_checks(mon, hdd):
         "alignment / bounds errors": mon.read("KiTestIdexErrorsOk") == 1,
         "IDE suite finished": mon.read("KiTestIdexDone") == 1,
         **lba48_kernel_checks(mon, q)}
+
+
+def idex_exfat_checks(mon, q):
+    """The IDE suite on an exFAT disk: Partition0 shows the retail reserved area (kept at sectors 1024-2047) and
+    nothing beyond it; the folder partitions have no sectors of their own."""
+    reserved = q.read(1024 * 512, 16)
+    return {
+        "exFAT layout detected (GPT, exFAT partition)": mon.read("IdexDiskExfatLayout") & 0xFF == 1,
+        "Partition0 sector 0 = the reserved-area copy at sector 1024": [
+            mon.read_offset("KiTestIdexPartitionSig", 4 * w) for w in range(4)] == list(struct.unpack("<4I", reserved)),
+        "Partition0 refuses access past the reserved area; folder partitions refuse raw reads":
+            mon.read("KiTestIdexFolderOk") == 1,
+        "write + read back (page-crossing pool buffer)": mon.read("KiTestIdexWriteOk") == 1,
+        "IOCTL partition info + drive geometry": mon.read("KiTestIdexIoctlOk") == 1,
+        "IDE suite finished": mon.read("KiTestIdexDone") == 1,
+    }
 
 
 # 48-bit addressing (spec/oxos-internal/lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
@@ -325,12 +350,19 @@ def fatx_checks(mon, hdd):
     if hdd is None:
         return {"HDD image attached": False}
     q = Qcow2(hdd)
-    c, e = Fatx(q, "C"), Fatx(q, "E")
-    dash = c.read_file("xboxdash.xbe")
+    if is_exfat_disk(q):
+        v = exfat.Exfat(q)
+        dash = v.read_file("/C/xboxdash.xbe")
+        names = "".join(x.name + "|" for x in v.listdir("/E"))
+        clusters, serial = min(v.count * v.cs, 2 << 40) // 0x4000, v.serial
+    else:
+        c, e = Fatx(q, "C"), Fatx(q, "E")
+        dash = c.read_file("xboxdash.xbe")
+        names = "".join(n + "|" for n, *_ in e.listdir())
+        clusters, serial = e.clusters, e.serial
     s = 0
     for b in dash:
         s = (s * 31 + b) & 0xFFFFFFFF
-    names = "".join(n + "|" for n, *_ in e.listdir())
     return {
         "C:\\xboxdash.xbe read in odd pieces matches the image": mon.read("KiTestFatxReadOk") == 1
             and mon.read("KiTestFatxReadLength") == len(dash) and mon.read("KiTestFatxReadSum") == s,
@@ -341,7 +373,7 @@ def fatx_checks(mon, hdd):
         "mask query, rename, delete, non-empty dir refused": mon.read("KiTestFatxRenameDeleteOk") == 1,
         "error statuses (not found, collision, dir/non-dir, names)": mon.read("KiTestFatxErrorsOk") == 1,
         "volume information (size, serial, FATX)": mon.read("KiTestFatxVolumeOk") == 1
-            and mon.read("KiTestFatxTotalClusters") == e.clusters and mon.read("KiTestFatxSerial") == e.serial,
+            and mon.read("KiTestFatxTotalClusters") == clusters and mon.read("KiTestFatxSerial") == serial,
         "free clusters balanced": mon.read("KiTestFatxFreeBalanced") == 1,
         "FATX suite finished": mon.read("KiTestFatxDone") == 1,
     }
@@ -557,8 +589,22 @@ def launch_reason_checks(mon):
 
 
 def disk_checks(hdd_copy):
-    """After xemu exits: what the kernel wrote must read back with an independent FATX reader."""
-    e = Fatx(Qcow2(hdd_copy), "E")
+    """After xemu exits: what the kernel wrote must read back with an independent FATX (or exFAT) reader."""
+    q = Qcow2(hdd_copy)
+    if is_exfat_disk(q):
+        v = exfat.Exfat(q)
+        problems, _, _ = v.check()
+        if problems:
+            print("  (exFAT checker: " + "; ".join(problems[:6]) + ")")
+        listing = v.listdir("/E/XkTest")
+        return {
+            "E:\\XkTest\\keep.bin readable by the host exFAT reader": v.read_file("/E/XkTest/keep.bin")
+                == b"open xbox kernel fatx test",
+            "deleted/renamed entries gone, directory consistent": listing is not None
+                and sorted(x.name for x in listing) == ["keep.bin"],
+            "exFAT volume consistent (checksums, chains, bitmap)": not problems,
+        }
+    e = Fatx(q, "E")
     names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
     return {
         "E:\\XkTest\\keep.bin readable by an independent FATX reader": e.read_file("XkTest\\keep.bin")

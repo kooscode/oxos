@@ -34,6 +34,17 @@ class Qcow2:
         self._cached = (None, None)  # (cluster index, decompressed bytes)
         self.changed = {}  # guest cluster index -> bytearray, the changes made with write()
 
+    @classmethod
+    def blank(cls, size, cluster_bits=16):
+        """An empty disk of size bytes, in memory: write() into it, then save()."""
+        q = cls.__new__(cls)
+        q.f, q.cluster_bits, q.size = None, cluster_bits, size
+        q.cluster_size = 1 << cluster_bits
+        q.l2_entries = q.cluster_size // 8
+        q.l1 = [0] * ((size + q.cluster_size * q.l2_entries - 1) // (q.cluster_size * q.l2_entries))
+        q._cached, q.changed = (None, None), {}
+        return q
+
     def _compressed(self, index, e):
         """A compressed cluster's contents: the entry holds the host offset and the number of extra 512-byte
         sectors the compressed data spans; the data is a raw deflate stream."""
