@@ -42,8 +42,8 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 | `src/ob/`, `src/ex/`, `src/ps/` | object manager; executive objects (Nt*), EEPROM, fatal errors; system threads |
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
 | `src/io/` | I/O manager: devices, IRPs, files, the file-system cache, the RAW file system |
-| `src/idex/` | IDE channel, hard disk and DVD drive |
-| `src/fatx/`, `src/xdvdfs/`, `src/udf/` | file systems: FATX (hard disk), XDVDFS (Xbox discs), UDF (DVD-video) |
+| `src/idex/` | IDE channel, hard disk (28- and 48-bit addressing; retail partition table or a GPT/MBR exFAT disk) and DVD drive |
+| `src/fatx/`, `src/xdvdfs/`, `src/udf/` | file systems: FATX and exFAT (hard disk; one request dispatcher, `exfat.cpp` for the exFAT volume and directory layer), XDVDFS (Xbox discs), UDF (DVD-video) |
 | `src/xc/` | crypto: SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
 | `src/xe/` | the title (XBE) loader and launcher; the kernel call tracer (`trace.cpp`, trace builds only) |
 | `src/rtl/` | runtime library |
@@ -100,6 +100,47 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      (security page and an RSA-signed security sector; `XePublicKeyData` is now an open exponent-1 key, and on a drive
      without Xbox security, such as xemu's, the CD-ROM driver emulates it, spec 04 §3a); XDVDFS reads test end of file
      before the non-cached alignment rule; FATX accepts one doubled path separator, as the reference (spec 04b).
+   - 14: **memory and quick-reboot parity with the reference.**
+     - The page database uses the reference's format (colour lists, bottom-up pages, relocation).
+     - One file-system cache shared by FATX, XDVDFS and UDF.
+     - At title entry the splash is freed, the launcher stack is 3 pages and there is no SMC thread, so titles get at
+       least the reference's memory (`make test-memory`, `tests/memory-test-title`, measures it with and without
+       the XBE's 64 MB flag).
+     - Quick reboots keep `XboxHardwareInfo` (Half-Life 2's controller input), the boot AV pack, the SMC armed flag
+       and the PHY state.
+     - A disc loaded at the dashboard is recognised: the reference's mount order and drive retries.
+   - 15: **HD display modes** (spec 17): standard timings for 480p, 720p, 1080i and VGA sizes. The widescreen GPIO
+     follows each mode change, so xemu's automatic aspect shows HD and widescreen games at 16:9.
+   - 16: **debugging tools.**
+     - Debug serial port on the SuperIO's COM1 (spec 18): boot log, DbgPrint and crash reports (`make run-trace-basic`).
+     - Kernel call tracer: the title's last 32768 kernel calls with arguments, results and file names, dumped on a
+       crash and on exit (`make run-trace-full`, `make print-trace-dump`, `tools/trace.py`).
+     - Source-level debugging of the kernel and nxdk titles with gdb or VS Code on xemu's GDB server (`make run-gdb`,
+       `tools/vscode/`, `tools/debug-app.py`).
+   - 17: **developer environment.**
+     - Nothing to provide: the free xemu-dashboard disk is fetched as the default hard disk, and play state lives in
+       `xemu-state/<bios>-<instance>/`.
+     - Reproducible builds (`/Brepro`), with all output under `build/<kind>/`.
+     - Each object rebuilds when any header it includes changes.
+     - Boot tests run on any formatted disk.
+     - `make test-controller`: an nxdk title and a virtual gamepad check all 24 inputs.
+   - 18: **48-bit disk addressing (LBA48)** for disks over 128 GiB (`../spec/oxos-internal/lba48.md`). Disks up to 128 GiB
+     keep the retail 28-bit commands. `make test-lba48` checks a 2 TB disk: every test pattern must land at the right
+     sector of the image, and a forced 28-bit driver is checked to fail.
+   - 19: **exFAT hard disks** (`../spec/oxos-internal/exfat-storage-spec.md`, `exfat-driver.md`).
+     - A GPT (or MBR) disk with one exFAT volume. C:, E:, X:, Y: and Z: are the folders `/C`, `/E`, `/X`, `/Y`, `/Z`,
+       and F: (`/F`) is the extra drive.
+     - Titles see the retail partitions and sizes. E: and C: report at most 2 TB, and X/Y/Z report their retail
+       750 MB less what their folder holds.
+     - The retail reserved area (refurb record, cache database) is kept in sectors 1024–2047.
+     - Read-write: files are stored contiguously where possible, with FAT chains otherwise, and the allocation bitmap
+       tracks free space.
+     - A title formatting its cache partition through the volume handle empties that folder.
+     - `make test-exfat` runs the FATX self-tests on E: as a folder and checks the disk afterwards with an independent
+       reader (`../tests/exfat.py`, which also builds exFAT disks from FATX ones).
+     - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
+       continues after a reboot. The dashboard boots from /C.
+     - Memory units come last.
    - Next (7): video encoder mode tables for real TVs (spec 17: algorithm and table layout documented; values must be derived from the Conexant/Focus datasheets with the reference's row numbering), then real-hardware validation (encoder mode tables, SMC events, microcode).
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
@@ -109,4 +150,7 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
+- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial it writes is
+  kept only until reboot (`/OXOS/partitions.ini` is not written yet); exFAT names outside Latin-1 or longer than 42
+  characters, and files of 4 GB or more, are not shown to titles.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
