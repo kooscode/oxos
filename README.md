@@ -20,7 +20,7 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - **Kernel call tracing:** a record of the kernel calls a title makes, saved automatically when it crashes.
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
-- **exFAT Support** for standard exFAT formatted disks, No size limit. (No more FATX)
+- **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
 - Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
 
 ## Running OXOS in xemu today !!
