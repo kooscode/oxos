@@ -1,0 +1,56 @@
+# 48-bit disk addressing (LBA48)
+
+Status: implemented (kernel/src/idex/disk.cpp), tested in xemu with `make test-lba48`. Behaviour follows the ATA
+standard's 48-bit feature set; Cerbios spec 03 §1 describes the same rules in Cerbios.
+
+## Why
+The retail kernel uses 28-bit commands, which address sectors 0 to 0x0FFFFFFF: 128 GiB with 512-byte sectors.
+Larger disks (and the exFAT layout, `exfat-storage-spec.md`) need the 48-bit commands. Disks up to 128 GiB keep the
+retail command sequence exactly.
+
+## Detection (cold boot, IDENTIFY DEVICE)
+- **48-bit drive** when word 83 has bits 15–14 = 01 (word valid) and bit 10 set (48-bit feature set supported), and
+  word 86 bit 10 is set (enabled).
+- **Capacity:** words 60–61 (the 28-bit count, as retail); on a 48-bit drive, words 100–103 (64-bit count) when
+  larger. Kept as a 64-bit sector count (`IdexDiskLengthInSectors`); Partition0's length and the drive geometry
+  (IOCTL 0x70000, Cylinders) report it.
+- The minimum stays 0xEE8AB0 sectors (fatal error 9 below it).
+
+## Transfers
+- Sector numbers are 64-bit through the whole request path (the stack location carries the absolute LBA in
+  `Read.ByteOffset.QuadPart`; each 128 KB DMA chunk advances it).
+- Per DMA chunk (at most 256 sectors): if the drive is 48-bit and the chunk reaches past sector 0x0FFFFFFF
+  (LBA + count > 0x0FFFFFFF), the EXT form is used; otherwise the retail 28-bit form.
+- **28-bit form** (unchanged): device register 0xE0 | LBA bits 24–27, LBA bits 0–23, count (0 = 256),
+  READ DMA 0xC8 / WRITE DMA 0xCA.
+- **EXT form:** device register 0xE0; each register written twice, high byte first: count bits 8–15, LBA bits
+  24–31, 32–39, 40–47, then count bits 0–7, LBA bits 0–7, 8–15, 16–23; READ DMA EXT 0x25 / WRITE DMA EXT 0x35. A
+  256-sector chunk is count 0x0100 (in the EXT form 0 would mean 65 536 sectors).
+- The bus-master DMA set-up, completion and retries are the same for both forms.
+
+## Not changed
+- The retail partition table (spec 04): partitions 1–5 stay where they are; space past them is reachable through
+  Partition0 (and, later, the exFAT layout or Cerbios-style extended partitions).
+- IDE pass-through (IOCTL 0x4D028) sends the caller's 28-bit task file as before.
+- The DVD drive (ATAPI) is unaffected.
+
+## Test (`make test-lba48`)
+- **Disk:** `xemu-state/oxos-xemu-lba48/hdd.qcow2`, the test disk grown to 2 TB with `tests/qcow2.py --grow` (sparse:
+  a few MB on the host). boot_test.py attaches a copy, so the image itself is never written.
+- **Kernel side** (self-test build, only on disks larger than 0x20001000 sectors): writes test sectors (magic
+  `LB48`, the sector's own LBA, a tag, data derived from the LBA) at 0x0FFFFFFE–0x10000001 one by one, 512
+  sectors from 0x0FFFFF80 (two chunks, the first crossing the limit), 256 sectors ending at 0x0FFFFEFF (the 28-bit
+  count-0 case), 256 sectors at 0x20000000 (EXT count 0x0100) and the last 8 sectors of the disk; then reads them
+  back. It writes only to sectors that are zero or already hold its pattern, so a self-test build on a real disk
+  never overwrites data.
+- **Host side:** each pattern must sit at exactly LBA × 512 in the image, and the first 0x400 sectors and the
+  partition starts must be unchanged (apart from the refurb record in sector 3 and the self-test's own area at
+  0x3F0). That catches the failure a read-back cannot: a 28-bit command for sector 0x10000000 wraps to sector 0.
+- The whole self-test suite runs on the 2 TB disk too, as a regression check.
+- **Checked to fail:** with the driver forced to 28-bit commands, the test fails (the wrapped reads find data at the
+  start of the disk).
+
+## Open
+- Real hardware: IDE-to-SATA adapters and drives that do not pass 48-bit commands through, or need other timings.
+- 48-bit READ VERIFY (0x42) and FLUSH CACHE EXT (0xEA) are not used yet: IOCTL_DISK_VERIFY checks bounds only, and
+  FLUSH CACHE (0xE7) flushes the whole cache on every drive.

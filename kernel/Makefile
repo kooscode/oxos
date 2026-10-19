@@ -177,6 +177,20 @@ test: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
+# 48-bit addressing (spec/oxos-internal/lba48.md): the self-tests on a 2 TB disk, a sparse copy of the test disk
+# grown with tests/qcow2.py --grow and kept in xemu-state/oxos-xemu-lba48/ (a few MB on the host). The kernel writes
+# test patterns either side of sector 0x0FFFFFFF and at the end of the disk; boot_test.py then finds each one at
+# exactly LBA * 512 in the image and checks that the start of the disk is untouched. The image itself is never
+# written (boot_test.py attaches a copy).
+LBA48_STATE := $(ROOT)/xemu-state/oxos-xemu-lba48
+LBA48_HDD   := $(LBA48_STATE)/hdd.qcow2
+$(LBA48_HDD): $(HDD_FETCH)
+	mkdir -p $(LBA48_STATE)
+	python3 -I $(ROOT)/tests/qcow2.py --grow $(HDD_IMAGE) $@ 2T
+test-lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
+	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
+
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
 test-mcpx: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin

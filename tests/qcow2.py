@@ -4,7 +4,8 @@ writes a new image. The source image is never modified.
 
 save() writes a fresh qcow2 version 2 image with the same cluster size and virtual size: header, L1 table,
 reference-count table and blocks (every used cluster counted once), L2 tables and the data clusters, uncompressed;
-clusters that are entirely zero are left out."""
+clusters that are entirely zero are left out. grow() raises the virtual size first, so save() makes a bigger disk:
+the added space is unallocated and costs nothing on the host (`qcow2.py --grow SRC DST SIZE` from the shell)."""
 import struct, zlib
 
 
@@ -145,6 +146,12 @@ class Qcow2:
         import os
         os.replace(path + ".part", path)
 
+    def grow(self, size):
+        """Make the virtual disk size bytes long (only larger; a multiple of 512) for the next save()."""
+        if size < self.size or size % 512:
+            raise ValueError("can only grow, to a multiple of 512 bytes")
+        self.size = size
+
     def read(self, offset, length):
         out = bytearray()
         while length:
@@ -170,6 +177,15 @@ class Qcow2:
 
 if __name__ == "__main__":
     import sys
+    if len(sys.argv) == 5 and sys.argv[1] == "--grow":  # qcow2.py --grow SRC DST SIZE (bytes, or with K/M/G/T)
+        units = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
+        n = sys.argv[4]
+        size = int(n[:-1]) * units[n[-1].upper()] if n[-1].upper() in units else int(n)
+        q = Qcow2(sys.argv[2])
+        q.grow(size)
+        q.save(sys.argv[3])
+        print(f"{sys.argv[3]}: {size} bytes ({size // 512} sectors)")
+        sys.exit(0)
     q = Qcow2(sys.argv[1])
     print("size", q.size)
     for name, lba in (("E", 0x55F400), ("C", 0x465400), ("X", 0x400), ("Y", 0x177400), ("Z", 0x2EE400)):
