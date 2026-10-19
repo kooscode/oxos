@@ -1,5 +1,6 @@
 // Boot self-tests for the FATX driver (milestone 3c-2). boot_test.py checks the results against the HDD image and,
 // after the run, re-reads what was written here from the disk copy with an independent FATX reader.
+#include <xk/idex.h>
 #include <xk/io.h>
 #include <xk/rtl.h>
 
@@ -7,6 +8,9 @@ volatile ULONG KiTestFatxReadOk, KiTestFatxReadSum, KiTestFatxReadLength, KiTest
     KiTestFatxWriteOk, KiTestFatxRenameDeleteOk, KiTestFatxErrorsOk, KiTestFatxVolumeOk, KiTestFatxFreeBalanced,
     KiTestFatxTotalClusters, KiTestFatxSerial, KiTestFatxDone;
 volatile char KiTestFatxDirNames[64];
+// exFAT disk: a title-style format of X: (Partition3) through its volume handle empties the folder
+// (spec/oxos-internal/exfat-storage-spec.md §5); E: refuses it.
+volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk;
 extern volatile ULONG KiTestIdexDone;
 
 static void Sleep(LONG ms) {
@@ -35,6 +39,8 @@ static ULONG FreeClusters(HANDLE h) {
     NtQueryVolumeInformationFile(h, &iosb, size, sizeof(size), FileFsSizeInformation);
     return size[2];
 }
+
+static void ExfatFormatTest(PUCHAR buf);
 
 static void NTAPI FatxControllerThread(PVOID) {
     while (!KiTestIdexDone)
@@ -207,8 +213,81 @@ static void NTAPI FatxControllerThread(PVOID) {
     // XkTest may have existed from a previous run on the same image: it and keep.bin hold 2 clusters.
     KiTestFatxFreeBalanced = FreeClusters(hv) + 2 == freeBefore || FreeClusters(hv) == freeBefore;
     NtClose(hv);
+    if (IdexDiskExfatLayout)
+        ExfatFormatTest(buf);
     ExFreePool(buf);
     KiTestFatxDone = 1;
+}
+
+// The format sequence the trace showed (Halo, spec §8): raw open, geometry + partition info, a FATX header at offset
+// 0, the allocation table and root directory after it, then a dismount.
+static NTSTATUS FormatLikeATitle(PCSZ volume, PUCHAR buf) {
+    HANDLE h;
+    NTSTATUS status = Open(&h, volume, GENERIC_READ | GENERIC_WRITE, FILE_OPEN, 0);
+    if (!NT_SUCCESS(status))
+        return status;
+    IO_STATUS_BLOCK iosb;
+    PARTITION_INFORMATION pi = {};
+    status = NtDeviceIoControlFile(h, nullptr, nullptr, nullptr, &iosb, IOCTL_DISK_GET_PARTITION_INFO, nullptr, 0,
+                                   &pi, sizeof(pi));
+    ULONG entries = (ULONG)(pi.PartitionLength.QuadPart >> 14) + 1, fat = (entries * 2 + 0xFFF) & ~0xFFFu;
+    LARGE_INTEGER at = {};
+    RtlZeroMemory(buf, 0x1000);
+    ((PULONG)buf)[0] = 0x58544146; // "FATX"
+    ((PULONG)buf)[1] = 0x12345678;
+    ((PULONG)buf)[2] = 32;
+    ((PULONG)buf)[3] = 1;
+    if (NT_SUCCESS(status))
+        status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
+    RtlZeroMemory(buf, 0x1000);
+    for (ULONG off = 0; NT_SUCCESS(status) && off < fat; off += 0x1000) {
+        ((PULONG)buf)[0] = off ? 0 : 0xFFFFFFF8;
+        at.QuadPart = 0x1000 + off;
+        status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
+    }
+    RtlFillMemory(buf, 0x1000, 0xFF);
+    for (ULONG off = 0; NT_SUCCESS(status) && off < 0x4000; off += 0x1000) {
+        at.QuadPart = 0x1000 + fat + off;
+        status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
+    }
+    if (NT_SUCCESS(status))
+        status = NtFsControlFile(h, nullptr, nullptr, nullptr, &iosb, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0);
+    NtClose(h);
+    return status;
+}
+
+static void ExfatFormatTest(PUCHAR buf) {
+    HANDLE h, hv;
+    IO_STATUS_BLOCK iosb;
+    // Something in X:, then the format.
+    bool ok = Open(&h, "\\Device\\Harddisk0\\Partition3\\XkCache", GENERIC_READ, FILE_OPEN_IF, FILE_DIRECTORY_FILE) == 0;
+    if (ok)
+        NtClose(h);
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition3\\XkCache\\junk.bin", GENERIC_WRITE, FILE_OVERWRITE_IF, 0) == 0;
+    if (ok) {
+        RtlFillMemory(buf, 0x10000, 0x5A);
+        LARGE_INTEGER zero = {};
+        ok = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x10000, &zero) == 0;
+        NtClose(h);
+    }
+    ok &= FormatLikeATitle("\\Device\\Harddisk0\\Partition3", buf) == 0;
+    // Afterwards: nothing in X:\, 750 MB less the folder's own cluster free, the header's serial shown.
+    ok &= Open(&hv, "\\Device\\Harddisk0\\Partition3\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0;
+    if (ok) {
+        ULONG size[6] = {}, vol[8] = {};
+        NtQueryVolumeInformationFile(hv, &iosb, size, sizeof(size), FileFsSizeInformation);
+        NtQueryVolumeInformationFile(hv, &iosb, vol, 18, FileFsVolumeInformation);
+        KiTestExfatFormatTotal = size[0];
+        KiTestExfatFormatFree = size[2];
+        UCHAR dir[0x100];
+        ok = NtQueryDirectoryFile(hv, nullptr, nullptr, nullptr, &iosb, dir, sizeof(dir), FileDirectoryInformation,
+                                  nullptr, TRUE) == (NTSTATUS)0xC000000F && // STATUS_NO_SUCH_FILE: empty
+             vol[2] == 0x12345678;
+        NtClose(hv);
+    }
+    KiTestExfatFormatOk = ok;
+    // E: is not a cache partition: the header write is refused and nothing changes.
+    KiTestExfatRefuseOk = FormatLikeATitle("\\Device\\Harddisk0\\Partition1", buf) == STATUS_ACCESS_DENIED;
 }
 
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);

@@ -246,6 +246,7 @@ NTSTATUS ExfatFreeFile(FATX_VOLUME *v, FATX_FCB *f) {
         if (!NT_SUCCESS(status))
             return status;
         v->Alloc->FreeClusters++;
+        v->UsedClusters--;
     }
     if (f->FirstCluster < v->Alloc->AllocationHint)
         v->Alloc->AllocationHint = f->FirstCluster;
@@ -275,6 +276,7 @@ static NTSTATUS ExGrowDirectory(FATX_VOLUME *v, FATX_FCB *dir) {
             if (!NT_SUCCESS(status))
                 return status;
             v->Alloc->FreeClusters--;
+            v->UsedClusters++;
             cluster = next;
             dir->ExAllocClusters++;
         } else if (NT_SUCCESS(status)) {
@@ -436,31 +438,171 @@ NTSTATUS ExfatIsDirectoryEmpty(FATX_VOLUME *v, FATX_FCB *dir) {
     }
 }
 
-// --- Volume handle and size (spec §5-6 of the storage spec)
+// --- Folder trees: usage of the cache folders, and emptying one when a title formats it
 
-// A folder partition has no sectors of its own: raw reads return zeros, raw writes are accepted and dropped.
-// (Cache-partition formatting through the volume handle is handled in a later step.)
-NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *, PIRP Irp) {
-    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
-    ULONG length = s->Parameters.Read.Length;
-    if (s->MajorFunction == IRP_MJ_READ && Irp->UserBuffer)
-        RtlZeroMemory(Irp->UserBuffer, length);
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = length;
-    IofCompleteRequest(Irp, 0);
-    return STATUS_SUCCESS;
+static bool ExIsCacheFolder(FATX_VOLUME *v) { return v->PartitionNumber >= 3 && v->PartitionNumber <= 5; }
+
+bool ExfatMayAllocate(FATX_VOLUME *v, ULONG Count) {
+    return !ExIsCacheFolder(v) || ((ULONGLONG)v->UsedClusters + Count) << v->ClusterShift <= 0x2EE00000;
 }
 
-// Reported in 16 KB units (the FATX cluster size titles expect): E: and C: the volume's free space capped at 2 TB,
-// X/Y/Z their retail 750 MB, F: everything.
+// A directory's or file's allocation as a temporary FCB (from its entry set).
+static void ExFcbFromSet(FATX_VOLUME *v, const EX_SET *s, FATX_FCB *f) {
+    RtlZeroMemory(f, sizeof(*f));
+    InitializeListHead(&f->ChildList);
+    const UCHAR *st = s->e[1];
+    ULONGLONG length = *(const ULONGLONG *)(st + 24);
+    f->FirstCluster = *(const ULONG *)(st + 20);
+    f->Flags = (*(const USHORT *)(s->e[0] + 4) & FILE_ATTRIBUTE_DIRECTORY) ? FCB_DIRECTORY : 0;
+    if (f->FirstCluster) {
+        f->ExFlags = (st[1] & 2) ? EXFAT_NOFATCHAIN : 0;
+        f->ExAllocClusters = (ULONG)((length + v->BytesPerCluster - 1) >> v->ClusterShift);
+    }
+}
+
+static NTSTATUS ExAllocationOf(FATX_VOLUME *v, FATX_FCB *f, ULONG *Clusters) {
+    *Clusters = 0;
+    if (!f->FirstCluster)
+        return STATUS_SUCCESS;
+    if (f->ExFlags & EXFAT_NOFATCHAIN) {
+        *Clusters = f->ExAllocClusters;
+        return STATUS_SUCCESS;
+    }
+    ULONG last;
+    return FatxChainLength(v, f->FirstCluster, Clusters, &last);
+}
+
+// Count (Delete = false) or delete (true) everything below dir; Used counts the clusters seen.
+static NTSTATUS ExWalk(FATX_VOLUME *v, FATX_FCB *dir, bool Delete, ULONG Depth, ULONG *Used) {
+    if (Depth > 32)
+        return STATUS_FILE_CORRUPT_ERROR_;
+    for (ULONG slot = 0;; slot++) {
+        PUCHAR e;
+        LONGLONG block;
+        NTSTATUS status = ExMapSlot(v, dir, slot, &e, &block);
+        if (status == STATUS_END_OF_FILE || (NT_SUCCESS(status) && e[0] == EX_END))
+            return STATUS_SUCCESS;
+        if (!NT_SUCCESS(status))
+            return status;
+        if (e[0] != EX_FILE)
+            continue;
+        EX_SET set;
+        status = ExReadSet(v, dir, slot, &set);
+        if (status == STATUS_FILE_CORRUPT_ERROR_)
+            continue;
+        if (!NT_SUCCESS(status))
+            return status;
+        FATX_FCB child;
+        ExFcbFromSet(v, &set, &child);
+        if (child.Flags & FCB_DIRECTORY) {
+            status = ExWalk(v, &child, Delete, Depth + 1, Used);
+            if (!NT_SUCCESS(status))
+                return status;
+        }
+        ULONG clusters;
+        status = ExAllocationOf(v, &child, &clusters);
+        if (!NT_SUCCESS(status))
+            return status;
+        *Used += clusters;
+        if (Delete) {
+            status = ExfatFreeFile(v, &child);
+            for (ULONG i = 0; NT_SUCCESS(status) && i < set.Count; i++) {
+                set.e[i][0] &= 0x7F;
+                status = ExWriteSlot(v, dir, slot + i, set.e[i]);
+            }
+            if (!NT_SUCCESS(status))
+                return status;
+        }
+        slot += set.Count - 1;
+    }
+}
+
+static NTSTATUS ExCountFolder(FATX_VOLUME *v) {
+    ULONG used = 0, own;
+    NTSTATUS status = ExWalk(v, &v->RootFcb, false, 0, &used);
+    if (NT_SUCCESS(status))
+        status = ExAllocationOf(v, &v->RootFcb, &own);
+    if (NT_SUCCESS(status))
+        v->UsedClusters = used + own;
+    return status;
+}
+
+// --- Volume handle and size (spec §5-6 of the storage spec)
+
+// A title formats its cache partition (X/Y/Z) through the volume handle: a FATX header written at offset 0, then the
+// allocation table and the root directory, then a dismount. A folder partition has no sectors of its own, so the
+// header write empties the folder and the metadata writes are dropped; reads show a freshly formatted FATX volume.
+// E:, C: and F: refuse to be formatted this way.
+static ULONG ExfatFormatSerial[7]; // the serial of the last header written to X/Y/Z (shown by later mounts)
+
+static void ExFormattedLayout(FATX_VOLUME *v, ULONG *EntrySize, ULONG *RootAt) {
+    ULONG entries = (ULONG)(v->ReportedLength >> 14) + 1;
+    *EntrySize = entries < 0xFFF0 ? 2 : 4;
+    *RootAt = 0x1000 + ((entries * *EntrySize + 0xFFF) & ~0xFFFu);
+}
+
+NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    ULONG length = s->Parameters.Read.Length;
+    LONGLONG offset = s->Parameters.Read.ByteOffset.QuadPart;
+    auto buffer = (PUCHAR)Irp->UserBuffer;
+    ULONG entrySize, rootAt;
+    ExFormattedLayout(v, &entrySize, &rootAt);
+    LONGLONG metaEnd = rootAt + 0x4000;
+    NTSTATUS status = STATUS_SUCCESS;
+    FatxAcquireVolume(v);
+    if (offset < 0 || offset + length > v->ReportedLength) {
+        status = STATUS_INVALID_PARAMETER;
+    } else if (s->MajorFunction == IRP_MJ_READ) {
+        for (ULONG i = 0; i < length; i++) {
+            LONGLONG at = offset + i;
+            UCHAR b = 0;
+            if (at < 16) {
+                ULONG header[4] = {FATX_SIGNATURE, ExfatFormatSerial[v->PartitionNumber] ? ExfatFormatSerial[v->PartitionNumber]
+                                                                                          : v->SerialNumber, 32, 1};
+                b = ((PUCHAR)header)[at];
+            } else if (at >= 0x1000 && at < 0x1000 + 2 * entrySize) {
+                b = (at - 0x1000) == 0 ? 0xF8 : 0xFF; // entry 0 (media), entry 1 (the root's end of chain)
+            } else if (at >= rootAt && at < metaEnd) {
+                b = 0xFF; // empty root directory
+            }
+            buffer[i] = b;
+        }
+    } else if (offset == 0 && length >= 16 && *(PULONG)buffer == FATX_SIGNATURE) {
+        if (!ExIsCacheFolder(v) || !IsListEmpty(&v->RootFcb.ChildList)) {
+            status = STATUS_ACCESS_DENIED;
+        } else {
+            ULONG used = 0;
+            status = ExWalk(v, &v->RootFcb, true, 0, &used);
+            if (NT_SUCCESS(status))
+                status = ExCountFolder(v);
+            if (NT_SUCCESS(status))
+                ExfatFormatSerial[v->PartitionNumber] = v->SerialNumber = ((PULONG)buffer)[1];
+        }
+    } else if (offset + length > metaEnd || !ExIsCacheFolder(v)) {
+        status = STATUS_ACCESS_DENIED; // only the format's own metadata writes are expected
+    }
+    FatxReleaseVolume(v);
+    Irp->IoStatus.Status = status;
+    Irp->IoStatus.Information = NT_SUCCESS(status) ? length : 0;
+    IofCompleteRequest(Irp, 0);
+    return status;
+}
+
+// Reported in 16 KB units (the FATX cluster size titles expect): E: and C: the volume capped at 2 TB, X/Y/Z their
+// retail 750 MB less what the folder holds, F: everything.
 void ExfatVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit) {
     constexpr ULONGLONG unit = 0x4000, cap = 2ull << 40;
     ULONGLONG total = (ULONGLONG)v->Ex->ClusterCount << v->ClusterShift;
     ULONGLONG free = (ULONGLONG)v->Alloc->FreeClusters << v->ClusterShift;
-    if (v->PartitionNumber >= 3 && v->PartitionNumber <= 5)
+    if (ExIsCacheFolder(v)) {
         total = 0x2EE00000;
-    else if (v->PartitionNumber <= 2 && total > cap)
+        ULONGLONG used = (ULONGLONG)v->UsedClusters << v->ClusterShift;
+        if (free > total - (used < total ? used : total))
+            free = total - (used < total ? used : total);
+    } else if (v->PartitionNumber <= 2 && total > cap) {
         total = cap;
+    }
     if (free > total)
         free = total;
     *Total = total / unit > 0xFFFFFFFF ? 0xFFFFFFFF : (ULONG)(total / unit);
@@ -649,6 +791,7 @@ NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     v->Alloc = &ExfatDisk.Alloc;
     v->PartitionNumber = target.PartitionNumber;
     v->PartitionLength = volume.PartitionLength.QuadPart;
+    v->ReportedLength = target.PartitionLength.QuadPart;
     v->SectorSize = 512;
     v->CacheExtension = {disk, volume.PartitionLength, 512};
     ExInitFcb(&v->RootFcb, FCB_DIRECTORY | FCB_ROOT);
@@ -696,6 +839,10 @@ NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
             r->CreationTime = e.CreationTime;
             r->LastWriteTime = e.LastWriteTime;
             r->LastAccessTime = e.LastAccessTime;
+            if (ExfatFormatSerial[v->PartitionNumber])
+                v->SerialNumber = ExfatFormatSerial[v->PartitionNumber];
+            if (ExIsCacheFolder(v))
+                status = ExCountFolder(v);
         }
     }
     FatxReleaseVolume(v);

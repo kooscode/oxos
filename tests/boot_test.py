@@ -376,6 +376,20 @@ def fatx_checks(mon, hdd):
             and mon.read("KiTestFatxTotalClusters") == clusters and mon.read("KiTestFatxSerial") == serial,
         "free clusters balanced": mon.read("KiTestFatxFreeBalanced") == 1,
         "FATX suite finished": mon.read("KiTestFatxDone") == 1,
+        **exfat_format_checks(mon, q)}
+
+
+def exfat_format_checks(mon, q):
+    """exFAT disk: a title-style format of X: empties the folder; E: refuses it (exfat-storage-spec.md §5)."""
+    if not is_exfat_disk(q):
+        return {}
+    total, free = mon.read("KiTestExfatFormatTotal"), mon.read("KiTestExfatFormatFree")
+    print(f"  (X: after the format: {free} of {total} 16 KB units free)")
+    return {
+        "X: formatted through its volume handle: folder emptied, header serial shown": mon.read("KiTestExfatFormatOk") == 1,
+        "X: reports its retail 750 MB, less only its directory's cluster": total == 0x2EE00000 // 0x4000
+            and free == total - 1,
+        "E: refuses a format through its volume handle": mon.read("KiTestExfatRefuseOk") == 1,
     }
 
 
@@ -603,6 +617,7 @@ def disk_checks(hdd_copy):
             "deleted/renamed entries gone, directory consistent": listing is not None
                 and sorted(x.name for x in listing) == ["keep.bin"],
             "exFAT volume consistent (checksums, chains, bitmap)": not problems,
+            "X: folder empty after the format": v.listdir("/X") == [],
         }
     e = Fatx(q, "E")
     names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
