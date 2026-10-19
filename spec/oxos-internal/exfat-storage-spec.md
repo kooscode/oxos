@@ -79,7 +79,7 @@ recognises that sequence and turns it into "empty the folder":
 1. **Raw open** of `\Device\Harddisk0\PartitionN` (no file name, exclusive share access) → succeeds; the handle is a
    raw-volume handle on the virtual partition.
 2. **IOCTL 0x70000** (geometry) and **IOCTL 0x74004** (partition information) → describe the virtual partition at its
-   retail size (X/Y/Z: 0x177000 sectors = 750 MB; others §6), 512-byte sectors.
+   retail size (X/Y/Z: 0x177000 sectors = 750 MB; others as reported in §6), 512-byte sectors.
 3. **Raw write at offset 0** whose data starts with `FATX` → **format**: record the header (signature, serial number
    at +4, sectors per cluster at +8, root cluster at +12) as the partition's current header, and empty the folder
    (rename it to `/OXOS/trash/<n>`, create a new empty one, delete the old one in the background).
@@ -95,13 +95,24 @@ recognises that sequence and turns it into "empty the folder":
 - The recorded header and the partition's size live in `/OXOS/partitions.ini`, so they survive reboots.
 
 ## 6. Size and free-space reporting
-Titles size their data from volume queries, and some compute free space in 32 bits, so every virtual partition
-reports a bounded size:
-- **total size:** X/Y/Z 750 MB; C: 500 MB; E: 4.9 GB (retail sizes); F:, G: … the real free space capped at
-  **1 TB** each (configurable), so 32-bit cluster counts stay valid;
-- **free space:** total minus the space the folder uses, and never more than the exFAT volume's real free space;
-- **cluster size reported:** 16 KB (retail FATX), whatever the exFAT cluster size; sizes are rounded to it.
-Usage per folder is computed at mount (a directory walk) and kept up to date on writes.
+Every virtual partition shares the one exFAT volume, so each reports its own size and free space (decided):
+
+| Partitions | Reported free space | Reported total size |
+|---|---|---|
+| **E:, C:** (Partition1, 2: legacy, present on every retail disk) | the volume's real free space, **capped at 2 TB** | the folder's used space + the reported free space |
+| **X:, Y:, Z:** (Partition3–5: legacy cache drives) | retail size minus the folder's used space | the **retail 750 MB** (0x177000 sectors), always |
+| **F:, G: and up** (Partition6+: added by modders, never on retail disks) | the volume's real free space, **no cap** | the folder's used space + the real free space |
+
+- **Why the cap on E: and C::** games and the stock dashboard look at these and were only ever tested with a few GB;
+  free space kept in 32-bit variables wraps around. At 2 TB, counts in 16 KB blocks or clusters (128 M) still fit in
+  31 bits; code that counts bytes in 32 bits wraps at 4 GB, which only a cap below 4 GB would avoid. The cap is a
+  setting: the compatibility pass (plan phase 6) runs the stock dashboard and the test games with E: reporting large
+  values, and the cap is lowered if any of them needs it.
+- **Why X/Y/Z stay at retail size:** a title sizes the FATX allocation table it writes from the partition size it is
+  given (§5); a 2 TB cache drive would mean about 512 MB of table writes, and titles expect a 750 MB cache.
+- **Why no cap on F:/G::** titles never use them; dashboards and homebrew that do already handle large disks.
+- **Cluster size reported:** 16 KB (retail FATX), whatever the exFAT cluster size; sizes are rounded to it.
+- Usage per folder is computed at mount (a directory walk) and kept up to date on writes.
 
 ## 7. What stays FATX
 - **FATX hard disks**: retail and Cerbios-style disks keep the current driver, so a disk can move between OXOS and
