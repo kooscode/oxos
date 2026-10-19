@@ -97,7 +97,8 @@ void IdexDiskComputePassword(PUCHAR Password);
 
 // Fixed retail partition table (spec/stock/04 §4); slot 0 is the whole disk.
 constexpr ULONG IDE_MAX_PARTITIONS = 20;
-XBAPI ULONG IdexDiskLengthInSectors;
+XBAPI ULONGLONG IdexDiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos-internal/lba48.md)
+XBAPI BOOLEAN IdexDiskLba48;             // the drive supports 48-bit addressing
 XBAPI BOOLEAN IdexDiskSecurityUnlocked;
 XBAPI STRING HalDiskModelNumber, HalDiskSerialNumber;
 XBAPI ULONG HalDiskCachePartitionCount;

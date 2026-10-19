@@ -253,7 +253,8 @@ def idex_checks(mon, hdd):
         "drive password = HMAC-SHA1(XboxHDKey, model, serial)": mem("KiTestIdexPassword", 32) == password,
         "locked drive unlocked at boot (word 128: locked bit gone)": not (before & 4)
             or (after & 6) == 2 and mon.read("IdexDiskSecurityUnlocked") & 0xFF == 1,
-        "disk identified: 8 GB LBA28 capacity": mon.read("IdexDiskLengthInSectors") == q.size // 512,
+        "disk identified: capacity of the image (64-bit size)": mon.read("IdexDiskLengthInSectors")
+            | mon.read_offset("IdexDiskLengthInSectors", 4) << 32 == q.size // 512,
         "\\Device\\Harddisk0\\PartitionN on demand, names checked": mon.read("KiTestIdexNamesOk") == 1,
         "sector 0 of partitions 0-5 matches the image": sigs_ok,
         "256 KB DMA read (2 chunks) matches the image": mon.read("KiTestIdexBigOk") == 1 and mon.read("KiTestIdexBigSum") == want,
@@ -261,6 +262,56 @@ def idex_checks(mon, hdd):
         "IOCTL partition info + drive geometry": mon.read("KiTestIdexIoctlOk") == 1,
         "alignment / bounds errors": mon.read("KiTestIdexErrorsOk") == 1,
         "IDE suite finished": mon.read("KiTestIdexDone") == 1,
+        **lba48_kernel_checks(mon, q)}
+
+
+# 48-bit addressing (spec/oxos-internal/lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
+# limit, as (first LBA, sector count, tag); kernel/src/ke/selftest_idex.cpp has the same list.
+def lba48_writes(sectors):
+    return [(0x0FFFFFFE, 1, 1), (0x0FFFFFFF, 1, 2), (0x10000000, 1, 3), (0x10000001, 1, 4), (0x0FFFFF80, 512, 5),
+            (0x0FFFFE00, 256, 6), (0x20000000, 256, 7), (sectors - 8, 8, 8)]
+
+
+def lba48_kernel_checks(mon, q):
+    if q.size // 512 < 0x20001000:
+        return {}
+    return {
+        "48-bit drive detected (IDENTIFY words 83/86)": mon.read("IdexDiskLba48") & 0xFF == 1,
+        "48-bit self-test ran (target sectors were free)": mon.read("KiTestIdexLba48Ran") == 1,
+        "48-bit writes read back (around 0x0FFFFFFF, 256-sector counts, end of disk)": mon.read("KiTestIdexLba48Ok") == 1,
+    }
+
+
+def lba48_disk_checks(copy, original):
+    """After xemu exits: each pattern sits at exactly LBA * 512 in the image, and nothing landed near the start of
+    the disk (a 28-bit command for sector 0x10000000 would wrap to sector 0)."""
+    sectors = copy.size // 512
+    if sectors < 0x20001000:
+        return {}
+    writes = lba48_writes(sectors)
+    placed = True
+    for lba0, count, _ in writes:
+        data = copy.read(lba0 * 512, count * 512)
+        for n in range(count):
+            lba = lba0 + n
+            tag = [t for a, c, t in writes if a <= lba < a + c][-1]
+            want = struct.pack("<4I", 0x3834424C, lba & 0xFFFFFFFF, lba >> 32, tag) + struct.pack(
+                "<124I", *(((lba & 0xFFFFFFFF) * 2654435761 & 0xFFFFFFFF) ^ i for i in range(4, 128)))
+            placed &= data[n * 512:(n + 1) * 512] == want
+    # The first 0x400 sectors (before X:) and the first sectors of each partition are unchanged, apart from the
+    # self-test's own write at sectors 0x3F0-0x3F7 and the refurb record in sector 3 (the kernel counts the power
+    # cycle there at every boot), which must still not hold a test pattern.
+    start = [lba for lba in range(0x400) if lba != 3 and not 0x3F0 <= lba < 0x3F8]
+    changed = [lba for lba in start + [0x400, 0x177400, 0x2EE400, 0x465400, 0x55F400]
+               if copy.read(lba * 512, 512) != original.read(lba * 512, 512)]
+    if copy.read(3 * 512, 4) == b"LB48":
+        changed.append(3)
+    if changed:
+        print(f"  (sectors changed near the start: {[hex(x) for x in changed]})")
+    start_same = not changed
+    return {
+        "each 48-bit pattern at exactly LBA * 512 in the image": placed,
+        "start of the disk and partition starts untouched (no 28-bit wrap)": start_same,
     }
 
 
@@ -597,7 +648,7 @@ def main():
         print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
         ok &= passed
     if ok and a.hdd and not a.dash and not a.relaunch and not a.udf:
-        for name, passed in disk_checks(hdd_copy).items():
+        for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed
     if os.path.exists(hdd_copy):

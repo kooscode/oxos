@@ -8,6 +8,80 @@ volatile ULONG KiTestIdexBigSum, KiTestIdexBigOk;  // 256 KB read at the start o
 volatile ULONG KiTestIdexWriteOk, KiTestIdexIoctlOk, KiTestIdexErrorsOk, KiTestIdexNamesOk, KiTestIdexDone;
 volatile ULONG KiTestIdexPassThroughOk, KiTestIdexSecurityAfter; // IDENTIFY word 128 after boot
 volatile UCHAR KiTestIdexPassword[32]; // the derived drive password (boot_test.py recomputes it)
+// 48-bit addressing (spec/oxos-internal/lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the
+// writes were made, 2 when skipped because a target sector held other data; Ok = every pattern read back.
+volatile ULONG KiTestIdexLba48Ran, KiTestIdexLba48Ok;
+static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major = IRP_MJ_READ);
+
+// Each test sector: 'LB48', its LBA (low, high), the write's tag, then dwords derived from the LBA. The host side
+// (boot_test.py) finds them at exactly LBA * 512 in the image.
+static void IdexLba48Fill(PULONG p, ULONGLONG lba, ULONG count, ULONG tag) {
+    for (ULONG n = 0; n < count; n++, lba++, p += 128) {
+        p[0] = 0x3834424C; // "LB48"
+        p[1] = (ULONG)lba;
+        p[2] = (ULONG)(lba >> 32);
+        p[3] = tag;
+        for (ULONG i = 4; i < 128; i++)
+            p[i] = (ULONG)lba * 2654435761u ^ i;
+    }
+}
+
+static bool IdexLba48Free(PDEVICE_OBJECT disk, PUCHAR buf, ULONGLONG lba, ULONG count) {
+    if (!NT_SUCCESS(IdexTestRead(disk, buf, count * 512, (LONGLONG)lba << 9)))
+        return false;
+    for (ULONG n = 0; n < count; n++) {
+        auto p = (PULONG)(buf + n * 512);
+        if (p[0] == 0x3834424C)
+            continue;
+        for (ULONG i = 0; i < 128; i++)
+            if (p[i])
+                return false;
+    }
+    return true;
+}
+
+static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
+    ULONGLONG last = IdexDiskLengthInSectors - 1;
+    if (!IdexDiskLba48 || IdexDiskLengthInSectors < 0x20001000)
+        return;
+    struct {
+        ULONGLONG lba;
+        ULONG count, tag;
+    } writes[] = {
+        {0x0FFFFFFE, 1, 1}, {0x0FFFFFFF, 1, 2}, {0x10000000, 1, 3}, {0x10000001, 1, 4}, // either side of the limit
+        {0x0FFFFF80, 512, 5},      // 256 KB = two 256-sector DMA chunks; the first one reaches past the limit
+        {0x0FFFFE00, 256, 6},      // 256 sectors ending just below the limit: the 28-bit count 0 case
+        {0x20000000, 256, 7},      // 256 sectors in 48-bit form: count register 0x0100
+        {last - 7, 8, 8},          // the last sectors of the disk
+    };
+    for (auto &w : writes)
+        if (!IdexLba48Free(disk, buf, w.lba, w.count)) {
+            KiTestIdexLba48Ran = 2;
+            return;
+        }
+    bool ok = true;
+    for (auto &w : writes) {
+        IdexLba48Fill((PULONG)buf, w.lba, w.count, w.tag);
+        ok &= NT_SUCCESS(IdexTestRead(disk, buf, w.count * 512, (LONGLONG)w.lba << 9, IRP_MJ_WRITE));
+    }
+    // Writes overlap (the 256 KB one covers the four single sectors): a sector holds the last write's tag.
+    for (auto &w : writes) {
+        RtlZeroMemory(buf, w.count * 512);
+        ok &= NT_SUCCESS(IdexTestRead(disk, buf, w.count * 512, (LONGLONG)w.lba << 9));
+        for (ULONG n = 0; ok && n < w.count; n++) {
+            auto p = (PULONG)(buf + n * 512);
+            ULONGLONG lba = w.lba + n;
+            ULONG tag = 0;
+            for (auto &v : writes)
+                if (lba >= v.lba && lba < v.lba + v.count)
+                    tag = v.tag;
+            ok = p[0] == 0x3834424C && p[1] == (ULONG)lba && p[2] == (ULONG)(lba >> 32) && p[3] == tag &&
+                 p[127] == ((ULONG)lba * 2654435761u ^ 127);
+        }
+    }
+    KiTestIdexLba48Ran = 1;
+    KiTestIdexLba48Ok = ok;
+}
 
 static PDEVICE_OBJECT IdexTestOpen(PCSZ name) {
     OBJECT_STRING s;
@@ -17,7 +91,7 @@ static PDEVICE_OBJECT IdexTestOpen(PCSZ name) {
                                                                                                   : nullptr;
 }
 
-static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major = IRP_MJ_READ) {
+static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major) {
     LARGE_INTEGER o;
     o.QuadPart = offset;
     return IoSynchronousFsdRequest(major, dev, buf, len, &o);
@@ -78,6 +152,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         ok = buf[i] == (UCHAR)(i * 7 + 3);
     KiTestIdexWriteOk = ok;
     ExFreePool(pool);
+    IdexLba48Test(parts[0], buf);
 
     // IOCTLs.
     PARTITION_INFORMATION pi;
@@ -89,7 +164,7 @@ static void NTAPI IdexControllerThread(PVOID) {
          pi.PartitionLength.QuadPart == 0x1F400000 && pi.PartitionNumber == 2;
     ok &= IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, parts[0], nullptr, 0, &g, sizeof(g),
                                               &ret, FALSE) == 0 &&
-          g.Cylinders.QuadPart == IdexDiskLengthInSectors && g.BytesPerSector == 512;
+          (ULONGLONG)g.Cylinders.QuadPart == IdexDiskLengthInSectors && g.BytesPerSector == 512;
     KiTestIdexIoctlOk = ok;
 
     // Parameter errors: unaligned length/offset, past the end of a partition.

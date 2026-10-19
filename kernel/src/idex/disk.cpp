@@ -1,4 +1,5 @@
-// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5).
+// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5), 48-bit
+// addressing for disks over 128 GiB (spec/oxos-internal/lba48.md).
 #include <xk/arch.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -7,8 +8,8 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
                               POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
                               PVOID *Object);
 
-ULONG IdexDiskLengthInSectors;
-BOOLEAN IdexDiskSecurityUnlocked;
+ULONGLONG IdexDiskLengthInSectors;
+BOOLEAN IdexDiskLba48, IdexDiskSecurityUnlocked;
 ULONG HalDiskCachePartitionCount = 3; // X, Y, Z
 static char IdexDiskModel[40], IdexDiskSerial[20];
 STRING HalDiskModelNumber = {0, sizeof(IdexDiskModel), IdexDiskModel};
@@ -29,7 +30,7 @@ static NTSTATUS NTAPI IdexDiskCreateClose(PDEVICE_OBJECT, PIRP Irp) {
 static PIDE_DISK_EXTENSION IdexExtension(PDEVICE_OBJECT dev) { return (PIDE_DISK_EXTENSION)dev->DeviceExtension; }
 
 // READ/WRITE: sector-aligned, inside the partition. The stack location is rewritten for the transfer:
-// Read.ByteOffset.LowPart = absolute LBA, Read.CacheBuffer = current buffer address.
+// Read.ByteOffset.QuadPart = absolute LBA, Read.CacheBuffer = current buffer address.
 static NTSTATUS NTAPI IdexDiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     PPARTITION_INFORMATION part = &IdexExtension(DeviceObject)->PartitionInformation;
@@ -68,8 +69,11 @@ static void IdexDiskCompleteIrp(PIRP Irp, NTSTATUS Status) {
 static void IdexDiskStartTransfer(PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     ULONG chunk = s->Parameters.Read.Length < IDE_MAX_TRANSFER ? s->Parameters.Read.Length : IDE_MAX_TRANSFER;
-    ULONG lba = s->Parameters.Read.ByteOffset.LowPart;
+    ULONGLONG lba = s->Parameters.Read.ByteOffset.QuadPart;
+    ULONG count = chunk >> 9;
     bool read = s->MajorFunction == IRP_MJ_READ;
+    // The 28-bit commands address sectors up to 0x0FFFFFFF; a chunk that reaches past it uses the EXT forms.
+    bool ext = IdexDiskLba48 && lba + count > 0x0FFFFFFF;
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
     if (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000) ||
@@ -78,12 +82,25 @@ static void IdexDiskStartTransfer(PIRP Irp) {
         IdexDiskCompleteIrp(Irp, STATUS_IO_DEVICE_ERROR);
         return;
     }
-    outb(IDE_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
-    outb(IDE_LBA0, (UCHAR)lba);
-    outb(IDE_LBA1, (UCHAR)(lba >> 8));
-    outb(IDE_LBA2, (UCHAR)(lba >> 16));
-    outb(IDE_COUNT, (UCHAR)(chunk >> 9)); // 0 = 256 sectors
-    outb(IDE_COMMAND, read ? 0xC8 : 0xCA); // READ DMA / WRITE DMA
+    if (ext) { // each register takes the high byte first, then the low byte
+        outb(IDE_DRIVE, 0xE0);
+        outb(IDE_COUNT, (UCHAR)(count >> 8)); // 256 sectors = 0x0100 (0 would mean 65536)
+        outb(IDE_LBA0, (UCHAR)(lba >> 24));
+        outb(IDE_LBA1, (UCHAR)(lba >> 32));
+        outb(IDE_LBA2, (UCHAR)(lba >> 40));
+        outb(IDE_COUNT, (UCHAR)count);
+        outb(IDE_LBA0, (UCHAR)lba);
+        outb(IDE_LBA1, (UCHAR)(lba >> 8));
+        outb(IDE_LBA2, (UCHAR)(lba >> 16));
+        outb(IDE_COMMAND, read ? 0x25 : 0x35); // READ DMA EXT / WRITE DMA EXT
+    } else {
+        outb(IDE_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
+        outb(IDE_LBA0, (UCHAR)lba);
+        outb(IDE_LBA1, (UCHAR)(lba >> 8));
+        outb(IDE_LBA2, (UCHAR)(lba >> 16));
+        outb(IDE_COUNT, (UCHAR)count); // 0 = 256 sectors
+        outb(IDE_COMMAND, read ? 0xC8 : 0xCA); // READ DMA / WRITE DMA
+    }
     ch->ExpectingBusMasterInterrupt = TRUE;
     ch->Timeout = 10;
     outb(IDE_BM_COMMAND, read ? 0x09 : 0x01);
@@ -109,7 +126,7 @@ static void NTAPI IdexDiskFinishIo() {
     s->Parameters.Read.Length -= chunk;
     if (s->Parameters.Read.Length) {
         s->Parameters.Read.CacheBuffer = (PUCHAR)s->Parameters.Read.CacheBuffer + chunk;
-        s->Parameters.Read.ByteOffset.LowPart += chunk >> 9;
+        s->Parameters.Read.ByteOffset.QuadPart += chunk >> 9;
         ch->IoRetries = 0;
         IdexDiskStartTransfer(irp);
         return;
@@ -461,7 +478,14 @@ void IdexDiskInit() {
 
     IdexCopyIdentifyString(&id[27], 20, IdexDiskModel, &HalDiskModelNumber);
     IdexCopyIdentifyString(&id[10], 10, IdexDiskSerial, &HalDiskSerialNumber);
+    // Words 83 and 86 bit 10: the 48-bit feature set, supported and enabled; its size is words 100-103.
+    IdexDiskLba48 = (id[83] & 0xC400) == 0x4400 && (id[86] & 0x0400);
     IdexDiskLengthInSectors = id[60] | ((ULONG)id[61] << 16);
+    if (IdexDiskLba48) {
+        ULONGLONG n = id[100] | ((ULONGLONG)id[101] << 16) | ((ULONGLONG)id[102] << 32) | ((ULONGLONG)id[103] << 48);
+        if (n > IdexDiskLengthInSectors)
+            IdexDiskLengthInSectors = n;
+    }
     if (IdexDiskLengthInSectors < 0xEE8AB0)
         IdexFatalError(9);
     IdexDiskSecurityWord = id[128];
