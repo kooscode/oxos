@@ -74,9 +74,12 @@ OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj)
 
 all: $(BUILD)/xboxkrnl.exe
 
+# Each object also depends on every header it includes (the compiler writes the list; -MP keeps a removed header
+# from breaking the build), including headers next to the sources such as src/fatx/fatx.h.
 $(BUILD)/%.obj: src/%.cpp $(wildcard include/xk/*.h)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+-include $(OBJS:.obj=.d)
 
 $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)

@@ -339,7 +339,8 @@ static void NTAPI ApcControllerThread(PVOID) {
     // Wake-up boost: base 8 + increment 2.
     KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
     PKTHREAD boosted = KiCreateSystemThread(BoostWaiter, nullptr, 0, 8);
-    Sleep(5);
+    while (boosted->State != Waiting) // set the event only once the waiter blocks (a busy boot can delay it)
+        Sleep(1);
     KeSetEvent(&BoostEvent, 2, FALSE);
     KeWaitForSingleObject(boosted, Executive, KernelMode, FALSE, nullptr);
 

@@ -83,6 +83,8 @@ struct FATX_VOLUME {
     FATX_ALLOC OwnAlloc;
     EXFAT_DISK *Ex;
     ULONG PartitionNumber;       // exFAT: the folder partition's number
+    ULONG UsedClusters;          // exFAT X/Y/Z: clusters in the folder (their size is fixed at 750 MB)
+    LONGLONG ReportedLength;     // exFAT: the folder partition's reported length
     LONGLONG PartitionLength;
     ULONG SectorSize;
     UCHAR ClusterShift;
@@ -160,6 +162,7 @@ NTSTATUS ExfatInitDirectory(FATX_VOLUME *v, ULONG *First);
 NTSTATUS ExfatMakeChain(FATX_VOLUME *v, FATX_FCB *f); // a NoFatChain file gets FAT entries (before it changes size)
 NTSTATUS ExfatFreeFile(FATX_VOLUME *v, FATX_FCB *f);
 bool ExfatClusterFree(FATX_VOLUME *v, ULONG Cluster, NTSTATUS *Status);
+bool ExfatMayAllocate(FATX_VOLUME *v, ULONG Count); // X/Y/Z hold at most their retail 750 MB
 NTSTATUS ExfatMarkCluster(FATX_VOLUME *v, ULONG Cluster, bool Used);
 NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp);
 void ExfatVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit);

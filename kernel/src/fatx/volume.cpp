@@ -124,7 +124,7 @@ static bool FatxIsLast(ULONG e) { return e >= 0xFFFFFFF8; }
 
 // Allocate Count clusters chained together; link them after PreviousLast (0 = new chain).
 NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, ULONG *First) {
-    if (Count > v->Alloc->FreeClusters)
+    if (Count > v->Alloc->FreeClusters || (v->Exfat && !ExfatMayAllocate(v, Count)))
         return (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
     ULONG first = 0, prev = PreviousLast, c = v->Alloc->AllocationHint;
     for (ULONG n = 0; n < Count;) {
@@ -148,6 +148,7 @@ NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, U
                 first = c;
             prev = c;
             v->Alloc->FreeClusters--;
+            v->UsedClusters++;
             n++;
         }
         c++;
@@ -168,6 +169,7 @@ NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First) {
         if (!NT_SUCCESS(status))
             return status;
         v->Alloc->FreeClusters++;
+        v->UsedClusters--;
         if (c < v->Alloc->AllocationHint)
             v->Alloc->AllocationHint = c;
         if (FatxIsLast(next))
