@@ -335,7 +335,8 @@ test-controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 # (tools/xbe-launcher, nxdk) and launch.txt = XBE boots, and the launcher starts that XBE the way a dashboard does (the
 # XBE then runs from the disk, with D: its folder). XBE='F:\apps\demo\default.xbe' (quoted, for the backslashes).
 # The disk: xemu-state/oxos-exfat/hdd.qcow2, an exFAT copy of PLAY_HDD made the first time (mount it on the PC to copy
-# files in; unmount it before running), or STATE=... for another state folder.
+# files in; unmount it before running), or STATE=... for another state folder. run-trace-xbe is the same with the
+# trace build (run-trace-full): the debug serial port in this terminal, the kernel call record dumped on a crash.
 LAUNCHER_DIR := $(ROOT)/tools/xbe-launcher
 LAUNCHER_XBE := $(LAUNCHER_DIR)/bin/default.xbe
 XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xemu-state/oxos-exfat)
@@ -343,8 +344,8 @@ XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xem
 $(LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(LAUNCHER_DIR)/xbe_launcher.c $(LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(LAUNCHER_DIR) -j8
 
-run-xbe: $(LAUNCHER_XBE) $(PLAY_FETCH)
-	@test -n '$(XBE)' || { printf '%s\n' "usage: make run-xbe XBE='F:\\apps\\demo\\default.xbe' [STATE=...]"; exit 1; }
+xbe-disc: $(LAUNCHER_XBE) $(PLAY_FETCH)
+	@test -n '$(XBE)' || { printf '%s\n' "usage: make run-xbe (or run-trace-xbe) XBE='F:\\apps\\demo\\default.xbe' [STATE=...]"; exit 1; }
 	@test -f $(XBE_STATE)/hdd.qcow2 || { mkdir -p $(XBE_STATE) && \
 	    python3 -I $(ROOT)/tests/exfat.py --from-fatx $(PLAY_HDD) $(XBE_STATE)/hdd.qcow2 --size 256G --cluster 16K; }
 	@echo "disk: $(XBE_STATE)/hdd.qcow2"
@@ -353,7 +354,12 @@ run-xbe: $(LAUNCHER_XBE) $(PLAY_FETCH)
 	        echo "F: holds:"; python3 -I $(ROOT)/tests/exfat.py --ls $(XBE_STATE)/hdd.qcow2 /F | grep . || echo "  (nothing)"; exit 1; fi
 	@mkdir -p $(OUT)/run-xbe
 	python3 -I $(ROOT)/tests/mkxiso.py $(OUT)/run-xbe/launcher.iso --add default.xbe=$(LAUNCHER_XBE) --text 'launch.txt=$(XBE)'
+
+run-xbe: xbe-disc
 	$(MAKE) run ISO=$(OUT)/run-xbe/launcher.iso STATE=$(XBE_STATE)
+
+run-trace-xbe: xbe-disc
+	$(MAKE) run-trace-full ISO=$(OUT)/run-xbe/launcher.iso STATE=$(XBE_STATE)
 
 # Memory test (tests/memory-test-title, an nxdk title): how much memory a title is given, as built (XBE flag
 # "limit to 64 MB") and with the flag cleared. MEMORY=128 for a 128 MB console; MEMORY_BIOS=... (with MCPX_ROM=...)
@@ -379,4 +385,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
