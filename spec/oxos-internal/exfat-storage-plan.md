@@ -26,7 +26,7 @@ written to a virtual partition.
    checksums. Test: the existing FATX test cases run against the exFAT image; a PC (Linux `fsck.exfat`) checks the
    image afterwards.
 3. **Virtual partitions.** `\Device\Harddisk0\PartitionN` on folders; FATX name rules; bounded sizes and free space
-   (spec §6); `Partition0`'s reserved area on `/OXOS/partition0.bin`. Test: the dashboard boots from `/C`, saves
+   (spec §6); `Partition0`'s reserved area in disk sectors 1024–2047. Test: the dashboard boots from `/C`, saves
    land in `/E/UDATA`.
 4. **Cache-format emulation** (spec §5). Test: Halo and Halo 2 on a fresh exFAT disk: the trace shows the same
    sequence, the format empties `/Z` (or `/X`, `/Y`), the cache files appear there, a second boot reuses them.

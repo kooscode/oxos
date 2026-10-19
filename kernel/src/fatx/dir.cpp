@@ -60,7 +60,14 @@ static bool FatxIsLive(const FATX_DIRENT *e) {
     return !FatxIsEnd(e) && e->FileNameLength != FATX_DIRENT_DELETED && e->FileNameLength <= FATX_MAX_NAME;
 }
 
-NTSTATUS FatxLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FATX_DIRENT *Found, ULONG *Index) {
+static void FatxEntryFromDirent(FATX_ENTRY *out, const FATX_DIRENT *e) {
+    RtlZeroMemory(out, sizeof(*out));
+    *(FATX_DIRENT *)out = *e;
+}
+
+NTSTATUS FatxLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FATX_ENTRY *Found, ULONG *Index) {
+    if (v->Exfat)
+        return ExfatLookup(v, dir, Name, Found, Index);
     for (ULONG i = 0;; i++) {
         FATX_DIRENT *e;
         LONGLONG block;
@@ -72,15 +79,82 @@ NTSTATUS FatxLookup(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, FA
         if (FatxIsEnd(e))
             return STATUS_OBJECT_NAME_NOT_FOUND;
         if (FatxIsLive(e) && FatxNameEqual(e->FileName, e->FileNameLength, Name->Buffer, Name->Length)) {
-            *Found = *e;
+            FatxEntryFromDirent(Found, e);
             *Index = i;
             return STATUS_SUCCESS;
         }
     }
 }
 
+// The entry at Index (an index Lookup, NextEntry or CreateDirent returned).
+NTSTATUS FatxReadEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG Index, FATX_ENTRY *Entry) {
+    if (v->Exfat)
+        return ExfatReadEntry(v, dir, Index, Entry);
+    FATX_DIRENT *e;
+    LONGLONG block;
+    NTSTATUS status = FatxMapDirent(v, dir, Index, &e, &block, false);
+    if (NT_SUCCESS(status))
+        FatxEntryFromDirent(Entry, e);
+    return status;
+}
+
+// The first visible entry at *Index or after it; *Index becomes its index. STATUS_END_OF_FILE after the last.
+NTSTATUS FatxNextEntry(FATX_VOLUME *v, FATX_FCB *dir, ULONG *Index, FATX_ENTRY *Entry) {
+    if (v->Exfat)
+        return ExfatNextEntry(v, dir, Index, Entry);
+    for (;; (*Index)++) {
+        FATX_DIRENT *e;
+        LONGLONG block;
+        NTSTATUS status = FatxMapDirent(v, dir, *Index, &e, &block, false);
+        if (status == STATUS_END_OF_FILE || (NT_SUCCESS(status) && FatxIsEnd(e)))
+            return STATUS_END_OF_FILE;
+        if (!NT_SUCCESS(status))
+            return status;
+        if (FatxIsLive(e)) {
+            FatxEntryFromDirent(Entry, e);
+            return STATUS_SUCCESS;
+        }
+    }
+}
+
+// A new directory's first cluster: FATX fills it with end markers (0xFF), exFAT with zeros.
+NTSTATUS FatxInitDirectory(FATX_VOLUME *v, ULONG *First) {
+    if (v->Exfat)
+        return ExfatInitDirectory(v, First);
+    NTSTATUS status = FatxAllocateClusters(v, 0, 1, First);
+    LONGLONG base = NT_SUCCESS(status) ? FatxClusterOffset(v, *First) : 0;
+    for (ULONG off = 0; NT_SUCCESS(status) && off < v->BytesPerCluster; off += FATX_BLOCK_SIZE) {
+        PUCHAR data;
+        status = FatxMapBlock(v, base + off, &data);
+        if (NT_SUCCESS(status)) {
+            RtlFillMemory(data, FATX_BLOCK_SIZE, FATX_DIRENT_NEVER_USED2);
+            status = FatxWriteBlockRange(v, base + off, 0, FATX_BLOCK_SIZE);
+        }
+    }
+    if (!NT_SUCCESS(status) && *First) {
+        FatxFreeChain(v, *First);
+        *First = 0;
+    }
+    return status;
+}
+
+NTSTATUS FatxRemoveDirent(FATX_VOLUME *v, FATX_FCB *f) {
+    if (v->Exfat)
+        return ExfatRemoveDirent(v, f);
+    FATX_DIRENT *e;
+    LONGLONG block;
+    NTSTATUS status = FatxMapDirent(v, f->Parent, f->DirentIndex, &e, &block, false);
+    if (NT_SUCCESS(status)) {
+        e->FileNameLength = FATX_DIRENT_DELETED;
+        status = FatxWriteDirent(v, block, e);
+    }
+    return status;
+}
+
 NTSTATUS FatxCreateDirent(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
                           ULONG FirstCluster, ULONG *Index) {
+    if (v->Exfat)
+        return ExfatCreateDirent(v, dir, Name, Attributes, FirstCluster, Index);
     for (ULONG i = 0;; i++) {
         FATX_DIRENT *e;
         LONGLONG block;
@@ -120,6 +194,8 @@ NTSTATUS FatxCreateDirent(FATX_VOLUME *v, FATX_FCB *dir, const OBJECT_STRING *Na
 
 // Write the FCB's size/cluster/attributes/times back into its directory entry.
 NTSTATUS FatxFlushFcb(FATX_VOLUME *v, FATX_FCB *f) {
+    if (v->Exfat)
+        return ExfatFlushFcb(v, f);
     if (f->Flags & (FCB_ROOT | FCB_VOLUME))
         return STATUS_SUCCESS;
     FATX_DIRENT *e;
@@ -140,6 +216,17 @@ NTSTATUS FatxFlushFcb(FATX_VOLUME *v, FATX_FCB *f) {
 }
 
 NTSTATUS FatxDeleteDirent(FATX_VOLUME *v, FATX_FCB *f) {
+    if (v->Exfat) {
+        NTSTATUS status = ExfatRemoveDirent(v, f);
+        if (NT_SUCCESS(status))
+            status = ExfatFreeFile(v, f);
+        f->FirstCluster = 0;
+        f->FileSize = 0;
+        f->HintCluster = 0;
+        f->ExFlags = 0;
+        f->ExAllocClusters = 0;
+        return status;
+    }
     FATX_DIRENT *e;
     LONGLONG block;
     NTSTATUS status = FatxMapDirent(v, f->Parent, f->DirentIndex, &e, &block, false);
@@ -156,6 +243,8 @@ NTSTATUS FatxDeleteDirent(FATX_VOLUME *v, FATX_FCB *f) {
 }
 
 NTSTATUS FatxIsDirectoryEmpty(FATX_VOLUME *v, FATX_FCB *dir) {
+    if (v->Exfat)
+        return ExfatIsDirectoryEmpty(v, dir);
     for (ULONG i = 0;; i++) {
         FATX_DIRENT *e;
         LONGLONG block;
@@ -181,7 +270,7 @@ FATX_FCB *FatxFindOpenFcb(FATX_FCB *dir, const CHAR *Name, ULONG Length) {
     return nullptr;
 }
 
-FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_DIRENT *e, ULONG Index) {
+FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_ENTRY *e, ULONG Index) {
     auto f = (FATX_FCB *)ExAllocatePoolWithTag(sizeof(FATX_FCB), 'fxtF');
     if (!f)
         return nullptr;
@@ -198,6 +287,10 @@ FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_DIRENT *e, ULONG Index) {
     f->CreationTime = e->CreationTime;
     f->LastWriteTime = e->LastWriteTime;
     f->LastAccessTime = e->LastAccessTime;
+    f->ExFlags = e->ExFlags;
+    f->ExEntries = e->ExEntries;
+    f->ExAllocClusters = e->ExAllocClusters;
+    f->ExDirLength = e->ExDirLength;
     InsertTailList(&Parent->ChildList, &f->SiblingLink);
     Parent->ReferenceCount++;
     return f;
@@ -214,6 +307,11 @@ void FatxDereferenceFcb(FATX_FCB *f) {
 
 // Grow or shrink the cluster chain to cover NewSize bytes.
 NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize) {
+    if (f->ExFlags & EXFAT_NOFATCHAIN) { // exFAT: chain the clusters before the allocation changes
+        NTSTATUS status = ExfatMakeChain(v, f);
+        if (!NT_SUCCESS(status))
+            return status;
+    }
     ULONG need = (ULONG)(((ULONGLONG)NewSize + v->BytesPerCluster - 1) >> v->ClusterShift);
     ULONG have = 0, last = 0;
     NTSTATUS status = f->FirstCluster ? FatxChainLength(v, f->FirstCluster, &have, &last) : STATUS_SUCCESS;
@@ -246,6 +344,7 @@ NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize) {
             return status;
     }
     f->FileSize = NewSize;
+    f->ExAllocClusters = need;
     f->Flags |= FCB_DIRENT_DIRTY;
     return FatxFlushFcb(v, f);
 }

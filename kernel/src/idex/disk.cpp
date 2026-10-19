@@ -17,6 +17,24 @@ STRING HalDiskSerialNumber = {0, sizeof(IdexDiskSerial), IdexDiskSerial};
 volatile USHORT IdexDiskSecurityWord; // IDENTIFY word 128, for diagnostics
 
 static PDEVICE_OBJECT IdexDiskPartitionTable[IDE_MAX_PARTITIONS];
+
+// exFAT layout (spec/oxos-internal/exfat-storage-spec.md): a GPT or MBR disk whose first data partition holds exFAT.
+// Partition1-6 are then folders of that volume (the file system mounts them through IdexDiskFolderOf), and
+// Partition0's retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at sectors 1024-2047,
+// before the partition. Kinds of disk device:
+enum : UCHAR { IDE_KIND_PARTITION, IDE_KIND_FOLDER, IDE_KIND_VOLUME, IDE_KIND_PHYSICAL };
+struct IDE_DISK_DEVICE {
+    IDE_DISK_EXTENSION Extension;
+    UCHAR Kind;
+};
+constexpr LONGLONG IDE_RESERVED_LENGTH = 0x80000, IDE_RESERVED_AT = 1024 * 512;
+BOOLEAN IdexDiskExfatLayout;
+PDEVICE_OBJECT IdexDiskExfatVolume; // the exFAT partition (not named)
+static PDEVICE_OBJECT IdexDiskPhysical; // the whole disk without remapping (not named), for reading the layout
+static KEVENT IdexDiskLayoutLock;
+static volatile LONG IdexDiskLayoutKnown;
+static const char *const IdexDiskFolders[] = {nullptr, "E", "C", "X", "Y", "Z", "F"};
+static UCHAR IdexKind(PDEVICE_OBJECT dev) { return ((IDE_DISK_DEVICE *)dev->DeviceExtension)->Kind; }
 constexpr ULONG IDE_MAX_TRANSFER = 0x20000;
 UCHAR IdexGetCompletionStatus(PUCHAR BusMasterStatus);
 
@@ -37,8 +55,20 @@ static NTSTATUS NTAPI IdexDiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONG len = s->Parameters.Read.Length;
     LONGLONG offset = s->Parameters.Read.ByteOffset.QuadPart;
     PUCHAR buffer = (PUCHAR)Irp->UserBuffer + s->Parameters.Read.BufferOffset;
+    UCHAR kind = IdexKind(DeviceObject);
+    bool remap = IdexDiskExfatLayout && kind == IDE_KIND_PARTITION; // Partition0 on an exFAT disk: reserved area only
+    if (kind == IDE_KIND_FOLDER || (remap && offset + len > IDE_RESERVED_LENGTH)) {
+        Irp->IoStatus.Status = kind == IDE_KIND_FOLDER ? STATUS_INVALID_DEVICE_REQUEST : STATUS_INVALID_PARAMETER;
+        Irp->IoStatus.Information = 0;
+        NTSTATUS status = Irp->IoStatus.Status;
+        IofCompleteRequest(Irp, 0);
+        return status;
+    }
+    if (remap)
+        offset += IDE_RESERVED_AT;
     if (((ULONG)buffer & 1) || (len & 0x1FF) || (offset & 0x1FF) || offset < 0 ||
-        offset + len > part->PartitionLength.QuadPart || Irp->SegmentArray) {
+        offset + len > (remap ? (LONGLONG)IdexDiskLengthInSectors << 9 : part->PartitionLength.QuadPart) ||
+        Irp->SegmentArray) {
         Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;
         IofCompleteRequest(Irp, 0);
@@ -281,9 +311,10 @@ DRIVER_OBJECT IdexDiskDriverObject = {
 
 // --- Partition devices
 
-static NTSTATUS IdexDiskCreateDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE_OBJECT *Out) {
+static NTSTATUS IdexDiskCreateDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE_OBJECT *Out,
+                                     UCHAR Kind = IDE_KIND_PARTITION) {
     PDEVICE_OBJECT dev;
-    NTSTATUS status = IoCreateDevice(&IdexDiskDriverObject, sizeof(IDE_DISK_EXTENSION), nullptr, FILE_DEVICE_DISK,
+    NTSTATUS status = IoCreateDevice(&IdexDiskDriverObject, sizeof(IDE_DISK_DEVICE), nullptr, FILE_DEVICE_DISK,
                                      FALSE, &dev);
     if (!NT_SUCCESS(status))
         return status;
@@ -296,6 +327,7 @@ static NTSTATUS IdexDiskCreateDevice(ULONG Number, LONGLONG Start, LONGLONG Leng
     ext->PartitionInformation.PartitionLength.QuadPart = Length;
     ext->PartitionInformation.HiddenSectors = (ULONG)(Start >> 9);
     ext->PartitionInformation.PartitionNumber = Number;
+    ((IDE_DISK_DEVICE *)ext)->Kind = Kind;
     if (Number == 0)
         dev->Flags |= DO_RAW_MOUNT_ONLY; // the whole disk never carries a file system
     dev->Flags &= ~DO_DEVICE_INITIALIZING;
@@ -303,9 +335,44 @@ static NTSTATUS IdexDiskCreateDevice(ULONG Number, LONGLONG Start, LONGLONG Leng
     return STATUS_SUCCESS;
 }
 
+// The folder partitions of an exFAT disk report the retail places and sizes (F: after E:, the whole volume), so
+// partition queries look as on a retail disk (spec §6 of the storage spec).
+static void IdexDiskFolderGeometry(ULONG Number, LONGLONG *Start, LONGLONG *Length) {
+    static const ULONG starts[] = {0, 0x55F400, 0x465400, 0x400, 0x177400, 0x2EE400, 0xEE8AB0};
+    *Start = (LONGLONG)starts[Number] << 9;
+    switch (Number) {
+    case 1: *Length = 0x1312D6000LL; break;
+    case 2: *Length = 0x1F400000; break;
+    case 3: case 4: case 5: *Length = 0x2EE00000; break;
+    default: *Length = IdexExtension(IdexDiskExfatVolume)->PartitionInformation.PartitionLength.QuadPart;
+    }
+}
+
+// Partition N of an exFAT disk is a folder of the volume: its name, or nullptr for any other device.
+PCSZ IdexDiskFolderOf(PDEVICE_OBJECT Device) {
+    if (Device->DriverObject != &IdexDiskDriverObject || IdexKind(Device) != IDE_KIND_FOLDER)
+        return nullptr;
+    return IdexDiskFolders[IdexExtension(Device)->PartitionInformation.PartitionNumber];
+}
+
 static NTSTATUS IdexDiskCreatePartitionDevice(ULONG Number) {
     ULONG startLba;
     LONGLONG length;
+    PDEVICE_OBJECT dev;
+    if (IdexDiskExfatLayout) {
+        if (Number < 1 || Number > 6)
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        LONGLONG start, length;
+        IdexDiskFolderGeometry(Number, &start, &length);
+        NTSTATUS status = IdexDiskCreateDevice(Number, start, length, &dev, IDE_KIND_FOLDER);
+        if (!NT_SUCCESS(status))
+            return status;
+        PDEVICE_OBJECT expected = nullptr;
+        if (!__atomic_compare_exchange_n(&IdexDiskPartitionTable[Number], &expected, dev, false, __ATOMIC_SEQ_CST,
+                                         __ATOMIC_SEQ_CST))
+            IoDeleteDevice(dev);
+        return STATUS_SUCCESS;
+    }
     if (Number == 1) {
         startLba = 0x55F400;
         length = 0x1312D6000LL;
@@ -318,7 +385,6 @@ static NTSTATUS IdexDiskCreatePartitionDevice(ULONG Number) {
     } else {
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
-    PDEVICE_OBJECT dev;
     NTSTATUS status = IdexDiskCreateDevice(Number, (LONGLONG)startLba << 9, length, &dev);
     if (!NT_SUCCESS(status))
         return status;
@@ -328,6 +394,95 @@ static NTSTATUS IdexDiskCreatePartitionDevice(ULONG Number) {
         return STATUS_SUCCESS;
     IoDeleteDevice(dev); // somebody else created it first
     return STATUS_SUCCESS;
+}
+
+// --- Layout: retail (fixed partition table) or exFAT (GPT or MBR), read once before the first partition is used.
+
+static ULONG IdexCrc32(const UCHAR *p, ULONG n) {
+    ULONG crc = 0xFFFFFFFF;
+    while (n--) {
+        crc ^= *p++;
+        for (int k = 0; k < 8; k++)
+            crc = (crc >> 1) ^ (0xEDB88320 & (0 - (crc & 1)));
+    }
+    return ~crc;
+}
+
+static NTSTATUS IdexDiskReadPhysical(ULONGLONG Lba, PVOID Buffer, ULONG Length) {
+    LARGE_INTEGER o;
+    o.QuadPart = (LONGLONG)(Lba << 9);
+    return IoSynchronousFsdRequest(IRP_MJ_READ, IdexDiskPhysical, Buffer, Length, &o);
+}
+
+// The first basic-data partition of a GPT whose header (at Lba) and entry array check out.
+static bool IdexDiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last) {
+    static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
+                                        0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
+    if (!NT_SUCCESS(IdexDiskReadPhysical(Lba, Sector, 512)) || RtlCompareMemory(Sector, "EFI PART", 8) != 8)
+        return false;
+    ULONG size = *(PULONG)(Sector + 12), crc = *(PULONG)(Sector + 16);
+    if (size < 92 || size > 512)
+        return false;
+    *(PULONG)(Sector + 16) = 0;
+    if (IdexCrc32(Sector, size) != crc)
+        return false;
+    ULONGLONG entriesLba = *(ULONGLONG *)(Sector + 72);
+    ULONG count = *(PULONG)(Sector + 80), entrySize = *(PULONG)(Sector + 84), entriesCrc = *(PULONG)(Sector + 88);
+    if (entrySize < 128 || entrySize > 512 || count == 0 || count * entrySize > 0x10000)
+        return false;
+    ULONG bytes = (count * entrySize + 511) & ~511u;
+    auto entries = (PUCHAR)ExAllocatePoolWithTag(bytes, 'tpgI');
+    if (!entries)
+        return false;
+    bool found = false;
+    if (NT_SUCCESS(IdexDiskReadPhysical(entriesLba, entries, bytes)) &&
+        IdexCrc32(entries, count * entrySize) == entriesCrc)
+        for (ULONG i = 0; i < count && !found; i++) {
+            PUCHAR e = entries + i * entrySize;
+            if (RtlCompareMemory(e, basicData, 16) == 16) {
+                *Start = *(ULONGLONG *)(e + 32);
+                *Last = *(ULONGLONG *)(e + 40);
+                found = *Last >= *Start;
+            }
+        }
+    ExFreePool(entries);
+    return found;
+}
+
+static void IdexDiskDetectLayout() {
+    if (IdexDiskLayoutKnown)
+        return;
+    KeWaitForSingleObject(&IdexDiskLayoutLock, Executive, KernelMode, FALSE, nullptr);
+    if (!IdexDiskLayoutKnown) {
+        auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'tyLI');
+        ULONGLONG start = 0, last = 0;
+        bool found = false;
+        if (sector && NT_SUCCESS(IdexDiskReadPhysical(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55) {
+            if (sector[446 + 4] == 0xEE) { // protective MBR: GPT, the primary header, else the backup
+                found = IdexDiskReadGpt(1, sector, &start, &last) ||
+                        IdexDiskReadGpt(IdexDiskLengthInSectors - 1, sector, &start, &last);
+            } else {
+                for (ULONG i = 0; i < 4 && !found; i++) {
+                    PUCHAR e = sector + 446 + 16 * i;
+                    if (e[4] == 0x07 && *(PULONG)(e + 12)) {
+                        start = *(PULONG)(e + 8);
+                        last = start + *(PULONG)(e + 12) - 1;
+                        found = true;
+                    }
+                }
+            }
+        }
+        // The partition must start after the reserved-area copy, end inside the disk and hold exFAT.
+        found = found && start >= 2048 && last < IdexDiskLengthInSectors &&
+                NT_SUCCESS(IdexDiskReadPhysical(start, sector, 512)) && RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8;
+        if (found && NT_SUCCESS(IdexDiskCreateDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9),
+                                                     &IdexDiskExfatVolume, IDE_KIND_VOLUME)))
+            IdexDiskExfatLayout = TRUE;
+        if (sector)
+            ExFreePool(sector);
+        IdexDiskLayoutKnown = 1;
+    }
+    KeSetEvent(&IdexDiskLayoutLock, 0, FALSE);
 }
 
 // \Device\Harddisk0 parses "PartitionN[\rest]" and hands the rest to the partition device.
@@ -355,6 +510,7 @@ static NTSTATUS NTAPI IdexDiskParseDirectory(PVOID ParseObject, POBJECT_TYPE Obj
     }
     if (!ok || number >= IDE_MAX_PARTITIONS)
         return rest.Length ? STATUS_OBJECT_PATH_NOT_FOUND : STATUS_OBJECT_NAME_NOT_FOUND;
+    IdexDiskDetectLayout();
     while (!IdexDiskPartitionTable[number]) {
         NTSTATUS status = IdexDiskCreatePartitionDevice(number);
         if (status == STATUS_OBJECT_NAME_NOT_FOUND)
@@ -499,6 +655,8 @@ void IdexDiskInit() {
         NT_SUCCESS(ObInsertObject(dir, &attrs, 0, &h)))
         NtClose(h);
     IdexDiskCreateDevice(0, 0, (LONGLONG)IdexDiskLengthInSectors << 9, &IdexDiskPartitionTable[0]);
+    IdexDiskCreateDevice(0x81, 0, (LONGLONG)IdexDiskLengthInSectors << 9, &IdexDiskPhysical, IDE_KIND_PHYSICAL);
+    KeInitializeEvent(&IdexDiskLayoutLock, SynchronizationEvent, TRUE);
 
     // ATA security (IDENTIFY word 128: bit 1 enabled, bit 2 locked).
     if (IdexDiskSecurityWord & 2) {

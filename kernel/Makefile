@@ -191,6 +191,19 @@ test-lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
+# exFAT disks (spec/oxos-internal/exfat-driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB,
+# 16 KB clusters, sparse), the test disk's C: and E: copied into /C and /E by tests/exfat.py; kept in
+# xemu-state/oxos-xemu-exfat/. The FATX suite then runs on E: as a folder of the volume, and tests/exfat.py checks the
+# whole volume afterwards (checksums, chains, bitmap).
+EXFAT_STATE := $(ROOT)/xemu-state/oxos-xemu-exfat
+EXFAT_HDD   := $(EXFAT_STATE)/hdd.qcow2
+$(EXFAT_HDD): $(HDD_FETCH)
+	mkdir -p $(EXFAT_STATE)
+	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K
+test-exfat: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(EXFAT_HDD)
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
+	    --hdd $(EXFAT_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
+
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
 test-mcpx: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
