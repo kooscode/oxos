@@ -44,11 +44,19 @@ Memory units come last (§9). Out of scope: changing what titles do.
   | `/E` | `\Device\Harddisk0\Partition1` | E: | saves (UDATA), title data (TDATA), apps |
   | `/C` | `\Device\Harddisk0\Partition2` | C: | dashboard |
   | `/X`, `/Y`, `/Z` | Partition3, 4, 5 | X:, Y:, Z: | title cache partitions (§5) |
-  | `/F`, `/G`, … | Partition6, 7, … | F:, G:, … | free space for games and apps (the extended partitions) |
+  | `/F` | Partition6 | F: | games and apps: the rest of the disk (§2.1) |
   | `/OXOS` | none | none | kernel files: `partition0.bin` (§4), settings |
 
   Folder names are matched case-insensitively. A user can copy a game folder to `/F/Games/Halo` from a PC and
   launch it from a dashboard as `F:\Games\Halo\default.xbe`.
+
+### 2.1 F: is the only extra drive (decided)
+On FATX disks the extended partitions (F:, G:, and Cerbios's J:–N:) exist because each partition has a size limit.
+On one exFAT volume every folder shares the same free space, so a single F: already offers the whole disk:
+- **F:** (Partition6) is the `/F` folder and reports the volume's full free space (§6). It is a folder, not the
+  volume root, so dashboards don't see the system folders (`/E`, `/C`, `/X`–`/Z`, `/OXOS`) as part of F:.
+- **G: and up** (Partition7+) are not created on an exFAT disk; opening them fails as for a missing partition.
+  Dashboards that offer G: simply don't list it.
 
 ## 3. Devices titles see
 - `\Device\Harddisk0\Partition0` (the whole disk) and `\Device\Harddisk0\Partition1…N` exist as on a retail disk.
@@ -101,7 +109,7 @@ Every virtual partition shares the one exFAT volume, so each reports its own siz
 |---|---|---|
 | **E:, C:** (Partition1, 2: legacy, present on every retail disk) | the volume's real free space, **capped at 2 TB** | the folder's used space + the reported free space |
 | **X:, Y:, Z:** (Partition3–5: legacy cache drives) | retail size minus the folder's used space | the **retail 750 MB** (0x177000 sectors), always |
-| **F:, G: and up** (Partition6+: added by modders, never on retail disks) | the volume's real free space, **no cap** | the folder's used space + the real free space |
+| **F:** (Partition6: added by modders, never on retail disks; the only extra drive, §2.1) | the volume's real free space, **no cap** | the folder's used space + the real free space |
 
 - **Why the cap on E: and C::** games and the stock dashboard look at these and were only ever tested with a few GB;
   free space kept in 32-bit variables wraps around. At 2 TB, counts in 16 KB blocks or clusters (128 M) still fit in
@@ -110,7 +118,7 @@ Every virtual partition shares the one exFAT volume, so each reports its own siz
   values, and the cap is lowered if any of them needs it.
 - **Why X/Y/Z stay at retail size:** a title sizes the FATX allocation table it writes from the partition size it is
   given (§5); a 2 TB cache drive would mean about 512 MB of table writes, and titles expect a 750 MB cache.
-- **Why no cap on F:/G::** titles never use them; dashboards and homebrew that do already handle large disks.
+- **Why no cap on F::** titles never use it; dashboards and homebrew that do already handle large disks.
 - **Cluster size reported:** 16 KB (retail FATX), whatever the exFAT cluster size; sizes are rounded to it.
 - Usage per folder is computed at mount (a directory walk) and kept up to date on writes.
 

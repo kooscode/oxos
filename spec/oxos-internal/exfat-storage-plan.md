@@ -59,7 +59,8 @@ After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT di
 - **GPT and MBR** (spec §2): GPT is the documented layout that our tools create; MBR is read too, so disks
   formatted with a PC's defaults work as they are.
 - **Free-space reporting** (spec §6): E: and C: report real free space capped at 2 TB (a setting); X/Y/Z their
-  retail 750 MB; F:, G: and up the real free space, no cap.
+  retail 750 MB; F: the real free space, no cap.
+- **F: is the only extra drive** (spec §2.1): the `/F` folder, with the whole disk's free space; no G: and up.
 
 ## Decisions to make
 - The default format for new memory units (FATX proposed) and the size cap for USB sticks (1 GB proposed).
