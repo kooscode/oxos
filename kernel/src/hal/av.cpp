@@ -276,6 +276,8 @@ static bool AvpIsFocusHd(ULONG Mode) {
     return AvpEncoderAddress == AV_ENCODER_FOCUS && (Mode >> 30) == 2 && (Mode & 0x7F) >= 1 && (Mode & 0x7F) <= 3;
 }
 
+static void AvpFocusRun(ULONG Mode, const AVP_FOCUS_WRITE *w, ULONG count);
+
 static void AvpFocusProgramHd(ULONG Mode, ULONG Width) {
     const AVP_FOCUS_WRITE *w;
     ULONG count;
@@ -291,9 +293,14 @@ static void AvpFocusProgramHd(ULONG Mode, ULONG Width) {
         w = AvpFocusHd1080i_1920, count = sizeof(AvpFocusHd1080i_1920) / sizeof(*w);
         break;
     }
+    AvpFocusRun(Mode, w, count);
+}
+
+// Writes the generated Focus sequence, then reads back each register's final value (diagnostics; xemu's encoder model
+// stores registers).
+static void AvpFocusRun(ULONG Mode, const AVP_FOCUS_WRITE *w, ULONG count) {
     for (ULONG i = 0; i < count; i++)
         HalWriteSMBusValue(AV_ENCODER_FOCUS, w[i].Register, w[i].Bytes == 2, w[i].Value);
-    // Read back each register's final value (diagnostics; xemu's encoder model stores registers).
     ULONG mismatches = 0, v;
     for (ULONG i = 0; i < count; i++) {
         bool last = true;
@@ -306,9 +313,21 @@ static void AvpFocusProgramHd(ULONG Mode, ULONG Width) {
     AvpEncoderProgrammed = Mode;
 }
 
+// Focus SD (tv-encoders.md §12): the row's generated sequence (QPR SDTV preset for the output, 27 MHz PLL, scaling
+// and position); the NV2A sends a progressive 858x525 (59.94 Hz) or 864x625 (50 Hz) raster at that clock.
+static const AVP_FOCUS_SD_MODE *AvpFindFocusSdMode(ULONG Mode) {
+    if (AvpEncoderAddress != AV_ENCODER_FOCUS || (Mode >> 30) > 1)
+        return nullptr;
+    for (auto &m : AvpFocusSdModes)
+        if (m.EncoderRow == (Mode & 0x7F) && (m.Output == 2 || m.Output == ((Mode >> 29) & 1)))
+            return &m;
+    return nullptr;
+}
+
 static void AvpFocusStart(ULONG Mode) {
     AvpOutputControl = (UCHAR)((Mode >> 24) & 0x0F);
-    HalWriteSMBusValue(AV_ENCODER_FOCUS, 0xA0, TRUE, 0x0400 | AvpOutputControl); // SD clock off, DAC disables
+    // HD: SD clock off (CLK_SOFF 2); SD: HD clock off (1); then the DAC disables of the mode word.
+    HalWriteSMBusValue(AV_ENCODER_FOCUS, 0xA0, TRUE, ((Mode >> 30) == 2 ? 0x0400 : 0x0200) | AvpOutputControl);
 }
 
 static void AvpCxStart(ULONG Mode) {
@@ -384,7 +403,15 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         // SD on a Conexant encoder: the encoder's settings define the NV2A timing (tv-encoders.md §3.2), and the CRTC
         // follows them (xemu sizes its display from the CRTC's active area only). Other modes/encoders as before.
         const AVP_SD_MODE *sd = AvpEncoderAddress == AV_ENCODER_CONEXANT ? AvpFindSdMode(Mode) : nullptr;
-        if (sd) {
+        const AVP_FOCUS_SD_MODE *fsd = AvpFindFocusSdMode(Mode);
+        if (fsd) {
+            AvpFocusRun(Mode, fsd->Writes, sizeof(fsd->Writes) / sizeof(fsd->Writes[0]));
+            AVP_TIMING t = {0, 0, fsd->Width, fsd->HSyncStart, (USHORT)(fsd->HSyncStart + 62), fsd->HTotal, 480,
+                            fsd->VSyncStart, (USHORT)(fsd->VSyncStart + 6), fsd->VTotal, FALSE};
+            AvpProgramTiming(regs, t);
+            AvpProgramTvTiming(regs, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart, t.HSyncEnd, t.VTotal,
+                               t.VSyncStart, t.VSyncEnd);
+        } else if (sd) {
             AvpCxProgram(Mode, *sd);
             AVP_TIMING t = {0, 0, sd->Width, (USHORT)(sd->HTotal - 32), (USHORT)(sd->HTotal - 16), sd->HTotal,
                             sd->Height, sd->VSyncStart, (USHORT)(sd->VSyncStart + 3), sd->VTotal, FALSE};
@@ -414,7 +441,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         regs[0xC03C2] = 0xE3; // misc output: 25 MHz clock, negative syncs
         if (sd || AvpIsCxHd(Mode))
             AvpCxStart(Mode);
-        else if (AvpIsFocusHd(Mode))
+        else if (AvpIsFocusHd(Mode) || fsd)
             AvpFocusStart(Mode);
         AvpCurrentMode = Mode;
     }

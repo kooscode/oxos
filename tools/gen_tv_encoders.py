@@ -371,6 +371,42 @@ def focus_hd(row, width):
             (0x0C, 0x2002, 2), (0x0C, 0x2000, 2)]  # latch the NCO and PLL settings
 
 
+# --- Focus FS453/4, SD (composite / S-video / SCART / component). The Focus clocks the NV2A (pseudo-master): with no
+# vertical scaling the GPU sends the TV's frame proportions (hardware reference §4.1: GCC_VACTIVE / GCC_VTOTAL =
+# TV_VACTIVE / TV_VTOTAL), so 525 lines at 59.94 Hz or 625 at 50 Hz; with 858 / 864 pixels per line the pixel clock is
+# exactly 27 MHz (PLL mode, no NCO dithering, 2.11), the PLL setting of 480p. The QPR preset supplies the TV standard.
+FOCUS_SD_STD = {  # TV standard -> (QPR PN, GPU total pixels/lines, TV active pixels at 13.5 MHz, TV active lines)
+    "NTSC-M": (0, 858, 525, 711, 487), "NTSC-J": (0, 858, 525, 711, 487), "PAL-60": (0, 858, 525, 711, 487),
+    "PAL-BDGHI": (1, 864, 625, 702, 576),
+}
+FOCUS_OM = {0: 0, 1: 2, 2: 1}  # our output (0 composite/S-video, 1 SCART, 2 component) -> QPR QK_OM (0, 2 SCART, 1 YPrPb)
+
+
+def focus_sd(std, width, output):
+    """Focus SD writes [(register, value, bytes)] and the NV2A timing. NTSC-J uses the NTSC preset (7.5 IRE setup kept);
+    PAL-60 uses it too (525 lines; component and SCART RGB carry no subcarrier, composite gets NTSC colour)."""
+    pn, htotal, vtotal, tv_hactive, tv_vactive = FOCUS_SD_STD[std]
+    hs, vs = width + 16, 480 + 9                     # GPU sync positions (as the 480p raster)
+    if tv_hactive >= width:                          # HSC (hardware reference §4.2): HUSC high byte, HDSC low byte
+        hsc, fifo = int((tv_hactive / width - 1) * 256) << 8, 130   # upscaling; FIFO latency (fs453.h constants)
+    else:
+        hsc, fifo = int(tv_hactive / width * 256), 164              # downscaling
+    iho = htotal - hs                                # §4.3: HSYNC edge to the line's end = TV active left edge
+    ivo = vtotal - vs - (tv_vactive - 480) // 2      # centred: 480 lines in 487 (NTSC) or 576 (PAL, bars)
+    qpr = FOCUS_QPR_INIT | FOCUS_UIM_NVIDIA | 0 << 8 | FOCUS_OM[output] << 4 | 1 << 6 | ((width == 720) << 1) | pn
+    n, m, p = FOCUS_HD[1]["pll"]                     # 27 MHz, as 480p
+    writes = [(0x0C, 0x2000, 2), (0x0C, 0x2001, 2), (0x0C, 0x2000, 2),   # CR: GCC_CK_LVL, soft reset
+              (0x0A, 0x0000, 2),                     # BYPASS: none (scaler and flicker filter in use)
+              (0xC4, qpr, 2),                        # QPR: SDTV preset, flicker filter, NVIDIA input
+              (0x10, 1, 2), (0x12, 0, 2), (0x14, 1, 2), (0x16, 0, 2),     # NCON = NCOD = 1 (as Freescale's SD)
+              (0x18, m - 17, 2), (0x1A, n - 1, 2), (0x1C, (p - 1) << 8 | (p - 1), 2),
+              (0x0C, 0x2002, 2), (0x0C, 0x2000, 2),  # latch NCO and PLL
+              (0x00, iho, 2), (0x02, max(ivo, 0), 2), (0x04, width, 2),   # IHO, IVO, IHW
+              (0x06, 0x0000, 2), (0x08, hsc, 2),     # VSC = 0 (1:1), HSC
+              (0x38, fifo, 2)]                       # FIFO_LAT
+    return writes, dict(htotal=htotal, hsync_start=hs, vtotal=vtotal, vsync_start=vs)
+
+
 def check_focus():
     ok = True
     for row, h in FOCUS_HD.items():
@@ -435,6 +471,18 @@ def emit(path):
         w = focus_hd(row, width)
         out.append(f"static const AVP_FOCUS_WRITE AvpFocusHd{FOCUS_HD[row]['name']}_{width}[{len(w)}] = {{")
         out.append("    " + ", ".join(f"{{0x{r:02X}, 0x{v:04X}, {b}}}" for r, v, b in w) + "};")
+    out += ["", "// Focus FS453/4 SD: writes, then the NV2A timing (progressive, 27 MHz), then PWR_MGNT = HD clock off | DACs.",
+            "struct AVP_FOCUS_SD_MODE {", "    UCHAR EncoderRow, Output; // Output: 0 composite/S-video (1 = SCART: mode bit 29), 2 component",
+            "    USHORT Width, HTotal, HSyncStart, VTotal, VSyncStart;", "    AVP_FOCUS_WRITE Writes[20];", "};",
+            "static const AVP_FOCUS_SD_MODE AvpFocusSdModes[] = {"]
+    for row, std, xres, output in SD_ROWS:
+        for out_kind in ((output,) if output == 2 else (0, 1)):
+            w, nv = focus_sd(std, xres, out_kind)
+            assert len(w) == 20
+            out.append(f"    // {std} {xres}x480 {('composite', 'scart', 'component')[out_kind]}")
+            out.append(f"    {{0x{row:02X}, {out_kind}, {xres}, {nv['htotal']}, {nv['hsync_start']}, {nv['vtotal']}, "
+                       f"{nv['vsync_start']}, {{" + ", ".join(f"{{0x{r:02X}, 0x{v:04X}, {b}}}" for r, v, b in w) + "}},")
+    out.append("};")
     open(path, "w").write("\n".join(out) + "\n")
     print(f"{path}: {len(rows)} SD modes, {len(reglist)} + {len(OUTPUT_REGS)} Conexant registers each")
     assert all(r[7] in (0, 2) for r in rows)
