@@ -1,6 +1,7 @@
 # TV encoders: Conexant CX25871 and Focus FS454 (design)
 
-Status: design, not implemented. Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
+Status: phase 1 done (bus probe, flags, encoder type, 4-byte SMBus form, `make test-encoders`); phases 2–6 to do.
+Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
 
 OXOS programs the NV2A timing today and leaves the encoder registers alone, which is enough for xemu (it does not
@@ -130,8 +131,9 @@ Per encoder, from the datasheets; the option numbers and query results as the re
    cannot show the analog picture.
 
 ## 8. Plan
-1. Probe + flags + option 0x10 + the per-encoder SMBus writes (no visible change in xemu), self-test with each
-   xemu encoder.
+1. **Done:** probe + flags + option 0x10 + the 4-byte SMBus form; `make test-encoders` boots with each xemu encoder.
+   xemu's Xcalibur model is byte-wide (a block read returns its register 0 as the count), so 32-bit reads are only
+   checked for completing on the bus.
 2. Generator + Conexant SD (NTSC-M first, then PAL, NTSC-J, PAL-60), validation 1–3.
 3. Focus SD.
 4. HD on both; SD component; VGA.

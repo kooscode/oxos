@@ -13,25 +13,43 @@ XBAPI UCHAR HalBootSMCVideoMode;
 XK_PERSIST UCHAR HalBootSMCVideoMode = 7; // SMC AV pack code (7 = none) read at boot
 XK_PERSIST static PVOID AvpSavedDataAddress;
 XK_PERSIST static ULONG AvpCurrentMode;
-static UCHAR AvpEncoderAddress; // 0x8A Conexant, 0xD4 Focus, 0xE0 Xcalibur (0 = none found)
+// The video encoder, found by probing the bus at every boot (spec/oxos-internal/tv-encoders.md §2): 0x8A Conexant,
+// 0xD4 Focus, 0xE0 Xcalibur (1.6 consoles; recognised, not driven yet), 0 = none found.
+volatile UCHAR AvpEncoderAddress;
+volatile ULONG AvpEncoderWideStatus; // Xcalibur: status of a 32-bit read of its register 0 (the 4-byte SMBus form)
 volatile ULONG AvpSetDisplayModeCalls;
+
+constexpr UCHAR AV_ENCODER_CONEXANT = 0x8A, AV_ENCODER_FOCUS = 0xD4, AV_ENCODER_XCALIBUR = 0xE0;
+constexpr ULONG XBOX_HW_FLAG_FOCUS = 0x20, XBOX_HW_FLAG_XCALIBUR = 0x400;
 
 void AvInit() {
     ULONG v;
     if (NT_SUCCESS(HalReadSMBusValue(0x20, 0x04, FALSE, &v)))
         HalBootSMCVideoMode = (UCHAR)v;
-    static const UCHAR encoders[] = {0x8A, 0xD4, 0xE0};
+    // The retail kernels decide from a byte of their own BIOS image (spec/stock/02 §5, spec/stock/19 §1.1); OXOS's
+    // image does not carry it, so the encoder is probed (a byte read of register 0, as Cerbios does) and
+    // XboxHardwareInfo reports it the way the reference would: 0x20 Focus, 0x400 Xcalibur.
+    static const UCHAR encoders[] = {AV_ENCODER_CONEXANT, AV_ENCODER_FOCUS, AV_ENCODER_XCALIBUR};
+    AvpEncoderAddress = 0;
     for (UCHAR a : encoders)
         if (NT_SUCCESS(HalReadSMBusValue(a, 0x00, FALSE, &v))) {
             AvpEncoderAddress = a;
             break;
         }
+    XboxHardwareInfo.Flags &= ~(XBOX_HW_FLAG_FOCUS | XBOX_HW_FLAG_XCALIBUR);
+    if (AvpEncoderAddress == AV_ENCODER_FOCUS)
+        XboxHardwareInfo.Flags |= XBOX_HW_FLAG_FOCUS;
+    if (AvpEncoderAddress == AV_ENCODER_XCALIBUR) {
+        XboxHardwareInfo.Flags |= XBOX_HW_FLAG_XCALIBUR;
+        AvpEncoderWideStatus = HalReadSMBusValue(AV_ENCODER_XCALIBUR, 0x00, TRUE, &v);
+    }
 }
 
 // AV pack unplugged / plugged back (SMC events): the encoder's output control register 0xBA.
 static UCHAR AvpOutputControl = 0x0F;
 void AvpSmcSetOutputs(bool Enable) {
-    if (AvpEncoderAddress && (!Enable || AvpCurrentMode))
+    // As the reference (spec/stock/12 §4) on Conexant and Focus; Xcalibur has 32-bit registers and is not driven yet.
+    if (AvpEncoderAddress && AvpEncoderAddress != AV_ENCODER_XCALIBUR && (!Enable || AvpCurrentMode))
         HalWriteSMBusValue(AvpEncoderAddress, 0xBA, FALSE, Enable ? (AvpOutputControl & 0x0F) | 0x20 : 0x3F);
 }
 
@@ -78,8 +96,8 @@ XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG P
     case AV_OPTION_NULL_MODE:
         AvpCurrentMode = 0;
         return;
-    case AV_QUERY_ENCODER_TYPE:
-        *Result = AvpEncoderAddress == 0xD4;
+    case AV_QUERY_ENCODER_TYPE: // 0 Conexant, 1 Focus, 2 Xcalibur (spec/stock/19 §1.2)
+        *Result = AvpEncoderAddress == AV_ENCODER_FOCUS ? 1 : AvpEncoderAddress == AV_ENCODER_XCALIBUR ? 2 : 0;
         return;
     case 0x0D: // the current display mode word (titles' D3D derives its frame layout from it)
         *Result = AvpCurrentMode;

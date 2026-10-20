@@ -96,7 +96,7 @@ clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480
 reference rule (bit 28 only), since 480p can be 4:3 or 16:9.
 
 `AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
-bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type),
+bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type: 0 Conexant, 1 Focus, 2 Xcalibur, from the bus probe),
 0x11 (mode table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (mode flag 0x10000000). Other options are
 encoder writes and are no-ops until the tables exist.
 

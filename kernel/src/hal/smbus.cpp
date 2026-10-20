@@ -4,7 +4,7 @@
 #include <xk/ke.h>
 
 constexpr USHORT SMB_STATUS = 0xC000, SMB_CONTROL = 0xC002, SMB_ADDRESS = 0xC004, SMB_DATA = 0xC006,
-                 SMB_COMMAND = 0xC008;
+                 SMB_COMMAND = 0xC008, SMB_FIFO = 0xC009;
 constexpr UCHAR SMB_STATUS_COLLISION = 0x02, SMB_STATUS_PROTOCOL = 0x04,
                 SMB_STATUS_DONE = 0x10, SMB_STATUS_TIMEOUT = 0x20;
 constexpr NTSTATUS STATUS_IO_TIMEOUT_ = (NTSTATUS)0xC00000B5, STATUS_IO_DEVICE_ERROR_ = (NTSTATUS)0xC0000185;
@@ -26,15 +26,30 @@ static void HalpReleaseSMBus() {
         KeSetEvent(&HalpSMBusLock, 0, FALSE);
 }
 
-// One byte/word transaction, polled. The reference retries collisions/protocol errors up to 20 times, 2 ms apart.
-static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, BOOLEAN WordData, bool Read, USHORT *Value) {
+// Transfer size: 1 byte, or with the word flag 2 bytes, or 4 bytes for the 32-bit devices at 0xE0-0xE7 (the 1.6
+// video encoder; the 5838 kernel's rule, spec/stock/19 §2).
+volatile ULONG HalpSMBusLastBlock; // diagnostics: (host status << 8) | byte count of the last block transfer
+
+static ULONG HalpSMBusSize(UCHAR Address, BOOLEAN WordFlag) {
+    return !WordFlag ? 1 : (Address & 0xF8) == 0xE0 ? 4 : 2;
+}
+
+// One byte/word/block transaction, polled. The reference retries collisions/protocol errors up to 20 times, 2 ms
+// apart. A 4-byte transfer uses the block protocol: the bytes go through the FIFO (0xC009), low byte first, with the
+// byte count in the data register.
+static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, ULONG Size, bool Read, ULONG *Value) {
     for (int attempt = 0; attempt < 20; attempt++) {
         outb(SMB_ADDRESS, Read ? (UCHAR)(Address | 1) : (UCHAR)(Address & 0xFE));
         outb(SMB_COMMAND, Command);
-        if (!Read)
-            outw(SMB_DATA, *Value);
+        if (!Read && Size == 4) {
+            for (int i = 0; i < 4; i++)
+                outb(SMB_FIFO, (UCHAR)(*Value >> (8 * i)));
+            outb(SMB_DATA, 4);
+        } else if (!Read) {
+            outw(SMB_DATA, (USHORT)*Value);
+        }
         outw(SMB_STATUS, inw(SMB_STATUS)); // clear
-        outb(SMB_CONTROL, WordData ? 0x0B : 0x0A); // start, byte/word data (no interrupt: polled)
+        outb(SMB_CONTROL, Size == 4 ? 0x0D : Size == 2 ? 0x0B : 0x0A); // start; block/word/byte (polled)
         UCHAR status = 0;
         for (ULONG us = 0; us < 50000; us += 10) {
             status = inb(SMB_STATUS);
@@ -43,10 +58,21 @@ static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, BOOLEAN WordD
             KeStallExecutionProcessor(10);
         }
         if (status & SMB_STATUS_DONE) {
-            if (Read)
-                *Value = WordData ? inw(SMB_DATA) : (USHORT)inb(SMB_DATA);
+            if (Read && Size == 4) {
+                HalpSMBusLastBlock = (ULONG)status << 8 | inb(SMB_DATA);
+                if ((inb(SMB_DATA) & 0x3F) != 4)
+                    return STATUS_IO_DEVICE_ERROR_;
+                ULONG v = 0;
+                for (int i = 0; i < 4; i++)
+                    v |= (ULONG)inb(SMB_FIFO) << (8 * i);
+                *Value = v;
+            } else if (Read) {
+                *Value = Size == 2 ? inw(SMB_DATA) : inb(SMB_DATA);
+            }
             return STATUS_SUCCESS;
         }
+        if (Size == 4)
+            HalpSMBusLastBlock = (ULONG)status << 8 | 0xFF;
         if (!(status & (SMB_STATUS_COLLISION | SMB_STATUS_PROTOCOL)))
             return (status & SMB_STATUS_TIMEOUT) ? STATUS_IO_TIMEOUT_ : STATUS_IO_DEVICE_ERROR_;
         KeStallExecutionProcessor(2000);
@@ -57,8 +83,8 @@ static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, BOOLEAN WordD
 XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue,
                                        PULONG DataValue) {
     HalpAcquireSMBus();
-    USHORT v = 0;
-    NTSTATUS status = HalpSMBusTransaction(SlaveAddress, CommandCode, ReadWordValue, true, &v);
+    ULONG v = 0;
+    NTSTATUS status = HalpSMBusTransaction(SlaveAddress, CommandCode, HalpSMBusSize(SlaveAddress, ReadWordValue), true, &v);
     HalpReleaseSMBus();
     *DataValue = v;
     return status;
@@ -67,8 +93,8 @@ XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BO
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue,
                                         ULONG DataValue) {
     HalpAcquireSMBus();
-    USHORT v = (USHORT)DataValue;
-    NTSTATUS status = HalpSMBusTransaction(SlaveAddress, CommandCode, WriteWordValue, false, &v);
+    ULONG v = DataValue;
+    NTSTATUS status = HalpSMBusTransaction(SlaveAddress, CommandCode, HalpSMBusSize(SlaveAddress, WriteWordValue), false, &v);
     HalpReleaseSMBus();
     return status;
 }

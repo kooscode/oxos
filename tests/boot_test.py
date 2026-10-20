@@ -536,6 +536,35 @@ def dash_checks(mon):
     }, "M5e": launch_reason_checks(mon)}
 
 
+ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE0, 0x400, 2)}
+
+
+def encoder_checks(mon, name):
+    """The video encoder xemu presents (-machine video-encoder=NAME) is found by the bus probe and reported in
+    XboxHardwareInfo.Flags as the reference would (spec/oxos-internal/tv-encoders.md §2, spec/stock/19 §1)."""
+    address, flag, kind = ENCODERS[name]
+    for _ in range(40):
+        if mon.read("AvpEncoderAddress") & 0xFF:
+            break
+        time.sleep(0.25)
+    found = mon.read("AvpEncoderAddress") & 0xFF
+    flags = mon.read("XboxHardwareInfo")
+    print(f"  encoder {name}: found {found:#x}, XboxHardwareInfo.Flags {flags:#x}")
+    checks = {
+        f"{name}: the probe finds the encoder at {address:#x}": found == address,
+        f"{name}: XboxHardwareInfo.Flags encoder bits = {flag:#x}": flags & 0x420 == flag,
+    }
+    if name == "xcalibur":
+        st = mon.read("AvpEncoderWideStatus")
+        print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")
+        # xemu models the Xcalibur as 256 byte registers, so a block read returns its register 0 (zero) as the byte
+        # count and the kernel rejects it, as it would a short reply on hardware (spec/stock/19 §2). What xemu can
+        # show is that the block transfer itself completes on the bus.
+        last = mon.read("HalpSMBusLastBlock")
+        checks["xcalibur: a 4-byte block SMBus transfer completes on the bus"] = (last >> 8) & 0x10 != 0
+    return checks
+
+
 def fatal_checks(mon):
     for _ in range(240):  # the disk wait times out first
         if mon.read("IdexFatalErrorCode"):
@@ -644,6 +673,8 @@ def main():
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
+    ap.add_argument("--encoder", choices=sorted(ENCODERS), help="present this video encoder (xemu -machine "
+                    "video-encoder=...) and check that the kernel finds and reports it")
     a = ap.parse_args()
 
     work = tempfile.mkdtemp(prefix="xk-boot-")
@@ -668,6 +699,8 @@ def main():
     log = open(os.path.join(work, "xemu.log"), "w")
     serial_log = os.path.join(work, "serial.log")
     serial_args = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
+    if a.encoder:
+        serial_args += ["-machine", f"video-encoder={a.encoder}"]
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"] + serial_args,
                             stdout=log, stderr=subprocess.STDOUT)
     ok = False
@@ -678,7 +711,9 @@ def main():
             time.sleep(0.1)
         time.sleep(a.boot_wait)
         mon = Monitor(sock, map_symbols(a.map))
-        if a.udf:
+        if a.encoder:
+            results = {"encoder": encoder_checks(mon, a.encoder)}
+        elif a.udf:
             results = udf_checks(mon)
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
@@ -708,7 +743,7 @@ def main():
         passed = fatal_code > 4 and bool(history & (1 << (fatal_code - 5)))
         print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
         ok &= passed
-    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf:
+    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder:
         for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed
