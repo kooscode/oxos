@@ -255,7 +255,8 @@ test-udf: $(BUILD)/bios.bin $(HDD_FETCH)
 # never written): FRESH=1 starts it over, STATE= (empty) uses a throwaway copy. Display, by default widescreen in a
 # 1920x1080 window at twice the render resolution: WIDE=0 (no EEPROM widescreen flag; a flag already saved in STATE
 # stays until FRESH=1 or the dashboard clears it), ASPECT=auto|native|4x3|16x9 (xemu's picture aspect; auto follows the
-# widescreen signal each game sends), SIZE= (window size), SCALE=1..10, FULL=1 (full screen).
+# widescreen signal each game sends), SIZE= (window size), SCALE=1..10, FULL=1 (full screen). HD=1: the HDTV AV pack
+# and the EEPROM's 480p/720p/1080i flags (HD=480p,720p for a subset), so games use their HD modes.
 # PLAY_HDD: the disk image the run targets start from, by default the stock Microsoft dashboard image when you have
 # one (its Settings set up video modes, clock, language); the tests keep using HDD_IMAGE. One state directory per
 # image, so switching images never mixes saves.
@@ -274,6 +275,7 @@ SIZE        ?= 1920x1080
 SCALE       ?= 2
 ASPECT      ?= auto
 RUN_OPTS     = --hdd $(PLAY_HDD) $(if $(ISO),--iso $(ISO)) $(if $(FRESH),--fresh) $(if $(filter 1,$(WIDE)),--widescreen) \
+               $(if $(HD),--hd $(if $(filter 1,$(HD)),,$(HD))) \
                $(if $(MEMORY),--memory $(MEMORY)) \
                $(if $(ASPECT),--aspect $(ASPECT)) \
                $(if $(SIZE),--size $(SIZE)) $(if $(SCALE),--scale $(SCALE)) $(if $(FULL),--fullscreen)
