@@ -64,13 +64,14 @@ the CRTC totals/sync positions together; the CRTC rows for SD in stock spec 17 �
 xemu) are replaced by the generated ones. xemu sizes its display from the active area only, so this does not change
 what xemu shows.
 
-### 3.3 Picture size on the TV (decision)
+### 3.3 Picture size on the TV (decided 2026-10-19)
 The reference's overscan amounts are not known to us and are not copied. OXOS's default (a generator parameter):
 - **NTSC / PAL-60:** 640 or 720 input pixels across the full nominal active line (52.66 µs), 480 input lines on 480
   of the 486 active lines (no vertical scaling): the picture fills the screen as on a TV broadcast; titles keep
   their own title-safe margins.
-- **PAL 50 Hz:** the same horizontally; 480 input lines **scaled to 576** active lines (vertical upscaling, as
-  PAL-converted titles expect a full-height picture).
+- **PAL 50 Hz:** the same horizontally; 480 input lines shown **unscaled**, centred in the 576 active lines (black
+  bars above and below; decided 2026-10-19). PAL-60 is the recommended setting for PAL users: full height, no
+  scaling.
 - Both encoders get the same geometry, so a title looks the same on any 1.0–1.5 console.
 
 ### 3.4 HD
@@ -111,8 +112,9 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   (stock spec 19 §7: encoder-independent), written to the Conexant WSS fields or Focus WSS_DATAF0/F1 (0x83/0x86).
 - **Closed captions (2–5, 525-line only):** the Conexant caption registers; Focus CC_FIELD_1/2, CC_CONTROL (0xAE–0xB2).
 - **Blank (9):** DAC enables off / back to mode bits 24–27.
-- **Macrovision (1, 0x0A):** not supported (a licensed technology; OXOS has no licence and no values). The options
-  are accepted and do nothing; the query results report level 0.
+- **Macrovision (1, 0x0A):** disabled (decided 2026-10-19: a licensed technology; OXOS has no licence and no
+  values). The options are accepted and do nothing; the encoders' copy-protection features stay off, and the WSS/CGMS
+  word reports no copy protection.
 - **Queries** as today (0x0D, 0x0F, 0x10: 0 Conexant / 1 Focus, 0x11).
 
 ## 7. Validation
@@ -138,6 +140,6 @@ Per encoder, from the datasheets; the option numbers and query results as the re
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.
-- The exact picture size users prefer on real TVs (§3.3 is a starting point).
+- The exact picture size users prefer on real TVs (§3.3: full area for now; an option later).
 - The Conexant pseudo-master clock details on the Xbox board (which pins drive the NV2A pixel clock) — from the
   datasheet's interface modes and, if needed, testing.
