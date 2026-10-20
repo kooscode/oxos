@@ -8,7 +8,7 @@ volatile ULONG KiTestIdexBigSum, KiTestIdexBigOk;  // 256 KB read at the start o
 volatile ULONG KiTestIdexWriteOk, KiTestIdexIoctlOk, KiTestIdexErrorsOk, KiTestIdexNamesOk, KiTestIdexDone;
 volatile ULONG KiTestIdexPassThroughOk, KiTestIdexSecurityAfter; // IDENTIFY word 128 after boot
 volatile UCHAR KiTestIdexPassword[32]; // the derived drive password (boot_test.py recomputes it)
-// 48-bit addressing (spec/oxos-internal/lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the
+// 48-bit addressing (spec/oxos-internal/00-lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the
 // writes were made, 2 when skipped because a target sector held other data; Ok = every pattern read back.
 volatile ULONG KiTestIdexLba48Ran, KiTestIdexLba48Ok;
 volatile ULONG KiTestIdexFolderOk; // exFAT disk: raw access refused where it must be
@@ -133,7 +133,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         return;
     }
 
-    // exFAT disk (spec/oxos-internal/exfat-storage-spec.md): folder partitions have no sectors of their own, and
+    // exFAT disk (spec/oxos-internal/01-exfat-storage-spec.md): folder partitions have no sectors of their own, and
     // Partition0 reaches only the retail reserved area (0-0x7FFFF).
     if (IdexDiskExfatLayout) {
         KiTestIdexFolderOk = IdexTestRead(parts[1], buf, 512, 0) == STATUS_INVALID_DEVICE_REQUEST &&

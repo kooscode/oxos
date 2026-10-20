@@ -97,9 +97,9 @@ void IdexDiskComputePassword(PUCHAR Password);
 
 // Fixed retail partition table (spec/stock/04 §4); slot 0 is the whole disk.
 constexpr ULONG IDE_MAX_PARTITIONS = 20;
-XBAPI ULONGLONG IdexDiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos-internal/lba48.md)
+XBAPI ULONGLONG IdexDiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos-internal/00-lba48.md)
 XBAPI BOOLEAN IdexDiskLba48;             // the drive supports 48-bit addressing
-// exFAT layout (spec/oxos-internal/exfat-storage-spec.md): set before the first partition lookup.
+// exFAT layout (spec/oxos-internal/01-exfat-storage-spec.md): set before the first partition lookup.
 extern BOOLEAN IdexDiskExfatLayout;
 extern PDEVICE_OBJECT IdexDiskExfatVolume; // the exFAT partition
 PCSZ IdexDiskFolderOf(PDEVICE_OBJECT Device); // "E", "C", ... for a folder partition, else nullptr
