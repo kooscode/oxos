@@ -1,6 +1,8 @@
 # TV encoders: verification (phase 5)
 
-State verified: commit 931a7c6 (code), against the tagged design of 04-tv-encoders.md §14. Comparisons with the
+State verified: commit 931a7c6 (code), against the tagged design of 04-tv-encoders.md §14. The **R** fixes of the
+conflicts register were implemented on 2026-10-20; §1.2 and §1.4 show both states, and §3 gives the confidence
+for both. Comparisons with the
 retail kernel (4627) were run in scratch and are reported as **agree / differ / not present** only; no reference
 values appear here.
 
@@ -23,14 +25,14 @@ H_CLKO → line time, MSC → subcarrier, H_ACTIVE / H_CLKI → active picture t
 - SD component rows (0x0D–0x1A): 300 mV sync on Y only, 700 mV white, no setup (EIA-770.2).
 
 ### 1.2 Conexant HD
-| Format | Clock | Raster (flat panel) | Routing A / B / C | Pad drive | Clock source |
+| Format | Clock | Raster (flat panel) | Routing A / B / C (931a7c6 → now) | Pad drive | Clock source |
 |---|---|---|---|---|---|
-| 480p | 27.000 MHz | 858 × 525, 59.94 Hz | **Pr / Y / Pb** | **1.8 V** | **PLL** |
-| 720p | 74.250 MHz | 1650 × 750, 60 Hz | **Pr / Y / Pb** | **1.8 V** | PLL |
-| 1080i | 74.250 MHz | 2200 × 562.5 per field, 60 fields/s | **Pr / Y / Pb** | **1.8 V** | PLL |
+| 480p | 27.000 MHz | 858 × 525, 59.94 Hz | Pr / Y / Pb → **Y / Pr / Pb** | 1.8 V → **1.5 V** | PLL → **CLKI** |
+| 720p | 74.250 MHz | 1650 × 750, 60 Hz | Pr / Y / Pb → **Y / Pr / Pb** | 1.8 V → **1.5 V** | PLL |
+| 1080i | 74.250 MHz | 2200 × 562.5 per field, 60 fields/s | Pr / Y / Pb → **Y / Pr / Pb** | 1.8 V → **1.5 V** | PLL |
 
-The bold entries are the defects of conflicts X1, X2 and X3. Routed this way, Y leaves on the Pr pin (22) and Pr on
-the Y pin (11): a component input would see no usable luma or sync. Clocks and rasters are right.
+In 931a7c6, Y left on the Pr pin (22) and Pr on the Y pin (11): a component input would have seen no usable luma
+or sync (conflicts X1, X2, X3). Clocks and rasters were right. SD component got the same routing fix.
 
 ### 1.3 Focus
 - HD: PLL 27.000 / 74.250 MHz (27 MHz × M / N / P within the PLL limits).
@@ -40,8 +42,9 @@ the Y pin (11): a component input would see no usable luma or sync. Clocks and r
 
 ### 1.4 NV2A flat panel
 - Totals and syncs match §14.4.
-- Display end is width + 7 on every path: right only for Conexant SD (X7).
-- TG_CONTROL and PRAMDAC 0x630 / 0x84C / 0x8C4 / 0x880 are not written (X5, X6).
+- Display end was width + 7 on every path; now width + 7 for Conexant SD only, width − 1 elsewhere (X7).
+- PRAMDAC 0x630 / 0x84C / 0x8C4 / 0x880 were not written; now cleared (RGB) at every TV mode set (X5).
+- TG_CONTROL is still not written (X6: waits for the boot-value dump).
 
 ## 2. Field-by-field comparison with the reference
 
@@ -114,7 +117,7 @@ As 2.1, plus:
 "Works" means a stable, correctly coloured picture on a typical TV or HDMI adapter. The estimates are judgement
 calls from the evidence above, not measurements.
 
-| Path | As built (931a7c6) | After the R fixes | Main remaining risks |
+| Path | As built (931a7c6) | Now (R fixes implemented) | Main remaining risks |
 |---|---|---|---|
 | Conexant composite / S-video | 70 % | 75 % | X6 sync polarity (boot state), X16 levels, X7 |
 | Conexant SCART RGB | 55 % | 65 % | X16, X5 (now written) |
@@ -133,7 +136,9 @@ outputs, then a Focus console (1.4–1.5).
 **Step 0: diagnostics build (to be written).** A BIOS variant that, before the first mode set, records the boot
 values of PRAMDAC 0x680848, 0x680630, 0x680880, 0x68084C and 0x6808C4 and the encoder's chip ID. It shows them on
 screen on composite (the most likely path to work) and blinks them on the front LED if there is no picture. This
-settles X5 and X6 before any variant testing.
+settles X5 and X6 before any variant testing. The test console will also have serial output through the
+SuperIO (debug serial, spec/stock/18), so the build can print these values and every mode set's register writes
+there, to be read directly during the session.
 
 | # | Console / cable | Mode (how to get it) | Variants | Pass criteria | Conflicts |
 |---|---|---|---|---|---|
