@@ -156,7 +156,9 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      SCART, component) from the chip's own presets (`make run ENCODER=focus` in xemu). All 15 SD/HD mode words are
      checked in xemu on both encoder models. **Hardware testing TBD:** the AV drivers and encoder tables still have to
      be confirmed on real 1.0–1.5 consoles. Encoder options (flicker and luma filters, WSS/CGMS, closed captions) done. Xcalibur (1.6)
-     waits for a clean source of register values.
+     waits for a clean source of register values. **Re-evaluated 2026-10-20** (sources, conflicts, verification:
+     `04-tv-encoders-sources.md`, `-conflicts.md`, `-verification.md`): component DAC routing, HD pad drive, the
+     NV2A's colour-space registers and the HD/Focus flat-panel display end must change before hardware testing.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

@@ -7,6 +7,10 @@ flat-panel timing; **Focus HD component** (§11) and **Focus SD** (§12: composi
 run on a real console yet; the AV drivers and encoder tables must be confirmed on 1.0–1.5 consoles (§7.4, Open).
 Encoder options (flicker filter, luma filter, WSS/CGMS, closed captions) done (§13). Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
+**Re-evaluated 2026-10-20** with the five-phase process: sources
+(04-tv-encoders-sources.md), reference behaviour (stock spec 17 §8), conflicts (04-tv-encoders-conflicts.md), the
+tagged design (§14 below) and verification (04-tv-encoders-verification.md). §14 supersedes the earlier sections
+where they disagree; the code has not been changed yet.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
 
@@ -16,7 +20,7 @@ values **computed by OXOS** from the chips' datasheets and the video standards, 
 uses (stock spec 17 §5), for every mode word titles send.
 
 ## 1. Sources
-Allowed (clean, public, licence-compatible), cited in the generator and the code:
+The full inventory, with what each source is authoritative for, is 04-tv-encoders-sources.md. Summary:
 
 | Source | Used for |
 |---|---|
@@ -45,7 +49,7 @@ Excluded: the encoder tables of the 4627 and 5838 kernels and BIOS, Cerbios's ta
 ## 3. Modes
 ### 3.1 Mode words → what to produce
 Mode word fields as stock spec 17 §2. Bits 30–31 give the class: **00** 525-line SD, **01** 625-line SD (PAL 50 Hz),
-**10** HD, **11** VGA. Bit 29 = RGB-type output (SCART RGB in SD, the component set-up in the reference). Bits 24–27 =
+**10** HD, **11** VGA. Bit 29 = SCART RGB (the reference's bit-29 table has rows for the composite rows only; stock spec 17 §8.3). Bits 24–27 =
 DAC enables. Encoder rows (bits 0–6) seen from nxdk and titles:
 
 | Encoder row | Standard | Input | Output |
@@ -165,6 +169,8 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   flat-panel and CRTC timing, then EN_OUT (0xC4), TIMING_RST and 0xBA ← DAC enables | SLAVER.
 
 ## 10. Conexant HD component as implemented
+- **Superseded in part by §14** (conflicts X1, X2, X3, X7): the routing, pad drive and display end below are wrong
+  or unproven.
 - **Encoder:** the datasheet's Table E-1 (24-bit RGB in, YPbPr out) per format, checked by the generator, with three
   documented deviations: Pr/Pb sync disabled (the table's own EIA-770.3 note), the Xbox pads and alternate RGB input
   in 0x32 (as for SD), and EN_XCLK clear for 480p (the table's 8C would take the clock from CLKI, contradicting its
@@ -184,7 +190,8 @@ Per encoder, from the datasheets; the option numbers and query results as the re
 ## 10a. Conexant SD component as implemented
 - Rows 0x0D/0x0E (NTSC), 0x14/0x15 (PAL 50 Hz), 0x19/0x1A (PAL-60): the SD timing of the composite twin (0x01/0x02,
   0x07/0x08, 0x0B/0x0C) plus the datasheet's Tables 1-27/1-28 for EIA-770.2-A component (checked by the generator):
-  MCOMPY/U/V = 0x80/0x90/0x66, OUT_MODE 10 (Pr / Y / Pb / Y_DLY: DAC A = Pr, B = Y, C = Pb, the HD wiring), no
+  MCOMPY/U/V = 0x80/0x90/0x66, OUT_MODE 10 (Video[0–3] = Pr / Y / Pb / Y_DLY; routed DAC A = Pr, B = Y, C = Pb:
+  **wrong for the Xbox board, see §14 / conflict X1**), no
   setup, SYNC_AMP 0xF0 (300 mV, on Y only), MY 0x8C (700 mV white). The row says which output it is, so mode bit
   29 only selects SCART for the composite rows.
 
@@ -236,6 +243,73 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   1728) / H_CLKO and CCR_START = H_CLKO × 10.003 × 27 / (1716 or 1728) + 60 (Appendix D). Focus: its QPR preset's
   caption and WSS timing.
 - **Tested in xemu:** a boot self-test on both encoder models sets each option and checks the registers.
+
+## 14. Tagged design (phase 4)
+Every value OXOS programs, with its kind and source. Tags:
+- **CHIP:** the encoder's datasheet or GPL header.
+- **BOARD:** Xbox-specific only: Cromwell, the AV pinout.
+- **STANDARD:** a video standard.
+- **OUR CHOICE:** a decision, with its date.
+
+Source numbers are those of 04-tv-encoders-sources.md. "Change" marks what the code must do differently from
+931a7c6; conflict numbers refer to 04-tv-encoders-conflicts.md.
+
+### 14.1 Conexant, all classes
+| Value | Design | Tag | Source | Change |
+|---|---|---|---|---|
+| Interface | pseudo-master, EN_BLANKO, no BLANK* input, FLD_MODE 10, EACTIVE | BOARD | S5 | — |
+| Sync polarity at the encoder | HSYNCI = VSYNCI = 1 (active high) | BOARD | S5 | — |
+| Input format | alternate 24-bit RGB multiplexed (IN_MODE 1000) | BOARD | S5 (NV2A in RGB) | — |
+| NV2A colour space | PRAMDAC 0x630 = 0, 0x84C = 0, 0x8C4 = 0, 0x880 = 0 at every TV mode set | BOARD | S5 | **write them** (X5) |
+| NV2A sync polarity | FP_TG_CONTROL: set HSYNC_POS and VSYNC_POS, keep the other bits as booted (read-modify-write). WIDTH_12, which nouveau sets for its internal TV encoder, matters for the Xbox's 12-pin multiplexed bus and is left as the boot state set it | CHIP (bits) + BOARD (polarity) | S6, S5 | **write it** after the boot-value dump (X6) |
+| Pad drive | SD 1.8 V (DRVS 01), HD 1.5 V (DRVS 10) | BOARD | S5 | **HD** (X2) |
+| Sequence | SRESET, 0xBA ← 0x3F, registers, NV2A timing, EN_OUT, (HD: 75 ms), TIMING_RST, DAC enables | CHIP | S1 Table E-1 / E-2, §5 order of stock spec 17 | — |
+
+### 14.2 Conexant outputs
+| Output | OUT_MODE | Routing A / B / C / D | Tag | Source | Change |
+|---|---|---|---|---|---|
+| Composite + S-video | 00 | Y / C / Y / CVBS | BOARD | S5, S7 | — |
+| SCART RGB | 11 + EN_SCART | G / R / B / CVBS (sync) | BOARD | S5, S7 | setup off on NTSC rows (X17) |
+| SD component | 10 | Y / Pr / Pb / Y_DLY | BOARD | S5 (HDTV routing), S7 | **routing** (X1) |
+| HD component | 11 + HDTV_EN | Y / Pr / Pb / off | BOARD | S5, S7 | **routing** (X1) |
+
+### 14.3 Conexant values per mode
+| Value | Design | Tag | Source | Change |
+|---|---|---|---|---|
+| SD picture area | full active line, 480 lines unscaled (PAL 50 Hz: bars) | OUR CHOICE (2026-10-19) | — | — |
+| SD timing, clock, subcarrier, levels, burst | datasheet equations from the standard and the picture area | CHIP + STANDARD | S1 §1.3.6, 1.3.17, 1.3.26; S10 | — (X16, X19 on the test list) |
+| SD standard bits | setup NTSC-M only; VSYNC_DUR 3 lines for every 525-line row incl. PAL-60 | STANDARD + CHIP | S10, S1 register text | — |
+| SD component gains, setup | Table 1-27 / 1-28, no setup | CHIP + STANDARD | S1, EIA-770.2 | — (X13, X14 on the test list) |
+| HD control | HDTV_EN, RGB2YPRPB, Pr / Pb tri-level off, HD_SYNC_EDGE 480p only, RASTER_SEL per format, CSC_SEL 720p / 1080i | CHIP | S1 Table E-1 + its EIA-770.3 note | — |
+| HD gains | Table E-1 (RGB in, YPbPr out) | CHIP | S1 | — |
+| HD PLL | 27 MHz (480p), 74.25 MHz (720p, 1080i) | STANDARD | S10 | — |
+| 480p EN_XCLK | set (CLKI) | CHIP | S1 Tables E-1 and E-2 | **set** (X3; Cromwell's clear is the test variant) |
+| WSS / CGMS / captions | as §13 | STANDARD + CHIP | S10, S1 | — |
+
+### 14.4 NV2A flat-panel timing
+| Value | Design | Tag | Source | Change |
+|---|---|---|---|---|
+| SD totals, sync | from the encoder's H_CLKI / V_LINESI; HSYNC at H_CLKI − H_BLANKI − 7, width 32; VSYNC at V_LINESI − V_BLANKI + 1, 3 lines | BOARD | S5 (conexant.c) | — |
+| Display end, Conexant SD | width + 7 | BOARD | S5 | — (X7 test) |
+| Display end, all other paths | width − 1 | BOARD + CHIP | S5 (HDTV, Focus), S6 | **change** (X7, F8) |
+| Horizontal "CRTC" value | width − 1 | BOARD | S5 | — (X8 test) |
+| HD rasters | CEA-861 / SMPTE 293M 858 × 525, SMPTE 296M 1650 × 750, SMPTE 274M 2200 × 1125 | STANDARD | S10 | — |
+| HD sync position | nominal + 2 clocks for 480p | BOARD | S5 (480p) | 720p / 1080i: nominal (no board source for the offset; X10) |
+| 1080i | per field with CRTC 0x39 | OUR CHOICE (no source) | — | X9 test |
+
+### 14.5 Focus
+| Value | Design | Tag | Source | Change |
+|---|---|---|---|---|
+| Sequence | CR clock level, soft reset, BYPASS, QPR, NCO / PLL, CR latch, explicit registers, PWR_MGNT last | CHIP | S3, S4 | **add the explicit registers** (F1) |
+| QPR | init 9, NVIDIA, standard, output, input size | CHIP | S3 | — (supplies the TV-standard block only) |
+| MISC | Cromwell's board value | BOARD | S5 focus_defaults (single field) | **write** (F2) |
+| VID_CNTL0 | VID_MODE per output, matrix on (RGB input), sync type per standard | CHIP (fields) + BOARD (RGB input) | S3, S5 | **write** (F1) |
+| Colour matrix | BT.601 (SD) / BT.709 (HD) RGB → YCbCr, format per the hardware reference | STANDARD + CHIP | S10, S2 | **write** (F5) |
+| DAC_CNTL | identity (A–D = video 0–3) | BOARD | S5 | **write** (F3) |
+| BYPASS | bridge bypass in HD | BOARD | S5 (480p) | — (F4 test) |
+| PLL | 27 MHz / 74.25 MHz dividers within the PLL limits | CHIP + BOARD | S2, S5 | — |
+| SD scaling | §12 | CHIP + OUR CHOICE | S2 §4 | — |
+| PWR_MGNT | SD / HD clock off as the class, DAC disables from mode bits 24–27 | CHIP | S3 | — |
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.
