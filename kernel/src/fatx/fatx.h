@@ -1,5 +1,5 @@
 // FATX file system driver, internal definitions (spec/stock/04 §6, spec/stock/04b). The same dispatcher serves exFAT
-// volumes (spec/oxos-internal/03-exfat-driver.md): the volume and directory layers branch on FATX_VOLUME::Exfat.
+// volumes (spec/oxos-internal/05-exfat-driver.md): the volume and directory layers branch on FATX_VOLUME::Exfat.
 #pragma once
 #include <xk/fsc.h>
 #include <xk/idex.h>

@@ -1,6 +1,6 @@
 # TV encoders: verification (phase 5)
 
-State verified: commit 931a7c6 (code), against the tagged design of 04-tv-encoders.md §14. The **R** fixes of the
+State verified: commit 931a7c6 (code), against the tagged design of 06-tv-encoders.md §14. The **R** fixes of the
 conflicts register were implemented on 2026-10-20; §1.2 and §1.4 show both states, and §3 gives the confidence
 for both. Comparisons with the
 retail kernel (4627) were run in scratch and are reported as **agree / differ / not present** only; no reference
@@ -137,7 +137,7 @@ outputs, then a Focus console (1.4–1.5).
 values of PRAMDAC 0x680848, 0x680630, 0x680880, 0x68084C and 0x6808C4 and the encoder's chip ID. It shows them on
 screen on composite (the most likely path to work) and blinks them on the front LED if there is no picture. This
 settles X5 and X6 before any variant testing. The test console will also have serial output through the
-SuperIO (debug serial, spec/stock/18), so the build can print these values and every mode set's register writes
+SuperIO (debug serial, spec/oxos-internal/01-debug-serial.md), so the build can print these values and every mode set's register writes
 there, to be read directly during the session.
 
 | # | Console / cable | Mode (how to get it) | Variants | Pass criteria | Conflicts |

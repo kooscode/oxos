@@ -17,7 +17,7 @@ Display:
 - --aspect forces xemu's aspect ratio instead (auto, native, 4x3, 16x9);
 - --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier
   (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
-Debugging: --serial prints the debug serial port (spec/stock/18) here; --qmp opens xemu's QMP socket at SOCK (used by
+Debugging: --serial prints the debug serial port (spec/oxos-internal/01-debug-serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by
 tools/trace.py); --memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds).
 --trace-map MAP (an import-trace build's xboxkrnl.map) dumps the title's last kernel calls when the kernel reports a
 crash on the serial port (a line starting with "***", needs --serial) and when xemu is closed: the last 30 here, all

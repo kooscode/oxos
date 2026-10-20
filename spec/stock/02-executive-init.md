@@ -107,7 +107,7 @@ Classic NT x86 self-mapped paging: **page tables at 0xC0000000, page directory a
 - **McpRevision** = PCI bus 0, device 1, config byte 0x08 (MCPX revision ID).
 - **GpuRevision** = low byte of NV2A register 0xFD000000 (boot ID).
 - **Ours, encoder flags:** OXOS's BIOS image has 0x70 at flash offset 0x78, so 0x20 would never be set from it; the
-  encoder bits come from a bus probe instead (spec/oxos-internal/04-tv-encoders.md §2): Focus → 0x20, Xcalibur → 0x400
+  encoder bits come from a bus probe instead (spec/oxos-internal/06-tv-encoders.md §2): Focus → 0x20, Xcalibur → 0x400
   (the 5838 kernel's flag, spec 19 §1.1), as the reference reports them on those consoles.
 - Ours (milestone 6c) matches otherwise; it runs right after MM init (it needs `MmMapIoSpace`). In xemu: flags 0x41, GPU 0xA3,
   MCPX 0xB2.

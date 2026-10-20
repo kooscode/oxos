@@ -1,4 +1,4 @@
-# Spec 18 — Debug serial port (OXOS addition)
+# Debug serial port (OXOS addition)
 
 Not part of the reference: a retail 4627 kernel never programs a SuperIO, and has no serial output. Debug kernels
 and some modded BIOSes do. This spec describes our own, opt-in debug output for bringing OXOS up on hardware.

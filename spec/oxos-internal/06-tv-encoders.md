@@ -8,8 +8,8 @@ run on a real console yet; the AV drivers and encoder tables must be confirmed o
 Encoder options (flicker filter, luma filter, WSS/CGMS, closed captions) done (§13). Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 **Re-evaluated 2026-10-20** with the five-phase process: sources
-(04-tv-encoders-sources.md), reference behaviour (stock spec 17 §8), conflicts (04-tv-encoders-conflicts.md), the
-tagged design (§14 below) and verification (04-tv-encoders-verification.md). §14 supersedes the earlier sections
+(06-tv-encoders-sources.md), reference behaviour (stock spec 17 §8), conflicts (06-tv-encoders-conflicts.md), the
+tagged design (§14 below) and verification (06-tv-encoders-verification.md). §14 supersedes the earlier sections
 where they disagree. Its required changes were implemented the same day, except FP_TG_CONTROL, which waits for a
 boot-value dump on hardware (X6).
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
@@ -21,7 +21,7 @@ values **computed by OXOS** from the chips' datasheets and the video standards, 
 uses (stock spec 17 §5), for every mode word titles send.
 
 ## 1. Sources
-The full inventory, with what each source is authoritative for, is 04-tv-encoders-sources.md. Summary:
+The full inventory, with what each source is authoritative for, is 06-tv-encoders-sources.md. Summary:
 
 | Source | Used for |
 |---|---|
@@ -255,8 +255,8 @@ Every value OXOS programs, with its kind and source. Tags:
 - **STANDARD:** a video standard.
 - **OUR CHOICE:** a decision, with its date.
 
-Source numbers are those of 04-tv-encoders-sources.md. "Change" marks what the code had to do differently from
-931a7c6 (**done** = implemented 2026-10-20); conflict numbers refer to 04-tv-encoders-conflicts.md.
+Source numbers are those of 06-tv-encoders-sources.md. "Change" marks what the code had to do differently from
+931a7c6 (**done** = implemented 2026-10-20); conflict numbers refer to 06-tv-encoders-conflicts.md.
 
 ### 14.1 Conexant, all classes
 | Value | Design | Tag | Source | Change |
