@@ -146,7 +146,12 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
        continues after a reboot. The dashboard boots from /C.
      - Memory units come last.
-   - Next (7): video encoder mode tables for real TVs (spec 17: algorithm and table layout documented; values must be derived from the Conexant/Focus datasheets with the reference's row numbering), then real-hardware validation (encoder mode tables, SMC events, microcode).
+   - 7 (in progress): **TV encoders for real hardware** (`../spec/oxos-internal/tv-encoders.md`). Done: the encoder is
+     found by a bus probe (Conexant, Focus, Xcalibur) and reported as the retail kernels do; Conexant SD modes
+     (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB) are computed from the CX25871 datasheet by
+     `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing (`make test-encoders`). Next: Focus SD, HD
+     and SD component on both, encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
+     source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

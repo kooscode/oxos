@@ -554,6 +554,16 @@ def encoder_checks(mon, name):
         f"{name}: the probe finds the encoder at {address:#x}": found == address,
         f"{name}: XboxHardwareInfo.Flags encoder bits = {flag:#x}": flags & 0x420 == flag,
     }
+    if name == "conexant":
+        # The dashboard sets an SD mode: the generated CX25871 registers must read back as written
+        # (tools/gen_tv_encoders.py; xemu's encoder model stores registers).
+        for _ in range(60):
+            if mon.read("AvpEncoderProgrammed"):
+                break
+            time.sleep(0.25)
+        mode, bad = mon.read("AvpEncoderProgrammed"), mon.read("AvpEncoderMismatches")
+        print(f"  Conexant: mode {mode:#010x} programmed, {bad} registers read back differently")
+        checks["conexant: an SD mode set programs the encoder (generated registers read back)"] = mode != 0 and bad == 0
     if name == "xcalibur":
         st = mon.read("AvpEncoderWideStatus")
         print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")
