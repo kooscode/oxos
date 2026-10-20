@@ -5,7 +5,7 @@ RGB, **SD component** 480i/576i) and **HD component (480p, 720p, 1080i)**, compu
 flat-panel timing; **Focus HD component** (§11) and **Focus SD** (§12: composite, S-video, SCART, component); bus probe, flags, encoder type, 4-byte SMBus form;
 `make test-encoders` and a boot self-test of every mode on both encoders. **Hardware testing TBD:** nothing here has
 run on a real console yet; the AV drivers and encoder tables must be confirmed on 1.0–1.5 consoles (§7.4, Open).
-To do: encoder options (flicker filter, WSS/CGMS, captions). Priority (decided 2026-10-20): HD
+Encoder options (flicker filter, luma filter, WSS/CGMS, closed captions) done (§13). Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
@@ -223,6 +223,19 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   layout no public source documents).
 - **Tested in xemu:** the boot self-test sets all 15 mode words on the Focus model (`make test-encoders`); the xemu
   dashboard picks 480i component (0x0801010D) on it and reports "Focus FS454".
+
+## 13. Encoder options as implemented
+- Behaviour as the reference (stock spec 17 §5a) on Conexant and Focus: captions on/off/data/status (525-line SD),
+  flicker filter levels 0–5 (Conexant: off, 2-, 3-, 4-, 5-line, 5-line adaptive; Focus FLK = level × 16 / 5),
+  luma filter, and the WSS/CGMS word after options 0x12 / 0x13 / 0x0A and each SD mode set.
+- **The word:** 525 lines: 20-bit CGMS-A (IEC 61880: widescreen bit, copy bits 6–7, Macrovision bits 8–9 always 0
+  here, CRC-6 x⁶ + x + 1 preset all ones, checked against a textbook LFSR for all 16 384 data words; widescreen only
+  = 0x60001); 625 lines: ETSI EN 300 294 WSS (aspect 8 / 7, copy bits << 12). Not sent in HD or VGA.
+- **Computed per Conexant SD mode** (datasheet, not the reference's table): WSSINC = 2^20 / (bit period × CLK)
+  (2.234 µs → 447.6 kHz for CGMS-A, 200 ns → 5 MHz for WSS, 1.3.35); caption timing CC_ADD = 2^22 / 1716 × (1716 or
+  1728) / H_CLKO and CCR_START = H_CLKO × 10.003 × 27 / (1716 or 1728) + 60 (Appendix D). Focus: its QPR preset's
+  caption and WSS timing.
+- **Tested in xemu:** a boot self-test on both encoder models sets each option and checks the registers.
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.

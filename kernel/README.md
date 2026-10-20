@@ -155,7 +155,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      (`make test-encoders`; `make run HD=1` for games' HD modes). Focus HD component and SD (composite, S-video,
      SCART, component) from the chip's own presets (`make run ENCODER=focus` in xemu). All 15 SD/HD mode words are
      checked in xemu on both encoder models. **Hardware testing TBD:** the AV drivers and encoder tables still have to
-     be confirmed on real 1.0–1.5 consoles. Next: encoder options (flicker filter, WSS/CGMS, captions). Xcalibur (1.6)
+     be confirmed on real 1.0–1.5 consoles. Encoder options (flicker and luma filters, WSS/CGMS, closed captions) done. Xcalibur (1.6)
      waits for a clean source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,

@@ -14,6 +14,49 @@ XBAPI void NTAPI AvSendTVEncoderOption(PVOID, ULONG, ULONG, PULONG);
 extern volatile UCHAR AvpEncoderAddress;
 extern volatile ULONG AvpEncoderProgrammed, AvpEncoderMismatches;
 volatile ULONG KiTestAvModesTried, KiTestAvModesOk; // TV encoder modes set / programmed and read back correctly
+volatile ULONG KiTestAvOptionsOk; // encoder options (spec/stock/17 §5a): bit per check, 0x1F = all passed
+XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR, UCHAR, BOOLEAN, PULONG);
+
+static ULONG KiAvRead(UCHAR Register, BOOLEAN Word) {
+    ULONG v = 0;
+    HalReadSMBusValue(AvpEncoderAddress, Register, Word, &v);
+    return v;
+}
+
+// Encoder options on NTSC 640x480 composite: WSS/CGMS word, flicker filter, captions on/off and data, luma filter.
+static ULONG KiTestAvOptions(ULONG fb) {
+    bool focus = AvpEncoderAddress == 0xD4;
+    ULONG ok = 0, dummy = 0;
+    AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
+    AvSendTVEncoderOption(nullptr, 0x13, 1, &dummy); // widescreen: CGMS-A word 0x60001 (CRC checked against IEC 61880)
+    if (focus ? KiAvRead(0x85, FALSE) == 0x01 && KiAvRead(0x84, FALSE) == 0x00 && KiAvRead(0x83, FALSE) == 0x60 &&
+                    KiAvRead(0x88, FALSE) == 0x01 && KiAvRead(0x86, FALSE) == 0x60
+              : KiAvRead(0x60, FALSE) == 0xC1 && KiAvRead(0x62, FALSE) == 0x00 && KiAvRead(0x64, FALSE) == 0x60)
+        ok |= 1;
+    AvSendTVEncoderOption(nullptr, 0x13, 0, &dummy);
+    AvSendTVEncoderOption(nullptr, 0x0B, 2, &dummy); // flicker filter level 2
+    bool ff = focus ? KiAvRead(0x26, FALSE) == 6 : (KiAvRead(0xC8, FALSE) & 0x7F) == 0x12 && KiAvRead(0x34, FALSE) == 0;
+    AvSendTVEncoderOption(nullptr, 0x0B, 5, &dummy);
+    ff &= focus ? KiAvRead(0x26, FALSE) == 16 : (KiAvRead(0xC8, FALSE) & 0x3F) == 0 && KiAvRead(0x34, FALSE) == 0x80;
+    AvSendTVEncoderOption(nullptr, 0x0B, 0, &dummy);
+    ff &= focus ? KiAvRead(0x26, FALSE) == 0 : (KiAvRead(0xC8, FALSE) & 0x40) != 0;
+    if (ff)
+        ok |= 2;
+    AvSendTVEncoderOption(nullptr, 0x02, 0, &dummy); // captions on, then off
+    bool cc = focus ? (KiAvRead(0xB2, TRUE) & 0xC000) == 0xC000 : (KiAvRead(0xC4, FALSE) & 0x38) == 0x38;
+    AvSendTVEncoderOption(nullptr, 0x03, 0, &dummy);
+    cc &= focus ? (KiAvRead(0xB2, TRUE) & 0xC000) == 0 : (KiAvRead(0xC4, FALSE) & 0x30) == 0;
+    if (cc)
+        ok |= 4;
+    UCHAR data[4] = {0x41, 0, 0x42, 0}; // caption bytes for field 0
+    AvSendTVEncoderOption(nullptr, 0x04, 0, (PULONG)data);
+    if (focus ? KiAvRead(0xB0, TRUE) == 0x4241 : KiAvRead(0xBC, FALSE) == 0x42 && KiAvRead(0xBE, FALSE) == 0x41)
+        ok |= 8;
+    AvSendTVEncoderOption(nullptr, 0x0E, 1, &dummy); // luma filter on
+    if (focus ? KiAvRead(0xC2, TRUE) == 0x52 : (KiAvRead(0x96, FALSE) & 0x30) == 0x10)
+        ok |= 16;
+    return ok;
+}
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
     KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscScatterOk, KiTestMiscDone;
@@ -177,6 +220,7 @@ static void NTAPI MiscControllerThread(PVOID) {
         }
         KiTestAvModesTried = (ULONG)(modesEnd - modesBegin);
         KiTestAvModesOk = ok;
+        KiTestAvOptionsOk = KiTestAvOptions(fb);
         if (previous)
             AvSetDisplayMode((PVOID)0xFD000000, 0, previous, 0x12, 640 * 4, fb);
     }
