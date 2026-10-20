@@ -76,6 +76,10 @@ FIELDS = {
     "EN_BLANKO": [(0xC6, 7, 0, 1)],
     "OUT_MUXA": [(0xCE, 0, 0, 2)], "OUT_MUXB": [(0xCE, 2, 0, 2)], "OUT_MUXC": [(0xCE, 4, 0, 2)],
     "OUT_MUXD": [(0xCE, 6, 0, 2)], "OUT_MODE": [(0xD6, 2, 0, 2)],
+    # WSS bit clock and closed-caption timing (1.3.35, Appendix D)
+    "WSSINC": [(0x66, 0, 0, 8), (0x68, 0, 8, 8), (0x6A, 0, 16, 4)],
+    "CCR_START": [(0xD0, 0, 0, 8), (0xD4, 4, 8, 1)],
+    "CC_ADD": [(0xD2, 0, 0, 8), (0xD4, 0, 8, 4)],
     # HDTV output (Appendix E, Table E-6)
     "RASTER_SEL": [(0x2E, 0, 0, 2)], "HD_SYNC_EDGE": [(0x2E, 2, 0, 1)], "BPB_SYNC_DIS": [(0x2E, 3, 0, 1)],
     "GY_SYNC_DIS": [(0x2E, 4, 0, 1)], "RPR_SYNC_DIS": [(0x2E, 5, 0, 1)], "RGB2PRPB": [(0x2E, 6, 0, 1)],
@@ -170,7 +174,14 @@ def conexant_mode(std_name, xres, yres, h_clko, h_clki, v_linesi):
         "MCR": int((128 / 127) * s["v100"] * 0.877 / (127 * VFS * sx) * 32768 + 0.5),
         "MCB": int((128 / 127) * s["v100"] * 0.493 / (127 * VFS * sx) * 32768 + 0.5),
         "MSC": int(s["fsc_per_line"] / h_clko * 2 ** 32 + 0.5),
+        # WSS DTO (1.3.35): 2^20 / (bit period x Fclk): 2.234 us (525-line CGMS-A), 200 ns (625-line WSS)
+        "WSSINC": int(2 ** 20 / ((2.234e-6 if s["lines"] == 525 else 200e-9) * fclk) + 0.5),
+        # Closed captions (Appendix D): CC_ADD = 2^22 / 1716 x (1716 or 1728) / H_CLKO; CCR_START = H_CLKO x 10.003
+        # x 27 / (1716 or 1728) + 60 (the CC pipeline delay)
+        "CC_ADD": int(2 ** 22 / 1716 * (1716 if s["lines"] == 525 else 1728) / h_clko + 0.5),
+        "CCR_START": int(h_clko * 10.003 * 27 / (1716 if s["lines"] == 525 else 1728) + 60 + 0.5),
     }
+    assert f["CCR_START"] < 512 and f["CC_ADD"] < 4096 and f["WSSINC"] < 1 << 20
     return f, fclk
 
 

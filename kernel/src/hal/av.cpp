@@ -81,6 +81,57 @@ static ULONG AvpCapabilities() {
     return (flags & 0xFFFF0000) | AvpPackFromSmc(HalBootSMCVideoMode) | (standard & 0xC0FF00);
 }
 
+// --- Encoder options (spec/stock/17 §5a): Conexant and Focus; the Xcalibur is not driven.
+static ULONG AvpCgms; // option 0x12: the CGMS copy-control bits sent in the WSS/CGMS word
+
+static bool AvpDriven() { return AvpEncoderAddress == AV_ENCODER_CONEXANT || AvpEncoderAddress == AV_ENCODER_FOCUS; }
+
+static ULONG AvpEncRead(UCHAR Register, BOOLEAN Word) {
+    ULONG v = 0;
+    if (!NT_SUCCESS(HalReadSMBusValue(AvpEncoderAddress, Register, Word, &v)))
+        v = 0;
+    return v;
+}
+
+static void AvpEncWrite(UCHAR Register, BOOLEAN Word, ULONG Value) {
+    HalWriteSMBusValue(AvpEncoderAddress, Register, Word, Value);
+}
+
+// The 20-bit CGMS-A word for 525 lines (IEC 61880: 14 data bits, 6-bit CRC x^6 + x + 1 with all-ones preset, data
+// from bit 0) or the 625-line WSS word (ETSI EN 300 294: aspect 8 = 4:3, 7 = 16:9 anamorphic, copy bits << 12).
+// Macrovision is off, so its two bits are 0.
+static ULONG AvpWssWord(ULONG Mode) {
+    ULONG widescreen = (Mode >> 28) & 1;
+    if ((Mode >> 30) == 1)
+        return (8 - widescreen) | (AvpCgms << 12);
+    ULONG data = (AvpCgms << 6) | widescreen, crc = 0x3F;
+    for (ULONG i = 0; i < 14; i++) {
+        ULONG b = ((data >> i) ^ crc) & 1;
+        crc = (((crc >> 1) & 0x10) ^ (b << 4)) | ((crc >> 1) & 0x0F) | (b << 5);
+    }
+    return (crc << 14) | data;
+}
+
+// Sends the word for the current SD mode (spec/stock/17 §5a; nothing for HD or VGA).
+static void AvpUpdateWss() {
+    ULONG mode = AvpCurrentMode;
+    if (!AvpDriven() || (mode >> 30) > 1)
+        return;
+    ULONG w = AvpWssWord(mode);
+    if (AvpEncoderAddress == AV_ENCODER_FOCUS) {
+        static const UCHAR bases[2] = {0x83, 0x86}; // WSS_DATAF1, WSS_DATAF0: most significant byte first
+        for (UCHAR base : bases) {
+            AvpEncWrite(base + 2, FALSE, w & 0x0F);
+            AvpEncWrite(base + 1, FALSE, (w >> 4) & 0xFF);
+            AvpEncWrite(base, FALSE, (w >> 12) & 0xFF);
+        }
+    } else {
+        AvpEncWrite(0x60, FALSE, (w & 0x0F) | 0xC0); // EWSSF1, EWSSF2, WSSDAT[4:1]
+        AvpEncWrite(0x62, FALSE, (w >> 4) & 0xFF);
+        AvpEncWrite(0x64, FALSE, (w >> 12) & 0xFF);
+    }
+}
+
 constexpr ULONG AV_QUERY_AV_CAPABILITIES = 6, AV_OPTION_BLANK_SCREEN = 9, AV_OPTION_NULL_MODE = 0xC,
                 AV_QUERY_ENCODER_TYPE = 0x10, AV_QUERY_MODE_TABLE_VERSION = 0x11;
 
@@ -105,16 +156,64 @@ XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG P
     case 0x0D: // the current display mode word (titles' D3D derives its frame layout from it)
         *Result = AvpCurrentMode;
         return;
-    case 0x05: { // encoder status bits (none for HDTV modes)
+    case 0x02: // closed captions on / off (525-line SD only)
+    case 0x03:
+        if (!AvpDriven() || (AvpCurrentMode & 0xC0000000))
+            return;
+        if (AvpEncoderAddress == AV_ENCODER_FOCUS) {
+            ULONG v = AvpEncRead(0xB2, TRUE);
+            AvpEncWrite(0xB2, TRUE, Option == 2 ? (v | 0xC000) : (v & 0x3FFF));
+        } else {
+            ULONG v = AvpEncRead(0xC4, FALSE);
+            AvpEncWrite(0xC4, FALSE, Option == 2 ? (v | 0x38) : (v & 0xCF)); // ECCF2, ECCF1, ECCGATE
+        }
+        return;
+    case 0x04: { // caption bytes: Param bit 0 = field; Result points at the data (bytes 0 and 2)
+        if (!AvpDriven() || (AvpCurrentMode & 0xC0000000) || !Result)
+            return;
+        auto data = (PUCHAR)Result;
+        if (AvpEncoderAddress == AV_ENCODER_FOCUS) {
+            AvpEncWrite((Param & 1) ? 0xAE : 0xB0, TRUE, (ULONG)data[2] << 8 | data[0]);
+        } else {
+            AvpEncWrite((Param & 1) ? 0xC0 : 0xBC, FALSE, data[2]);
+            AvpEncWrite((Param & 1) ? 0xC2 : 0xBE, FALSE, data[0]);
+        }
+        return;
+    }
+    case 0x05: { // caption status (none outside 525-line SD)
         ULONG v = 0;
-        if (!(AvpCurrentMode & 0xC0000000) && AvpEncoderAddress == 0x8A &&
-            NT_SUCCESS(HalReadSMBusValue(0x8A, 0x02, FALSE, &v)))
-            v = (v & 0x0C) >> 2;
-        else
-            v = 0;
+        if (!(AvpCurrentMode & 0xC0000000) && AvpEncoderAddress == AV_ENCODER_CONEXANT)
+            v = (AvpEncRead(0x02, FALSE) & 0x0C) >> 2;
+        else if (!(AvpCurrentMode & 0xC0000000) && AvpEncoderAddress == AV_ENCODER_FOCUS)
+            v = (AvpEncRead(0xAE, TRUE) ? 1 : 0) | (AvpEncRead(0xB0, TRUE) ? 2 : 0);
         *Result = v;
         return;
     }
+    case 0x0B: // flicker filter, level 0-5
+        if (AvpEncoderAddress == AV_ENCODER_FOCUS) {
+            AvpEncWrite(0x26, FALSE, (Param * 16 / 5) & 0xFF); // FLK
+            AvpEncWrite(0x27, FALSE, 0);
+        } else if (AvpEncoderAddress == AV_ENCODER_CONEXANT) {
+            ULONG v = AvpEncRead(0xC8, FALSE);
+            if (!Param) {
+                AvpEncWrite(0xC8, FALSE, v | 0x40); // DIS_FFILT
+            } else {
+                ULONG n = Param <= 3 ? Param : 0; // F_SELY / F_SELC: 2-, 3-, 4-line, else 5-line
+                AvpEncWrite(0xC8, FALSE, (v & 0x80) | n << 3 | n);
+                AvpEncWrite(0x34, FALSE, Param == 5 ? 0x80 : 0); // ADPT_FF: adaptive at the top level
+            }
+        }
+        return;
+    case 0x0E: // luma filter on / off
+        if (AvpEncoderAddress == AV_ENCODER_FOCUS)
+            AvpEncWrite(0xC2, TRUE, Param ? 0x0052 : 0x00EE); // LUMA_BANDWIDTH
+        else if (AvpEncoderAddress == AV_ENCODER_CONEXANT)
+            AvpEncWrite(0x96, FALSE, (AvpEncRead(0x96, FALSE) & 0x0F) | (Param ? 0x10 : 0)); // YLPF
+        return;
+    case 0x12: // CGMS copy-control bits
+        AvpCgms = Param & 3;
+        AvpUpdateWss();
+        return;
     case 0x0F: { // Conexant: the field currently being sent (register 6, bit 0)
         ULONG v = 0;
         if (AvpEncoderAddress != 0x8A || !NT_SUCCESS(HalReadSMBusValue(0x8A, 0x06, FALSE, &v)))
@@ -125,11 +224,14 @@ XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG P
     case AV_QUERY_MODE_TABLE_VERSION:
         *Result = 0;
         return;
-    case 0x13: // mode flag 0x10000000 (GPIO 0x80D6 bit 0 on the next mode set)
+    case 0x13: // widescreen: mode flag 0x10000000 (GPIO 0x80D6 bit 0 on the next mode set) and the WSS/CGMS word
         AvpCurrentMode = (AvpCurrentMode & ~0x10000000u) | (Param ? 0x10000000u : 0);
+        AvpUpdateWss();
         return;
-    default:
-        // Encoder writes (macrovision, flicker filter, widescreen, ...) need the encoder tables (spec/stock/17): no effect yet.
+    case 0x0A: // Macrovision commit: Macrovision stays off (tv-encoders.md §6); the word is refreshed as the reference does
+        AvpUpdateWss();
+        return;
+    default: // 1 (Macrovision level): off
         return;
     }
 }
@@ -444,6 +546,8 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         else if (AvpIsFocusHd(Mode) || fsd)
             AvpFocusStart(Mode);
         AvpCurrentMode = Mode;
+        if (sd || fsd)
+            AvpUpdateWss();
     }
     *(volatile ULONG *)(regs + 0x680600) = generalControl;
     AvpCrtc(regs, 0x13, (UCHAR)pitch8);

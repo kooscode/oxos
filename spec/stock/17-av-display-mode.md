@@ -75,6 +75,33 @@ framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(
 12. PRAMDAC 0x680880 ← the per-row value; stall 1 µs; Conexant: 0x6C |= 0x80, 0xBA ← (bits 24–27) | 0x20.
 13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; 0x8002FDD2 (saved-data / splash bookkeeping).
 
+## 5a. AvSendTVEncoderOption: encoder options (Conexant, Focus)
+Evidence: batch_decompile of `AvSendTVEncoderOption` (ord 2, 0x8002FFDE), the WSS/CGMS writer 0x8002FDD2 and the
+Macrovision commit 0x8002FBAA. "Class" = mode word bits 30–31 (00 525-line SD, 01 625-line SD, 10 HD, 11 VGA).
+Conexant writes are bytes; Focus registers 0xAE–0xB2, 0xC2 and 0x0E are words.
+
+| Option | Conexant (0x8A) | Focus (0xD4) |
+|---|---|---|
+| 2 closed captions on (class 00 only) | 0xC4 ← 0xC4 \| 0x38 (ECCF2, ECCF1, ECCGATE), then 4 caption-timing registers from a per-row table | 0xB2 ← 0xB2 \| 0xC000 |
+| 3 closed captions off (class 00) | 0xC4 ← 0xC4 & 0xCF | 0xB2 ← 0xB2 & 0x3FFF |
+| 4 caption bytes (class 00; argument bit 0 = field, data bytes d0 and d2) | field 0: 0xBC ← d2, 0xBE ← d0; field 1: 0xC0 ← d2, 0xC2 ← d0 | field 0: 0xB0 ← d2 << 8 \| d0; field 1: 0xAE ← the same |
+| 5 caption status (class 00, else 0) | register 2 bits 2–3 | bit 0 = 0xAE ≠ 0, bit 1 = 0xB0 ≠ 0 |
+| 0x0A Macrovision commit | 0xFC ← 0 / 0x63 / 0xE3 (0x42 in 480p) by level | 0x0E bit 15 ← level ≠ 0 |
+| 0x0B flicker filter, level 0–5 | level 0: 0xC8 \|= 0x40 (DIS_FFILT); else n = 1, 2, 3 for levels 1–3, 0 for 4–5: 0xC8 ← (0xC8 & 0x80) \| n << 3 \| n (F_SELC = F_SELY = n), 0x34 ← 0x80 (ADPT_FF) for level 5, else 0 | 0x26 ← level × 16 / 5, 0x27 ← 0 |
+| 0x0E luma filter on/off | 0x96 ← (0x96 & 0x0F) \| (on ? 0x10 : 0) (YLPF) | 0xC2 ← on ? 0x0052 : 0x00EE |
+| 0x0F current field | register 6 bit 0 | 0 |
+| 0x12 CGMS bits, 0x13 widescreen | store the value (0x13: mode word bit 28), then WSS/CGMS update | the same |
+
+**WSS/CGMS update (0x8002FDD2)**, also after option 0x0A (and each mode set): class 00 → the 20-bit CGMS-A word (widescreen
+bit 0, CGMS bits 6–7, Macrovision level bits 8–9, 6-bit CRC in 14–19; IEC 61880); class 01 → (widescreen ? 7 : 8) \|
+CGMS << 12 (ETSI EN 300 294 WSS); other classes nothing. Conexant: 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2),
+0x62 ← word >> 4, 0x64 ← word >> 12. Focus: 0x85 ← word & 0xF, 0x84 ← word >> 4, 0x83 ← word >> 12 (field 1), and the
+same into 0x88, 0x87, 0x86 (field 0).
+**Ours:** the same option behaviour; the clock-dependent Conexant values (caption timing CCR_START / CC_ADD, the WSS
+bit clock WSSINC) are computed from the datasheet's equations per mode (spec/oxos-internal/tv-encoders.md §13), not
+taken from the reference's table. Macrovision stays off (options 1 and 0x0A do nothing; the CGMS-A word carries
+level 0).
+
 ## 6. Ours (status)
 `src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7). On Conexant and
 Focus encoders, SD (composite, S-video, SCART, component) and HD component mode words also program the encoder and
@@ -96,10 +123,10 @@ clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480
 (HDTV table, CRTC rows 0x0A and 0x0C), which are always 16:9, so xemu's "auto" shows them at 16:9; 480p keeps the
 reference rule (bit 28 only), since 480p can be 4:3 or 16:9.
 
-`AvSendTVEncoderOption` queries implemented: 6 (AV capabilities), 0x0D (current mode word), 0x05 (Conexant status
-bits, reg 2 bits 2–3; 0 for HDTV modes), 0x0F (current field, Conexant reg 6 bit 0), 0x10 (encoder type: 0 Conexant, 1 Focus, 2 Xcalibur, from the bus probe),
-0x11 (mode table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (mode flag 0x10000000). Other options are
-encoder writes and are no-ops until the tables exist.
+`AvSendTVEncoderOption`: queries 6 (AV capabilities), 0x0D (current mode word), 0x05 (caption status), 0x0F (current
+field, Conexant reg 6 bit 0), 0x10 (encoder type: 0 Conexant, 1 Focus, 2 Xcalibur, from the bus probe), 0x11 (mode
+table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (widescreen) and, on Conexant and Focus, the encoder
+options of §5a (captions, flicker filter, luma filter, WSS/CGMS). Macrovision (1, 0x0A) stays off.
 
 ## 7a. Display timings per mode (ours; milestone 13)
 **Row meanings (observed, not from the reference's tables):** the D3D mode words for each picture size, as listed

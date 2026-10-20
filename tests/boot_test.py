@@ -506,6 +506,8 @@ def misc_checks(mon):
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "TV encoder: every SD and HD mode word programs the Conexant registers (read back)":
             mon.read("KiTestAvModesTried") == 15 and mon.read("KiTestAvModesOk") == 15,
+        "TV encoder options: WSS/CGMS, flicker filter, captions, luma filter (Conexant registers)":
+            mon.read("KiTestAvOptionsOk") == 0x1F,
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 
@@ -576,6 +578,9 @@ def encoder_checks(mon, name, self_test=False):
         want = 15
         print(f"  self-test: {good} of {tried} mode words programmed and read back")
         checks[f"{name}: all {want} supported mode words program the encoder (self-test)"] = tried == want and good == want
+        opts = mon.read("KiTestAvOptionsOk")
+        print(f"  self-test: encoder options {opts:#x} (0x1f = WSS/CGMS, flicker, captions on/off, caption data, luma)")
+        checks[f"{name}: encoder options program the encoder (self-test)"] = opts == 0x1F
     if name == "xcalibur":
         st = mon.read("AvpEncoderWideStatus")
         print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")

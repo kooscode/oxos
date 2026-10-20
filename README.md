@@ -203,8 +203,7 @@ Microsoft's 2BL and keys: do not distribute that one.
 ## Next steps
 - **Real hardware (TBD):** testing on revisions 1.0–1.5 to confirm the AV drivers and encoder tables (component HD via
   HDMI adapters first), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
-- **Video:** the remaining encoder options (flicker-filter levels, widescreen/copy-control signalling, closed
-  captions); 1.6 consoles' Xcalibur encoder once a clean source of its register values exists.
+- **Video:** 1.6 consoles' Xcalibur encoder once a clean source of its register values exists.
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.
 - **Debugging on real hardware:** a GDB stub in the kernel over the SuperIO serial port, with the debugger-only
   exports, so the same gdb and VS Code debugging works on a console.
