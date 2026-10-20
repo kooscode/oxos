@@ -77,7 +77,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 4. XBE loader and title launch (spec 05):
    - 4a: XBE loader, kernel thunks, section load/digests, media/region checks, title keys, path symlinks, kernel test title from disc (`tests/kernel-test-title`). ✅ passes in xemu.
    - 4b-1: SMBus, SMC tray/reset, EEPROM settings + security section (HD key, region), HalReturnToFirmware (spec 12). ✅ passes in xemu.
-   - 4b-2: AV options/capabilities + basic display mode; the nxdk dashboard on C: boots and draws (`make test-dash`, `tools/fbshot.py` for a framebuffer PNG). ✅ passes in xemu. Real-hardware encoder tables pending.
+   - 4b-2: AV options/capabilities + basic display mode; the nxdk dashboard on C: boots and draws (`make test-dash`, `tools/fbshot.py` for a framebuffer PNG). ✅ passes in xemu. Encoder tables: milestone 7.
 5. Remaining exports:
    - 5a: runtime exports (Rtl/Interlocked/Ex locks/sprintf/Dbg/HAL extras/RTC time) (spec 13). ✅ passes in xemu.
    - 5b: structured exception handling: trap dispatch, raise, unwind, stack walks (spec 14). ✅ passes in xemu.
@@ -153,8 +153,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB, component) and HD component (480p, 720p, 1080i) are computed
      from the CX25871 datasheet by `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing
      (`make test-encoders`; `make run HD=1` for games' HD modes). Focus HD component and SD (composite, S-video,
-     SCART, component) from the chip's own presets (`make run ENCODER=focus` in xemu). Next: encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
-     source of register values.
+     SCART, component) from the chip's own presets (`make run ENCODER=focus` in xemu). All 15 SD/HD mode words are
+     checked in xemu on both encoder models. **Hardware testing TBD:** the AV drivers and encoder tables still have to
+     be confirmed on real 1.0–1.5 consoles. Next: encoder options (flicker filter, WSS/CGMS, captions). Xcalibur (1.6)
+     waits for a clean source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

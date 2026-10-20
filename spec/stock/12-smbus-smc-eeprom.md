@@ -81,7 +81,8 @@ Evidence: `ev_179f3a58…` (AV capabilities 0x8002fc8f, AvSetSavedDataAddress, e
 - **Ours:**
   - AV capabilities, saved-data address, blank, null-mode and encoder-type options
   - for every mode: VGA 640x480 timings from the public VGA register model, plus the stock pitch/format/start
-    programming. The per-mode encoder tables (needed on real hardware) still have to be derived.
+    programming. The per-mode encoder tables are OXOS's own, computed from the datasheets (spec/oxos-internal/tv-encoders.md); hardware
+    testing TBD.
 
 - AvGetSavedDataAddress returns the persisted framebuffer pointer. AvSendTVEncoderOption is a large option switch
   (encoder at 0x8A Conexant / 0xD4 Focus / 0xE0 Xcalibur).

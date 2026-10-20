@@ -76,10 +76,10 @@ framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(
 13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; 0x8002FDD2 (saved-data / splash bookkeeping).
 
 ## 6. Ours (status)
-`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7). On a Conexant
-encoder, SD mode words also program the encoder and the NV2A flat-panel timing from OXOS's own computed tables
-(spec/oxos-internal/tv-encoders.md, milestone 7, phase 2); HD, VGA, SD component and the Focus encoder still leave
-the encoder alone.
+`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7). On Conexant and
+Focus encoders, SD (composite, S-video, SCART, component) and HD component mode words also program the encoder and
+the NV2A flat-panel timing from OXOS's own computed tables (spec/oxos-internal/tv-encoders.md, milestone 7); VGA and
+the Xcalibur leave the encoder alone. Not yet confirmed on real hardware.
 
 The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF for progressive output: the
 reference leaves it at 0xFF, and xemu treats any other value as interlaced and shows each field at half height

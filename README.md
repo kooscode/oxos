@@ -21,7 +21,11 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
 - **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
-- Real hardware has not been validated yet (the TV-encoder mode tables are still missing).
+- **TV output drivers** for revisions 1.0–1.5, computed from the encoder chips' public datasheets: Conexant and Focus,
+  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take).
+  Tested in xemu only.
+- **Hardware testing TBD:** OXOS has not run on a real console yet. The AV drivers and encoder tables in particular
+  need confirming on real 1.0–1.5 consoles (picture position, levels, 1080i); 1.6 (Xcalibur) has no video support yet.
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
@@ -197,8 +201,10 @@ verify under OXOS, and System Link with stock consoles does not work. Saves made
 Microsoft's 2BL and keys: do not distribute that one.
 
 ## Next steps
-- **Real hardware:** video encoder mode tables (Conexant, Focus) for TVs, then validation on revisions 1.0–1.5
-  (the open image's 1.6 values, `MCPX16=1`, are untested).
+- **Real hardware (TBD):** testing on revisions 1.0–1.5 to confirm the AV drivers and encoder tables (component HD via
+  HDMI adapters first), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
+- **Video:** the remaining encoder options (flicker-filter levels, widescreen/copy-control signalling, closed
+  captions); 1.6 consoles' Xcalibur encoder once a clean source of its register values exists.
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.
 - **Debugging on real hardware:** a GDB stub in the kernel over the SuperIO serial port, with the debugger-only
   exports, so the same gdb and VS Code debugging works on a console.
