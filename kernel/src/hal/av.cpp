@@ -250,7 +250,8 @@ static void AvpCxWrite(UCHAR Register, UCHAR Value) {
 // Soft reset, then the mode's registers (the chip's documented defaults stay for all others); the clock output,
 // timing reset and DAC enables follow once the NV2A side is programmed (AvpCxStart).
 static void AvpCxProgram(ULONG Mode, const AVP_SD_MODE &m) {
-    const UCHAR *output = AvpCxOutputRegs[(Mode >> 29) & 1]; // bit 29: SCART RGB
+    // The row's output: SD component (YPbPr), else composite/S-video, or SCART RGB with mode bit 29.
+    const UCHAR *output = AvpCxOutputRegs[m.Output ? m.Output : (Mode >> 29) & 1];
     static const UCHAR outputRegs[3] = {0x6C, 0xCE, 0xD6};
     AvpCxWrite(0xBA, 0x80); // SRESET
     AvpCxWrite(0xBA, 0x3F); // slave (pseudo-master) interface, all DACs off

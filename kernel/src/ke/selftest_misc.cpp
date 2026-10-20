@@ -160,10 +160,12 @@ static void NTAPI MiscControllerThread(PVOID) {
 
     // TV encoder (spec/oxos-internal/tv-encoders.md): every supported mode word programs the generated registers,
     // which read back as written (xemu's encoder models store them); then the previous mode is restored. Conexant
-    // (xemu's default model): the 8 SD and 4 HD tests below; Focus (make test-encoders): the 4 HD ones.
+    // (xemu's default model): the 11 SD (composite, SCART, component) and 4 HD tests below; Focus (make
+    // test-encoders): the 4 HD ones.
     static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
-                                    0x2001010B, 0x60030307, 0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
-    const ULONG *modesBegin = AvpEncoderAddress == 0x8A ? cxModes : AvpEncoderAddress == 0xD4 ? cxModes + 8 : nullptr;
+                                    0x2001010B, 0x60030307, 0x0801010D, 0x48030314, 0x08010119,
+                                    0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
+    const ULONG *modesBegin = AvpEncoderAddress == 0x8A ? cxModes : AvpEncoderAddress == 0xD4 ? cxModes + 11 : nullptr;
     if (modesBegin) {
         const ULONG *modesEnd = cxModes + sizeof(cxModes) / sizeof(cxModes[0]);
         ULONG previous = 0;
