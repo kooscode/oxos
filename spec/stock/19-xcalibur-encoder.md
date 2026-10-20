@@ -68,7 +68,7 @@ kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies
 | 1 | per-mode encoder table | **yes**: SDTV and HD rows alike |
 | 2 | HDTV encoder table | no (count 0) |
 | 3 | Macrovision, SDTV | yes |
-| 4 | Macrovision, 480p class | yes |
+| 4 | Macrovision, 625-line SD | yes |
 | 5 | NV2A register table (dword offsets + dword rows) | yes (as for all encoders) |
 | 6 | CRTC table | yes |
 | 7 | component set-up (read-modify-write rows) | no (fixed writes, §5 step 7) |
@@ -86,7 +86,7 @@ kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies
 | 1 per-mode | 63 | 64 | **42** |
 | 2 HDTV | 13 | 64 | 0 |
 | 3 Macrovision SD | 6 | 28 | 26 |
-| 4 Macrovision 480p | 1 | 28 | 26 |
+| 4 Macrovision 625-line | 1 | 28 | 26 |
 | 5 NV2A | 104 | 104 | 104 |
 | 6 CRTC | 34 | 34 | 34 |
 | 7 component | 12 | 14 | 0 |
@@ -95,7 +95,7 @@ kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies
 
 - Row counts (from the table sizes in the 5838 blob): Xcalibur per-mode table = register row + 38 mode rows; NV2A
   = register row + 18; CRTC = register row + 16; Xcalibur Macrovision SD = register row + 3 (levels 1–3, no level-0
-  row), 480p = register row + 1.
+  row), 625-line = register row + 1.
 - **Validation:** every table pointer must lie inside the blob, and *pointer + row length + a per-table row count*
   must not pass its end (row counts checked: common 2, per-mode 30 or **36 for Xcalibur**, HDTV 4, Macrovision 5 / 3,
   NV2A 19, CRTC 17, component 30 (Conexant) or 3, pool 1, list 1). A failure **bug-checks** (code 0). This is a weak
@@ -155,7 +155,7 @@ As spec 17 §4 (pitch, depth, framebuffer start), then options 0x0B (5) and 0x0E
 6. Mode bit 29 (component HDTV) → component set-up, step 7.
 7. * Component set-up: register **1** ← (register 1 & 0xFCFFFFFF) | **0x00C00008**; register **0x60** ← register 0x60
    & ~0x01000000; register **0x58** ← 0.
-8. * HD (bits 30–31 = 10b): register **7** ← 0 (WSS/CGMS off). Any of bits 30–31 set (480p class or HD): register **9**
+8. * HD (bits 30–31 = 10b): register **7** ← 0 (WSS/CGMS off). Any of bits 30–31 set (625-line, HD or VGA): register **9**
    ← 0 (closed captions off). Register **0** ← register 0 **| 0x02** (output on). **sub(0x0F) ← 0** (Macrovision off).
    Then option 0x0B with level 5 (default flicker filter, §6).
 9. GPIO (`0x80D6`, `0x80D8`), NV2A table row, the component clears (bit 29: NV 0x680630, 0x6808C4, 0x68084C ← 0),
@@ -165,18 +165,19 @@ As spec 17 §4 (pitch, depth, framebuffer start), then options 0x0B (5) and 0x0E
 11. Framebuffer start (NV 0x600800); WSS/CGMS update (§7).
 
 ## 6. `AvSendTVEncoderOption` on Xcalibur
-"SD" = mode bits 30–31 = 00, "480p class" = 01, "HD" = 10.
+Mode classes by bits 30–31: **00** 525-line SD (NTSC, PAL-60), **01** 625-line SD (PAL 50 Hz), **10** HD, **11** VGA
+(nxdk's mode words: e.g. 0x44030307 PAL 50 Hz 640×480, 0x88070701 480p). "SD" below means class 00 or 01.
 
 | option | Xcalibur behaviour |
 |---|---|
-| 1 (Macrovision level 0–3) | Only in SD or 480p class. Level 0 → **sub(0x0F) ← 0** and done. Otherwise, for each of the 26 columns of the Macrovision table (SD or 480p): sub(register) ← value from row *level* (SD: levels 1–3 = value rows 1–3; 480p: any level ≥ 1 = value row 1). The level is also kept for WSS/CGMS (§7). |
-| 2 (closed captions on) | SD only: register **9** ← 7. |
-| 3 (closed captions off) | SD only: register **9** ← 0. |
-| 4 (send caption bytes; arg = field, data = bytes d0, d2) | SD only: register **0x0A** ← d2 & 0x7F; field 0: **0x0B** ← 4, **0x0A** ← d0 & 0x7F, **0x0B** ← 8; field 1: **0x0B** ← 1, **0x0A** ← d0 & 0x7F, **0x0B** ← 2. |
-| 5 (caption status) | SD only: read register **0x14**; result = (~value) & 3. |
+| 1 (Macrovision level 0–3) | Only in class 00 or 01. Level 0 → **sub(0x0F) ← 0** and done. Otherwise, for each of the 26 columns of the Macrovision table (525-line or 625-line): sub(register) ← value from row *level* (525-line: levels 1–3 = value rows 1–3; 625-line: any level ≥ 1 = value row 1). The level is also kept for WSS/CGMS (§7). |
+| 2 (closed captions on) | Class 00 (525-line) only: register **9** ← 7. |
+| 3 (closed captions off) | Class 00 only: register **9** ← 0. |
+| 4 (send caption bytes; arg = field, data = bytes d0, d2) | Class 00 only: register **0x0A** ← d2 & 0x7F; field 0: **0x0B** ← 4, **0x0A** ← d0 & 0x7F, **0x0B** ← 8; field 1: **0x0B** ← 1, **0x0A** ← d0 & 0x7F, **0x0B** ← 2. |
+| 5 (caption status) | Class 00 only: read register **0x14**; result = (~value) & 3. |
 | 6 (AV capabilities) | as 4627 (EEPROM-based, encoder-independent). |
 | 9 (blank screen) | on: VGA sequencer 1 ← 0x21. Off: sequencer 1 ← 1, register **4** ← mode bits 24–27, `out 0x80D3, 4`. |
-| 0x0A (Macrovision commit) | Only in SD, 480p class, or the special mode class where (mode & 0xCF0000FF) == 0x88000001. Value: level 0 → 0; level 1 → 0x36; level ≥ 2 → 0x3E in SD, 0x36 otherwise; the special class → 0x24 when non-zero. **sub(0x0F) ← value**. |
+| 0x0A (Macrovision commit) | Only in class 00, 01, or **480p** ((mode & 0xCF0000FF) == 0x88000001: HD class, HD row 1, component DACs). Value: level 0 → 0; level 1 → 0x36; level ≥ 2 → 0x3E in class 00, 0x36 otherwise; 480p → 0x24 when non-zero. **sub(0x0F) ← value**. |
 | 0x0B (flicker filter 0–5) | Not in HD. Read register **0x60**; set A if bits 22–23 = 10b, else set B. Level → entry: 0→0, 1→1, 2→(A ? 2 : 1), 3→(A ? 3 : 2), 4/5→(A ? 4 : 2). Write the entry's **7 dwords to registers 0x60–0x66**, skipped if it is the entry written last (the cache is cleared at each mode change). With mode bit 29: then register 0x60 ← register 0x60 & ~0x01000000. The two sets (5 entries × 7 dwords) are kernel data. |
 | 0x0C (zero mode) | forget the current mode (next `AvSetDisplayMode` does a full change). |
 | 0x0D (query mode) | current mode word. |
@@ -189,10 +190,11 @@ As spec 17 §4 (pitch, depth, framebuffer start), then options 0x0B (5) and 0x0E
 
 ## 7. WSS / CGMS-A on Xcalibur
 The kernel builds one word and sends it to the encoder; only the final write differs per encoder.
-- **SD:** data (14 bits): bit 0 = widescreen (mode bit 28); bits 6–7 = CGMS (option 0x12); bit 8 = Macrovision level
+- **525-line SD (class 00):** data (14 bits): bit 0 = widescreen (mode bit 28); bits 6–7 = CGMS (option 0x12); bit 8 = Macrovision level
   bit 1, bit 9 = level bit 0 (option 1). A **6-bit CRC** over data bits 0–13 (polynomial x⁶ + x + 1, initial value
   all ones, data processed from bit 0, as a shift register) goes into bits 14–19 — the 20-bit CGMS-A word of IEC 61880 (525-line).
-- **480p class:** word = (widescreen ? 7 : 8) | CGMS << 12 (no CRC).
+- **625-line SD (class 01):** word = (widescreen ? 7 : 8) | CGMS << 12 (no CRC): the WSS of ETSI EN 300 294, aspect
+  code 8 = 4:3 full format, 7 = 16:9 anamorphic, with the copy bits in the upper group.
 - **HD:** nothing is sent.
 - **Xcalibur write:** register **7** ← ((word & 0xFFFFF) | 0x01800000) << 1.
   (Focus: registers 0x83–0x88; Conexant: 0x60/0x62/0x64 — spec 17.)
@@ -225,6 +227,4 @@ The kernel builds one word and sends it to the encoder; only the final write dif
 - Meanings of Xcalibur registers 0, 1, 4, 7, 9, 0x0A, 0x0B, 0x14, 0x58, 0x60 and the coefficient banks beyond what
   the behaviour shows (DAC enables in 4 bits 0–3, output enable in 0 bit 1, WSS in 7, captions in 9–0x0B/0x14).
 - Meaning of register 0x60 bits 22–23 (selects flicker set A or B) and bit 24 (cleared for component).
-- What the special mode class (mode & 0xCF0000FF) == 0x88000001 is (an HD-class mode word with encoder row 1 and DAC
-  bits 8) and why Macrovision applies to it.
 - Whether the 5838 BIOS's other hardware (1.6 SMC, fan) needs further kernel changes outside the encoder.
