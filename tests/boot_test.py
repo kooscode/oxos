@@ -541,7 +541,7 @@ def dash_checks(mon):
 ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE0, 0x400, 2)}
 
 
-def encoder_checks(mon, name):
+def encoder_checks(mon, name, self_test=False):
     """The video encoder xemu presents (-machine video-encoder=NAME) is found by the bus probe and reported in
     XboxHardwareInfo.Flags as the reference would (spec/oxos-internal/tv-encoders.md §2, spec/stock/19 §1)."""
     address, flag, kind = ENCODERS[name]
@@ -566,6 +566,16 @@ def encoder_checks(mon, name):
         mode, bad = mon.read("AvpEncoderProgrammed"), mon.read("AvpEncoderMismatches")
         print(f"  Conexant: mode {mode:#010x} programmed, {bad} registers read back differently")
         checks["conexant: an SD mode set programs the encoder (generated registers read back)"] = mode != 0 and bad == 0
+    if self_test and name in ("conexant", "focus"):
+        # Self-test build: the misc suite sets every supported mode word on this encoder and reads the registers back.
+        for _ in range(240):
+            if mon.read("KiTestMiscDone"):
+                break
+            time.sleep(0.25)
+        tried, good = mon.read("KiTestAvModesTried"), mon.read("KiTestAvModesOk")
+        want = 12 if name == "conexant" else 4
+        print(f"  self-test: {good} of {tried} mode words programmed and read back")
+        checks[f"{name}: all {want} supported mode words program the encoder (self-test)"] = tried == want and good == want
     if name == "xcalibur":
         st = mon.read("AvpEncoderWideStatus")
         print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")
@@ -724,7 +734,7 @@ def main():
         time.sleep(a.boot_wait)
         mon = Monitor(sock, map_symbols(a.map))
         if a.encoder:
-            results = {"encoder": encoder_checks(mon, a.encoder)}
+            results = {"encoder": encoder_checks(mon, a.encoder, any(k.startswith("?KiTestAvModesOk@") or k == "KiTestAvModesOk" for k in mon.syms))}
         elif a.udf:
             results = udf_checks(mon)
         elif a.fatal:

@@ -269,6 +269,47 @@ static void AvpCxProgram(ULONG Mode, const AVP_SD_MODE &m) {
     AvpEncoderProgrammed = Mode;
 }
 
+// --- Focus FS453/4, HD component (tv-encoders.md §11): the chip's QPR preset for the standard plus the PLL, then
+// PWR_MGNT once the NV2A timing runs. Registers are 16-bit (SMBus word transfers).
+static bool AvpIsFocusHd(ULONG Mode) {
+    return AvpEncoderAddress == AV_ENCODER_FOCUS && (Mode >> 30) == 2 && (Mode & 0x7F) >= 1 && (Mode & 0x7F) <= 3;
+}
+
+static void AvpFocusProgramHd(ULONG Mode, ULONG Width) {
+    const AVP_FOCUS_WRITE *w;
+    ULONG count;
+    switch (Mode & 0x7F) {
+    case 1:
+        w = Width == 720 ? AvpFocusHd480p_720 : AvpFocusHd480p_640;
+        count = sizeof(AvpFocusHd480p_640) / sizeof(*w);
+        break;
+    case 2:
+        w = AvpFocusHd720p_1280, count = sizeof(AvpFocusHd720p_1280) / sizeof(*w);
+        break;
+    default:
+        w = AvpFocusHd1080i_1920, count = sizeof(AvpFocusHd1080i_1920) / sizeof(*w);
+        break;
+    }
+    for (ULONG i = 0; i < count; i++)
+        HalWriteSMBusValue(AV_ENCODER_FOCUS, w[i].Register, w[i].Bytes == 2, w[i].Value);
+    // Read back each register's final value (diagnostics; xemu's encoder model stores registers).
+    ULONG mismatches = 0, v;
+    for (ULONG i = 0; i < count; i++) {
+        bool last = true;
+        for (ULONG j = i + 1; j < count; j++)
+            last &= w[j].Register != w[i].Register;
+        if (last && (!NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_FOCUS, w[i].Register, TRUE, &v)) || (USHORT)v != w[i].Value))
+            mismatches++;
+    }
+    AvpEncoderMismatches = mismatches;
+    AvpEncoderProgrammed = Mode;
+}
+
+static void AvpFocusStart(ULONG Mode) {
+    AvpOutputControl = (UCHAR)((Mode >> 24) & 0x0F);
+    HalWriteSMBusValue(AV_ENCODER_FOCUS, 0xA0, TRUE, 0x0400 | AvpOutputControl); // SD clock off, DAC disables
+}
+
 static void AvpCxStart(ULONG Mode) {
     ULONG v;
     AvpCxWrite(0xC4, 0x01); // EN_OUT: CLKO (the NV2A's pixel clock) and the timing outputs on
@@ -349,9 +390,12 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
             AvpProgramTiming(regs, t);
             AvpProgramTvTiming(regs, sd->Width, sd->Height, sd->HTotal, sd->HSyncStart, sd->HSyncStart + 32,
                                sd->VTotal, sd->VSyncStart, sd->VSyncStart + 3);
-        } else if (AvpIsCxHd(Mode)) {
+        } else if (AvpIsCxHd(Mode) || AvpIsFocusHd(Mode)) {
             const AVP_TIMING &t = *AvpFindTiming(Mode);
-            AvpCxProgramHd(Mode);
+            if (AvpEncoderAddress == AV_ENCODER_FOCUS)
+                AvpFocusProgramHd(Mode, t.HDisplay);
+            else
+                AvpCxProgramHd(Mode);
             AvpProgramTiming(regs, t);
             AvpProgramTvTiming(regs, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart + 2, t.HSyncEnd + 2, t.VTotal,
                                t.VSyncStart, t.VSyncEnd);
@@ -369,6 +413,8 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         regs[0xC03C2] = 0xE3; // misc output: 25 MHz clock, negative syncs
         if (sd || AvpIsCxHd(Mode))
             AvpCxStart(Mode);
+        else if (AvpIsFocusHd(Mode))
+            AvpFocusStart(Mode);
         AvpCurrentMode = Mode;
     }
     *(volatile ULONG *)(regs + 0x680600) = generalControl;

@@ -158,20 +158,23 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
     }
 
-    // TV encoder (spec/oxos-internal/tv-encoders.md): on a Conexant encoder (xemu's default model) every SD and HD
-    // mode word programs the generated registers, which read back as written; then the previous mode is restored.
-    if (AvpEncoderAddress == 0x8A) {
-        static const ULONG modes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
-                                      0x2001010B, 0x60030307, 0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
+    // TV encoder (spec/oxos-internal/tv-encoders.md): every supported mode word programs the generated registers,
+    // which read back as written (xemu's encoder models store them); then the previous mode is restored. Conexant
+    // (xemu's default model): the 8 SD and 4 HD tests below; Focus (make test-encoders): the 4 HD ones.
+    static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
+                                    0x2001010B, 0x60030307, 0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
+    const ULONG *modesBegin = AvpEncoderAddress == 0x8A ? cxModes : AvpEncoderAddress == 0xD4 ? cxModes + 8 : nullptr;
+    if (modesBegin) {
+        const ULONG *modesEnd = cxModes + sizeof(cxModes) / sizeof(cxModes[0]);
         ULONG previous = 0;
         AvSendTVEncoderOption(nullptr, 0x0D, 0, &previous);
         ULONG fb = *(volatile ULONG *)0xFD600800, ok = 0;
-        for (ULONG mode : modes) {
-            AvSetDisplayMode((PVOID)0xFD000000, 0, mode, 0x12, 640 * 4, fb);
-            if (AvpEncoderProgrammed == mode && AvpEncoderMismatches == 0)
+        for (const ULONG *mode = modesBegin; mode < modesEnd; mode++) {
+            AvSetDisplayMode((PVOID)0xFD000000, 0, *mode, 0x12, 640 * 4, fb);
+            if (AvpEncoderProgrammed == *mode && AvpEncoderMismatches == 0)
                 ok++;
         }
-        KiTestAvModesTried = sizeof(modes) / sizeof(modes[0]);
+        KiTestAvModesTried = (ULONG)(modesEnd - modesBegin);
         KiTestAvModesOk = ok;
         if (previous)
             AvSetDisplayMode((PVOID)0xFD000000, 0, previous, 0x12, 640 * 4, fb);
