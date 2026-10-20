@@ -1,8 +1,10 @@
 # TV encoders: Conexant CX25871 and Focus FS454 (design)
 
-Status: phases 1–2 done: bus probe, flags, encoder type, 4-byte SMBus form; Conexant SD (NTSC-M, NTSC-J, PAL 50 Hz,
-PAL-60 at 640 and 720 wide; composite + S-video and SCART RGB) computed by `tools/gen_tv_encoders.py` and programmed
-with the NV2A flat-panel timing; `make test-encoders`. Not yet tried on a real console. Phases 3–6 to do.
+Status: Conexant done for SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60 at 640 and 720 wide; composite + S-video and SCART
+RGB) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
+flat-panel timing; bus probe, flags, encoder type, 4-byte SMBus form; `make test-encoders` and a boot self-test of
+every mode. Not yet tried on a real console. To do: Focus, SD component, options. Priority (decided 2026-10-20): HD
+component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
 
@@ -159,6 +161,23 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   V_BLANKI + 1).
 - **Kernel order:** SRESET, 0xBA ← 0x3F, the 35 + 3 generated registers (read back as a diagnostic), NV2A
   flat-panel and CRTC timing, then EN_OUT (0xC4), TIMING_RST and 0xBA ← DAC enables | SLAVER.
+
+## 10. Conexant HD component as implemented
+- **Encoder:** the datasheet's Table E-1 (24-bit RGB in, YPbPr out) per format, checked by the generator, with three
+  documented deviations: Pr/Pb sync disabled (the table's own EIA-770.3 note), the Xbox pads and alternate RGB input
+  in 0x32 (as for SD), and EN_XCLK clear for 480p (the table's 8C would take the clock from CLKI, contradicting its
+  own pseudo-master setting). PLL: 27 MHz (480p), 74.25 MHz (720p, 1080i: 60 Hz family). Sequence: SRESET, 0xBA ←
+  0x3F, the 12 registers (read back), NV2A timing, EN_OUT, **75 ms** (Table E-1's wait), TIMING_RST, DAC enables.
+- **NV2A:** the standard rasters (CEA-861 / SMPTE 293M: 858 × 525; SMPTE 296M: 1650 × 750; SMPTE 274M: 2200 × 1125,
+  per field) on the flat-panel generator, HSYNC two clocks after nominal (Cromwell's 480p value). 640 × 480p is
+  centred in the 720-wide 480p raster (sync at 696 instead of 736), so all three HD formats run at the standard
+  clock.
+- **Tested in xemu** (`run.py --hd`, `make run HD=1`): Halo picks 480p (0x88070701), Enter the Matrix 720p
+  (0x880B0A02) or 1080i (0x880E0C03); the encoder registers read back as generated. xemu does not show the analog
+  side, so the picture on a real TV is untested.
+- **Unverified:** 1080i on the flat-panel generator (the encoder needs VSYNC within ±5 clocks of mid-line on alternate
+  fields; whether the NV2A's flat-panel timing does this like its CRTC is unknown), the HSYNC offset, and 60 Hz vs
+  59.94 Hz for 720p/1080i (74.25 vs 74.176 MHz; both are standard).
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.

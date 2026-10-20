@@ -14,6 +14,7 @@ make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
                                 # BIOS_BASE=its.bin BIOS_NAME=name (state xemu-state/<name>-<instance>)
                                 # MEMORY=128 on any run target: a 128 MB console
+                                # HD=1 (or HD=480p,720p): HDTV AV pack + EEPROM HD modes, so games use 480p/720p/1080i
 make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
 make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
 make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
@@ -148,9 +149,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - Memory units come last.
    - 7 (in progress): **TV encoders for real hardware** (`../spec/oxos-internal/tv-encoders.md`). Done: the encoder is
      found by a bus probe (Conexant, Focus, Xcalibur) and reported as the retail kernels do; Conexant SD modes
-     (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB) are computed from the CX25871 datasheet by
-     `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing (`make test-encoders`). Next: Focus SD, HD
-     and SD component on both, encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
+     (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB) and HD component (480p, 720p, 1080i) are computed
+     from the CX25871 datasheet by `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing
+     (`make test-encoders`; `make run HD=1` for games' HD modes). Next: Focus HD, SD component, encoder options, then
+     testing on real consoles. Xcalibur (1.6) waits for a clean
      source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,

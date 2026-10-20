@@ -151,7 +151,7 @@ struct AVP_TIMING {
     BOOLEAN Interlaced;
 };
 static const AVP_TIMING AvpTimings[] = {
-    {2, 0x07, 640, 656, 752, 800, 480, 490, 492, 525, FALSE},      // 640x480p
+    {2, 0x07, 640, 696, 758, 858, 480, 489, 495, 525, FALSE},      // 640x480p: centred in the 720x480p raster
     {2, 0x08, 720, 736, 798, 858, 480, 489, 495, 525, FALSE},      // 720x480p
     {2, 0x0A, 1280, 1390, 1430, 1650, 720, 725, 730, 750, FALSE},  // 1280x720p
     {2, 0x0C, 1920, 2008, 2052, 2200, 540, 542, 547, 562, TRUE},   // 1920x1080i
@@ -272,30 +272,54 @@ static void AvpCxProgram(ULONG Mode, const AVP_SD_MODE &m) {
 static void AvpCxStart(ULONG Mode) {
     ULONG v;
     AvpCxWrite(0xC4, 0x01); // EN_OUT: CLKO (the NV2A's pixel clock) and the timing outputs on
+    if ((Mode >> 30) == 2)
+        KeStallExecutionProcessor(75000); // HD: the datasheet's wait before the timing reset (Table E-1)
     if (NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_CONEXANT, 0x6C, FALSE, &v)))
         AvpCxWrite(0x6C, (UCHAR)(v | 0x80)); // TIMING_RST (self-clearing)
     AvpOutputControl = (UCHAR)((Mode >> 24) & 0x0F);
     AvpCxWrite(0xBA, (UCHAR)(AvpOutputControl | 0x20)); // DAC enables from the mode word, slave interface
 }
 
-// NV2A flat-panel timing generator, which drives the encoder's input (Cromwell VideoInitialization.c, GPL):
-// active area at 0, totals and sync positions from the generated mode.
-static void AvpProgramTvTiming(volatile UCHAR *regs, const AVP_SD_MODE &m) {
+// NV2A flat-panel timing generator, which drives the encoder's input (register use as in Cromwell's
+// VideoInitialization.c, GPL): active area from 0, totals as total - 1, sync positions as given.
+static void AvpProgramTvTiming(volatile UCHAR *regs, ULONG Width, ULONG Height, ULONG HTotal, ULONG HSyncStart,
+                               ULONG HSyncEnd, ULONG VTotal, ULONG VSyncStart, ULONG VSyncEnd) {
     auto fp = [&](ULONG offset, ULONG value) { *(volatile ULONG *)(regs + 0x680800 + offset) = value; };
-    fp(0x00, m.Height - 1);          // vertical display end
-    fp(0x04, m.VTotal - 1);          // vertical total
-    fp(0x08, m.Height - 1);          // vertical CRTC
-    fp(0x0C, m.VSyncStart);
-    fp(0x10, m.VSyncStart + 3);
+    fp(0x00, Height - 1);            // vertical display end
+    fp(0x04, VTotal - 1);            // vertical total
+    fp(0x08, Height - 1);            // vertical CRTC
+    fp(0x0C, VSyncStart);
+    fp(0x10, VSyncEnd);
     fp(0x14, 0);                     // vertical valid start / end
-    fp(0x18, m.Height - 1);
-    fp(0x20, m.Width + 7);           // horizontal display end
-    fp(0x24, m.HTotal - 1);          // horizontal total
-    fp(0x28, m.Width - 1);           // horizontal CRTC
-    fp(0x2C, m.HSyncStart);
-    fp(0x30, m.HSyncStart + 32);
+    fp(0x18, Height - 1);
+    fp(0x20, Width + 7);             // horizontal display end
+    fp(0x24, HTotal - 1);            // horizontal total
+    fp(0x28, Width - 1);             // horizontal CRTC
+    fp(0x2C, HSyncStart);
+    fp(0x30, HSyncEnd);
     fp(0x34, 0);                     // horizontal valid start / end
-    fp(0x38, m.Width - 1);
+    fp(0x38, Width - 1);
+}
+
+// --- Conexant CX25871, HD component (Appendix E of the datasheet; tv-encoders.md §10): the encoder passes the
+// NV2A's standard HD raster through, so the flat-panel timing is the standard one (the CRTC table above), with the
+// HSYNC two clocks after its nominal position as Cromwell uses for 480p.
+static bool AvpIsCxHd(ULONG Mode) {
+    return AvpEncoderAddress == AV_ENCODER_CONEXANT && (Mode >> 30) == 2 && (Mode & 0x7F) >= 1 && (Mode & 0x7F) <= 3;
+}
+
+static void AvpCxProgramHd(ULONG Mode) {
+    const UCHAR *values = AvpCxHdValues[(Mode & 0x7F) - 1];
+    AvpCxWrite(0xBA, 0x80); // SRESET
+    AvpCxWrite(0xBA, 0x3F);
+    for (ULONG i = 0; i < sizeof(AvpCxHdRegs); i++)
+        AvpCxWrite(AvpCxHdRegs[i], values[i]);
+    ULONG mismatches = 0, v;
+    for (ULONG i = 0; i < sizeof(AvpCxHdRegs); i++)
+        if (!NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_CONEXANT, AvpCxHdRegs[i], FALSE, &v)) || (UCHAR)v != values[i])
+            mismatches++;
+    AvpEncoderMismatches = mismatches;
+    AvpEncoderProgrammed = Mode;
 }
 
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
@@ -323,7 +347,14 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
             AVP_TIMING t = {0, 0, sd->Width, (USHORT)(sd->HTotal - 32), (USHORT)(sd->HTotal - 16), sd->HTotal,
                             sd->Height, sd->VSyncStart, (USHORT)(sd->VSyncStart + 3), sd->VTotal, FALSE};
             AvpProgramTiming(regs, t);
-            AvpProgramTvTiming(regs, *sd);
+            AvpProgramTvTiming(regs, sd->Width, sd->Height, sd->HTotal, sd->HSyncStart, sd->HSyncStart + 32,
+                               sd->VTotal, sd->VSyncStart, sd->VSyncStart + 3);
+        } else if (AvpIsCxHd(Mode)) {
+            const AVP_TIMING &t = *AvpFindTiming(Mode);
+            AvpCxProgramHd(Mode);
+            AvpProgramTiming(regs, t);
+            AvpProgramTvTiming(regs, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart + 2, t.HSyncEnd + 2, t.VTotal,
+                               t.VSyncStart, t.VSyncEnd);
         } else {
             AvpProgramTiming(regs, *AvpFindTiming(Mode));
         }
@@ -336,7 +367,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         regs[0xC03C3] = 0x01;
         AvpVgaGraphicsMode(regs);
         regs[0xC03C2] = 0xE3; // misc output: 25 MHz clock, negative syncs
-        if (sd)
+        if (sd || AvpIsCxHd(Mode))
             AvpCxStart(Mode);
         AvpCurrentMode = Mode;
     }

@@ -9,6 +9,11 @@ XBAPI NTSTATUS NTAPI FscSetCacheSize(ULONG);
 XBAPI NTSTATUS NTAPI PhyInitialize(BOOLEAN, PVOID);
 XBAPI ULONG NTAPI PhyGetLinkState(BOOLEAN);
 extern volatile ULONG KiTestXcDone, KiTestFatxDone;
+XBAPI ULONG NTAPI AvSetDisplayMode(PVOID, ULONG, ULONG, ULONG, ULONG, ULONG);
+XBAPI void NTAPI AvSendTVEncoderOption(PVOID, ULONG, ULONG, PULONG);
+extern volatile UCHAR AvpEncoderAddress;
+extern volatile ULONG AvpEncoderProgrammed, AvpEncoderMismatches;
+volatile ULONG KiTestAvModesTried, KiTestAvModesOk; // TV encoder modes set / programmed and read back correctly
 
 volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
     KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscScatterOk, KiTestMiscDone;
@@ -151,6 +156,25 @@ static void NTAPI MiscControllerThread(PVOID) {
         LONGLONG rate = last.QuadPart - start.QuadPart, f = KeQueryPerformanceFrequency().QuadPart;
         KiTestMiscPmTicksPerSecond = (ULONG)rate;
         KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
+    }
+
+    // TV encoder (spec/oxos-internal/tv-encoders.md): on a Conexant encoder (xemu's default model) every SD and HD
+    // mode word programs the generated registers, which read back as written; then the previous mode is restored.
+    if (AvpEncoderAddress == 0x8A) {
+        static const ULONG modes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
+                                      0x2001010B, 0x60030307, 0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
+        ULONG previous = 0;
+        AvSendTVEncoderOption(nullptr, 0x0D, 0, &previous);
+        ULONG fb = *(volatile ULONG *)0xFD600800, ok = 0;
+        for (ULONG mode : modes) {
+            AvSetDisplayMode((PVOID)0xFD000000, 0, mode, 0x12, 640 * 4, fb);
+            if (AvpEncoderProgrammed == mode && AvpEncoderMismatches == 0)
+                ok++;
+        }
+        KiTestAvModesTried = sizeof(modes) / sizeof(modes[0]);
+        KiTestAvModesOk = ok;
+        if (previous)
+            AvSetDisplayMode((PVOID)0xFD000000, 0, previous, 0x12, 640 * 4, fb);
     }
 
     KiTestMiscPhyStatus = PhyInitialize(TRUE, nullptr);

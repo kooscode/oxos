@@ -42,6 +42,11 @@ ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/
 ap.add_argument("--state", help="directory for a persistent HDD copy and EEPROM")
 ap.add_argument("--fresh", action="store_true", help="start the --state directory over from --hdd")
 ap.add_argument("--widescreen", action="store_true", help="EEPROM widescreen flag (16:9 in games that support it)")
+ap.add_argument("--hd", nargs="?", const="480p,720p,1080i", metavar="MODES",
+                help="HDTV AV pack and the EEPROM's HD mode flags (default all: 480p,720p,1080i), so games that "
+                "support HD modes use them (component output, as HDMI adapters take)")
+ap.add_argument("--avpack", choices=["composite", "svideo", "scart", "hdtv", "vga", "rfu", "none"],
+                help="the AV cable xemu presents (default: xemu's own, composite; hdtv with --hd)")
 ap.add_argument("--aspect", choices=["auto", "native", "4x3", "16x9"], help="xemu aspect ratio (default auto)")
 ap.add_argument("--size", choices=SIZES, help="window size")
 ap.add_argument("--scale", type=int, choices=range(1, 11), metavar="1-10", help="render resolution multiplier")
@@ -83,7 +88,8 @@ def config(path, extra=""):
         display.append(f"[display.quality]\nsurface_scale = {a.scale}\n")
     open(path, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n" + "\n".join(display)
-        + (f"\n[sys]\nmem_limit = '{a.memory}'\n" if a.memory else "") + "\n[sys.files]\n"
+        + ("\n[sys]\n" + (f"mem_limit = '{a.memory}'\n" if a.memory else "")
+           + (f"avpack = '{a.avpack}'\n" if a.avpack else "") if a.memory or a.avpack else "") + "\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.abspath(eeprom)}'\n"
@@ -236,14 +242,15 @@ def create_eeprom():
     return os.path.exists(eeprom)
 
 
-def set_widescreen():
-    """User settings section 0x60-0xBF: video flags (setting 8) at 0x94, widescreen = 0x00010000; the section's
-    first dword makes it sum to 0xFFFFFFFF (32-bit sum with end-around carry, spec 12)."""
+def set_video_flags(bits, what):
+    """User settings section 0x60-0xBF: video flags (setting 8) at 0x94: widescreen 0x00010000, HD modes 0x00020000
+    (720p), 0x00040000 (1080i), 0x00080000 (480p) (as the Microsoft dashboard writes them with all HD modes on); the
+    section's first dword makes it sum to 0xFFFFFFFF (32-bit sum with end-around carry, spec 12)."""
     data = bytearray(open(eeprom, "rb").read())
     flags, = struct.unpack_from("<I", data, 0x94)
-    if flags & 0x00010000:
+    if flags & bits == bits:
         return
-    struct.pack_into("<I", data, 0x94, flags | 0x00010000)
+    struct.pack_into("<I", data, 0x94, flags | bits)
     struct.pack_into("<I", data, 0x60, 0)
     total = 0
     for i in range(0x60, 0xC0, 4):
@@ -251,7 +258,7 @@ def set_widescreen():
         total = (total & 0xFFFFFFFF) + (total >> 32)
     struct.pack_into("<I", data, 0x60, ~total & 0xFFFFFFFF)
     open(eeprom, "wb").write(data)
-    print("EEPROM: widescreen on")
+    print(f"EEPROM: {what} on")
 
 
 # Stopped with a signal (kill, closing the terminal): close xemu too and clean up, instead of leaving it running.
@@ -259,11 +266,15 @@ signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
 signal.signal(signal.SIGHUP, lambda *_: sys.exit(1))
 p = dumper = watcher = None
 try:
-    if a.widescreen:
-        if os.path.exists(eeprom) or create_eeprom():
-            set_widescreen()
-        else:
-            print("warning: no EEPROM to set the widescreen flag in", file=sys.stderr)
+    if a.hd and not a.avpack:
+        a.avpack = "hdtv"
+    hd_bits = sum({"480p": 0x00080000, "720p": 0x00020000, "1080i": 0x00040000}[m] for m in (a.hd or "").split(",") if m)
+    for wanted, bits, what in ((a.widescreen, 0x00010000, "widescreen"), (a.hd, hd_bits, a.hd)):
+        if wanted:
+            if os.path.exists(eeprom) or create_eeprom():
+                set_video_flags(bits, what)
+            else:
+                print(f"warning: no EEPROM to set the {what} flags in", file=sys.stderr)
     cfg = os.path.join(work, "xemu.toml")
     config(cfg, f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "")
     print(f"xemu: {a.bios}" + (f" + {a.iso}" if a.iso else " (no disc)")

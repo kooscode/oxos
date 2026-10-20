@@ -504,6 +504,8 @@ def misc_checks(mon):
         "FATX scatter/gather: NtWriteFileGather + NtReadFileScatter round trip": mon.read("KiTestMiscScatterOk") == 1,
         "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
+        "TV encoder: every SD and HD mode word programs the Conexant registers (read back)":
+            mon.read("KiTestAvModesTried") == 12 and mon.read("KiTestAvModesOk") == 12,
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 
