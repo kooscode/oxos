@@ -9,7 +9,7 @@ volatile ULONG KiTestFatxReadOk, KiTestFatxReadSum, KiTestFatxReadLength, KiTest
     KiTestFatxTotalClusters, KiTestFatxSerial, KiTestFatxDone;
 volatile char KiTestFatxDirNames[64];
 // exFAT disk: a title-style format of X: (Partition3) through its volume handle empties the folder
-// (spec/oxos-internal/01-exfat-storage-spec.md §5); E: refuses it.
+// (spec/oxos-internal/03-exfat-storage-spec.md §5); E: refuses it.
 volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk;
 extern volatile ULONG KiTestIdexDone;
 

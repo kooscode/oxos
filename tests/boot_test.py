@@ -225,7 +225,7 @@ def run_checks(mon, hdd=None, title_map=None):
 
 
 def is_exfat_disk(q):
-    """A GPT disk (protective MBR): the exFAT layout (spec/oxos-internal/01-exfat-storage-spec.md)."""
+    """A GPT disk (protective MBR): the exFAT layout (spec/oxos-internal/03-exfat-storage-spec.md)."""
     s0 = q.read(0, 512)
     return s0[510:512] == b"\x55\xAA" and s0[446 + 4] == 0xEE
 
@@ -290,7 +290,7 @@ def idex_exfat_checks(mon, q):
     }
 
 
-# 48-bit addressing (spec/oxos-internal/00-lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
+# 48-bit addressing (spec/oxos-internal/02-lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
 # limit, as (first LBA, sector count, tag); kernel/src/ke/selftest_idex.cpp has the same list.
 def lba48_writes(sectors):
     return [(0x0FFFFFFE, 1, 1), (0x0FFFFFFF, 1, 2), (0x10000000, 1, 3), (0x10000001, 1, 4), (0x0FFFFF80, 512, 5),
@@ -380,7 +380,7 @@ def fatx_checks(mon, hdd):
 
 
 def exfat_format_checks(mon, q):
-    """exFAT disk: a title-style format of X: empties the folder; E: refuses it (01-exfat-storage-spec.md §5)."""
+    """exFAT disk: a title-style format of X: empties the folder; E: refuses it (03-exfat-storage-spec.md §5)."""
     if not is_exfat_disk(q):
         return {}
     total, free = mon.read("KiTestExfatFormatTotal"), mon.read("KiTestExfatFormatFree")
@@ -545,7 +545,7 @@ ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE
 
 def encoder_checks(mon, name, self_test=False):
     """The video encoder xemu presents (-machine video-encoder=NAME) is found by the bus probe and reported in
-    XboxHardwareInfo.Flags as the reference would (spec/oxos-internal/04-tv-encoders.md §2, spec/stock/19 §1)."""
+    XboxHardwareInfo.Flags as the reference would (spec/oxos-internal/06-tv-encoders.md §2, spec/stock/19 §1)."""
     address, flag, kind = ENCODERS[name]
     for _ in range(40):
         if mon.read("AvpEncoderAddress") & 0xFF:
@@ -634,7 +634,7 @@ def udf_checks(mon):
 
 
 def serial_checks(path):
-    """Debug serial port (spec/stock/18): the boot banner, the start-up steps and the title load reach the SuperIO."""
+    """Debug serial port (spec/oxos-internal/01-debug-serial.md): the boot banner, the start-up steps and the title load reach the SuperIO."""
     text = open(path, "rb").read().decode("latin1") if os.path.exists(path) else ""
     print(f"  (serial log: {len(text)} bytes, {text.count(chr(10))} lines)")
     return {

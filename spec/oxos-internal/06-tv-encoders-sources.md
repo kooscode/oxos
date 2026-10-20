@@ -1,6 +1,6 @@
 # TV encoders: source inventory (phase 1)
 
-Every source used, or looked for, by the TV-encoder design (04-tv-encoders.md). Each source says which kinds of fact
+Every source used, or looked for, by the TV-encoder design (06-tv-encoders.md). Each source says which kinds of fact
 it is **authoritative** for:
 
 - **CHIP:** what a register field means and what the chip does with it.
@@ -46,4 +46,4 @@ datasheet's example tables, which describe the vendor's evaluation board.
   (Cromwell) for pad drive, sync polarity and the NV2A's colour space.
 - Focus board facts rest on Cromwell's defaults alone.
 - 720p, 1080i and all Focus HD output have **no** Xbox-specific public source that ran on hardware. Those paths rely
-  on CHIP + STANDARD facts and hardware testing (04-tv-encoders-verification.md).
+  on CHIP + STANDARD facts and hardware testing (06-tv-encoders-verification.md).

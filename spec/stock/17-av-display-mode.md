@@ -98,14 +98,14 @@ CGMS << 12 (ETSI EN 300 294 WSS); other classes nothing. Conexant: 0x60 ← (wor
 0x62 ← word >> 4, 0x64 ← word >> 12. Focus: 0x85 ← word & 0xF, 0x84 ← word >> 4, 0x83 ← word >> 12 (field 1), and the
 same into 0x88, 0x87, 0x86 (field 0).
 **Ours:** the same option behaviour; the clock-dependent Conexant values (caption timing CCR_START / CC_ADD, the WSS
-bit clock WSSINC) are computed from the datasheet's equations per mode (spec/oxos-internal/04-tv-encoders.md §13), not
+bit clock WSSINC) are computed from the datasheet's equations per mode (spec/oxos-internal/06-tv-encoders.md §13), not
 taken from the reference's table. Macrovision stays off (options 1 and 0x0A do nothing; the CGMS-A word carries
 level 0).
 
 ## 6. Ours (status)
 `src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7). On Conexant and
 Focus encoders, SD (composite, S-video, SCART, component) and HD component mode words also program the encoder and
-the NV2A flat-panel timing from OXOS's own computed tables (spec/oxos-internal/04-tv-encoders.md, milestone 7); VGA and
+the NV2A flat-panel timing from OXOS's own computed tables (spec/oxos-internal/06-tv-encoders.md, milestone 7); VGA and
 the Xcalibur leave the encoder alone. Not yet confirmed on real hardware.
 
 The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF for progressive output: the
@@ -186,7 +186,7 @@ during cold boot (`src/hal/splash.cpp`):
 
 ## 8. Encoder programming per class (reference behaviour, 4627)
 Evidence: the INIT tables at 0x800a7c18–0x800aa0c0 (Focus and Conexant sets; layout §1), decoded field by field
-with the chips' datasheets (sources in spec/oxos-internal/04-tv-encoders-sources.md). This section records **what
+with the chips' datasheets (sources in spec/oxos-internal/06-tv-encoders-sources.md). This section records **what
 the reference programs and what it means**. Per-mode values (timings, clocks, gains, filter taps) are table data
 and are not reproduced. "Class" = mode word bits 30–31.
 The 5838 kernel's Conexant tables are identical to 4627's except the NV2A rows; its Focus tables differ.

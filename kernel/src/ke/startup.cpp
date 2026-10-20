@@ -48,7 +48,7 @@ constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584
 XK_PERSIST ULONG KiEepromKeyStates[8][10];
 XK_PERSIST ULONG KiEepromKeyStateCount;
 
-// Serial log of the start-up steps (SERIAL=1 builds, spec/stock/18).
+// Serial log of the start-up steps (SERIAL=1 builds, spec/oxos-internal/01-debug-serial.md).
 #define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {

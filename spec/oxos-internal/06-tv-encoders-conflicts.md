@@ -4,9 +4,9 @@ Every point where OXOS's implementation (as of 931a7c6) and a source disagree, o
 each other. Rules:
 
 - No conflict is settled by preference, or by calling a source's value a typo.
-- An entry is **resolved** only when a source authoritative for that kind of fact (04-tv-encoders-sources.md)
+- An entry is **resolved** only when a source authoritative for that kind of fact (06-tv-encoders-sources.md)
   decides it.
-- Otherwise it goes on the **hardware test** list (04-tv-encoders-verification.md §4), with the variants to try.
+- Otherwise it goes on the **hardware test** list (06-tv-encoders-verification.md §4), with the variants to try.
 
 The reference (S9) is reported as agree / differ only.
 
