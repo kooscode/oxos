@@ -15,6 +15,7 @@ make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
                                 # BIOS_BASE=its.bin BIOS_NAME=name (state xemu-state/<name>-<instance>)
                                 # MEMORY=128 on any run target: a 128 MB console
                                 # HD=1 (or HD=480p,720p): HDTV AV pack + EEPROM HD modes, so games use 480p/720p/1080i
+                                # ENCODER=focus|xcalibur: the video encoder xemu presents (default conexant)
 make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec 18) printed in the terminal
 make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
 make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
@@ -151,8 +152,8 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      found by a bus probe (Conexant, Focus, Xcalibur) and reported as the retail kernels do; Conexant SD modes
      (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB, component) and HD component (480p, 720p, 1080i) are computed
      from the CX25871 datasheet by `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing
-     (`make test-encoders`; `make run HD=1` for games' HD modes). Focus HD component (480p, 720p, 1080i) from
-     the chip's own presets. Next: Focus SD, encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
+     (`make test-encoders`; `make run HD=1` for games' HD modes). Focus HD component and SD (composite, S-video,
+     SCART, component) from the chip's own presets (`make run ENCODER=focus` in xemu). Next: encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
      source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,

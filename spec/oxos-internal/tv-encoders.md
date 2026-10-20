@@ -2,9 +2,9 @@
 
 Status: Conexant done for SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60 at 640 and 720 wide; composite + S-video and SCART
 RGB, **SD component** 480i/576i) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
-flat-panel timing; **Focus HD component** (§11); bus probe, flags, encoder type, 4-byte SMBus form;
+flat-panel timing; **Focus HD component** (§11) and **Focus SD** (§12: composite, S-video, SCART, component); bus probe, flags, encoder type, 4-byte SMBus form;
 `make test-encoders` and a boot self-test of every mode on both encoders. Not yet tried on a real console. To do:
-Focus SD (composite, S-video, SCART, component), options. Priority (decided 2026-10-20): HD
+encoder options (flicker filter, WSS/CGMS, captions), hardware testing. Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
@@ -205,6 +205,23 @@ Per encoder, from the datasheets; the option numbers and query results as the re
   the chip (4627, 0x800148f4 / 0x80014a7b); on a Focus that register is HACT_WD.
 - **Unverified on hardware:** that the QPR preset alone gives the right HD timing and colour matrix for the NV2A's
   RGB input (Cromwell sets the matrix and timing registers by hand), the PLL charge-pump bits (left 0, as Cromwell).
+
+## 12. Focus SD as implemented
+- **Clocking without scaling:** the GPU sends the TV's frame proportions (hardware reference §4.1, no vertical
+  scaling: VSC = 0): 858 × 525 at 59.94 Hz (NTSC, NTSC-J, PAL-60) or 864 × 625 at 50 Hz (PAL), progressive, which is
+  exactly 27 MHz, made by the PLL alone (§2.11; the 480p dividers 125 / 1000 / 8; NCON = NCOD = 1 as Freescale's SD
+  presets).
+- **QPR preset:** init 9 | NVIDIA | SDTV | flicker filter | output (composite/S-video 0, YPrPb 1, SCART 2) | input
+  640 or 720 × 480 | NTSC or PAL. Then IHO / IVO / IHW (§4.3: IHO = HTOTAL − HSYNC position, IVO likewise, centring
+  480 lines in 487 or, for PAL 50 Hz, in 576 with bars), HSC for the full active line (711 / 702 TV pixels:
+  640 upscales by HUSC 28, 720 downscales by HDSC 252, §4.2), FIFO_LAT 130 (up) / 164 (down) (fs453.h constants),
+  BYPASS 0. PWR_MGNT last: HD clock off (CLK_SOFF 1) | DAC disables.
+- **Limits:** the QPR knows NTSC and PAL 50 Hz only. NTSC-J uses the NTSC preset (its 7.5 IRE setup stays, so black is
+  slightly lifted on Japanese TVs); PAL-60 uses it too: right for component and SCART RGB (no subcarrier), but
+  composite / S-video then carry NTSC colour (PAL-60's subcarrier would need the chroma registers, whose field
+  layout no public source documents).
+- **Tested in xemu:** the boot self-test sets all 15 mode words on the Focus model (`make test-encoders`); the xemu
+  dashboard picks 480i component (0x0801010D) on it and reports "Focus FS454".
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.

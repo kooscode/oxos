@@ -573,7 +573,7 @@ def encoder_checks(mon, name, self_test=False):
                 break
             time.sleep(0.25)
         tried, good = mon.read("KiTestAvModesTried"), mon.read("KiTestAvModesOk")
-        want = 15 if name == "conexant" else 4
+        want = 15
         print(f"  self-test: {good} of {tried} mode words programmed and read back")
         checks[f"{name}: all {want} supported mode words program the encoder (self-test)"] = tried == want and good == want
     if name == "xcalibur":

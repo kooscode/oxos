@@ -45,6 +45,8 @@ ap.add_argument("--widescreen", action="store_true", help="EEPROM widescreen fla
 ap.add_argument("--hd", nargs="?", const="480p,720p,1080i", metavar="MODES",
                 help="HDTV AV pack and the EEPROM's HD mode flags (default all: 480p,720p,1080i), so games that "
                 "support HD modes use them (component output, as HDMI adapters take)")
+ap.add_argument("--encoder", choices=["conexant", "focus", "xcalibur"],
+                help="the video encoder xemu presents (default conexant; focus = 1.4-1.5 consoles, xcalibur = 1.6)")
 ap.add_argument("--avpack", choices=["composite", "svideo", "scart", "hdtv", "vga", "rfu", "none"],
                 help="the AV cable xemu presents (default: xemu's own, composite; hdtv with --hd)")
 ap.add_argument("--aspect", choices=["auto", "native", "4x3", "16x9"], help="xemu aspect ratio (default auto)")
@@ -299,7 +301,8 @@ try:
     if a.gdb:
         gdb = ["-gdb", f"tcp:127.0.0.1:{a.gdb}", "-S"]
         print(f"GDB server: localhost:{a.gdb} (paused at power-on until the debugger continues)")
-    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb, stdout=open(os.path.join(work, "xemu.log"), "w"),
+    encoder = ["-machine", f"video-encoder={a.encoder}"] if a.encoder else []
+    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb + encoder, stdout=open(os.path.join(work, "xemu.log"), "w"),
                          stderr=subprocess.STDOUT, start_new_session=True)
     if a.serial:
         threading.Thread(target=follow, args=(serial_log, p, dumper.on_serial if dumper else None),
