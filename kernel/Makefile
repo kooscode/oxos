@@ -227,6 +227,14 @@ test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
 	    --relaunch --boot-wait 1
 
+# Video encoder phase: the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus probe
+# finds it and XboxHardwareInfo reports it (spec/oxos-internal/tv-encoders.md).
+test-encoders: $(HDD_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
+	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \
+	    --encoder $$e --boot-wait 2 || exit 1; done
+
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
 test-fatal:
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
@@ -385,4 +393,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean

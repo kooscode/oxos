@@ -26,6 +26,7 @@ make run-xbe XBE='F:\apps\demo\default.xbe' [STATE=...]  # run an XBE from the h
                                 # xemu-state/oxos-exfat/ (an exFAT copy of the play disk, made on first use)
 make run-trace-xbe XBE=... [STATE=...]  # the same with the trace build: serial output here, call record on a crash
 make test-exfat                 # the self-tests on an exFAT disk (xemu-state/oxos-xemu-exfat/): E: as a folder
+make test-encoders              # the encoder probe and flags on xemu's Conexant, Focus and Xcalibur models
 make test-lba48                 # the self-tests on a 2 TB disk (xemu-state/oxos-xemu-lba48/): 48-bit addressing
 make test-controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
                                 # the tests/controller-test-title title (nxdk, fetched into ../third_party) checks each one
