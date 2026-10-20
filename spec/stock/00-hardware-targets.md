@@ -7,7 +7,8 @@ Observed: the video code (0x8002f…–0x80030…) talks over SMBus to only two 
 - No Xcalibur (1.6) encoder code was found. The only `push 0xE0` in the image is the IDE device/head
   value at 0x80024621, not an encoder.
 => This kernel targets console revisions **1.0–1.5**. Supporting **1.6** means also reversing a
-later kernel (5713/5838) for its Xcalibur and 1.6-specific code.
+later kernel (5713/5838) for its Xcalibur and 1.6-specific code (done for the encoder driver: spec 19; OXOS's own
+encoder support: spec/oxos-internal/tv-encoders.md, Conexant and Focus, hardware testing TBD).
 User-supplied MCPX ROM = **MCPX 1.0** (the version used in 1.0 consoles).
 
 ## Boot chain on hardware (what our image must satisfy)

@@ -1,10 +1,11 @@
-# TV encoders: Conexant CX25871 and Focus FS454 (design)
+# TV encoders: Conexant CX25871 and Focus FS454
 
 Status: Conexant done for SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60 at 640 and 720 wide; composite + S-video and SCART
 RGB, **SD component** 480i/576i) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
 flat-panel timing; **Focus HD component** (§11) and **Focus SD** (§12: composite, S-video, SCART, component); bus probe, flags, encoder type, 4-byte SMBus form;
-`make test-encoders` and a boot self-test of every mode on both encoders. Not yet tried on a real console. To do:
-encoder options (flicker filter, WSS/CGMS, captions), hardware testing. Priority (decided 2026-10-20): HD
+`make test-encoders` and a boot self-test of every mode on both encoders. **Hardware testing TBD:** nothing here has
+run on a real console yet; the AV drivers and encoder tables must be confirmed on 1.0–1.5 consoles (§7.4, Open).
+To do: encoder options (flicker filter, WSS/CGMS, captions). Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
