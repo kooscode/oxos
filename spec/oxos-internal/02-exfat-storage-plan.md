@@ -1,6 +1,6 @@
 # exFAT storage for OXOS: plan
 
-Design: `exfat-storage-spec.md`. Idea: one PC-friendly exFAT volume, Xbox partitions as folders, FATX kept for
+Design: `01-exfat-storage-spec.md`. Idea: one PC-friendly exFAT volume, Xbox partitions as folders, FATX kept for
 disks shared with other BIOSes; exFAT memory units last.
 
 ## Why

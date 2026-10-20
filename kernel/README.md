@@ -71,7 +71,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 3. Kernel services:
    - 3a: object manager, handles, namespace, symbolic links, Nt event/mutant/semaphore/timer objects, Ps threads (spec 10). ✅ passes in xemu.
    - 3b: I/O manager — devices, IRPs, StartIo, file objects, Nt*File services, completion ports (spec 11). ✅ passes in xemu.
-   - 3c-1: IDE channel, hard disk DMA driver, partition devices (stock LBA28 table) (spec 04). ✅ passes in xemu with a copy of the HDD image. Later: 48-bit addressing for disks over 128 GiB (spec/oxos-internal/lba48.md), `make test-lba48` on a 2 TB disk.
+   - 3c-1: IDE channel, hard disk DMA driver, partition devices (stock LBA28 table) (spec 04). ✅ passes in xemu with a copy of the HDD image. Later: 48-bit addressing for disks over 128 GiB (spec/oxos-internal/00-lba48.md), `make test-lba48` on a 2 TB disk.
    - 3c-2: FATX file system — create/read/write/rename/delete, directory and volume queries (spec 04b). ✅ passes in xemu; written files verified on the disk copy by an independent reader.
    - 3c-3: DVD (ATAPI), XDVDFS, RAW file system (spec 04c). ✅ passes in xemu with a generated XISO.
 4. XBE loader and title launch (spec 05):
@@ -131,10 +131,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - Each object rebuilds when any header it includes changes.
      - Boot tests run on any formatted disk.
      - `make test-controller`: an nxdk title and a virtual gamepad check all 24 inputs.
-   - 18: **48-bit disk addressing (LBA48)** for disks over 128 GiB (`../spec/oxos-internal/lba48.md`). Disks up to 128 GiB
+   - 18: **48-bit disk addressing (LBA48)** for disks over 128 GiB (`../spec/oxos-internal/00-lba48.md`). Disks up to 128 GiB
      keep the retail 28-bit commands. `make test-lba48` checks a 2 TB disk: every test pattern must land at the right
      sector of the image, and a forced 28-bit driver is checked to fail.
-   - 19: **exFAT hard disks** (`../spec/oxos-internal/exfat-storage-spec.md`, `exfat-driver.md`).
+   - 19: **exFAT hard disks** (`../spec/oxos-internal/01-exfat-storage-spec.md`, `03-exfat-driver.md`).
      - A GPT (or MBR) disk with one exFAT volume. C:, E:, X:, Y: and Z: are the folders `/C`, `/E`, `/X`, `/Y`, `/Z`,
        and F: (`/F`) is the extra drive.
      - Titles see the retail partitions and sizes. E: and C: report at most 2 TB, and X/Y/Z report their retail
@@ -148,7 +148,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
        continues after a reboot. The dashboard boots from /C.
      - Memory units come last.
-   - 7 (in progress): **TV encoders for real hardware** (`../spec/oxos-internal/tv-encoders.md`). Done: the encoder is
+   - 7 (in progress): **TV encoders for real hardware** (`../spec/oxos-internal/04-tv-encoders.md`). Done: the encoder is
      found by a bus probe (Conexant, Focus, Xcalibur) and reported as the retail kernels do; Conexant SD modes
      (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB, component) and HD component (480p, 720p, 1080i) are computed
      from the CX25871 datasheet by `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing

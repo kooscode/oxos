@@ -180,7 +180,7 @@ test: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
-# 48-bit addressing (spec/oxos-internal/lba48.md): the self-tests on a 2 TB disk, a sparse copy of the test disk
+# 48-bit addressing (spec/oxos-internal/00-lba48.md): the self-tests on a 2 TB disk, a sparse copy of the test disk
 # grown with tests/qcow2.py --grow and kept in xemu-state/oxos-xemu-lba48/ (a few MB on the host). The kernel writes
 # test patterns either side of sector 0x0FFFFFFF and at the end of the disk; boot_test.py then finds each one at
 # exactly LBA * 512 in the image and checks that the start of the disk is untouched. The image itself is never
@@ -194,7 +194,7 @@ test-lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
-# exFAT disks (spec/oxos-internal/exfat-driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB,
+# exFAT disks (spec/oxos-internal/03-exfat-driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB,
 # 16 KB clusters, sparse), the test disk's C: and E: copied into /C and /E by tests/exfat.py; kept in
 # xemu-state/oxos-xemu-exfat/. The FATX suite then runs on E: as a folder of the volume, and tests/exfat.py checks the
 # whole volume afterwards (checksums, chains, bitmap).
@@ -231,7 +231,7 @@ test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 # a stale-table check, then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus
 # probe finds it, XboxHardwareInfo reports it, and on Conexant an SD mode set leaves the generated registers in the
 # encoder; then the self-test build on Focus, whose boot self-test sets every Focus mode word and reads the registers
-# back (spec/oxos-internal/tv-encoders.md).
+# back (spec/oxos-internal/04-tv-encoders.md).
 test-encoders: $(HDD_FETCH)
 	python3 -I $(ROOT)/tools/gen_tv_encoders.py --out $(OUT)/av_modes.check.inc >/dev/null
 	@cmp -s $(OUT)/av_modes.check.inc src/hal/av_modes.inc || { echo "src/hal/av_modes.inc is stale: run tools/gen_tv_encoders.py --out src/hal/av_modes.inc"; exit 1; }
