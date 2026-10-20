@@ -1,6 +1,8 @@
 # TV encoders: Conexant CX25871 and Focus FS454 (design)
 
-Status: phase 1 done (bus probe, flags, encoder type, 4-byte SMBus form, `make test-encoders`); phases 2–6 to do.
+Status: phases 1–2 done: bus probe, flags, encoder type, 4-byte SMBus form; Conexant SD (NTSC-M, NTSC-J, PAL 50 Hz,
+PAL-60 at 640 and 720 wide; composite + S-video and SCART RGB) computed by `tools/gen_tv_encoders.py` and programmed
+with the NV2A flat-panel timing; `make test-encoders`. Not yet tried on a real console. Phases 3–6 to do.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
 
@@ -134,14 +136,32 @@ Per encoder, from the datasheets; the option numbers and query results as the re
 1. **Done:** probe + flags + option 0x10 + the 4-byte SMBus form; `make test-encoders` boots with each xemu encoder.
    xemu's Xcalibur model is byte-wide (a block read returns its register 0 as the count), so 32-bit reads are only
    checked for completing on the bus.
-2. Generator + Conexant SD (NTSC-M first, then PAL, NTSC-J, PAL-60), validation 1–3.
+2. **Done:** generator + Conexant SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60), validation 1 and 3 (§9 records the
+   derivation).
 3. Focus SD.
 4. HD on both; SD component; VGA.
 5. Options: flicker filter, WSS/CGMS, captions.
 6. Hardware testing; Xcalibur when a clean source exists.
 
+## 9. Conexant SD as implemented (phase 2)
+- **Self-check first:** the generator reproduces the datasheet's autoconfiguration modes 0, 1, 8 and 9 (Appendix C:
+  640×480 and 640×400, NTSC and PAL) from their H_CLKO / H_CLKI / V_LINESI: every timing, clock, subcarrier and gain
+  field matches, within one LSB for the gains and burst start (the vendor's tool rounds differently).
+- **Derived from those modes, not from the text:** HSYNC_WIDTH is truncated; H_BLANKO = centring + 15 clocks (the
+  output pipeline); V_BLANKO centres on field line 140 (525) / 167 (625); the burst ends at 7.944 µs (NTSC) /
+  7.86 µs (PAL), slightly later than Table A-2.
+- **Ours:** V_LINESI = 2 × the output lines per field (480 lines, no vertical scaling), H_CLKO = the smallest even
+  value with HOC ≥ 0 (640 or 720 pixels across the full active line): e.g. NTSC 640: H_CLKO 1546, H_CLKI 773, 525
+  lines, 24.325 MHz; PAL 50 Hz: 242 active lines centred in 288 (bars).
+- **Board facts from Cromwell (GPL), unverifiable from the datasheet:** 1.8 V pads (DRVS 01), alternate 24-bit RGB
+  multiplexed input, active-high syncs, no BLANK* input, FLD_MODE 10; DAC routing (composite/S-video 0xCE = 0x19,
+  SCART 0xE1 with OUT_MODE 11); NV2A sync offsets (flat-panel HSYNC at H_CLKI − H_BLANKI − 7, VSYNC at V_LINESI −
+  V_BLANKI + 1).
+- **Kernel order:** SRESET, 0xBA ← 0x3F, the 35 + 3 generated registers (read back as a diagnostic), NV2A
+  flat-panel and CRTC timing, then EN_OUT (0xC4), TIMING_RST and 0xBA ← DAC enables | SLAVER.
+
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.
 - The exact picture size users prefer on real TVs (§3.3: full area for now; an option later).
-- The Conexant pseudo-master clock details on the Xbox board (which pins drive the NV2A pixel clock) — from the
-  datasheet's interface modes and, if needed, testing.
+- Hardware verification of the board facts above (pad level, sync polarity and offsets, DAC routing), the picture
+  position (H_BLANKO pipeline constant) and colour levels.

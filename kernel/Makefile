@@ -227,9 +227,13 @@ test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
 	    --relaunch --boot-wait 1
 
-# Video encoder phase: the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus probe
-# finds it and XboxHardwareInfo reports it (spec/oxos-internal/tv-encoders.md).
+# Video encoder phase: the generator's self-check (it reproduces the CX25871 datasheet's autoconfiguration modes) and
+# a stale-table check, then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus
+# probe finds it, XboxHardwareInfo reports it, and on Conexant an SD mode set leaves the generated registers in the
+# encoder (spec/oxos-internal/tv-encoders.md).
 test-encoders: $(HDD_FETCH)
+	python3 -I $(ROOT)/tools/gen_tv_encoders.py --out $(OUT)/av_modes.check.inc >/dev/null
+	@cmp -s $(OUT)/av_modes.check.inc src/hal/av_modes.inc || { echo "src/hal/av_modes.inc is stale: run tools/gen_tv_encoders.py --out src/hal/av_modes.inc"; exit 1; }
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
 	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \
