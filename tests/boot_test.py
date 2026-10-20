@@ -505,7 +505,7 @@ def misc_checks(mon):
         "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "TV encoder: every SD and HD mode word programs the Conexant registers (read back)":
-            mon.read("KiTestAvModesTried") == 12 and mon.read("KiTestAvModesOk") == 12,
+            mon.read("KiTestAvModesTried") == 15 and mon.read("KiTestAvModesOk") == 15,
         "misc suite finished": mon.read("KiTestMiscDone") == 1,
     }
 
@@ -573,7 +573,7 @@ def encoder_checks(mon, name, self_test=False):
                 break
             time.sleep(0.25)
         tried, good = mon.read("KiTestAvModesTried"), mon.read("KiTestAvModesOk")
-        want = 12 if name == "conexant" else 4
+        want = 15 if name == "conexant" else 4
         print(f"  self-test: {good} of {tried} mode words programmed and read back")
         checks[f"{name}: all {want} supported mode words program the encoder (self-test)"] = tried == want and good == want
     if name == "xcalibur":

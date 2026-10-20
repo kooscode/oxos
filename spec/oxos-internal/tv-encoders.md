@@ -1,10 +1,10 @@
 # TV encoders: Conexant CX25871 and Focus FS454 (design)
 
 Status: Conexant done for SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60 at 640 and 720 wide; composite + S-video and SCART
-RGB) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
+RGB, **SD component** 480i/576i) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
 flat-panel timing; **Focus HD component** (§11); bus probe, flags, encoder type, 4-byte SMBus form;
 `make test-encoders` and a boot self-test of every mode on both encoders. Not yet tried on a real console. To do:
-SD component, Focus SD, options. Priority (decided 2026-10-20): HD
+Focus SD (composite, S-video, SCART, component), options. Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
@@ -179,6 +179,13 @@ Per encoder, from the datasheets; the option numbers and query results as the re
 - **Unverified:** 1080i on the flat-panel generator (the encoder needs VSYNC within ±5 clocks of mid-line on alternate
   fields; whether the NV2A's flat-panel timing does this like its CRTC is unknown), the HSYNC offset, and 60 Hz vs
   59.94 Hz for 720p/1080i (74.25 vs 74.176 MHz; both are standard).
+
+## 10a. Conexant SD component as implemented
+- Rows 0x0D/0x0E (NTSC), 0x14/0x15 (PAL 50 Hz), 0x19/0x1A (PAL-60): the SD timing of the composite twin (0x01/0x02,
+  0x07/0x08, 0x0B/0x0C) plus the datasheet's Tables 1-27/1-28 for EIA-770.2-A component (checked by the generator):
+  MCOMPY/U/V = 0x80/0x90/0x66, OUT_MODE 10 (Pr / Y / Pb / Y_DLY: DAC A = Pr, B = Y, C = Pb, the HD wiring), no
+  setup, SYNC_AMP 0xF0 (300 mV, on Y only), MY 0x8C (700 mV white). The row says which output it is, so mode bit
+  29 only selects SCART for the composite rows.
 
 ## 11. Focus HD component as implemented
 - **The chip's own presets:** after CR ← GCC_CK_LVL and a soft reset, BYPASS ← bridge bypass (the scaler is unused
