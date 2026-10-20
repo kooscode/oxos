@@ -6,7 +6,7 @@ have no reference to study. The OXOS kernel is written from these documents only
 
 | Folder | Studied from | Content |
 |---|---|---|
-| [`stock/`](stock/) | the retail kernel, xboxkrnl.exe 1.0.4627.1 | what OXOS implements today: boot, executive, memory, objects, I/O, file systems, AV, crypto, debug serial |
+| [`stock/`](stock/) | the retail kernel, xboxkrnl.exe 1.0.4627.1 (spec 19: 1.0.5838.1, the 1.6 kernel) | what OXOS implements today: boot, executive, memory, objects, I/O, file systems, AV, crypto, debug serial; and the Xcalibur video encoder of 1.6 consoles ([`19-xcalibur-encoder.md`](stock/19-xcalibur-encoder.md)) |
 | [`cerbios/`](cerbios/) | the Cerbios 3.1.0 BIOS (its kernel, 1.0.8008.135, and its extension code) | features OXOS may add: 128 MB, large disks and partitions, a second hard disk, virtual disc images, IGR, video options, fan/LED/LCD/RTC, clocks, and more. Start at [`cerbios/00-overview.md`](cerbios/00-overview.md) |
 | [`oxos-internal/`](oxos-internal/) | OXOS's own designs (traced on OXOS, not studied from another binary) | features with no reference implementation: [`lba48.md`](oxos-internal/lba48.md) (48-bit disk addressing, implemented), [`exfat-storage-spec.md`](oxos-internal/exfat-storage-spec.md) (an exFAT hard disk with the Xbox partitions as folders, GPT and MBR) and its [`plan`](oxos-internal/exfat-storage-plan.md) |
 

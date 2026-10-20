@@ -10,7 +10,7 @@ At boot (INIT 0x800626e0, cold boot) the kernel picks one of two table sets by *
 - flag 0x20 set → **Focus FS454** (SMBus 0xD4), header at 0x80012AA4
 - clear → **Conexant CX25871** (SMBus 0x8A), header at 0x80012AB4
 The chosen set is copied from INIT into the STICKY section (so quick reboots keep it), the encoder address is stored
-at 0x8003B354 and a pointer to the header at 0x8003C434. (The 1.6 Xcalibur encoder, 0xE0, is not in this kernel.)
+at 0x8003B354 and a pointer to the header at 0x8003C434. (The 1.6 Xcalibur encoder, 0xE0, is not in this kernel; the 5838 kernel's Xcalibur driver is spec 19.)
 
 ### Header (eight 16-bit counts)
 | field | Conexant | Focus | meaning |
