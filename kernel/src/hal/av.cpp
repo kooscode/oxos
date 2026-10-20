@@ -353,17 +353,20 @@ static void AvpCxWrite(UCHAR Register, UCHAR Value) {
 // timing reset and DAC enables follow once the NV2A side is programmed (AvpCxStart).
 static void AvpCxProgram(ULONG Mode, const AVP_SD_MODE &m) {
     // The row's output: SD component (YPbPr), else composite/S-video, or SCART RGB with mode bit 29.
-    const UCHAR *output = AvpCxOutputRegs[m.Output ? m.Output : (Mode >> 29) & 1];
+    bool scart = !m.Output && (Mode >> 29) & 1;
+    const UCHAR *output = AvpCxOutputRegs[m.Output ? m.Output : scart];
     static const UCHAR outputRegs[3] = {0x6C, 0xCE, 0xD6};
+    // SCART RGB carries no 7.5 IRE setup, also on NTSC rows: SETUP (0xA2 bit 1) off (conflict X17).
+    auto value = [&](ULONG i) { return (UCHAR)(scart && AvpCxRegs[i] == 0xA2 ? m.Cx[i] & ~0x02 : m.Cx[i]); };
     AvpCxWrite(0xBA, 0x80); // SRESET
     AvpCxWrite(0xBA, 0x3F); // slave (pseudo-master) interface, all DACs off
     for (ULONG i = 0; i < sizeof(AvpCxRegs); i++)
-        AvpCxWrite(AvpCxRegs[i], m.Cx[i]);
+        AvpCxWrite(AvpCxRegs[i], value(i));
     for (ULONG i = 0; i < 3; i++)
         AvpCxWrite(outputRegs[i], output[i]);
     ULONG mismatches = 0, v;
     for (ULONG i = 0; i < sizeof(AvpCxRegs); i++)
-        if (!NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_CONEXANT, AvpCxRegs[i], FALSE, &v)) || (UCHAR)v != m.Cx[i])
+        if (!NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_CONEXANT, AvpCxRegs[i], FALSE, &v)) || (UCHAR)v != value(i))
             mismatches++;
     for (ULONG i = 0; i < 3; i++)
         if (!NT_SUCCESS(HalReadSMBusValue(AV_ENCODER_CONEXANT, outputRegs[i], FALSE, &v)) || (UCHAR)v != output[i])
@@ -444,10 +447,18 @@ static void AvpCxStart(ULONG Mode) {
 }
 
 // NV2A flat-panel timing generator, which drives the encoder's input (register use as in Cromwell's
-// VideoInitialization.c, GPL): active area from 0, totals as total - 1, sync positions as given.
+// VideoInitialization.c, GPL): active area from 0, totals as total - 1, sync positions as given. The horizontal
+// display end is width - 1, plus 8 for Conexant SD only (Cromwell's conexant.c; its HDTV and Focus paths use the
+// width; conflict X7). The NV2A sends RGB to the Conexant and Focus encoders: PRAMDAC 0x630 (output colour space),
+// 0x84C, 0x8C4 and 0x880 (no flat-panel scaling) are cleared, as Cromwell's BootVgaInitialization.c does
+// ("Other encoders use RGB"; conflict X5).
 static void AvpProgramTvTiming(volatile UCHAR *regs, ULONG Width, ULONG Height, ULONG HTotal, ULONG HSyncStart,
-                               ULONG HSyncEnd, ULONG VTotal, ULONG VSyncStart, ULONG VSyncEnd) {
+                               ULONG HSyncEnd, ULONG VTotal, ULONG VSyncStart, ULONG VSyncEnd,
+                               ULONG DisplayEndExtra = 0) {
     auto fp = [&](ULONG offset, ULONG value) { *(volatile ULONG *)(regs + 0x680800 + offset) = value; };
+    static const ULONG rgbRegs[] = {0x680630, 0x68084C, 0x6808C4, 0x680880};
+    for (ULONG offset : rgbRegs)
+        *(volatile ULONG *)(regs + offset) = 0;
     fp(0x00, Height - 1);            // vertical display end
     fp(0x04, VTotal - 1);            // vertical total
     fp(0x08, Height - 1);            // vertical CRTC
@@ -455,7 +466,7 @@ static void AvpProgramTvTiming(volatile UCHAR *regs, ULONG Width, ULONG Height, 
     fp(0x10, VSyncEnd);
     fp(0x14, 0);                     // vertical valid start / end
     fp(0x18, Height - 1);
-    fp(0x20, Width + 7);             // horizontal display end
+    fp(0x20, Width - 1 + DisplayEndExtra); // horizontal display end
     fp(0x24, HTotal - 1);            // horizontal total
     fp(0x28, Width - 1);             // horizontal CRTC
     fp(0x2C, HSyncStart);
@@ -519,7 +530,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
                             sd->Height, sd->VSyncStart, (USHORT)(sd->VSyncStart + 3), sd->VTotal, FALSE};
             AvpProgramTiming(regs, t);
             AvpProgramTvTiming(regs, sd->Width, sd->Height, sd->HTotal, sd->HSyncStart, sd->HSyncStart + 32,
-                               sd->VTotal, sd->VSyncStart, sd->VSyncStart + 3);
+                               sd->VTotal, sd->VSyncStart, sd->VSyncStart + 3, 8);
         } else if (AvpIsCxHd(Mode) || AvpIsFocusHd(Mode)) {
             const AVP_TIMING &t = *AvpFindTiming(Mode);
             if (AvpEncoderAddress == AV_ENCODER_FOCUS)
@@ -527,7 +538,9 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
             else
                 AvpCxProgramHd(Mode);
             AvpProgramTiming(regs, t);
-            AvpProgramTvTiming(regs, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart + 2, t.HSyncEnd + 2, t.VTotal,
+            // HSYNC two clocks late in 480p only (Cromwell's 480p value; no board source for 720p / 1080i: X10).
+            ULONG late = t.VDisplay == 480 ? 2 : 0;
+            AvpProgramTvTiming(regs, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart + late, t.HSyncEnd + late, t.VTotal,
                                t.VSyncStart, t.VSyncEnd);
         } else {
             AvpProgramTiming(regs, *AvpFindTiming(Mode));
