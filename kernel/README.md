@@ -151,8 +151,8 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      found by a bus probe (Conexant, Focus, Xcalibur) and reported as the retail kernels do; Conexant SD modes
      (NTSC-M/J, PAL 50 Hz, PAL-60; composite, S-video, SCART RGB) and HD component (480p, 720p, 1080i) are computed
      from the CX25871 datasheet by `../tools/gen_tv_encoders.py` and programmed with the NV2A's TV timing
-     (`make test-encoders`; `make run HD=1` for games' HD modes). Next: Focus HD, SD component, encoder options, then
-     testing on real consoles. Xcalibur (1.6) waits for a clean
+     (`make test-encoders`; `make run HD=1` for games' HD modes). Focus HD component (480p, 720p, 1080i) from
+     the chip's own presets. Next: SD component, Focus SD, encoder options, then testing on real consoles. Xcalibur (1.6) waits for a clean
      source of register values.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,

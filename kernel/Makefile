@@ -230,7 +230,8 @@ test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 # Video encoder phase: the generator's self-check (it reproduces the CX25871 datasheet's autoconfiguration modes) and
 # a stale-table check, then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus
 # probe finds it, XboxHardwareInfo reports it, and on Conexant an SD mode set leaves the generated registers in the
-# encoder (spec/oxos-internal/tv-encoders.md).
+# encoder; then the self-test build on Focus, whose boot self-test sets every Focus mode word and reads the registers
+# back (spec/oxos-internal/tv-encoders.md).
 test-encoders: $(HDD_FETCH)
 	python3 -I $(ROOT)/tools/gen_tv_encoders.py --out $(OUT)/av_modes.check.inc >/dev/null
 	@cmp -s $(OUT)/av_modes.check.inc src/hal/av_modes.inc || { echo "src/hal/av_modes.inc is stale: run tools/gen_tv_encoders.py --out src/hal/av_modes.inc"; exit 1; }
@@ -238,6 +239,9 @@ test-encoders: $(HDD_FETCH)
 	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
 	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \
 	    --encoder $$e --boot-wait 2 || exit 1; done
+	$(MAKE) $(BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --encoder focus --boot-wait 2
 
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
 test-fatal:

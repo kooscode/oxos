@@ -253,6 +253,7 @@ def check():
         print(f"appendix C mode {mode} ({std} {xres}x{yres}, CLK {fclk / 1e6:.4f} MHz): "
               f"{'matches' if mode_ok else 'DIFFERS'}")
     ok &= check_hd()
+    ok &= check_focus()
     for row, std, xres in SD_ROWS:
         h_clko, h_clki, v_linesi = our_timing(std, xres)
         f, fclk = conexant_mode(std, xres, 480, h_clko, h_clki, v_linesi)
@@ -317,6 +318,49 @@ def check_hd():
     return ok
 
 
+# --- Focus FS453/4, HD component. Sources: the FS453/4 hardware reference (register map, clocks), MontaVista's
+# fs453.h (GPL-2: QPR, CR, BYPASS, PLL and PWR_MGNT fields), Freescale's fs453.c (GPL-2+: the programming order).
+# The chip's quick-program register (QPR) loads its own preset for the output standard; OXOS adds only the clock.
+# (Cromwell's 720p/1080i Focus timing values are not used: they match Microsoft's tables byte for byte.)
+FXTAL_FOCUS = 27e6
+FOCUS_QPR_INIT, FOCUS_UIM_NVIDIA, FOCUS_OM_YPRPB = 9 << 12, 1 << 10, 1 << 4
+FOCUS_HD = {  # HD row -> QPR output standard (QK_OS), pixel clock, PLL (N, M, P)
+    # PLL: Fout = 27 MHz / N x M / P with 100-1000 kHz at the phase detector and a 100-300 MHz VCO (the limits
+    # Cromwell's focus.c uses); these dividers are the ones Cromwell runs on hardware (not in Microsoft's tables).
+    1: dict(name="480p", os=1, clk=27.0e6, pll=(125, 1000, 8)),
+    2: dict(name="720p", os=2, clk=74.25e6, pll=(200, 1100, 2)),
+    3: dict(name="1080i", os=3, clk=74.25e6, pll=(200, 1100, 2)),
+}
+
+
+def focus_hd(row, width):
+    """Focus HD register writes, in order: [(register, value, bytes)]. QK_MODE: 640x480 (0) or 720x480 (1) input for
+    480p; the HD formats use 0."""
+    h = FOCUS_HD[row]
+    n, m, p = h["pll"]
+    qpr = FOCUS_QPR_INIT | FOCUS_UIM_NVIDIA | h["os"] << 8 | FOCUS_OM_YPRPB | ((width == 720) << 1)
+    return [(0x0C, 0x2000, 2),            # CR: GCC_CK_LVL
+            (0x0C, 0x2001, 2), (0x0C, 0x2000, 2),  # soft reset
+            (0x0A, 0x0010, 2),            # BYPASS: bridge (scaler) bypass
+            (0xC4, qpr, 2),               # QPR: the chip's preset for this standard
+            (0x10, 0, 2), (0x12, 0, 2), (0x14, 0, 2), (0x16, 0, 2),  # NCON/NCOD = 0: no NCO
+            (0x18, m - 17, 2), (0x1A, n - 1, 2), (0x1C, (p - 1) << 8 | (p - 1), 2),  # PLL M, N, post-dividers
+            (0x0C, 0x2002, 2), (0x0C, 0x2000, 2)]  # latch the NCO and PLL settings
+
+
+def check_focus():
+    ok = True
+    for row, h in FOCUS_HD.items():
+        n, m, p = h["pll"]
+        pd, vco = FXTAL_FOCUS / n, FXTAL_FOCUS / n * m
+        out = vco / p
+        good = 100e3 <= pd <= 1e6 and 100e6 <= vco <= 300e6 and abs(out - h["clk"]) < 1
+        print(f"Focus {h['name']}: PLL {FXTAL_FOCUS / 1e6:.0f} MHz / {n} x {m} / {p} = {out / 1e6:.4f} MHz "
+              f"(phase detector {pd / 1e3:.0f} kHz, VCO {vco / 1e6:.1f} MHz): {'ok' if good else 'OUT OF RANGE'}")
+        ok &= good
+    return ok
+
+
 OUTPUT_REGS = (0x6C, 0xCE, 0xD6)  # the registers whose value depends on the output (composite/S-video or SCART RGB)
 
 
@@ -357,6 +401,13 @@ def emit(path):
     for row in sorted(hd):
         out.append("    {" + ", ".join(f"0x{hd[row][r]:02X}" for r in hdregs) + f"}}, // {HD_FORMATS[row]['name']}")
     out.append("};")
+    out += ["", "// Focus FS453/4 HD component: register writes in order {register, value, bytes} (QPR preset + PLL);",
+            "// then the NV2A timing, then PWR_MGNT (0xA0) = SD clock off | the mode word's DAC disables.",
+            "struct AVP_FOCUS_WRITE { UCHAR Register; USHORT Value; UCHAR Bytes; };"]
+    for row, width in ((1, 640), (1, 720), (2, 1280), (3, 1920)):
+        w = focus_hd(row, width)
+        out.append(f"static const AVP_FOCUS_WRITE AvpFocusHd{FOCUS_HD[row]['name']}_{width}[{len(w)}] = {{")
+        out.append("    " + ", ".join(f"{{0x{r:02X}, 0x{v:04X}, {b}}}" for r, v, b in w) + "};")
     open(path, "w").write("\n".join(out) + "\n")
     print(f"{path}: {len(rows)} SD modes, {len(reglist)} + {len(OUTPUT_REGS)} Conexant registers each")
 

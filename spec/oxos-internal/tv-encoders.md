@@ -2,8 +2,9 @@
 
 Status: Conexant done for SD (NTSC-M, NTSC-J, PAL 50 Hz, PAL-60 at 640 and 720 wide; composite + S-video and SCART
 RGB) and **HD component (480p, 720p, 1080i)**, computed by `tools/gen_tv_encoders.py` and programmed with the NV2A
-flat-panel timing; bus probe, flags, encoder type, 4-byte SMBus form; `make test-encoders` and a boot self-test of
-every mode. Not yet tried on a real console. To do: Focus, SD component, options. Priority (decided 2026-10-20): HD
+flat-panel timing; **Focus HD component** (§11); bus probe, flags, encoder type, 4-byte SMBus form;
+`make test-encoders` and a boot self-test of every mode on both encoders. Not yet tried on a real console. To do:
+SD component, Focus SD, options. Priority (decided 2026-10-20): HD
 component first, as HDMI adapters take component.
 Milestone 7 (real-hardware video). Xcalibur (1.6 consoles) is out of scope until
 its register values have a clean source (stock spec 19 describes the reference driver; its values are not public).
@@ -178,6 +179,25 @@ Per encoder, from the datasheets; the option numbers and query results as the re
 - **Unverified:** 1080i on the flat-panel generator (the encoder needs VSYNC within ±5 clocks of mid-line on alternate
   fields; whether the NV2A's flat-panel timing does this like its CRTC is unknown), the HSYNC offset, and 60 Hz vs
   59.94 Hz for 720p/1080i (74.25 vs 74.176 MHz; both are standard).
+
+## 11. Focus HD component as implemented
+- **The chip's own presets:** after CR ← GCC_CK_LVL and a soft reset, BYPASS ← bridge bypass (the scaler is unused
+  in HD), then **QPR** = init code 9 | NVIDIA input interface | output standard (480p / 720p / 1080i) | YPbPr |
+  input size (640 or 720 × 480 for 480p): the quick-program register loads the FS453/4's built-in settings for that
+  standard (field layout from MontaVista's GPL fs453.h; sequence from Freescale's GPL fs453.c).
+- **Clock:** NCO off (NCON = NCOD = 0), PLL 27 MHz / N × M / P: 480p 125 / 1000 / 8 = 27 MHz, 720p and 1080i
+  200 / 1100 / 2 = 74.25 MHz (registers M − 17, N − 1, P − 1 for both post-dividers), then the CR NCO latch pulse.
+  These dividers are Cromwell's (hardware-tested, not in Microsoft's tables); the generator checks them against the
+  PLL limits (100–1000 kHz phase detector, 100–300 MHz VCO).
+- **Last:** PWR_MGNT (0xA0) ← SD clock off (CLK_SOFF = 2) | DAC disables = mode bits 24–27 (the same meaning as the
+  Conexant's 0xBA bits). NV2A: the same standard rasters as Conexant HD (§10).
+- **Not used:** Cromwell's Focus 720p / 1080i timing values (registers 0x94–0x99) match Microsoft's tables byte for
+  byte (checked against the 4627 kernel and the 5838 BIOS), so OXOS relies on the QPR preset instead; its 480p
+  values (no match) are not needed either.
+- **Reference quirk kept:** the AV-pack unplug/replug handler writes register 0xBA at the encoder's address whatever
+  the chip (4627, 0x800148f4 / 0x80014a7b); on a Focus that register is HACT_WD.
+- **Unverified on hardware:** that the QPR preset alone gives the right HD timing and colour matrix for the NV2A's
+  RGB input (Cromwell sets the matrix and timing registers by hand), the PLL charge-pump bits (left 0, as Cromwell).
 
 ## Open
 - Whether titles send other encoder rows (PAL-M, PAL-N, NTSC-J 480p…): to be logged with the tracer.
