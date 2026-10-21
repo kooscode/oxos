@@ -9,9 +9,10 @@ the SMBus routines 0x800145F1 / 0x80014743 / 0x800146D1 / 0x80014D1D; the AV tab
 5838 BIOS image (layout only). The Cerbios 3.1.0 kernel's Xcalibur path (`AvSetDisplayMode` 0x80036FCB) was used as a
 cross-check: it follows the same sequence.
 
-**No table contents are reproduced here** (register values, value pools, row maps, flicker or Macrovision rows):
-only their layout, sizes and how they are indexed. OXOS's values must come from public sources (open-source
-drivers with a compatible licence, documentation) or measurement — never from a Microsoft or Cerbios image.
+This spec covers the tables' layout, sizes and how they are indexed. The Xcalibur register values (per-mode rows
+expanded from the value pool and dword list, the row maps and the flicker-filter sets) are recorded as plain register
+maps in spec 22 (functional hardware constants, see `dmca-compliance.md` §3). Macrovision rows are not reproduced,
+and nothing is taken from the Cerbios image.
 
 Register numbers below are the 8-bit SMBus command (register) numbers the kernel uses. Every Xcalibur register is
 **32 bits wide**. Their names are not known; meanings are given where the behaviour shows them.
@@ -216,10 +217,7 @@ The kernel builds one word and sends it to the encoder; only the final write dif
   the value pool and dword list (or an equivalent flat form — the pool/index scheme is a compression choice, not
   ABI), Macrovision rows, flicker sets A/B, and NV2A/CRTC rows (shared with the other encoders). Their layout need
   not follow the blob; only the mode-word meaning, the option behaviour and the register sequence matter.
-- **Sources for values:** candidates are open-source Xbox video drivers with a GPL-compatible licence (e.g.
-  XboxDev/cromwell's encoder support — provenance of its values to be checked first), public documentation, or
-  measurement on a 1.6 console (I²C capture of a retail kernel's writes is *not* an option for OXOS's tables:
-  those writes are the reference's data).
+- **Sources for values:** spec 22 (the 5838 tables as register maps, `dmca-compliance.md` §3).
 - **Order of work:** detection + SMBus 4-byte form + option 0x10 first (harmless on 1.0–1.5), then the mode-change
   sequence with an SDTV 480i row, then HD rows, then Macrovision/CGMS/captions.
 
