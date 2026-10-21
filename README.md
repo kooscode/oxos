@@ -50,7 +50,7 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
   (`spec/stock/`), and the kernel is written from those specs only. No Microsoft source code, machine code,
   disassembly, decompiled code or keys are included. The one kind of data taken from Microsoft images is the video
-  encoder register tables, recorded as plain register maps in `spec/stock/20`–`22` (functional hardware constants;
+  encoder register tables, recorded as plain register maps in `spec/stock/18`–`20` (functional hardware constants;
   [`dmca-compliance.md`](dmca-compliance.md) §3).
 - **Planned features** (`spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its
   features (128 MB, large disks, a second hard disk, virtual discs, IGR and more) were written up as behavioural

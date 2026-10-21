@@ -545,7 +545,7 @@ ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE
 
 def encoder_checks(mon, name, self_test=False):
     """The video encoder xemu presents (-machine video-encoder=NAME) is found by the bus probe and reported in
-    XboxHardwareInfo.Flags as the reference would (spec/stock/19 §1)."""
+    XboxHardwareInfo.Flags as the reference would (spec/stock/17 §1.2)."""
     address, flag, kind = ENCODERS[name]
     for _ in range(40):
         if mon.read("AvpEncoderAddress") & 0xFF:
@@ -585,7 +585,7 @@ def encoder_checks(mon, name, self_test=False):
         st = mon.read("AvpEncoderWideStatus")
         print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")
         # xemu models the Xcalibur as 256 byte registers, so a block read returns its register 0 (zero) as the byte
-        # count and the kernel rejects it, as it would a short reply on hardware (spec/stock/19 §2). What xemu can
+        # count and the kernel rejects it, as it would a short reply on hardware (spec/stock/20 §1). What xemu can
         # show is that the block transfer itself completes on the bus.
         last = mon.read("HalpSMBusLastBlock")
         checks["xcalibur: a 4-byte block SMBus transfer completes on the bus"] = (last >> 8) & 0x10 != 0

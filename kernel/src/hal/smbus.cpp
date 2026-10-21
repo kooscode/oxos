@@ -27,7 +27,7 @@ static void HalpReleaseSMBus() {
 }
 
 // Transfer size: 1 byte, or with the word flag 2 bytes, or 4 bytes for the 32-bit devices at 0xE0-0xE7 (the 1.6
-// video encoder; the 5838 kernel's rule, spec/stock/19 §2).
+// video encoder; the 5838 kernel's rule, spec/stock/20 §1).
 volatile ULONG HalpSMBusLastBlock; // diagnostics: (host status << 8) | byte count of the last block transfer
 
 static ULONG HalpSMBusSize(UCHAR Address, BOOLEAN WordFlag) {

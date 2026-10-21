@@ -1,32 +1,37 @@
-# Spec 21 — Focus FS453/FS454 encoder tables (xboxkrnl 1.0.4627.1 and 1.0.5838.1)
+# Spec 19 — Focus FS453/FS454 video encoder (xboxkrnl 1.0.4627.1, 1.0.5838.1)
 
-Consoles 1.4–1.5. Two versions: §1 from the kernel in the Complex 4627 BIOS image (INIT section, file offset = VA −
-0x80010000), §2 from the 5838 BIOS image's AV blob (flash offset 0x357A8, spec 19 §3). Use the 5838 set for 1.4–1.5
-consoles unless a test shows otherwise: it is Microsoft's later revision of the same tables.
+Consoles 1.4–1.5. SMBus address **0xD4**. The registers are 8, 16 or 32 bits wide; the table rows are written as
+**byte writes** to each byte address, the options use word writes where noted. The shared part of the driver
+(encoder choice, table layouts, mode word, mode-change sequence, options) is spec 17; this spec gives the Focus steps
+and the Focus tables. Register names: the GPL `fs453.h` header and the FS453/4 datasheets.
 
-**Provenance.** The register values below are functional hardware constants, extracted as flat data from the retail
-kernel's encoder tables for the purpose of making an independently written kernel drive the same hardware
-(see [`dmca-compliance.md`](../../dmca-compliance.md) §3). Only data is recorded: no code, no decompiled structures, no
-names from the binary. Register names and functional purposes come from the chips' public documentation
-(CX25870/871 datasheet 100381B; the GPL `fs453.h` header and FS453/4 datasheets), or are marked as not known.
-Offsets are file offsets in the images named, so every value can be checked against a copy of the image.
+## 1. Mode change (the [E] steps of spec 17 §5)
+- **Step 0 (5838 only):** word read of 0xA0 (PWR_MGNT), word write 0xA0 ← (value & 0xFFFF) | 0x000F (DACs off).
+  4627 does nothing here.
+- **Step 3:** nothing (no reset; only the shared 1 µs stall).
+- **Step 4:** class HD → the HD row. Else the SD common block, then the SD per-mode row. Japan (console region 2) on
+  encoder rows 0x0D, 0x0E, 0x12: then word write 0x4E ← 0x013C (BLACK_LVL).
+- **Step 5 (bit 29, SCART RGB):** for each register of the bit-29 table: read the byte, clear the bits of the mask row,
+  OR in the value row, write it back. The same two rows serve every encoder row (they are not indexed by the mode).
+- **Step 12:** nothing (the DACs come back on through option 9, 5838).
 
-**How a mode word selects these rows** (spec 17 §2): bits 0–6 = encoder row, bits 30–31 = class (00 525-line SD,
-01 625-line SD, 10 HD, 11 VGA), bit 29 = SCART RGB (Conexant, Focus) / the bit-29 set-up (Xcalibur). The write
-sequence around the rows (resets, GPIO, NV2A and CRTC programming, waits) is spec 17 §5 (Conexant, Focus) and spec 19
-§5 (Xcalibur). Mode names are decoded from each Conexant row's own values (subcarrier frequency from MSC and the
-PLL, 525/625 lines, setup, H_ACTIVE, V_ACTIVEI, output mode): the row meaning is part of the mode-word ABI and is the
-same for every encoder.
+## 2. What the rows program (decoded, 4627)
+- **Not used:** the quick-program register QPR (0xC4) is never written. The reference programs every register
+  explicitly.
+- **Common block (48 registers):** clock / interface registers including MISC (0x0E: UIM_MOD 5, a mode not in
+  the GPL header's list, plus UIM_DCLK and BRDG_RST), DAC_CNTL (A–D = video 0–3, identity), PWR_MGNT (SD: HD
+  clock off), PLL M / P, the colour matrix and flicker / sharpness.
+- **SD per-mode row (61 registers):** CR (with PAL_NTSCIN set for the PAL rows), the scaler (IHO, IVO, IHW, VSC,
+  HSC), NCO (NCON / NCOD), PLL N, the TV-standard block 0x38–0x80, VID_CNTL0, and the caption and WSS registers.
+- **HD row (64 registers):** CR, BYPASS **0** (scaler not bypassed), MISC, VID_CNTL0, DAC_CNTL, PWR_MGNT (SD clock
+  off), NCO, PLL, the HD timing block 0x92–0xBF and the colour matrix.
+- **Bit-29 table (14 registers):** VID_CNTL0 output mode bits and the colour matrix.
 
-**Not included:** copy-protection (Macrovision) rows (OXOS keeps copy protection off), the Conexant closed-caption
-timing table used by option 2, and the NV2A / CRTC rows (GPU registers, not encoder registers).
-
-**Writes.** The Focus registers are 16 or 32 bits wide, but every table entry is a single **byte write** to the byte
-address shown (low byte at the register's address, then the next address). The register lists repeat CR (0x0C/0x0D)
-at their end: the second CR write releases the reset / latches the NCO and PLL values written in between.
-**Order for an SD mode:** the common block (§n.1), then the mode's row (§n.2); with mode bit 29, the read-modify-write
-of §n.4. For Japan (region 2) on rows 0x0D, 0x0E, 0x12, after the mode row: word write 0x4E ← 0x013C.
-**HD mode:** only the §n.3 row.
+| Fact | SD composite / S-video | SD component | SCART (bit 29) | HD |
+|---|---|---|---|---|
+| VID_CNTL0 | VID_MODE composite, MATRIX_BYP (input already YCrCb), INT_PROG | VID_MODE YPrPb, MATRIX_BYP, INT_PROG | VID_MODE bits replaced by the bit-29 value row, matrix bypass cleared | VID_MODE HD, MATRIX_BYP, SYNC_ADD; 480p sets SYNC_BI_TRI (bi-level, inferred from SMPTE 293M), 720p / 1080i clear it; 1080i INT_PROG |
+| Input | YCrCb (NV 0x680630, spec 17 §8) | YCrCb | RGB (the colour matrix converts) | YCrCb |
+| Clock | NCO + PLL per row | same | same | NCO + PLL per row |
 
 **5838 against 4627** (same row meaning):
 - Common block: 5838 adds CR (0x0C/0x0D) and drops 0x8A (WSS_LNF0).
@@ -35,12 +40,37 @@ of §n.4. For Japan (region 2) on rows 0x0D, 0x0E, 0x12, after the mode row: wor
   porch, first-line, WSS-line and caption settings; and Pr / Pb scaling (0xC0) on the component rows.
 - HD rows: the colour-matrix scaling (0xA8, 0xAA, 0xAC) differs on all three.
 - Bit-29 table: identical.
+- Driver: the DAC power-down at the start of a mode change and the power-up on option 9 (§1, §3), and the flicker
+  filter mapping (§3).
 
-## 1. Tables of xboxkrnl 1.0.4627.1 (Complex 4627 BIOS)
+## 3. Options (the [E] options of spec 17 §5a)
+| Option | Focus |
+|---|---|
+| 2 closed captions on | word: 0xB2 ← 0xB2 \| 0xC000 |
+| 3 closed captions off | word: 0xB2 ← 0xB2 & 0x3FFF |
+| 4 caption bytes | word: field 0: 0xB0 ← d2 << 8 \| d0; field 1: 0xAE ← the same |
+| 5 caption status | bit 0 = (word 0xAE ≠ 0), bit 1 = (word 0xB0 ≠ 0) |
+| 9 blank off | 4627: nothing. 5838: word 0xA0 ← 0xA0 & 0xFFF0 (DACs on) |
+| 0x0A Macrovision commit | 0x0E bit 15 ← level ≠ 0 |
+| 0x0B flicker filter | byte 0x26 (FLK) ← 4627: level × 16 / 5; 5838: 0 for level 0, 0x0D for levels 1–2, 0x10 for 3–5; then byte 0x27 ← 0 |
+| 0x0E luma filter | word: 0xC2 ← on ? 0x0052 : 0x00EE (LUMA_BANDWIDTH) |
+| WSS/CGMS write | 0x85 ← word & 0xF, 0x84 ← word >> 4, 0x83 ← word >> 12 (field 1), and the same into 0x88, 0x87, 0x86 (field 0) |
 
-### 1.1 SD common block (written before every SD mode row)
+## 4. How to read the tables
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3). §5.1: the 4627
+kernel (the one in the Complex 4627 BIOS image; file offset = VA − 0x80010000). §5.2: the 5838 BIOS image's AV blob
+(flash offset 0x357A8, spec 17 §1a.2); use this set on 1.4–1.5 consoles unless a test shows otherwise, as it is the
+later revision of the same tables. Mode names as in spec 18 (the row meaning is part of the mode-word ABI). The
+register lists repeat CR (0x0C/0x0D) at their end: the second CR write releases the reset / latches the NCO and PLL
+values written in between. Copy-protection rows are not included: OXOS keeps copy protection off.
 
-### Video Encoder Mode: SD common block (4627)
+## 5. Tables
+
+### 5.1 Tables of xboxkrnl 1.0.4627.1 (Complex 4627 BIOS)
+
+#### 5.1.1 SD common block (written before every SD mode row)
+
+##### Video Encoder Mode: SD common block (4627)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97C48 (SD common table, value row 0x01; register list at 0x97C18)
 Register Mappings (written in this order):
@@ -93,9 +123,9 @@ Register Mappings (written in this order):
 - Register 0xC2: Write Value 0xEE -> (LUMA_BANDWIDTH low byte: luma frequency response)
 - Register 0xC3: Write Value 0x00 -> (LUMA_BANDWIDTH byte 1: luma frequency response)
 
-### 1.2 SD modes (row = mode word bits 0–6; names as in spec 20)
+#### 5.1.2 SD modes (row = mode word bits 0–6; names as in spec 18)
 
-### Video Encoder Mode: SD row 0x01 (4627): NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x01 (4627): NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97CB5 (SD per-mode table, value row 0x01; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -161,7 +191,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x02 (4627): NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x02 (4627): NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97CF2 (SD per-mode table, value row 0x02; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -227,7 +257,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x03 (4627): NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x03 (4627): NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97D2F (SD per-mode table, value row 0x03; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -293,7 +323,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x04 (4627): NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x04 (4627): NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97D6C (SD per-mode table, value row 0x04; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -359,7 +389,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x05 (4627): PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x05 (4627): PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97DA9 (SD per-mode table, value row 0x05; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -425,7 +455,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x06 (4627): PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x06 (4627): PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97DE6 (SD per-mode table, value row 0x06; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -491,7 +521,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x07 (4627): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x07 (4627): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97E23 (SD per-mode table, value row 0x07; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -557,7 +587,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x08 (4627): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x08 (4627): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97E60 (SD per-mode table, value row 0x08; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -623,7 +653,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x09 (4627): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x09 (4627): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97E9D (SD per-mode table, value row 0x09; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -689,7 +719,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0A (4627): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x0A (4627): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97EDA (SD per-mode table, value row 0x0A; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -755,7 +785,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0B (4627): PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x0B (4627): PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97F17 (SD per-mode table, value row 0x0B; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -821,7 +851,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0C (4627): PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x0C (4627): PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97F54 (SD per-mode table, value row 0x0C; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -887,7 +917,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0D (4627): NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x0D (4627): NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97F91 (SD per-mode table, value row 0x0D; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -953,7 +983,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0E (4627): NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x0E (4627): NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x97FCE (SD per-mode table, value row 0x0E; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1019,7 +1049,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0F (4627): NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x0F (4627): NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9800B (SD per-mode table, value row 0x0F; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1085,7 +1115,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x10 (4627): NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x10 (4627): NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98048 (SD per-mode table, value row 0x10; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1151,7 +1181,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x11 (4627): PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x11 (4627): PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98085 (SD per-mode table, value row 0x11; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1217,7 +1247,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x12 (4627): NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x12 (4627): NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x980C2 (SD per-mode table, value row 0x12; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1283,7 +1313,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x13 (4627): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x13 (4627): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x980FF (SD per-mode table, value row 0x13; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1349,7 +1379,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x14 (4627): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x14 (4627): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9813C (SD per-mode table, value row 0x14; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1415,7 +1445,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x15 (4627): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x15 (4627): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98179 (SD per-mode table, value row 0x15; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1481,7 +1511,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x16 (4627): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x16 (4627): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x981B6 (SD per-mode table, value row 0x16; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1547,7 +1577,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x17 (4627): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x17 (4627): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x981F3 (SD per-mode table, value row 0x17; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1613,7 +1643,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x18 (4627): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x18 (4627): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98230 (SD per-mode table, value row 0x18; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1679,7 +1709,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x19 (4627): PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x19 (4627): PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9826D (SD per-mode table, value row 0x19; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1745,7 +1775,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1A (4627): PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1A (4627): PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x982AA (SD per-mode table, value row 0x1A; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1811,7 +1841,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1B (4627): PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1B (4627): PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x982E7 (SD per-mode table, value row 0x1B; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1877,7 +1907,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1C (4627): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x1C (4627): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98324 (SD per-mode table, value row 0x1C; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -1943,7 +1973,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1D (4627): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1D (4627): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98361 (SD per-mode table, value row 0x1D; register list at 0x97C78)
 Register Mappings (written in this order):
@@ -2009,9 +2039,9 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### 1.3 HD modes
+#### 5.1.3 HD modes
 
-### Video Encoder Mode: HD row 0x01 (4627): 480p (720x480 / 640x480 input), component YPbPr
+##### Video Encoder Mode: HD row 0x01 (4627): 480p (720x480 / 640x480 input), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x983E0 (HD table, value row 0x01; register list at 0x983A0)
 Register Mappings (written in this order):
@@ -2080,7 +2110,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: HD row 0x02 (4627): 720p (1280x720), component YPbPr
+##### Video Encoder Mode: HD row 0x02 (4627): 720p (1280x720), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98420 (HD table, value row 0x02; register list at 0x983A0)
 Register Mappings (written in this order):
@@ -2149,7 +2179,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: HD row 0x03 (4627): 1080i (1920x1080), component YPbPr
+##### Video Encoder Mode: HD row 0x03 (4627): 1080i (1920x1080), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98460 (HD table, value row 0x03; register list at 0x983A0)
 Register Mappings (written in this order):
@@ -2218,9 +2248,9 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### 1.4 Mode bit 29: SCART RGB (read-modify-write, the same for every SD row)
+#### 5.1.4 Mode bit 29: SCART RGB (read-modify-write, the same for every SD row)
 
-### Video Encoder Mode: SCART RGB set-up (bit 29), 4627
+##### Video Encoder Mode: SCART RGB set-up (bit 29), 4627
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98F84 (register list, then a mask row and a value row)
 Register Mappings (each register: read it, clear the mask bits, OR in the value, write it back):
@@ -2239,11 +2269,11 @@ Register Mappings (each register: read it, clear the mask bits, OR in the value,
 - Register 0xAC: Clear Mask 0xFF, Write Value 0x7E -> (BLU_SCL low byte: colour matrix blue scaling)
 - Register 0xAD: Clear Mask 0xFF, Write Value 0x00 -> (BLU_SCL byte 1: colour matrix blue scaling)
 
-## 2. Tables of the 5838 BIOS image (AV blob at flash offset 0x357A8)
+### 5.2 Tables of the 5838 BIOS image (AV blob at flash offset 0x357A8)
 
-### 2.1 SD common block (written before every SD mode row)
+#### 5.2.1 SD common block (written before every SD mode row)
 
-### Video Encoder Mode: SD common block (5838)
+##### Video Encoder Mode: SD common block (5838)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36BC9 (SD common table, value row 0x01; register list at 0x36B98)
 Register Mappings (written in this order):
@@ -2297,9 +2327,9 @@ Register Mappings (written in this order):
 - Register 0xC2: Write Value 0xEE -> (LUMA_BANDWIDTH low byte: luma frequency response)
 - Register 0xC3: Write Value 0x00 -> (LUMA_BANDWIDTH byte 1: luma frequency response)
 
-### 2.2 SD modes (row = mode word bits 0–6; names as in spec 20)
+#### 5.2.2 SD modes (row = mode word bits 0–6; names as in spec 18)
 
-### Video Encoder Mode: SD row 0x01 (5838): NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x01 (5838): NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36C3C (SD per-mode table, value row 0x01; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2368,7 +2398,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x02 (5838): NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x02 (5838): NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36C7C (SD per-mode table, value row 0x02; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2437,7 +2467,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x03 (5838): NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x03 (5838): NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36CBC (SD per-mode table, value row 0x03; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2506,7 +2536,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x04 (5838): NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x04 (5838): NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36CFC (SD per-mode table, value row 0x04; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2575,7 +2605,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x05 (5838): PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x05 (5838): PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36D3C (SD per-mode table, value row 0x05; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2644,7 +2674,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x06 (5838): PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x06 (5838): PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36D7C (SD per-mode table, value row 0x06; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2713,7 +2743,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x07 (5838): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x07 (5838): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36DBC (SD per-mode table, value row 0x07; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2782,7 +2812,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x08 (5838): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x08 (5838): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36DFC (SD per-mode table, value row 0x08; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2851,7 +2881,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x09 (5838): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x09 (5838): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36E3C (SD per-mode table, value row 0x09; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2920,7 +2950,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0A (5838): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x0A (5838): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36E7C (SD per-mode table, value row 0x0A; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -2989,7 +3019,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0B (5838): PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+##### Video Encoder Mode: SD row 0x0B (5838): PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36EBC (SD per-mode table, value row 0x0B; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3058,7 +3088,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0C (5838): PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+##### Video Encoder Mode: SD row 0x0C (5838): PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36EFC (SD per-mode table, value row 0x0C; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3127,7 +3157,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0D (5838): NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x0D (5838): NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36F3C (SD per-mode table, value row 0x0D; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3196,7 +3226,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0E (5838): NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x0E (5838): NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36F7C (SD per-mode table, value row 0x0E; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3265,7 +3295,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x0F (5838): NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x0F (5838): NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36FBC (SD per-mode table, value row 0x0F; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3334,7 +3364,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x10 (5838): NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x10 (5838): NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x36FFC (SD per-mode table, value row 0x10; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3403,7 +3433,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x11 (5838): PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x11 (5838): PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3703C (SD per-mode table, value row 0x11; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3472,7 +3502,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x12 (5838): NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x12 (5838): NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3707C (SD per-mode table, value row 0x12; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3541,7 +3571,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x13 (5838): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x13 (5838): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x370BC (SD per-mode table, value row 0x13; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3610,7 +3640,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x14 (5838): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x14 (5838): PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x370FC (SD per-mode table, value row 0x14; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3679,7 +3709,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x15 (5838): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x15 (5838): PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3713C (SD per-mode table, value row 0x15; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3748,7 +3778,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x16 (5838): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x16 (5838): PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3717C (SD per-mode table, value row 0x16; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3817,7 +3847,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x17 (5838): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x17 (5838): PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x371BC (SD per-mode table, value row 0x17; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3886,7 +3916,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x18 (5838): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x18 (5838): PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x371FC (SD per-mode table, value row 0x18; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -3955,7 +3985,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x19 (5838): PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x19 (5838): PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3723C (SD per-mode table, value row 0x19; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -4024,7 +4054,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1A (5838): PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1A (5838): PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3727C (SD per-mode table, value row 0x1A; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -4093,7 +4123,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1B (5838): PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1B (5838): PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x372BC (SD per-mode table, value row 0x1B; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -4162,7 +4192,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1C (5838): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
+##### Video Encoder Mode: SD row 0x1C (5838): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x372FC (SD per-mode table, value row 0x1C; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -4231,7 +4261,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: SD row 0x1D (5838): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
+##### Video Encoder Mode: SD row 0x1D (5838): PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3733C (SD per-mode table, value row 0x1D; register list at 0x36BFC)
 Register Mappings (written in this order):
@@ -4300,9 +4330,9 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x21 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### 2.3 HD modes
+#### 5.2.3 HD modes
 
-### Video Encoder Mode: HD row 0x01 (5838): 480p (720x480 / 640x480 input), component YPbPr
+##### Video Encoder Mode: HD row 0x01 (5838): 480p (720x480 / 640x480 input), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x373BC (HD table, value row 0x01; register list at 0x3737C)
 Register Mappings (written in this order):
@@ -4371,7 +4401,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: HD row 0x02 (5838): 720p (1280x720), component YPbPr
+##### Video Encoder Mode: HD row 0x02 (5838): 720p (1280x720), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x373FC (HD table, value row 0x02; register list at 0x3737C)
 Register Mappings (written in this order):
@@ -4440,7 +4470,7 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### Video Encoder Mode: HD row 0x03 (5838): 1080i (1920x1080), component YPbPr
+##### Video Encoder Mode: HD row 0x03 (5838): 1080i (1920x1080), component YPbPr
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x3743C (HD table, value row 0x03; register list at 0x3737C)
 Register Mappings (written in this order):
@@ -4509,9 +4539,9 @@ Register Mappings (written in this order):
 - Register 0x0C: Write Value 0x00 -> (CR low byte: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 - Register 0x0D: Write Value 0x20 -> (CR byte 1: command register (clock level, soft reset, NCO/PLL latch, PAL_NTSCIN))
 
-### 2.4 Mode bit 29: SCART RGB (read-modify-write, the same for every SD row)
+#### 5.2.4 Mode bit 29: SCART RGB (read-modify-write, the same for every SD row)
 
-### Video Encoder Mode: SCART RGB set-up (bit 29), 5838
+##### Video Encoder Mode: SCART RGB set-up (bit 29), 5838
 Target Chip: Focus FS453/FS454 (SMBus address 0xD4; table entries are byte writes to the byte address shown)
 Memory Offset / Base Address: 5838 BIOS image (AV blob at flash offset 0x357A8), file offset 0x37F58 (register list, then a mask row and a value row)
 Register Mappings (each register: read it, clear the mask bits, OR in the value, write it back):
