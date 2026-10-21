@@ -201,7 +201,7 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
     }
 
-    // TV encoder (spec/oxos-internal/06-tv-encoders.md): every supported mode word programs the generated registers,
+    // TV encoder: every supported mode word programs the generated registers,
     // which read back as written (xemu's encoder models store them); then the previous mode is restored. Conexant
     // and Focus (make test-encoders): the 11 SD (composite, SCART, component) and 4 HD mode words below.
     static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,

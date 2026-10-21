@@ -231,7 +231,7 @@ test-relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 # a stale-table check, then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus
 # probe finds it, XboxHardwareInfo reports it, and on Conexant an SD mode set leaves the generated registers in the
 # encoder; then the self-test build on Focus, whose boot self-test sets every Focus mode word and reads the registers
-# back (spec/oxos-internal/06-tv-encoders.md).
+# back.
 test-encoders: $(HDD_FETCH)
 	python3 -I $(ROOT)/tools/gen_tv_encoders.py --out $(OUT)/av_modes.check.inc >/dev/null
 	@cmp -s $(OUT)/av_modes.check.inc src/hal/av_modes.inc || { echo "src/hal/av_modes.inc is stale: run tools/gen_tv_encoders.py --out src/hal/av_modes.inc"; exit 1; }
