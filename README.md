@@ -25,11 +25,7 @@ The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md)
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
 - **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
-- **TV output drivers** for revisions 1.0–1.5, computed from the encoder chips' public datasheets: Conexant and Focus,
-  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take).
-  Tested in xemu only.
-- **Hardware testing TBD:** OXOS has not run on a real console yet. The AV drivers and encoder tables in particular
-  need confirming on real 1.0–1.5 consoles (picture position, levels, 1080i); 1.6 (Xcalibur) has no video support yet.
+- **Hardware testing TBD:** OXOS has not run on a real console yet.
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
