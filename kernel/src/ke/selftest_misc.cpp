@@ -12,7 +12,7 @@ extern volatile ULONG KiTestXcDone, KiTestFatxDone;
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID, ULONG, ULONG, ULONG, ULONG, ULONG);
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID, ULONG, ULONG, PULONG);
 extern volatile UCHAR AvpEncoderAddress;
-extern volatile ULONG AvpEncoderProgrammed, AvpEncoderMismatches;
+extern volatile ULONG AvpEncoderProgrammed, AvpEncoderMismatches, AvpXcShadow[0x100];
 volatile ULONG KiTestAvModesTried, KiTestAvModesOk; // TV encoder modes set / programmed and read back correctly
 volatile ULONG KiTestAvOptionsOk; // encoder options (spec/stock/17 §5a): bit per check, 0x1F = all passed
 XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR, UCHAR, BOOLEAN, PULONG);
@@ -23,8 +23,40 @@ static ULONG KiAvRead(UCHAR Register, BOOLEAN Word) {
     return v;
 }
 
+// Xcalibur options (spec/stock/20 §4): the values the driver wrote (xemu cannot read the 32-bit registers back).
+static ULONG KiTestAvXcalibur(ULONG fb) {
+    ULONG ok = 0, dummy = 0;
+    AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
+    AvSendTVEncoderOption(nullptr, 0x13, 1, &dummy); // widescreen: CGMS-A word 0x60001
+    if (AvpXcShadow[0x07] == ((0x60001u | 0x01800000) << 1))
+        ok |= 1;
+    AvSendTVEncoderOption(nullptr, 0x13, 0, &dummy);
+    AvSendTVEncoderOption(nullptr, 0x0B, 0, &dummy); // flicker filter: level 0 and 5 write different entries
+    ULONG level0 = AvpXcShadow[0x61];
+    AvSendTVEncoderOption(nullptr, 0x0B, 5, &dummy);
+    if (AvpXcShadow[0x61] != level0)
+        ok |= 2;
+    AvSendTVEncoderOption(nullptr, 0x02, 0, &dummy); // captions on, then off
+    bool cc = AvpXcShadow[0x09] == 7;
+    AvSendTVEncoderOption(nullptr, 0x03, 0, &dummy);
+    if (cc && AvpXcShadow[0x09] == 0)
+        ok |= 4;
+    UCHAR data[4] = {0x41, 0, 0x42, 0}; // caption bytes for field 0
+    AvSendTVEncoderOption(nullptr, 0x04, 0, (PULONG)data);
+    if (AvpXcShadow[0x0A] == 0x41 && AvpXcShadow[0x0B] == 8)
+        ok |= 8;
+    ULONG bank = AvpXcShadow[0x20]; // luma filter on: the variant-1 coefficient banks are written
+    AvSendTVEncoderOption(nullptr, 0x0E, 1, &dummy);
+    if (AvpXcShadow[0x20] != bank)
+        ok |= 16;
+    AvSendTVEncoderOption(nullptr, 0x0E, 0, &dummy);
+    return ok;
+}
+
 // Encoder options on NTSC 640x480 composite: WSS/CGMS word, flicker filter, captions on/off and data, luma filter.
 static ULONG KiTestAvOptions(ULONG fb) {
+    if (AvpEncoderAddress == 0xE0)
+        return KiTestAvXcalibur(fb);
     bool focus = AvpEncoderAddress == 0xD4;
     ULONG ok = 0, dummy = 0;
     AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
@@ -35,9 +67,9 @@ static ULONG KiTestAvOptions(ULONG fb) {
         ok |= 1;
     AvSendTVEncoderOption(nullptr, 0x13, 0, &dummy);
     AvSendTVEncoderOption(nullptr, 0x0B, 2, &dummy); // flicker filter level 2
-    bool ff = focus ? KiAvRead(0x26, FALSE) == 6 : (KiAvRead(0xC8, FALSE) & 0x7F) == 0x12 && KiAvRead(0x34, FALSE) == 0;
+    bool ff = focus ? KiAvRead(0x26, FALSE) == 0x0D : (KiAvRead(0xC8, FALSE) & 0x7F) == 0x12 && KiAvRead(0x34, FALSE) == 0;
     AvSendTVEncoderOption(nullptr, 0x0B, 5, &dummy);
-    ff &= focus ? KiAvRead(0x26, FALSE) == 16 : (KiAvRead(0xC8, FALSE) & 0x3F) == 0 && KiAvRead(0x34, FALSE) == 0x80;
+    ff &= focus ? KiAvRead(0x26, FALSE) == 0x10 : (KiAvRead(0xC8, FALSE) & 0x3F) == 0 && KiAvRead(0x34, FALSE) == 0x80;
     AvSendTVEncoderOption(nullptr, 0x0B, 0, &dummy);
     ff &= focus ? KiAvRead(0x26, FALSE) == 0 : (KiAvRead(0xC8, FALSE) & 0x40) != 0;
     if (ff)
@@ -201,13 +233,13 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
     }
 
-    // TV encoder: every supported mode word programs the generated registers,
-    // which read back as written (xemu's encoder models store them); then the previous mode is restored. Conexant
-    // and Focus (make test-encoders): the 11 SD (composite, SCART, component) and 4 HD mode words below.
+    // TV encoder: every mode word below programs the encoder's rows (spec/stock/18-20), which read back as written on
+    // Conexant and Focus (xemu's encoder models store them; on the Xcalibur every 32-bit write must complete); then the
+    // previous mode is restored. make test-encoders: 11 SD (composite, SCART, component) and 4 HD mode words.
     static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
                                     0x2001010B, 0x60030307, 0x0801010D, 0x48030314, 0x08010119,
                                     0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
-    const ULONG *modesBegin = AvpEncoderAddress == 0x8A || AvpEncoderAddress == 0xD4 ? cxModes : nullptr;
+    const ULONG *modesBegin = AvpEncoderAddress ? cxModes : nullptr;
     if (modesBegin) {
         const ULONG *modesEnd = cxModes + sizeof(cxModes) / sizeof(cxModes[0]);
         ULONG previous = 0;

@@ -543,9 +543,37 @@ def dash_checks(mon):
 ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE0, 0x400, 2)}
 
 
+def xcalibur_expected(mode):
+    """The Xcalibur registers a mode set leaves, from spec/stock/20 alone: the row the maps select (§6.1; region not
+    Japan), its entries for variant (mode bit 29) << 1 (§2, §6.2). Registers the later steps change (0, 1, 4, 7, 9,
+    the indirect port 0x0C-0x0E, 0x58, the flicker filter 0x60-0x66) are left out."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+    import gen_av_tables as g
+    rows = {g.row_of(b["title"]): b for b in g.section(g.blocks(g.XC_SPEC), "6.2")}
+    maps, in_maps = [], False
+    for line in open(os.path.join(g.SPEC, g.XC_SPEC), encoding="utf-8"):
+        in_maps = (in_maps or line.startswith("### 6.1 ")) and not line.startswith("### 6.2 ")
+        m = re.match(r"^\| (0x[0-9A-F]{2}) \| (.*)\|$", line)
+        if in_maps and m:
+            maps.append([int(c, 16) if c.strip() else 0 for c in m.group(2).split("|")])
+    row, hd = mode & 0x7F, (mode >> 30) == 2
+    if hd and row == 1 and (mode >> 8) & 0xFF == 7:
+        row = 4
+    x = maps[row][2] if hd else maps[row][0]
+    variant, regs = ((mode >> 29) & 1) << 1, {}
+    for w in rows[x]["writes"]:
+        if w[0] == "w":
+            regs[w[1]] = w[2]
+        elif w[1] == "always" or w[1] == f"only when v == {variant}" or w[1] == f"only when (v & 1) == {variant & 1}":
+            regs.update(dict(w[2]))
+    skip = {0x00, 0x01, 0x04, 0x07, 0x09, 0x0C, 0x0D, 0x0E, 0x58} | set(range(0x60, 0x67))
+    return x, {r: v for r, v in regs.items() if r not in skip}
+
+
 def encoder_checks(mon, name, self_test=False):
     """The video encoder xemu presents (-machine video-encoder=NAME) is found by the bus probe and reported in
-    XboxHardwareInfo.Flags as the reference would (spec/stock/17 §1.2)."""
+    XboxHardwareInfo.Flags as the reference would (spec/stock/17 §1.2); a mode set programs it from its register maps
+    (spec/stock/18-20)."""
     address, flag, kind = ENCODERS[name]
     for _ in range(40):
         if mon.read("AvpEncoderAddress") & 0xFF:
@@ -558,36 +586,41 @@ def encoder_checks(mon, name, self_test=False):
         f"{name}: the probe finds the encoder at {address:#x}": found == address,
         f"{name}: XboxHardwareInfo.Flags encoder bits = {flag:#x}": flags & 0x420 == flag,
     }
-    if name == "conexant":
-        # The dashboard sets an SD mode: the generated CX25871 registers must read back as written
-        # (tools/gen_tv_encoders.py; xemu's encoder model stores registers).
-        for _ in range(60):
-            if mon.read("AvpEncoderProgrammed"):
-                break
-            time.sleep(0.25)
-        mode, bad = mon.read("AvpEncoderProgrammed"), mon.read("AvpEncoderMismatches")
-        print(f"  Conexant: mode {mode:#010x} programmed, {bad} registers read back differently")
-        checks["conexant: an SD mode set programs the encoder (generated registers read back)"] = mode != 0 and bad == 0
-    if self_test and name in ("conexant", "focus"):
-        # Self-test build: the misc suite sets every supported mode word on this encoder and reads the registers back.
+    # The dashboard sets an SD mode: Conexant and Focus registers read back as the tables have them; on the Xcalibur
+    # every write completes and the values written are the ones spec/stock/20 gives for that mode.
+    for _ in range(60):
+        if mon.read("AvpEncoderProgrammed"):
+            break
+        time.sleep(0.25)
+    mode, bad = mon.read("AvpEncoderProgrammed"), mon.read("AvpEncoderMismatches")
+    print(f"  {name}: mode {mode:#010x} programmed, {bad} registers read back differently or writes failed")
+    checks[f"{name}: the dashboard's mode set programs the encoder"] = mode != 0 and bad == 0
+    if name == "xcalibur" and mode and not self_test:
+        row, want = xcalibur_expected(mode)
+        got = {r: mon.read_offset("AvpXcShadow", r * 4) for r in want}
+        diff = {f"{r:#04x}": (f"{got[r]:#010x}", f"{v:#010x}") for r, v in want.items() if got[r] != v}
+        print(f"  Xcalibur row {row:#04x}: {len(want) - len(diff)} of {len(want)} registers as spec/stock/20 gives them"
+              + (f"; differ: {diff}" if diff else ""))
+        checks["xcalibur: the registers written are spec/stock/20's for the mode"] = not diff
+    if self_test:
+        # Self-test build: the misc suite sets every supported mode word on this encoder and checks it.
         for _ in range(240):
             if mon.read("KiTestMiscDone"):
                 break
             time.sleep(0.25)
         tried, good = mon.read("KiTestAvModesTried"), mon.read("KiTestAvModesOk")
         want = 15
-        print(f"  self-test: {good} of {tried} mode words programmed and read back")
+        print(f"  self-test: {good} of {tried} mode words programmed and checked")
         checks[f"{name}: all {want} supported mode words program the encoder (self-test)"] = tried == want and good == want
         opts = mon.read("KiTestAvOptionsOk")
         print(f"  self-test: encoder options {opts:#x} (0x1f = WSS/CGMS, flicker, captions on/off, caption data, luma)")
         checks[f"{name}: encoder options program the encoder (self-test)"] = opts == 0x1F
     if name == "xcalibur":
-        st = mon.read("AvpEncoderWideStatus")
-        print(f"  32-bit read of Xcalibur register 0: status {st:#x}, last block {mon.read('HalpSMBusLastBlock'):#x}")
-        # xemu models the Xcalibur as 256 byte registers, so a block read returns its register 0 (zero) as the byte
-        # count and the kernel rejects it, as it would a short reply on hardware (spec/stock/20 §1). What xemu can
-        # show is that the block transfer itself completes on the bus.
+        # xemu models the Xcalibur as byte registers, so a 4-byte block read returns its register 0 as the byte count
+        # and the kernel rejects it, as it would a short reply on hardware (spec/stock/20 §1); the block writes
+        # themselves complete on the bus.
         last = mon.read("HalpSMBusLastBlock")
+        print(f"  last block transfer {last:#x}")
         checks["xcalibur: a 4-byte block SMBus transfer completes on the bus"] = (last >> 8) & 0x10 != 0
     return checks
 

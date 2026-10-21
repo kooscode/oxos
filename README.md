@@ -25,6 +25,8 @@ The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md)
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
 - **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
+- **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
+  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take).
 - **Hardware testing TBD:** OXOS has not run on a real console yet.
 
 ## Running OXOS in xemu today !!
@@ -203,9 +205,8 @@ verify under OXOS, and System Link with stock consoles does not work. Saves made
 Microsoft's 2BL and keys: do not distribute that one.
 
 ## Next steps
-- **Real hardware (TBD):** testing on revisions 1.0–1.5 to confirm the AV drivers and encoder tables (component HD via
-  HDMI adapters first), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
-- **Video:** 1.6 consoles' Xcalibur encoder once a clean source of its register values exists.
+- **Real hardware (TBD):** testing on real consoles, video output first (all three encoders, component HD via HDMI
+  adapters), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.
 - **Debugging on real hardware:** a GDB stub in the kernel over the SuperIO serial port, with the debugger-only
   exports, so the same gdb and VS Code debugging works on a console.
