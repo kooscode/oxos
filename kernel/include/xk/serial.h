@@ -1,4 +1,4 @@
-// Debug serial port (spec/oxos-internal/01-debug-serial.md): SuperIO serial port 1 at 0x3F8, polled. Compiled in with SERIAL=1.
+// Debug serial port (spec/oxos-internal/03-debug-serial.md): SuperIO serial port 1 at 0x3F8, polled. Compiled in with SERIAL=1.
 #pragma once
 #include <xk/types.h>
 

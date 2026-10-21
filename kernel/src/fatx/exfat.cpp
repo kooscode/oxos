@@ -1,4 +1,4 @@
-// exFAT: the folder partitions of an exFAT disk (spec/oxos-internal/05-exfat-driver.md, 03-exfat-storage-spec.md).
+// exFAT: the folder partitions of an exFAT disk (spec/oxos-internal/07-exfat-driver.md, 05-exfat-storage-spec.md).
 // Each folder partition mounts as its own volume whose root is that folder; they share one EXFAT_DISK (geometry,
 // up-case table, free count, block cache key). The FATX dispatcher (fsd.cpp) serves them through the directory and
 // cluster layers, which branch here for exFAT.

@@ -19,7 +19,7 @@ fields 0x28..0x37 describe the .data copy used by quick reboot (spec/stock/02 §
 Boot splash (optional, 1 MiB images only): the second 256 KiB bank (flash offset 0x40000, 0xFFF40000) holds
   "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 256-colour palette PNG with one IDAT chunk.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
-valid and falls back to its drawn emblem otherwise (spec/stock/17 §7).
+valid and falls back to its drawn emblem otherwise (spec/oxos-internal/00-boot-splash.md).
 
 LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
 stream); its own decoder checks the result before the image is written.

@@ -1,6 +1,6 @@
 // Audio/video: AV pack, encoder detection, display mode programming (spec/stock/12 §4).
 // The per-mode encoder and CRTC/RAMDAC tables of the reference are not reproduced: modes are programmed from
-// the documented VGA/NV2A register model with the standards' timings for each mode's picture size (spec/stock/17 §7).
+// the documented VGA/NV2A register model with the standards' timings for each mode's picture size (spec/oxos-internal/02-display-modes.md §1).
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -241,7 +241,7 @@ static void AvpCrtc(volatile UCHAR *regs, UCHAR index, UCHAR value) {
     regs[0x6013D5] = value;
 }
 
-// Display timings per mode (spec/stock/17 §7). The mode word's table (bits 30-31: 10b HDTV, 11b VGA, otherwise SDTV) and
+// Display timings per mode (spec/oxos-internal/02-display-modes.md §1). The mode word's table (bits 30-31: 10b HDTV, 11b VGA, otherwise SDTV) and
 // CRTC row (bits 8-15) select the picture size; the row meanings follow the D3D mode words (as nxdk's table lists
 // them), and the timings are the public video standards' (CEA-861 480p, SMPTE 296M 720p, SMPTE 274M 1080i, VESA),
 // not the reference's tables. Interlaced modes are programmed per field. xemu sizes its display from these CRTC
@@ -546,7 +546,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
             AvpProgramTiming(regs, *AvpFindTiming(Mode));
         }
         // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it).
-        // Deviation (spec/stock/17 §6): also raised for 720p and 1080i, which are always 16:9, although titles leave bit
+        // Deviation (spec/oxos-internal/02-display-modes.md §2): also raised for 720p and 1080i, which are always 16:9, although titles leave bit
         // 28 clear in those mode words and the reference keeps the line low; so "Auto" shows HD pictures at 16:9.
         bool hd = (Mode >> 30) == 2 && ((UCHAR)(Mode >> 8) == 0x0A || (UCHAR)(Mode >> 8) == 0x0C);
         outb(0x80D6, (UCHAR)((((Mode >> 28) & 1) | hd) | 4));

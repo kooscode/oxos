@@ -9,7 +9,7 @@
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 
-// The retail drive letters and the extra exFAT drive F: (spec/oxos-internal/01-exfat-storage-spec.md).
+// The retail drive letters and the extra exFAT drive F: (spec/oxos-internal/05-exfat-storage-spec.md).
 static const char *PartitionOf(char letter) {
     switch (letter & ~0x20) {
     case 'C': return "\\Device\\Harddisk0\\Partition2";

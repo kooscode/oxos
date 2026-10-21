@@ -8,8 +8,8 @@ Evidence: batch_decompile of 4627 `AvSetDisplayMode` (ord 3, 0x8003045C), `AvSen
 0x8002FFDE), the bit-29 set-up 0x8002FF23, the WSS/CGMS writer 0x8002FDD2 and the INIT table set-up 0x800626E0; of
 5838 `AvSetDisplayMode` (0x80030F3D), `AvSendTVEncoderOption` (0x80030822), the encoder register writer 0x80030026,
 the bit-29 set-up 0x800306FF, the WSS/CGMS routine 0x800305C8, the table loader 0x800315D4 and hardware detection
-0x80054921. The Cerbios 3.1.0 kernel's `AvSetDisplayMode` (0x80036FCB) was a cross-check for 5838.
-The NV2A and CRTC table rows are not reproduced.
+0x80054921.
+The NV2A and CRTC table rows are not reproduced. OXOS's own display choices are spec/oxos-internal/02-display-modes.md.
 
 ## 1. Which encoder
 ### 1.1 4627
@@ -31,12 +31,6 @@ Detection (cold boot, `XboxHardwareInfo`, spec 02 §5) uses a byte of the BIOS i
 The encoder address is chosen at every boot (cold and quick, in the table loader 0x800315D4):
 **Flags 0x20 → Focus 0xD4; else Flags 0x400 → Xcalibur 0xE0; else Conexant 0x8A**. Titles read
 `XboxHardwareInfo`, so on a 1.6 console Flags bit 0x400 must be set and bit 0x20 clear.
-
-**Cerbios cross-check (one image for every revision):** Cerbios ignores the flash byte and probes the bus at boot:
-an SMBus byte read (protocol 0x0A, command 0) at 0x8A, then 0xD4, then 0xE0; the first that completes (host status
-0x10) is the encoder. Focus → Flags |= 0x20; Xcalibur → Flags |= 0x400.
-**For OXOS:** probe the bus like Cerbios rather than trusting flash byte 0x78 (OXOS's open BIOS has 0x70 there, and
-one image should serve every revision); report Flags 0x20 / 0x400 exactly as the reference would.
 
 ## 1a. Table layouts
 ### 1a.1 4627: header (eight 16-bit counts) and tables in STICKY
@@ -109,6 +103,18 @@ kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies
 The title-side D3D library builds these words, so **row numbers are ABI**: the same row means the same mode on
 every encoder.
 
+## 2a. Mode words titles send (observed)
+The D3D mode words for each picture size, as listed by nxdk's `lib/hal/video.c` (MIT) and seen in titles'
+AvSetDisplayMode calls: the class (bits 30–31) and the CRTC row (bits 8–15) give the size.
+- HD: CRTC row 7 = 640×480p (0x88070701), 8 = 720×480p (0x88080801), 0x0A = 1280×720p (0x880B0A02), 0x0C =
+  1920×1080i (0x880E0C03).
+- VGA: 6 = 640×480, 3 = 800×600, 4 = 1024×768.
+- SD: 1/3 = 640×480 (NTSC/PAL), 2/4 = 720×480.
+- Enter the Matrix with 1080i allowed asks for 0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with
+  pitch 0x1400 (logged with a gdb breakpoint on AvSetDisplayMode).
+- **1080i scanout:** the title renders each field as 1920×540 with 8192-byte lines and passes half of that (0x1000)
+  as the pitch: in interlaced mode the CRTC offset is stepped twice per field line.
+
 ## 3. Format and pitch
 `Format`: 0x10 / 0x1C → CRTC depth code 2 (16 bpp), general control 0x100030; 0x11 → depth 0x2000011 (565),
 general control 0x101030; 0x12 / 0x1E → depth code 3 (32 bpp), 0x100030; others keep the 32-bit defaults. Pitch is
@@ -132,8 +138,11 @@ Steps marked **[E]** are encoder-specific: specs 18–20 say what each encoder d
 5a. **[E]** Xcalibur only: further fixed writes and the flicker filter (spec 20).
 6. `out 0x80D6, (bit 28) | 4`; `out 0x80D8, 4`; NV 0x68050C |= 0x10020000; VGA 0x3C3 ← 1, misc output 0x3C2 ← 0xE3;
    PRAMDAC general control.
-7. NV2A register row (field 5 bytes of dword writes at the listed offsets, §8).
-8. Bit 29: clear NV 0x680630, 0x6808C4, 0x68084C (NV2A output back to RGB, §8).
+   Port 0x80D6 is ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen line. Option 0x13
+   only updates bit 28 of the stored mode word and the WSS word (SD only), and titles' D3D leaves bit 28 clear in HD
+   mode words (Halo 2 and Brute Force in 480p: 0x88070701), so in HD modes the line stays low.
+7. NV2A register row (field 5 bytes of dword writes at the listed offsets, §7).
+8. Bit 29: clear NV 0x680630, 0x6808C4, 0x68084C (NV2A output back to RGB, §7).
 9. VGA sequencer (3 registers: 0x03, 0x21, 0x0F at indexes 0–2), graphics controller and attribute controller
    defaults (short fixed lists), then CRTC 0x11 ← 0.
 10. CRTC row (field 6 registers; the pitch registers 0x13/0x19/0x25 get the pitch bits merged in).
@@ -176,86 +185,16 @@ builds one word; only the final write differs per encoder **[E]**.
   code 8 = 4:3 full format, 7 = 16:9 anamorphic, with the copy bits in the upper group.
 - **HD and VGA:** nothing is sent.
 
-**Ours:** the same option behaviour. Macrovision stays off (options 1 and 0x0A do nothing; the CGMS-A word carries
-level 0).
+## 6. Boot animation (reference)
+The boot animation lives in the INIT section. Its screen costs the title nothing (observed: objdump of
+0x8001E990–0x8001E9E2): 0x8001E9F5 takes the saved display block, records the physical address of its pixels at
+0x8003B2D0 and **returns its pages to the free lists** (tail insertion, contiguous count decremented) while the
+scanout keeps showing them. Measured at the XBE entry point with the boot animation on and off: no pages besides the
+kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec 09 §7).
+Why (inferred): freed pages go to the end of the colour lists, so the picture survives until the title's video set-up
+replaces it, at no cost to the title's budget.
 
-## 6. Ours (status)
-`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7a). On Conexant and
-Focus encoders, SD (composite, S-video, SCART, component) and HD component mode words also program the encoder and
-the NV2A flat-panel timing; VGA and the Xcalibur leave the encoder alone.
-
-The NV extended CRTC register 0x39 (interlace half-line position) must be 0xFF for progressive output: the
-reference leaves it at 0xFF, and xemu treats any other value as interlaced and shows each field at half height
-(observed: Halo's menu squished into the top half of the window). Line compare (CR18) is likewise 0xFF (never).
-
-Of step 6 ours does the GPIO writes (`0x80D6 ← (bit 28) | 4`, `0x80D8 ← 4`) on every mode change. Port 0x80D6 is
-ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen line: titles that render 16:9 set
-mode bit 28 (option 0x13 or their D3D mode word), and xemu's "auto" aspect ratio shows 16:9 exactly when the last
-value written there is 5. Without the write every title shows 4:3 in xemu (anamorphic pictures look squashed).
-The line is raised only for SDTV modes: in the reference, option 0x13 just updates bit 28 of the stored mode word
-and the WSS encoder registers (SDTV only; nothing for HDTV-table modes), and titles' D3D leaves bit 28
-clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480p/720p/1080i xemu's "auto" shows
-4:3 under both kernels. **Ours (deviation since milestone 13):** the line is also raised for 720p and 1080i mode words
-(HDTV table, CRTC rows 0x0A and 0x0C), which are always 16:9, so xemu's "auto" shows them at 16:9; 480p keeps the
-reference rule (bit 28 only), since 480p can be 4:3 or 16:9.
-
-## 7a. Display timings per mode (ours; milestone 13)
-**Row meanings (observed, not from the reference's tables):** the D3D mode words for each picture size, as listed
-by nxdk's `lib/hal/video.c` (MIT) and seen in titles' AvSetDisplayMode calls: the table bits 30–31 (10b HDTV,
-11b VGA, else SDTV) and the CRTC row (bits 8–15) give the size. HDTV: row 7 = 640×480p (0x88070701), 8 =
-720×480p (0x88080801), 0x0A = 1280×720p (0x880B0A02), 0x0C = 1920×1080i (0x880E0C03); VGA: 6 = 640×480, 3 =
-800×600, 4 = 1024×768; SDTV: 1/3 = 640×480 (NTSC/PAL), 2/4 = 720×480. Enter the Matrix with 1080i allowed asks for
-0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with pitch 0x1400 (logged with a gdb breakpoint on
-AvSetDisplayMode).
-**Ours:** timings from the public standards for those sizes (CEA-861 480p, SMPTE 296M 720p: 1650×750 total,
-SMPTE 274M 1080i: 2200×1125, programmed per field with CR39 = interlace half-line, VESA 800×600/1024×768); unknown
-rows fall back to 640×480. High bits in the NV extended CRTC registers CR25 (vertical bit 10s, kept with the mode
-across quick reboots and merged with the pitch bit) and CR2D (horizontal bit 8s). xemu sizes its display from
-CR01, CR12/CR07 and CR39 (doubling interlaced heights): measured 1920×1080 interlaced and 1280×720 for the two modes
-above (before: 640×480 for every mode).
-**xemu note:** Enter the Matrix in 720p or 1080i aborts xemu at render scale 2 or more (assertion in
-`surface_download_to_buffer`: one of the title's render surfaces has a pitch smaller than width × bytes per
-pixel, which xemu's downscale path rejects); at scale 1 it runs. The retail BIOS we have returns this title to the
-dashboard within 0.3 s in xemu, so there is no reference run to compare.
-**1080i scanout (observed):** the title renders each field as 1920×540 with 8192-byte lines and passes half of that
-(0x1000) as the pitch: in interlaced mode the CRTC offset is stepped twice per field line. xemu's display code
-expects this (it divides the surface pitch by the CRTC offset); ours programs the pitch as given.
-
-## 7. Boot splash image (ours; no reference counterpart)
-The reference kernel's boot animation lives in its INIT section and is not reproduced. Ours shows a picture
-during cold boot (`src/hal/splash.cpp`):
-
-- `tools/mkbios.py --splash IMAGE` (the Makefile passes `kernel/splash/splash.png` when present) keeps a
-  640×480 palette PNG as it is (no Pillow needed; the committed splash is one, and `--save-splash PNG`
-  writes such a file); any other image needs Pillow and is scaled to fit 640×480 keeping its aspect ratio (black bars),
-  pixels with every channel ≤ 6 are set to black (background noise that costs bytes but is invisible), and it is
-  reduced to 256 colours without dithering: octree by default (`SPLASH_QUANT=octree`; smallest, suits textured
-  art: 93 KB for the current splash against 241 KB with median cut), or `SPLASH_QUANT=median` for images with
-  smooth gradients, where octree shows banding. The PNG is re-chunked to a single IDAT and
-  stored in flash bank 1 (offset
-  0x40000, physical 0xFFF40000) behind a 20-byte header: `"XKSPLASH"`, u32 version 1, u32 PNG length, u32
-  CRC-32 of the PNG. Banks 0 and 3 must stay as they are: the MCPX boot ROM reads its init table at 0xFF000000
-  (bank 0 of a 1 MiB chip) and the 2BL/kernel from the top bank. A 256 KiB image has no spare bank, so no splash.
-- The splash thread maps the bank with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)` and decodes it with
-  `src/hal/png.cpp`: inflate (RFC 1951), Adler-32 check, PNG scanline un-filtering. Supported input is exactly
-  what mkbios writes, plus 8-bit RGB/RGBA: not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a
-  temporary buffer below 16 MB.
-- When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
-  `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header,
-  0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
-- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time.
-- **Reference behaviour (observed: objdump of 0x8001e990–0x8001e9e2):** the boot screen costs the
-  title nothing. 0x8001e9f5 takes the saved display block, records the physical address of its pixels at
-  0x8003b2d0 and **returns its pages to the free lists** (tail insertion, contiguous count decremented) while the
-  scanout keeps showing them. Measured at the XBE entry point with the boot animation on and off: no pages besides
-  the kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec/stock/09 §7).
-  Why (inferred): freed pages go to the end of the colour lists, so the picture survives until the title's video
-  set-up replaces it, at no cost to the title's budget.
-- **Ours:** the launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the
-  scanout on the screen buffer. Until 2026-10-17 the screen buffer was kept as the persisted display
-  (`AvSetSavedDataAddress`), which held 301 pages (1.2 MB) at the title's entry point that the reference does not.
-
-## 8. NV2A registers per mode (field 5 rows, 26 dwords; 4627)
+## 7. NV2A registers per mode (field 5 rows, 26 dwords; 4627)
 | Register | Role (name from nouveau where known) | Reference behaviour |
 |---|---|---|
 | 0x680800–0x680818 | flat-panel vertical: display end, total, CRTC, sync start / end, valid start / end | per mode |

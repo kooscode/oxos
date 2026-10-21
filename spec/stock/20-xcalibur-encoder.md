@@ -24,7 +24,7 @@ All Xcalibur accesses use the 4-byte form.
 
 ## 2. Tables and the register writer
 The Xcalibur uses three tables of the AV blob (spec 17 §1a.2): the per-mode table (42 columns, register row + 38
-mode rows), the value pool and the dword list; plus four row maps and two flicker-filter sets in the kernel (§6).
+mode rows), the value pool and the dword list; plus four row maps and two flicker-filter sets in the kernel (§6.1, §6.3).
 Each per-mode row holds, under the register row's 42 register numbers, one **index byte** per register. The writer
 `write(register, index)` turns it into one or more 32-bit writes, depending on the **variant** v = (mode word bit 29 ?
 2 : 0) | (luma filter on, option 0x0E ? 1 : 0):
@@ -46,11 +46,11 @@ Each per-mode row holds, under the register row's 42 register numbers, one **ind
   only those.
 - **Indirect sub-registers:** some settings go through a three-register port: **0x0C ← sub-address, 0x0D ← value,
   0x0E ← 1** (commit). Below, "sub(a) ← x" means that sequence.
-- In §7 the rows are already expanded: each entry shows the 32-bit values written.
+- In §6 the rows are already expanded: each entry shows the 32-bit values written.
 
 ## 3. Mode change (the [E] steps of spec 17 §5)
 - **Row selection:** the encoder row (mode bits 0–6) is **remapped** to an Xcalibur row through one of four byte maps
-  (§7.1), chosen by class HD and console region 2 (Japan). Special case: encoder row 1 with CRTC row (bits 8–15) 7 in
+  (§6.1), chosen by class HD and console region 2 (Japan). Special case: encoder row 1 with CRTC row (bits 8–15) 7 in
   the HD class is looked up as row **4**. The CRTC and NV2A rows are used unmapped.
 - **Step 0:** read register **4**, write it back **| 0x0F** (DAC outputs off); read register **0**, write it back
   **& ~0x02** (output off). Clear the luma-filter state and the flicker cache (option 0x0B).
@@ -74,30 +74,23 @@ Each per-mode row holds, under the register row's 42 register numbers, one **ind
 | 5 caption status | (~register 0x14) & 3 |
 | 9 blank off | register **4** ← mode bits 24–27 |
 | 0x0A Macrovision commit | only in class 00, 01, or **480p** ((mode & 0xCF0000FF) == 0x88000001). Value: level 0 → 0; level 1 → 0x36; level ≥ 2 → 0x3E in class 00, 0x36 otherwise; 480p → 0x24 when non-zero. **sub(0x0F) ← value** |
-| 0x0B flicker filter 0–5 | not in HD. Read register **0x60**; set A if bits 22–23 = 10b, else set B. Level → entry: 0→0, 1→1, 2→(A ? 2 : 1), 3→(A ? 3 : 2), 4/5→(A ? 4 : 2). Write the entry's **7 dwords to registers 0x60–0x66** (§7.3), skipped if it is the entry written last (the cache is cleared at each mode change). With mode bit 29: then register 0x60 ← register 0x60 & ~0x01000000 |
+| 0x0B flicker filter 0–5 | not in HD. Read register **0x60**; set A if bits 22–23 = 10b, else set B. Level → entry: 0→0, 1→1, 2→(A ? 2 : 1), 3→(A ? 3 : 2), 4/5→(A ? 4 : 2). Write the entry's **7 dwords to registers 0x60–0x66** (§6.3), skipped if it is the entry written last (the cache is cleared at each mode change). With mode bit 29: then register 0x60 ← register 0x60 & ~0x01000000 |
 | 0x0E luma filter on/off | store the state (variant bit 0). If a mode is set and the state changed: re-run `write(register, index)` for per-mode columns **24–41** of the current (remapped) row |
 | WSS/CGMS write | register **7** ← ((word & 0xFFFFF) \| 0x01800000) << 1 |
 
-## 5. For OXOS (notes)
-- **SMBus:** add the 4-byte block form (§1) to the HAL, keyed by address 0xE0–0xE7 and `WordFlag`, so titles and the
-  kernel see the reference's behaviour.
-- **Tables:** the pool / index scheme is a compression choice, not ABI: OXOS can store the expanded rows of §7.2
-  directly, keyed by (mode word fields, region). Only the mode-word meaning, the option behaviour and the register
-  sequence matter.
-
-## 6. Open
+## 5. Open
 - Meanings of Xcalibur registers 0, 1, 4, 7, 9, 0x0A, 0x0B, 0x14, 0x58, 0x60 and the coefficient banks beyond what
   the behaviour shows (DAC enables in 4 bits 0–3, output enable in 0 bit 1, WSS in 7, captions in 9–0x0B/0x14).
 - Meaning of register 0x60 bits 22–23 (selects flicker set A or B) and bit 24 (cleared for bit 29).
 - Whether the 1.6 board's other hardware (SMC, fan) needs further kernel changes outside the encoder.
 
-## 7. Tables
+## 6. Tables
 Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3): the per-mode rows
 from the 5838 BIOS image's AV blob (flash offset 0x357A8), the row maps and flicker-filter sets from the 5838 kernel
 (file offset = VA − 0x80010000). Mode names as in spec 18. Macrovision rows are not included: OXOS keeps copy
 protection off.
 
-### 7.1 Row maps (mode word bits 0–6 → Xcalibur row)
+### 6.1 Row maps (mode word bits 0–6 → Xcalibur row)
 
 Chosen by class (HD = mode word bits 30–31 == 10b) and console region 2 (Japan). Special case: encoder row 1 with CRTC row 7 in the HD class is looked up as row 4. File offsets in xboxkrnl 1.0.5838.1: SD 0x02878, SD Japan 0x02898, HD 0x028B8, HD Japan 0x028C0.
 
@@ -136,7 +129,7 @@ Chosen by class (HD = mode word bits 30–31 == 10b) and console region 2 (Japan
 | 0x1E | 0x00 | 0x00 |  |  |
 | 0x1F | 0x00 | 0x00 |  |  |
 
-### 7.2 Per-mode rows
+### 6.2 Per-mode rows
 
 #### Video Encoder Mode: Xcalibur row 0x01
 Used by: SD map entry 0x01 (NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x01 (NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video)
@@ -1962,7 +1955,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 5): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 6): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### 7.3 Flicker filter sets (option 0x0B; level 5 is written at every mode change)
+### 6.3 Flicker filter sets (option 0x0B; level 5 is written at every mode change)
 
 #### Video Encoder Mode: flicker filter set A, entry 0 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)

@@ -220,7 +220,7 @@ def our_timing(std_name, xres):
     return h_clko, h_clko // 2, v_linesi
 
 
-# The SD encoder rows of the mode words titles send (nxdk lib/hal/video.c, stock spec 17 §7a).
+# The SD encoder rows of the mode words titles send (nxdk lib/hal/video.c, stock spec 17 §2a).
 # Output 0: composite + S-video (SCART RGB with mode bit 29); output 2: SD component (the HDTV AV pack's 480i/576i).
 SD_ROWS = [
     (0x01, "NTSC-M", 640, 0), (0x02, "NTSC-M", 720, 0), (0x03, "NTSC-J", 640, 0), (0x04, "NTSC-J", 720, 0),

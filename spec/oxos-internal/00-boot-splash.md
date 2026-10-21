@@ -1,0 +1,37 @@
+# Boot splash image (OXOS addition)
+
+Not part of the reference: the retail kernel shows its own boot animation from its INIT section (what it does with
+the animation's memory is in stock spec 17 §6). OXOS shows a picture during cold boot instead. First implemented
+2026-10-15 (drawn emblem, then the PNG from flash the same day). Code: `kernel/src/hal/splash.cpp`,
+`kernel/src/hal/png.cpp`; host side `tools/mkbios.py`.
+
+## 1. The image in flash
+- `tools/mkbios.py --splash IMAGE` (the Makefile passes `kernel/splash/splash.png` when present) keeps a
+  640×480 palette PNG as it is (no Pillow needed; the committed splash is one, and `--save-splash PNG` writes such a
+  file).
+- Any other image needs Pillow:
+  - it is scaled to fit 640×480 keeping its aspect ratio (black bars);
+  - pixels with every channel ≤ 6 are set to black (background noise that costs bytes but is invisible);
+  - it is reduced to 256 colours without dithering: octree by default (`SPLASH_QUANT=octree`; smallest, suits
+    textured art: 93 KB for the current splash against 241 KB with median cut), or `SPLASH_QUANT=median` for images
+    with smooth gradients, where octree shows banding.
+- The PNG is re-chunked to a single IDAT and stored in flash bank 1 (offset 0x40000, physical 0xFFF40000) behind a
+  20-byte header: `"XKSPLASH"`, u32 version 1, u32 PNG length, u32 CRC-32 of the PNG.
+- Banks 0 and 3 must stay as they are: the MCPX boot ROM reads its init table at 0xFF000000 (bank 0 of a 1 MiB chip)
+  and the 2BL/kernel from the top bank. A 256 KiB image has no spare bank, so no splash.
+
+## 2. Showing it
+- The splash thread maps the bank with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)` and decodes it with
+  `src/hal/png.cpp`: inflate (RFC 1951), Adler-32 check, PNG scanline un-filtering. Supported input is exactly what
+  mkbios writes, plus 8-bit RGB/RGBA: not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a temporary
+  buffer below 16 MB.
+- When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
+  `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header, 0x102 bad
+  header, 0x103 out of memory, 1–10 decoder step) record what happened.
+- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time.
+
+## 3. Memory
+- The launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the scanout on
+  the screen buffer, so the title starts with no splash pages held, as on the reference (stock spec 17 §6).
+- Until 2026-10-17 the screen buffer was kept as the persisted display (`AvSetSavedDataAddress`), which held 301
+  pages (1.2 MB) at the title's entry point that the reference does not.

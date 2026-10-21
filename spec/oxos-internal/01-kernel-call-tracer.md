@@ -14,7 +14,7 @@ host side `tools/trace.py`, `tools/run.py --trace-map`.
 | 1 | ring from contiguous memory, stubs from pool: inside the console's 64 MB (about 2 MB less for the title) | `make run-trace-full TRACE=1` (`build/trace-full-64mb`) |
 | 2 | ring and stubs mapped at physical 0x4000000, **above** the 64 MB the kernel manages; needs xemu with 128 MB | `make run-trace-full` (default, `build/trace-full`): the title sees exactly a release build's memory |
 
-Trace builds also turn on the debug serial port (01-debug-serial.md); the host tools use its crash lines.
+Trace builds also turn on the debug serial port (03-debug-serial.md); the host tools use its crash lines.
 
 ## 2. Hooking the title's imports
 - When the XBE loader resolves the title's kernel thunks (`XepResolveKernelThunks`), each resolved address goes
