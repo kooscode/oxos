@@ -1,4 +1,4 @@
-"""exFAT on GPT disks for the tests (spec/oxos-internal/05-exfat-driver.md, 03-exfat-storage-spec.md): a writer that builds
+"""exFAT on GPT disks for the tests (spec/oxos-internal/07-exfat-driver.md, 05-exfat-storage-spec.md): a writer that builds
 a disk image from a tree of folders and files, and a reader that checks a volume completely.
 
 Writer: Builder(size).add(path, data) ... .write(out.qcow2). The disk gets a protective MBR, a GPT with one

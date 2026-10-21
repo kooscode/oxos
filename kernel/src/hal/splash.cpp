@@ -1,5 +1,5 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
-// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/stock/17 §7), or, without one, a
+// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/oxos-internal/00-boot-splash.md), or, without one, a
 // drawn emblem and caption. The title launcher waits for it and frees its memory before the title starts, leaving the
 // last frame on screen, as the reference does with its animation.
 #include <xk/ke.h>

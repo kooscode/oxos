@@ -48,7 +48,7 @@ TRACE_IMPORTS ?= 0
 # converted to ELF, which gdb reads better than PE) is the symbol file for gdb.
 DEBUG     ?= 0
 OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-O2 -g0)
-# Debug serial port (spec/oxos-internal/01-debug-serial.md): on in the self-test and trace builds, off in release builds.
+# Debug serial port (spec/oxos-internal/03-debug-serial.md): on in the self-test and trace builds, off in release builds.
 SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 
 CXX := clang++
@@ -180,7 +180,7 @@ test: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) test-dash test-relaunch test-fatal test-udf
 	$(if $(MCPX_ROM),$(MAKE) test-mcpx)
 
-# 48-bit addressing (spec/oxos-internal/02-lba48.md): the self-tests on a 2 TB disk, a sparse copy of the test disk
+# 48-bit addressing (spec/oxos-internal/04-lba48.md): the self-tests on a 2 TB disk, a sparse copy of the test disk
 # grown with tests/qcow2.py --grow and kept in xemu-state/oxos-xemu-lba48/ (a few MB on the host). The kernel writes
 # test patterns either side of sector 0x0FFFFFFF and at the end of the disk; boot_test.py then finds each one at
 # exactly LBA * 512 in the image and checks that the start of the disk is untouched. The image itself is never
@@ -194,7 +194,7 @@ test-lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
-# exFAT disks (spec/oxos-internal/05-exfat-driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB,
+# exFAT disks (spec/oxos-internal/07-exfat-driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB,
 # 16 KB clusters, sparse), the test disk's C: and E: copied into /C and /E by tests/exfat.py; kept in
 # xemu-state/oxos-xemu-exfat/. The FATX suite then runs on E: as a folder of the volume, and tests/exfat.py checks the
 # whole volume afterwards (checksums, chains, bitmap).
@@ -288,7 +288,7 @@ run: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
-# The same with the debug serial port (spec/oxos-internal/01-debug-serial.md), whose output is printed in this terminal. No import tracing, so
+# The same with the debug serial port (spec/oxos-internal/03-debug-serial.md), whose output is printed in this terminal. No import tracing, so
 # titles see the memory of a release build (plus the serial code); also the build to flash for troubleshooting on
 # hardware.
 run-trace-basic: $(PLAY_FETCH)

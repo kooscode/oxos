@@ -1,6 +1,6 @@
 # exFAT storage for OXOS: design spec
 
-Status: design, not implemented. Companion plan: `04-exfat-storage-plan.md`. The title behaviour below was traced with
+Status: design, not implemented. Companion plan: `06-exfat-storage-plan.md`. The title behaviour below was traced with
 OXOS's kernel call tracer (Halo, 2026-10-18, §8).
 
 ## 1. Goal

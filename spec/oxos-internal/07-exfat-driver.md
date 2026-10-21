@@ -3,7 +3,7 @@
 Status: phases 1-4 of the plan work (GPT/MBR, read-write exFAT, folder partitions with bounded sizes, cache-partition
 formatting through the volume handle with X/Y/Z usage limits; `make test-exfat` passes). Not yet run with a retail
 title on an exFAT disk; memory units are the last phase. The storage design (layout, virtual partitions, cache formatting, size reporting) is
-`03-exfat-storage-spec.md`; this document is the driver: the on-disk format it reads and writes, and how it fits the
+`05-exfat-storage-spec.md`; this document is the driver: the on-disk format it reads and writes, and how it fits the
 kernel. The format facts come from Microsoft's published exFAT specification (2019) and the UEFI specification
 (GPT); nothing here comes from another implementation's code.
 

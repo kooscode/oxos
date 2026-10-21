@@ -1,5 +1,5 @@
 // IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5), 48-bit
-// addressing for disks over 128 GiB (spec/oxos-internal/02-lba48.md).
+// addressing for disks over 128 GiB (spec/oxos-internal/04-lba48.md).
 #include <xk/arch.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -18,7 +18,7 @@ volatile USHORT IdexDiskSecurityWord; // IDENTIFY word 128, for diagnostics
 
 static PDEVICE_OBJECT IdexDiskPartitionTable[IDE_MAX_PARTITIONS];
 
-// exFAT layout (spec/oxos-internal/03-exfat-storage-spec.md): a GPT or MBR disk whose first data partition holds exFAT.
+// exFAT layout (spec/oxos-internal/05-exfat-storage-spec.md): a GPT or MBR disk whose first data partition holds exFAT.
 // Partition1-6 are then folders of that volume (the file system mounts them through IdexDiskFolderOf), and
 // Partition0's retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at sectors 1024-2047,
 // before the partition. Kinds of disk device:

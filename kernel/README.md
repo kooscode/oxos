@@ -17,7 +17,7 @@ make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
                                 # MEMORY=128 on any run target: a 128 MB console
                                 # HD=1 (or HD=480p,720p): HDTV AV pack + EEPROM HD modes, so games use 480p/720p/1080i
                                 # ENCODER=focus|xcalibur: the video encoder xemu presents (default conexant)
-make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec/oxos-internal/01-debug-serial.md) printed in the terminal
+make run-trace-basic [ISO=game.iso]  # the same session with the debug serial port (spec/oxos-internal/03-debug-serial.md) printed in the terminal
 make run-trace-full [ISO=game.iso] [TRACE=1|2]  # run-trace-basic plus a record of the title's last 32768 kernel calls
 make print-trace-dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
 make run-gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build/debug/) paused for gdb on xemu's
@@ -46,7 +46,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 | `boot/` | the open image's X-code wrapper (Cromwell's table), reset code and 2BL (spec 01 §5) |
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads, scheduler, waits, bug checks; the boot self-tests (`selftest*.cpp`, self-test build only) |
-| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, AV (video modes), network PHY, boot splash, debug serial port (spec/oxos-internal/01-debug-serial.md) |
+| `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, AV (video modes), network PHY, boot splash, debug serial port (spec/oxos-internal/03-debug-serial.md) |
 | `src/ob/`, `src/ex/`, `src/ps/` | object manager; executive objects (Nt*), EEPROM, fatal errors; system threads |
 | `src/mm/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
 | `src/io/` | I/O manager: devices, IRPs, files, the file-system cache, the RAW file system |
@@ -72,7 +72,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
 3. Kernel services:
    - 3a: object manager, handles, namespace, symbolic links, Nt event/mutant/semaphore/timer objects, Ps threads (spec 10). ✅ passes in xemu.
    - 3b: I/O manager — devices, IRPs, StartIo, file objects, Nt*File services, completion ports (spec 11). ✅ passes in xemu.
-   - 3c-1: IDE channel, hard disk DMA driver, partition devices (stock LBA28 table) (spec 04). ✅ passes in xemu with a copy of the HDD image. Later: 48-bit addressing for disks over 128 GiB (spec/oxos-internal/02-lba48.md), `make test-lba48` on a 2 TB disk.
+   - 3c-1: IDE channel, hard disk DMA driver, partition devices (stock LBA28 table) (spec 04). ✅ passes in xemu with a copy of the HDD image. Later: 48-bit addressing for disks over 128 GiB (spec/oxos-internal/04-lba48.md), `make test-lba48` on a 2 TB disk.
    - 3c-2: FATX file system — create/read/write/rename/delete, directory and volume queries (spec 04b). ✅ passes in xemu; written files verified on the disk copy by an independent reader.
    - 3c-3: DVD (ATAPI), XDVDFS, RAW file system (spec 04c). ✅ passes in xemu with a generated XISO.
 4. XBE loader and title launch (spec 05):
@@ -94,9 +94,9 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
    - 6d: performance counter as the reference: 3.375 MHz, 32-bit PM timer extended through the SCI (spec 06 §7). ✅ passes in xemu.
    - 6e: FATX scatter/gather I/O (`NtReadFileScatter`/`NtWriteFileGather`) (spec 04b). ✅ passes in xemu.
    - 8 (out of order): UDF 1.0x read-only file system for DVD-video discs, tried before XDVDFS (spec 04d; `make test-udf`). ✅ passes in xemu.
-   - Boot splash: a picture fading in on cold boot (`src/hal/splash.cpp`): `splash/splash.png` (already reduced to 256 colours, so the build needs no Pillow), stored by `mkbios.py` in flash bank 1, decoded by the kernel's own PNG/inflate decoder; without it (256 KB flash) a drawn emblem. The reference's INIT-section 3D animation and its assets are not reproduced (spec 17 §7).
+   - Boot splash: a picture fading in on cold boot (`src/hal/splash.cpp`): `splash/splash.png` (already reduced to 256 colours, so the build needs no Pillow), stored by `mkbios.py` in flash bank 1, decoded by the kernel's own PNG/inflate decoder; without it (256 KB flash) a drawn emblem. The reference's INIT-section 3D animation and its assets are not reproduced (`../spec/oxos-internal/00-boot-splash.md`).
    - 9: retail discs: Xbox DVD authentication (spec 04 §3a; xemu does not emulate it), modded-BIOS media/region policy by default (`RETAIL_MEDIA_POLICY=1` for strict), top-down physical page allocation and a low splash framebuffer so titles' fixed-address memory assumptions hold. Halo (XISO) now loads and runs its own code in xemu.
-   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`../spec/oxos-internal/00-kernel-call-tracer.md`; `make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools; today `make run-trace-full`). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad` (today `make test-controller`), a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
+   - 10: FSCTL_DISMOUNT_VOLUME for FATX/RAW/XDVDFS/UDF (utility-drive formatting); import tracer (`../spec/oxos-internal/01-kernel-call-tracer.md`; `make BUILD=build-trace SELFTEST=0 TRACE_IMPORTS=1`: every title kernel call with arguments, result and file names in a ring for the host tools; today `make run-trace-full`). **Halo reaches its main menu in xemu.** Then: progressive CRTC (CR39 = 0xFF; xemu showed Halo at half height before) and the encoder query options D3D uses (spec 17); `make test-pad` (today `make test-controller`), a controller test (nxdk title + virtual uinput gamepad, all 24 inputs) that passes on ours and the reference.
    - 11: **Halo 2 reaches its title screen in xemu.** Its "disc dirty or damaged" error had two causes: non-cached XDVDFS reads with a length that is not whole sectors (a map file's tail) were rejected, and the kernel used more memory than the reference (per-volume FATX caches instead of one shared FscSetCacheSize cache, an 8-page commit reserve, self-test/tracer code and a page-lock table in release builds). `make BUILD=build-trace2 SELFTEST=0 TRACE_IMPORTS=2` traced with the ring above 64 MB (xemu `mem_limit = '128'`), so the title's memory matches a release build (today `make run-trace-full`).
    - 12: **fully open BIOS image** (spec 01 §4–5).
      - Our reset code (top 512 bytes) and 2BL, XboxDev/cromwell's X-codes with its overflow trick, and its
@@ -117,10 +117,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - Quick reboots keep `XboxHardwareInfo` (Half-Life 2's controller input), the boot AV pack, the SMC armed flag
        and the PHY state.
      - A disc loaded at the dashboard is recognised: the reference's mount order and drive retries.
-   - 15: **HD display modes** (spec 17): standard timings for 480p, 720p, 1080i and VGA sizes. The widescreen GPIO
+   - 15: **HD display modes** (`../spec/oxos-internal/02-display-modes.md`): standard timings for 480p, 720p, 1080i and VGA sizes. The widescreen GPIO
      follows each mode change, so xemu's automatic aspect shows HD and widescreen games at 16:9.
    - 16: **debugging tools.**
-     - Debug serial port on the SuperIO's COM1 (spec/oxos-internal/01-debug-serial.md): boot log, DbgPrint and crash reports (`make run-trace-basic`).
+     - Debug serial port on the SuperIO's COM1 (spec/oxos-internal/03-debug-serial.md): boot log, DbgPrint and crash reports (`make run-trace-basic`).
      - Kernel call tracer: the title's last 32768 kernel calls with arguments, results and file names, dumped on a
        crash and on exit (`make run-trace-full`, `make print-trace-dump`, `tools/trace.py`).
      - Source-level debugging of the kernel and nxdk titles with gdb or VS Code on xemu's GDB server (`make run-gdb`,
@@ -132,10 +132,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - Each object rebuilds when any header it includes changes.
      - Boot tests run on any formatted disk.
      - `make test-controller`: an nxdk title and a virtual gamepad check all 24 inputs.
-   - 18: **48-bit disk addressing (LBA48)** for disks over 128 GiB (`../spec/oxos-internal/02-lba48.md`). Disks up to 128 GiB
+   - 18: **48-bit disk addressing (LBA48)** for disks over 128 GiB (`../spec/oxos-internal/04-lba48.md`). Disks up to 128 GiB
      keep the retail 28-bit commands. `make test-lba48` checks a 2 TB disk: every test pattern must land at the right
      sector of the image, and a forced 28-bit driver is checked to fail.
-   - 19: **exFAT hard disks** (`../spec/oxos-internal/03-exfat-storage-spec.md`, `05-exfat-driver.md`).
+   - 19: **exFAT hard disks** (`../spec/oxos-internal/05-exfat-storage-spec.md`, `07-exfat-driver.md`).
      - A GPT (or MBR) disk with one exFAT volume. C:, E:, X:, Y: and Z: are the folders `/C`, `/E`, `/X`, `/Y`, `/Z`,
        and F: (`/F`) is the extra drive.
      - Titles see the retail partitions and sizes. E: and C: report at most 2 TB, and X/Y/Z report their retail
