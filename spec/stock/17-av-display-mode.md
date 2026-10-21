@@ -1,50 +1,113 @@
-# Spec 17 — AvSetDisplayMode, video encoder tables (xboxkrnl 1.0.4627.1)
+# Spec 17 — AvSetDisplayMode and AvSendTVEncoderOption (xboxkrnl 1.0.4627.1, 1.0.5838.1)
 
-Clean-room behavioural spec. Evidence: batch_decompile of 0x8003045c (`AvSetDisplayMode`, ord 3) and disassembly of
-the INIT table set-up 0x800626e0. This spec covers the tables' layout and how they are indexed. The encoder register
-values themselves (Conexant and Focus) are recorded as plain register maps in spec 20 and spec 21 (functional
-hardware constants, see `dmca-compliance.md` §3); the NV2A and CRTC rows are not reproduced.
+Clean-room behavioural spec of what every video encoder shares: how the kernel picks the encoder, the table layouts,
+the mode word, the mode-change sequence, the encoder options and the NV2A registers per mode. What each encoder does
+in its own steps, and its register tables, is in its own spec: **spec 18 Conexant CX25871** (1.0–1.3),
+**spec 19 Focus FS453/FS454** (1.4–1.5), **spec 20 Xcalibur** (1.6).
+Evidence: batch_decompile of 4627 `AvSetDisplayMode` (ord 3, 0x8003045C), `AvSendTVEncoderOption` (ord 2,
+0x8002FFDE), the bit-29 set-up 0x8002FF23, the WSS/CGMS writer 0x8002FDD2 and the INIT table set-up 0x800626E0; of
+5838 `AvSetDisplayMode` (0x80030F3D), `AvSendTVEncoderOption` (0x80030822), the encoder register writer 0x80030026,
+the bit-29 set-up 0x800306FF, the WSS/CGMS routine 0x800305C8, the table loader 0x800315D4 and hardware detection
+0x80054921. The Cerbios 3.1.0 kernel's `AvSetDisplayMode` (0x80036FCB) was a cross-check for 5838.
+The NV2A and CRTC table rows are not reproduced.
 
 ## 1. Which encoder
-At boot (INIT 0x800626e0, cold boot) the kernel picks one of two table sets by **XboxHardwareInfo.Flags bit 0x20**
+### 1.1 4627
+At boot (INIT 0x800626E0, cold boot) the kernel picks one of two table sets by **XboxHardwareInfo.Flags bit 0x20**
 (spec 02 §5), not by probing the SMBus:
-- flag 0x20 set → **Focus FS454** (SMBus 0xD4), header at 0x80012AA4
-- clear → **Conexant CX25871** (SMBus 0x8A), header at 0x80012AB4
+- flag 0x20 set → **Focus** (SMBus 0xD4), header at 0x80012AA4;
+- clear → **Conexant** (SMBus 0x8A), header at 0x80012AB4.
 The chosen set is copied from INIT into the STICKY section (so quick reboots keep it), the encoder address is stored
-at 0x8003B354 and a pointer to the header at 0x8003C434. (The 1.6 Xcalibur encoder, 0xE0, is not in this kernel; the 5838 kernel's Xcalibur driver is spec 19.)
+at 0x8003B354 and a pointer to the header at 0x8003C434. 4627 has no Xcalibur support.
 
-### Header (eight 16-bit counts)
+### 1.2 5838
+Detection (cold boot, `XboxHardwareInfo`, spec 02 §5) uses a byte of the BIOS image, not the bus:
+- Map 4 bytes of physical **0xFFF00078** (flash offset 0x78; the 1.6 BIOS image holds 0x90 there, retail 4627
+  images 0x60). If the byte is **≥ 0x80**: Flags |= 0x10, then
+  - byte **== 0x90** → Flags |= **0x400** (Xcalibur);
+  - otherwise, port 0x80CE bit 5 set → Flags |= 0x30 (Focus, as in 4627).
+- (4627 only tests the byte for == 0x80 and has no 0x400 case.)
+
+The encoder address is chosen at every boot (cold and quick, in the table loader 0x800315D4):
+**Flags 0x20 → Focus 0xD4; else Flags 0x400 → Xcalibur 0xE0; else Conexant 0x8A**. Titles read
+`XboxHardwareInfo`, so on a 1.6 console Flags bit 0x400 must be set and bit 0x20 clear.
+
+**Cerbios cross-check (one image for every revision):** Cerbios ignores the flash byte and probes the bus at boot:
+an SMBus byte read (protocol 0x0A, command 0) at 0x8A, then 0xD4, then 0xE0; the first that completes (host status
+0x10) is the encoder. Focus → Flags |= 0x20; Xcalibur → Flags |= 0x400.
+**For OXOS:** probe the bus like Cerbios rather than trusting flash byte 0x78 (OXOS's open BIOS has 0x70 there, and
+one image should serve every revision); report Flags 0x20 / 0x400 exactly as the reference would.
+
+## 1a. Table layouts
+### 1a.1 4627: header (eight 16-bit counts) and tables in STICKY
 | field | Conexant | Focus | meaning |
 |---|---|---|---|
 | 0 | 22 | 48 | encoder registers written for every SDTV mode (common part) |
 | 1 | 63 | 61 | encoder registers per SDTV mode (bytes per row of the per-mode table) |
 | 2 | 13 | 64 | encoder registers per HDTV mode |
-| 3 | 6 | 28 | copy-protection registers, 525-line (AvSendTVEncoderOption 0x0A) |
+| 3 | 6 | 28 | copy-protection registers, 525-line (option 1) |
 | 4 | 1 | 28 | copy-protection registers, 625-line (same) |
 | 5 | 104 | 104 | bytes per row of the NV2A register table (26 dword writes) |
 | 6 | 34 | 34 | CRTC registers per row |
-| 7 | 12 | 14 | registers of the mode-bit-29 (SCART RGB) table, written by 0x8002FF23 (§8.3) |
+| 7 | 12 | 14 | registers of the mode-bit-29 table (§5 step 5) |
 
-### Tables (STICKY)
-Each table is *register list* (one row of register numbers / offsets) followed by *value rows*, one per index:
+Each table is a *register list* (one row of register numbers / offsets) followed by *value rows*, one per index:
 - 0x8003C810: SDTV common encoder registers: field 0 register numbers, then field 0 values (one row).
 - 0x8003BCD0: SDTV per-mode encoder table: field 1 register numbers, then rows of field-1 values.
 - 0x8003C710: HDTV per-mode encoder table: field 2 register numbers, then rows.
+- 0x8003BB68: the bit-29 table: field 7 register numbers, then rows (meaning per encoder: specs 18, 19).
 - 0x8003B358: NV2A registers: field 5 / 4 dword *offsets* (relative to the NV2A base), then rows of dword values.
 - 0x8003C4C8: CRTC: field 6 CRTC indexes, then rows of values.
 - 0x800362B0 (in .data, 4 bytes per NV row index): the value for NV2A 0x680880 (PRAMDAC).
 
+### 1a.2 5838: the AV blob in flash
+5838 does not compile mode tables into the kernel. At boot the table loader maps the top 4 MB of physical memory
+(the flash, PA 0xFFC00000) with one large-page PDE at VA 0xC0C00000 (mapped once, reference-counted) and reads an
+**AV blob** at PA **0xFFFF57A8** (offset 0x357A8 of the 256 KB image), **0x4658 bytes** long. It sits right after the
+kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies from flash on a quick reboot).
+
+- `u32 [3]` at 0: offset of the **descriptor** for Conexant, Focus, Xcalibur (in the 5838 image: 0x0C, 0x38, 0x64).
+- Descriptor: `u32 [11]` table offsets: 0 SDTV common, 1 per-mode, 2 HDTV, 3 Macrovision SD, 4 Macrovision 625-line,
+  5 NV2A (dword offsets + dword rows), 6 CRTC, 7 bit-29 table, 8 value pool (Xcalibur), 9 dword list (Xcalibur),
+  10 counts header (`u16 [10]`, the row length of tables 0–9).
+- Each table is a **register row** (register numbers, NV2A dword offsets or CRTC indexes) followed by **value rows** of
+  the same length.
+- Row lengths in the 5838 blob (bytes):
+
+| table | Conexant | Focus | Xcalibur |
+|---|---|---|---|
+| 0 SDTV common | 22 | 49 | 0 |
+| 1 per-mode | 63 | 64 | 42 |
+| 2 HDTV | 13 | 64 | 0 |
+| 3 Macrovision SD | 6 | 28 | 26 |
+| 4 Macrovision 625-line | 1 | 28 | 26 |
+| 5 NV2A | 104 | 104 | 104 |
+| 6 CRTC | 34 | 34 | 34 |
+| 7 bit-29 table | 12 | 14 | 0 |
+| 8 value pool | 0 | 0 | 3044 (761 dwords) |
+| 9 dword list | 0 | 0 | 368 (92 dwords) |
+
+- Row counts: NV2A = register row + 18; CRTC = register row + 16; per-mode tables as in specs 18–20.
+- **Validation:** every table pointer must lie inside the blob, and *pointer + row length + a per-table row count*
+  must not pass its end (row counts checked: common 2, per-mode 30 or 36 for Xcalibur, HDTV 4, Macrovision 5 / 3,
+  NV2A 19, CRTC 17, bit-29 table 30 (Conexant) or 3, pool 1, list 1). A failure **bug-checks** (code 0). This is a
+  weak sanity check, not a full bounds check.
+- The PRAMDAC 0x680880 values per NV2A row stay a small dword table in the kernel's initialised data (as in 4627).
+- The quick-reboot path re-reads the kernel's initialised data from flash and compares its SHA-1 with the cold-boot
+  value (a mismatch hangs): an integrity check of the image, not part of the driver.
+
 ## 2. Mode word (`Mode`, argument 3; 0 → 0x0F010101)
 | bits | meaning |
 |---|---|
-| 0–6 | encoder row (SDTV or HDTV table) |
+| 0–6 | encoder row (SDTV or HDTV table; Xcalibur maps it first, spec 20) |
 | 8–15 | CRTC row |
 | 16–23 | NV2A register row (and PRAMDAC 0x680880 entry) |
-| 24–27 | DAC output enable bits for the encoder (`0xBA ← (bits 24–27) | 0x20` on Conexant) |
-| 28 | `0x80D6` bit 0 (GPIO: written as `(bit 28) | 4`) |
-| 29 | **SCART RGB**: call 0x8002FF23 (writes the field-7 table row: SCART output, RGB input; §8.3) and clear NV 0x680630, 0x6808C4, 0x68084C (the NV2A then sends RGB). Earlier versions of this spec called it "HDTV"; the decoded table shows SCART |
-| 30–31 | `10b` → use the HDTV encoder table instead of the SDTV ones |
-The title-side D3D library builds these words, so **row numbers are ABI**: our tables need the same row meaning.
+| 24–27 | DAC output enable bits for the encoder (§5 step 12) |
+| 28 | `0x80D6` bit 0 (GPIO: written as `(bit 28) | 4`); widescreen |
+| 29 | the encoder's bit-29 set-up (§5 step 5): **SCART RGB** on Conexant and Focus; and clear NV 0x680630, 0x6808C4, 0x68084C (the NV2A then sends RGB) |
+| 30–31 | class: `00` 525-line SD, `01` 625-line SD, `10` HD (the HDTV encoder table), `11` VGA |
+The title-side D3D library builds these words, so **row numbers are ABI**: the same row means the same mode on
+every encoder.
 
 ## 3. Format and pitch
 `Format`: 0x10 / 0x1C → CRTC depth code 2 (16 bpp), general control 0x100030; 0x11 → depth 0x2000011 (565),
@@ -52,57 +115,72 @@ general control 0x101030; 0x12 / 0x1E → depth code 3 (32 bpp), 0x100030; other
 programmed in 8-byte units: CRTC 0x13 = pitch/8, CRTC 0x19 bits 5–7 = (pitch/8 >> 3) & 0xE0, CRTC 0x25 bit 5 =
 (pitch/8 >> 6) & 0x20.
 
-## 4. Same mode as last time (0x8003B34C)
+## 4. Same mode as last time (4627 0x8003B34C, 5838 0x8003C364)
 Only: PRAMDAC general control (0x680600), unlock CRTC (0x1F ← 0x57), pitch registers, CRTC 0x28 ← depth | 0x80,
 framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(base, 0x0E, 0)`.
 
 ## 5. Mode change (full sequence)
+Steps marked **[E]** are encoder-specific: specs 18–20 say what each encoder does there (nothing, if not listed).
+0. **[E]** Before anything else (5838): Focus and Xcalibur switch their outputs off.
 1. `out 0x80D3, 5`; wait until NV 0x6806A0 bits 0 and 4 agree (vertical blank phase).
 2. CRTC unlock (0x1F ← 0x57), 0x21 ← 0xFF, 0x28 ← 0 (screen off); PRAMDAC 0x680880 ← 0x21121111 (bytes 11 11 12 21).
-3. Conexant only: 0xBA ← 0x80 (reset), 0xBA ← 0x3F, 0x6C ← 0x46; stall 1 µs; 0x6C ← 0xC6.
-4. Encoder registers: HDTV table row (bits 30–31 = 10b) **or** the SDTV common row then the SDTV per-mode row.
-   SDTV extra for console region **2** (0x8003B158 == 2, Japan) and encoder rows 0x0D, 0x0E, 0x12: Conexant
-   0xA2 ← 8, 0xA4 ← 0xF0, 0xAC ← 0x9A; Focus word write 0x4E ← 0x13C.
-5. Bit 29 → SCART set-up routine 0x8002FF23(base, row): the field-7 table row (§8.3).
+3. **[E]** Encoder reset (Conexant), with a 1 µs stall in the middle (all encoders stall 1 µs here).
+4. **[E]** Encoder registers: class HD → the HDTV table row; else the SDTV common row, then the SDTV per-mode row
+   (Xcalibur: only its per-mode row). Then, for console region **2** (Japan) and encoder rows 0x0D, 0x0E, 0x12, a
+   per-encoder fix-up.
+5. **[E]** Bit 29 → the encoder's bit-29 set-up.
+5a. **[E]** Xcalibur only: further fixed writes and the flicker filter (spec 20).
 6. `out 0x80D6, (bit 28) | 4`; `out 0x80D8, 4`; NV 0x68050C |= 0x10020000; VGA 0x3C3 ← 1, misc output 0x3C2 ← 0xE3;
    PRAMDAC general control.
-7. NV2A register row (field 5 bytes of dword writes at the listed offsets).
-8. Bit 29: clear NV 0x680630, 0x6808C4, 0x68084C (NV2A output back to RGB, §8.4).
+7. NV2A register row (field 5 bytes of dword writes at the listed offsets, §8).
+8. Bit 29: clear NV 0x680630, 0x6808C4, 0x68084C (NV2A output back to RGB, §8).
 9. VGA sequencer (3 registers: 0x03, 0x21, 0x0F at indexes 0–2), graphics controller and attribute controller
    defaults (short fixed lists), then CRTC 0x11 ← 0.
 10. CRTC row (field 6 registers; the pitch registers 0x13/0x19/0x25 get the pitch bits merged in).
 11. Restore NV 0x6806A0 from step 1; CRTC 0x28 ← depth | 0x80 (screen on); wait for 3 vertical retraces (VGA
     status 0x3DA bit 3 high→low).
-12. PRAMDAC 0x680880 ← the per-row value; stall 1 µs; Conexant: 0x6C |= 0x80, 0xBA ← (bits 24–27) | 0x20.
-13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; 0x8002FDD2 (saved-data / splash bookkeeping).
+12. PRAMDAC 0x680880 ← the per-row value; stall 1 µs; **[E]** the encoder's DACs on from mode bits 24–27.
+13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; WSS/CGMS update (§5a).
 
-## 5a. AvSendTVEncoderOption: encoder options (Conexant, Focus)
-Evidence: batch_decompile of `AvSendTVEncoderOption` (ord 2, 0x8002FFDE), the WSS/CGMS writer 0x8002FDD2 and the
-Macrovision commit 0x8002FBAA. "Class" = mode word bits 30–31 (00 525-line SD, 01 625-line SD, 10 HD, 11 VGA).
-Conexant writes are bytes; Focus registers 0xAE–0xB2, 0xC2 and 0x0E are words.
+## 5a. AvSendTVEncoderOption
+"Class" = mode word bits 30–31 of the current mode. Options marked **[E]** are carried out by the encoder (specs
+18–20); the table gives the shared rules.
 
-| Option | Conexant (0x8A) | Focus (0xD4) |
-|---|---|---|
-| 2 closed captions on (class 00 only) | 0xC4 ← 0xC4 \| 0x38 (ECCF2, ECCF1, ECCGATE), then 4 caption-timing registers from a per-row table | 0xB2 ← 0xB2 \| 0xC000 |
-| 3 closed captions off (class 00) | 0xC4 ← 0xC4 & 0xCF | 0xB2 ← 0xB2 & 0x3FFF |
-| 4 caption bytes (class 00; argument bit 0 = field, data bytes d0 and d2) | field 0: 0xBC ← d2, 0xBE ← d0; field 1: 0xC0 ← d2, 0xC2 ← d0 | field 0: 0xB0 ← d2 << 8 \| d0; field 1: 0xAE ← the same |
-| 5 caption status (class 00, else 0) | register 2 bits 2–3 | bit 0 = 0xAE ≠ 0, bit 1 = 0xB0 ≠ 0 |
-| 0x0A Macrovision commit | 0xFC ← 0 / 0x63 / 0xE3 (0x42 in 480p) by level | 0x0E bit 15 ← level ≠ 0 |
-| 0x0B flicker filter, level 0–5 | level 0: 0xC8 \|= 0x40 (DIS_FFILT); else n = 1, 2, 3 for levels 1–3, 0 for 4–5: 0xC8 ← (0xC8 & 0x80) \| n << 3 \| n (F_SELC = F_SELY = n), 0x34 ← 0x80 (ADPT_FF) for level 5, else 0 | 0x26 ← level × 16 / 5, 0x27 ← 0 |
-| 0x0E luma filter on/off | 0x96 ← (0x96 & 0x0F) \| (on ? 0x10 : 0) (YLPF) | 0xC2 ← on ? 0x0052 : 0x00EE |
-| 0x0F current field | register 6 bit 0 | 0 |
-| 0x12 CGMS bits, 0x13 widescreen | store the value (0x13: mode word bit 28), then WSS/CGMS update | the same |
+| Option | Behaviour |
+|---|---|
+| 1 Macrovision level 0–3 | **[E]**; the level is also kept for the WSS/CGMS word |
+| 2 closed captions on | class 00 only, else no-op; **[E]** |
+| 3 closed captions off | class 00 only; **[E]** |
+| 4 caption bytes (argument bit 0 = field, data bytes d0 and d2) | class 00 only; **[E]** |
+| 5 caption status | class 00, else 0; **[E]** |
+| 6 AV capabilities | EEPROM-based, encoder-independent |
+| 9 blank screen | on: VGA sequencer 1 ← 0x21. Off: sequencer 1 ← 1, **[E]** DACs back on, `out 0x80D3, 4` |
+| 0x0A Macrovision commit | **[E]**; then WSS/CGMS update |
+| 0x0B flicker filter, level 0–5 | **[E]** |
+| 0x0C null mode | forget the current mode (the next `AvSetDisplayMode` does a full change) |
+| 0x0D query mode | the current mode word |
+| 0x0E luma filter on/off | **[E]** |
+| 0x0F current field | 4627: Conexant register 6 bit 0, other encoders 0. 5838: ~(port 0x80C0 bit 5) & 1, for every encoder |
+| 0x10 encoder type | 0 Conexant, 1 Focus, 2 Xcalibur (4627: 1 for Focus, else 0) |
+| 0x11 mode table version | 0 |
+| 0x12 CGMS bits | store; WSS/CGMS update |
+| 0x13 widescreen | mode word bit 28 ← argument; WSS/CGMS update |
 
-**WSS/CGMS update (0x8002FDD2)**, also after option 0x0A (and each mode set): class 00 → the 20-bit CGMS-A word (widescreen
-bit 0, CGMS bits 6–7, Macrovision level bits 8–9, 6-bit CRC in 14–19; IEC 61880); class 01 → (widescreen ? 7 : 8) \|
-CGMS << 12 (ETSI EN 300 294 WSS); other classes nothing. Conexant: 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2),
-0x62 ← word >> 4, 0x64 ← word >> 12. Focus: 0x85 ← word & 0xF, 0x84 ← word >> 4, 0x83 ← word >> 12 (field 1), and the
-same into 0x88, 0x87, 0x86 (field 0).
+**WSS/CGMS update** (4627 0x8002FDD2, 5838 0x800305C8), after options 0x0A, 0x12, 0x13 and each mode set. The kernel
+builds one word; only the final write differs per encoder **[E]**.
+- **Class 00 (525-line SD):** data (14 bits): bit 0 = widescreen (mode bit 28); bits 6–7 = CGMS (option 0x12); bit 8
+  = Macrovision level bit 1, bit 9 = level bit 0 (option 1). A **6-bit CRC** over data bits 0–13 (polynomial
+  x⁶ + x + 1, initial value all ones, data processed from bit 0, as a shift register) goes into bits 14–19: the
+  20-bit CGMS-A word of IEC 61880.
+- **Class 01 (625-line SD):** word = (widescreen ? 7 : 8) | CGMS << 12 (no CRC): the WSS of ETSI EN 300 294, aspect
+  code 8 = 4:3 full format, 7 = 16:9 anamorphic, with the copy bits in the upper group.
+- **HD and VGA:** nothing is sent.
+
 **Ours:** the same option behaviour. Macrovision stays off (options 1 and 0x0A do nothing; the CGMS-A word carries
 level 0).
 
 ## 6. Ours (status)
-`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7). On Conexant and
+`src/hal/av.cpp` programs the NV2A CRTC timing for the picture size the mode word asks for (§7a). On Conexant and
 Focus encoders, SD (composite, S-video, SCART, component) and HD component mode words also program the encoder and
 the NV2A flat-panel timing; VGA and the Xcalibur leave the encoder alone.
 
@@ -115,16 +193,11 @@ ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen 
 mode bit 28 (option 0x13 or their D3D mode word), and xemu's "auto" aspect ratio shows 16:9 exactly when the last
 value written there is 5. Without the write every title shows 4:3 in xemu (anamorphic pictures look squashed).
 The line is raised only for SDTV modes: in the reference, option 0x13 just updates bit 28 of the stored mode word
-and the WSS encoder registers (0x8002fdd2, SDTV only; nothing for HDTV-table modes), and titles' D3D leaves bit 28
+and the WSS encoder registers (SDTV only; nothing for HDTV-table modes), and titles' D3D leaves bit 28
 clear in HDTV mode words (Halo 2 and Brute Force in 480p: 0x88070701). So in 480p/720p/1080i xemu's "auto" shows
 4:3 under both kernels. **Ours (deviation since milestone 13):** the line is also raised for 720p and 1080i mode words
 (HDTV table, CRTC rows 0x0A and 0x0C), which are always 16:9, so xemu's "auto" shows them at 16:9; 480p keeps the
 reference rule (bit 28 only), since 480p can be 4:3 or 16:9.
-
-`AvSendTVEncoderOption`: queries 6 (AV capabilities), 0x0D (current mode word), 0x05 (caption status), 0x0F (current
-field, Conexant reg 6 bit 0), 0x10 (encoder type: 0 Conexant, 1 Focus, 2 Xcalibur, from the bus probe), 0x11 (mode
-table version, 0); options 9 (blank), 0x0C (null mode), 0x13 (widescreen) and, on Conexant and Focus, the encoder
-options of §5a (captions, flicker filter, luma filter, WSS/CGMS). Macrovision (1, 0x0A) stays off.
 
 ## 7a. Display timings per mode (ours; milestone 13)
 **Row meanings (observed, not from the reference's tables):** the D3D mode words for each picture size, as listed
@@ -182,59 +255,15 @@ during cold boot (`src/hal/splash.cpp`):
   scanout on the screen buffer. Until 2026-10-17 the screen buffer was kept as the persisted display
   (`AvSetSavedDataAddress`), which held 301 pages (1.2 MB) at the title's entry point that the reference does not.
 
-## 8. Encoder programming per class (reference behaviour, 4627)
-Evidence: the INIT tables at 0x800a7c18–0x800aa0c0 (Focus and Conexant sets; layout §1), decoded field by field
-with the chips' datasheets (CX25870/871 100381B; FS453/4 and the GPL `fs453.h`). This section records **what
-the reference programs and what it means**. Per-mode values (timings, clocks, gains, filter taps) are table data
-and are recorded in spec 20 (Conexant) and spec 21 (Focus). "Class" = mode word bits 30–31.
-The 5838 kernel's Conexant tables are identical to 4627's except the NV2A rows; its Focus tables differ.
-
-### 8.1 Conexant CX25871, which registers per class
-- **SD common row (22 registers, every SD mode):** WSS / caption control, pad drive and input-format bits (0x32),
-  EN_OUT (0xC4), input format (0xC6), flicker filter (0xC8), and a few constant set-up registers.
-- **SD per-mode row (63 registers):** the output mode (0xD6), the full timing set (H_CLKO … V_SCALE), PLL, the
-  standard bits (0xA2: SETUP, 625LINE, VSYNC_DUR, PAL_MD), levels (SYNC_AMP, BST_AMP, MCR, MCB, MY), the subcarrier
-  (MSC), WSSINC, DAC routing (0xCE), the flicker / luma filters and the copy-protection registers.
-- **HD row (13 registers):** output mode (0xD6), HDTV control (0x2E), pad drive / CSC (0x32), component gains
-  (0x3C/0x3E/0x40), EN_OUT (0xC4), input format (0xC6), DAC routing (0xCE), PLL (0xA0/0x9E/0x9C), timing reset
-  (0x6C).
-- Rows exist for SD encoder rows 0x01–0x1D (composite / S-video rows 0x01–0x0C, SD component rows 0x0D–0x1A among
-  them) and HD rows 1–3 (480p, 720p, 1080i).
-
-### 8.2 Conexant interface facts (decoded)
-| Fact | SD (composite / S-video, rows 0x01–0x0C) | SD component (rows 0x0D–0x1A) | SCART (bit 29) | HD (480p, 720p, 1080i) |
-|---|---|---|---|---|
-| Input format (IN_MODE) | alternate 24-bit **YCrCb** multiplexed | YCrCb | alternate 24-bit **RGB** multiplexed | YCrCb |
-| Pad drive (DRVS) | 1.8 V | 1.8 V | 1.8 V | **1.5 / 1.3 V** |
-| Interface | pseudo-master (EN_BLANKO), active-high HSYNC / VSYNC inputs, FLD_MODE 10, EACTIVE | same | same | same |
-| Clock source (EN_XCLK) | encoder PLL | encoder PLL | encoder PLL | **CLKI for 480p only**, PLL for 720p / 1080i |
-| Output mode (OUT_MODE) | 00 (CVBS / Y / C / Y_DLY) | 10 (V / Y / U / Y_DLY) | 11 + EN_SCART | 11 + HDTV_EN |
-| DAC routing (OUT_MUX A/B/C/D) | A = Y, B = C, C = Y, D = CVBS | **A = Y, B = Pr (V), C = Pb (U)**, D = Y_DLY | A = G, B = R, C = B, D = CVBS (sync) | **A = Y, B = Pr, C = Pb** |
-| Setup (7.5 IRE) | NTSC-M yes; NTSC-J, PAL no | **NTSC component yes**, PAL no | none | n/a |
-| Vertical sync (VSYNC_DUR) | 3 lines for 525-line NTSC rows, **2.5 lines for PAL-60** and 625-line rows | as SD | as SD | n/a |
-| HDTV control | n/a | n/a | n/a | tri-level sync off on Pr and Pb (EIA-770.3), RGB2YPRPB off (YCrCb in), HD_SYNC_EDGE for 480p only, RASTER_SEL per format, CSC_SEL for 720p / 1080i |
-| Component gains | n/a | own values (V gain differs from the datasheet's Table 1-27) | n/a | own values, not Table E-1 / E-2's |
-| Sequence | SRESET, 0xBA ← 0x3F, 0x6C ← 0x46, 1 µs, 0x6C ← 0xC6 (§5 step 3), common row, per-mode row | same | then the bit-29 row | HD row |
-
-The DAC routing for component and SCART is the same mapping (A = the Y / G pin, B = the Pr / R pin, C = the Pb / B
-pin), and matches the AV connector pinout (xboxdevwiki AV_Cables: pin 11 Y/G, 22 C/R/Pr, 9 B/Pb, 24 CVBS) together
-with the composite routing (A carries Y to pin 11, B carries C to pin 22, D carries CVBS to pin 24).
-
-### 8.3 Bit 29: the SCART table (field 7)
-12 Conexant registers (14 Focus): the output mode with EN_SCART (or the Focus VID_CNTL0 plus its colour matrix),
-the RGB input format, the DAC routing above and the standard bits. Rows exist only for the composite encoder rows;
-the SD component rows' entries are empty. So bit 29 means "SCART RGB instead of composite", and the reference
-switches the NV2A to RGB for it (§8.4).
-
-### 8.4 NV2A registers per mode (field 5 rows, 26 dwords)
+## 8. NV2A registers per mode (field 5 rows, 26 dwords; 4627)
 | Register | Role (name from nouveau where known) | Reference behaviour |
 |---|---|---|
 | 0x680800–0x680818 | flat-panel vertical: display end, total, CRTC, sync start / end, valid start / end | per mode |
 | 0x680820–0x680838 | flat-panel horizontal: the same seven | per mode; display end = width − 1 in every row; the horizontal "CRTC" value is not the width (it differs per row) |
 | 0x680848 | FP_TG_CONTROL | written every mode: DISPEN_POS, READ_PROG, positive HSYNC and VSYNC; MODE = centre for SD and 720p, scale for 480p; 1080i sets further bits (12–13, 16–17) not named by nouveau (interlace, inferred) |
-| 0x68084C | FP_MARGIN_COLOR | per mode; cleared for SCART (bit 29) |
-| 0x680630 | NV_PRAMDAC_630: the NV2A's output colour space (Cromwell: 0 = RGB, 2 = YUV) | **YCrCb** for every SD and HD row (an SD and an HD variant), cleared (RGB) for SCART |
-| 0x6808C0, 0x6808C4 | unnamed (nouveau writes 0x8C0 = 0 for TV) | per mode; 0x6808C4 cleared for SCART |
+| 0x68084C | FP_MARGIN_COLOR | per mode; cleared for bit 29 |
+| 0x680630 | NV_PRAMDAC_630: the NV2A's output colour space (Cromwell: 0 = RGB, 2 = YUV) | **YCrCb** for every SD and HD row (an SD and an HD variant), cleared (RGB) for bit 29 |
+| 0x6808C0, 0x6808C4 | unnamed (nouveau writes 0x8C0 = 0 for TV) | per mode; 0x6808C4 cleared for bit 29 |
 | 0x680898, 0x68089C | unnamed | per mode |
 | 0x680680–0x680690 | TV-out block: 0x680680 holds the encoder's H_CLKO; the others are not understood | per mode |
 | 0x680880 | FP_DEBUG_0 (scaling) | 0x21121111 during the change (§5 step 2), then a per-row value from .data (§5 step 12) |
@@ -244,22 +273,6 @@ switches the NV2A to RGB for it (§8.4).
 - **HD rasters:** the flat-panel totals are the standard ones (858 × 525, 1650 × 750, 2200 × 1125) for every HD
   row; sync positions and widths differ from the nominal CEA-861 / SMPTE positions (the 720p and 1080i horizontal
   sync is wider than the standard's).
-- **SD:** totals follow the encoder's H_CLKI / V_LINESI; the horizontal sync width is a constant per encoder.
-
-### 8.5 Focus FS453/4, which registers per class
-- **Not used:** the quick-program register QPR (0xC4) is never written. The reference programs every register
-  explicitly.
-- **Common row (48 registers):** clock / interface registers including MISC (0x0E: UIM_MOD 5, a mode not in
-  the GPL header's list, plus UIM_DCLK and BRDG_RST), DAC_CNTL (A–D = video 0–3, identity), PWR_MGNT (SD: HD
-  clock off), PLL M / P, the colour matrix and flicker / sharpness.
-- **SD per-mode row (61 registers):** CR (with PAL_NTSCIN set for the PAL rows), the scaler (IHO, IVO, IHW, VSC,
-  HSC), NCO (NCON / NCOD), PLL N, the TV-standard block 0x38–0x80, VID_CNTL0, and the caption and WSS registers.
-- **HD row (64 registers):** CR, BYPASS **0** (scaler not bypassed), MISC, VID_CNTL0, DAC_CNTL, PWR_MGNT (SD clock
-  off), NCO, PLL, the HD timing block 0x92–0xBF and the colour matrix.
-
-### 8.6 Focus interface facts (decoded)
-| Fact | SD composite / S-video | SD component | SCART (bit 29) | HD |
-|---|---|---|---|---|
-| VID_CNTL0 | VID_MODE composite, MATRIX_BYP (input already YCrCb), INT_PROG | VID_MODE YPrPb, MATRIX_BYP, INT_PROG | VID_MODE SCART / RGB (two table rows; which mode rows use which is not decoded) | VID_MODE HD, MATRIX_BYP, SYNC_ADD; 480p sets SYNC_BI_TRI (bi-level, inferred from SMPTE 293M), 720p / 1080i clear it; 1080i INT_PROG |
-| Input | YCrCb (NV 0x680630 as Conexant) | YCrCb | RGB | YCrCb |
-| Clock | NCO + PLL per row | same | same | NCO + PLL per row |
+- **SD:** totals follow the encoder's input timing (Conexant H_CLKI / V_LINESI); the horizontal sync width is a
+  constant per encoder.
+- The 5838 kernel's NV2A rows differ from 4627's.

@@ -1,38 +1,103 @@
-# Spec 22 — Xcalibur encoder tables (5838 BIOS image, xboxkrnl 1.0.5838.1)
+# Spec 20 — Xcalibur video encoder (xboxkrnl 1.0.5838.1)
 
-Console 1.6. Source: the AV blob in the 5838 BIOS image (flash offset 0x357A8, layout spec 19 §3) and four row maps
-and two flicker-filter sets in the 5838 kernel's code section (file offset = VA − 0x80010000).
+Console 1.6. SMBus address **0xE0**; every register is **32 bits wide**. No public datasheet exists, so register
+meanings are given only where the behaviour shows them. The shared part of the driver (encoder choice, the AV blob
+in flash, mode word, mode-change sequence, options) is spec 17; this spec gives the Xcalibur steps and the Xcalibur
+tables. Evidence: batch_decompile of the 5838 kernel's `AvSetDisplayMode` (0x80030F3D), `AvSendTVEncoderOption`
+(0x80030822), the register writer 0x80030026, the Macrovision routines 0x8003026F / 0x8003045E, the bit-29 set-up
+0x800306FF and the SMBus routines 0x800145F1 / 0x80014743 / 0x800146D1 / 0x80014D1D.
+Register numbers are the 8-bit SMBus command (register) numbers.
 
-**Provenance.** The register values below are functional hardware constants, extracted as flat data from the retail
-kernel's encoder tables for the purpose of making an independently written kernel drive the same hardware
-(see [`dmca-compliance.md`](../../dmca-compliance.md) §3). Only data is recorded: no code, no decompiled structures, no
-names from the binary. Register names and functional purposes come from the chips' public documentation
-(CX25870/871 datasheet 100381B; the GPL `fs453.h` header and FS453/4 datasheets), or are marked as not known.
-Offsets are file offsets in the images named, so every value can be checked against a copy of the image.
+## 1. SMBus: 32-bit transfers
+`HalReadSMBusValue` / `HalWriteSMBusValue` keep their signature (address, command, `WordFlag`, value). In 5838 the
+transfer size is:
+- `WordFlag` = 0 → 1 byte (protocol code 0x1A, byte data);
+- `WordFlag` ≠ 0 and **(address & 0xF8) == 0xE0** → **4 bytes** (protocol code **0x1D**, block);
+- `WordFlag` ≠ 0, other addresses → 2 bytes (protocol code 0x1B, word data), as in 4627.
 
-**How a mode word selects these rows** (spec 17 §2): bits 0–6 = encoder row, bits 30–31 = class (00 525-line SD,
-01 625-line SD, 10 HD, 11 VGA), bit 29 = SCART RGB (Conexant, Focus) / the bit-29 set-up (Xcalibur). The write
-sequence around the rows (resets, GPIO, NV2A and CRTC programming, waits) is spec 17 §5 (Conexant, Focus) and spec 19
-§5 (Xcalibur). Mode names are decoded from each Conexant row's own values (subcarrier frequency from MSC and the
-PLL, 525/625 lines, setup, H_ACTIVE, V_ACTIVEI, output mode): the row meaning is part of the mode-word ABI and is the
-same for every encoder.
+4-byte write: address (write) → 0xC004, command → 0xC008, the four value bytes **low byte first** → the block FIFO
+0xC009, byte count 4 → 0xC006, clear status (read 0xC000, write it back), then the protocol code → 0xC002.
+4-byte read: address | 1 → 0xC004, command → 0xC008, clear status, protocol 0x1D → 0xC002; on completion the count
+(0xC006 bits 0–5) must be 4 — otherwise the request fails with STATUS_IO_DEVICE_ERROR (0xC0000185) — and four bytes
+are read from 0xC009, low byte first. The rest (lock, retries, completion event) is as in stock spec 12.
+All Xcalibur accesses use the 4-byte form.
 
-**Not included:** copy-protection (Macrovision) rows (OXOS keeps copy protection off), the Conexant closed-caption
-timing table used by option 2, and the NV2A / CRTC rows (GPU registers, not encoder registers).
+## 2. Tables and the register writer
+The Xcalibur uses three tables of the AV blob (spec 17 §1a.2): the per-mode table (42 columns, register row + 38
+mode rows), the value pool and the dword list; plus four row maps and two flicker-filter sets in the kernel (§6).
+Each per-mode row holds, under the register row's 42 register numbers, one **index byte** per register. The writer
+`write(register, index)` turns it into one or more 32-bit writes, depending on the **variant** v = (mode word bit 29 ?
+2 : 0) | (luma filter on, option 0x0E ? 1 : 0):
 
-**Writes.** Every Xcalibur register is 32 bits, written with the SMBus 4-byte block form (spec 19 §2). The tables
-store, per mode, a register list and one **index** per register; the values below are already expanded from the
-value pool and dword list as the writer does it (spec 19 §4). Coefficient banks come in four versions per mode; only
-the one for the current **variant v** is written: v bit 1 = mode word bit 29, v bit 0 = luma filter on (option 0x0E).
-At a mode change the luma filter state is cleared, so v = 0 or 2. Index 0 writes zeros to the whole bank. Option 0x0E
-re-writes the columns marked "column ≥ 24" for the new variant.
+| register | action |
+|---|---|
+| 0x20–0x23 | only if register − 0x20 == v: write **16 registers 0x20–0x2F** from pool block (index × 16 dwords) at pool byte offset 0x3A4 |
+| 0x31–0x34 | only if register − 0x31 == v: write **8 registers 0x31–0x38** from pool block (index × 8 dwords) at pool offset 0x1C4 |
+| 0x3A–0x3D | only if register − 0x3A == v: write **8 registers 0x3A–0x41** from pool block (index × 8 dwords) at pool offset 0x84 |
+| 0x43–0x44 | only if register − 0x43 == (v & 1): write **0x43** and **0x44** from the pool pair at offset 0x4C + index × 8 |
+| 0x46 | write **0x46, 0x47, 0x48** from the pool triple at offset (index − 1) × 12 |
+| any other | write the register with **dword list[index]** |
 
-**Order for a mode** (spec 19 §5.3): look up the row in §1, write the row's entries in the order listed (§2); Japan
-(region 2) on Xcalibur rows 0x0D, 0x0E, 0x12: register 1 ← register 1 & ~0x8000; with mode bit 29: register 1 ←
-(register 1 & 0xFCFFFFFF) | 0x00C00008, register 0x60 &= ~0x01000000, register 0x58 ← 0; then the fixed writes of
-spec 19 §5.3 step 8 and the flicker filter at level 5 (§3).
+- **Index 0** in a block entry writes **zeros** to the whole block.
+- A row lists all four variants of each coefficient bank (e.g. registers 0x20, 0x21, 0x22, 0x23); only the one
+  matching the current variant is written. The banks look like filter coefficient sets selected by output type and
+  the luma filter.
+- Row columns **24–41** (byte offset 0x18 onward) are the ones that depend on the luma filter; option 0x0E rewrites
+  only those.
+- **Indirect sub-registers:** some settings go through a three-register port: **0x0C ← sub-address, 0x0D ← value,
+  0x0E ← 1** (commit). Below, "sub(a) ← x" means that sequence.
+- In §7 the rows are already expanded: each entry shows the 32-bit values written.
 
-## 1. Row maps (mode word bits 0–6 → Xcalibur row)
+## 3. Mode change (the [E] steps of spec 17 §5)
+- **Row selection:** the encoder row (mode bits 0–6) is **remapped** to an Xcalibur row through one of four byte maps
+  (§7.1), chosen by class HD and console region 2 (Japan). Special case: encoder row 1 with CRTC row (bits 8–15) 7 in
+  the HD class is looked up as row **4**. The CRTC and NV2A rows are used unmapped.
+- **Step 0:** read register **4**, write it back **| 0x0F** (DAC outputs off); read register **0**, write it back
+  **& ~0x02** (output off). Clear the luma-filter state and the flicker cache (option 0x0B).
+- **Step 3:** nothing (no reset; only the shared 1 µs stall).
+- **Step 4:** only the per-mode table: for each of the 42 columns, `write(register, index)` from the remapped row.
+  Japan (region 2) and remapped row **0x0D, 0x0E or 0x12**: read register **1**, write it back **& ~0x8000**.
+- **Step 5 (bit 29):** register **1** ← (register 1 & 0xFCFFFFFF) | **0x00C00008**; register **0x60** ← register 0x60
+  & ~0x01000000; register **0x58** ← 0.
+- **Step 5a:** class HD: register **7** ← 0 (WSS/CGMS off). Any of bits 30–31 set (625-line, HD or VGA): register
+  **9** ← 0 (closed captions off). Register **0** ← register 0 **| 0x02** (output on). **sub(0x0F) ← 0** (Macrovision
+  off). Then option 0x0B with level 5 (default flicker filter).
+- **Step 12:** register **4** ← mode bits 24–27 (the DAC enable bits).
+
+## 4. Options (the [E] options of spec 17 §5a)
+| Option | Xcalibur |
+|---|---|
+| 1 Macrovision level 0–3 | only in class 00 or 01. Level 0 → **sub(0x0F) ← 0**. Otherwise, for each of the 26 columns of the Macrovision table (525-line or 625-line): sub(register) ← value from row *level* (525-line: levels 1–3 = value rows 1–3; 625-line: any level ≥ 1 = value row 1) |
+| 2 closed captions on | register **9** ← 7 |
+| 3 closed captions off | register **9** ← 0 |
+| 4 caption bytes | register **0x0A** ← d2 & 0x7F; field 0: **0x0B** ← 4, **0x0A** ← d0 & 0x7F, **0x0B** ← 8; field 1: **0x0B** ← 1, **0x0A** ← d0 & 0x7F, **0x0B** ← 2 |
+| 5 caption status | (~register 0x14) & 3 |
+| 9 blank off | register **4** ← mode bits 24–27 |
+| 0x0A Macrovision commit | only in class 00, 01, or **480p** ((mode & 0xCF0000FF) == 0x88000001). Value: level 0 → 0; level 1 → 0x36; level ≥ 2 → 0x3E in class 00, 0x36 otherwise; 480p → 0x24 when non-zero. **sub(0x0F) ← value** |
+| 0x0B flicker filter 0–5 | not in HD. Read register **0x60**; set A if bits 22–23 = 10b, else set B. Level → entry: 0→0, 1→1, 2→(A ? 2 : 1), 3→(A ? 3 : 2), 4/5→(A ? 4 : 2). Write the entry's **7 dwords to registers 0x60–0x66** (§7.3), skipped if it is the entry written last (the cache is cleared at each mode change). With mode bit 29: then register 0x60 ← register 0x60 & ~0x01000000 |
+| 0x0E luma filter on/off | store the state (variant bit 0). If a mode is set and the state changed: re-run `write(register, index)` for per-mode columns **24–41** of the current (remapped) row |
+| WSS/CGMS write | register **7** ← ((word & 0xFFFFF) \| 0x01800000) << 1 |
+
+## 5. For OXOS (notes)
+- **SMBus:** add the 4-byte block form (§1) to the HAL, keyed by address 0xE0–0xE7 and `WordFlag`, so titles and the
+  kernel see the reference's behaviour.
+- **Tables:** the pool / index scheme is a compression choice, not ABI: OXOS can store the expanded rows of §7.2
+  directly, keyed by (mode word fields, region). Only the mode-word meaning, the option behaviour and the register
+  sequence matter.
+
+## 6. Open
+- Meanings of Xcalibur registers 0, 1, 4, 7, 9, 0x0A, 0x0B, 0x14, 0x58, 0x60 and the coefficient banks beyond what
+  the behaviour shows (DAC enables in 4 bits 0–3, output enable in 0 bit 1, WSS in 7, captions in 9–0x0B/0x14).
+- Meaning of register 0x60 bits 22–23 (selects flicker set A or B) and bit 24 (cleared for bit 29).
+- Whether the 1.6 board's other hardware (SMC, fan) needs further kernel changes outside the encoder.
+
+## 7. Tables
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3): the per-mode rows
+from the 5838 BIOS image's AV blob (flash offset 0x357A8), the row maps and flicker-filter sets from the 5838 kernel
+(file offset = VA − 0x80010000). Mode names as in spec 18. Macrovision rows are not included: OXOS keeps copy
+protection off.
+
+### 7.1 Row maps (mode word bits 0–6 → Xcalibur row)
 
 Chosen by class (HD = mode word bits 30–31 == 10b) and console region 2 (Japan). Special case: encoder row 1 with CRTC row 7 in the HD class is looked up as row 4. File offsets in xboxkrnl 1.0.5838.1: SD 0x02878, SD Japan 0x02898, HD 0x028B8, HD Japan 0x028C0.
 
@@ -71,9 +136,9 @@ Chosen by class (HD = mode word bits 30–31 == 10b) and console region 2 (Japan
 | 0x1E | 0x00 | 0x00 |  |  |
 | 0x1F | 0x00 | 0x00 |  |  |
 
-## 2. Per-mode rows
+### 7.2 Per-mode rows
 
-### Video Encoder Mode: Xcalibur row 0x01
+#### Video Encoder Mode: Xcalibur row 0x01
 Used by: SD map entry 0x01 (NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x01 (NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x37FC2 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -121,7 +186,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x02
+#### Video Encoder Mode: Xcalibur row 0x02
 Used by: SD map entry 0x02 (NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x02 (NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x37FEC (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -169,7 +234,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x03
+#### Video Encoder Mode: Xcalibur row 0x03
 Used by: SD map entry 0x03 (NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x03 (NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38016 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -217,7 +282,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x04
+#### Video Encoder Mode: Xcalibur row 0x04
 Used by: SD map entry 0x04 (NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x04 (NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38040 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -265,7 +330,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x05
+#### Video Encoder Mode: Xcalibur row 0x05
 Used by: SD map entry 0x05 (PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x05 (PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3806A (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -313,7 +378,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 0): Write Values 0x3A=0x00000000, 0x3B=0x00000000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00000000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 0): Write Values 0x3A=0x00000000, 0x3B=0x00000000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00000000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x06
+#### Video Encoder Mode: Xcalibur row 0x06
 Used by: SD map entry 0x06 (PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x06 (PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38094 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -361,7 +426,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 0): Write Values 0x3A=0x00000000, 0x3B=0x00000000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00000000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 0): Write Values 0x3A=0x00000000, 0x3B=0x00000000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00000000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x07
+#### Video Encoder Mode: Xcalibur row 0x07
 Used by: SD map entry 0x07 (PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x07 (PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x380BE (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -409,7 +474,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x08
+#### Video Encoder Mode: Xcalibur row 0x08
 Used by: SD map entry 0x08 (PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x08 (PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x380E8 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -457,7 +522,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x09
+#### Video Encoder Mode: Xcalibur row 0x09
 Used by: SD map entry 0x09 (PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x09 (PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38112 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -505,7 +570,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0A
+#### Video Encoder Mode: Xcalibur row 0x0A
 Used by: SD map entry 0x0A (PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x0A (PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3813C (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -553,7 +618,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0B
+#### Video Encoder Mode: Xcalibur row 0x0B
 Used by: SD map entry 0x0B (PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video); SD, Japan map entry 0x0B (PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38166 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -601,7 +666,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0C
+#### Video Encoder Mode: Xcalibur row 0x0C
 Used by: SD map entry 0x0C (PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video); SD, Japan map entry 0x0C (PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38190 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -649,7 +714,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0D
+#### Video Encoder Mode: Xcalibur row 0x0D
 Used by: SD map entry 0x0D (NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x381BA (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -697,7 +762,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0E
+#### Video Encoder Mode: Xcalibur row 0x0E
 Used by: SD, Japan map entry 0x0D (NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x381E4 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -745,7 +810,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x0F
+#### Video Encoder Mode: Xcalibur row 0x0F
 Used by: SD map entry 0x0E (NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3820E (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -793,7 +858,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x10
+#### Video Encoder Mode: Xcalibur row 0x10
 Used by: SD, Japan map entry 0x0E (NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38238 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -841,7 +906,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x11
+#### Video Encoder Mode: Xcalibur row 0x11
 Used by: SD map entry 0x0F (NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video); SD, Japan map entry 0x0F (NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38262 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -889,7 +954,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x12
+#### Video Encoder Mode: Xcalibur row 0x12
 Used by: SD map entry 0x10 (NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video); SD, Japan map entry 0x10 (NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3828C (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -937,7 +1002,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 1): Write Values 0x3A=0x000AFFFE, 0x3B=0x0036FFE9, 0x3C=0x000000DA, 0x3D=0x0003FFFC, 0x3E=0x000EFFFC, 0x3F=0x007AFFDC, 0x40=0xFFE200B8, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 2): Write Values 0x3A=0x00010000, 0x3B=0x0042FFFB, 0x3C=0x002000A4, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x006BFFFD, 0x40=0x00070090, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x13
+#### Video Encoder Mode: Xcalibur row 0x13
 Used by: SD map entry 0x11 (PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video); SD, Japan map entry 0x11 (PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x382B6 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -985,7 +1050,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x14
+#### Video Encoder Mode: Xcalibur row 0x14
 Used by: SD map entry 0x12 (NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x382E0 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1033,7 +1098,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x15
+#### Video Encoder Mode: Xcalibur row 0x15
 Used by: SD, Japan map entry 0x12 (NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3830A (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1081,7 +1146,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x16
+#### Video Encoder Mode: Xcalibur row 0x16
 Used by: SD map entry 0x13 (PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video); SD, Japan map entry 0x13 (PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38334 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1129,7 +1194,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x17
+#### Video Encoder Mode: Xcalibur row 0x17
 Used by: SD map entry 0x14 (PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)); SD, Japan map entry 0x14 (PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3835E (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1177,7 +1242,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x18
+#### Video Encoder Mode: Xcalibur row 0x18
 Used by: SD map entry 0x15 (PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)); SD, Japan map entry 0x15 (PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38388 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1225,7 +1290,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x19
+#### Video Encoder Mode: Xcalibur row 0x19
 Used by: SD map entry 0x16 (PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)); SD, Japan map entry 0x16 (PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x383B2 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1273,7 +1338,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1A
+#### Video Encoder Mode: Xcalibur row 0x1A
 Used by: SD map entry 0x17 (PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)); SD, Japan map entry 0x17 (PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x383DC (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1321,7 +1386,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1B
+#### Video Encoder Mode: Xcalibur row 0x1B
 Used by: SD map entry 0x18 (PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)); SD, Japan map entry 0x18 (PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38406 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1369,7 +1434,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1C
+#### Video Encoder Mode: Xcalibur row 0x1C
 Used by: SD map entry 0x19 (PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)); SD, Japan map entry 0x19 (PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38430 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1417,7 +1482,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1D
+#### Video Encoder Mode: Xcalibur row 0x1D
 Used by: SD map entry 0x1A (PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)); SD, Japan map entry 0x1A (PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3845A (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1465,7 +1530,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1E
+#### Video Encoder Mode: Xcalibur row 0x1E
 Used by: SD map entry 0x1B (PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)); SD, Japan map entry 0x1B (PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38484 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1513,7 +1578,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x1F
+#### Video Encoder Mode: Xcalibur row 0x1F
 Used by: SD map entry 0x1C (PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video); SD, Japan map entry 0x1C (PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x384AE (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1561,7 +1626,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 3): Write Values 0x3A=0x000AFFFE, 0x3B=0x0034FFEA, 0x3C=0x000000D6, 0x3D=0x0003FFFC, 0x3E=0x000DFFFC, 0x3F=0x0077FFDE, 0x40=0xFFE300B4, 0x41=0xFFFF0008 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 4): Write Values 0x3A=0x00010000, 0x3B=0x0041FFFB, 0x3C=0x001F00A1, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0069FFFD, 0x40=0x0007008D, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x20
+#### Video Encoder Mode: Xcalibur row 0x20
 Used by: SD map entry 0x1D (PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)); SD, Japan map entry 0x1D (PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x384D8 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1609,7 +1674,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 9): Write Values 0x3A=0x000AFFFE, 0x3B=0x0032FFEA, 0x3C=0x000000CD, 0x3D=0x0003FFFC, 0x3E=0x000CFFFD, 0x3F=0x0072FFDF, 0x40=0xFFE500AC, 0x41=0xFFFF0007 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 10): Write Values 0x3A=0x00010000, 0x3B=0x003EFFFB, 0x3C=0x001E009A, 0x3D=0x0000FFFF, 0x3E=0x0002FFFE, 0x3F=0x0064FFFD, 0x40=0x00070087, 0x41=0x00000001 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x21
+#### Video Encoder Mode: Xcalibur row 0x21
 Used by: HD map entry 0x01 (480p (720x480 / 640x480 input), component YPbPr)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38502 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1657,7 +1722,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 5): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 6): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x22
+#### Video Encoder Mode: Xcalibur row 0x22
 Used by: HD, Japan map entry 0x01 (480p (720x480 / 640x480 input), component YPbPr)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x3852C (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1705,7 +1770,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 5): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 6): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x23
+#### Video Encoder Mode: Xcalibur row 0x23
 Used by: HD map entry 0x02 (720p (1280x720), component YPbPr); HD, Japan map entry 0x02 (720p (1280x720), component YPbPr)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38556 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1753,7 +1818,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 7): Write Values 0x3A=0x00000000, 0x3B=0x00F00000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00F00000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 8): Write Values 0x3A=0x00000000, 0x3B=0x00F00000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00F00000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x24
+#### Video Encoder Mode: Xcalibur row 0x24
 Used by: HD map entry 0x03 (1080i (1920x1080), component YPbPr); HD, Japan map entry 0x03 (1080i (1920x1080), component YPbPr)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x38580 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1801,7 +1866,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 7): Write Values 0x3A=0x00000000, 0x3B=0x00F00000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00F00000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 8): Write Values 0x3A=0x00000000, 0x3B=0x00F00000, 0x3C=0x00000000, 0x3D=0x00000000, 0x3E=0x00000000, 0x3F=0x00F00000, 0x40=0x00000000, 0x41=0x00000000 -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x25
+#### Video Encoder Mode: Xcalibur row 0x25
 Used by: HD map entry 0x04 (HD row 1 with CRTC row 7 (remapped to 4 before the lookup))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x385AA (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1849,7 +1914,7 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 5): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 6): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-### Video Encoder Mode: Xcalibur row 0x26
+#### Video Encoder Mode: Xcalibur row 0x26
 Used by: HD, Japan map entry 0x04 (HD row 1 with CRTC row 7 (remapped to 4 before the lookup))
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: 5838 BIOS image, file offset 0x385D4 (per-mode index row; register list at 0x37F98); values expanded from the value pool (file offset 0x39098) and dword list (0x39C7C)
@@ -1897,9 +1962,9 @@ Register Mappings (written in this order; v = variant: bit 1 = mode word bit 29,
 - Registers 0x3A–0x41 (only when v == 2; table entry 0x3C, index 5): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 - Registers 0x3A–0x41 (only when v == 3; table entry 0x3D, index 6): Write Values 0x3A=0x000EFFFC, 0x3B=0x0051FFE0, 0x3C=0xFFEC00C6, 0x3D=0x00020001, 0x3E=0x00020002, 0x3F=0x00C5FFEC, 0x40=0xFFE00052, 0x41=0xFFFC000E -> (coefficient bank C) [column ≥ 24: rewritten by option 0x0E]
 
-## 3. Flicker filter sets (option 0x0B; level 5 is written at every mode change)
+### 7.3 Flicker filter sets (option 0x0B; level 5 is written at every mode change)
 
-### Video Encoder Mode: flicker filter set A, entry 0 (register 0x60 bits 22–23 == 10b)
+#### Video Encoder Mode: flicker filter set A, entry 0 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x028C8 (VA 0x800128C8); register list at file offset 0x029AC
 Register Mappings:
@@ -1911,7 +1976,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x00010000 -> (flicker filter)
 - Register 0x66: Write Value 0x00010000 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set A, entry 1 (register 0x60 bits 22–23 == 10b)
+#### Video Encoder Mode: flicker filter set A, entry 1 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x028E4 (VA 0x800128E4); register list at file offset 0x029AC
 Register Mappings:
@@ -1923,7 +1988,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x01491026 -> (flicker filter)
 - Register 0x66: Write Value 0x01DCFA0C -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set A, entry 2 (register 0x60 bits 22–23 == 10b)
+#### Video Encoder Mode: flicker filter set A, entry 2 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x02900 (VA 0x80012900); register list at file offset 0x029AC
 Register Mappings:
@@ -1935,7 +2000,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x01491026 -> (flicker filter)
 - Register 0x66: Write Value 0x01DCFA0C -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set A, entry 3 (register 0x60 bits 22–23 == 10b)
+#### Video Encoder Mode: flicker filter set A, entry 3 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x0291C (VA 0x8001291C); register list at file offset 0x029AC
 Register Mappings:
@@ -1947,7 +2012,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x015CD041 -> (flicker filter)
 - Register 0x66: Write Value 0x01A4CA32 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set A, entry 4 (register 0x60 bits 22–23 == 10b)
+#### Video Encoder Mode: flicker filter set A, entry 4 (register 0x60 bits 22–23 == 10b)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x02938 (VA 0x80012938); register list at file offset 0x029AC
 Register Mappings:
@@ -1959,7 +2024,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x015CD041 -> (flicker filter)
 - Register 0x66: Write Value 0x01A4CA32 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set B, entry 0 (otherwise)
+#### Video Encoder Mode: flicker filter set B, entry 0 (otherwise)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x02958 (VA 0x80012958); register list at file offset 0x029AC
 Register Mappings:
@@ -1971,7 +2036,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x00010000 -> (flicker filter)
 - Register 0x66: Write Value 0x00010000 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set B, entry 1 (otherwise)
+#### Video Encoder Mode: flicker filter set B, entry 1 (otherwise)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x02974 (VA 0x80012974); register list at file offset 0x029AC
 Register Mappings:
@@ -1983,7 +2048,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x00008040 -> (flicker filter)
 - Register 0x66: Write Value 0x00008040 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set B, entry 2 (otherwise)
+#### Video Encoder Mode: flicker filter set B, entry 2 (otherwise)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x02990 (VA 0x80012990); register list at file offset 0x029AC
 Register Mappings:
@@ -1995,7 +2060,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x00907024 -> (flicker filter)
 - Register 0x66: Write Value 0x00907024 -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set B, entry 3 (otherwise)
+#### Video Encoder Mode: flicker filter set B, entry 3 (otherwise)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x029AC (VA 0x800129AC); register list at file offset 0x029AC
 Register Mappings:
@@ -2007,7 +2072,7 @@ Register Mappings:
 - Register 0x65: Write Value 0x002D012D -> (flicker filter)
 - Register 0x66: Write Value 0x003303BE -> (flicker filter)
 
-### Video Encoder Mode: flicker filter set B, entry 4 (otherwise)
+#### Video Encoder Mode: flicker filter set B, entry 4 (otherwise)
 Target Chip: Xcalibur (SMBus address 0xE0, 32-bit registers, 4-byte block writes, low byte first)
 Memory Offset / Base Address: xboxkrnl 1.0.5838.1 file offset 0x029C8 (VA 0x800129C8); register list at file offset 0x029AC
 Register Mappings:

@@ -1,37 +1,73 @@
-# Spec 20 — Conexant CX25871 encoder tables (xboxkrnl 1.0.4627.1 and 1.0.5838.1)
+# Spec 18 — Conexant CX25871 video encoder (xboxkrnl 1.0.4627.1, 1.0.5838.1)
 
-Consoles 1.0–1.3. Source: the kernel in the Complex 4627 BIOS image (identical to `xboxkrnl.exe` 1.0.4627.1), INIT
-section, file offset = VA − 0x80010000. The 5838 BIOS image's AV blob (flash offset 0x357A8, spec 19 §3) holds the
-same Conexant register lists and value rows byte for byte (checked), so this one set serves both.
+Consoles 1.0–1.3. SMBus address **0x8A**, 8-bit registers, byte writes. The shared part of the driver (encoder
+choice, table layouts, mode word, mode-change sequence, options) is spec 17; this spec gives the Conexant steps and
+the Conexant tables. 4627 and 5838 drive the Conexant identically (the one 5838 change, option 0x0F, is shared: spec
+17 §5a), and the 5838 BIOS image's Conexant tables are byte for byte the 4627 ones.
+Register names: the CX25870/871 datasheet (Conexant 100381B), Table 2-1.
 
-**Provenance.** The register values below are functional hardware constants, extracted as flat data from the retail
-kernel's encoder tables for the purpose of making an independently written kernel drive the same hardware
-(see [`dmca-compliance.md`](../../dmca-compliance.md) §3). Only data is recorded: no code, no decompiled structures, no
-names from the binary. Register names and functional purposes come from the chips' public documentation
-(CX25870/871 datasheet 100381B; the GPL `fs453.h` header and FS453/4 datasheets), or are marked as not known.
-Offsets are file offsets in the images named, so every value can be checked against a copy of the image.
+## 1. Mode change (the [E] steps of spec 17 §5)
+- **Step 3:** 0xBA ← 0x80 (SRESET), 0xBA ← 0x3F (DACs off), 0x6C ← 0x46; stall 1 µs; 0x6C ← 0xC6 (TIMING_RST).
+- **Step 4:** class HD → the HD row (§5.3). Else the SD common block (§5.1), then the SD per-mode row (§5.2).
+  Japan (console region 2) on encoder rows 0x0D, 0x0E, 0x12: then 0xA2 ← 0x08, 0xA4 ← 0xF0, 0xAC ← 0x9A.
+- **Step 5 (bit 29, SCART RGB):** the bit-29 row for the encoder row (§5.4), plain writes. Rows exist only for the
+  composite / S-video encoder rows; the component rows' entries are empty.
+- **Step 12:** 0x6C ← (0x6C | 0x80); 0xBA ← (mode bits 24–27) | 0x20.
 
-**How a mode word selects these rows** (spec 17 §2): bits 0–6 = encoder row, bits 30–31 = class (00 525-line SD,
-01 625-line SD, 10 HD, 11 VGA), bit 29 = SCART RGB (Conexant, Focus) / the bit-29 set-up (Xcalibur). The write
-sequence around the rows (resets, GPIO, NV2A and CRTC programming, waits) is spec 17 §5 (Conexant, Focus) and spec 19
-§5 (Xcalibur). Mode names are decoded from each Conexant row's own values (subcarrier frequency from MSC and the
-PLL, 525/625 lines, setup, H_ACTIVE, V_ACTIVEI, output mode): the row meaning is part of the mode-word ABI and is the
-same for every encoder.
+## 2. What the rows program (decoded with the datasheet)
+- **SD common block (22 registers, every SD mode):** WSS / caption control, pad drive and input-format bits (0x32),
+  EN_OUT (0xC4), input format (0xC6), flicker filter (0xC8), and a few constant set-up registers.
+- **SD per-mode row (63 registers):** the output mode (0xD6), the full timing set (H_CLKO … V_SCALE), PLL, the
+  standard bits (0xA2: SETUP, 625LINE, VSYNC_DUR, PAL_MD), levels (SYNC_AMP, BST_AMP, MCR, MCB, MY), the subcarrier
+  (MSC), WSSINC, DAC routing (0xCE), the flicker / luma filters and the copy-protection registers (0xDA–0xFC). The
+  list ends with three writes to register 0x00 (read-only, no effect).
+- **HD row (13 registers):** output mode (0xD6), HDTV control (0x2E), pad drive / CSC (0x32), component gains
+  (0x3C/0x3E/0x40), EN_OUT (0xC4), input format (0xC6), DAC routing (0xCE), PLL (0xA0/0x9E/0x9C), timing reset
+  (0x6C).
+- **Bit-29 row (12 registers):** the output mode with EN_SCART, the RGB input format, the DAC routing and the
+  standard bits.
 
-**Not included:** copy-protection (Macrovision) rows (OXOS keeps copy protection off), the Conexant closed-caption
-timing table used by option 2, and the NV2A / CRTC rows (GPU registers, not encoder registers).
+| Fact | SD (composite / S-video) | SD component | SCART (bit 29) | HD (480p, 720p, 1080i) |
+|---|---|---|---|---|
+| Input format (IN_MODE) | alternate 24-bit **YCrCb** multiplexed | YCrCb | alternate 24-bit **RGB** multiplexed | YCrCb |
+| Pad drive (DRVS) | 1.8 V | 1.8 V | 1.8 V | **1.5 / 1.3 V** |
+| Interface | pseudo-master (EN_BLANKO), active-high HSYNC / VSYNC inputs, FLD_MODE 10, EACTIVE | same | same | same |
+| Clock source (EN_XCLK) | encoder PLL | encoder PLL | encoder PLL | **CLKI for 480p only**, PLL for 720p / 1080i |
+| Output mode (OUT_MODE) | 00 (CVBS / Y / C / Y_DLY) | 10 (V / Y / U / Y_DLY) | 11 + EN_SCART | 11 + HDTV_EN |
+| DAC routing (OUT_MUX A/B/C/D) | A = Y, B = C, C = Y, D = CVBS | **A = Y, B = Pr (V), C = Pb (U)**, D = Y_DLY | A = G, B = R, C = B, D = CVBS (sync) | **A = Y, B = Pr, C = Pb** |
+| Setup (7.5 IRE) | NTSC-M yes; NTSC-J, PAL no | **NTSC component yes**, PAL no | none | n/a |
+| Vertical sync (VSYNC_DUR) | 3 lines for 525-line NTSC rows, **2.5 lines for PAL-60** and 625-line rows | as SD | as SD | n/a |
+| HDTV control | n/a | n/a | n/a | tri-level sync off on Pr and Pb (EIA-770.3), RGB2YPRPB off (YCrCb in), HD_SYNC_EDGE for 480p only, RASTER_SEL per format, CSC_SEL for 720p / 1080i |
 
-**Order of writes for an SD mode:** §1 (common block), then the mode's §2 row; then, with mode bit 29, the §4 row.
-For Japan (console region 2) on rows 0x0D, 0x0E, 0x12, after the mode row: 0xA2 ← 0x08, 0xA4 ← 0xF0, 0xAC ← 0x9A.
-**HD mode:** only the §3 row. Before either: 0xBA ← 0x80, 0xBA ← 0x3F, 0x6C ← 0x46, wait 1 µs, 0x6C ← 0xC6. After the
-GPU is set up: 0x6C ← (0x6C | 0x80), 0xBA ← (mode bits 24–27) | 0x20.
+The DAC routing for component and SCART is the same mapping (A = the Y / G pin, B = the Pr / R pin, C = the Pb / B
+pin), and matches the AV connector pinout (xboxdevwiki AV_Cables: pin 11 Y/G, 22 C/R/Pr, 9 B/Pb, 24 CVBS) together
+with the composite routing (A carries Y to pin 11, B carries C to pin 22, D carries CVBS to pin 24).
 
-The SD per-mode register list ends with three entries for register 0x00 (read-only); they are listed as the table
-has them.
+## 3. Options (the [E] options of spec 17 §5a)
+| Option | Conexant |
+|---|---|
+| 2 closed captions on | 0xC4 ← 0xC4 \| 0x38 (ECCF2, ECCF1, ECCGATE), then the caption-timing row of the encoder row (§5.5) |
+| 3 closed captions off | 0xC4 ← 0xC4 & 0xCF |
+| 4 caption bytes | field 0: 0xBC ← d2, 0xBE ← d0; field 1: 0xC0 ← d2, 0xC2 ← d0 |
+| 5 caption status | (register 2 >> 2) & 3 |
+| 9 blank off | nothing extra (the DACs stay as step 12 set them) |
+| 0x0A Macrovision commit | 0xFC ← 0 / 0x63 / 0xE3 by level (0x42 in 480p) |
+| 0x0B flicker filter | level 0: 0xC8 \|= 0x40 (DIS_FFILT); else n = 1, 2, 3 for levels 1–3, 0 for 4–5: 0xC8 ← (0xC8 & 0x80) \| n << 3 \| n (F_SELC = F_SELY = n), then 0x34 ← 0x80 (ADPT_FF) for level 5, else 0 |
+| 0x0E luma filter | 0x96 ← (0x96 & 0x0F) \| (on ? 0x10 : 0) (YLPF) |
+| WSS/CGMS write | 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2), 0x62 ← word >> 4, 0x64 ← word >> 12 |
 
-## 1. SD common block (written before every SD mode row)
+## 4. How to read the tables
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3). File offsets: the
+4627 kernel (the one in the Complex 4627 BIOS image; offset = VA − 0x80010000). Mode names are decoded from each
+row's own values (subcarrier frequency from MSC and the PLL, 525/625 lines, setup, H_ACTIVE, V_ACTIVEI, output
+mode); the row meaning is part of the mode-word ABI. Copy-protection (Macrovision) rows are not included: OXOS keeps
+copy protection off.
 
-### Video Encoder Mode: SD common block (all 480i / 576i modes)
+## 5. Tables
+
+### 5.1 SD common block (written before every SD mode row)
+
+#### Video Encoder Mode: SD common block (all 480i / 576i modes)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x98FC6 (SD common table, value row 0x01; register list at 0x98FB0)
 Register Mappings (written in this order):
@@ -58,9 +94,9 @@ Register Mappings (written in this order):
 - Register 0xCC: Write Value 0xC0 -> (DIS_GMUSHC, DIS_GMSHC, CCORING, CATTENUATE)
 - Register 0xD8: Write Value 0x40 -> (CHROMA_BW, BY_YCCR, PKFIL_SEL, FIELD_ID, CVBSD_INV, SC_PATTERN, PROG_SC)
 
-## 2. SD modes (mode word class 00 / 01; row = mode word bits 0–6)
+### 5.2 SD modes (mode word class 00 / 01; row = mode word bits 0–6)
 
-### Video Encoder Mode: SD row 0x01: NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x01: NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9901F (SD per-mode table, value row 0x01; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -128,7 +164,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x02: NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x02: NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9905E (SD per-mode table, value row 0x02; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -196,7 +232,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x03: NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x03: NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9909D (SD per-mode table, value row 0x03; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -264,7 +300,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x04: NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x04: NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x990DC (SD per-mode table, value row 0x04; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -332,7 +368,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x05: PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x05: PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9911B (SD per-mode table, value row 0x05; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -400,7 +436,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x06: PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x06: PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9915A (SD per-mode table, value row 0x06; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -468,7 +504,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x07: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x07: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99199 (SD per-mode table, value row 0x07; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -536,7 +572,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x08: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x08: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x991D8 (SD per-mode table, value row 0x08; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -604,7 +640,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x09: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x09: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99217 (SD per-mode table, value row 0x09; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -672,7 +708,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0A: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x0A: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99256 (SD per-mode table, value row 0x0A; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -740,7 +776,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0B: PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SD row 0x0B: PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99295 (SD per-mode table, value row 0x0B; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -808,7 +844,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0C: PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SD row 0x0C: PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x992D4 (SD per-mode table, value row 0x0C; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -876,7 +912,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0D: NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x0D: NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99313 (SD per-mode table, value row 0x0D; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -944,7 +980,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0E: NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x0E: NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99352 (SD per-mode table, value row 0x0E; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1012,7 +1048,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x0F: NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SD row 0x0F: NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99391 (SD per-mode table, value row 0x0F; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1080,7 +1116,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x10: NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SD row 0x10: NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x993D0 (SD per-mode table, value row 0x10; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1148,7 +1184,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x11: PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SD row 0x11: PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9940F (SD per-mode table, value row 0x11; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1216,7 +1252,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x12: NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x12: NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9944E (SD per-mode table, value row 0x12; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1284,7 +1320,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x13: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SD row 0x13: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9948D (SD per-mode table, value row 0x13; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1352,7 +1388,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x14: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x14: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x994CC (SD per-mode table, value row 0x14; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1420,7 +1456,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x15: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x15: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9950B (SD per-mode table, value row 0x15; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1488,7 +1524,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x16: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x16: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9954A (SD per-mode table, value row 0x16; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1556,7 +1592,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x17: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x17: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99589 (SD per-mode table, value row 0x17; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1624,7 +1660,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x18: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x18: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x995C8 (SD per-mode table, value row 0x18; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1692,7 +1728,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x19: PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x19: PAL-60 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99607 (SD per-mode table, value row 0x19; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1760,7 +1796,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x1A: PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x1A: PAL-60 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99646 (SD per-mode table, value row 0x1A; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1828,7 +1864,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x1B: PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x1B: PAL-60 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99685 (SD per-mode table, value row 0x1B; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1896,7 +1932,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x1C: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SD row 0x1C: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x996C4 (SD per-mode table, value row 0x1C; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -1964,7 +2000,7 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-### Video Encoder Mode: SD row 0x1D: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
+#### Video Encoder Mode: SD row 0x1D: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), component YPbPr (480i/576i)
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99703 (SD per-mode table, value row 0x1D; register list at 0x98FE0)
 Register Mappings (written in this order):
@@ -2032,9 +2068,9 @@ Register Mappings (written in this order):
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 - Register 0x00: Write Value 0x00 -> (read-only ID register (the write has no effect))
 
-## 3. HD modes (mode word class 10; row = mode word bits 0–6)
+### 5.3 HD modes (mode word class 10; row = mode word bits 0–6)
 
-### Video Encoder Mode: HD row 0x01: 480p (720x480 / 640x480 input), component YPbPr
+#### Video Encoder Mode: HD row 0x01: 480p (720x480 / 640x480 input), component YPbPr
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99751 (HD table, value row 0x01; register list at 0x99744)
 Register Mappings (written in this order):
@@ -2052,7 +2088,7 @@ Register Mappings (written in this order):
 - Register 0x9C: Write Value 0x00 -> (PLL_FRACT[7:0]: pixel clock PLL fraction)
 - Register 0x6C: Write Value 0x46 -> (TIMING_RST, EN_REG_RD, FFCBAR, BLNK_IGNORE, EN_SCART, EACTIVE, FLD_MODE (interface mode))
 
-### Video Encoder Mode: HD row 0x02: 720p (1280x720), component YPbPr
+#### Video Encoder Mode: HD row 0x02: 720p (1280x720), component YPbPr
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9975E (HD table, value row 0x02; register list at 0x99744)
 Register Mappings (written in this order):
@@ -2070,7 +2106,7 @@ Register Mappings (written in this order):
 - Register 0x9C: Write Value 0x00 -> (PLL_FRACT[7:0]: pixel clock PLL fraction)
 - Register 0x6C: Write Value 0x46 -> (TIMING_RST, EN_REG_RD, FFCBAR, BLNK_IGNORE, EN_SCART, EACTIVE, FLD_MODE (interface mode))
 
-### Video Encoder Mode: HD row 0x03: 1080i (1920x1080), component YPbPr
+#### Video Encoder Mode: HD row 0x03: 1080i (1920x1080), component YPbPr
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9976B (HD table, value row 0x03; register list at 0x99744)
 Register Mappings (written in this order):
@@ -2088,9 +2124,9 @@ Register Mappings (written in this order):
 - Register 0x9C: Write Value 0x00 -> (PLL_FRACT[7:0]: pixel clock PLL fraction)
 - Register 0x6C: Write Value 0x46 -> (TIMING_RST, EN_REG_RD, FFCBAR, BLNK_IGNORE, EN_SCART, EACTIVE, FLD_MODE (interface mode))
 
-## 4. Mode bit 29: SCART RGB (written after the SD rows of §1–2; row = mode word bits 0–6)
+### 5.4 Mode bit 29: SCART RGB (written after the SD rows of §5.1–5.2; row = mode word bits 0–6)
 
-### Video Encoder Mode: SCART RGB on SD row 0x01: NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x01: NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99784 (bit-29 table, value row 0x01; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2107,7 +2143,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x02: NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x02: NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99790 (bit-29 table, value row 0x02; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2124,7 +2160,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x03: NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x03: NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9979C (bit-29 table, value row 0x03; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2141,7 +2177,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x04: NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x04: NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997A8 (bit-29 table, value row 0x04; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2158,7 +2194,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x07: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x07: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997CC (bit-29 table, value row 0x07; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2175,7 +2211,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x08: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x08: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997D8 (bit-29 table, value row 0x08; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2192,7 +2228,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x09: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x09: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997E4 (bit-29 table, value row 0x09; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2209,7 +2245,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x0A: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x0A: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997F0 (bit-29 table, value row 0x0A; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2226,7 +2262,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x0B: PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x0B: PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x997FC (bit-29 table, value row 0x0B; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2243,7 +2279,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x0C: PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x0C: PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99808 (bit-29 table, value row 0x0C; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2260,7 +2296,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x0F: NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x0F: NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9982C (bit-29 table, value row 0x0F; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2277,7 +2313,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x10: NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x10: NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99838 (bit-29 table, value row 0x10; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2294,7 +2330,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x11: PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x11: PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x99844 (bit-29 table, value row 0x11; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2311,7 +2347,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x13: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x13: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x9985C (bit-29 table, value row 0x13; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2328,7 +2364,7 @@ Register Mappings (written in this order):
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
 
-### Video Encoder Mode: SCART RGB on SD row 0x1C: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
+#### Video Encoder Mode: SCART RGB on SD row 0x1C: PAL-B/D/G/H/I 576i, 704x576 input (H_ACTIVE 704), composite / S-video
 Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
 Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x998C8 (bit-29 table, value row 0x1C; register list at 0x99778)
 Register Mappings (written in this order):
@@ -2344,3 +2380,178 @@ Register Mappings (written in this order):
 - Register 0xC6: Write Value 0x98 -> (input: EN_BLANKO, EN_DOT, FIELDI, VSYNCI, HSYNCI (sync polarity), IN_MODE[2:0] (input format))
 - Register 0xCE: Write Value 0xE1 -> (OUT_MUXD/C/B/A: DAC output routing)
 - Register 0xD6: Write Value 0x0C -> (CCR_START[9], E656, BLANKI, EBLUE, OUT_MODE (output format), LUMADLY)
+
+### 5.5 Closed-caption timing (option 2; row = mode word bits 0–6, class 00 only)
+
+Rows 0x01–0x13; the 625-line rows 0x07–0x0A are never used (option 2 works in class 00 only). The table is 0x13 rows long: class-00 rows above 0x13 (the PAL-60 component rows 0x19–0x1B) index past its end into unrelated data.
+
+#### Video Encoder Mode: caption timing, SD row 0x01: NTSC-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A2C (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2F -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x8E -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x02: NTSC-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A30 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4C -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x03: NTSC-J 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A34 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2F -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x8E -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x04: NTSC-J 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A38 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4C -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x05: PAL-M 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A3C (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2F -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x8E -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x06: PAL-M 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A40 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4C -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x07: PAL-B/D/G/H/I 576i, 640x480 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A44 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x22 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x35 -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x57 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x08: PAL-B/D/G/H/I 576i, 720x480 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A48 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x22 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4D -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x55 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x09: PAL-B/D/G/H/I 576i, 640x576 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A4C (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x22 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2E -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x78 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0A: PAL-B/D/G/H/I 576i, 720x576 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A50 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x22 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4E -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x55 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0B: PAL-60 480i, 640x480 input (H_ACTIVE 648), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A54 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2F -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x8E -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0C: PAL-60 480i, 720x480 input (H_ACTIVE 728), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A58 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4C -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0D: NTSC-M 480i, 640x480 input (H_ACTIVE 648), component YPbPr (480i/576i)
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A5C (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x2F -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x8E -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x1A -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0E: NTSC-M 480i, 720x480 input (H_ACTIVE 728), component YPbPr (480i/576i)
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A60 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4C -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x0F: NTSC-M 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A64 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x47 -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0xA0 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x10: NTSC-J 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A68 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x47 -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0xA0 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x11: PAL-60 480i, 704x480 input (H_ACTIVE 704), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A6C (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x47 -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0xA0 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x12: NTSC-M 480i, 704x480 input (H_ACTIVE 704), component YPbPr (480i/576i)
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A70 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x44 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x47 -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0xA0 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
+
+#### Video Encoder Mode: caption timing, SD row 0x13: PAL-B/D/G/H/I 576i, 704x480 input (H_ACTIVE 704), composite / S-video
+Target Chip: Conexant CX25871 (SMBus address 0x8A, 8-bit registers, byte writes)
+Memory Offset / Base Address: xboxkrnl 1.0.4627.1 (Complex 4627 BIOS), file offset 0x02A74 (register list at 0x02A28; 5838: VA 0x800129E0, same values)
+Register Mappings (written in this order, after 0xC4 |= 0x38):
+- Register 0x5E: Write Value 0x22 -> (XDSSEL / CCSEL: caption line select)
+- Register 0xD0: Write Value 0x4E -> (CCR_START[7:0]: caption run-in start)
+- Register 0xD2: Write Value 0x60 -> (CC_ADD[7:0]: caption clock increment)
+- Register 0xD4: Write Value 0x19 -> (MODE2X, DIV2, EN_ASYNC, CCR_START[8], CC_ADD[11:8])
