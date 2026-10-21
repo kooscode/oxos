@@ -29,7 +29,7 @@ make run-xbe XBE='F:\apps\demo\default.xbe' [STATE=...]  # run an XBE from the h
                                 # xemu-state/oxos-exfat/ (an exFAT copy of the play disk, made on first use)
 make run-trace-xbe XBE=... [STATE=...]  # the same with the trace build: serial output here, call record on a crash
 make test-exfat                 # the self-tests on an exFAT disk (xemu-state/oxos-xemu-exfat/): E: as a folder
-make test-encoders              # the encoder probe and flags on xemu's Conexant, Focus and Xcalibur models
+make test-encoders              # the three video encoders (Conexant, Focus, Xcalibur) on xemu's models: probe, mode sets, options
 make test-lba48                 # the self-tests on a 2 TB disk (xemu-state/oxos-xemu-lba48/): 48-bit addressing
 make test-controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
                                 # the tests/controller-test-title title (nxdk, fetched into ../third_party) checks each one
@@ -149,6 +149,12 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
        continues after a reboot. The dashboard boots from /C.
      - Memory units come last.
+   - 20: **video encoders for all three console families** (`../spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md`,
+     `20-xcalibur-encoder.md`; OXOS's choices in `../spec/oxos-internal/02-display-modes.md`): Conexant (1.0–1.3), Focus
+     (1.4–1.5) and Xcalibur (1.6) are programmed from their register maps (`../tools/gen_av_tables.py` writes
+     `src/hal/av_modes.inc` from the specs), SD composite / S-video / SCART / component and 480p / 720p / 1080i, with
+     the encoder options; the NV2A timing follows each encoder's row. `make test-encoders` passes on all three of
+     xemu's encoder models; Halo, Halo 2 (480p) and Enter the Matrix (1080i) run on each. Not yet tried on hardware.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
