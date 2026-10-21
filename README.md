@@ -218,3 +218,4 @@ in `third_party/xemu-dashboard/LICENSE`) as the default disk; `tests/controller-
 ## Legal
 This is an independent project, not affiliated with or endorsed by Microsoft. "Xbox" is a trademark of
 Microsoft Corporation. Use it with game discs you own.
+How OXOS was developed, and the legal basis for it, is documented in [`dmca-compliance.md`](dmca-compliance.md).
