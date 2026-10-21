@@ -5,6 +5,10 @@ built on Linux with clang and lld, inside a **fully open 1 MB BIOS image**: no M
 dump is needed to build or run it. It boots retail software in [xemu](https://xemu.app); console revisions
 1.0–1.5 are the target.
 
+**Clean-room:** OXOS contains no Microsoft source code, machine code, disassembly or decompiled code. The retail
+kernel was studied to write behavioural specifications, and the kernel is written from those specifications only.
+The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md).
+
 ![OXOS boot splash in xemu](docs/splash-screenshot.png)
 
 *The OXOS boot splash, captured in xemu.*
@@ -48,8 +52,10 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
 
 ### How it was made
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
-  (`spec/stock/`), and the kernel is written from those specs only. No decompiled code, Microsoft keys or data tables
-  are included.
+  (`spec/stock/`), and the kernel is written from those specs only. No Microsoft source code, machine code,
+  disassembly, decompiled code or keys are included. The one kind of data taken from Microsoft images is the video
+  encoder register tables, recorded as plain register maps in `spec/stock/20`–`22` (functional hardware constants;
+  [`dmca-compliance.md`](dmca-compliance.md) §3).
 - **Planned features** (`spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its
   features (128 MB, large disks, a second hard disk, virtual discs, IGR and more) were written up as behavioural
   specs for later OXOS work.

@@ -1,8 +1,9 @@
 # Spec 17 — AvSetDisplayMode, video encoder tables (xboxkrnl 1.0.4627.1)
 
 Clean-room behavioural spec. Evidence: batch_decompile of 0x8003045c (`AvSetDisplayMode`, ord 3) and disassembly of
-the INIT table set-up 0x800626e0. **No table contents are reproduced here**: only their layout and how they are
-indexed. Our tables must be derived independently (encoder datasheets, NV2A CRTC timing arithmetic).
+the INIT table set-up 0x800626e0. This spec covers the tables' layout and how they are indexed. The encoder register
+values themselves (Conexant and Focus) are recorded as plain register maps in spec 20 and spec 21 (functional
+hardware constants, see `dmca-compliance.md` §3); the NV2A and CRTC rows are not reproduced.
 
 ## 1. Which encoder
 At boot (INIT 0x800626e0, cold boot) the kernel picks one of two table sets by **XboxHardwareInfo.Flags bit 0x20**
@@ -188,7 +189,7 @@ during cold boot (`src/hal/splash.cpp`):
 Evidence: the INIT tables at 0x800a7c18–0x800aa0c0 (Focus and Conexant sets; layout §1), decoded field by field
 with the chips' datasheets (sources in spec/oxos-internal/06-tv-encoders-sources.md). This section records **what
 the reference programs and what it means**. Per-mode values (timings, clocks, gains, filter taps) are table data
-and are not reproduced. "Class" = mode word bits 30–31.
+and are recorded in spec 20 (Conexant) and spec 21 (Focus). "Class" = mode word bits 30–31.
 The 5838 kernel's Conexant tables are identical to 4627's except the NV2A rows; its Focus tables differ.
 
 ### 8.1 Conexant CX25871, which registers per class

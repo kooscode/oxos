@@ -1,7 +1,8 @@
 # Open Xbox kernel
 
 A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with
-retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/`; no decompiled code is used.
+retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code,
+machine code, disassembly or decompiled code is used; see [`../dmca-compliance.md`](../dmca-compliance.md)).
 Targets console revisions 1.0–1.5 (1.6 comes later). It builds on Linux with clang + lld-link.
 
 ## Build and test
