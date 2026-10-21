@@ -2,8 +2,9 @@
 
 A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with
 retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code,
-machine code, disassembly or decompiled code is used; see [`../dmca-compliance.md`](../dmca-compliance.md)).
-Targets console revisions 1.0–1.5 (1.6 comes later). It builds on Linux with clang + lld-link.
+machine code, disassembly or decompiled code is used; the video encoders' register tables are the one data taken
+from Microsoft images, see [`../dmca-compliance.md`](../dmca-compliance.md)). Targets console revisions 1.0–1.5; on
+1.6 the Xcalibur video encoder is driven, the rest of 1.6 is untested. It builds on Linux with clang + lld-link.
 
 ## Build and test
 ```
@@ -167,3 +168,7 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
   kept only until reboot (`/OXOS/partitions.ini` is not written yet); exFAT names outside Latin-1 or longer than 42
   characters, and files of 4 GB or more, are not shown to titles.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
+- Video (milestone 20; `../spec/oxos-internal/02-display-modes.md`): the NV2A timing is OXOS's own (derived from each
+  encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait
+  for the vertical blank phase before a mode change; Macrovision stays off; the Xcalibur is left alone on AV pack
+  events. Nothing of it has been tried on a real console yet.
