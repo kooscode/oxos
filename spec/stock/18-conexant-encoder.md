@@ -57,7 +57,7 @@ with the composite routing (A carries Y to pin 11, B carries C to pin 22, D carr
 | WSS/CGMS write | 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2), 0x62 ← word >> 4, 0x64 ← word >> 12 |
 
 ## 4. How to read the tables
-Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3). File offsets: the
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §5). File offsets: the
 4627 kernel (the one in the Complex 4627 BIOS image; offset = VA − 0x80010000). Mode names are decoded from each
 row's own values (subcarrier frequency from MSC and the PLL, 525/625 lines, setup, H_ACTIVE, V_ACTIVEI, output
 mode); the row meaning is part of the mode-word ABI. Copy-protection (Macrovision) rows are not included: OXOS keeps

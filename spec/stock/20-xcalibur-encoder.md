@@ -85,7 +85,7 @@ Each per-mode row holds, under the register row's 42 register numbers, one **ind
 - Whether the 1.6 board's other hardware (SMC, fan) needs further kernel changes outside the encoder.
 
 ## 6. Tables
-Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3): the per-mode rows
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §5): the per-mode rows
 from the 5838 BIOS image's AV blob (flash offset 0x357A8), the row maps and flicker-filter sets from the 5838 kernel
 (file offset = VA − 0x80010000). Mode names as in spec 18. Macrovision rows are not included: OXOS keeps copy
 protection off.

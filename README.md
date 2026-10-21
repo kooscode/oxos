@@ -2,12 +2,13 @@
 
 A clean-room, ABI-compatible reimplementation of the original Xbox kernel (`xboxkrnl.exe` 1.0.4627.1) in C++,
 built on Linux with clang and lld, inside a **fully open 1 MB BIOS image**: no Microsoft code, keys or boot-ROM
-dump is needed to build or run it. It boots retail software in [xemu](https://xemu.app); console revisions
-1.0–1.5 are the target.
+dump is needed to build or run it. It boots retail software in [xemu](https://xemu.app). Console revisions
+1.0–1.5 are the target; on 1.6 the video encoder is driven too, the rest of that revision is untested.
 
 **Clean-room:** OXOS contains no Microsoft source code, machine code, disassembly or decompiled code. The retail
 kernel was studied to write behavioural specifications, and the kernel is written from those specifications only.
-The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md).
+The one kind of data taken from Microsoft images is the video encoders' register tables (functional hardware
+constants). The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md).
 
 ![OXOS boot splash in xemu](docs/splash-screenshot.png)
 
@@ -26,7 +27,8 @@ The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md)
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
 - **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
 - **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
-  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take).
+  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
+  programmed from their register tables; checked in xemu on all three of its encoder models.
 - **Hardware testing TBD:** OXOS has not run on a real console yet.
 
 ## Running OXOS in xemu today !!
@@ -53,7 +55,7 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
   (`spec/stock/`), and the kernel is written from those specs only. No Microsoft source code, machine code,
   disassembly, decompiled code or keys are included. The one kind of data taken from Microsoft images is the video
   encoder register tables, recorded as plain register maps in `spec/stock/18`–`20` (functional hardware constants;
-  [`dmca-compliance.md`](dmca-compliance.md) §3).
+  [`dmca-compliance.md`](dmca-compliance.md) §5).
 - **Planned features** (`spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its
   features (128 MB, large disks, a second hard disk, virtual discs, IGR and more) were written up as behavioural
   specs for later OXOS work.
@@ -196,8 +198,9 @@ read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox (a GDB
 serial port) is not implemented yet.
 
 ## About the BIOS image you build
-`make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0;
-there is nothing of Microsoft's in it. One known gap: there is no certificate key. Games therefore derive
+`make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0, and
+no Microsoft code. The one Microsoft-derived data in it is the video encoders' register tables, functional hardware
+constants ([`dmca-compliance.md`](dmca-compliance.md) §5). One known gap: there is no certificate key. Games therefore derive
 different save-signature and System Link keys than a stock console does: saves made on a stock console do not
 verify under OXOS, and System Link with stock consoles does not work. Saves made under OXOS work among themselves.
 

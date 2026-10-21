@@ -57,7 +57,7 @@ and the Focus tables. Register names: the GPL `fs453.h` header and the FS453/4 d
 | WSS/CGMS write | 0x85 ← word & 0xF, 0x84 ← word >> 4, 0x83 ← word >> 12 (field 1), and the same into 0x88, 0x87, 0x86 (field 0) |
 
 ## 4. How to read the tables
-Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §3). §5.1: the 4627
+Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §5). §5.1: the 4627
 kernel (the one in the Complex 4627 BIOS image; file offset = VA − 0x80010000). §5.2: the 5838 BIOS image's AV blob
 (flash offset 0x357A8, spec 17 §1a.2); use this set on 1.4–1.5 consoles unless a test shows otherwise, as it is the
 later revision of the same tables. Mode names as in spec 18 (the row meaning is part of the mode-word ABI). The
