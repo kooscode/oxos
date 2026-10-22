@@ -77,12 +77,14 @@ Each 256 KB bank (`tools/mkbios.py`, `build_open`):
 |---|---|
 | 0x00000 | MCPX header and X-code table (`kernel/boot/xcodes.S`): XboxDev/cromwell's `boot_rom/Xcodes.h` (GPL-2.0), fetched at build time |
 | 0x01000 | our 2BL (`kernel/boot/start.S`, `bl.cpp`), entered at 0xFFFC1000 |
-| 0x06000 | payload header {'OXKP', kernel offset, packed size, image size, key-block offset, key-block size} |
+| 0x06000 | payload header {'OXKP', kernel offset, packed size, image size, key-block offset, key-block size, splash offset, splash size} |
 | 0x06040 | key block, then the flat kernel image as a raw deflate stream |
+| … | a copy of the boot splash when it fits (0, 0 in the header otherwise; spec/oxos-internal/00-boot-splash.md) |
 | … | the kernel's `.data` initializer (quick reboot), ending at 0x3FE00 |
 | 0x3FE00 | our reset code (`kernel/boot/reset.S`) |
 
-Bank 1 holds the splash instead (spec/oxos-internal/00-boot-splash.md).
+Bank 1 holds the splash instead (spec/oxos-internal/00-boot-splash.md). `make bios-256k` writes one bank alone, for
+256 KB flash chips and modchip banks.
 
 - **With an MCPX ROM** (a console, or xemu given a ROM dump): the ROM runs the X-codes. Their last two write
   `mov eax, 0xFFFC1000; jmp eax` to RAM address 0 (Cromwell's "overflow trick"). The ROM's check of the

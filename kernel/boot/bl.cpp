@@ -19,6 +19,7 @@ struct XK_BOOT_PAYLOAD {
     ULONG KernelOffset, KernelPacked; // raw deflate stream, bank-relative
     ULONG KernelSize;                 // the flat kernel image
     ULONG KeysOffset, KeysSize;       // the key block handed to the kernel
+    ULONG SplashOffset, SplashSize;   // the boot splash copy in this bank (0, 0 if none; read by the kernel)
 };
 
 constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + 0x6000, PAYLOAD_MAGIC = 0x504B584F, BOOT_MAGIC = 0x534F584F;

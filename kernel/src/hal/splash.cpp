@@ -26,8 +26,11 @@ volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header
 ULONG HalpPngScratchSize(ULONG Width, ULONG Height);
 ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, ULONG Height, UCHAR *Scratch);
 
-// Flash bank 1: "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG.
+// "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG: in flash bank 1 of a
+// 1 MiB image, else (a 256 KiB image) the copy in the boot bank that the payload header at bank offset 0x6000 points
+// to (words 6 and 7: offset and size, 0 when there is none).
 constexpr ULONG SPLASH_FLASH = 0xFFF40000, SPLASH_FLASH_SIZE = 0x40000, SPLASH_HEADER = 20;
+constexpr ULONG SPLASH_BOOT_BANK = 0xFFFC0000, SPLASH_PAYLOAD = 0x6000, SPLASH_PAYLOAD_MAGIC = 0x504B584F;
 
 // 5x7 glyphs, one byte per row (bit 4 = leftmost column), for the caption's letters.
 static const struct {
@@ -84,25 +87,41 @@ static void HalpDrawEmblem(ULONG *img) {
         }
 }
 
+// Decode the splash at Splash (Room bytes available after it); 0 = shown.
+static ULONG HalpDecodeFlashSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
+    static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
+    for (int i = 0; i < 8; i++)
+        if (Splash[i] != (UCHAR)magic[i])
+            return 0x101; // no splash here
+    ULONG length = *(const ULONG *)(Splash + 12);
+    if (*(const ULONG *)(Splash + 8) != 1 || Room < SPLASH_HEADER || length > Room - SPLASH_HEADER)
+        return 0x102;
+    ULONG scratchSize = HalpPngScratchSize(SPLASH_W, SPLASH_H);
+    auto scratch = (UCHAR *)MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
+    ULONG status = scratch ? HalpDecodePng(Splash + SPLASH_HEADER, length, img, SPLASH_W, SPLASH_H, scratch) : 0x103;
+    if (scratch)
+        MmFreeContiguousMemory(scratch);
+    return status;
+}
+
 static ULONG HalpLoadFlashSplash(ULONG *img) {
     auto flash = (const UCHAR *)MmMapIoSpace(SPLASH_FLASH, SPLASH_FLASH_SIZE, PAGE_READONLY | PAGE_NOCACHE);
     if (!flash)
         return 0x100;
-    static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
-    ULONG status = 0, length = *(const ULONG *)(flash + 12);
-    for (int i = 0; i < 8; i++)
-        if (flash[i] != (UCHAR)magic[i])
-            status = 0x101; // no splash bank (256 KiB image, or built without one)
-    if (!status && (*(const ULONG *)(flash + 8) != 1 || length > SPLASH_FLASH_SIZE - SPLASH_HEADER))
-        status = 0x102;
-    if (!status) {
-        ULONG scratchSize = HalpPngScratchSize(SPLASH_W, SPLASH_H);
-        auto scratch = (UCHAR *)MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
-        status = scratch ? HalpDecodePng(flash + SPLASH_HEADER, length, img, SPLASH_W, SPLASH_H, scratch) : 0x103;
-        if (scratch)
-            MmFreeContiguousMemory(scratch);
-    }
+    ULONG status = HalpDecodeFlashSplash(flash, SPLASH_FLASH_SIZE, img);
     MmUnmapIoSpace((PVOID)flash, SPLASH_FLASH_SIZE);
+    if (status != 0x101)
+        return status;
+    // No bank 1 splash (a 256 KiB chip mirrors the boot bank there): the boot bank's own copy.
+    auto bank = (const UCHAR *)MmMapIoSpace(SPLASH_BOOT_BANK, SPLASH_FLASH_SIZE, PAGE_READONLY | PAGE_NOCACHE);
+    if (!bank)
+        return 0x100;
+    auto payload = (const ULONG *)(bank + SPLASH_PAYLOAD);
+    ULONG offset = payload[6], size = payload[7];
+    if (payload[0] == SPLASH_PAYLOAD_MAGIC && offset >= SPLASH_PAYLOAD + 0x40 && size >= SPLASH_HEADER &&
+        offset < SPLASH_FLASH_SIZE && size <= SPLASH_FLASH_SIZE - offset)
+        status = HalpDecodeFlashSplash(bank + offset, size, img);
+    MmUnmapIoSpace((PVOID)bank, SPLASH_FLASH_SIZE);
     return status;
 }
 

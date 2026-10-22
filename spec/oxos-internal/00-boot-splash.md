@@ -18,10 +18,17 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
 - The PNG is re-chunked to a single IDAT and stored in flash bank 1 (offset 0x40000, physical 0xFFF40000) behind a
   20-byte header: `"XKSPLASH"`, u32 version 1, u32 PNG length, u32 CRC-32 of the PNG.
 - Banks 0 and 3 must stay as they are: the MCPX boot ROM reads its init table at 0xFF000000 (bank 0 of a 1 MiB chip)
-  and the 2BL/kernel from the top bank. A 256 KiB image has no spare bank, so no splash.
+  and the 2BL/kernel from the top bank.
+- **256 KiB images** (since 2026-10-21): the open image also puts a copy of the same header and PNG in each boot
+  bank's spare space, between the kernel's deflate stream and its `.data` initializer, when it fits, and records it
+  in the payload header (bank offset 0x6000, words 6 and 7: offset and size; 0, 0 for none; stock spec 01 §5). So
+  `make bios-256k` (`mkbios.py --size 256K`), or the first 256 KiB of a 1 MiB image, shows the splash too. If the
+  kernel grows past the room, the 1 MiB build warns and keeps only bank 1, and the 256 KiB build fails.
 
 ## 2. Showing it
-- The splash thread maps the bank with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)` and decodes it with
+- The splash thread maps bank 1 with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)`; without a header there (on a
+  256 KiB chip that address mirrors the boot bank) it maps the boot bank at 0xFFFC0000 and uses the copy the payload
+  header points to. It decodes the image with
   `src/hal/png.cpp`: inflate (RFC 1951), Adler-32 check, PNG scanline un-filtering. Supported input is exactly what
   mkbios writes, plus 8-bit RGB/RGBA: not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a temporary
   buffer below 16 MB.
