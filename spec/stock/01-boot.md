@@ -95,6 +95,10 @@ Bank 1 holds the splash instead (spec/oxos-internal/00-boot-splash.md). `make bi
   enters flat protected mode, interprets the same X-code table and jumps to 0xFFFC1000. On hardware the MCPX ROM
   hides this range, so the code never runs there.
 - **2BL:**
+  - answers the SMC's start-up challenge first: reads SMC registers 0x1C-0x1F and writes the answer to 0x20 and
+    0x21 (the algorithm as in XboxDev/cromwell's `boot_rom/2bPicResponseAction.c`). On a console the SMC resets the
+    machine and flashes the LED red and green when no answer comes within a few seconds; xemu does not check it.
+    Added 2026-10-21 after the first hardware run (a 1.4 console) ended that way;
   - loads its own GDT, sets the MTRRs as in §4 and enables the caches;
   - copies its C part to 0x400000;
   - inflates the kernel to 0x10000 (`xk/inflate.h`, shared with the PNG decoder);

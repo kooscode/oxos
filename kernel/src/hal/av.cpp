@@ -1,6 +1,7 @@
 // Audio/video: AV pack, encoder detection, display mode programming (spec/stock/12 §4, spec/stock/17).
 // The video encoders (Conexant, Focus, Xcalibur) are programmed from their register maps (spec/stock/18-20); the NV2A
 // timing follows each encoder's settings, or the standards for HD and VGA (spec/oxos-internal/02-display-modes.md).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -45,6 +46,7 @@ void AvInit() {
         XboxHardwareInfo.Flags |= XBOX_HW_FLAG_XCALIBUR;
         AvpEncoderWideStatus = HalReadSMBusValue(AV_ENCODER_XCALIBUR, 0x00, TRUE, &v);
     }
+    XK_SERIAL("av: AV pack %u, encoder at %#x\n", HalBootSMCVideoMode, AvpEncoderAddress);
 }
 
 // AV pack unplugged / plugged back (SMC events): the encoder's output control register 0xBA. The low four bits are
@@ -650,12 +652,175 @@ static void AvpEncoderStart(ULONG Mode) {
     }
 }
 
+// OXOS's own boot screens (splash, fatal error): the mode word the reference's boot animation would choose for this
+// AV pack and video standard (spec/stock/22 §8.3; 4:3), so the encoder sends what the cable expects (component
+// YPbPr on the HDTV pack, not composite). Standard: factory setting 0x103 bits 8-15 (1 NTSC-M, 2 NTSC-J, 3 PAL).
+ULONG AvBootModeWord() {
+    ULONG type, length, region = 0x00400100;
+    ExQueryNonVolatileSetting(0x103, &type, &region, sizeof(region), &length);
+    bool pal = ((region >> 8) & 0xFF) == 3, japan = ((region >> 8) & 0xFF) == 2;
+    switch (HalBootSMCVideoMode & 7) {
+    case 0: // SCART
+        return pal ? 0x60030307 : japan ? 0x20010103 : 0x20010101;
+    case 1: // HDTV (component): the interlaced SD row
+        return pal ? 0x48030314 : 0x0801010D;
+    case 2: // VGA
+        return pal ? 0 : 0x88070701;
+    default: // composite, S-video, RF
+        return pal ? 0x44030307 : japan ? 0x04010103 : 0x04010101;
+    }
+}
+
+// The display part of the reference graphics library's device set-up (spec/stock/22 §7 steps 4 and 7): every title
+// repeats it before its first mode set, and the reference's boot animation does it before the boot picture. OXOS
+// shows its splash without a title, so it does this once at cold boot before the first mode set.
+void AvPrepareBootDisplay() {
+    auto regs = (volatile UCHAR *)0xFD000000;
+    auto reg32 = [&](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(regs + offset); };
+    reg32(0x000200) = 0xFFFFFFFF; // PMC: all engines on
+    regs[0x6013D4] = 0x1F;
+    UCHAR lock = regs[0x6013D5];
+    AvpCrtc(regs, 0x1F, 0x57);
+    regs[0x6013D4] = 0x52;
+    UCHAR cr52 = regs[0x6013D5];
+    AvpCrtc(regs, 0x52, (UCHAR)(cr52 + 4));
+    ULONG v = reg32(0x008088);
+    v = (v & 0xFFFFF43F) | 0x400;
+    reg32(0x008088) = v;
+    reg32(0x008088) = (v & 0xF43FFFFF) | 0x4000000;
+    v = reg32(0x00808C);
+    v = (v & 0xFFFFF40F) | 0x400;
+    reg32(0x00808C) = v;
+    reg32(0x00808C) = (v & 0xF40FFFFF) | 0x4000000;
+    AvpCrtc(regs, 0x20, 0x29);
+    AvpCrtc(regs, 0x1B, 0x05);
+    reg32(0x600804) = (reg32(0x600804) & ~5u) | 2;
+    if (!lock)
+        AvpCrtc(regs, 0x1F, 0x99);
+}
+
+// The NV2A side of a mode change exactly as spec/stock/22 §2 describes it, with the reference NV2A and CRTC rows of the
+// console's encoder (spec 22 §3.4 / §4 Focus, §3.7 / §3.9 Conexant, §3.10 / §3.11 Xcalibur). Every encoder generates
+// the pixel clock and follows the NV2A's syncs (spec 22 §5), so the NV2A raster has to be the reference's to the
+// pixel; OXOS's own derived timing (spec/oxos-internal/02-display-modes.md §1) gave a locked but scrambled picture on
+// a 1.4 console. Returns false when the mode word's rows are outside the tables (the caller then uses its own path).
+static void AvpSeq(volatile UCHAR *regs, UCHAR index, UCHAR value) {
+    regs[0xC03C4] = index;
+    regs[0xC03C5] = value;
+}
+
+static bool AvpReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer) {
+    ULONG nvRow = (Mode >> 16) & 0xFF, crtcRow = (Mode >> 8) & 0xFF;
+    const ULONG(*nv)[26] = AvpCxNv;
+    const ULONG *nv880 = AvpCxNv880;
+    const UCHAR(*crtc)[34] = AvpCxCrtc;
+    if (AvpEncoderAddress == AV_ENCODER_FOCUS)
+        nv = AvpFoNv, nv880 = AvpFoNv880, crtc = AvpFoCrtc;
+    else if (AvpEncoderAddress == AV_ENCODER_XCALIBUR)
+        nv = AvpXcNv, nv880 = AvpXcNv880, crtc = AvpXcCrtc;
+    static_assert(sizeof(AvpFoNv) == sizeof(AvpCxNv) && sizeof(AvpFoNv) == sizeof(AvpXcNv) &&
+                      sizeof(AvpFoCrtc) == sizeof(AvpCxCrtc) && sizeof(AvpFoCrtc) == sizeof(AvpXcCrtc),
+                  "one row count for every encoder");
+    if (!nvRow || nvRow > sizeof(AvpFoNv) / sizeof(AvpFoNv[0]) || !crtcRow ||
+        crtcRow > sizeof(AvpFoCrtc) / sizeof(AvpFoCrtc[0]))
+        return false;
+    // §2.1: format -> general control and depth code; pitch in 8-byte units.
+    ULONG gc = Format == 0x11 ? 0x00101030 : 0x00100030;
+    UCHAR depth = (Format == 0x10 || Format == 0x1C || Format == 0x11) ? 2 : (Format == 0x12 || Format == 0x1E) ? 3 : 0;
+    ULONG p8 = Pitch / 8;
+    auto reg32 = [&](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(regs + offset); };
+    if (Mode == AvpCurrentMode) { // §2.2: the same mode word as the last full change
+        reg32(0x680600) = gc;
+        AvpCrtc(regs, 0x1F, 0x57);
+        AvpCrtc(regs, 0x13, (UCHAR)p8);
+        AvpCrtc(regs, 0x19, (UCHAR)((p8 >> 3) & 0xE0));
+        AvpCrtc(regs, 0x28, (UCHAR)(depth | 0x80));
+        reg32(0x600800) = FrameBuffer;
+        AvSendTVEncoderOption((PVOID)regs, 0x0B, 5, nullptr);
+        AvSendTVEncoderOption((PVOID)regs, 0x0E, 0, nullptr);
+        return true;
+    }
+    // §2.3: the full change.
+    AvpEncoderOff();                                       // 0: Focus / Xcalibur outputs off (5838)
+    outb(0x80D3, 5);                                       // 1
+    ULONG v = reg32(0x6806A0);
+    for (ULONG i = 0; i < 100000 && ((v ^ (v >> 4)) & 1); i++) // bit 0 equal to bit 4 (bounded)
+        v = reg32(0x6806A0);
+    AvpCrtc(regs, 0x1F, 0x57);                             // 2: unlock, display off
+    AvpCrtc(regs, 0x21, 0xFF);
+    AvpCrtc(regs, 0x28, 0x00);
+    reg32(0x680880) = 0x21121111;                          // 3
+    ULONG errors = AvpEncoderWriteErrors;                  // 4: encoder reset (Conexant) and rows (specs 18-20)
+    AvpEncoderRows(Mode);
+    AvpCheckModeRows(Mode, errors);
+    // 5: GPIOs (with OXOS's HD widescreen line, spec/oxos-internal/02-display-modes.md §2).
+    bool hd = AvpIsHd(Mode) && (crtcRow == 0x0A || crtcRow == 0x0C);
+    outb(0x80D6, (UCHAR)((((Mode >> 28) & 1) | hd) | 4));
+    outb(0x80D8, 4);
+    reg32(0x68050C) = reg32(0x68050C) | 0x10020000;        // 6: pixel clock from the encoder, bit 28
+    regs[0xC03C3] = 0x01;                                  // 7: misc output
+    regs[0xC03C2] = 0xE3;
+    reg32(0x680600) = gc;                                  // 8
+    for (ULONG i = 0; i < 26; i++)                         // 9: the NV2A row
+        reg32(AvpNvRegs[i]) = nv[nvRow - 1][i];
+    if (Mode & 0x20000000) {                               // 10: SCART: RGB out of the NV2A
+        reg32(0x680630) = 0;
+        reg32(0x6808C4) = 0;
+        reg32(0x68084C) = 0;
+    }
+    static const UCHAR seq[] = {0x03, 0x21, 0x0F, 0x00, 0x06}; // 11: the screen stays off until option 9
+    for (UCHAR i = 0; i < sizeof(seq); i++)
+        AvpSeq(regs, i, seq[i]);
+    static const UCHAR gfx[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F, 0xFF}; // 12
+    for (UCHAR i = 0; i < sizeof(gfx); i++) {
+        regs[0xC03CE] = i;
+        regs[0xC03CF] = gfx[i];
+    }
+    (void)regs[0x6013DA]; // 13: attribute controller (flip-flop to the index state first)
+    for (UCHAR i = 0; i < 0x15; i++) {
+        regs[0x6013C0] = i;
+        regs[0x6013C0] = i < 0x10 ? i : i == 0x10 ? 0x01 : i == 0x11 ? 0x4A : i == 0x12 ? 0x0F : 0x00;
+    }
+    regs[0x6013C0] = 0x20;
+    AvpCrtc(regs, 0x11, 0x00);                             // 14: unlock CR00-CR07
+    const UCHAR *row = crtc[crtcRow - 1];                  // 15: the CRTC row, the pitch merged in
+    for (ULONG i = 0; i < sizeof(AvpCrtcIndex); i++) {
+        UCHAR index = AvpCrtcIndex[i], value = row[i];
+        if (index == 0x13)
+            value = (UCHAR)p8;
+        else if (index == 0x19)
+            value = (UCHAR)(value | ((p8 >> 3) & 0xE0));
+        else if (index == 0x25)
+            value = (UCHAR)(value | ((p8 >> 6) & 0x20));
+        AvpCrtc(regs, index, value);
+    }
+    reg32(0x6806A0) = ~v & 1;                              // 16
+    AvpCrtc(regs, 0x28, (UCHAR)(depth | 0x80));            // 17: pixel format on
+    for (int r = 0; r < 3; r++) {                          // 18: three vertical retraces (bounded waits)
+        for (ULONG i = 0; i < 200000 && (regs[0x6013DA] & 8); i++)
+            KeStallExecutionProcessor(1);
+        for (ULONG i = 0; i < 200000 && !(regs[0x6013DA] & 8); i++)
+            KeStallExecutionProcessor(1);
+    }
+    reg32(0x680880) = nv880[nvRow - 1];                    // 19
+    KeStallExecutionProcessor(1);                          // 20: Conexant timing reset + DACs, Xcalibur outputs
+    AvpEncoderStart(Mode);                                 //     (Focus: its DACs come on with option 9)
+    reg32(0x600800) = FrameBuffer;                         // 21
+    AvpCurrentMode = Mode;
+    AvpUpdateWss();
+    return true;
+}
+
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
     AvpSetDisplayModeCalls = AvpSetDisplayModeCalls + 1;
     if (!Mode)
         Mode = 0x0F010101;
+    // Encoder modes other than the VGA class (the reference has no VGA rows; spec 22 §13): the reference mode change.
+    if (AvpEncoderAddress && AvpEncoderMode(Mode) && (Mode >> 30) != 3 &&
+        AvpReferenceDisplayMode(regs, Mode, Format, Pitch, FrameBuffer))
+        return 0;
     // Pixel format: RAMDAC general control and the CRTC pixel-depth code.
     ULONG generalControl = 0x100030, depth = 0x3000000;
     if (Format == 0x10 || Format == 0x1C)

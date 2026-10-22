@@ -557,7 +557,8 @@ static void XepWaitForTray() {
     }
     if (state == 0x60) {
         extern PDEVICE_OBJECT IdexCdRomDeviceObject;
-        IoDismountVolume(IdexCdRomDeviceObject);
+        if (IdexCdRomDeviceObject) // none on a console without a DVD drive
+            IoDismountVolume(IdexCdRomDeviceObject);
         XepLaunchTitle(0);
     } else {
         XeTitleLaunched = 2;
