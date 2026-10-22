@@ -25,7 +25,10 @@ constants). The method and its legal basis are in [`dmca-compliance.md`](dmca-co
 - **Kernel call tracing:** a record of the kernel calls a title makes, saved automatically when it crashes.
 - **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
 - **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
-- **exFAT Support** for standard exFAT formatted disks, No file or disk size limit
+- **exFAT Support** for standard exFAT formatted disks, No file or disk size limit: format a disk on any PC, copy
+  the dashboard into `/C`, and the Xbox partitions are folders (`/C`, `/E`, `/X`–`/Z`, `/F`). The dashboard,
+  **Halo** and **Halo 2** run from one in xemu, including a 500 GB SATA drive formatted on a PC and attached over
+  USB (see [Using an exFAT disk](#using-an-exfat-disk)).
 - **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
   composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
   programmed from their register tables; checked in xemu on all three of its encoder models.
@@ -46,6 +49,21 @@ Free, Legal and Open Source!!
    xemu's *Machine* menu.
 
 OXOS has only been tested in xemu so far, not on a real console.
+
+## Using an exFAT disk
+OXOS also runs from a hard disk formatted as exFAT on a PC (Windows, macOS or Linux), with no Xbox tools. Experimental:
+checked in xemu only.
+1. Partition the disk with GPT (or MBR) and one exFAT partition starting at 1 MiB or later (the default on every
+   PC). OXOS keeps the Xbox's reserved sectors (refurb record, cache database) in the gap before the partition.
+2. Copy the dashboard's files into a folder `/C` at the root of the volume, and saves (`TDATA`, `UDATA`) into `/E`.
+   The other folders (`/X`, `/Y`, `/Z` for game caches, `/F` for games and apps, `/OXOS`) are created when first
+   used. Folder names are not case-sensitive.
+3. Attach the disk as the console's hard disk. In xemu, a small qcow2 overlay on the raw disk keeps the disk itself
+   untouched: `qemu-img create -f qcow2 -F raw -b /dev/sdX overlay.qcow2`, then use `overlay.qcow2` as the hard disk
+   (your user needs read access to `/dev/sdX`).
+
+`tests/exfat.py --from-fatx SRC.qcow2 OUT.qcow2` builds such a disk image from an existing Xbox disk image. The
+design is in [`spec/oxos-internal/05-exfat-storage-spec.md`](spec/oxos-internal/05-exfat-storage-spec.md).
 
 ## Getting Started (Kernel Developer)
 To build OXOS yourself, change it, run its tests or debug the kernel and your own nxdk titles.
@@ -210,6 +228,8 @@ Microsoft's 2BL and keys: do not distribute that one.
 ## Next steps
 - **Real hardware (TBD):** testing on real consoles, video output first (all three encoders, component HD via HDMI
   adapters), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
+- **exFAT:** saving the cache partitions' format settings on the disk (`/OXOS/partitions.ini`), a compatibility pass
+  over more titles, and exFAT memory units.
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.
 - **Debugging on real hardware:** a GDB stub in the kernel over the SuperIO serial port, with the debugger-only
   exports, so the same gdb and VS Code debugging works on a console.
