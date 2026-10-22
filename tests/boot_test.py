@@ -384,11 +384,16 @@ def exfat_format_checks(mon, q):
     if not is_exfat_disk(q):
         return {}
     total, free = mon.read("KiTestExfatFormatTotal"), mon.read("KiTestExfatFormatFree")
-    print(f"  (X: after the format: {free} of {total} 16 KB units free)")
+    spc = mon.read("KiTestExfatFormatSpc")
+    print(f"  (X: after the format: {free} of {total} units of {spc * 512 // 1024} KB free)")
+    # A FATX volume of 750 MB with the 64 KB clusters the format chose: 4 KB header, table rounded to 4 KB.
+    length, cluster = 0x2EE00000, 0x10000
+    fat = ((length // cluster + 1) * 2 + 0xFFF) & ~0xFFF
+    clusters = (length - 0x1000 - fat) // cluster
     return {
         "X: formatted through its volume handle: folder emptied, header serial shown": mon.read("KiTestExfatFormatOk") == 1,
-        "X: reports its retail 750 MB, less only its directory's cluster": total == 0x2EE00000 // 0x4000
-            and free == total - 1,
+        "X: reports a 750 MB FATX volume in the format's cluster size, only its root directory in use":
+            spc == 128 and total == clusters and free == total - 1,
         "E: refuses a format through its volume handle": mon.read("KiTestExfatRefuseOk") == 1,
     }
 

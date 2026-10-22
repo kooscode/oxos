@@ -10,7 +10,7 @@ volatile ULONG KiTestFatxReadOk, KiTestFatxReadSum, KiTestFatxReadLength, KiTest
 volatile char KiTestFatxDirNames[64];
 // exFAT disk: a title-style format of X: (Partition3) through its volume handle empties the folder
 // (spec/oxos-internal/05-exfat-storage-spec.md §5); E: refuses it.
-volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk;
+volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk, KiTestExfatFormatSpc;
 extern volatile ULONG KiTestIdexDone;
 
 static void Sleep(LONG ms) {
@@ -230,12 +230,13 @@ static NTSTATUS FormatLikeATitle(PCSZ volume, PUCHAR buf) {
     PARTITION_INFORMATION pi = {};
     status = NtDeviceIoControlFile(h, nullptr, nullptr, nullptr, &iosb, IOCTL_DISK_GET_PARTITION_INFO, nullptr, 0,
                                    &pi, sizeof(pi));
-    ULONG entries = (ULONG)(pi.PartitionLength.QuadPart >> 14) + 1, fat = (entries * 2 + 0xFFF) & ~0xFFFu;
+    // 64 KB clusters, as Halo 2 formats its cache partition.
+    ULONG entries = (ULONG)(pi.PartitionLength.QuadPart >> 16) + 1, fat = (entries * 2 + 0xFFF) & ~0xFFFu;
     LARGE_INTEGER at = {};
     RtlZeroMemory(buf, 0x1000);
     ((PULONG)buf)[0] = 0x58544146; // "FATX"
     ((PULONG)buf)[1] = 0x12345678;
-    ((PULONG)buf)[2] = 32;
+    ((PULONG)buf)[2] = 128;
     ((PULONG)buf)[3] = 1;
     if (NT_SUCCESS(status))
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
@@ -246,7 +247,7 @@ static NTSTATUS FormatLikeATitle(PCSZ volume, PUCHAR buf) {
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
     }
     RtlFillMemory(buf, 0x1000, 0xFF);
-    for (ULONG off = 0; NT_SUCCESS(status) && off < 0x4000; off += 0x1000) {
+    for (ULONG off = 0; NT_SUCCESS(status) && off < 0x10000; off += 0x1000) {
         at.QuadPart = 0x1000 + fat + off;
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
     }
@@ -271,7 +272,8 @@ static void ExfatFormatTest(PUCHAR buf) {
         NtClose(h);
     }
     ok &= FormatLikeATitle("\\Device\\Harddisk0\\Partition3", buf) == 0;
-    // Afterwards: nothing in X:\, 750 MB less the folder's own cluster free, the header's serial shown.
+    // Afterwards: nothing in X:\, a FATX volume with the header's cluster size and only its root directory in use,
+    // the header's serial shown.
     ok &= Open(&hv, "\\Device\\Harddisk0\\Partition3\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0;
     if (ok) {
         ULONG size[6] = {}, vol[8] = {};
@@ -279,6 +281,7 @@ static void ExfatFormatTest(PUCHAR buf) {
         NtQueryVolumeInformationFile(hv, &iosb, vol, 18, FileFsVolumeInformation);
         KiTestExfatFormatTotal = size[0];
         KiTestExfatFormatFree = size[2];
+        KiTestExfatFormatSpc = size[4];
         UCHAR dir[0x100];
         ok = NtQueryDirectoryFile(hv, nullptr, nullptr, nullptr, &iosb, dir, sizeof(dir), FileDirectoryInformation,
                                   nullptr, TRUE) == (NTSTATUS)0xC000000F && // STATUS_NO_SUCH_FILE: empty

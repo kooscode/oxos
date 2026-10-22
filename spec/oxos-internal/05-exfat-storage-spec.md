@@ -122,7 +122,9 @@ Every virtual partition shares the one exFAT volume, so each reports its own siz
 - **Why X/Y/Z stay at retail size:** a title sizes the FATX allocation table it writes from the partition size it is
   given (§5); a 2 TB cache drive would mean about 512 MB of table writes, and titles expect a 750 MB cache.
 - **Why no cap on F::** titles never use it; dashboards and homebrew that do already handle large disks.
-- **Cluster size reported:** 16 KB (retail FATX), whatever the exFAT cluster size; sizes are rounded to it.
+- **Cluster size reported:** 16 KB (retail FATX), whatever the exFAT cluster size; sizes are rounded to it. X/Y/Z
+  report the cluster size of their last format instead (titles choose it: Halo 2 uses 64 KB and checks it), with
+  the cluster count and free space a FATX mount of that format shows (driver spec 07 §2.1).
 - Usage per folder is computed at mount (a directory walk) and kept up to date on writes.
 
 ## 7. What stays FATX
@@ -180,8 +182,9 @@ Design, once confirmed:
   which is why FATX stays the default.
 
 ## Open
-- Other titles' sequences (Halo 2, a title that uses X: or Y:, one that uses two cache partitions): expected to be
-  the same runtime code, to confirm with the tracer.
+- Other titles' sequences (a title that uses X: or Y:): expected to be the same runtime code, to confirm with the
+  tracer. Halo 2 (2026-10-21) uses two cache partitions (Z: and one more, linked as N:), formats with 64 KB clusters
+  and checks the formatted volume's cluster size and free space (§6).
 - The dashboard's formatting and "clear cache" paths, and homebrew dashboards that format partitions.
 - Whether any title reads raw sectors of E: or C:.
 - Memory units: the trace of §9 (device creation, raw name and format accesses, where the mount happens).

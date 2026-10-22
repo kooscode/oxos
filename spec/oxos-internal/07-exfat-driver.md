@@ -2,7 +2,7 @@
 
 Status: phases 1-4 of the plan work (GPT/MBR, read-write exFAT, folder partitions with bounded sizes, cache-partition
 formatting through the volume handle with X/Y/Z usage limits; `make test-exfat` passes). Not yet run with a retail
-title on an exFAT disk; memory units are the last phase. The storage design (layout, virtual partitions, cache formatting, size reporting) is
+title on an exFAT disk until 2026-10-21, when Halo 2 ran from an exFAT USB disk (§2.1); memory units are the last phase. The storage design (layout, virtual partitions, cache formatting, size reporting) is
 `05-exfat-storage-spec.md`; this document is the driver: the on-disk format it reads and writes, and how it fits the
 kernel. The format facts come from Microsoft's published exFAT specification (2019) and the UEFI specification
 (GPT); nothing here comes from another implementation's code.
@@ -97,20 +97,31 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
   count, allocation hint) and one block cache key (the exFAT partition), under the FATX layer's lock.
 
 ### 2.1 Volume handle (cache formatting, storage spec §5)
+- **Cluster size:** a folder partition shows the FATX cluster size of its last format (the header's sectors per
+  cluster, 8 to 128: 4 to 64 KB), 16 KB until it has been formatted. Titles choose it: Halo 2 formats Z: with 64 KB
+  clusters and then checks that the volume it mounts has that cluster size and only its root directory in use; with
+  16 KB units it took the disk for a damaged one and sent the console to the dashboard's "requires service" screen
+  (error 2, invalid hard disk). Fixed 2026-10-21.
 - **Reads** of a folder partition's volume handle return a freshly formatted FATX volume of the reported size: the
-  header (signature, the serial of the last format or the volume's own, 32 sectors per cluster, root cluster 1), the
-  allocation table with entries 0 and 1 set (2-byte entries below 0xFFF0 clusters, else 4-byte), one root cluster of
-  0xFF, zeros elsewhere.
+  header (signature, the serial of the last format or the volume's own, the cluster size above, root cluster 1),
+  the allocation table with entries 0 and 1 set (2-byte entries below 0xFFF0 clusters, else 4-byte), one root
+  cluster of 0xFF, zeros elsewhere.
 - **A FATX header written at offset 0** of X, Y or Z empties the folder (every entry set below it is deleted and its
-  clusters freed) and keeps the header's serial for later volume queries. Refused (STATUS_ACCESS_DENIED) while a file
-  on that partition is open, and always on E, C and F.
+  clusters freed) and keeps the header's serial and cluster size for later mounts. Refused (STATUS_ACCESS_DENIED)
+  while a file on that partition is open, and always on E, C and F.
 - **Other writes** inside the metadata area (up to the end of the first root cluster) are accepted and dropped;
   writes past it are refused.
+- **Size reported (FileFsSizeInformation):** X/Y/Z report what a FATX mount of a 750 MB volume with that cluster size
+  reports: (750 MB − 4 KB header − the allocation table rounded to 4 KB) / cluster size clusters (11 999 at 64 KB,
+  47 993 at 16 KB), and as free that count less one (the root directory) less the folder's contents rounded up to
+  the cluster size; never more than the exFAT volume's real free space. The exFAT folder's own directory clusters are
+  not counted.
 - **Usage:** X/Y/Z count their folder's clusters at mount and on each allocation and free; an allocation that would
   take a folder past 750 MB fails with STATUS_DISK_FULL, as a full FATX partition would.
 - **Differences from the storage spec, for now:** the folder is emptied in place, synchronously (no trash folder, no
-  background delete); the recorded serial lives in memory only (`/OXOS/partitions.ini` is not written yet), so a
-  reboot shows the volume's own serial again.
+  background delete); the recorded serial and cluster size live in memory only (`/OXOS/partitions.ini` is not
+  written yet): they survive quick reboots (title to title) but a cold boot shows the volume's own serial and 16 KB
+  clusters again, so a title may format its cache partition again after a power cycle.
 
 ## 3. Tests
 - `tests/exfat.py` builds GPT disks with an exFAT volume from host folders (the writer) and checks a volume
@@ -118,5 +129,5 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
   allocation, free count).
 - `make test-exfat` boots the self-test BIOS on such a disk and checks what the kernel reads and writes, then runs
   the checker on the disk afterwards. The kernel side includes a title-style format of X: (a file created first,
-  then the header, table and root writes and a dismount): X: must be empty afterwards with 47 999 of 48 000 units
-  free and the new serial, and E: must refuse the same format.
+  then the header, table and root writes and a dismount, with 64 KB clusters as Halo 2 uses): X: must be empty
+  afterwards and report 11 998 of 11 999 units of 64 KB free and the new serial, and E: must refuse the same format.
