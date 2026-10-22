@@ -1,4 +1,5 @@
 // IDE DVD drive (ATAPI, device 1): \Device\CdRom0, READ via bus-master DMA, packet IOCTLs (spec/stock/04 §3).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -151,7 +152,11 @@ static NTSTATUS IdexCdRomComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Informati
 
 static NTSTATUS NTAPI IdexCdRomCreateClose(PDEVICE_OBJECT, PIRP Irp) { return IdexCdRomComplete(Irp, 0, 0); }
 
+volatile ULONG IdexCdRomAbsentReason; // 0 = a DVD drive, else why none was found (IdexCdRomStart)
+
 static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    if (IdexCdRomAbsentReason) // no drive: an empty tray
+        return IdexCdRomComplete(Irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     ULONG len = s->Parameters.Read.Length;
     LONGLONG offset = s->Parameters.Read.ByteOffset.QuadPart;
@@ -172,6 +177,8 @@ static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 static NTSTATUS IdexCdRomAuthenticate();
 
 static NTSTATUS NTAPI IdexCdRomDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    if (IdexCdRomAbsentReason) // no drive: an empty tray
+        return IdexCdRomComplete(Irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
     switch (IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_CDROM_CHECK_VERIFY:
     case IOCTL_CDROM_GET_DRIVE_GEOMETRY:
@@ -603,14 +610,10 @@ DRIVER_OBJECT IdexCdRomDriverObject = {
      IoInvalidDeviceRequest, IdexCdRomDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest}};
 
-void IdexCdRomInit() {
-    KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
-    outb(IDE_DRIVE, 0xB0);
-    ULONG tries = 0;
-    while (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 50000))
-        if (++tries == 600)
-            IdexFatalError(10);
-    // SET FEATURES transfer mode PIO 4 then UDMA 2 (polled).
+// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
+// 4 IDENTIFY PACKET). Called at the channel's IRQL.
+// One attempt at bringing device 1 up (SET FEATURES PIO 4, UDMA 2; IDENTIFY PACKET DEVICE): 0, or the failing step.
+static ULONG IdexCdRomIdentify() {
     static const UCHAR modes[] = {0x0C, 0x42};
     for (UCHAR mode : modes) {
         outb(IDE_FEATURES, 0x03);
@@ -618,16 +621,68 @@ void IdexCdRomInit() {
         outb(IDE_COMMAND, 0xEF);
         KeStallExecutionProcessor(1);
         if (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000) || (inb(IDE_ALT_STATUS) & IDE_STATUS_ERR))
-            IdexFatalError(12);
+            return 3;
     }
     outb(IDE_COMMAND, 0xA1); // IDENTIFY PACKET DEVICE
     KeStallExecutionProcessor(1);
     if (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 5000000))
-        IdexFatalError(11);
+        return 4;
     for (int i = 0; i < 256; i++)
         inw(IDE_DATA);
     inb(IDE_STATUS);
+    return 0;
+}
+
+// ATAPI DEVICE RESET (0x08) of device 1, then wait (bounded) until it is no longer busy.
+static void IdexCdRomReset() {
+    outb(IDE_COMMAND, 0x08);
+    KeStallExecutionProcessor(10);
+    IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000);
+}
+
+// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
+// 4 IDENTIFY PACKET). Called at the channel's IRQL. A drive that answers but is not ready yet (a DVD drive still
+// starting up when the boot is fast) is reset and tried again, for about 30 s in all (the reference's busy wait).
+static ULONG IdexCdRomStart() {
+    outb(IDE_DRIVE, 0xB0);
+    KeStallExecutionProcessor(1);
+    UCHAR st = inb(IDE_ALT_STATUS);
+    if (st == 0xFF || st == 0x7F) // nothing drives the bus for device 1 (floating, or only the host's pull-down on DD7)
+        return 1;
+    ULONG tries = 0;
+    while (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 50000))
+        if (++tries == 600)
+            return 2;
+    ULONG step = 0;
+    for (int attempt = 0; attempt < 3; attempt++) {
+        step = IdexCdRomIdentify();
+        if (!step)
+            return 0;
+        UCHAR status = inb(IDE_ALT_STATUS);
+        XK_SERIAL("dvd: attempt %d failed at step %lu, status %#x\n", attempt + 1, step, status);
+        if (!status) // nothing answers (device 0 reads back for an absent device 1): no drive, no retries
+            break;
+        IdexCdRomReset();
+    }
+    return step;
+}
+
+// A console without a DVD drive (OXOS deviation: the reference stops with fatal error 10, 11 or 12) still gets
+// \Device\CdRom0, because every title's start-up links D: to it, but the device acts as an empty drive: reads and
+// drive commands fail with STATUS_NO_MEDIA_IN_DEVICE without touching the bus, so the dashboard starts.
+void IdexCdRomInit() {
+    KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
+    IdexCdRomAbsentReason = IdexCdRomStart();
+    if (IdexCdRomAbsentReason) {
+        // The disk again. A busy device ignores the device-select register, so device 1 was reset (and waited for)
+        // above; wait for the disk to be idle too before the next request (bounded).
+        outb(IDE_DRIVE, 0xA0);
+        KeStallExecutionProcessor(1);
+        IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000);
+        inb(IDE_STATUS);
+    }
     KfLowerIrql(old);
+    XK_SERIAL("dvd: %s (step %lu)\n", IdexCdRomAbsentReason ? "no drive" : "drive found", IdexCdRomAbsentReason);
 
     OBJECT_STRING name, link;
     RtlInitAnsiString(&name, "\\Device\\CdRom0");
@@ -643,4 +698,5 @@ void IdexCdRomInit() {
     IdexCdRomDeviceObject = dev;
     KeInitializeTimerEx(&IdexCdRomRetryTimer, NotificationTimer);
     KeInitializeDpc(&IdexCdRomRetryDpc, IdexCdRomRetryRoutine, nullptr);
+    XK_SERIAL("dvd: device ready, selected %#x, status %#x\n", inb(IDE_DRIVE), inb(IDE_ALT_STATUS));
 }

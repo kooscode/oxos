@@ -7,6 +7,7 @@
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG, PULONG, PVOID, ULONG, PULONG);
 XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG, ULONG, PVOID, ULONG);
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
+XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
 extern UCHAR KiCertKey[16];
@@ -62,6 +63,8 @@ static void XkpDrawDigit(ULONG *fb, ULONG x, ULONG y, ULONG digit) {
 }
 
 // Two digits, white on black, 640x480 X8R8G8B8 (only with an AV pack connected).
+ULONG AvBootModeWord();
+
 static void XkpShowCode(ULONG Code) {
     if (HalBootSMCVideoMode == 7)
         return;
@@ -73,7 +76,8 @@ static void XkpShowCode(ULONG Code) {
     XkpDrawDigit(fb, 330, 185, Code % 10);
     XkpDrawDigit(fb, 250, 185, Code / 10 % 10);
     ULONG phys = MmGetPhysicalAddress(fb);
-    AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, pitch, phys);
+    AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, pitch, phys);
+    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr); // the screen on (spec/stock/22 §2.3)
     XkFatalErrorFrameBuffer = phys;
 }
 

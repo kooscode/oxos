@@ -62,7 +62,28 @@ Each per-mode row holds, under the register row's 42 register numbers, one **ind
 - **Step 5a:** class HD: register **7** ← 0 (WSS/CGMS off). Any of bits 30–31 set (625-line, HD or VGA): register
   **9** ← 0 (closed captions off). Register **0** ← register 0 **| 0x02** (output on). **sub(0x0F) ← 0** (Macrovision
   off). Then option 0x0B with level 5 (default flicker filter).
-- **Step 12:** register **4** ← mode bits 24–27 (the DAC enable bits).
+- **Step 12:** register **4** ← mode bits 24–27 (the DAC bits).
+  - Register 4 bits 0–3 act as DAC **disable** bits (inferred: step 0 sets all four to switch the outputs off, the
+    AV-pack removal handler writes 0x0F, and the mode bits are the Conexant's DACDISA–D values: 4 for composite /
+    S-video, 8 for component, 0 for SCART).
+- **Order around the NV2A raster:** step 0 (outputs off: register 4 |= 0x0F, register 0 bit 1 cleared) comes before
+  the shared vertical-blank wait; the per-mode row, the bit-29 writes and step 5a (**register 0 bit 1 set**, captions /
+  WSS off, Macrovision off, flicker filter) all happen **before** the NV2A row is programmed (spec 22 §2.3 #9); only
+  the DACs (register 4) wait until after the NV2A raster has run for three vertical retraces and the 1 µs stall of
+  step 12 (5838 kernel).
+- **No encoder reset, no timing reset and no encoder wait:** the only delays are the shared ones (the 1 µs stall of
+  step 3, the three retraces, the 1 µs stall of step 12); no Xcalibur register is polled (5838 kernel).
+- **Rows:** the Xcalibur has its own NV2A and CRTC rows (AV blob descriptor 2, tables 5 and 6), neither the Focus
+  nor the Conexant ones: spec 22 §3.10–§3.12.
+- **Clock and raster:** the NV2A side is the same as for the other encoders (pixel clock taken from the encoder,
+  no VPLL); inferred: the Xcalibur makes the pixel clock. Register **0x54** of every per-mode row holds the NV2A
+  raster: bits 16–27 = horizontal total, bits 0–11 = vertical total, bit 15 = interlaced input (1080i only); it
+  equals the NV2A row's 0x680824 + 1 and 0x680804 + 1 in every row. Register 0x50 has the same layout for the output
+  raster (bit 15 = interlaced output); 0x55 / 0x56 (input) and 0x51 / 0x52 (output) hold the active lines / width
+  in bits 20–31 and the sync-to-active distances in their low bits (spec 22 §5.2 gives the relation to the NV2A sync
+  positions).
+- **AV pack events** (spec 12 §4, 5838): removal → register 4 ← 0x0F; re-insertion of the same pack → register 4 ←
+  mode bits 24–27, or 0x0F if no mode has been set yet (5838 kernel).
 
 ## 4. Options (the [E] options of spec 17 §5a)
 | Option | Xcalibur |
@@ -78,11 +99,26 @@ Each per-mode row holds, under the register row's 42 register numbers, one **ind
 | 0x0E luma filter on/off | store the state (variant bit 0). If a mode is set and the state changed: re-run `write(register, index)` for per-mode columns **24–41** of the current (remapped) row |
 | WSS/CGMS write | register **7** ← ((word & 0xFFFFF) \| 0x01800000) << 1 |
 
+## 4a. Cerbios and Cromwell (cross-check)
+- **Cerbios:** the same steps, row maps, per-mode rows and NV2A rows as 5838; a 1 µs stall after step 0; the
+  Xcalibur CRTC rows 7, 8, 0x0A and 0x0F with CR19 = 0 (spec 22 §3.11); its optional HD RGB setting is not applied to
+  the Xcalibur (Cerbios).
+- **Cromwell** (shows a picture on 1.6): register 4 ← 0x0F and register 0 ← 0, then registers 0x00–0x8F written in
+  order from fixed tables with 500 µs between writes; NV2A left in YCrCb (0x680630 = 2) with the reference rasters of
+  NV rows 1 (NTSC, 780 × 525) and 3 (PAL, 800 × 520) and 780 × 525 for 480p, but 32-pixel HSYNC and 3-line VSYNC
+  (Cromwell).
+
 ## 5. Open
 - Meanings of Xcalibur registers 0, 1, 4, 7, 9, 0x0A, 0x0B, 0x14, 0x58, 0x60 and the coefficient banks beyond what
-  the behaviour shows (DAC enables in 4 bits 0–3, output enable in 0 bit 1, WSS in 7, captions in 9–0x0B/0x14).
+  the behaviour shows (DAC disables in 4 bits 0–3, output enable in 0 bit 1, WSS in 7, captions in 9–0x0B/0x14).
 - Meaning of register 0x60 bits 22–23 (selects flicker set A or B) and bit 24 (cleared for bit 29).
 - Whether the 1.6 board's other hardware (SMC, fan) needs further kernel changes outside the encoder.
+- Which registers set the Xcalibur's clock (0x5A, 0x5B and 0x80 change with the raster); meaning of the 0x50–0x56
+  fields beyond the totals.
+- Register 4 bits 0–3: which bit drives which output (the disable meaning is inferred).
+- The Japan fix-up tests the **remapped** row (0x0D, 0x0E, 0x12): in the Japan map only rows 0x0E (encoder row 0x0D)
+  and 0x12 (encoder row 0x10) reach it, so Japanese 720-pixel component (encoder row 0x0E → 0x10) and 704-pixel
+  component (0x12 → 0x15) keep register 1 bit 15; whether this is intended is not determined.
 
 ## 6. Tables
 Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §5): the per-mode rows

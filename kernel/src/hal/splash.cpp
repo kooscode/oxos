@@ -2,11 +2,13 @@
 // 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/oxos-internal/00-boot-splash.md), or, without one, a
 // drawn emblem and caption. The title launcher waits for it and frees its memory before the title starts, leaving the
 // last frame on screen, as the reference does with its animation.
+#include <xk/serial.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/ob.h>
 #include <xk/rtl.h>
 
+XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
@@ -125,9 +127,13 @@ static ULONG HalpLoadFlashSplash(ULONG *img) {
     return status;
 }
 
+ULONG AvBootModeWord();
+void AvPrepareBootDisplay();
+
 static void NTAPI HalpSplashThread(PVOID) {
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
     HalpSplashStatus = HalpLoadFlashSplash(HalpSplashImage);
+    XK_SERIAL("splash: image status %#lx\n", HalpSplashStatus);
     if (!HalpSplashStatus) {
         HalpSplashSource = 2;
     } else {
@@ -136,7 +142,11 @@ static void NTAPI HalpSplashThread(PVOID) {
         HalpDrawText(HalpSplashImage, "OPEN XBOX KERNEL", 350, 3, 0xE0E0E0);
         HalpSplashSource = 1;
     }
-    AvSetDisplayMode((PVOID)0xFD000000, 0, 0, 0x1E, SPLASH_PITCH, MmGetPhysicalAddress(HalpSplashScreen));
+    // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
+    AvPrepareBootDisplay();
+    AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, SPLASH_PITCH, MmGetPhysicalAddress(HalpSplashScreen));
+    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr);
+    XK_SERIAL("splash: display mode set\n");
     for (ULONG f = 1; f <= SPLASH_FADE_FRAMES; f++) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
             ULONG p = HalpSplashImage[i];
@@ -151,6 +161,7 @@ static void NTAPI HalpSplashThread(PVOID) {
         t.QuadPart = -10000LL * SPLASH_FRAME_MS;
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
+    XK_SERIAL("splash: faded in\n");
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
 

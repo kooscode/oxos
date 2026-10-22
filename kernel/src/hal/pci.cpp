@@ -1,4 +1,5 @@
 // PCI configuration access and the Xbox chipset set-up (spec/stock/02-executive-init.md §3.7-3.8).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -13,16 +14,26 @@ static ULONG PciAddress(ULONG bus, ULONG slot, ULONG reg) {
 
 XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG RegisterNumber, PVOID Buffer,
                                       ULONG Length, BOOLEAN WritePCISpace) {
+    // Whole 32-bit configuration cycles only: a byte or word is read, or merged into its dword and written back.
+    // Suspected on the first console runs (2026-10-21): byte-wide cycles through 0xCFD-0xCFF did not reach the MCPX
+    // devices (the IDE controller stayed off and its configuration read as 0xFF); xemu accepts either. To confirm.
     ULONG flags = save_flags_cli();
     UCHAR *p = (UCHAR *)Buffer;
-    for (ULONG i = 0; i < Length; i++) {
-        ULONG reg = RegisterNumber + i;
+    for (ULONG i = 0; i < Length;) {
+        ULONG reg = RegisterNumber + i, shift = (reg & 3) * 8;
+        ULONG n = 4 - (reg & 3) < Length - i ? 4 - (reg & 3) : Length - i; // bytes in this dword
         outl(PCI_ADDRESS, PciAddress(BusNumber, SlotNumber, reg));
-        USHORT port = PCI_DATA + (reg & 3);
-        if (WritePCISpace)
-            outb(port, p[i]);
-        else
-            p[i] = inb(port);
+        ULONG v = inl(PCI_DATA);
+        if (WritePCISpace) {
+            for (ULONG k = 0; k < n; k++)
+                v = (v & ~(0xFFu << (shift + 8 * k))) | (ULONG)p[i + k] << (shift + 8 * k);
+            outl(PCI_ADDRESS, PciAddress(BusNumber, SlotNumber, reg));
+            outl(PCI_DATA, v);
+        } else {
+            for (ULONG k = 0; k < n; k++)
+                p[i + k] = (UCHAR)(v >> (shift + 8 * k));
+        }
+        i += n;
     }
     restore_flags(flags);
 }
@@ -118,6 +129,16 @@ void HalpInitPci() {
     PciEnable(1, 0, 0x07, 3);
     HalpPciWrite8(1, 0, 0x3D, 0x01);
     HalpPciWrite32(1, 0, 0x4C, 0x00000114);
+#if XK_DEBUG_SERIAL
+    static const UCHAR devs[] = {0, 1, 2, 3, 4, 5, 6, 9, 0x1E};
+    for (UCHAR d : devs)
+        XK_SERIAL("pci: 0:%x.0 ids %08lx cmd %08lx\n", d, HalpPciRead32(0, d, 0), HalpPciRead32(0, d, 4));
+    XK_SERIAL("pci: 1:0.0 ids %08lx; dev1 0x80 %08lx 0x8c %08lx 0xc8 %08lx; ide 0x50 %08lx\n", HalpPciRead32(1, 0, 0),
+              HalpPciRead32(0, 1, 0x80), HalpPciRead32(0, 1, 0x8C), HalpPciRead32(0, 1, 0xC8), HalpPciRead32(0, 9, 0x50));
+    XK_SERIAL("pci: memory: host 0x84 %08lx, NV2A PFB 0x100200 %08lx 0x100204 %08lx, NVPLL %08lx, 0x68050C %08lx\n",
+              HalpPciRead32(0, 0, 0x84), *(volatile ULONG *)0xFD100200, *(volatile ULONG *)0xFD100204,
+              *(volatile ULONG *)0xFD680500, *(volatile ULONG *)0xFD68050C);
+#endif
 }
 
 // ACPI power-management block at I/O 0x8000.

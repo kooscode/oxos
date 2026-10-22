@@ -15,6 +15,35 @@ and the Focus tables. Register names: the GPL `fs453.h` header and the FS453/4 d
   OR in the value row, write it back. The same two rows serve every encoder row (they are not indexed by the mode).
 - **Step 12:** nothing (the DACs come back on through option 9, 5838).
 
+## 1a. Outside the mode tables (bring-up, clocking, both kernels)
+- **Detection:** none on the bus. The Focus is chosen from `XboxHardwareInfo` flag 0x20 (spec 17 §1); no Focus
+  register is read to identify the chip, so **FS453 and FS454 are handled identically** (4627 kernel) (5838 kernel).
+- **Reset, PLL and clock bring-up:** none outside the rows. No reset pin, no soft-reset write before the rows (step 3
+  is only the shared 1 µs stall), no separate PLL start-up: the NCO / PLL values and the CR writes that latch them are
+  inside each SD common block / SD row / HD row: the rows write CR with the soft reset held (CR = 0x2001, bit 13 =
+  CR_GCC_CK_LVL) before the NCO / PLL values and write CR again at their end to latch them and release the reset (§4)
+  (4627 kernel) (5838 kernel).
+- **Power management (PWR_MGNT 0xA0):** 4627 writes it only through the rows (SD common block: HD clock off; HD rows:
+  SD clock off). 5838 adds the word read-modify-write at the start of every full mode change (DACs off: value | 0x000F)
+  and at option 9 off (value & 0xFFF0).
+- **Delays:** none between Focus writes beyond the SMBus transactions themselves; the shared steps add the 1 µs stall
+  (step 3), the 3-retrace wait and the 1 µs stall of step 12 (spec 17 §5).
+- **Before the kernel:** neither the X-codes nor the 2BL address 0xD4. The Complex 4627 X-codes send Conexant set-up
+  writes to 0x8A unconditionally (no device answers on a Focus console); the 5838 X-codes do not (flash header)
+  (Complex 4627 2BL) (5838 2BL). The Focus is therefore in its power-on state when the kernel first programs it.
+- **AV pack events** (spec 12 §4) write register **0xBA** (Conexant DAC control) also on the Focus, where 0xBA is the
+  low byte of HACT_WD (HD active width): 0x3F on removal, 0x20 | DAC bits on re-insertion. Harmless in SD modes (the
+  SD rows do not use the HD timing block); in an HD mode the next full mode change restores it (4627 kernel)
+  (5838 kernel).
+- **Clocking (pseudo-master):** the Focus generates the pixel clock (CLKOUT) from its 27 MHz crystal with the row's NCO
+  (NCON / NCOD) and PLL (M = field + 17, N = field + 1, P = field + 1); the NV2A takes it as its pixel clock
+  (0x68050C, spec 22 §5) and returns HSYNC / VSYNC and data; CR bit 7 (SYNC_MS) is clear in every row. Clocks:
+  29.4545 MHz (525-line SD rows and 480-line rows), 22.68 MHz (625-line rows with 480-line input), 27 MHz (625-line
+  rows with 576-line input; HD 480p), 74.25 MHz (HD 720p, 1080i; PLL only, NCO off). The NV2A raster of each
+  NV row matches these clocks exactly (spec 22 §5).
+- **HDTV pack at boot:** the boot animation uses SD row **0x0D** (component 480i) with the SD common block, never an HD
+  row (spec 22 §9).
+
 ## 2. What the rows program (decoded, 4627)
 - **Not used:** the quick-program register QPR (0xC4) is never written. The reference programs every register
   explicitly.
@@ -30,7 +59,7 @@ and the Focus tables. Register names: the GPL `fs453.h` header and the FS453/4 d
 | Fact | SD composite / S-video | SD component | SCART (bit 29) | HD |
 |---|---|---|---|---|
 | VID_CNTL0 | VID_MODE composite, MATRIX_BYP (input already YCrCb), INT_PROG | VID_MODE YPrPb, MATRIX_BYP, INT_PROG | VID_MODE bits replaced by the bit-29 value row, matrix bypass cleared | VID_MODE HD, MATRIX_BYP, SYNC_ADD; 480p sets SYNC_BI_TRI (bi-level, inferred from SMPTE 293M), 720p / 1080i clear it; 1080i INT_PROG |
-| Input | YCrCb (NV 0x680630, spec 17 §8) | YCrCb | RGB (the colour matrix converts) | YCrCb |
+| Input | YCrCb (NV 0x680630 = 2, spec 22 §3.2) | YCrCb | RGB (the colour matrix converts) | YCrCb (NV 0x680630 = 2 for 480p, 3 for 720p / 1080i) |
 | Clock | NCO + PLL per row | same | same | NCO + PLL per row |
 
 **5838 against 4627** (same row meaning):

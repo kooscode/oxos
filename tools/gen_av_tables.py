@@ -18,6 +18,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = os.path.join(ROOT, "spec", "stock")
 CX_SPEC, FO_SPEC, XC_SPEC = "18-conexant-encoder.md", "19-focus-encoder.md", "20-xcalibur-encoder.md"
+NV_SPEC = "22-nv2a-display.md"
 
 PLAIN = re.compile(r"^- Register (0x[0-9A-F]+): Write Value (0x[0-9A-F]+) -> (.*)$")
 RMW = re.compile(r"^- Register (0x[0-9A-F]+): Clear Mask (0x[0-9A-F]+), Write Value (0x[0-9A-F]+) -> ")
@@ -323,7 +324,70 @@ def generate():
             out.append("        {" + ", ".join(f"0x{w[2]:08X}" for w in b["writes"]) + "},")
         out.append("    },")
     out += ["};"]
+    out += nv_tables()
     return "\n".join(out) + "\n"
+
+
+def nv_rows(text, start, end):
+    """NV2A rows of one spec 22 subsection: {row: {register: value}} from its register-map tables."""
+    sec = text.split(start, 1)[1].split(end, 1)[0]
+    rows = {}
+    for tab in re.split(r"\n\n", sec):
+        lines = [l for l in tab.splitlines() if l.startswith("|")]
+        if len(lines) < 3 or not lines[0].startswith("| row | 0x"):
+            continue
+        head = [h.strip() for h in lines[0].strip("|").split("|")]
+        regs = [int(re.match(r"0x([0-9A-Fa-f]+)", h).group(1), 16) for h in head[1:]]
+        for l in lines[2:]:
+            cells = [c.strip() for c in l.strip("|").split("|")]
+            r = int(cells[0], 16)
+            for reg, v in zip(regs, cells[1:]):
+                rows.setdefault(r, {})[reg] = int(v, 16)
+    assert sorted(rows) == list(range(1, max(rows) + 1)), (start, sorted(rows))
+    return rows
+
+
+def crtc_rows(text, start, end, count):
+    sec = text.split(start, 1)[1].split(end, 1)[0]
+    crtc = {}
+    for l in sec.splitlines():
+        m = re.match(r"\| 0x([0-9A-F]{2}) \| ([0-9A-F ]+) \|", l)
+        if m:
+            crtc[int(m.group(1), 16)] = [int(x, 16) for x in m.group(2).split()]
+    assert all(len(v) == count for v in crtc.values()) and sorted(crtc) == list(range(1, max(crtc) + 1)), start
+    return crtc
+
+
+def nv_tables():
+    """The NV2A rows (register order of spec 22 §3.1), their 0x680880 values and the CRTC rows of each encoder:
+    Focus §3.4 / §4, Conexant §3.7 / §3.9, Xcalibur §3.10 / §3.11 (all 5838 AV blob sets)."""
+    text = open(os.path.join(SPEC, NV_SPEC), encoding="utf-8").read()
+    order_text = text.split("Register order (both kernels):", 1)[1].split("- The 0x680880", 1)[0]
+    order = [int(x, 16) for x in re.findall(r"0x([0-9A-Fa-f]{6})", order_text)]
+    assert len(order) == 26, order
+    crtc_sec = text.split("## 4. CRTC rows", 1)[1].split("## 5.", 1)[0]
+    idx_text = crtc_sec.split("in this order:", 1)[1].split(".", 1)[0]
+    idx = []
+    for a, b in re.findall(r"CR([0-9A-F]{2})(?:–CR([0-9A-F]{2}))?", idx_text):
+        idx += list(range(int(a, 16), int(b or a, 16) + 1))
+    sets = [("Fo", "Focus", nv_rows(text, "### 3.4", "### 3.5"), crtc_rows(text, "## 4. CRTC rows", "## 5.", len(idx))),
+            ("Cx", "Conexant", nv_rows(text, "### 3.7", "### 3.8"), crtc_rows(text, "### 3.9", "### 3.10", len(idx))),
+            ("Xc", "Xcalibur", nv_rows(text, "### 3.10", "### 3.11"), crtc_rows(text, "### 3.11", "### 3.12", len(idx)))]
+    out = ["// ---- NV2A side (spec/stock/22: NV rows §3.4 Focus, §3.7 Conexant, §3.10 Xcalibur; CRTC rows §4, §3.9,",
+           "// §3.11; register order §3.1; all from the 5838 AV blob)",
+           "static const ULONG AvpNvRegs[26] = {"]
+    out += ["    " + ", ".join(f"0x{r:06X}" for r in order[k:k + 9]) + "," for k in range(0, 26, 9)] + ["};"]
+    out += [f"static const UCHAR AvpCrtcIndex[{len(idx)}] = {c_bytes(idx)};"]
+    for tag, name, rows, crtc in sets:
+        n = max(rows)
+        out += [f"static const ULONG Avp{tag}Nv[{n}][26] = {{ // {name}: NV row r (mode bits 16-23) at index r - 1"]
+        out += ["    {" + ", ".join(f"0x{rows[r][reg]:X}" for reg in order) + "}," for r in range(1, n + 1)] + ["};"]
+        out += [f"static const ULONG Avp{tag}Nv880[{n}] = {{ // {name}: 0x680880 after the change (§2.3 step 19)"]
+        out += ["    " + ", ".join(f"0x{rows[r][0x680880]:08X}" for r in range(k, min(k + 6, n + 1))) + ","
+                for k in range(1, n + 1, 6)] + ["};"]
+        out += [f"static const UCHAR Avp{tag}Crtc[{max(crtc)}][{len(idx)}] = {{ // {name}: CRTC row r at index r - 1"]
+        out += ["    " + c_bytes(crtc[r]) + "," for r in range(1, max(crtc) + 1)] + ["};"]
+    return out
 
 
 if __name__ == "__main__":

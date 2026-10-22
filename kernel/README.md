@@ -174,6 +174,8 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
   size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
   a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters, and
   files of 4 GB or more, are not shown to titles.
+- No DVD drive (`../spec/oxos-internal/08-no-dvd-drive.md`): the console boots to the dashboard with `\Device\CdRom0` acting
+  as an empty drive, where the reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
 - Video (milestone 20; `../spec/oxos-internal/02-display-modes.md`): the NV2A timing is OXOS's own (derived from each
   encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait

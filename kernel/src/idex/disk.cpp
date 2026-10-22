@@ -1,6 +1,8 @@
 // IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5), 48-bit
 // addressing for disks over 128 GiB (spec/oxos-internal/04-lba48.md).
+#include <xk/serial.h>
 #include <xk/arch.h>
+#include <xk/hal.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
 
@@ -612,20 +614,35 @@ void IdexDiskCountPowerCycle() {
     }
 }
 
+volatile UCHAR IdexDiskLastStatus; // diagnostics: the disk's status register when its start-up wait ended
+
 void IdexDiskInit() {
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     outb(IDE_DRIVE, 0xA0);
-    ULONG tries = 0;
-    while (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 50000))
-        if (++tries == 600)
+    // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviation: a disk that is
+    // no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as XboxDev/cromwell
+    // does; some drives and SATA bridges only set DRDY once they have seen a command. Only a disk still busy after
+    // 30 s is fatal error 7.
+    for (ULONG tries = 0;; tries++) {
+        if (IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 50000))
+            break;
+        UCHAR st = inb(IDE_ALT_STATUS);
+        if (!(st & IDE_STATUS_BSY) && tries >= 20)
+            break;
+        if (tries == 600) {
+            IdexDiskLastStatus = st;
+            XK_SERIAL("disk: not ready after 30 s, status %#x\n", st);
             IdexFatalError(7);
+        }
+    }
+    IdexDiskLastStatus = inb(IDE_ALT_STATUS);
     if (!IdexDiskCommand(0xEF, 0x03, 0x0C) || !IdexDiskCommand(0xEF, 0x03, 0x42)) // PIO 4, UDMA 2
-        IdexFatalError(9);
+        IdexFatalError((IdexDiskLastStatus = inb(IDE_ALT_STATUS), 9));
     outb(IDE_DRIVE, 0xE0);
     outb(IDE_COMMAND, 0xEC); // IDENTIFY DEVICE
     KeStallExecutionProcessor(1);
     if (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 5000000))
-        IdexFatalError(8);
+        IdexFatalError((IdexDiskLastStatus = inb(IDE_ALT_STATUS), 8));
     USHORT id[256];
     for (auto &w : id)
         w = inw(IDE_DATA);
@@ -643,8 +660,10 @@ void IdexDiskInit() {
             IdexDiskLengthInSectors = n;
     }
     if (IdexDiskLengthInSectors < 0xEE8AB0)
-        IdexFatalError(9);
+        IdexFatalError((IdexDiskLastStatus = inb(IDE_ALT_STATUS), 9));
     IdexDiskSecurityWord = id[128];
+    XK_SERIAL("disk: %.40s, %lu sectors%s, security %#x, status %#x\n", IdexDiskModel, (ULONG)IdexDiskLengthInSectors,
+              IdexDiskLba48 ? " (LBA48)" : "", IdexDiskSecurityWord, IdexDiskLastStatus);
 
     OBJECT_STRING name;
     RtlInitAnsiString(&name, "\\Device\\Harddisk0");

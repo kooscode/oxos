@@ -9,7 +9,8 @@ Evidence: batch_decompile of 4627 `AvSetDisplayMode` (ord 3, 0x8003045C), `AvSen
 5838 `AvSetDisplayMode` (0x80030F3D), `AvSendTVEncoderOption` (0x80030822), the encoder register writer 0x80030026,
 the bit-29 set-up 0x800306FF, the WSS/CGMS routine 0x800305C8, the table loader 0x800315D4 and hardware detection
 0x80054921.
-The NV2A and CRTC table rows are not reproduced. OXOS's own display choices are spec/oxos-internal/02-display-modes.md.
+The NV2A and CRTC table rows (as register maps), the clocking, the framebuffer and the boot display are spec 22.
+OXOS's own display choices are spec/oxos-internal/02-display-modes.md.
 
 ## 1. Which encoder
 ### 1.1 4627
@@ -96,7 +97,7 @@ kernel's 0x610 bytes of initialised data in the image (the region 5838 re-copies
 | 0–6 | encoder row (SDTV or HDTV table; Xcalibur maps it first, spec 20) |
 | 8–15 | CRTC row |
 | 16–23 | NV2A register row (and PRAMDAC 0x680880 entry) |
-| 24–27 | DAC output enable bits for the encoder (§5 step 12) |
+| 24–27 | DAC **disable** bits for the encoder (§5 step 12): a set bit keeps that DAC off (Conexant 0xBA DACDISA–D, Xcalibur register 4 bits 0–3; the Focus mode change does not use them); 4 = composite / S-video (DAC C off), 8 = component (DAC D off), 0 = SCART (all on) |
 | 28 | `0x80D6` bit 0 (GPIO: written as `(bit 28) | 4`); widescreen |
 | 29 | the encoder's bit-29 set-up (§5 step 5): **SCART RGB** on Conexant and Focus; and clear NV 0x680630, 0x6808C4, 0x68084C (the NV2A then sends RGB) |
 | 30–31 | class: `00` 525-line SD, `01` 625-line SD, `10` HD (the HDTV encoder table), `11` VGA |
@@ -108,7 +109,9 @@ The D3D mode words for each picture size, as listed by nxdk's `lib/hal/video.c` 
 AvSetDisplayMode calls: the class (bits 30–31) and the CRTC row (bits 8–15) give the size.
 - HD: CRTC row 7 = 640×480p (0x88070701), 8 = 720×480p (0x88080801), 0x0A = 1280×720p (0x880B0A02), 0x0C =
   1920×1080i (0x880E0C03).
-- VGA: 6 = 640×480, 3 = 800×600, 4 = 1024×768.
+- VGA: 6 = 640×480, 3 = 800×600, 4 = 1024×768 (nxdk's class-11 words 0xC0060601, 0xC0030303, 0xC0040404). The
+  reference mode list has no class-11 word (its VGA pack gets the HD words, spec 22 §13); a class-11 word takes the
+  SD encoder path of §5 step 4 with the NV2A / CRTC rows its bytes name (4627 kernel) (5838 kernel).
 - SD: 1/3 = 640×480 (NTSC/PAL), 2/4 = 720×480.
 - Enter the Matrix with 1080i allowed asks for 0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with
   pitch 0x1400 (logged with a gdb breakpoint on AvSetDisplayMode).
@@ -122,7 +125,8 @@ programmed in 8-byte units: CRTC 0x13 = pitch/8, CRTC 0x19 bits 5–7 = (pitch/8
 (pitch/8 >> 6) & 0x20.
 
 ## 4. Same mode as last time (4627 0x8003B34C, 5838 0x8003C364)
-Only: PRAMDAC general control (0x680600), unlock CRTC (0x1F ← 0x57), pitch registers, CRTC 0x28 ← depth | 0x80,
+Only: PRAMDAC general control (0x680600), unlock CRTC (0x1F ← 0x57), CRTC 0x13 ← pitch/8 and CRTC 0x19 ← its pitch
+bits alone (the other bits of 0x19 written 0; CRTC 0x25 is not written on this path), CRTC 0x28 ← depth | 0x80,
 framebuffer start (0x600800), then `AvSendTVEncoderOption(base, 0x0B, 5)` and `(base, 0x0E, 0)`.
 
 ## 5. Mode change (full sequence)
@@ -136,20 +140,28 @@ Steps marked **[E]** are encoder-specific: specs 18–20 say what each encoder d
    per-encoder fix-up.
 5. **[E]** Bit 29 → the encoder's bit-29 set-up.
 5a. **[E]** Xcalibur only: further fixed writes and the flicker filter (spec 20).
-6. `out 0x80D6, (bit 28) | 4`; `out 0x80D8, 4`; NV 0x68050C |= 0x10020000; VGA 0x3C3 ← 1, misc output 0x3C2 ← 0xE3;
+6. `out 0x80D6, (bit 28) | 4`; `out 0x80D8, 4`; NV 0x68050C |= 0x10020000 (pixel clock from the encoder, spec 22 §5);
+   VGA 0x3C3 ← 1, misc output 0x3C2 ← 0xE3 (both through the NV2A's memory-mapped VGA window, base + 0x0C0000);
    PRAMDAC general control.
    Port 0x80D6 is ACPI PM GPIO 0x16 (PM base 0x8000 + 0xC0 + 0x16), the AV connector's widescreen line. Option 0x13
    only updates bit 28 of the stored mode word and the WSS word (SD only), and titles' D3D leaves bit 28 clear in HD
    mode words (Halo 2 and Brute Force in 480p: 0x88070701), so in HD modes the line stays low.
 7. NV2A register row (field 5 bytes of dword writes at the listed offsets, §7).
 8. Bit 29: clear NV 0x680630, 0x6808C4, 0x68084C (NV2A output back to RGB, §7).
-9. VGA sequencer (3 registers: 0x03, 0x21, 0x0F at indexes 0–2), graphics controller and attribute controller
-   defaults (short fixed lists), then CRTC 0x11 ← 0.
+9. VGA sequencer indexes 0–4 ← 0x03, 0x21, 0x0F, 0x00, 0x06 (index 1 = 0x21: **screen off** until option 9 turns
+   it on); graphics controller indexes 0–8 ← 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F, 0xFF; attribute
+   controller indexes 0–0x14 ← 0x00–0x0F (identity), 0x01, 0x4A, 0x0F, 0x00, 0x00, then 0x20 (no read of 0x3DA
+   first); then CRTC 0x11 ← 0. All VGA-style registers are accessed through the NV2A's memory-mapped windows, never
+   through I/O ports (spec 22 §2.3).
 10. CRTC row (field 6 registers; the pitch registers 0x13/0x19/0x25 get the pitch bits merged in).
-11. Restore NV 0x6806A0 from step 1; CRTC 0x28 ← depth | 0x80 (screen on); wait for 3 vertical retraces (VGA
-    status 0x3DA bit 3 high→low).
-12. PRAMDAC 0x680880 ← the per-row value; stall 1 µs; **[E]** the encoder's DACs on from mode bits 24–27.
-13. Framebuffer start 0x600800 ← `FrameBuffer`; remember the mode; WSS/CGMS update (§5a).
+11. NV 0x6806A0 ← the complement of bit 0 of the value read in step 1 (all other bits 0; not a restore); CRTC 0x28 ←
+    depth | 0x80 (pixel format on); wait for 3 vertical retraces (VGA status 0x3DA bit 3 high→low).
+12. PRAMDAC 0x680880 ← the per-row value; stall 1 µs; **[E]** the encoder's DACs on, except those disabled by mode bits
+    24–27.
+13. Framebuffer start 0x600800 ← `FrameBuffer`, unchanged (callers pass a physical address, spec 22 §6.2); remember
+    the mode (5838: the mode word is stored at the start of the full change instead); WSS/CGMS update (§5a).
+- The picture stays blanked by sequencer index 1 (step 9) and port 0x80D3 = 5 (step 1) until
+  `AvSendTVEncoderOption(9, 0)`; the graphics library sends it after its first frame (spec 22 §8.1).
 
 ## 5a. AvSendTVEncoderOption
 "Class" = mode word bits 30–31 of the current mode. Options marked **[E]** are carried out by the encoder (specs
@@ -193,6 +205,9 @@ scanout keeps showing them. Measured at the XBE entry point with the boot animat
 kernel image, page 0, the page directory, the GPU instance memory and the PTE array are mapped (spec 09 §7).
 Why (inferred): freed pages go to the end of the colour lists, so the picture survives until the title's video set-up
 replaces it, at no cost to the title's budget.
+- The animation's mode word comes from its graphics library's mode list (spec 22 §8.2–8.3): e.g. NTSC 0x04010101
+  (composite / S-video), 0x20010101 (SCART), **0x0801010D (HDTV pack: component 480i, never an HD row)**,
+  0x88070701 (VGA); the picture is 640 × 480, 32 bpp (format 0x12), pitch 2560.
 
 ## 7. NV2A registers per mode (field 5 rows, 26 dwords; 4627)
 | Register | Role (name from nouveau where known) | Reference behaviour |
@@ -201,10 +216,10 @@ replaces it, at no cost to the title's budget.
 | 0x680820–0x680838 | flat-panel horizontal: the same seven | per mode; display end = width − 1 in every row; the horizontal "CRTC" value is not the width (it differs per row) |
 | 0x680848 | FP_TG_CONTROL | written every mode: DISPEN_POS, READ_PROG, positive HSYNC and VSYNC; MODE = centre for SD and 720p, scale for 480p; 1080i sets further bits (12–13, 16–17) not named by nouveau (interlace, inferred) |
 | 0x68084C | FP_MARGIN_COLOR | per mode; cleared for bit 29 |
-| 0x680630 | NV_PRAMDAC_630: the NV2A's output colour space (Cromwell: 0 = RGB, 2 = YUV) | **YCrCb** for every SD and HD row (an SD and an HD variant), cleared (RGB) for bit 29 |
+| 0x680630 | NV_PRAMDAC_630: the NV2A's output colour space (Cromwell: 0 = RGB, 2 = YUV) | **YCrCb**: 2 in the SD and 480p rows, 3 in the 720p / 1080i rows; cleared (RGB) for bit 29 |
 | 0x6808C0, 0x6808C4 | unnamed (nouveau writes 0x8C0 = 0 for TV) | per mode; 0x6808C4 cleared for bit 29 |
 | 0x680898, 0x68089C | unnamed | per mode |
-| 0x680680–0x680690 | TV-out block: 0x680680 holds the encoder's H_CLKO; the others are not understood | per mode |
+| 0x680680–0x680690 | TV-out block: 0x680680 / 0x680684 is a ratio = NV2A pixel clocks per TV output line (inferred; spec 22 §3.2); the others are not understood | per mode |
 | 0x680880 | FP_DEBUG_0 (scaling) | 0x21121111 during the change (§5 step 2), then a per-row value from .data (§5 step 12) |
 
 - **1080i** is programmed as a full frame (1125 lines, 1080 active) with the extra TG_CONTROL bits, not as one
@@ -212,6 +227,10 @@ replaces it, at no cost to the title's budget.
 - **HD rasters:** the flat-panel totals are the standard ones (858 × 525, 1650 × 750, 2200 × 1125) for every HD
   row; sync positions and widths differ from the nominal CEA-861 / SMPTE positions (the 720p and 1080i horizontal
   sync is wider than the standard's).
-- **SD:** totals follow the encoder's input timing (Conexant H_CLKI / V_LINESI); the horizontal sync width is a
-  constant per encoder.
-- The 5838 kernel's NV2A rows differ from 4627's.
+- **SD:** totals follow the encoder's input timing (Conexant H_CLKI / V_LINESI, Xcalibur register 0x54, Focus its
+  clock), and each encoder has its own NV2A rows (Focus and Conexant tables in 4627; Focus, Conexant and Xcalibur
+  descriptors in 5838; spec 22 §3.4, §3.7, §3.10); the horizontal sync width is nearly constant per encoder (Focus 64,
+  Conexant 32 pixels) and irregular on the Xcalibur.
+- The 5838 kernel's NV2A rows differ from 4627's in 0x680680 / 0x680684 (same quotient in SD) and a few sync
+  positions (spec 22 §3.5); the CRTC rows are identical.
+- Register maps of every Focus NV2A and CRTC row, and the rows each mode word selects: spec 22 §3–§4.

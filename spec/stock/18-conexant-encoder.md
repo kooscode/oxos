@@ -8,11 +8,39 @@ Register names: the CX25870/871 datasheet (Conexant 100381B), Table 2-1.
 
 ## 1. Mode change (the [E] steps of spec 17 §5)
 - **Step 3:** 0xBA ← 0x80 (SRESET), 0xBA ← 0x3F (DACs off), 0x6C ← 0x46; stall 1 µs; 0x6C ← 0xC6 (TIMING_RST).
+  - 0xBA ← 0x80: SRESET (software reset of the registers to their power-on defaults, datasheet).
+  - 0xBA ← 0x3F = SLAVER | DACOFF | DACDISD | DACDISC | DACDISB | DACDISA: the encoder becomes **timing slave**
+    (it takes HSYNC / VSYNC from the NV2A) here, before any row, and all four DACs are off. Together with EN_BLANKO =
+    1, EN_DOT = 0 (0xC6) and EN_OUT = 1 (0xC4) from the rows this is the datasheet's pseudo-master interface: the
+    encoder makes the pixel clock (CLKO), the NV2A sends syncs and data (spec 22 §5.1).
+  - 0x6C ← 0x46: EN_REG_RD (register read-back on, needed for the step-12 read), EACTIVE, FLD_MODE 10; then 1 µs
+    and 0x6C ← 0xC6: the same with TIMING_RST (bit 7, self-clearing).
+  - All writes are byte writes to 0x8A; their results are not checked (4627 kernel) (5838 kernel).
 - **Step 4:** class HD → the HD row (§5.3). Else the SD common block (§5.1), then the SD per-mode row (§5.2).
   Japan (console region 2) on encoder rows 0x0D, 0x0E, 0x12: then 0xA2 ← 0x08, 0xA4 ← 0xF0, 0xAC ← 0x9A.
 - **Step 5 (bit 29, SCART RGB):** the bit-29 row for the encoder row (§5.4), plain writes. Rows exist only for the
   composite / S-video encoder rows; the component rows' entries are empty.
 - **Step 12:** 0x6C ← (0x6C | 0x80); 0xBA ← (mode bits 24–27) | 0x20.
+  - Runs after the NV2A row and CRTC row are programmed, three vertical retraces of the new raster have passed and
+    0x680880 has its per-row value plus a 1 µs stall (spec 22 §2.3 #16–#20).
+  - 0x6C is **read** (SMBus byte read) and written back with TIMING_RST set: a second timing reset, now that the NV2A
+    syncs of the new raster are running. The datasheet asks for a wait before the timing reset (75 ms in its HDTV
+    table E-1); the reference's wait is the three retraces (about 50 ms at 59.94 Hz, 60 ms at 50 Hz).
+  - 0xBA ← 0x20 | (mode bits 24–27): SLAVER stays set, DACOFF cleared, and mode bits 24–27 land in **DACDISA–D**
+    (bit 24 = DACDISA … bit 27 = DACDISD): a set bit switches that DAC **off**. Composite / S-video words (bits = 4)
+    turn off DAC C (the second Y), component words (8) DAC D (Y_DLY), SCART words (0) none.
+- **SCART (bit 29):** the bit-29 row ends with 0xBA ← 0x20, so in SCART modes all four DACs are already on from
+  step 5, before the NV2A raster runs; step 12 then writes 0x20 again.
+- **Clock and raster:** in every SD row the encoder's PLL makes the pixel clock (0xA0 bit 7 EN_XCLK = 0):
+  13.5 MHz × (PLL_INT + PLL_FRACT / 65536) / 6, which equals H_CLKI × V_LINESI × the field rate; the NV2A row's
+  totals equal H_CLKI and V_LINESI. 720p and 1080i: PLL_INT 0x21 → 74.25 MHz. **480p: 0xA0 = 0x8C, EN_XCLK set**:
+  the encoder takes the clock from CLKI and three-states CLKO (datasheet); the source of that clock on the console is
+  not determined (§3b). Table and sync positions: spec 22 §5.1.
+- **HD rows** do not write 0x30, 0x38, 0x3A or 0x6E–0x74: those keep their SRESET defaults in HD modes (the SD
+  common block writes them for SD).
+- **AV pack events** (spec 12 §4): removal → 0xBA ← 0x3F (5838: also port 0x80D3 ← 5); re-insertion of the same
+  pack → 0xBA ← 0x20 | (mode bits 24–27) (4627: only once a mode is set; 5838: 0x2F, all DACs off, if no mode has
+  been set yet) (4627 kernel) (5838 kernel).
 
 ## 2. What the rows program (decoded with the datasheet)
 - **SD common block (22 registers, every SD mode):** WSS / caption control, pad drive and input-format bits (0x32),
@@ -33,6 +61,8 @@ Register names: the CX25870/871 datasheet (Conexant 100381B), Table 2-1.
 | Pad drive (DRVS) | 1.8 V | 1.8 V | 1.8 V | **1.5 / 1.3 V** |
 | Interface | pseudo-master (EN_BLANKO), active-high HSYNC / VSYNC inputs, FLD_MODE 10, EACTIVE | same | same | same |
 | Clock source (EN_XCLK) | encoder PLL | encoder PLL | encoder PLL | **CLKI for 480p only**, PLL for 720p / 1080i |
+| Interface (SLAVER, set at step 3) | timing slave, clock master (pseudo-master) | same | same | same |
+| DACs off by mode bits 24–27 (step 12) | 4: DAC C | 8: DAC D | 0: none (all on from step 5) | 8: DAC D |
 | Output mode (OUT_MODE) | 00 (CVBS / Y / C / Y_DLY) | 10 (V / Y / U / Y_DLY) | 11 + EN_SCART | 11 + HDTV_EN |
 | DAC routing (OUT_MUX A/B/C/D) | A = Y, B = C, C = Y, D = CVBS | **A = Y, B = Pr (V), C = Pb (U)**, D = Y_DLY | A = G, B = R, C = B, D = CVBS (sync) | **A = Y, B = Pr, C = Pb** |
 | Setup (7.5 IRE) | NTSC-M yes; NTSC-J, PAL no | **NTSC component yes**, PAL no | none | n/a |
@@ -55,6 +85,22 @@ with the composite routing (A carries Y to pin 11, B carries C to pin 22, D carr
 | 0x0B flicker filter | level 0: 0xC8 \|= 0x40 (DIS_FFILT); else n = 1, 2, 3 for levels 1–3, 0 for 4–5: 0xC8 ← (0xC8 & 0x80) \| n << 3 \| n (F_SELC = F_SELY = n), then 0x34 ← 0x80 (ADPT_FF) for level 5, else 0 |
 | 0x0E luma filter | 0x96 ← (0x96 & 0x0F) \| (on ? 0x10 : 0) (YLPF) |
 | WSS/CGMS write | 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2), 0x62 ← word >> 4, 0x64 ← word >> 12 |
+
+## 3a. Cerbios and Cromwell (cross-check)
+- **Cerbios:** the same steps, values and tables as 5838 (SD common, SD per-mode and HD tables byte-identical to 4627;
+  NV2A and CRTC rows as spec 22 §3.7–§3.9). Its optional HD RGB setting for the HDTV / VGA packs uses its own HD rows:
+  0x2E ← 0x00, 0x32 ← 0x48, 0x3C / 0x3E / 0x40 ← 0x80, 0xC6 ← 0x98 (RGB input), the other registers as §5.3, with the
+  NV2A sending RGB (spec 22 §10) (Cerbios).
+- **Cromwell** (shows a picture on 1.0–1.3): NV2A output RGB with RGB input (0xC6 = 0x98); its own timing from
+  overscan ratios, with the NV2A raster set to its H_CLKI × V_LINESI (the same rule as the reference); 480p with the
+  encoder PLL (0xA0 = 12, EN_XCLK clear); all registers 0x2E–0xFE written with 500 µs between writes, 0x6C without
+  TIMING_RST and 0xC4 without EN_OUT, then a timing reset (0x6C | 0x80) and EN_OUT on; luma / chroma gains 0xA8 /
+  0xAA / 0xAC held at 0 until the display is enabled, then 0x81 / 0x49 / 0x8C (Cromwell).
+
+## 3b. Open
+- 480p (HD row 1, EN_XCLK set): where the 27 MHz pixel clock on CLKI comes from, given that no stage programs the
+  NV2A's VPLL and 0x68050C selects the encoder's clock for the NV2A (spec 22 §5.1, §13).
+- The encoder's tolerance to NV2A sync positions other than the reference rows' (spec 22 §5.1).
 
 ## 4. How to read the tables
 Values are functional hardware constants, extracted as flat data (see `dmca-compliance.md` §5). File offsets: the
