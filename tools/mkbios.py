@@ -4,7 +4,7 @@
 usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
                  [--flat-kernel OUT.exe] [--splash IMAGE]
        mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel xboxkrnl.exe
-                 --out bios.bin [--flat-kernel OUT.exe] [--splash IMAGE]
+                 --out bios.bin [--flat-kernel OUT.exe] [--splash IMAGE] [--size 256K|1M]
 
 The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/stock/01 §5), see build_open().
 
@@ -16,8 +16,9 @@ Layout (one 256 KiB bank, see spec/stock/00):
 The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
 fields 0x28..0x37 describe the .data copy used by quick reboot (spec/stock/02 §1).
 
-Boot splash (optional, 1 MiB images only): the second 256 KiB bank (flash offset 0x40000, 0xFFF40000) holds
+Boot splash (optional): the second 256 KiB bank of a 1 MiB image (flash offset 0x40000, 0xFFF40000) holds
   "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 256-colour palette PNG with one IDAT chunk.
+  The open image also keeps a copy in each boot bank when it fits (see build_open), for 256 KiB images.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
 valid and falls back to its drawn emblem otherwise (spec/oxos-internal/00-boot-splash.md).
 
@@ -196,8 +197,11 @@ def splash_bank(path, quantize="octree", save=None):
 # --- Open image (spec/stock/01 §5). Each 256 KiB bank:
 #   0x00000 MCPX header + X-codes (kernel/boot/xcodes.S: XboxDev/cromwell's table, ending in the overflow trick)
 #   0x01000 our 2BL (kernel/boot/start.S + bl.cpp), entered at 0xFFFC1000
-#   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size}
+#   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size,
+#                           splash offset, splash size} (splash 0, 0 when there is none in the bank)
 #   0x06040 key block (below), then the kernel as a raw deflate stream
+#   ...     a copy of the splash ("XKSPLASH" header + PNG) when it fits in the space left, so a 256 KiB image (one
+#           bank: --size 256K, or the first 256 KiB of a 1 MiB image) shows it too
 #   ...     the kernel's .data initializer (quick reboot), ending at 0x3FE00
 #   0x3FE00 our reset code (kernel/boot/reset.S) for running without an MCPX boot ROM
 OPEN_LOADER, OPEN_PAYLOAD, OPEN_KEYS, OPEN_RESET = 0x1000, 0x6000, 0x6040, BANK - 0x200
@@ -261,15 +265,33 @@ def build_open(a):
     bank[dstart:dstart + len(data_init)] = data_init
     bank[OPEN_RESET:] = reset
 
-    banks = [bytes(bank)] * 4
-    splash = ""
+    splash, splash_full, free = "", None, dstart - kstart - len(packed)
+    struct.pack_into("<II", bank, OPEN_PAYLOAD + 24, 0, 0)
     if a.splash:
-        banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
-        splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
-    out = b"".join(banks)
+        splash_full, size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
+        sstart = (dstart - size) & ~0xF
+        if sstart >= kstart + len(packed):  # a copy in the boot bank's free space, below the .data initializer
+            bank[sstart:sstart + size] = splash_full[:size]
+            struct.pack_into("<II", bank, OPEN_PAYLOAD + 24, sstart, size)
+            free = sstart - kstart - len(packed)
+            splash = f"; splash in the boot bank at {sstart:#x}"
+        elif a.size == "256K":
+            sys.exit(f"no room for the splash in a 256 KiB image: {size:#x} bytes, {free:#x} free")
+        else:
+            print(f"warning: the splash ({size:#x} bytes) does not fit in the boot bank ({free:#x} free): "
+                  "only the 1 MiB image's bank 1 has it")
+
+    if a.size == "256K":
+        out = bytes(bank)
+    else:
+        banks = [bytes(bank)] * 4
+        if splash_full:
+            banks[SPLASH_BANK] = splash_full
+            splash += f" and bank {SPLASH_BANK}"
+        out = b"".join(banks)
     open(a.out, "wb").write(out)
     print(f"{a.out}: {len(out):#x} bytes, open image; kernel image {len(image):#x} -> deflate {len(packed):#x} at "
-          f"{kstart:#x}, {len(keys) // 4 - 10} key-state words, free {dstart - kstart - len(packed):#x}{splash}")
+          f"{kstart:#x}, {len(keys) // 4 - 10} key-state words, free {free:#x}{splash}")
 
 
 def main():
@@ -284,7 +306,9 @@ def main():
     ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
-    ap.add_argument("--splash", help="boot splash image placed in flash bank 1 (1 MiB images only)")
+    ap.add_argument("--splash", help="boot splash image: flash bank 1 of a 1 MiB image, and (open image) a copy in "
+                    "each boot bank when it fits")
+    ap.add_argument("--size", choices=("256K", "1M"), default="1M", help="open image size (default 1M)")
     ap.add_argument("--splash-quantize", choices=("octree", "median"), default="octree")
     ap.add_argument("--save-splash", metavar="PNG", help="also write the splash as converted (usable without Pillow)")
     a = ap.parse_args()

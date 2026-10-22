@@ -139,6 +139,8 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
   (e.g. a udev rule, or `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
 - **Debugging with gdb or VS Code** (see below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an
   nxdk checkout (`make -C kernel nxdk` fetches one into `third_party/nxdk`).
+- **256 KB flash chips:** `make bios-256k` writes a 256 KB image (one bank, splash included) for 256 KB chips and
+  modchip banks; the first 256 KB of the 1 MB image is the same image.
 - **Your own boot splash:** `make bios SPLASH=my-picture.jpg` converts any picture with Pillow
   (`sudo apt install python3-pil`); the committed `kernel/splash/splash.png` is already converted and needs nothing.
 - **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or

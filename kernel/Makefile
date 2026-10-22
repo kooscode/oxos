@@ -153,6 +153,8 @@ $(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.ld include/xk/inflate.h
 	$(OBJCOPY) -O binary $(BOOT)/bl.elf $@
 
 bios: $(BUILD)/bios.bin
+# A 256 KiB image (one bank, for 256 KiB flash chips and modchip banks), with the splash in the bank's spare space.
+bios-256k: $(BUILD)/bios-256k.bin
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
 ifeq ($(IMAGE),base)
@@ -165,6 +167,10 @@ $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SP
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
 	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
+$(BUILD)/bios-256k.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
+                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin
+	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
+	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K
 endif
 
 $(XDASH_HDD):
@@ -404,4 +410,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios bios-256k hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
