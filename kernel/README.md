@@ -139,8 +139,9 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
    - 19: **exFAT hard disks** (`../spec/oxos-internal/05-exfat-storage-spec.md`, `07-exfat-driver.md`).
      - A GPT (or MBR) disk with one exFAT volume. C:, E:, X:, Y: and Z: are the folders `/C`, `/E`, `/X`, `/Y`, `/Z`,
        and F: (`/F`) is the extra drive.
-     - Titles see the retail partitions and sizes. E: and C: report at most 2 TB, and X/Y/Z report their retail
-       750 MB less what their folder holds.
+     - Titles see the retail partitions and sizes. E: and C: report at most 2 TB, and X/Y/Z report a 750 MB FATX
+       volume with the cluster size of the title's last format (Halo 2 uses 64 KB and checks it), less what their
+       folder holds.
      - The retail reserved area (refurb record, cache database) is kept in sectors 1024–2047.
      - Read-write: files are stored contiguously where possible, with FAT chains otherwise, and the allocation bitmap
        tracks free space.
@@ -149,6 +150,11 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
        reader (`../tests/exfat.py`, which also builds exFAT disks from FATX ones).
      - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
        continues after a reboot. The dashboard boots from /C.
+     - **Halo 2 runs on an exFAT disk** (2026-10-21): started from the dashboard on a 500 GB SATA drive formatted on a
+       PC and attached to xemu over USB, it formats its two cache partitions and reaches its title screen. Getting
+       there fixed two bugs: X/Y/Z now report the cluster size of the title's format, and a quick reboot (the
+       dashboard starting a game) no longer briefly unmaps the kernel's own pages while it rebuilds the page tables,
+       which crashed or hung the restart depending on the build.
      - Memory units come last.
    - 20: **video encoders for all three console families** (`../spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md`,
      `20-xcalibur-encoder.md`; OXOS's choices in `../spec/oxos-internal/02-display-modes.md`): Conexant (1.0–1.3), Focus
@@ -164,9 +170,10 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 - CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
-- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial it writes is
-  kept only until reboot (`/OXOS/partitions.ini` is not written yet); exFAT names outside Latin-1 or longer than 42
-  characters, and files of 4 GB or more, are not shown to titles.
+- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster
+  size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
+  a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters, and
+  files of 4 GB or more, are not shown to titles.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
 - Video (milestone 20; `../spec/oxos-internal/02-display-modes.md`): the NV2A timing is OXOS's own (derived from each
   encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait
