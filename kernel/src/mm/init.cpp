@@ -410,26 +410,28 @@ void MmInitSystem(bool QuickReboot) {
     auto allocatable = [&](ULONG pfn) {
         return (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
     };
+    //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
+    //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
+    //    first, even briefly, unmaps the code and stack running this loop as soon as a cached translation is evicted.
     RtlZeroMemory(MmAllocatedPagesByUsage, sizeof(MmAllocatedPagesByUsage));
     ULONG persisted = 0;
     for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
-        bool keep = QuickReboot && allocatable(pfn) &&
-                    (MiPteArray[pfn] & (PTE_PRESENT | PTE_PERSIST)) == (PTE_PRESENT | PTE_PERSIST);
-        if (keep)
+        ULONG pte = 0;
+        if (pfn >= MM_PAGE_TABLES_FIRST_PFN) {
+            pte = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
+        } else if (pfn >= MM_GPU_INSTANCE_FIRST_PFN) {
+            pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
+        } else if (!allocatable(pfn)) {
+            if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
+                pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);
+        } else if (QuickReboot &&
+                   (MiPteArray[pfn] & (PTE_PRESENT | PTE_PERSIST)) == (PTE_PRESENT | PTE_PERSIST)) {
             persisted++;
-        else
-            MiPteArray[pfn] = 0;
+            continue; // a persisted allocation: re-adopted as it is
+        }
+        MiPteArray[pfn] = pte;
     }
     MmPersistedPages = persisted;
-    for (ULONG pfn = 0; pfn < imageEndPfn; pfn++)
-        if (!allocatable(pfn))
-            MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
-    for (ULONG pfn = 0x10; pfn < textEndPfn; pfn++)
-        MiPteArray[pfn] &= ~PTE_WRITE;
-    for (ULONG pfn = MM_GPU_INSTANCE_FIRST_PFN; pfn < MM_PAGE_TABLES_FIRST_PFN; pfn++)
-        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
-    for (ULONG pfn = MM_PAGE_TABLES_FIRST_PFN; pfn < MM_PAGES; pfn++)
-        MiPteArray[pfn] = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
 
     // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
     //    count as contiguous memory.
