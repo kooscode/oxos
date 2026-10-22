@@ -84,6 +84,7 @@ struct FATX_VOLUME {
     EXFAT_DISK *Ex;
     ULONG PartitionNumber;       // exFAT: the folder partition's number
     ULONG UsedClusters;          // exFAT X/Y/Z: clusters in the folder (their size is fixed at 750 MB)
+    ULONG OwnClusters;           // exFAT X/Y/Z: of those, the folder's own directory clusters (at the last count)
     LONGLONG ReportedLength;     // exFAT: the folder partition's reported length
     LONGLONG PartitionLength;
     ULONG SectorSize;

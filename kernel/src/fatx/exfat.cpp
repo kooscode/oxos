@@ -522,8 +522,10 @@ static NTSTATUS ExCountFolder(FATX_VOLUME *v) {
     NTSTATUS status = ExWalk(v, &v->RootFcb, false, 0, &used);
     if (NT_SUCCESS(status))
         status = ExAllocationOf(v, &v->RootFcb, &own);
-    if (NT_SUCCESS(status))
+    if (NT_SUCCESS(status)) {
         v->UsedClusters = used + own;
+        v->OwnClusters = own;
+    }
     return status;
 }
 
@@ -533,12 +535,26 @@ static NTSTATUS ExCountFolder(FATX_VOLUME *v) {
 // allocation table and the root directory, then a dismount. A folder partition has no sectors of its own, so the
 // header write empties the folder and the metadata writes are dropped; reads show a freshly formatted FATX volume.
 // E:, C: and F: refuse to be formatted this way.
-static ULONG ExfatFormatSerial[7]; // the serial of the last header written to X/Y/Z (shown by later mounts)
+// The serial and sectors per cluster of the last header written to X/Y/Z, shown by later mounts and kept across
+// quick reboots (a title formats, starts another title or the dashboard, and is started again).
+XK_PERSIST static ULONG ExfatFormatSerial[7];
+XK_PERSIST static ULONG ExfatFormatSpc[7];
 
-static void ExFormattedLayout(FATX_VOLUME *v, ULONG *EntrySize, ULONG *RootAt) {
-    ULONG entries = (ULONG)(v->ReportedLength >> 14) + 1;
+// The FATX cluster size a folder partition shows: the one its last format chose, else 16 KB.
+static ULONG ExFormattedClusterBytes(FATX_VOLUME *v) {
+    ULONG spc = ExfatFormatSpc[v->PartitionNumber];
+    return (spc ? spc : 32) * 512;
+}
+
+// The layout of a freshly formatted FATX volume of the reported length (as FATX mounts it: a 4 KB header, the
+// allocation table rounded to 4 KB, then the clusters, the first holding the root directory).
+static void ExFormattedLayout(FATX_VOLUME *v, ULONG *EntrySize, ULONG *RootAt, ULONG *Clusters = nullptr) {
+    ULONG bytes = ExFormattedClusterBytes(v);
+    ULONG entries = (ULONG)(v->ReportedLength / bytes) + 1;
     *EntrySize = entries < 0xFFF0 ? 2 : 4;
     *RootAt = 0x1000 + ((entries * *EntrySize + 0xFFF) & ~0xFFFu);
+    if (Clusters)
+        *Clusters = (ULONG)((v->ReportedLength - *RootAt) / bytes);
 }
 
 NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
@@ -548,7 +564,7 @@ NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
     auto buffer = (PUCHAR)Irp->UserBuffer;
     ULONG entrySize, rootAt;
     ExFormattedLayout(v, &entrySize, &rootAt);
-    LONGLONG metaEnd = rootAt + 0x4000;
+    LONGLONG metaEnd = rootAt + ExFormattedClusterBytes(v);
     NTSTATUS status = STATUS_SUCCESS;
     FatxAcquireVolume(v);
     if (offset < 0 || offset + length > v->ReportedLength) {
@@ -559,7 +575,8 @@ NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
             UCHAR b = 0;
             if (at < 16) {
                 ULONG header[4] = {FATX_SIGNATURE, ExfatFormatSerial[v->PartitionNumber] ? ExfatFormatSerial[v->PartitionNumber]
-                                                                                          : v->SerialNumber, 32, 1};
+                                                                                          : v->SerialNumber,
+                                   ExFormattedClusterBytes(v) / 512, 1};
                 b = ((PUCHAR)header)[at];
             } else if (at >= 0x1000 && at < 0x1000 + 2 * entrySize) {
                 b = (at - 0x1000) == 0 ? 0xF8 : 0xFF; // entry 0 (media), entry 1 (the root's end of chain)
@@ -576,8 +593,11 @@ NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
             status = ExWalk(v, &v->RootFcb, true, 0, &used);
             if (NT_SUCCESS(status))
                 status = ExCountFolder(v);
-            if (NT_SUCCESS(status))
+            if (NT_SUCCESS(status)) {
                 ExfatFormatSerial[v->PartitionNumber] = v->SerialNumber = ((PULONG)buffer)[1];
+                ULONG spc = ((PULONG)buffer)[2]; // a FATX mount accepts powers of two from 4 KB to 64 KB clusters
+                ExfatFormatSpc[v->PartitionNumber] = (spc >= 8 && spc <= 128 && !(spc & (spc - 1))) ? spc : 0;
+            }
         }
     } else if (offset + length > metaEnd || !ExIsCacheFolder(v)) {
         status = STATUS_ACCESS_DENIED; // only the format's own metadata writes are expected
@@ -589,17 +609,23 @@ NTSTATUS ExfatVolumeTransfer(FATX_VOLUME *v, PIRP Irp) {
     return status;
 }
 
-// Reported in 16 KB units (the FATX cluster size titles expect): E: and C: the volume capped at 2 TB, X/Y/Z their
-// retail 750 MB less what the folder holds, F: everything.
+// E: and C: in 16 KB units, the volume capped at 2 TB; F: everything. X/Y/Z as a FATX volume of their retail 750 MB
+// with the cluster size of their last format (16 KB until formatted): its clusters, less the root directory's and
+// those the folder's files take (the exFAT folder's own directory clusters are not counted).
 void ExfatVolumeSize(FATX_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit) {
     constexpr ULONGLONG unit = 0x4000, cap = 2ull << 40;
     ULONGLONG total = (ULONGLONG)v->Ex->ClusterCount << v->ClusterShift;
     ULONGLONG free = (ULONGLONG)v->Alloc->FreeClusters << v->ClusterShift;
     if (ExIsCacheFolder(v)) {
-        total = 0x2EE00000;
-        ULONGLONG used = (ULONGLONG)v->UsedClusters << v->ClusterShift;
-        if (free > total - (used < total ? used : total))
-            free = total - (used < total ? used : total);
+        ULONG bytes = ExFormattedClusterBytes(v), entrySize, rootAt, clusters;
+        ExFormattedLayout(v, &entrySize, &rootAt, &clusters);
+        ULONG content = v->UsedClusters > v->OwnClusters ? v->UsedClusters - v->OwnClusters : 0;
+        ULONGLONG used = (((ULONGLONG)content << v->ClusterShift) + bytes - 1) / bytes + 1;
+        ULONGLONG avail = free / bytes;
+        *Total = clusters;
+        *Free = (ULONG)(used >= clusters ? 0 : clusters - used < avail ? clusters - used : avail);
+        *SectorsPerUnit = bytes / v->SectorSize;
+        return;
     } else if (v->PartitionNumber <= 2 && total > cap) {
         total = cap;
     }
