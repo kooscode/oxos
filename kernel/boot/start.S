@@ -59,10 +59,32 @@ _start:
     movl $0x800, %eax
     xorl %edx, %edx
     wrmsr
+    // The page attribute table as the retail 2BLs set it: PA0 WB, PA1 WC, PA2 UC-, PA3 UC (twice), so a PTE's PWT
+    // bit selects write-combining (spec/stock/21 §1).
+    movl $0x277, %ecx
+    movl $0x00070106, %eax
+    movl $0x00070106, %edx
+    wrmsr
     movl %cr0, %eax
     andl $0x9FFFFFFF, %eax
     movl %eax, %cr0
 
+    // 64 MB consoles: the GPU's memory size (PFB 0x100200 bit 8, as Cromwell for 64 MB) and the host bridge's top of
+    // memory for 64 MB, before anything is stored in RAM. The X-codes (XboxDev/cromwell's) always leave the 128 MB
+    // set-up; RAM that is not there does not keep a value. PFB 0x100204 stays the X-codes' 0x11448000: the
+    // 0x11338000 of spec/stock/22 §6.3 stopped a 1.0 console's kernel in the memory manager (2026-10-22).
+    movl $0x2468ACE0, 0x04000FF0
+    movl $0x13579BDF, 0x00000FF0
+    cmpl $0x2468ACE0, 0x04000FF0
+    je 4f                                   // 128 MB: keep it
+    andl $0xFFFFFEFF, 0xFD100200            // PFB: bit 8 clear (64 MB)
+    movl $0x80000084, %eax                  // host bridge register 0x84: top of memory 64 MB - 1
+    movw $0xCF8, %dx
+    outl %eax, %dx
+    movl $0x03FFFFFF, %eax
+    movw $0xCFC, %dx
+    outl %eax, %dx
+4:
     movl $0x003FFFF0, %esp
     // Copy the C part (.text/.rodata/.data) to RAM and clear its .bss.
     movl $__ram_load, %esi

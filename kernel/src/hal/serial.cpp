@@ -84,6 +84,7 @@ void HalpSerialWrite(const char *Text, ULONG Length) {
 }
 
 void XkSerialPrint(const char *Format, ...) {
+    XkBootMark(Format);
     if (!HalpSerialPresent && !XK_NETLOG)
         return;
     char line[256];
@@ -91,6 +92,8 @@ void XkSerialPrint(const char *Format, ...) {
     va_start(ap, Format);
     int n = RtlVsnprintf(line, sizeof(line), Format, ap);
     va_end(ap);
+    XK_MARK("mark: log line formatted");
     HalpSerialWrite(line, n < 0 || n >= (int)sizeof(line) ? sizeof(line) - 1 : (ULONG)n);
+    XK_MARK("mark: log line written");
 }
 #endif

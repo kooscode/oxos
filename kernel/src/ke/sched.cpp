@@ -137,6 +137,13 @@ LONG KiSwapThread() {
         Prcb.NextThread = nullptr;
     else if (!(next = KiFindReadyThread(0)))
         next = Prcb.IdleThread;
+    // The idle thread (the boot thread during start-up) must never block: with nothing else to run it would
+    // "switch" to itself and return at once with the wait still linked (its wait block on this stack), and with
+    // another thread ready the scheduler would later resume it as the idle thread in the middle of its wait. Either
+    // way the wait and timer lists get corrupted: stop with a report instead.
+    if (old == Prcb.IdleThread)
+        KeBugCheckEx(0x000000E3 /*our code: wait on the idle thread*/, (ULONG)old, old->WaitReason,
+                     (ULONG)__builtin_return_address(0), 0);
     KiSwapToThread(old, next);
     return old->WaitStatus;
 }
@@ -198,8 +205,16 @@ static void KiRetireDpcListOnDpcStack() {
 
 // DISPATCH_LEVEL software interrupt: drain DPCs on the DPC stack, then reschedule if needed.
 void KiDispatchInterrupt() {
-    if (!IsListEmpty(&Prcb.DpcListHead))
+    if (!IsListEmpty(&Prcb.DpcListHead)) {
         KiRetireDpcListOnDpcStack();
+    } else {
+        // The DPC that requested this interrupt was removed again (KeRemoveQueueDpc): clear the request, or every
+        // later KeInsertQueueDpc would skip requesting the DISPATCH interrupt and its DPC wait for the idle loop.
+        ULONG flags = save_flags_cli();
+        if (IsListEmpty(&Prcb.DpcListHead))
+            Prcb.DpcInterruptRequested = FALSE;
+        restore_flags(flags);
+    }
     if (Prcb.QuantumEnd) {
         Prcb.QuantumEnd = 0;
         KiQuantumEnd();

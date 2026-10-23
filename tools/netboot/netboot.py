@@ -21,11 +21,34 @@ HEADER = struct.Struct("<IBBHIII")  # magic, op, version, reserved, session, off
 PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only used for frames injected into xemu
 
 
-def load(path):
-    """The first 256 KiB bank of an OXOS open image and its CRC-32."""
-    data = open(path, "rb").read()[:BANK]
+DEBUG_CONFIG_AT = 0x6020  # free space after the payload header (kernel: src/ke/dbgstep.cpp)
+
+
+def debug_config(a):
+    """The debug-register block for network-log kernels (--dr0/--dr1/--dr2 execution breakpoints, --watch a 4-byte
+    write watch in DR3, --steps single steps from the first DR0 hit), or None."""
+    drs, dr7 = [0, 0, 0, 0], 0
+    for i, v in enumerate((a.dr0, a.dr1, a.dr2)):
+        if v is not None:
+            drs[i] = v
+            dr7 |= 1 << (2 * i)  # Li, execution (RW 00, LEN 00)
+    if a.watch is not None:
+        drs[3] = a.watch & ~3
+        dr7 |= (1 << 6) | (0b01 << 28) | (0b11 << 30)  # L3, data writes, 4 bytes
+    if not dr7:
+        return None
+    dr7 |= 0x300  # LE / GE: exact breakpoints
+    return struct.pack("<4s4IIII", b"DBGC", *drs, dr7, a.steps, 1 if a.step_dr1 else 0)
+
+
+def load(path, config=None):
+    """The first 256 KiB bank of an OXOS open image (with the debug block patched in) and its CRC-32."""
+    data = bytearray(open(path, "rb").read()[:BANK])
     if len(data) != BANK or data[0x6000:0x6004] != b"OXKP":
         raise ValueError(f"{path}: not an OXOS open image (no 'OXKP' payload header at 0x6000)")
+    if config:
+        data[DEBUG_CONFIG_AT:DEBUG_CONFIG_AT + len(config)] = config
+    data = bytes(data)
     return data, zlib.crc32(data)
 
 
@@ -88,6 +111,14 @@ def main():
                          "e.g. 192.168.1.255, on a PC with several networks)")
     ap.add_argument("--out", help="also append the printed lines to this file")
     ap.add_argument("--verbose", action="store_true", help="print every request")
+    num = lambda v: int(v, 0)
+    ap.add_argument("--dr0", type=num, help="network-log kernels: execution breakpoint (DR0); --steps start here")
+    ap.add_argument("--dr1", type=num, help="execution breakpoint (DR1), reported when hit")
+    ap.add_argument("--dr2", type=num, help="execution breakpoint (DR2), reported when hit")
+    ap.add_argument("--watch", type=num, help="report writes to this 4-byte location (DR3)")
+    ap.add_argument("--steps", type=num, default=0, help="single-step this many instructions from the first DR0 hit")
+    ap.add_argument("--step-dr1", action="store_true",
+                    help="the first DR1 hit starts a second run of --steps (after the DR0 run has ended)")
     ap.add_argument("--once", action="store_true", help="exit after one console has booted")
     a = ap.parse_args()
     log = Log(a.out)
@@ -149,7 +180,7 @@ def main():
                 log.say(f"netboot: <- op {op} session {sess:08x} offset {offset:#x} length {length:#x} from {who}")
             if op == OP_HELLO:
                 try:
-                    image, crc = load(a.image)
+                    image, crc = load(a.image, debug_config(a))
                 except (OSError, ValueError) as e:
                     log.say(f"netboot: console {who} asked, but {e}")
                     continue

@@ -1,6 +1,7 @@
 // 8259 PIC, interrupt enable/disable, 8254 PIT and CMOS RTC (spec/stock/02 §3.3-3.6, spec/stock/06 §1, §3).
 #include <xk/arch.h>
 #include <xk/hal.h>
+#include <xk/serial.h>
 
 constexpr USHORT PIC1_CMD = 0x20, PIC1_DATA = 0x21, PIC2_CMD = 0xA0, PIC2_DATA = 0xA1;
 constexpr USHORT ELCR1 = 0x4D0, ELCR2 = 0x4D1;
@@ -38,8 +39,16 @@ static USHORT HalpLevelMask(KIRQL irql) {
     return mask;
 }
 
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+extern "C" volatile ULONG KiEarlySample;
+#endif
+
 void HalpSetIrqlMask(KIRQL irql) {
     USHORT mask = HalpDisabledMask | HalpLevelMask(irql);
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+    if (KiEarlySample)
+        mask &= ~1u; // the early EIP sampler (ke/irql.cpp)
+#endif
     if ((mask & 0xFF00) != 0xFF00)
         mask &= ~(1u << CASCADE_IRQ); // keep the cascade open while any slave IRQ is live
     HalpWritePicMask(mask);
@@ -83,7 +92,21 @@ bool HalpIsSpuriousIrq(ULONG irq) {
     return !inService;
 }
 
+#if XK_NETLOG
+void HalpNetLogReleaseNic();
+#endif
+
 XBAPI ULONG NTAPI HalGetInterruptVector(ULONG BusInterruptLevel, PKIRQL Irql) {
+#if XK_NETLOG
+    if (BusInterruptLevel == 4) // a network stack is about to drive the NIC: the network log lets go of it now
+        HalpNetLogReleaseNic();
+#endif
+#ifdef XK_EXPERIMENT_NO_NIC_IRQ
+    if (BusInterruptLevel == 4) { // experiment: no network card interrupt (a title's network stack does not start)
+        XK_SERIAL("hal: experiment: no interrupt vector for the NIC\n");
+        return 0;
+    }
+#endif
     ULONG vector = BusInterruptLevel + HAL_IRQ_BASE_VECTOR;
     if (vector < HAL_IRQ_BASE_VECTOR || vector > 0x4A)
         return 0;

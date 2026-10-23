@@ -44,6 +44,10 @@ XBAPI KIRQL NTAPI KeGetCurrentIrql() { return KiPcr.Irql; }
 
 XBAPI KIRQL FASTCALL KfRaiseIrql(KIRQL NewIrql) {
     KIRQL old = KiPcr.Irql;
+    // Never lower (NT's rule; checked builds bug-check): the boot runs at HIGH_LEVEL, and the IDE driver's "raise to
+    // the channel IRQL" would otherwise drop to 12 for a whole device probe, with the PIC mask and the IRQL apart.
+    if (NewIrql < old)
+        return old;
     if (NewIrql > DISPATCH_LEVEL) {
         ULONG flags = save_flags_cli();
         KiPcr.Irql = NewIrql;
@@ -92,8 +96,11 @@ void HalpNetLogWrite(const char *Text, ULONG Length);
 XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
 extern "C" volatile ULONG KiSampleTitlePc;
 volatile ULONG KiSampleTitlePc;
+extern "C" volatile ULONG KiPcRing[32]; // the interrupted EIP of the last 32 clock ticks (the watchdog prints them)
+volatile ULONG KiPcRing[32];
+void HalpNetWatchdog();
 static void KiSamplePc(PULONG frame, KIRQL irql) {
-    // frame (from the entry stub): eight saved registers, the IRQ number, then EIP, CS, EFLAGS of the interrupted code
+    // frame: eight saved registers (pushal), the IRQ number pushed by the stub, then EIP, CS, EFLAGS of the interrupted code
     // (same privilege: no SS:ESP), then its stack.
     char line[160];
     int n = RtlSnprintf(line, sizeof(line), "pc %#lx irql %u efl %#lx stack %#lx %#lx %#lx %#lx\n", frame[9], irql,
@@ -102,13 +109,42 @@ static void KiSamplePc(PULONG frame, KIRQL irql) {
 }
 #endif
 
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+// Experiment: from the network log's start to "clock interrupt on", IRQ 0 stays unmasked at every IRQL and only
+// samples the interrupted EIP (10 per second), so a hang in phase 1 shows where the CPU is.
+extern "C" volatile ULONG KiEarlySample;
+volatile ULONG KiEarlySample;
+[[maybe_unused]] static ULONG KiEarlyTicks;
+#endif
+
+extern "C" void XkBootMarkWatchdog(ULONG Eip, UCHAR Irql);
+
 // Called from the IRQ entry stubs with interrupts disabled.
-extern "C" void KiDispatchHardwareInterrupt(ULONG irq, [[maybe_unused]] PULONG frame) {
+extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (HalpIsSpuriousIrq(irq))
         return;
+    if (irq == 0) // start-up watchdog (ke/startup.cpp); the frame as KiSamplePc reads it
+        XkBootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+    if (irq == 0 && KiEarlySample) {
+#if XK_NETLOG && !defined(XK_EARLY_SAMPLE_QUIET)
+        if (++KiEarlyTicks % 100 == 0)
+            KiSamplePc((PULONG)__builtin_frame_address(0) + 3, KiPcr.Irql);
+#endif // quiet: only the start-up watchdog above runs (CMOS, any build)
+        HalpEoi(0);
+        return;
+    }
+#endif
 #if XK_NETLOG
-    if (irq == 0 && KiSampleTitlePc && KeTickCount % 100 == 0)
-        KiSamplePc(frame, KiPcr.Irql);
+    // The stub's frame starts above our argument: EBP + 8 is irq, then the eight registers of pushal (built with
+    // frame pointers: -fno-omit-frame-pointer).
+    if (irq == 0 && KiSampleTitlePc) {
+        PULONG frame = (PULONG)__builtin_frame_address(0) + 3;
+        KiPcRing[KeTickCount % 32] = frame[9];
+        if (KeTickCount % 100 == 0)
+            KiSamplePc(frame, KiPcr.Irql);
+        HalpNetWatchdog();
+    }
 #endif
     KIRQL old = KiPcr.Irql;
     KIRQL level = HalpGetIrqLevel(irq);

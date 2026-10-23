@@ -678,6 +678,17 @@ void AvPrepareBootDisplay() {
     auto regs = (volatile UCHAR *)0xFD000000;
     auto reg32 = [&](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(regs + offset); };
     reg32(0x000200) = 0xFFFFFFFF; // PMC: all engines on
+    // Gamma (spec/stock/22 §7 step 9: the reference loads identity ramps): every 32-bit pixel goes through the RAMDAC's
+    // colour table, which holds garbage at power-on: a wrongly coloured picture on hardware that changes from boot to
+    // boot (xemu does not model the table). Loaded through the VGA DAC ports of PRMDIO (nouveau: 0x6813C6 pixel mask,
+    // 0x6813C8 write index, 0x6813C9 data, red / green / blue). Six bits per entry: a 1.4 console showed a 0-255 ramp
+    // four times too bright, wrapping (2026-10-22).
+    XK_SERIAL("av: RAMDAC general control %#lx before the boot display\n", reg32(0x680600));
+    regs[0x6813C6] = 0xFF;
+    regs[0x6813C8] = 0;
+    for (ULONG i = 0; i < 256; i++)
+        for (int c = 0; c < 3; c++)
+            regs[0x6813C9] = (UCHAR)(i >> 2);
     regs[0x6013D4] = 0x1F;
     UCHAR lock = regs[0x6013D5];
     AvpCrtc(regs, 0x1F, 0x57);

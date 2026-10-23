@@ -68,7 +68,78 @@ enum : ULONG {
     DEV_APU = 5, DEV_AC97 = 6, DEV_IDE = 9, DEV_AGP = 0x1E,
 };
 
+// --- Bus masters left running (OXOS addition, spec/oxos-internal/10-dma-quiesce.md). A modchip menu (XeniumOS) or
+// another OS that started this image without a full hardware reset can leave the USB host controllers, the NIC, the
+// audio and IDE DMA engines or the GPU's FIFO running, writing into RAM the kernel is about to reuse: corruption that
+// hangs the boot at varying places on hardware, never in xemu. Before anything here enables bus mastering: log the
+// state each device arrives in, turn bus mastering off and stop or reset each engine.
+static void HalpQuiesceBusMasters() {
+    constexpr ULONG DEVS[] = {2, 3, 4, 5, 6, 9};
+    for (ULONG d : DEVS) {
+        ULONG cmd = HalpPciRead32(0, d, 4);
+        [[maybe_unused]] ULONG bar0 = HalpPciRead32(0, d, 0x10);
+        XK_SERIAL("pci: at entry 0:%lx.0 cmd %08lx bar0 %08lx\n", d, cmd, bar0);
+        HalpPciWrite16(0, d, 4, (USHORT)(cmd & ~4u)); // bus master off
+    }
+    [[maybe_unused]] ULONG gpuCmd = HalpPciRead32(1, 0, 4);
+    // Memory-mapped engines in 0xFEC00000-0xFEFFFFFF (USB 0xFED00000 / 0xFED08000, NIC 0xFEF00000): not mapped yet
+    // (the 2BL maps only RAM, the NV2A and the flash), so map that 4 MB window uncached for a moment through the
+    // page directory's self-map (entry 0x300: the directory at 0xC0300000).
+    auto pd = (volatile ULONG *)0xC0300000;
+    ULONG saved = pd[0x3FB];
+    pd[0x3FB] = 0xFEC00000 | 0x9B; // present, writable, write-through, cache-disabled, 4 MB
+    __asm__ volatile("invlpg (%0)" ::"r"(0xFEC00000) : "memory");
+    auto mmio = [](ULONG a) -> volatile ULONG & { return *(volatile ULONG *)a; };
+    static const ULONG OHCI[] = {2, 3};
+    for (ULONG d : OHCI) { // OHCI: HcControl 0x04, HcCommandStatus 0x08, HcHCCA 0x18
+        ULONG bar = HalpPciRead32(0, d, 0x10) & ~0xFFFu;
+        if (bar < 0xFEC00000 || bar >= 0xFF000000 || !(HalpPciRead32(0, d, 4) & 2))
+            continue;
+        XK_SERIAL("pci: USB %lu at entry: control %08lx hcca %08lx\n", d - 2, mmio(bar + 4), mmio(bar + 0x18));
+        mmio(bar + 0x14) = 0xC000007F; // HcInterruptDisable: all
+        mmio(bar + 4) = 0;             // HcControl: USB reset state, every list off
+        mmio(bar + 8) = 1;             // HcCommandStatus: host controller reset (clears HCCA and the list pointers)
+        for (int i = 0; i < 100 && (mmio(bar + 8) & 1); i++)
+            KeStallExecutionProcessor(1);
+    }
+    ULONG nic = HalpPciRead32(0, 4, 0x10) & ~0xFFFu;
+    if (nic >= 0xFEC00000 && nic < 0xFF000000 && (HalpPciRead32(0, 4, 4) & 2)) {
+        XK_SERIAL("pci: NIC at entry: tx ring %08lx rx ring %08lx tx %lx rx %lx\n", mmio(nic + 0x100),
+                  mmio(nic + 0x104), mmio(nic + 0x84), mmio(nic + 0x94));
+        mmio(nic + 0x84) = 0; // transmitter off
+        mmio(nic + 0x94) = 0; // receiver off
+        mmio(nic + 0x004) = 0; // interrupts masked
+        mmio(nic + 0x144) = 0x14; // TxRxControl: reset
+        KeStallExecutionProcessor(10);
+        mmio(nic + 0x144) = 0x04;
+        mmio(nic + 0x100) = 0;
+        mmio(nic + 0x104) = 0;
+    }
+    pd[0x3FB] = saved;
+    __asm__ volatile("invlpg (%0)" ::"r"(0xFEC00000) : "memory");
+    // AC'97 bus-master channels (I/O BAR1; ICH layout: control at 0x0B, 0x1B, 0x2B, S/PDIF 0x7B): stop, then reset.
+    static const USHORT AC97_CONTROL[] = {0x0B, 0x1B, 0x2B, 0x7B};
+    ULONG aci = HalpPciRead32(0, 6, 0x14);
+    if ((aci & 1) && (aci & ~3u) && (HalpPciRead32(0, 6, 4) & 1))
+        for (USHORT c : AC97_CONTROL) {
+            outb((USHORT)((aci & ~3u) + c), 0);
+            outb((USHORT)((aci & ~3u) + c), 2);
+        }
+    // IDE bus master (I/O BAR4): stop.
+    ULONG ide = HalpPciRead32(0, 9, 0x20);
+    if ((ide & 1) && (ide & ~3u))
+        outb((USHORT)(ide & ~3u), 0);
+    // GPU: its FIFO and graphics engines reset (PMC 0x200 bits 8 and 12 off and on again; the NV2A registers are mapped).
+    auto pmc = (volatile ULONG *)0xFD000200;
+    ULONG enable = *pmc;
+    XK_SERIAL("pci: NV2A at entry: cmd %08lx PMC enable %08lx PFIFO caches %08lx pusher %08lx\n", gpuCmd, enable,
+              *(volatile ULONG *)0xFD002500, *(volatile ULONG *)0xFD003220);
+    *pmc = enable & ~0x1100u;
+    *pmc = enable;
+}
+
 void HalpInitPci() {
+    HalpQuiesceBusMasters();
     // MCPX ISA/LPC bridge.
     HalpPciWrite8(0, DEV_LPC, 0x6A, 0x03);
     HalpPciWrite32(0, DEV_LPC, 0x6C, 0x0E065491);
@@ -82,6 +153,15 @@ void HalpInitPci() {
     HalpPciWrite32(0, DEV_IDE, 0x50, 0x00000002);
     HalpPciWrite32(0, DEV_IDE, 0x58, 0x20202020);
     HalpPciWrite32(0, DEV_IDE, 0x60, 0xC0C0C0C0);
+    // The bus-master engine keeps its registers across a reset of its owner (a modchip menu or another BIOS started
+    // this image): stop it, clear its status and table pointer before anything selects a device. A start bit left
+    // set would let the first device to raise DMARQ (the DVD probe's commands) write into reused RAM.
+    XK_SERIAL("pci: IDE bus master at entry: command %#x status %#x table %08lx\n", inb(0xFF60), inb(0xFF62),
+              inl(0xFF64));
+    outb(0xFF60, 0);
+    outb(0xFF62, 0x06);
+    outl(0xFF64, 0);
+    XK_SERIAL("pci: IDE bus master after reset: command %#x status %#x\n", inb(0xFF60), inb(0xFF62));
 
     // NIC.
     PciEnable(0, DEV_NIC, 0x07, 4);
@@ -97,11 +177,20 @@ void HalpInitPci() {
     HalpPciWrite32(0, DEV_USB1, 0x50, 0x00000030);
 
     // AC'97 and APU.
+#ifdef XK_EXPERIMENT_NO_AUDIO_DMA
+    // Experiment: audio devices without bus mastering (I/O and memory decode only).
+    PciEnable(0, DEV_AC97, 0x03, 6);
+#else
     PciEnable(0, DEV_AC97, 0x07, 6);
+#endif
     HalpPciWrite32(0, DEV_AC97, 0x10, 0x0000D001);
     HalpPciWrite32(0, DEV_AC97, 0x14, 0x0000D201);
     HalpPciWrite32(0, DEV_AC97, 0x18, 0xFEC00000);
+#ifdef XK_EXPERIMENT_NO_AUDIO_DMA
+    PciEnable(0, DEV_APU, 0x03, 5);
+#else
     PciEnable(0, DEV_APU, 0x07, 5);
+#endif
     HalpPciWrite32(0, DEV_APU, 0x10, 0xFE800000);
 
     // LPC bridge register 0x8C: set bit 27, clear bit 26; then MCPX I/O 0x80CD = 8.

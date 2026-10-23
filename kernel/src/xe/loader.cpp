@@ -229,6 +229,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 
     HANDLE h;
     NTSTATUS status = XeOpenImage(&h);
+    XK_SERIAL("load: opened %#lx\n", status);
     if (!NT_SUCCESS(status))
         return status;
     auto head = (PUCHAR)ExAllocatePoolWithTag(0x1000, 'iHeX');
@@ -238,6 +239,14 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     status = XeReadFile(h, head, 0x1000, 0, &got);
+    XK_SERIAL("load: first page read %#lx (%lu bytes)\n", status, got);
+#ifdef XK_EXPERIMENT_WATCHDOG_TEST
+    {
+        ULONG efl;
+        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
+        XK_SERIAL("load: eflags %08lx, IRQL %u, thread %p\n", efl, KeGetCurrentIrql(), KeGetCurrentThread());
+    }
+#endif
     ULONG sizeOfHeaders = *(ULONG *)(head + 0x108), sizeOfImage = *(ULONG *)(head + 0x10C);
     bool reserved = false;
     if (NT_SUCCESS(status) && (got < 0x178 || *(ULONG *)head != XBE_MAGIC || sizeOfHeaders < 0x179 ||
@@ -247,17 +256,21 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         PVOID base = (PVOID)XBE_BASE;
         SIZE_T size = sizeOfImage;
         status = NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE);
+        XK_SERIAL("load: image reserved %#lx\n", status);
         reserved = NT_SUCCESS(status);
         size = sizeOfHeaders;
         if (reserved)
             status = MiCommitImageMemory(&base, &size);
+        XK_SERIAL("load: headers committed %#lx\n", status);
     }
     if (NT_SUCCESS(status)) {
         RtlCopyMemory((PVOID)XBE_BASE, head, got < sizeOfHeaders ? got : sizeOfHeaders);
+        XK_MARK("mark: load: first page copied");
         if (sizeOfHeaders > got)
             status = XeReadFile(h, (PVOID)(XBE_BASE + got), sizeOfHeaders - got, got);
     }
     ExFreePool(head);
+    XK_SERIAL("load: headers %#lx\n", status);
     ULONG cert = XbeField(0x118), sections = XbeField(0x120), count = XbeField(0x11C);
     if (NT_SUCCESS(status) && (cert < XBE_BASE || cert + 0x1D0 > XBE_BASE + sizeOfHeaders || sections < XBE_BASE ||
                                sections + count * 0x38 > XBE_BASE + sizeOfHeaders || XbeField(0x15C)))
@@ -296,11 +309,15 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     }
     auto sec = (XBE_SECTION_HEADER *)sections;
     for (ULONG i = 0; NT_SUCCESS(status) && i < count; i++)
-        if (sec[i].Flags & XBE_SECTION_PRELOAD)
+        if (sec[i].Flags & XBE_SECTION_PRELOAD) {
+            XK_SERIAL("load: section %lu\n", i);
             status = XepLoadSection(h, &sec[i]);
+        }
+    XK_SERIAL("load: sections %#lx\n", status);
     // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard).
     if (NT_SUCCESS(status) && HalpSmcArmEvents(Dashboard) && !Dashboard)
         status = (NTSTATUS)0xC000003A;
+    XK_SERIAL("load: SMC events armed\n");
     // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
     // non-secure media, boot flag 4 and manufacturing units; turned back on for everything else.
     if (NT_SUCCESS(status)) {
@@ -315,9 +332,11 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
             while (!NT_SUCCESS(HalWriteSMBusValue(0x20, 0x19, FALSE, 1))) {
             }
         }
+        XK_SERIAL("load: reset on eject set\n");
     }
     if (NT_SUCCESS(status))
         status = XepResolveKernelThunks((PULONG)XbeField(0x158));
+    XK_SERIAL("load: thunks %#lx\n", status);
     if (NT_SUCCESS(status)) {
         for (ULONG i = 0; i < count; i++) {
             if ((sec[i].Flags & (XBE_SECTION_PRELOAD | XBE_SECTION_WRITABLE)) != XBE_SECTION_PRELOAD)
@@ -525,6 +544,7 @@ static void XepLaunchTitle(ULONG Reason) {
 // §5: keep the LaunchDataPage below the kernel, out of the title's way.
 void HalpEndSplash();
 extern "C" void HalpSetBootLed(UCHAR Pattern);
+extern "C" void XkBootMarksDone();
 extern "C" volatile ULONG KiSampleTitlePc; // NETLOG builds: the clock interrupt samples the interrupted EIP (irql.cpp)
 extern "C" void HalpNetLogReplay();
 
@@ -607,6 +627,7 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     XepChooseTitle();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
+    XkBootMarksDone();
 #if XK_NETLOG
     KiSampleTitlePc = 1;
 #endif

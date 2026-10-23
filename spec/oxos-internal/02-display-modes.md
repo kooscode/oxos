@@ -83,6 +83,17 @@ Option 0x0F follows 4627 on the Conexant (register 6) and 5838 elsewhere (port 0
 - **Checks** (`make test-encoders`): Conexant and Focus registers read back as the tables have them after each mode
   set; on the Xcalibur every write must complete and the test compares the values written with spec 20.
 
+## 3b. Gamma ramp
+- `AvPrepareBootDisplay` loads an identity ramp (0-255 for red, green and blue) into the RAMDAC colour table before
+  the boot display's first mode set. It writes index 0 to PRMDIO 0x6813C8, then 768 bytes to 0x6813C9.
+- Why: the reference graphics library loads identity ramps in its device set-up (spec/stock/22 §7 step 9). With
+  general control 0x00100030 every 32-bit pixel goes through the table, which holds garbage at power-on. A real 1.4
+  console showed the splash with wrong colours that varied between boots (2026-10-22). xemu does not model the
+  table.
+- The port pair is the standard VGA DAC interface (nouveau's PRMDIO names); the reference's own gamma registers are
+  not catalogued in spec 22.
+- Titles load their own gamma when they set up their graphics device.
+
 ## 4. Encoder detection
 The reference decides from its own BIOS image (stock spec 17 §1). OXOS probes the bus instead, as Cerbios 3.1.0 does
 (its kernel's `AvSetDisplayMode`, 0x80036FCB): an SMBus byte read (protocol 0x0A, command 0) at 0x8A, then 0xD4, then
