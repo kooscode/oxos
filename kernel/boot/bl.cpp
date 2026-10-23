@@ -152,6 +152,10 @@ static void BlSetUpChipset() {
     // OXOS images did) gave the GPU the wrong memory layout: a scrambled picture on 1.4 and 1.x consoles.
 }
 
+#if XK_NETBOOT
+#include "netboot.h"
+#endif
+
 extern "C" [[noreturn]] void BlMain() {
     BlPost(0x20);
     BlAnswerSmcChallenge();
@@ -160,16 +164,25 @@ extern "C" [[noreturn]] void BlMain() {
     BlSmcTransfer(false, 0x07, 1);
     BlSetUpChipset();
     BlPost(0x23);
-    auto payload = (const volatile XK_BOOT_PAYLOAD *)PAYLOAD;
+    ULONG bank = BANK; // where the kernel and key block come from: this flash bank, or a network download
+#if XK_NETBOOT
+    BlSmcTransfer(false, 0x08, 0xFF); // solid orange while it asks the network (spec/oxos-internal/09-netboot.md)
+    BlSmcTransfer(false, 0x07, 1);
+    if (const UCHAR *download = netboot::Boot())
+        bank = (ULONG)download;
+    BlSmcTransfer(false, 0x08, 0xAA);
+    BlSmcTransfer(false, 0x07, 1);
+#endif
+    auto payload = (const volatile XK_BOOT_PAYLOAD *)(bank + (PAYLOAD - BANK));
     if (payload->Magic != PAYLOAD_MAGIC || payload->KeysSize > sizeof(BlKeys))
         BlFail(0xE0);
 
-    Inflater s = {(const UCHAR *)(BANK + payload->KernelOffset), payload->KernelPacked, 0, 0, 0,
+    Inflater s = {(const UCHAR *)(bank + payload->KernelOffset), payload->KernelPacked, 0, 0, 0,
                   (UCHAR *)KERNEL_PHYS, payload->KernelSize, 0, false};
     if (!Inflate(s) || s.OutPos != payload->KernelSize)
         BlFail(0xE1);
     BlPost(0x21);
-    memcpy(BlKeys, (const void *)(BANK + payload->KeysOffset), payload->KeysSize);
+    memcpy(BlKeys, (const void *)(bank + payload->KeysOffset), payload->KeysSize);
 
     auto pd = (volatile ULONG *)PAGE_DIRECTORY;
     for (ULONG i = 0; i < 1024; i++)

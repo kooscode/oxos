@@ -53,6 +53,7 @@ register 0x08 is the sequence (bits 7–4 red, 3–0 green, one bit per quarter 
 | Stage | Pattern | Set by |
 |---|---|---|
 | the 2BL, after the SMC challenge | 0xAA, blinking orange | `kernel/boot/bl.cpp` |
+| NETBOOT=1 2BL, waiting for the link and the network (spec/oxos-internal/09) | 0xFF, solid orange | `kernel/boot/bl.cpp` |
 | the kernel, from the end of HAL phase 0 to the title launch (cold and quick boots) | 0x5F, alternating green / orange | `KiSystemStartup` |
 | the title (dashboard or game) entered | 0x0F, solid green | the title launcher |
 | fatal error | 0xE1, red / green (the reference's) | `IdexFatalError` |

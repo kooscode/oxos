@@ -171,14 +171,14 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
         XK_SERIAL("    eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx efl %08lx\n",
                   Frame->Eax, Frame->Ebx, Frame->Ecx, Frame->Edx, Frame->Esi, Frame->Edi, Frame->Ebp, context.Esp,
                   Frame->EFlags);
-        auto code = (const UCHAR *)Frame->Eip;
+        [[maybe_unused]] auto code = (const UCHAR *)Frame->Eip;
         ULONG cr0, cr4;
         __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
         __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
         XK_SERIAL("    code %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x; cr0 %08lx cr4 %08lx\n", code[0],
                   code[1], code[2], code[3], code[4], code[5], code[6], code[7], code[8], code[9], code[10], code[11],
                   cr0, cr4);
-        auto stack = (const ULONG *)context.Esp;
+        [[maybe_unused]] auto stack = (const ULONG *)context.Esp;
         XK_SERIAL("    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", stack[0], stack[1], stack[2], stack[3],
                   stack[4], stack[5], stack[6], stack[7]);
         KiUnhandled(&record, vector, Frame->ErrorCode);
