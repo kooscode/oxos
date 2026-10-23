@@ -465,7 +465,7 @@ void KeTerminateThread() __attribute__((noreturn));
 
 // Terminated threads whose kernel stacks are freed after the switch away from them.
 void KiReapDeadThreads();
-XBAPI void KiDispatchHardwareInterrupt(ULONG irq);
+XBAPI void KiDispatchHardwareInterrupt(ULONG irq, PULONG frame);
 XBAPI void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 
 // Self-tests run at boot (milestone checks read their counters over QMP).

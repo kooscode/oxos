@@ -61,6 +61,9 @@ ap.add_argument("--dump-dir", default=".", help="where --trace-map writes the du
 ap.add_argument("--exports", default=os.path.join(root, "kernel/exports.tsv"), help="export names for the dumps")
 ap.add_argument("--gdb", type=int, metavar="PORT", help="GDB server on localhost:PORT, paused at power-on")
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
+ap.add_argument("--net-udp", type=int, metavar="PORT",
+                help="network: xemu's udp backend, sending the console's Ethernet frames to 127.0.0.1:PORT "
+                "(tools/netlog.py --xemu PORT prints a NETLOG=1 build's log from them)")
 a = ap.parse_args()
 
 work = tempfile.mkdtemp(prefix="xk-run-")
@@ -95,7 +98,9 @@ def config(path, extra=""):
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.abspath(eeprom)}'\n"
-        f"hdd_path = '{os.path.abspath(hdd)}'\n" + extra)
+        f"hdd_path = '{os.path.abspath(hdd)}'\n" + extra
+        + (f"\n[net]\nenable = true\nbackend = 'udp'\n[net.udp]\nbind_addr = '127.0.0.1:{a.net_udp + 1}'\n"
+           f"remote_addr = '127.0.0.1:{a.net_udp}'\n" if a.net_udp else ""))
 
 
 def follow(path, proc, on_line=None):

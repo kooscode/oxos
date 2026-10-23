@@ -1,5 +1,6 @@
 // SMBus host controller (MCPX, I/O 0xC000), SMC services, firmware return (spec/stock/12).
 #include <xk/arch.h>
+#include <xk/serial.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
 
@@ -200,9 +201,26 @@ extern "C" void KiQuickRebootQuiesce() {
 extern "C" void KiQuickReboot() __attribute__((noreturn));
 extern "C" volatile UCHAR KiQuickRebootFlag;
 
+// Boot status on the front LED (spec/oxos-internal/03-debug-serial.md §6): an SMC LED sequence (register 0x08: bits 7-4
+// red, 3-0 green, one bit per quarter of the cycle) in custom mode (0x07 = 1).
+extern "C" void HalpSetBootLed(UCHAR Pattern) {
+    HalWriteSMBusValue(SMC_ADDRESS, 0x08, FALSE, Pattern);
+    HalWriteSMBusValue(SMC_ADDRESS, 0x07, FALSE, 1);
+}
+
 // Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at
 // once: 4 (fatal error) first leaves scratch 2 for the next boot (spec/stock/12 §2).
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
+    XK_SERIAL("firmware: HalReturnToFirmware(%lu) from %p\n", Routine, __builtin_return_address(0));
+#if XK_DEBUG_SERIAL
+    {
+        extern PVOID LaunchDataPage;
+        auto ldp = (const ULONG *)LaunchDataPage;
+        if (ldp)
+            XK_SERIAL("firmware: launch data type %#lx title %08lx path '%.40s' data %lx %lx %lx\n", ldp[0], ldp[1],
+                      (const char *)(ldp + 2), ldp[0x100], ldp[0x101], ldp[0x102]);
+    }
+#endif
     if (Routine != 2) {
         if (Routine == 4)
             HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, 2);
