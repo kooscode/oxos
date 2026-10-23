@@ -126,6 +126,17 @@ TEST_F(Mm, ContiguousMemoryHonoursTheRangeAndAlignment) {
         << "larger than the range";
 }
 
+TEST_F(Mm, ContiguousMemoryWithTheLowestAboveTheHighestClampsTheLowest) {
+    // As the reference (0x8001dc6c): the lowest page is clamped to the highest, so only the highest page qualifies,
+    // below the requested lowest address.
+    auto p = MmAllocateContiguousMemoryEx(4096, 0x2000000, 0x1FFFFF, 0, PAGE_READWRITE);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(MmGetPhysicalAddress(p), 0x1FF000u);
+    MmFreeContiguousMemory(p);
+    EXPECT_EQ(MmAllocateContiguousMemoryEx(2 * 4096, 0x2000000, 0x1FFFFF, 0, PAGE_READWRITE), nullptr)
+        << "two pages do not fit in the one-page window";
+}
+
 TEST_F(Mm, ContiguousMemoryTypes) {
     auto uc = MmAllocateContiguousMemoryEx(4096, 0, 0xFFFFFFFF, 0, PAGE_READWRITE | PAGE_NOCACHE);
     auto wc = MmAllocateContiguousMemoryEx(4096, 0, 0xFFFFFFFF, 0, PAGE_READWRITE | PAGE_WRITECOMBINE);

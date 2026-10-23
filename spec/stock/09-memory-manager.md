@@ -36,7 +36,8 @@ WRITECOMBINE → |0x08 (PWT).
 
 ## 4. APIs
 - `MmAllocateContiguousMemoryEx(size, low, high, align, protect)`:
-  - high is capped at PFN 0x3FDF (below the GPU instance memory)
+  - high is capped at PFN 0x3FDF (below the GPU instance memory); a low above it is lowered to it, so the result
+    can then lie below the requested low (only the highest page qualifies)
   - finds the **highest** run that starts on an `align` boundary and whose pages are free or in use but unlocked;
     pages in use are moved out of the way (§8)
   - maps them with the protection bits and sets bit 9 on the last page
@@ -46,7 +47,8 @@ WRITECOMBINE → |0x08 (PWT).
     1 GB); not implemented
 - `MmAllocateContiguousMemory(size)` = Ex(size, 0, ~0, 0, PAGE_READWRITE).
 - `MmFreeContiguousMemory(va)`: free pages up to and including the bit-9 page, with invlpg.
-- `MmQueryAllocationSize(va)`: count PTEs up to bit 9 → bytes. `MmPersistContiguousMemory(va, size, b)`: set/clear bit 10.
+- `MmQueryAllocationSize(va)`: at DISPATCH_LEVEL, count PTEs up to bit 9 → bytes (no bound: the caller passes the
+  base of a live allocation). `MmPersistContiguousMemory(va, size, b)`: set/clear bit 10.
 - `MmGetPhysicalAddress(va)`: PDE (large → 4 MB frame) / PTE walk; 0 if not present. `MmIsAddressValid`: same walk.
 - **System PTE range 0xD0000000–0xEFFFFFFF** (descriptor at 0x800360F0: PTEs 0xC0340000–0xC03C0000). Page tables
   are created on demand.
@@ -70,6 +72,24 @@ WRITECOMBINE → |0x08 (PWT).
   header included)**, Tag}, so returned pointers are 8-byte aligned (≡ 8 mod 32).
 - `ExQueryPoolBlockSize(p)`: page-aligned → MmQueryAllocationSize; else BlockSize × 32 − 8.
 - `ExAllocatePool(size)` uses tag 'None'. `ExFreePool`: page-aligned → MmFreeSystemMemory, else return the block.
+- Small blocks (evidence: batch_decompile of ExAllocatePoolWithTag 0x80012e11, ExFreePool 0x80012fc8, pool init
+  0x80012dc2, S-list push 0x80012c84; data at 0x80036328–0x80036810):
+  - units = (size + 0x27) >> 5. Header: PoolIndex **0x80** while handed out, PoolType 1 in use / 0 free,
+    PreviousSize = units of the block in front in the same page (0 at a page start). A free block holds a
+    LIST_ENTRY after its header. On allocation the tag is stored and the first 8 body bytes are cleared.
+  - **Lookaside lists** for units 1–8 (descriptor 0x18 bytes: S-list header, max depth 2 set at init, total
+    allocations and hits). Allocation pops one first (no lock); ExFreePool pushes the block while the list's depth is
+    below 2 (the block keeps PoolType 1, PoolIndex 0).
+  - **Free lists**: 128 list heads; list *i* holds free blocks of *i* + 1 units. An allocation of *n* units takes the
+    first block of the first non-empty list from *n* up (so always a larger block), else maps a new page, which
+    becomes one free 128-unit block. Splitting: a block at a page start (PreviousSize 0) gives its front, the rest
+    following; any other block gives its end and stays in place, smaller. The block after the split pair learns its
+    PreviousSize (unless at a page end); the free part goes to the tail of its list.
+  - ExFreePool bug-checks **0xC2 (7, 0x376, header, block)** when PoolIndex is not 0x80, then clears it. It merges
+    with a free block behind it (unless at a page end) and in front of it (PreviousSize ≠ 0). A block that then spans
+    its whole page goes back to the memory manager; otherwise it is inserted at the tail of its list if merged (the
+    block behind learns the new PreviousSize), at the head if not.
+  - All of it except the lookaside lists runs at DISPATCH_LEVEL, page mapping included.
 
 ## 6. Title virtual memory (user range 0x00010000–0x7FFDFFFF)
 - `NtAllocateVirtualMemory(*Base, ZeroBits, *Size, Type, Protect)`:
@@ -235,7 +255,6 @@ point at a NULL root (an empty tree). Making the VADs a tree would only serve th
 
 ## Implementation notes (internal, ABI-neutral)
 - The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/oxos-internal/00-boot-splash.md).
-- Small pool blocks use exact-size free lists without coalescing.
 - VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob
   reference counting exists (milestone 3).

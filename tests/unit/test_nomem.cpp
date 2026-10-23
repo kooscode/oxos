@@ -21,7 +21,8 @@ constexpr NTSTATUS NO_RESOURCES = (NTSTATUS)0xC000009A;
 
 // Takes every free physical page (leaving `leave`), then with `drainPool` every small pool block that could still
 // be handed out (the free lists and the current page: no new pool page can be had any more); gives everything back
-// when it goes out of scope. Pages first: pool pages are never returned to the memory manager once taken.
+// when it goes out of scope. Pages first, so that the pool cannot start a new page; pool pages that become entirely
+// free go back to the memory manager when the blocks are freed.
 struct Exhaust {
     std::vector<ULONG> pages;
     std::vector<void *> blocks;
