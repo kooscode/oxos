@@ -432,6 +432,26 @@ PVOID MiReserveSystemPtes(ULONG count) {
     }
 }
 
+#ifdef XK_EXPERIMENT_STAGE
+// Elimination series: the system PTE free list's shape (runs, longest run), walked with the same checks.
+ULONG KiStressPteRuns(ULONG *longest) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    MMPTERANGE &r = MiSystemPteRange;
+    ULONG runs = 0;
+    *longest = 0;
+    for (ULONG *link = &r.Head; (*link & ~3u) != MM_PTE_LIST_END && runs < 100000; runs++) {
+        ULONG *run = MiRunNext(*link);
+        if (run < r.FirstCommittedPte || run >= r.LastCommittedPte)
+            break;
+        if (MiRunLength(run) > *longest)
+            *longest = MiRunLength(run);
+        link = run;
+    }
+    KfLowerIrql(old);
+    return runs;
+}
+#endif
+
 void MiReleaseSystemPtes(PVOID va, ULONG count) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG *first = MiGetPteAddress((ULONG)va);
@@ -539,13 +559,14 @@ void MmInitSystem(bool QuickReboot) {
             }
         }
 #endif
-        // 64 MB consoles (no RAM answers above 64 MB): the GPU's memory interface as Cromwell leaves it for 64 MB
-        // (spec/stock/22 §11: PFB 0x100200 bit 8 clear, 0x03070003), not the 128 MB value our X-codes leave.
-        // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes
-        // it has; at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
+        // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
+        // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
+        // Our 2BL sets the DRAM up as the retail X-codes do (spec/stock/22 §6.3: 64 MB = 0x100200 0x03070103 with
+        // 0x100204 0x11338000). Only an older 2BL that left the larger chips' 0x11448000 on a 64 MB console needs
+        // the fallback: PFB 0x100200 bit 8 clear, as Cromwell does.
         auto pfb = (volatile ULONG *)0xFD100200;
         MiGpuSizeBefore = pfb[3];
-        if (MiRamProbe != 2 && (pfb[0] & 0x100))
+        if (MiRamProbe != 2 && pfb[1] != 0x11338000 && (pfb[0] & 0x100))
             pfb[0] = pfb[0] & ~0x100u;
         MiGpuSizeAfter = pfb[3];
         // And the host bridge's top of memory (bus 0 device 0 register 0x84): 64 MB - 1, not 128 MB - 1.

@@ -16,6 +16,7 @@ constexpr ULONG RING = 0x00300000;                    // RX_COUNT receive descri
 constexpr ULONG RX_BUFFERS = 0x00301000, TX_BUFFERS = 0x00320000;
 constexpr ULONG IMAGE = 0x00800000;                   // the downloaded bank
 constexpr ULONG RX_COUNT = 32, BUFFER = 2048, BANK_SIZE = 0x40000, CHUNK = 1024;
+constexpr ULONG MAX_IMAGE = 0x100000; // a download is one bank or more (a kernel too large for one bank), at most 1 MiB
 constexpr unsigned short PORT = 5141;
 constexpr ULONG MAGIC = 0x424E584F;                   // 'OXNB'
 enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5 };
@@ -295,12 +296,12 @@ static const UCHAR *Fetch() {
         if (r && r->Op != OP_OFFER)
             r = nullptr;
     }
-    if (!r || r->Length != BANK_SIZE)
+    if (!r || r->Length < BANK_SIZE || r->Length > MAX_IMAGE || r->Length % CHUNK)
         return nullptr;
-    const ULONG crc = r->Offset;
+    const ULONG crc = r->Offset, size = r->Length;
     // 2. Read it chunk by chunk (each request repeated every 100 ms, 30 times at most).
     auto image = (UCHAR *)IMAGE;
-    for (ULONG offset = 0; offset < BANK_SIZE; offset += CHUNK) {
+    for (ULONG offset = 0; offset < size; offset += CHUNK) {
         m = {MAGIC, OP_READ, 1, 0, session, offset, CHUNK};
         bool got = false;
         for (int retry = 0; retry < 30 && !got; retry++) {
@@ -318,7 +319,7 @@ static const UCHAR *Fetch() {
     }
     // 3. Check it and say what happens next (Offset 0: booting the download, 1: bad image, booting flash).
     auto payload = (const XK_BOOT_PAYLOAD *)(image + 0x6000);
-    bool good = Crc32(image, BANK_SIZE) == crc && payload->Magic == PAYLOAD_MAGIC;
+    bool good = Crc32(image, size) == crc && payload->Magic == PAYLOAD_MAGIC;
     m = {MAGIC, OP_BOOT, 1, 0, session, good ? 0u : 1u, 0};
     Send(m, nullptr, 0);
     for (ULONG t = Now(); (Tx()[(TxNext - 1) & 1].Flags & TX_VALID) && Before(t, 20000);)

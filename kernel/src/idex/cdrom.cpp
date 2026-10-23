@@ -657,7 +657,7 @@ static void IdexCdRomReset() {
 // Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
 // 4 IDENTIFY PACKET). Called at the channel's IRQL. A drive that answers but is not ready yet (a DVD drive still
 // starting up when the boot is fast) is reset and tried again, for about 30 s in all (the reference's busy wait).
-static ULONG IdexCdRomStart() {
+[[maybe_unused]] static ULONG IdexCdRomStart() {
     outb(IDE_DRIVE, 0xB0);
     KeStallExecutionProcessor(1);
     UCHAR st = inb(IDE_ALT_STATUS);
@@ -702,8 +702,52 @@ static ULONG IdexCdRomStart() {
 // drive commands fail with STATUS_NO_MEDIA_IN_DEVICE without touching the bus, so the dashboard starts.
 void IdexCdRomInit() {
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
+#ifdef XK_CDROM_NIEN
+    outb(IDE_CONTROL, 2); // experiment: drive interrupts off while device 1 is probed
+    XK_SERIAL("dvd: experiment: nIEN set for the probe\n");
+#endif
+#ifdef XK_CDROM_AS_REFERENCE
+    // Experiment: as the reference's no-drive part: device 1 selected, busy polled, left selected.
+    outb(IDE_DRIVE, 0xB0);
+    KeStallExecutionProcessor(1);
+    IdexWaitForStatus(IDE_STATUS_BSY, 0, 50000);
+    XK_SERIAL("dvd: experiment: device 1 selected and polled (status %#x), left selected\n", inb(IDE_ALT_STATUS));
+    IdexCdRomAbsentReason = 4;
+    if (0) {
+#elif defined(XK_CDROM_SELECT_ONLY)
+    // Experiment: device 1 selected and device 0 again, nothing read from device 1.
+#ifdef XK_PORT61_WATCH
+    UCHAR p61a = inb(0x61);
+#endif
+    outb(IDE_DRIVE, 0xB0);
+    KeStallExecutionProcessor(1);
+#ifdef XK_PORT61_WATCH
+    {
+        UCHAR p61b = inb(0x61);
+        outb(IDE_DRIVE, 0xA0);
+        KeStallExecutionProcessor(1);
+        UCHAR seen[20];
+        for (int i = 0; i < 20; i++) {
+            KeStallExecutionProcessor(100);
+            seen[i] = inb(0x61);
+        }
+        XK_SERIAL("dvd: port 0x61 before %#x, device 1 selected %#x, then every 100 us: %02x %02x %02x %02x %02x %02x "
+                  "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", p61a, p61b, seen[0], seen[1],
+                  seen[2], seen[3], seen[4], seen[5], seen[6], seen[7], seen[8], seen[9], seen[10], seen[11], seen[12],
+                  seen[13], seen[14], seen[15], seen[16], seen[17], seen[18], seen[19]);
+    }
+#endif
+    XK_SERIAL("dvd: experiment: device 1 selected only\n");
+    IdexCdRomAbsentReason = 4;
+    if (1) {
+#elif defined(XK_CDROM_NO_IO)
+    XK_SERIAL("dvd: experiment: no IDE access at all\n");
+    IdexCdRomAbsentReason = 4;
+    if (0) {
+#else
     IdexCdRomAbsentReason = IdexCdRomStart();
     if (IdexCdRomAbsentReason) {
+#endif
         // The disk again. A busy device ignores the device-select register, so device 1 was reset (and waited for)
         // above; wait for the disk to be idle too before the next request (bounded).
         outb(IDE_DRIVE, 0xA0);
@@ -711,6 +755,9 @@ void IdexCdRomInit() {
         IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000);
         inb(IDE_STATUS);
     }
+#ifdef XK_CDROM_NIEN
+    outb(IDE_CONTROL, 0);
+#endif
     XK_SERIAL("dvd: lowering IRQL %u -> %u; IRQ 14 taken %lu\n", KeGetCurrentIrql(), old, KiIrqCounts[14]);
     KfLowerIrql(old);
     XK_SERIAL("dvd: %s (step %lu)\n", IdexCdRomAbsentReason ? "no drive" : "drive found", IdexCdRomAbsentReason);
@@ -723,16 +770,31 @@ void IdexCdRomInit() {
     }
 #endif
 
+#ifdef XK_FLUSH_TLB_BEFORE_DEVICE
+    {
+        ULONG cr3;
+        __asm__ volatile("mov %%cr3, %0\n\tmov %0, %%cr3" : "=r"(cr3)::"memory");
+        XK_SERIAL("dvd: experiment: TLB flushed before the device objects\n");
+    }
+#endif
+#ifdef XK_FLUSH_CACHE_BEFORE_DEVICE
+    __asm__ volatile("wbinvd" ::: "memory");
+    XK_SERIAL("dvd: experiment: caches flushed before the device objects\n");
+#endif
     OBJECT_STRING name, link;
     RtlInitAnsiString(&name, "\\Device\\CdRom0");
     RtlInitAnsiString(&link, "\\??\\CdRom0:");
     PDEVICE_OBJECT dev;
     extern volatile ULONG ObpTraceSymbolicLink;
+#ifndef XK_NO_LINK_TRACE
     ObpTraceSymbolicLink = 1;
+#endif
     NTSTATUS created = IoCreateDevice(&IdexCdRomDriverObject, 0, &name, FILE_DEVICE_CD_ROM, FALSE, &dev);
     ObpTraceSymbolicLink = 0;
     XK_SERIAL("dvd: IoCreateDevice %#lx; IRQ 14 taken %lu\n", created, KiIrqCounts[14]);
+#ifndef XK_NO_LINK_TRACE
     ObpTraceSymbolicLink = 1;
+#endif
     NTSTATUS linked = NT_SUCCESS(created) ? IoCreateSymbolicLink(&link, &name) : created;
     ObpTraceSymbolicLink = 0;
     if (!NT_SUCCESS(created) || !NT_SUCCESS(linked))
@@ -747,7 +809,14 @@ void IdexCdRomInit() {
     KeInitializeDpc(&IdexCdRomRetryDpc, IdexCdRomRetryRoutine, nullptr);
     XK_SERIAL("dvd: timer and DPC set up\n");
     // Leave device 0 (the disk) selected and both devices out of a data phase.
+#if !defined(XK_CDROM_NO_IO) && !defined(XK_CDROM_AS_REFERENCE)
     outb(IDE_DRIVE, 0xA0);
     KeStallExecutionProcessor(1);
+#endif
     XK_SERIAL("dvd: device ready, selected %#x, status %#x\n", inb(IDE_DRIVE), inb(IDE_ALT_STATUS));
+#ifdef XK_NMI_SELFTEST
+    XK_SERIAL("dvd: experiment: software NMI (int 2) to test the NMI task; port 0x61 %#x\n", inb(0x61));
+    __asm__ volatile("int $2");
+    XK_SERIAL("dvd: experiment: back from the NMI task\n");
+#endif
 }

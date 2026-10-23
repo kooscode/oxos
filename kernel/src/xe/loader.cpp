@@ -627,7 +627,15 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     XepChooseTitle();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
+#ifndef XK_MARKS_IN_TITLE
     XkBootMarksDone();
+#endif
+#if XK_NETLOG
+    {
+        void HalpScreenLogStop();
+        HalpScreenLogStop();
+    }
+#endif
 #if XK_NETLOG
     KiSampleTitlePc = 1;
 #endif

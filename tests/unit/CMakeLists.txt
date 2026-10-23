@@ -40,6 +40,11 @@ add_library(oxos_core STATIC ${KERNEL_SOURCES})
 target_include_directories(oxos_core PUBLIC ${KERNEL}/include)
 target_compile_definitions(oxos_core PUBLIC XK_HOST_TEST=1 XK_BOOT_SELFTEST=0 XK_DEBUG_SERIAL=1 XK_NETLOG=0
                            XK_TRACE_IMPORTS=0 XK_RETAIL_MEDIA_POLICY=0 XK_NETLOG_IP=0,0,0,0 XK_NETLOG_DEST=0,0,0,0)
+# OXOS_KERNEL_OPT: the kernel sources' optimisation level (the console build uses -O2; the default -O1 debugs better).
+set(OXOS_KERNEL_OPT "" CACHE STRING "Optimisation flags for the kernel sources (e.g. -O2 as the console build)")
+if(OXOS_KERNEL_OPT)
+    target_compile_options(oxos_core PRIVATE ${OXOS_KERNEL_OPT})
+endif()
 target_compile_options(oxos_core PRIVATE -mno-sse -mno-mmx -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector
                        -fno-threadsafe-statics -Wall -Wextra -Wno-unused-parameter)
 if(OXOS_COVERAGE)
@@ -51,6 +56,7 @@ add_executable(oxos_unit_tests
     host/hostcpu.cpp host/host_asm.S host/boot.cpp host/stubs.cpp host/checks.cpp ${TEST_SOURCES})
 target_include_directories(oxos_unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/host)
 target_link_libraries(oxos_unit_tests PRIVATE oxos_core gtest)
+target_link_options(oxos_unit_tests PRIVATE -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/host/kernel_text.ld)
 if(OXOS_COVERAGE)
     target_link_options(oxos_unit_tests PRIVATE -fprofile-instr-generate)
 endif()

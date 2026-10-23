@@ -103,6 +103,7 @@ void HalpCmosWrite(UCHAR reg, UCHAR v);
 extern "C" volatile BOOLEAN XkBootMarksOn;
 volatile BOOLEAN XkBootMarksOn;
 static ULONG XkBootMarkCount, KiPrevMark, KiPrevMarkCount;
+[[maybe_unused]] static ULONG KiPrevMarkCaller;
 static bool KiPrevMarkFound, KiPrevStallFound;
 static ULONG KiPrevStallEip, KiPrevStallIrql, KiPrevStallSeconds;
 extern "C" volatile ULONG XkLastMarkTick;
@@ -110,6 +111,9 @@ volatile ULONG XkLastMarkTick; // XkWatchdogTicks at the last mark (the clock in
 static volatile ULONG XkWatchdogTicks; // clock interrupts seen by the watchdog (also before KeTickCount runs: the
                                        // early sampler experiment unmasks IRQ 0 in phase 0)
 extern "C" void XkBootMark(const char *Format) {
+#ifdef XK_NO_MARKS
+    return; // experiment: no CMOS writes for the start-up marks
+#endif
     if (!XkBootMarksOn)
         return;
     ULONG flags = save_flags_cli(); // the index / data pairs must not interleave with another CMOS access
@@ -119,6 +123,15 @@ extern "C" void XkBootMark(const char *Format) {
         HalpCmosWrite((UCHAR)(0x71 + i), (UCHAR)((ULONG)Format >> (8 * i)));
     HalpCmosWrite(0x75, (UCHAR)XkBootMarkCount);
     HalpCmosWrite(0x76, (UCHAR)(XkBootMarkCount >> 8));
+#ifdef XK_MARK_CALLER
+    {
+        // Experiment: also the caller of the function that set the mark (frame-pointer chain), CMOS 0x78-0x7B.
+        auto frame = (ULONG *)__builtin_frame_address(0);
+        ULONG ra = frame && frame[0] >= 0x80000000 ? ((ULONG *)frame[0])[1] : 0;
+        for (int i = 0; i < 4; i++)
+            HalpCmosWrite((UCHAR)(0x78 + i), (UCHAR)(ra >> (8 * i)));
+    }
+#endif
     if (XkLastMarkTick + 3000 <= XkWatchdogTicks)
         HalpCmosWrite(0x77, 0); // a stall record of an earlier pause is stale now
     XkLastMarkTick = XkWatchdogTicks;
@@ -161,6 +174,10 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         for (int i = 0; i < 4; i++)
             KiPrevMark |= (ULONG)HalpCmosRead((UCHAR)(0x71 + i)) << (8 * i);
         KiPrevMarkCount = HalpCmosRead(0x75) | HalpCmosRead(0x76) << 8;
+#ifdef XK_MARK_CALLER
+        for (int i = 0; i < 4; i++)
+            KiPrevMarkCaller |= (ULONG)HalpCmosRead((UCHAR)(0x78 + i)) << (8 * i);
+#endif
         if (HalpCmosRead(0x77) == 'W') {
             KiPrevStallFound = true;
             for (int i = 0; i < 4; i++)
@@ -180,7 +197,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #endif
     KiSetStage(post_code::Entry);
 #if XK_DEBUG_SERIAL
+#ifndef XK_NO_SERIAL_PROBE
     HalpSerialInit();
+#endif
     XK_SERIAL("\nOXOS kernel (" __DATE__ " " __TIME__ "): %s boot\n", KiQuickRebootFlag ? "quick" : "cold");
 #endif
     for (ULONG i = 0; i < 17; i++) {
@@ -224,6 +243,11 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #endif
     KiEnableMachineChecks();
     KiReportLastWords();
+#ifdef XK_NMI_SELFTEST_EARLY
+    XK_SERIAL("boot: experiment: software NMI (int 2) to test the NMI task on this CPU\n");
+    __asm__ volatile("int $2");
+    XK_SERIAL("boot: experiment: back from the NMI task (it should not return)\n");
+#endif
 #if XK_NETLOG
     KiArmDebugRegisters();
 #endif
@@ -277,12 +301,21 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiInitializeSystemTime();
     KiBootStep("EEPROM");
     ExInitEeprom();
+#ifdef XK_EXPERIMENT_STAGE
+    // Experiment (elimination series): stage 1 = core kernel only, 2 = + AV and splash, 3 = + IDE; 4 or none = all.
+    XK_SERIAL("boot: experiment: stage %d\n", XK_EXPERIMENT_STAGE);
+#define XK_STAGE(n) (XK_EXPERIMENT_STAGE >= (n))
+#else
+#define XK_STAGE(n) 1
+#endif
     KiBootStep("AV");
-    AvInit();
+    if (XK_STAGE(2))
+        AvInit();
     if (!quick)
         HalpSmcInitColdBoot();
     KiBootStep("IDE");
-    IdexChannelInit();
+    if (XK_STAGE(3))
+        IdexChannelInit();
     XK_SERIAL("boot: IDE done\n");
 #ifdef XK_EXPERIMENT_EARLY_SAMPLE
     KiEarlySample = 0;
@@ -291,7 +324,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     XK_SERIAL("boot: clock interrupt on\n");
     HalpSmcStartEvents();
     XK_SERIAL("boot: SMC events started\n");
-    if (!quick)
+    if (!quick && XK_STAGE(2))
         HalpStartSplash();
     XK_SERIAL("boot: splash started\n");
 #ifdef XK_EXPERIMENT_WATCHDOG_TEST
@@ -323,10 +356,21 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #if XK_NETLOG
     {
         void HalpNetLogStartHeartbeat();
+#ifndef XK_STRESS_NO_HEARTBEAT
         HalpNetLogStartHeartbeat();
+#else
+        XK_SERIAL("boot: experiment: no heartbeat thread\n");
+#endif
     }
 #endif
-    XeStartTitleLauncher();
+    if (XK_STAGE(4)) {
+        XeStartTitleLauncher();
+    } else {
+#ifdef XK_EXPERIMENT_STAGE
+        void KiStartStressThreads();
+        KiStartStressThreads();
+#endif
+    }
 
     KfLowerIrql(DISPATCH_LEVEL);
     KiSetStage(post_code::Idle);
@@ -366,6 +410,10 @@ static void KiEnableMachineChecks() {
         KiMcaBanks = cap & 0xFF;
         XK_SERIAL("machine check: MCG_CAP %08lx, %lu banks\n", cap, KiMcaBanks);
         KiReportMachineCheckBanks("at boot");
+#ifdef XK_EXPERIMENT_NO_MCE
+        XK_SERIAL("machine check: experiment: left off (as the reference)\n");
+        return;
+#endif
         if (cap & 0x100)
             wrmsr(0x17B, ~0ULL); // MCG_CTL: every error type
         for (ULONG i = 1; i < KiMcaBanks; i++) // bank 0 is the firmware's on the P6 family
@@ -419,6 +467,9 @@ static void KiReportLastWords() {
     if (KiPrevMarkFound)
         XK_SERIAL("*** previous boot stopped in start-up: last mark %08lx (mark %lu; the address of a log line's format "
                   "string in that boot's image)\n", KiPrevMark, KiPrevMarkCount);
+    if (KiPrevMarkFound)
+        XK_SERIAL("*** previous boot's last mark was set from a function called at %08lx (if that boot recorded it)\n",
+                  KiPrevMarkCaller);
     if (KiPrevStallFound)
         XK_SERIAL("*** previous boot's start-up watchdog: %lu s after that mark the clock interrupt still ran, last "
                   "interrupted eip %08lx at IRQL %lu\n", KiPrevStallSeconds, KiPrevStallEip, KiPrevStallIrql);

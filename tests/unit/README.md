@@ -9,6 +9,8 @@ built from the kernel's own sources as a 32-bit Linux program. How it works: `sp
     tools/unit-tests.sh -- --gtest_filter='Pool.*'
     tools/unit-tests.sh --coverage               # + llvm-cov report: tests/unit/build-cov/coverage.txt, coverage-html/
     OXOS_TEST_LOG=1 tools/unit-tests.sh          # also print the kernel log (XK_SERIAL) as it happens
+    OXOS_STRESS_SECONDS=120 tools/unit-tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
+    OXOS_KERNEL_OPT=-O2 tools/unit-tests.sh      # kernel sources at the console build's optimisation
 
 Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`,
 cmake, ninja) or Docker: without the toolchain the script builds the image from `Dockerfile` here and runs inside it.

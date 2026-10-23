@@ -218,6 +218,15 @@ void IdexChannelInit() {
     if (!KeConnectInterrupt(&ch->InterruptObject))
         KeBugCheckEx(0x2066B, (ULONG_PTR)(NTSTATUS)0xC0000001, 0, 0, 0);
     ch->PhysicalRegionDescriptorTablePhysical = MmGetPhysicalAddress(IdexPrdTable);
+#ifdef XK_IDE_PART
+    XK_SERIAL("ide: experiment: set-up up to part %d (1 channel, 2 + disk, 3 + DVD)\n", XK_IDE_PART);
+    if (XK_IDE_PART >= 2)
+        IdexDiskInit();
+    if (XK_IDE_PART >= 3)
+        IdexCdRomInit();
+    XK_SERIAL("ide: experiment: set-up done\n");
+    return;
+#endif
     IdexDiskInit();
     IdexCdRomInit();
 }

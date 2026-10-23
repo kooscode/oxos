@@ -25,6 +25,10 @@ coverage. Implemented 2026-10-23. User guide: `tests/unit/README.md`.
   `restore_flags`), at `hlt`, and when a test advances the fake time. The handler pushes the interrupted EIP on the
   interrupted stack and continues in a trampoline that calls `KiDispatchHardwareInterrupt` there, outside the signal
   handler. Masking follows the fake 8259's IMR, as programmed by the kernel.
+- **Asynchronous interrupts** (the `Stress.*` tests): a real-time signal stands for the PIT and takes the clock
+  interrupt at whatever kernel instruction it lands on (only kernel code: the kernel library is linked into a section
+  of its own, `host/kernel_text.ld`); with the interrupt flag off it stays pending. `OXOS_STRESS_SECONDS` sets the
+  length; `OXOS_KERNEL_OPT=-O2` builds the kernel sources at the console build's optimisation.
 - **Time**: the PIT interrupt (IRQ 0) once per fake millisecond; `hlt` with nothing pending advances one tick; the
   ACPI PM timer (port 0x8008) follows the fake time. `SkipTime` moves the PM timer without clock interrupts.
 - **Devices**: master/slave 8259 (ICW sequence, IMR, ISR reads), ELCR, CMOS/RTC (index 0x70/0x72, data 0x71),
@@ -63,4 +67,5 @@ coverage. Implemented 2026-10-23. User guide: `tests/unit/README.md`.
 ## 5. Not covered
 - Code that needs devices or the boot path: HAL (other than the PIC/RTC), IDE, file systems, the XBE loader, video,
   start-up (`startup.cpp`), the double-fault and NMI tasks (hardware task switches).
-- Asynchronous interrupts at arbitrary instructions (delivery is synchronous, which keeps the tests deterministic).
+- The console's own CPU behaviour: the start-up freeze of 2026-10-23 came from the Pentium III code generation
+  (the kernel is now built for a plain Pentium), which no host test can see.

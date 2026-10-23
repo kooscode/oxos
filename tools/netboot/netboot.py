@@ -3,7 +3,8 @@
 
 Flash a netboot image once (make -C kernel netboot -> kernel/build/netboot/bios-256k.bin or bios.bin). At every
 power-on its 2BL asks the network for a boot image; this tool answers with IMAGE, any OXOS open image (a 256 KiB
-bios-256k.bin, or a 1 MiB bios.bin, whose first bank is sent). The console boots the kernel inside it, or its own
+bios-256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose kernel stream runs past
+the first bank is sent whole). The console boots the kernel inside it, or its own
 kernel from flash when nobody answers. IMAGE is read again at every request, so rebuilding it between power-ons is
 enough: each boot gets the newest build.
 
@@ -15,7 +16,7 @@ Standard library only. No root needed on the LAN: the console has no IP stack, s
 """
 import argparse, os, re, select, socket, struct, sys, time, zlib
 
-PORT, LOG_PORT, MAGIC, BANK = 5141, 5140, 0x424E584F, 0x40000
+PORT, LOG_PORT, MAGIC, BANK, MAX_IMAGE = 5141, 5140, 0x424E584F, 0x40000, 0x100000
 OP_HELLO, OP_OFFER, OP_READ, OP_DATA, OP_BOOT = 1, 2, 3, 4, 5
 HEADER = struct.Struct("<IBBHIII")  # magic, op, version, reserved, session, offset, length
 PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only used for frames injected into xemu
@@ -42,10 +43,16 @@ def debug_config(a):
 
 
 def load(path, config=None):
-    """The first 256 KiB bank of an OXOS open image (with the debug block patched in) and its CRC-32."""
-    data = bytearray(open(path, "rb").read()[:BANK])
-    if len(data) != BANK or data[0x6000:0x6004] != b"OXKP":
+    """The image to serve (with the debug block patched in) and its CRC-32: the first 256 KiB bank of an OXOS open
+    image, or the whole file (up to 1 MiB, a multiple of 1 KiB) when its kernel stream runs past the first bank."""
+    data = bytearray(open(path, "rb").read())
+    if len(data) < BANK or data[0x6000:0x6004] != b"OXKP":
         raise ValueError(f"{path}: not an OXOS open image (no 'OXKP' payload header at 0x6000)")
+    kstart, packed = struct.unpack_from("<II", data, 0x6004)
+    if kstart + packed <= BANK:
+        data = data[:BANK]
+    elif len(data) > MAX_IMAGE or len(data) % 1024:
+        raise ValueError(f"{path}: a large image must be at most 1 MiB and a multiple of 1 KiB ({len(data):#x})")
     if config:
         data[DEBUG_CONFIG_AT:DEBUG_CONFIG_AT + len(config)] = config
     data = bytes(data)
@@ -189,9 +196,9 @@ def main():
                     log.say(f"netboot: console {who} ({console_mac}) asks for a kernel; offering {a.image} "
                             f"(CRC-32 {crc:08x}, built {time.ctime(os.path.getmtime(a.image))})")
                     session, served, started = sess, set(), time.monotonic()
-                reply(HEADER.pack(MAGIC, OP_OFFER, 1, 0, sess, crc, BANK), mac)
+                reply(HEADER.pack(MAGIC, OP_OFFER, 1, 0, sess, crc, len(image)), mac)
             elif op == OP_READ and sess == session and image:
-                if offset + length > BANK or length > 1400:
+                if offset + length > len(image) or length > 1400:
                     continue
                 reply(HEADER.pack(MAGIC, OP_DATA, 1, 0, sess, offset, length) + image[offset:offset + length], mac)
                 served.add(offset)

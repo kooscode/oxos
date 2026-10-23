@@ -688,12 +688,23 @@ The same mode word selects the same row numbers on every encoder (§3.3); the en
 
 ### 6.3 Memory interface before scanout
 - X-codes (flash header): PFB 0x100200 ← 0x03070103 (temporarily 0x03070003 during the memory-size probe; the final
-  value is 0x03070103), PFB 0x100204 ← 0x11448000, then 0x11338000 if the probe finds the smaller memory (64 MB,
-  inferred); PFB 0x100210 ← 0x80000000; PFB 0x100228 ← 0x081205FF; PFB 0x1002C0–0x1002D4 sequence (0x11, 0x32,
+  value is 0x03070103), PFB 0x100204 ← 0x11448000, then 0x11338000 if the probe finds the smaller memory (64 MB; the
+  probe below); PFB 0x100210 ← 0x80000000; PFB 0x100228 ← 0x081205FF; PFB 0x1002C0–0x1002D4 sequence (0x11, 0x32,
   0x132; 0x1002C4 / 0x1002CC 0x00100042 in Complex 4627, 0x00100000 in 5838; 0x1002D0 ← 1 twice; 0x1002D4 ← 1);
   0x100328 ← 1, 0x10032C ← 0xFFFFCFFF, 0x100330 ← 0x84848888, 0x100338 ← 0xDF, 0x100410 ← 0x11000016; NV2A strap
   0x101000 ← 0x803D4401 on NV2A revision 0xA1 only (Complex 4627); NVPLL 0x680500 ← 0x00011701 on NV2A revision
   0xA1, else 0x00011C01 (Complex 4627; 5838 always 0x00011C01); 0x68050C ← 0x000A0400.
+- X-code memory-size probe (Complex 4627 X-code table, entries 169–314): with 0x100200 = 0x03070103 and 0x100204 =
+  0x11448000, for each of 8 lanes *n* (address *a* = 0x00555548 + 16*n* for *n* = 0–3, 0x04555548 + 16(*n* − 4) for
+  *n* = 4–7): write 0xAAAAAAAA at *a* and 0x5A5A5A5A at *a* + 32 MB. If *a* + 32 MB does not read back 0x5A5A5A5A,
+  lane *n* is marked faulty; else if *a* still reads 0xAAAAAAAA, lane *n* is marked "large" (bit *n* of a mask
+  kept in PCI 0:2:0 register 0x3C); then 0x55555555 is written at *a* and must read back, else the lane is marked
+  faulty (mask in PCI 0:3:0 register 0x3C). Result, from the "large" mask:
+  - 0 (no lane large: 64 MB): 0x100200 ← 0x03070103, 0x100204 ← **0x11338000**, host 0x84 ← 0x03FFFFFF;
+  - 0xFF (every lane large: 128 MB): 0x100200 ← 0x03070103, 0x100204 stays 0x11448000, host 0x84 ← 0x07FFFFFF;
+  - anything else: 0x100200 ← 0x03070003, 0x100204 stays 0x11448000, host 0x84 ← 0x03FFFFFF.
+  The two masks are then sent to the SMC (SMBus address 0x20, commands 0x13 "large" and 0x12 "faulty").
+  So bit 8 of 0x100200 is set on both regular 64 MB and 128 MB consoles; 0x03070003 is only the mixed case.
 - 2BL: pad calibration (spec 21 §3) only.
 - Kernel `AvSetDisplayMode`: nothing (§1).
 - Kernel graphics library (§7): PMC 0x200 ← 0xFFFFFFFF (all engines enabled), saves PFB 0x100200 / 0x100204 and writes
