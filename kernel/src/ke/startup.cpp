@@ -34,6 +34,7 @@ static void KiSetStage(UCHAR code) {
 }
 
 void XeStartTitleLauncher(); // spec/stock/05: load and enter the title
+extern "C" void HalpSetBootLed(UCHAR Pattern);
 void ExInitEeprom();          // spec/stock/12: EEPROM shadow, HD key, game region
 void AvInit();                // spec/stock/12: AV pack, video encoder
 void KiInitializeSystemTime(); // system time from the RTC
@@ -86,8 +87,16 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiSetStage(post_code::HalPhase0);
     KiBootStep("HAL phase 0");
     HalInitSystemPhase0(/*coldBoot=*/!quick);
+    HalpSetBootLed(0x5F); // alternating green / orange: the kernel is starting
+
     KiBootStep("memory manager");
     MmInitSystem(quick);
+#if XK_NETLOG
+    {
+        void HalpNetLogStart();
+        HalpNetLogStart(); // the NIC registers are mapped from here on
+    }
+#endif
     if (!quick)
         HalpDetectHardware();
     KiInitializeDpcs();
@@ -108,16 +117,26 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         HalpSmcInitColdBoot();
     KiBootStep("IDE");
     IdexChannelInit();
+    XK_SERIAL("boot: IDE done\n");
     HalEnableSystemInterrupt(0, Latched); // PIT clock
+    XK_SERIAL("boot: clock interrupt on\n");
     HalpSmcStartEvents();
+    XK_SERIAL("boot: SMC events started\n");
     if (!quick)
         HalpStartSplash();
+    XK_SERIAL("boot: splash started\n");
 
 #if XK_BOOT_SELFTEST
     if (!quick)
         KiRunBootSelfTests();
 #endif
     KiBootStep("title launcher");
+#if XK_NETLOG
+    {
+        void HalpNetLogStartHeartbeat();
+        HalpNetLogStartHeartbeat();
+    }
+#endif
     XeStartTitleLauncher();
 
     KfLowerIrql(DISPATCH_LEVEL);

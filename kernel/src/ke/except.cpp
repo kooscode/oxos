@@ -1,4 +1,5 @@
 // Structured exception handling: trap translation, handler dispatch, raise, unwind, stack walks (spec/stock/14).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/ke.h>
 
@@ -164,8 +165,24 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     context.SegSs = 0x10;
     BOOLEAN handled = RtlpDispatchException(&record, &context);
     KiDispatchDepth = KiDispatchDepth - 1;
-    if (!handled)
+    if (!handled) {
+        XK_SERIAL("*** unhandled exception %#lx at %#lx (vector %lu, error %#lx, address %#lx)\n", record.ExceptionCode,
+                  Frame->Eip, vector, Frame->ErrorCode, record.ExceptionInformation[1]);
+        XK_SERIAL("    eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx efl %08lx\n",
+                  Frame->Eax, Frame->Ebx, Frame->Ecx, Frame->Edx, Frame->Esi, Frame->Edi, Frame->Ebp, context.Esp,
+                  Frame->EFlags);
+        auto code = (const UCHAR *)Frame->Eip;
+        ULONG cr0, cr4;
+        __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+        __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+        XK_SERIAL("    code %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x; cr0 %08lx cr4 %08lx\n", code[0],
+                  code[1], code[2], code[3], code[4], code[5], code[6], code[7], code[8], code[9], code[10], code[11],
+                  cr0, cr4);
+        auto stack = (const ULONG *)context.Esp;
+        XK_SERIAL("    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", stack[0], stack[1], stack[2], stack[3],
+                  stack[4], stack[5], stack[6], stack[7]);
         KiUnhandled(&record, vector, Frame->ErrorCode);
+    }
     cli();
     if (context.Esp != (ULONG)(&Frame->EFlags + 1))
         KiContinueContext(&context);

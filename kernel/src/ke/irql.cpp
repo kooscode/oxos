@@ -3,6 +3,7 @@
 // Device interrupts are masked in the PIC as soon as IRQL reaches their level (eager masking), so
 // a hardware interrupt never arrives at or below the current IRQL and nothing has to be replayed.
 // APC/DISPATCH software interrupts are pending bits delivered when IRQL drops below them.
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -11,6 +12,7 @@ constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 
 static volatile ULONG KiPendingSoftwareInterrupts;
 static PKINTERRUPT KiInterruptObjects[16];
+volatile ULONG KiIrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the network log's heartbeat prints them)
 
 // Interrupts are disabled on entry and exit; enabled while a handler runs.
 void KiDeliverSoftwareInterrupts() {
@@ -82,16 +84,58 @@ XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
     restore_flags(flags);
 }
 
+#if XK_NETLOG
+// PC sampling (network-log builds, once the title runs): every 100 clock ticks the clock interrupt sends the
+// interrupted EIP, IRQL, EFLAGS and the top stack words, so a console that spins at raised IRQL shows where, and one
+// that freezes with interrupts off shows the last place it ran.
+void HalpNetLogWrite(const char *Text, ULONG Length);
+XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
+extern "C" volatile ULONG KiSampleTitlePc;
+volatile ULONG KiSampleTitlePc;
+static void KiSamplePc(PULONG frame, KIRQL irql) {
+    // frame (from the entry stub): eight saved registers, the IRQ number, then EIP, CS, EFLAGS of the interrupted code
+    // (same privilege: no SS:ESP), then its stack.
+    char line[160];
+    int n = RtlSnprintf(line, sizeof(line), "pc %#lx irql %u efl %#lx stack %#lx %#lx %#lx %#lx\n", frame[9], irql,
+                        frame[11], frame[12], frame[13], frame[14], frame[15]);
+    HalpNetLogWrite(line, (ULONG)n);
+}
+#endif
+
 // Called from the IRQ entry stubs with interrupts disabled.
-extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
+extern "C" void KiDispatchHardwareInterrupt(ULONG irq, [[maybe_unused]] PULONG frame) {
     if (HalpIsSpuriousIrq(irq))
         return;
+#if XK_NETLOG
+    if (irq == 0 && KiSampleTitlePc && KeTickCount % 100 == 0)
+        KiSamplePc(frame, KiPcr.Irql);
+#endif
     KIRQL old = KiPcr.Irql;
     KIRQL level = HalpGetIrqLevel(irq);
     KiPcr.Irql = level;
     HalpSetIrqlMask(level);
     HalpEoi(irq);
     KiPcr.PrcbData.InterruptCount++;
+    if (irq < 16)
+        KiIrqCounts[irq] = KiIrqCounts[irq] + 1;
+#if XK_DEBUG_SERIAL
+    // Interrupt-storm detector (serial and network-log builds): more than 5000 interrupts of one line within one clock
+    // tick (1 ms) freezes the console; log it once and mask the line, so the system and its log keep running.
+    if (irq) {
+        static ULONG stormTick[16], stormCount[16];
+        if (stormTick[irq] != KeTickCount) {
+            stormTick[irq] = KeTickCount;
+            stormCount[irq] = 0;
+        }
+        if (++stormCount[irq] == 5000) {
+            XK_SERIAL("*** interrupt storm on IRQ %lu (%lu taken in all): masked\n", irq, KiIrqCounts[irq]);
+            HalDisableSystemInterrupt(irq);
+            KiPcr.Irql = old;
+            HalpSetIrqlMask(old);
+            return;
+        }
+    }
+#endif
 
     sti();
     if (irq == 0) {

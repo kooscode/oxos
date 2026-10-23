@@ -357,6 +357,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 }
 
 NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
+    XK_SERIAL("load %s: start\n", Path);
     NTSTATUS status = XepLoadImage(Path, Dashboard);
     XK_SERIAL("load %s: %#lx\n", Path, status);
     return status;
@@ -523,6 +524,9 @@ static void XepLaunchTitle(ULONG Reason) {
 
 // §5: keep the LaunchDataPage below the kernel, out of the title's way.
 void HalpEndSplash();
+extern "C" void HalpSetBootLed(UCHAR Pattern);
+extern "C" volatile ULONG KiSampleTitlePc; // NETLOG builds: the clock interrupt samples the interrupted EIP (irql.cpp)
+extern "C" void HalpNetLogReplay();
 
 static void XepPrepareToEnterTitle() {
     HalpEndSplash();
@@ -592,6 +596,9 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
+#if XK_NETLOG
+    HalpNetLogReplay(); // the previous run's on-disk log (after a title had taken the NIC)
+#endif
     if (!KiQuickRebootFlag) {
         if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
             IdexFatalError(21);
@@ -599,6 +606,10 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     }
     XepChooseTitle();
     XepPrepareToEnterTitle();
+    HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
+#if XK_NETLOG
+    KiSampleTitlePc = 1;
+#endif
     ((void(__cdecl *)())XbeField(0x128))();
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

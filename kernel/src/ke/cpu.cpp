@@ -89,7 +89,7 @@ KTHREAD KiIdleThread;
 static void KiInitializeGdt() {
     constexpr UCHAR TSS_AVAILABLE = 0x89;
     KiGdt[0] = {};
-    KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xBFFFF, 0x9B, 0xC);
+    KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xFFFFF, 0x9B, 0xC); // flat 4 GB: titles run code from pool (0xD0000000+)
     KiGdt[KGDT_R0_DATA / 8] = MakeSegment(0, 0xFFFFF, 0x93, 0xC);
     KiGdt[KGDT_TSS / 8] = MakeSegment((ULONG)&KiTss, sizeof(KTSS), TSS_AVAILABLE, 0);
     KiGdt[KGDT_R0_PCR / 8] = MakeSegment((ULONG)&KiPcr, 0x27C, 0x93, 0xC);

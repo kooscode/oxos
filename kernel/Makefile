@@ -49,7 +49,15 @@ TRACE_IMPORTS ?= 0
 DEBUG     ?= 0
 OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-O2 -g0)
 # Debug serial port (spec/oxos-internal/03-debug-serial.md): on in the self-test and trace builds, off in release builds.
-SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
+# NETLOG=1: the serial log also goes out as UDP broadcasts (spec/oxos-internal/03-debug-serial.md §7; tools/netlog.py)
+# On by default in trace builds (TRACE_IMPORTS=1/2): on a console the network is their only output. NETLOG_IP is the
+# console's address, NETLOG_DEST the receiver (255.255.255.255 = broadcast; a PC's address = point-to-point, still in a
+# broadcast frame since the log never receives and so cannot ask ARP).
+NETLOG ?= $(if $(filter-out 0,$(TRACE_IMPORTS)),1,0)
+NETLOG_IP ?= 192.168.1.222
+NETLOG_DEST ?= 255.255.255.255
+comma := ,
+SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS) $(NETLOG)),1,0)
 
 CXX := clang++
 CC  := clang
@@ -59,7 +67,7 @@ TARGET  := --target=i386-pc-win32
 ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
 CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL)
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_NETLOG=$(NETLOG) -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP)) -DXK_NETLOG_DEST=$(subst .,$(comma),$(NETLOG_DEST))
 ASFLAGS := $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \

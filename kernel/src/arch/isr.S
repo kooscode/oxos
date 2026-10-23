@@ -99,9 +99,11 @@ IRQ 15
 KiIrqCommon:
     pushal
     cld
-    pushl 32(%esp)                  // IRQ number pushed by the stub
+    movl %esp, %eax
+    pushl %eax                      // the frame: the registers, the IRQ number, then EIP / CS / EFLAGS
+    pushl 36(%esp)                  // IRQ number pushed by the stub
     call _KiDispatchHardwareInterrupt
-    addl $4, %esp
+    addl $8, %esp
     popal
     addl $4, %esp
     iretl

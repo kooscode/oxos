@@ -60,7 +60,17 @@ static bool HalpSerialPut(UCHAR c) {
     return false;
 }
 
+#ifndef XK_NETLOG
+#define XK_NETLOG 0
+#endif
+#if XK_NETLOG
+void HalpNetLogWrite(const char *Text, ULONG Length);
+#endif
+
 void HalpSerialWrite(const char *Text, ULONG Length) {
+#if XK_NETLOG
+    HalpNetLogWrite(Text, Length);
+#endif
     if (!HalpSerialPresent)
         return;
     ULONG flags = save_flags_cli();
@@ -74,7 +84,7 @@ void HalpSerialWrite(const char *Text, ULONG Length) {
 }
 
 void XkSerialPrint(const char *Format, ...) {
-    if (!HalpSerialPresent)
+    if (!HalpSerialPresent && !XK_NETLOG)
         return;
     char line[256];
     va_list ap;
