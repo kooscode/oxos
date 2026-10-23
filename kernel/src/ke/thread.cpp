@@ -121,6 +121,13 @@ void KeTerminateThread() {
     XkTraceThreadExit(t); // it may have ended inside a traced call that will never return
 #endif
     t->HasTerminated = TRUE;
+    // Leave its queue (spec/stock/07): release the concurrency slot, and do not stay on the queue's thread list after
+    // the thread object is freed.
+    if (PKQUEUE q = t->Queue) {
+        RemoveEntryList(&t->QueueListEntry);
+        t->Queue = nullptr;
+        KiActivateWaiterQueue(q);
+    }
     t->State = Terminated;
     t->Header.SignalState = 1;
     if (!IsListEmpty(&t->Header.WaitListHead))

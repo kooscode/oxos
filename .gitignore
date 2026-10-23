@@ -31,3 +31,5 @@ tools/xbe-launcher/*.obj
 tools/xbe-launcher/*.d
 tools/xbe-launcher/*.exe
 tools/xbe-launcher/*.pdb
+# Host unit-test build output
+tests/unit/build*/

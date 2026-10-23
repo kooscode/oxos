@@ -142,6 +142,9 @@ static void KiInitializeGdt() {
     InitFaultTss(KiDoubleFaultTss, KiDoubleFaultTask, KiDoubleFaultStack);
     InitFaultTss(KiNmiTss, KiNmiTask, KiNmiStack);
 
+#ifdef XK_HOST_TEST
+    return; // host unit tests run in user mode: no segment reload (the TSS fields above are still filled)
+#endif
     DescriptorTableRegister gdtr = {sizeof(KiGdt) - 1, (ULONG)KiGdt};
     __asm__ volatile("lgdt %0\n\t"
                      "ljmp $0x08, $1f\n"

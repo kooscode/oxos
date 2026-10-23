@@ -14,8 +14,15 @@ XBAPI ULONG KiBugCheckData[5]; // exported: code and the four parameters
 ULONG KiBugCheckData[5];
 
 extern "C" void KiSaveBugCheckLastWords(ULONG Code, ULONG P1, ULONG Caller); // ke/startup.cpp
+#ifdef XK_HOST_TEST
+// Host unit tests: a test can expect a bug check (the harness returns to it); any other one ends the run.
+extern "C" void HostBugCheck(ULONG Code, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4);
+#endif
 
 XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4) {
+#ifdef XK_HOST_TEST
+    HostBugCheck(BugCheckCode, P1, P2, P3, P4);
+#endif
     cli();
     // CMOS first (needs no log; reported at the next boot): a release build otherwise halts without a trace.
     KiSaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));

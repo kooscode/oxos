@@ -166,6 +166,37 @@ XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
     KfLowerIrql(OldIrql);
 }
 
+// NtYieldExecution (spec/stock/07): give the processor to any ready thread above the idle priority, lower ones
+// included; STATUS_NO_YIELD_PERFORMED when there is none.
+NTSTATUS KiYieldExecution() {
+    constexpr NTSTATUS STATUS_NO_YIELD_PERFORMED = 0x40000024;
+    if (!KiReadySummary)
+        return STATUS_NO_YIELD_PERFORMED;
+    PKTHREAD t = Prcb.CurrentThread;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    t->WaitIrql = old;
+    if (!Prcb.NextThread) {
+        PKTHREAD next = KiFindReadyThread(1);
+        if (!next) {
+            KfLowerIrql(old);
+            return STATUS_NO_YIELD_PERFORMED;
+        }
+        next->State = Standby;
+        Prcb.NextThread = next;
+    }
+    t->Quantum = t->ApcState.Process->ThreadQuantum;
+    t->State = Ready;
+    if (t->Priority < 16) {
+        SCHAR p = (SCHAR)(t->Priority - 1 - t->PriorityDecrement);
+        t->Priority = p < t->BasePriority ? t->BasePriority : p;
+        t->PriorityDecrement = 0;
+    }
+    KiInsertReady(t, false);
+    KiSwapThread();
+    KfLowerIrql(t->WaitIrql);
+    return STATUS_SUCCESS;
+}
+
 // Quantum expired (spec/stock/07 KiQuantumEnd): refill, decay priority, pick a same-or-higher thread.
 static void KiQuantumEnd() {
     PKTHREAD t = Prcb.CurrentThread;

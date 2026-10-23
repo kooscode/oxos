@@ -1,4 +1,5 @@
 // Debugger services without a kernel debugger: DbgPrint goes to an in-memory log (spec/stock/13).
+#include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/serial.h>
 
@@ -16,12 +17,11 @@ char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it s
 volatile ULONG XkDebugLogPosition;
 
 static void XkLogWrite(const char *s, ULONG n) {
-    ULONG flags = __builtin_ia32_readeflags_u32();
-    __asm__ volatile("cli");
+    ULONG flags = save_flags_cli();
     for (ULONG i = 0; i < n; i++)
         XkDebugLog[(XkDebugLogPosition + i) % sizeof(XkDebugLog)] = s[i];
     XkDebugLogPosition = XkDebugLogPosition + n;
-    __builtin_ia32_writeeflags_u32(flags);
+    restore_flags(flags);
 #if XK_DEBUG_SERIAL
     HalpSerialWrite(s, n);
 #endif

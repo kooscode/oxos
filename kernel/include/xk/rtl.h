@@ -2,9 +2,15 @@
 #pragma once
 #include <xk/types.h>
 
+#ifdef XK_HOST_TEST // host unit tests: the C library's (its size_t)
+XBAPI void *memset(void *dst, int c, __SIZE_TYPE__ n);
+XBAPI void *memcpy(void *dst, const void *src, __SIZE_TYPE__ n);
+XBAPI void *memmove(void *dst, const void *src, __SIZE_TYPE__ n);
+#else
 XBAPI void *memset(void *dst, int c, SIZE_T n);
 XBAPI void *memcpy(void *dst, const void *src, SIZE_T n);
 XBAPI void *memmove(void *dst, const void *src, SIZE_T n);
+#endif
 
 XBAPI void NTAPI RtlZeroMemory(PVOID Destination, SIZE_T Length);
 XBAPI void NTAPI RtlFillMemory(PVOID Destination, ULONG Length, UCHAR Fill);

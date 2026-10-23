@@ -88,6 +88,12 @@ linked to the timer's wait list. StackBase = top, StackLimit = top − size.
   refill from the process. For priority < 16: new = prio − PriorityDecrement − 1, clamped to BasePriority;
   PriorityDecrement = 0. If unchanged and no NextThread → pick a ready thread with priority ≥ the current one (Standby).
   If changed → set priority.
+- **NtYieldExecution** (0x8001aef3): if the ready summary is 0 → `STATUS_NO_YIELD_PERFORMED` (0x40000024). Else
+  raise to DISPATCH (Current.WaitIrql = the old IRQL); if there is no NextThread, take the highest ready thread with
+  priority **≥ 1** (any priority, lower ones included) as NextThread; none → lower IRQL, `STATUS_NO_YIELD_PERFORMED`.
+  Otherwise the current thread: Quantum = process quantum, state Ready, and below 16 its priority decays as at a
+  quantum end (− 1 − PriorityDecrement, clamped to BasePriority; PriorityDecrement = 0); inserted at the **tail** of
+  its ready list, summary bit set; switch (KiSwapThread); return 0.
 - **KiSwapContext**:
   - new.State = Running
   - push EFLAGS and PCR.ExceptionList
@@ -134,6 +140,14 @@ linked to the timer's wait list. StackBase = top, StackLimit = top − size.
 4. NtClose(UniqueThread); UniqueThread = 0.
 5. Disable APCs; run the mutant/APC rundown, flushing kernel APCs.
 6. Owned mutants remaining → `KeBugCheckEx(0x20, …)`; else KeTerminateThread (signal the thread object, never return).
+
+**KeTerminateThread** (0x800192cb), at DISPATCH_LEVEL:
+1. If the thread is associated with a queue (KTHREAD.Queue): unlink QueueListEntry and **KiActivateWaiterQueue** the
+   queue (its concurrency slot is released and a queued entry may go to another waiter).
+2. SignalState = 1; waiters → KiWaitTest.
+3. Unlink ThreadListEntry from the process; State = Terminated (4); process StackCount − 1; if it owns the FPU
+   (Prcb.NpxThread) → NpxThread = 0.
+4. Append it to the reaper list, queue the reaper, switch away (never returns).
 
 ## Plan for 2b implementation
 1. Early memory: map-free bump allocator for kernel stacks until milestone 2c (check the 2BL's mapping of

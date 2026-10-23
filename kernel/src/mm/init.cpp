@@ -191,8 +191,8 @@ static ULONG *MiFindOwnerPte(ULONG pfn, ULONG e) {
 // Fixed registers: the compiler must not share one between the copy source (advanced by rep movsl) and the address
 // to invalidate, although they start out equal.
 static void MiCopyAndSwitch(ULONG src, ULONG dst, ULONG *pte, ULONG value, bool pageTable) {
-    ULONG flags, n = PAGE_SIZE / 4, va = (ULONG)pte << 10;
-    __asm__ volatile("pushfl\n\tpopl %0\n\tcli" : "=r"(flags)::"memory");
+    ULONG n = PAGE_SIZE / 4, va = (ULONG)pte << 10;
+    ULONG flags = save_flags_cli();
     if (pageTable) // its self-map entries change too
         __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tmovl %%cr3, %%eax\n\tmovl %%eax, %%cr3"
                          : "+S"(src), "+D"(dst), "+c"(n), "+a"(va)
@@ -203,7 +203,7 @@ static void MiCopyAndSwitch(ULONG src, ULONG dst, ULONG *pte, ULONG value, bool 
                          : "+S"(src), "+D"(dst), "+c"(n)
                          : "b"(pte), "d"(value), "a"(va)
                          : "memory");
-    __asm__ volatile("pushl %0\n\tpopfl" ::"r"(flags) : "memory", "cc");
+    restore_flags(flags);
 }
 
 volatile ULONG MiRelocations, MiLastRelocation[5]; // diagnostics: pages moved; the last one {from, to, pte, entry, va}
@@ -461,10 +461,12 @@ volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2]; // XK_EXP
 volatile ULONG MiRamBadPages, MiRamBadPage[4]; // diagnostics: pages whose tag read back wrong {pfn << 16 | seen pfn}
 volatile ULONG MiRamProbe; // diagnostics: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB, 3 = unclear
 
-// How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0):
+// How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0 and
+// at 0x80000000):
 // a marker written at 64 MB + x either appears at x (only 64 MB, the address wraps) or not.
 static void MiProbeRamSize() {
-    auto low = (volatile ULONG *)0x00000FF0, high = (volatile ULONG *)(0x04000000 + 0x0FF0);
+    // Through the 2BL's 0x80000000 large pages (the same RAM as its identity mapping at 0).
+    auto low = (volatile ULONG *)0x80000FF0, high = (volatile ULONG *)(0x84000000 + 0x0FF0);
     ULONG saved = *low;
     *low = 0x13579BDF;
     *high = 0x2468ACE0;
