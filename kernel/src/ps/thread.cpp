@@ -1,6 +1,11 @@
 // Process structure: system threads as objects (spec/stock/07 "Thread creation", spec/stock/10 §6).
 #include <xk/ps.h>
 #include <xk/rtl.h>
+#include <xk/serial.h>
+
+#if XK_NETLOG
+extern "C" volatile ULONG KiSampleTitlePc; // set once the title runs (ke/irql.cpp)
+#endif
 
 static void NTAPI PspDeleteThread(PVOID Object) {
     auto t = (ETHREAD *)Object;
@@ -54,6 +59,12 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
                        &KiSystemProcess);
     if (CreateSuspended)
         KeSuspendThread(&t->Tcb);
+#if XK_NETLOG
+    if (KiSampleTitlePc)
+        XK_SERIAL("ps: thread %p: system routine %p start %p context %p, stack %p-%p, tls %lu, suspended %u\n", t,
+                  SystemRoutine, StartContext1, StartContext2, (PVOID)((ULONG)stack - stackSize), stack, TlsDataSize,
+                  CreateSuspended);
+#endif
 
     // References: one for UniqueThread's handle, one for the caller's handle, one released when the
     // thread's stack is reaped after termination.
@@ -193,4 +204,17 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
     }
     KeResumeThread(t);
     return t;
+}
+
+// From KiThreadStartup (arch/swap.S), at PASSIVE_LEVEL just before the system routine runs.
+extern "C" void KiLogThreadStart(PVOID SystemRoutine) {
+#if XK_NETLOG
+    if (KiSampleTitlePc) {
+        PKTHREAD t = KeGetCurrentThread();
+        XK_SERIAL("ps: thread %p running %p, priority %ld, esp %p\n", t, SystemRoutine, (LONG)t->Priority,
+                  __builtin_frame_address(0));
+    }
+#else
+    (void)SystemRoutine;
+#endif
 }

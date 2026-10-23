@@ -109,6 +109,11 @@ static void HalpNetSend(const char *Text, ULONG Length) {
     d.Flags = TX_FLAGS;
     Nv(NvTxRxControl) = TXRX_KICK; // as cromwell (bit 2 would stop DMA)
     (void)Nv(NvTxRxControl);
+#ifdef XK_NETLOG_SYNC_TX
+    // Experiment: wait until the NIC has fetched the frame (its DMA is over) before going on.
+    for (ULONG us = 2000; (d.Flags & TX_VALID) && us; us -= 2)
+        KeStallExecutionProcessor(2);
+#endif
     HalpNetNext++;
     HalpNetSent = HalpNetSent + 1;
 }
@@ -426,6 +431,10 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
         // The GPU's command engines (a title waiting for its push buffer to be consumed shows why the FIFO is
         // stuck): PMC enable/interrupts, PFIFO interrupts, DMA pusher state, cache 1 GET/PUT and status, PGRAPH
         // status/interrupts, the memory size register.
+        // Off by default: reading the registers of a GPU engine that is switched off (PMC 0x200) is not answered
+        // properly, and with memory traffic going on it froze a console within a minute (2026-10-23, elimination
+        // series stage 1). XK_HEARTBEAT_GPU turns it back on for debugging a title's GPU set-up.
+#ifdef XK_HEARTBEAT_GPU
         {
             auto gpu = [](ULONG o) { return *(volatile ULONG *)(0xFD000000 + o); };
             char gl[320];
@@ -448,6 +457,7 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
                 HalpNetLogWrite(gl, (ULONG)gn);
             }
         }
+#endif
 #if XK_BOOT_SELFTEST
         HalpNetSelfTestProgress();
 #endif
@@ -469,7 +479,9 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
         //     HalpNetFileFlush();
         // Liveness on the front LED: the beat alternates green with orange while the log goes over the network, with
         // red once it goes to the disk file (the title owns the NIC). A frozen colour means the system stopped.
+#ifndef XK_HEARTBEAT_NO_LED
         HalpSetBootLed((beat & 1) ? 0x0F : (HalpNetState == 4 ? 0xF0 : 0xFF));
+#endif
     }
 }
 

@@ -56,10 +56,21 @@ static void PciOr8(ULONG bus, ULONG dev, ULONG reg, UCHAR bits) {
     HalpPciWrite8(bus, dev, reg, HalpPciRead8(bus, dev, reg) | bits);
 }
 
-// Enable a function's decoders (command |= mask) and assign its interrupt line.
-static void PciEnable(ULONG bus, ULONG dev, UCHAR commandBits, UCHAR intLine) {
-    PciOr8(bus, dev, 0x04, commandBits);
-    HalpPciWrite8(bus, dev, 0x3C, intLine);
+
+// A function's whole configuration space read, edited and written back, as the reference does for each device it
+// sets up (0x80063908): every register is rewritten with its current value (status bits that are write-one-to-clear
+// are cleared), and the interrupt pin is written as well.
+struct PciSpace {
+    UCHAR b[0x100];
+    void Set8(ULONG r, UCHAR v) { b[r] = v; }
+    void Set16(ULONG r, USHORT v) { b[r] = (UCHAR)v, b[r + 1] = (UCHAR)(v >> 8); }
+    void Set32(ULONG r, ULONG v) { for (int i = 0; i < 4; i++) b[r + i] = (UCHAR)(v >> (8 * i)); }
+};
+template <typename F> static void PciEditAll(ULONG bus, ULONG dev, F edit) {
+    PciSpace s;
+    HalReadWritePCISpace(bus, dev, 0, s.b, 0x100, FALSE);
+    edit(s);
+    HalReadWritePCISpace(bus, dev, 0, s.b, 0x100, TRUE);
 }
 
 // Bus 0 device numbers on the Xbox (MCPX + NV2A host bridge).
@@ -132,8 +143,10 @@ static void HalpQuiesceBusMasters() {
     // GPU: its FIFO and graphics engines reset (PMC 0x200 bits 8 and 12 off and on again; the NV2A registers are mapped).
     auto pmc = (volatile ULONG *)0xFD000200;
     ULONG enable = *pmc;
+    // The FIFO's registers only while the FIFO is switched on (PMC bit 8): a switched-off GPU block does not answer
+    // properly, and touching one froze consoles (2026-10-23).
     XK_SERIAL("pci: NV2A at entry: cmd %08lx PMC enable %08lx PFIFO caches %08lx pusher %08lx\n", gpuCmd, enable,
-              *(volatile ULONG *)0xFD002500, *(volatile ULONG *)0xFD003220);
+              (enable & 0x100) ? *(volatile ULONG *)0xFD002500 : 0, (enable & 0x100) ? *(volatile ULONG *)0xFD003220 : 0);
     *pmc = enable & ~0x1100u;
     *pmc = enable;
 }
@@ -146,13 +159,15 @@ void HalpInitPci() {
     HalpPciWrite32(0, DEV_LPC, 0x64, 0x00000B0C);
     PciOr8(0, DEV_LPC, 0x81, 0x08);
 
-    // IDE: I/O + bus master, both channels in legacy mode, bus-master registers at 0xFF60.
-    PciOr8(0, DEV_IDE, 0x04, 0x05);
-    HalpPciWrite8(0, DEV_IDE, 0x09, HalpPciRead8(0, DEV_IDE, 0x09) & 0xFA);
-    HalpPciWrite32(0, DEV_IDE, 0x20, 0xFF61);
-    HalpPciWrite32(0, DEV_IDE, 0x50, 0x00000002);
-    HalpPciWrite32(0, DEV_IDE, 0x58, 0x20202020);
-    HalpPciWrite32(0, DEV_IDE, 0x60, 0xC0C0C0C0);
+    // IDE: I/O + bus master, both channels in legacy mode, bus-master registers at 0xFF60, timings.
+    PciEditAll(0, DEV_IDE, [](PciSpace &c) {
+        c.b[4] |= 5;
+        c.b[9] &= 0xFA;
+        c.Set32(0x20, 0xFF61);
+        c.Set32(0x50, 0x00000002);
+        c.Set32(0x58, 0x20202020);
+        c.Set32(0x60, 0xC0C0C0C0);
+    });
     // The bus-master engine keeps its registers across a reset of its owner (a modchip menu or another BIOS started
     // this image): stop it, clear its status and table pointer before anything selects a device. A start bit left
     // set would let the first device to raise DMARQ (the DVD probe's commands) write into reused RAM.
@@ -164,34 +179,53 @@ void HalpInitPci() {
     XK_SERIAL("pci: IDE bus master after reset: command %#x status %#x\n", inb(0xFF60), inb(0xFF62));
 
     // NIC.
-    PciEnable(0, DEV_NIC, 0x07, 4);
-    HalpPciWrite32(0, DEV_NIC, 0x10, 0xFEF00000);
-    HalpPciWrite32(0, DEV_NIC, 0x14, 0x0000E001);
+    PciEditAll(0, DEV_NIC, [](PciSpace &c) {
+        c.b[4] |= 7;
+        c.Set32(0x10, 0xFEF00000);
+        c.Set32(0x14, 0x0000E001);
+        c.Set8(0x3C, 4);
+        c.Set8(0x3D, 0);
+    });
 
     // USB host controllers.
-    PciEnable(0, DEV_USB0, 0x07, 1);
-    HalpPciWrite32(0, DEV_USB0, 0x10, 0xFED00000);
+    PciEditAll(0, DEV_USB0, [](PciSpace &c) {
+        c.b[4] |= 7;
+        c.Set32(0x10, 0xFED00000);
+        c.Set8(0x3C, 1);
+        c.Set8(0x3D, 0);
+    });
     HalpPciWrite32(0, DEV_USB0, 0x50, 0x0000000F);
-    PciEnable(0, DEV_USB1, 0x07, 9);
-    HalpPciWrite32(0, DEV_USB1, 0x10, 0xFED08000);
+    PciEditAll(0, DEV_USB1, [](PciSpace &c) {
+        c.b[4] |= 7;
+        c.Set32(0x10, 0xFED08000);
+        c.Set8(0x3C, 9);
+        c.Set8(0x3D, 0);
+    });
     HalpPciWrite32(0, DEV_USB1, 0x50, 0x00000030);
 
     // AC'97 and APU.
+    PciEditAll(0, DEV_AC97, [](PciSpace &c) {
 #ifdef XK_EXPERIMENT_NO_AUDIO_DMA
-    // Experiment: audio devices without bus mastering (I/O and memory decode only).
-    PciEnable(0, DEV_AC97, 0x03, 6);
+        c.b[4] |= 3; // experiment: audio devices without bus mastering (I/O and memory decode only)
 #else
-    PciEnable(0, DEV_AC97, 0x07, 6);
+        c.b[4] |= 7;
 #endif
-    HalpPciWrite32(0, DEV_AC97, 0x10, 0x0000D001);
-    HalpPciWrite32(0, DEV_AC97, 0x14, 0x0000D201);
-    HalpPciWrite32(0, DEV_AC97, 0x18, 0xFEC00000);
+        c.Set8(0x3C, 6);
+        c.Set8(0x3D, 0);
+        c.Set32(0x10, 0x0000D001);
+        c.Set32(0x14, 0x0000D201);
+        c.Set32(0x18, 0xFEC00000);
+    });
+    PciEditAll(0, DEV_APU, [](PciSpace &c) {
 #ifdef XK_EXPERIMENT_NO_AUDIO_DMA
-    PciEnable(0, DEV_APU, 0x03, 5);
+        c.b[4] |= 3;
 #else
-    PciEnable(0, DEV_APU, 0x07, 5);
+        c.b[4] |= 7;
 #endif
-    HalpPciWrite32(0, DEV_APU, 0x10, 0xFE800000);
+        c.Set8(0x3C, 5);
+        c.Set8(0x3D, 0);
+        c.Set32(0x10, 0xFE800000);
+    });
 
     // LPC bridge register 0x8C: set bit 27, clear bit 26; then MCPX I/O 0x80CD = 8.
     ULONG r8c = HalpPciRead32(0, DEV_LPC, 0x8C);
@@ -205,18 +239,23 @@ void HalpInitPci() {
 
     // AGP bridge: bus 0 -> 1, memory window 0xFD000000-0xFE7FFFFF, prefetch window 0xF0000000-0xF3FFFFFF
     // (limit extended when hardware flag 0x08 is set).
-    PciOr8(0, DEV_AGP, 0x04, 0x07);
-    HalpPciWrite8(0, DEV_AGP, 0x18, 0x00);
-    HalpPciWrite8(0, DEV_AGP, 0x19, 0x01);
-    HalpPciWrite8(0, DEV_AGP, 0x1A, 0x01);
-    HalpPciWrite32(0, DEV_AGP, 0x20, 0xFE70FD00);
-    HalpPciWrite16(0, DEV_AGP, 0x24, 0xF000);
-    HalpPciWrite16(0, DEV_AGP, 0x26, (USHORT)(0xF3F0 | ((XboxHardwareInfo.Flags & 8) << 7)));
+    PciEditAll(0, DEV_AGP, [](PciSpace &c) {
+        c.b[4] |= 7;
+        c.Set16(0x26, (USHORT)(0xF3F0 | ((XboxHardwareInfo.Flags & 8) << 7)));
+        c.Set8(0x18, 0x00);
+        c.Set8(0x19, 0x01);
+        c.Set8(0x1A, 0x01);
+        c.Set32(0x20, 0xFE70FD00);
+        c.Set16(0x24, 0xF000);
+    });
 
     // Host bridge, then NV2A (bus 1, device 0).
     HalpPciWrite32(0, DEV_HOST, 0x48, 0x00000114);
-    PciEnable(1, 0, 0x07, 3);
-    HalpPciWrite8(1, 0, 0x3D, 0x01);
+    PciEditAll(1, 0, [](PciSpace &c) {
+        c.b[4] |= 7;
+        c.Set8(0x3C, 3);
+        c.Set8(0x3D, 1);
+    });
     HalpPciWrite32(1, 0, 0x4C, 0x00000114);
 #if XK_DEBUG_SERIAL
     static const UCHAR devs[] = {0, 1, 2, 3, 4, 5, 6, 9, 0x1E};

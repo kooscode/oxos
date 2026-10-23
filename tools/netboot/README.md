@@ -46,7 +46,7 @@ the new build.
 
 | Option | Meaning |
 |---|---|
-| `IMAGE` | Any OXOS open image: a 256 KiB `bios-256k.bin`, or a 1 MiB `bios.bin`, whose first bank is sent. Only its kernel and key block are used; the console keeps its own 2BL, and its splash comes from its flash. |
+| `IMAGE` | Any OXOS open image: a 256 KiB `bios-256k.bin`, or a 1 MiB `bios.bin`, whose first bank is sent; or an image up to 1 MiB whose kernel stream runs past the first bank (sent whole). Only its kernel and key block are used; the console keeps its own 2BL, and its splash comes from its flash. |
 | `--log` | Also print the kernel's network log (UDP port 5140, `NETLOG=1` builds), like `tools/netlog.py`. |
 | `--to ADDR` | Where replies go. The default `255.255.255.255` uses the PC's default route. On a PC with several networks (Docker, VPN), give the console LAN's broadcast address, e.g. `--to 192.168.1.255`. |
 | `--out FILE` | Also append the printed lines to FILE. |

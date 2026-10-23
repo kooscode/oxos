@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <ucontext.h>
 #include <unistd.h>
 
@@ -499,6 +500,46 @@ static void OnFault(int sig, siginfo_t *si, void *ctx) {
     if (sig == SIGSEGV && Emulate(uc))
         return;
     Die(uc, sig == SIGBUS ? "bus error" : "unhandled fault (not a kernel window, not an emulated instruction)", addr);
+}
+
+// --- Asynchronous interrupts (stress tests): a real-time signal stands for the PIT. When it lands on a kernel
+// instruction with the fake IF on, the clock interrupt is taken right there, on the interrupted stack, as the CPU
+// would; with IF off it stays pending until the kernel enables interrupts. Elsewhere (the C library, the tests, the
+// harness) the tick is skipped, so non-kernel code is never re-entered.
+extern "C" char __oxos_kernel_text_start[], __oxos_kernel_text_end[];
+static volatile bool AsyncOn;
+volatile uint64_t AsyncDelivered, AsyncPended, AsyncSkipped;
+
+static void OnTimer(int, siginfo_t *, void *ctx) {
+    if (!AsyncOn)
+        return;
+    auto uc = (ucontext_t *)ctx;
+    auto eip = (uint32_t)uc->uc_mcontext.gregs[REG_EIP];
+    if (eip < (uint32_t)(uintptr_t)__oxos_kernel_text_start || eip >= (uint32_t)(uintptr_t)__oxos_kernel_text_end) {
+        AsyncSkipped = AsyncSkipped + 1;
+        return;
+    }
+    Tick();
+    if (!(HostIf & 0x200)) {
+        AsyncPended = AsyncPended + 1;
+        return;
+    }
+    AsyncDelivered = AsyncDelivered + 1;
+    RedirectToInterrupts(uc, eip);
+}
+
+void SetAsyncInterrupts(uint32_t periodUs) {
+    static bool installed;
+    if (!installed) {
+        struct sigaction sa = {};
+        sa.sa_sigaction = OnTimer;
+        sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESTART;
+        sigaction(SIGALRM, &sa, nullptr);
+        installed = true;
+    }
+    AsyncOn = periodUs != 0;
+    itimerval it = {{0, (long)periodUs}, {0, (long)periodUs}};
+    setitimer(ITIMER_REAL, &it, nullptr);
 }
 
 // Before anything else maps memory into the kernel's windows.

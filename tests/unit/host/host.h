@@ -22,6 +22,10 @@ void AdvanceTime(uint32_t ms);
 uint64_t NowMs();
 // Move the fake time on without clock interrupts (the ACPI PM timer jumps; KeTickCount does not).
 void SkipTime(uint64_t ms);
+// Asynchronous clock interrupts at any kernel instruction, every `periodUs` microseconds of real time (0: off), as the
+// PIT does on hardware; statistics: taken at once, left pending (IF off), skipped (outside kernel code).
+void SetAsyncInterrupts(uint32_t periodUs);
+extern volatile uint64_t AsyncDelivered, AsyncPended, AsyncSkipped;
 // Number of clock interrupts the kernel has taken.
 extern volatile uint64_t ClockInterrupts;
 

@@ -41,7 +41,7 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 | 0x00300000 | 32 receive descriptors, then 2 transmit descriptors |
 | 0x00301000–0x00310FFF | receive buffers (32 × 2 KiB) |
 | 0x00320000–0x00320FFF | transmit frames (2 × 2 KiB) |
-| 0x00800000–0x0083FFFF | the downloaded bank |
+| 0x00800000–0x008FFFFF | the downloaded image (one 256 KiB bank, or up to 1 MiB) |
 
 All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel treats all of it as free memory.
 
@@ -55,7 +55,7 @@ All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel t
 | Op | From | Offset / Length | Data |
 |---|---|---|---|
 | 1 HELLO | console | 0 / 0 | the console's MAC address (6 bytes) |
-| 2 OFFER | PC | CRC-32 of the image / its size (must be 0x40000) | none |
+| 2 OFFER | PC | CRC-32 of the image / its size (0x40000 to 0x100000, a multiple of 1 KiB) | none |
 | 3 READ | console | byte offset / 1024 | none |
 | 4 DATA | PC | the same offset / 1024 | the 1024 bytes |
 | 5 BOOT | console | 0 = booting the download, 1 = rejected, booting flash / 0 | none |
@@ -63,8 +63,8 @@ All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel t
 1. HELLO every 250 ms, 8 times, until an OFFER arrives.
 2. READ the 256 chunks in order. Each request is repeated after 100 ms without a matching DATA, 30 times at most.
    A chunk that never arrives means a flash boot.
-3. Check the CRC-32 (IEEE, as zlib) of the whole bank and the payload magic `'OXKP'` at 0x6000. Then send BOOT.
-4. Unpack the kernel and copy the key block from the downloaded bank, as from flash (spec/stock/01 §5). The 2BL
+3. Check the CRC-32 (IEEE, as zlib) of the whole image and the payload magic `'OXKP'` at 0x6000. Then send BOOT.
+4. Unpack the kernel and copy the key block from the downloaded image, as from flash (spec/stock/01 §5). The 2BL
    in flash stays in charge; the downloaded image's 2BL, X-codes and reset code are not used.
 
 ## 5. What the kernel sees
@@ -80,3 +80,10 @@ All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel t
 ## 6. LED (spec/oxos-internal/03 §6)
 - 0xFF (solid orange) while netboot waits for the link and the network.
 - Then 0xAA (blinking orange) again for the unpacking.
+
+## Images larger than one bank (2026-10-23)
+A kernel whose packed stream does not fit in 256 KiB (a Microsoft-derived kernel used as a reference, about 0x3B000
+bytes packed) is served as one larger image: the same layout as a bank (payload header at 0x6000, key block, kernel
+stream), the stream simply running past 0x40000. The PC offers the file's size (a multiple of 1 KiB, at most 1 MiB;
+`netboot.py` sends the first bank only when the kernel stream ends inside it, so ordinary 1 MiB `bios.bin` images
+still go out as 256 KiB). Loaders flashed before this change accept only 0x40000 and boot from flash otherwise.

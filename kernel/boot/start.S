@@ -65,25 +65,62 @@ _start:
     movl $0x00070106, %eax
     movl $0x00070106, %edx
     wrmsr
+    // The DRAM set-up as the retail X-codes finish it (spec/stock/22 §6.3), still with the caches off so that every
+    // access reaches the memory, and before anything is stored in RAM (0x100204 sets the DRAM geometry, so it cannot
+    // change under live data). The X-codes (XboxDev/cromwell's) leave the larger chips' set-up (PFB 0x100200
+    // 0x03070103, 0x100204 0x11448000, host 0x84 128 MB). For each of 8 byte lanes (four at 0x00555548 + 16n, four
+    // at 0x04555548 + 16n) write the address and the address + 32 MB: a lane where the second write leaves the first
+    // alone has the larger chips (ebx); one that does not keep a value is faulty (ebp, not used further).
+    cmpl $0x11448000, 0xFD100204            // X-codes that sized the memory themselves: keep their set-up
+    jne 13f
+    xorl %ebx, %ebx
+    xorl %ebp, %ebp
+    movl $0x00555548, %esi
+    movl $1, %ecx
+5:  movl $0xAAAAAAAA, (%esi)
+    movl $0x5A5A5A5A, 0x02000000(%esi)
+    cmpl $0x5A5A5A5A, 0x02000000(%esi)
+    jne 7f
+    cmpl $0xAAAAAAAA, (%esi)
+    jne 6f
+    orl %ecx, %ebx                          // no alias at +32 MB: the larger chips
+6:  movl $0x55555555, (%esi)
+    cmpl $0x55555555, (%esi)
+    je 8f
+7:  orl %ecx, %ebp
+8:  addl $0x10, %esi
+    shll $1, %ecx
+    cmpl $0x10, %ecx
+    jne 9f
+    movl $0x04555548, %esi
+9:  cmpl $0x100, %ecx
+    jne 5b
+    // No lane with the larger chips (64 MB): 0x100200 0x03070103 and 0x100204 0x11338000, top of memory 64 MB.
+    // Every lane (128 MB): 0x03070103, the X-codes' 0x11448000, 128 MB. Mixed: 0x03070003, 0x11448000, 64 MB.
+    movl $0x03FFFFFF, %edi
+    testl %ebx, %ebx
+    jnz 10f
+    movl $0x03070103, 0xFD100200
+    movl $0x11338000, 0xFD100204
+    jmp 11f
+10: cmpl $0xFF, %ebx
+    jne 12f
+    movl $0x03070103, 0xFD100200
+    movl $0x07FFFFFF, %edi
+    jmp 11f
+12: movl $0x03070003, 0xFD100200
+11: movl $0x80000084, %eax                  // host bridge register 0x84: top of memory
+    movw $0xCF8, %dx
+    outl %eax, %dx
+    movl %edi, %eax
+    movw $0xCFC, %dx
+    outl %eax, %dx
+13:
+
     movl %cr0, %eax
     andl $0x9FFFFFFF, %eax
     movl %eax, %cr0
 
-    // 64 MB consoles: the GPU's memory size (PFB 0x100200 bit 8, as Cromwell for 64 MB) and the host bridge's top of
-    // memory for 64 MB, before anything is stored in RAM. The X-codes (XboxDev/cromwell's) always leave the 128 MB
-    // set-up; RAM that is not there does not keep a value. PFB 0x100204 stays the X-codes' 0x11448000: the
-    // 0x11338000 of spec/stock/22 §6.3 stopped a 1.0 console's kernel in the memory manager (2026-10-22).
-    movl $0x2468ACE0, 0x04000FF0
-    movl $0x13579BDF, 0x00000FF0
-    cmpl $0x2468ACE0, 0x04000FF0
-    je 4f                                   // 128 MB: keep it
-    andl $0xFFFFFEFF, 0xFD100200            // PFB: bit 8 clear (64 MB)
-    movl $0x80000084, %eax                  // host bridge register 0x84: top of memory 64 MB - 1
-    movw $0xCF8, %dx
-    outl %eax, %dx
-    movl $0x03FFFFFF, %eax
-    movw $0xCFC, %dx
-    outl %eax, %dx
 4:
     movl $0x003FFFF0, %esp
     // Copy the C part (.text/.rodata/.data) to RAM and clear its .bss.

@@ -671,24 +671,28 @@ ULONG AvBootModeWord() {
     }
 }
 
-// The display part of the reference graphics library's device set-up (spec/stock/22 §7 steps 4 and 7): every title
-// repeats it before its first mode set, and the reference's boot animation does it before the boot picture. OXOS
-// shows its splash without a title, so it does this once at cold boot before the first mode set.
+// The reference graphics library's device set-up as far as the display needs it (spec/stock/22 §7), in its order:
+// every title repeats it before its first mode set, and the reference's boot animation does it before the boot
+// picture. OXOS shows its splash without a title, so it does this once at cold boot before the first mode set.
+// The colour table (step 9) is loaded once the display runs: AvLoadBootGamma.
 void AvPrepareBootDisplay() {
     auto regs = (volatile UCHAR *)0xFD000000;
     auto reg32 = [&](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(regs + offset); };
-    reg32(0x000200) = 0xFFFFFFFF; // PMC: all engines on
-    // Gamma (spec/stock/22 §7 step 9: the reference loads identity ramps): every 32-bit pixel goes through the RAMDAC's
-    // colour table, which holds garbage at power-on: a wrongly coloured picture on hardware that changes from boot to
-    // boot (xemu does not model the table). Loaded through the VGA DAC ports of PRMDIO (nouveau: 0x6813C6 pixel mask,
-    // 0x6813C8 write index, 0x6813C9 data, red / green / blue). Six bits per entry: a 1.4 console showed a 0-255 ramp
-    // four times too bright, wrapping (2026-10-22).
+    // 1. Bus master on (PBUS mirror of the PCI command register); vertical-blank and timer interrupts off.
+    reg32(0x001804) = reg32(0x001804) | 4;
+    reg32(0x600140) = 0;
+    reg32(0x009140) = 0;
+    // 3. PCI mirrors: expansion ROM base 0, latency timer 0xF8.
+    reg32(0x001830) = 0;
+    reg32(0x00180C) = 0xF800;
+    // 4. Every engine on.
+    if (!reg32(0x000200))
+        reg32(0x000200) = 0;
+    reg32(0x000200) = 0xFFFFFFFF;
+    // 6. (The part the display needs) PFB 0x100214 bit 0 clear.
+    reg32(0x100214) = reg32(0x100214) & ~1u;
     XK_SERIAL("av: RAMDAC general control %#lx before the boot display\n", reg32(0x680600));
-    regs[0x6813C6] = 0xFF;
-    regs[0x6813C8] = 0;
-    for (ULONG i = 0; i < 256; i++)
-        for (int c = 0; c < 3; c++)
-            regs[0x6813C9] = (UCHAR)(i >> 2);
+    // 7. CRTC and video overlay set-up.
     regs[0x6013D4] = 0x1F;
     UCHAR lock = regs[0x6013D5];
     AvpCrtc(regs, 0x1F, 0x57);
@@ -708,6 +712,21 @@ void AvPrepareBootDisplay() {
     reg32(0x600804) = (reg32(0x600804) & ~5u) | 2;
     if (!lock)
         AvpCrtc(regs, 0x1F, 0x99);
+}
+
+// §7 step 9, gamma: every 32-bit pixel goes through the RAMDAC's colour table, which holds garbage at power-on (a
+// wrongly coloured picture on hardware that changes from boot to boot; xemu does not model the table). Write index 0,
+// then red / green / blue per entry through the VGA DAC data port (0x6813C8 / 0x6813C9), as the reference loads it.
+// Only once the display runs: the reference loads the table from its vertical-blank interrupt (0x80045bc0 ->
+// 0x80044fc4). The table works on the pixel clock, which the video encoder supplies after the mode is set; written
+// before that, the console froze (2026-10-23). Full 8-bit entries, as the reference's 0-255 ramps: the mode set
+// switches the DAC to 8 bits (RAMDAC general control bit 20).
+void AvLoadBootGamma() {
+    auto regs = (volatile UCHAR *)0xFD000000;
+    regs[0x6813C8] = 0;
+    for (ULONG i = 0; i < 256; i++)
+        for (int c = 0; c < 3; c++)
+            regs[0x6813C9] = (UCHAR)i;
 }
 
 // The NV2A side of a mode change exactly as spec/stock/22 §2 describes it, with the reference NV2A and CRTC rows of the
@@ -822,10 +841,14 @@ static bool AvpReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Form
     return true;
 }
 
+volatile ULONG AvpScreenPitch; // bytes per line of the last mode set
+
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
     AvpSetDisplayModeCalls = AvpSetDisplayModeCalls + 1;
+    if (Pitch)
+        AvpScreenPitch = Pitch; // the on-screen log (hal/splash.cpp) draws into the buffer being shown
     if (!Mode)
         Mode = 0x0F010101;
     // Encoder modes other than the VGA class (the reference has no VGA rows; spec 22 §13): the reference mode change.

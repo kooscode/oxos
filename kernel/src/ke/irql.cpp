@@ -143,6 +143,10 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         KiPcRing[KeTickCount % 32] = frame[9];
         if (KeTickCount % 100 == 0)
             KiSamplePc(frame, KiPcr.Irql);
+        else if (KeTickCount % 100 == 50) {
+            void HalpScreenRefresh(); // hal/splash.cpp (C linkage here)
+            HalpScreenRefresh();
+        }
         HalpNetWatchdog();
     }
 #endif

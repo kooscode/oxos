@@ -129,6 +129,7 @@ static ULONG HalpLoadFlashSplash(ULONG *img) {
 
 ULONG AvBootModeWord();
 void AvPrepareBootDisplay();
+void AvLoadBootGamma();
 
 #if XK_NETLOG
 static volatile bool HalpScreenLogOn; // the on-screen log (below)
@@ -151,6 +152,20 @@ static void NTAPI HalpSplashThread(PVOID) {
     AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, SPLASH_PITCH, MmGetPhysicalAddress(HalpSplashScreen));
     AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr);
     XK_SERIAL("splash: display mode set\n");
+    {
+        // The colour table, now that the encoder clocks the display: after the next vertical blank (PCRTC interrupt
+        // status bit 0; at most 100 ms).
+        auto pcrtc = (volatile ULONG *)0xFD600100;
+        *pcrtc = 1;
+        for (ULONG ms = 0; ms < 100 && !(*pcrtc & 1); ms++)
+            KeStallExecutionProcessor(1000);
+        if (*pcrtc & 1) {
+            AvLoadBootGamma();
+            XK_SERIAL("splash: colour table loaded\n");
+        } else {
+            XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
+        }
+    }
     for (ULONG f = 1; f <= SPLASH_FADE_FRAMES; f++) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
             ULONG p = HalpSplashImage[i];
@@ -183,22 +198,34 @@ static ULONG HalpScreenLineLength, HalpScreenRowLength[16];
 constexpr ULONG SCREEN_ROWS = 16, SCREEN_TOP = SPLASH_H - SCREEN_ROWS * 11 - 4;
 
 // The buffer being scanned out: the splash, or once a title has set its own display mode, the title's front
-// buffer (PCRTC 0x600800; contiguous memory, mapped at 0x80000000 + physical; 640x480 x 32 bits assumed).
-static ULONG *HalpScreenTarget() {
+// buffer (PCRTC 0x600800; contiguous memory, mapped at 0x80000000 + physical), with the pitch of the last mode set
+// (32 bits per pixel assumed). The panel sits at the bottom of the splash and at the top of a title's screen (every
+// mode has at least 480 lines).
+extern volatile ULONG AvpScreenPitch; // hal/av.cpp
+static ULONG *HalpScreenTarget(ULONG *pitch, ULONG *top) {
     ULONG start = *(volatile ULONG *)0xFD600800 & 0x03FFFFFF;
     auto fb = (ULONG *)(0x80000000 | start);
-    if (start != MmGetPhysicalAddress(HalpSplashScreen) &&
-        (!MmIsAddressValid(fb) || !MmIsAddressValid((UCHAR *)fb + SPLASH_PITCH * SPLASH_H - 4)))
+    *pitch = SPLASH_W;
+    *top = SCREEN_TOP;
+    if (start == MmGetPhysicalAddress(HalpSplashScreen))
         return HalpSplashScreen;
+    ULONG p = AvpScreenPitch / 4;
+    if (p < SPLASH_W || p > 2048)
+        p = SPLASH_W;
+    if (!MmIsAddressValid(fb) || !MmIsAddressValid((UCHAR *)fb + p * 4 * (24 + SCREEN_ROWS * 11) - 4))
+        return HalpSplashScreen;
+    *pitch = p;
+    *top = 24;
     return fb;
 }
 
 static void HalpScreenDrawRow(ULONG row, const char *text, ULONG length, bool newest) {
-    ULONG *fb = HalpScreenTarget();
-    ULONG y0 = SCREEN_TOP + row * 11;
+    ULONG pitch, top;
+    ULONG *fb = HalpScreenTarget(&pitch, &top);
+    ULONG y0 = top + row * 11;
     for (ULONG y = 0; y < 11; y++)
         for (ULONG x = 0; x < SPLASH_W; x++)
-            fb[(y0 + y) * SPLASH_W + x] = 0;
+            fb[(y0 + y) * pitch + x] = 0;
     for (ULONG i = 0; i <= length && i < 106; i++) {
         UCHAR c = i == 0 ? (newest ? '>' : ' ') : (UCHAR)text[i - 1];
         if (c < 0x20 || c > 0x7E)
@@ -207,9 +234,23 @@ static void HalpScreenDrawRow(ULONG row, const char *text, ULONG length, bool ne
         for (ULONG r = 0; r < 10; r++)
             for (ULONG b = 0; b < 6; b++)
                 if (g[r] & (0x20 >> b))
-                    fb[(y0 + r) * SPLASH_W + i * 6 + b] = newest ? 0x80FF80 : 0x40C040;
+                    fb[(y0 + r) * pitch + i * 6 + b] = newest ? 0x80FF80 : 0x40C040;
     }
 }
+
+// From the clock interrupt, 10 times a second: draw the whole panel again into the buffer being shown, so a
+// title's rendering does not hide it for long and a frozen console shows its last lines.
+extern "C" void HalpScreenRefresh() {
+    if (!HalpScreenLogOn || !HalpSplashScreen)
+        return;
+    for (ULONG r = 0; r < SCREEN_ROWS; r++)
+        HalpScreenDrawRow(r, HalpScreenRows[r], HalpScreenRowLength[r], r == HalpScreenRow);
+}
+
+// The title is starting: no more drawing. From now on the buffer being scanned out belongs to the title, and the one
+// the panel last drew into may already be the title's memory (the freed splash buffer, its textures or push buffer):
+// drawing there corrupted the dashboard and froze consoles (2026-10-23).
+void HalpScreenLogStop() { HalpScreenLogOn = false; }
 
 void HalpScreenLog(const char *Text, ULONG Length) {
     if (!HalpScreenLogOn || !HalpSplashScreen)

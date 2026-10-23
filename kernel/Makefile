@@ -67,12 +67,15 @@ CC  := clang
 LD  := lld-link
 
 TARGET  := --target=i386-pc-win32
-ARCH    := -march=pentium3 -mno-sse -mno-mmx -mno-80387
+# Plain Pentium code (no cmov, no multi-byte NOPs), as the reference kernels (their compiler emits only 386-class
+# instructions). Not a fix for the 1.4 console's start-up freeze: that one depends on the exact binary layout with
+# either setting (2026-10-23).
+ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments (e.g. EXTRA_FLAGS=-DXK_EXPERIMENT_...), in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_NETLOG=$(NETLOG) -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP)) -DXK_NETLOG_DEST=$(subst .,$(comma),$(NETLOG_DEST))
-ASFLAGS := $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
+ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /Brepro /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
