@@ -130,6 +130,10 @@ static ULONG HalpLoadFlashSplash(ULONG *img) {
 ULONG AvBootModeWord();
 void AvPrepareBootDisplay();
 
+#if XK_NETLOG
+static volatile bool HalpScreenLogOn; // the on-screen log (below)
+#endif
+
 static void NTAPI HalpSplashThread(PVOID) {
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
     HalpSplashStatus = HalpLoadFlashSplash(HalpSplashImage);
@@ -162,12 +166,79 @@ static void NTAPI HalpSplashThread(PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     XK_SERIAL("splash: faded in\n");
+#if XK_NETLOG
+    HalpScreenLogOn = true;
+#endif
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
+
+#if XK_NETLOG
+// On-screen log (network-log builds, spec/oxos-internal/03 §10): once the splash has faded in, every log line is also
+// drawn into the splash's framebuffer, 16 rows at the bottom, the newest marked '>'. A console that freezes keeps
+// its last lines on screen (a capture card reads them), when neither the NIC nor the disk can carry them any more.
+#include "screenfont.inc"
+static ULONG HalpScreenRow;
+static char HalpScreenLine[107], HalpScreenRows[16][107];
+static ULONG HalpScreenLineLength, HalpScreenRowLength[16];
+constexpr ULONG SCREEN_ROWS = 16, SCREEN_TOP = SPLASH_H - SCREEN_ROWS * 11 - 4;
+
+// The buffer being scanned out: the splash, or once a title has set its own display mode, the title's front
+// buffer (PCRTC 0x600800; contiguous memory, mapped at 0x80000000 + physical; 640x480 x 32 bits assumed).
+static ULONG *HalpScreenTarget() {
+    ULONG start = *(volatile ULONG *)0xFD600800 & 0x03FFFFFF;
+    auto fb = (ULONG *)(0x80000000 | start);
+    if (start != MmGetPhysicalAddress(HalpSplashScreen) &&
+        (!MmIsAddressValid(fb) || !MmIsAddressValid((UCHAR *)fb + SPLASH_PITCH * SPLASH_H - 4)))
+        return HalpSplashScreen;
+    return fb;
+}
+
+static void HalpScreenDrawRow(ULONG row, const char *text, ULONG length, bool newest) {
+    ULONG *fb = HalpScreenTarget();
+    ULONG y0 = SCREEN_TOP + row * 11;
+    for (ULONG y = 0; y < 11; y++)
+        for (ULONG x = 0; x < SPLASH_W; x++)
+            fb[(y0 + y) * SPLASH_W + x] = 0;
+    for (ULONG i = 0; i <= length && i < 106; i++) {
+        UCHAR c = i == 0 ? (newest ? '>' : ' ') : (UCHAR)text[i - 1];
+        if (c < 0x20 || c > 0x7E)
+            c = '?';
+        const unsigned char *g = HalpScreenFont[c - 0x20];
+        for (ULONG r = 0; r < 10; r++)
+            for (ULONG b = 0; b < 6; b++)
+                if (g[r] & (0x20 >> b))
+                    fb[(y0 + r) * SPLASH_W + i * 6 + b] = newest ? 0x80FF80 : 0x40C040;
+    }
+}
+
+void HalpScreenLog(const char *Text, ULONG Length) {
+    if (!HalpScreenLogOn || !HalpSplashScreen)
+        return;
+    for (ULONG i = 0; i < Length; i++) {
+        if (Text[i] != '\n') {
+            if (HalpScreenLineLength < sizeof(HalpScreenLine) - 1)
+                HalpScreenLine[HalpScreenLineLength++] = Text[i];
+            continue;
+        }
+        // The previous newest row loses its marker; this line takes the next row (cycling).
+        HalpScreenDrawRow(HalpScreenRow, HalpScreenRows[HalpScreenRow], HalpScreenRowLength[HalpScreenRow], false);
+        HalpScreenRow = (HalpScreenRow + 1) % SCREEN_ROWS;
+        for (ULONG k = 0; k < HalpScreenLineLength; k++)
+            HalpScreenRows[HalpScreenRow][k] = HalpScreenLine[k];
+        HalpScreenRowLength[HalpScreenRow] = HalpScreenLineLength;
+        HalpScreenDrawRow(HalpScreenRow, HalpScreenLine, HalpScreenLineLength, true);
+        HalpScreenLineLength = 0;
+    }
+}
+#endif
 
 // Cold boot, with an AV pack connected.
 void HalpStartSplash() {
     KeInitializeEvent(&HalpSplashDone, NotificationEvent, TRUE);
+#ifdef XK_EXPERIMENT_NO_SPLASH
+    XK_SERIAL("splash: compiled out (experiment)\n");
+    return;
+#endif
     if (HalBootSMCVideoMode == 7)
         return;
     // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/stock/05 §5): titles
@@ -199,7 +270,11 @@ void HalpEndSplash() {
         ObfDereferenceObject(HalpSplashThreadObject);
         HalpSplashThreadObject = nullptr;
     }
+#if !defined(XK_EXPERIMENT_KEEP_SPLASH) && !XK_NETLOG
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = nullptr;
+#endif
+    // Network-log builds keep the splash framebuffer for the on-screen log (it stays the scanout until the title
+    // sets its own display mode).
 }

@@ -1,4 +1,6 @@
 // Kernel start-up after the 2BL hand-off (spec/stock/01-boot.md, spec/stock/02-executive-init.md).
+#define XK_STR2(x) #x
+#define XK_STR(x) XK_STR2(x)
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
@@ -6,6 +8,10 @@
 #include <xk/idex.h>
 #include <xk/rtl.h>
 #include <xk/serial.h>
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+extern "C" volatile ULONG KiEarlySample;
+void HalpSetIrqlMask(KIRQL irql);
+#endif
 void HalpSmcInitColdBoot();
 void HalpSmcStartEvents();
 void HalpStartSplash();
@@ -49,10 +55,129 @@ constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584
 XK_PERSIST ULONG KiEepromKeyStates[8][10];
 XK_PERSIST ULONG KiEepromKeyStateCount;
 
+// Checksum of the kernel's code section as it is in memory (network-log builds): h = rotl(h, 5) ^ word over the
+// first section's VirtualSize. tools compare it with the same sum of the built file: a different value means the
+// code in RAM is not what was built (a bad download / inflate, or something overwriting it later).
+extern "C" ULONG KiTextSum() {
+    auto image = (const UCHAR *)0x80010000;
+    ULONG lfanew = *(const ULONG *)(image + 0x3C);
+    USHORT optSize = *(const USHORT *)(image + lfanew + 20);
+    const UCHAR *section = image + lfanew + 24 + optSize;
+    ULONG va = *(const ULONG *)(section + 12), size = *(const ULONG *)(section + 8);
+    auto w = (const volatile ULONG *)(image + va);
+    ULONG h = 0;
+    for (ULONG i = 0; i < size / 4; i++)
+        h = ((h << 5) | (h >> 27)) ^ w[i];
+    return h;
+}
+
 // Serial log of the start-up steps (SERIAL=1 builds, spec/oxos-internal/03-debug-serial.md).
+#if XK_NETLOG
+// Boot stack use (network-log builds): the stack is filled with a pattern at entry; the lowest overwritten word.
+extern "C" UCHAR KiBootStack[];
+static ULONG KiBootStackUsed() {
+    auto w = (const ULONG *)KiBootStack;
+    ULONG i = 0;
+    while (i < 0x3000 / 4 && w[i] == 0x5A5A5A5A)
+        i++;
+    return 0x3000 - i * 4;
+}
+#define KiBootStep(name) XK_SERIAL("boot: %s (text %08lx, boot stack %#lx of 0x3000 used)\n", name, KiTextSum(), KiBootStackUsed())
+#else
 #define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
+#endif
+
+static void KiEnableMachineChecks();
+static void KiReportLastWords();
+
+#if XK_NETLOG
+extern "C" void KiReadDebugConfig();
+extern "C" void KiPadCalibrate(); // experiment XK_EXPERIMENT_PADCAL (ke/padcal.cpp)
+extern "C" void KiPadReport();
+extern "C" void KiArmDebugRegisters();
+#endif
+
+// Start-up marks (xk/serial.h). Off once the title starts, or once a fault or a step record owns the CMOS bytes.
+UCHAR HalpCmosRead(UCHAR reg);
+void HalpCmosWrite(UCHAR reg, UCHAR v);
+extern "C" volatile BOOLEAN XkBootMarksOn;
+volatile BOOLEAN XkBootMarksOn;
+static ULONG XkBootMarkCount, KiPrevMark, KiPrevMarkCount;
+static bool KiPrevMarkFound, KiPrevStallFound;
+static ULONG KiPrevStallEip, KiPrevStallIrql, KiPrevStallSeconds;
+extern "C" volatile ULONG XkLastMarkTick;
+volatile ULONG XkLastMarkTick; // XkWatchdogTicks at the last mark (the clock interrupt's start-up watchdog)
+static volatile ULONG XkWatchdogTicks; // clock interrupts seen by the watchdog (also before KeTickCount runs: the
+                                       // early sampler experiment unmasks IRQ 0 in phase 0)
+extern "C" void XkBootMark(const char *Format) {
+    if (!XkBootMarksOn)
+        return;
+    ULONG flags = save_flags_cli(); // the index / data pairs must not interleave with another CMOS access
+    if (XkBootMarkCount++ == 0)
+        HalpCmosWrite(0x70, 'P');
+    for (int i = 0; i < 4; i++)
+        HalpCmosWrite((UCHAR)(0x71 + i), (UCHAR)((ULONG)Format >> (8 * i)));
+    HalpCmosWrite(0x75, (UCHAR)XkBootMarkCount);
+    HalpCmosWrite(0x76, (UCHAR)(XkBootMarkCount >> 8));
+    if (XkLastMarkTick + 3000 <= XkWatchdogTicks)
+        HalpCmosWrite(0x77, 0); // a stall record of an earlier pause is stale now
+    XkLastMarkTick = XkWatchdogTicks;
+    restore_flags(flags);
+}
+// Start-up watchdog (clock interrupt, all builds): no mark for 3 s while the marks are on means start-up is stuck.
+// Each tick from then on leaves the interrupted EIP and IRQL in CMOS ('W' 0x77, EIP 0x78-0x7B, IRQL 0x7C, seconds
+// since the last mark 0x7D): a CPU that idles shows the idle loop, one that spins shows where. No record at all
+// means the clock interrupt stopped too.
+extern "C" void XkBootMarkWatchdog(ULONG Eip, UCHAR Irql) {
+    ULONG now = XkWatchdogTicks + 1;
+    XkWatchdogTicks = now;
+    if (!XkBootMarksOn || now - XkLastMarkTick < 3000)
+        return;
+    HalpCmosWrite(0x77, 'W');
+    for (int i = 0; i < 4; i++)
+        HalpCmosWrite((UCHAR)(0x78 + i), (UCHAR)(Eip >> (8 * i)));
+    HalpCmosWrite(0x7C, Irql);
+    ULONG s = (now - XkLastMarkTick) / 1000;
+    HalpCmosWrite(0x7D, (UCHAR)(s > 255 ? 255 : s));
+}
+// The title is starting: the marks stop, and the record says start-up finished ('T').
+extern "C" void XkBootMarksDone() {
+    XkBootMarksOn = FALSE;
+    HalpCmosWrite(0x70, 'T');
+}
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
+#if XK_NETLOG
+    {
+        ULONG sp;
+        __asm__ volatile("movl %%esp, %0" : "=r"(sp));
+        for (auto w = (ULONG *)KiBootStack; (ULONG)w < sp - 0x100; w++)
+            *w = 0x5A5A5A5A;
+    }
+#endif
+    // The previous boot's start-up record, before this boot's first mark overwrites it.
+    if (HalpCmosRead(0x70) == 'P') {
+        KiPrevMarkFound = true;
+        for (int i = 0; i < 4; i++)
+            KiPrevMark |= (ULONG)HalpCmosRead((UCHAR)(0x71 + i)) << (8 * i);
+        KiPrevMarkCount = HalpCmosRead(0x75) | HalpCmosRead(0x76) << 8;
+        if (HalpCmosRead(0x77) == 'W') {
+            KiPrevStallFound = true;
+            for (int i = 0; i < 4; i++)
+                KiPrevStallEip |= (ULONG)HalpCmosRead((UCHAR)(0x78 + i)) << (8 * i);
+            KiPrevStallIrql = HalpCmosRead(0x7C);
+            KiPrevStallSeconds = HalpCmosRead(0x7D);
+        }
+        HalpCmosWrite(0x77, 0);
+    }
+    if (HalpCmosRead(0x70) != 'X' && HalpCmosRead(0x70) != 'S' && HalpCmosRead(0x70) != 'B')
+        XkBootMarksOn = TRUE; // else the fault / step record stays until KiReportLastWords has shown it
+#if XK_NETLOG
+    KiReadDebugConfig(); // before anything reuses the downloaded bank (ke/dbgstep.cpp)
+#endif
+#ifdef XK_EXPERIMENT_PADCAL
+    KiPadCalibrate(); // the retail 2BL's NV2A pad calibration (ke/padcal.cpp), before RAM sees much traffic
+#endif
     KiSetStage(post_code::Entry);
 #if XK_DEBUG_SERIAL
     HalpSerialInit();
@@ -97,6 +222,47 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         HalpNetLogStart(); // the NIC registers are mapped from here on
     }
 #endif
+    KiEnableMachineChecks();
+    KiReportLastWords();
+#if XK_NETLOG
+    KiArmDebugRegisters();
+#endif
+    XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
+#ifdef XK_EXPERIMENT_PADCAL
+    KiPadReport();
+#endif
+    {
+        extern volatile ULONG MiRamProbe, MiGpuSizeBefore, MiGpuSizeAfter;
+        [[maybe_unused]] static const char *what[] = {"not run", "64 MB (64 MB + x reads back at x)", "more than 64 MB",
+                                     "unclear"};
+        extern volatile ULONG MiRamBadPages, MiRamBadPage[4];
+        extern volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2];
+        if (MiMemtestPasses)
+            XK_SERIAL("ram: memory test: %lu passes, %lu words wrong; first at %08lx (bits %08lx) %08lx (%08lx) "
+                      "%08lx (%08lx)\n", MiMemtestPasses, MiMemtestErrors, MiMemtestError[0][0], MiMemtestError[0][1],
+                      MiMemtestError[1][0], MiMemtestError[1][1], MiMemtestError[2][0], MiMemtestError[2][1]);
+        XK_SERIAL("ram: page tag test: %lu pages wrong; first %08lx %08lx %08lx %08lx (pfn << 16 | pfn seen)\n",
+                  MiRamBadPages, MiRamBadPage[0], MiRamBadPage[1], MiRamBadPage[2], MiRamBadPage[3]);
+        [[maybe_unused]] ULONG top;
+        HalReadWritePCISpace(0, 0, 0x84, &top, 4, FALSE);
+        XK_SERIAL("ram: %s; GPU memory size %08lx -> %08lx (PFB 0x100200 %08lx); host top of memory %08lx\n",
+                  what[MiRamProbe & 3], MiGpuSizeBefore, MiGpuSizeAfter, *(volatile ULONG *)0xFD100200, top);
+    }
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+    {
+        KiEarlySample = 1;
+        HalpSetIrqlMask(KiPcr.Irql);
+        __asm__ volatile("sti");
+        XK_SERIAL("boot: early EIP sampler on\n");
+    }
+#endif
+#ifdef XK_DIAG_PAD
+    __asm__ volatile("jmp 1f\n\t.skip " XK_STR(XK_DIAG_PAD) "\n1:");
+    {
+        static volatile char pad[XK_DIAG_PAD] = {1};
+        (void)pad[0];
+    }
+#endif
     if (!quick)
         HalpDetectHardware();
     KiInitializeDpcs();
@@ -118,6 +284,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiBootStep("IDE");
     IdexChannelInit();
     XK_SERIAL("boot: IDE done\n");
+#ifdef XK_EXPERIMENT_EARLY_SAMPLE
+    KiEarlySample = 0;
+#endif
     HalEnableSystemInterrupt(0, Latched); // PIT clock
     XK_SERIAL("boot: clock interrupt on\n");
     HalpSmcStartEvents();
@@ -125,6 +294,26 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     if (!quick)
         HalpStartSplash();
     XK_SERIAL("boot: splash started\n");
+#ifdef XK_EXPERIMENT_WATCHDOG_TEST
+    {
+        // Experiment: 5 s without a mark (interrupts on), then show what the start-up watchdog left in CMOS.
+        ULONG efl;
+        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
+        XK_SERIAL("watchdog test: IRQL %u, eflags %08lx, PIC mask %02x %02x\n", KeGetCurrentIrql(), efl, inb(0x21), inb(0xA1));
+        KfLowerIrql(DISPATCH_LEVEL); // the clock interrupt runs, no other thread does (none of them marks)
+        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
+        XK_SERIAL("watchdog test: IRQL %u, eflags %08lx, PIC mask %02x %02x\n", KeGetCurrentIrql(), efl, inb(0x21), inb(0xA1));
+        __asm__ volatile("sti"); // as in a thread (the title loader runs with interrupts on)
+        ULONG t0 = KeTickCount;
+        for (ULONG i = 0; i < 100000000 && KeTickCount - t0 < 5000; i++)
+            KeStallExecutionProcessor(100);
+        XK_SERIAL("watchdog test: %lu ticks; CMOS 77 %02x eip %02x%02x%02x%02x irql %u seconds %u\n", KeTickCount - t0, HalpCmosRead(0x77),
+                  HalpCmosRead(0x7B), HalpCmosRead(0x7A), HalpCmosRead(0x79), HalpCmosRead(0x78), HalpCmosRead(0x7C),
+                  HalpCmosRead(0x7D));
+        (void)t0;
+        __asm__ volatile("cli");
+    }
+#endif
 
 #if XK_BOOT_SELFTEST
     if (!quick)
@@ -150,8 +339,120 @@ volatile ULONG KiLastExceptionVector = 0xFFFFFFFF;
 volatile ULONG KiLastExceptionCode;
 volatile ULONG KiLastExceptionEip;
 
+// Machine checks (OXOS addition, spec/oxos-internal/03 §8): with CR4.MCE clear a machine-check error puts the
+// CPU in the shutdown state (a silent, total freeze). Enable the exception and the error banks, and report what the
+// banks hold, at boot (errors logged before the last warm reset) and in the #MC handler.
+static ULONG KiMcaBanks;
+static void KiReportMachineCheckBanks(const char *When) {
+    for (ULONG i = 0; i < KiMcaBanks; i++) {
+        ULONGLONG st = rdmsr(0x401 + 4 * i);
+        if (st >> 63) {
+            [[maybe_unused]] ULONGLONG addr = (st >> 58 & 1) ? rdmsr(0x402 + 4 * i) : 0;
+            XK_SERIAL("*** machine check bank %lu (%s): status %08lx%08lx address %08lx%08lx\n", i, When,
+                      (ULONG)(st >> 32), (ULONG)st, (ULONG)(addr >> 32), (ULONG)addr);
+        }
+    }
+    if (KiMcaBanks)
+        XK_SERIAL("machine check: MCG_STATUS %08lx (%s)\n", (ULONG)rdmsr(0x17A), When);
+}
+
+static void KiEnableMachineChecks() {
+    ULONG a, b, c, d;
+    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
+    if (!(d & (1u << 7))) // no machine-check exception
+        return;
+    if (d & (1u << 14)) { // machine-check architecture
+        ULONG cap = (ULONG)rdmsr(0x179);
+        KiMcaBanks = cap & 0xFF;
+        XK_SERIAL("machine check: MCG_CAP %08lx, %lu banks\n", cap, KiMcaBanks);
+        KiReportMachineCheckBanks("at boot");
+        if (cap & 0x100)
+            wrmsr(0x17B, ~0ULL); // MCG_CTL: every error type
+        for (ULONG i = 1; i < KiMcaBanks; i++) // bank 0 is the firmware's on the P6 family
+            wrmsr(0x400 + 4 * i, ~0ULL);
+        for (ULONG i = 0; i < KiMcaBanks; i++)
+            wrmsr(0x401 + 4 * i, 0);
+    }
+    ULONG cr4;
+    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+    __asm__ volatile("mov %0, %%cr4" ::"r"(cr4 | 0x40));
+}
+
+// Last words that survive a power cycle and need no network (spec/oxos-internal/03 §8): CMOS bytes 0x70-0x7F (free;
+// 0x10-0x6F and 0x80-0xFF hold the clock signature): 'X', vector, EIP, MCG_STATUS low, bank 1 status low and high.
+UCHAR HalpCmosRead(UCHAR reg);
+void HalpCmosWrite(UCHAR reg, UCHAR v);
+static void KiCmosPut32(UCHAR at, ULONG v) {
+    for (int i = 0; i < 4; i++)
+        HalpCmosWrite((UCHAR)(at + i), (UCHAR)(v >> (8 * i)));
+}
+[[maybe_unused]] static ULONG KiCmosGet32(UCHAR at) {
+    ULONG v = 0;
+    for (int i = 0; i < 4; i++)
+        v |= (ULONG)HalpCmosRead((UCHAR)(at + i)) << (8 * i);
+    return v;
+}
+static void KiSaveLastWords(ULONG vector, ULONG eip) {
+    XkBootMarksOn = FALSE;
+    HalpCmosWrite(0x70, 'X');
+    HalpCmosWrite(0x71, (UCHAR)vector);
+    KiCmosPut32(0x72, eip);
+    if (KiMcaBanks) {
+        KiCmosPut32(0x76, (ULONG)rdmsr(0x17A));
+        ULONGLONG st = rdmsr(0x405);
+        KiCmosPut32(0x7A, (ULONG)st);
+        HalpCmosWrite(0x7E, (UCHAR)(st >> 56));
+    }
+}
+// Bug checks: 'B', the code (0x71), the first parameter (0x75) and the caller (0x79).
+extern "C" void KiSaveBugCheckLastWords(ULONG Code, ULONG P1, ULONG Caller) {
+    XkBootMarksOn = FALSE;
+    HalpCmosWrite(0x70, 'B');
+    KiCmosPut32(0x71, Code);
+    KiCmosPut32(0x75, P1);
+    KiCmosPut32(0x79, Caller);
+}
+// For the NMI and double-fault tasks (ke/cpu.cpp): the same CMOS record, vector 2 or 8.
+extern "C" void KiSaveFaultTaskLastWords(ULONG vector, ULONG eip) { KiSaveLastWords(vector, eip); }
+
+static void KiReportLastWords() {
+    if (KiPrevMarkFound)
+        XK_SERIAL("*** previous boot stopped in start-up: last mark %08lx (mark %lu; the address of a log line's format "
+                  "string in that boot's image)\n", KiPrevMark, KiPrevMarkCount);
+    if (KiPrevStallFound)
+        XK_SERIAL("*** previous boot's start-up watchdog: %lu s after that mark the clock interrupt still ran, last "
+                  "interrupted eip %08lx at IRQL %lu\n", KiPrevStallSeconds, KiPrevStallEip, KiPrevStallIrql);
+    else if (KiPrevMarkFound)
+        XK_SERIAL("*** previous boot's start-up watchdog: no record (the clock interrupt stopped, or start-up "
+                  "had not stalled for 3 s)\n");
+    if (HalpCmosRead(0x70) == 'S') { // breakpoint stepping (ke/dbgstep.cpp): the last stepped instruction's state
+        XK_SERIAL("*** previous boot stepped %lu instructions; the last at eip %08lx: edi %08lx ecx %08lx\n",
+                  (ULONG)(HalpCmosRead(0x7D) | HalpCmosRead(0x7E) << 8), KiCmosGet32(0x71), KiCmosGet32(0x75),
+                  KiCmosGet32(0x79));
+        HalpCmosWrite(0x70, 0);
+        XkBootMarksOn = TRUE;
+        return;
+    }
+    if (HalpCmosRead(0x70) == 'B') {
+        XK_SERIAL("*** previous boot ended in bug check %#lx (%#lx), called from %08lx\n", KiCmosGet32(0x71),
+                  KiCmosGet32(0x75), KiCmosGet32(0x79));
+        HalpCmosWrite(0x70, 0);
+        XkBootMarksOn = TRUE;
+        return;
+    }
+    if (HalpCmosRead(0x70) != 'X')
+        return;
+    XK_SERIAL("*** previous boot ended in exception %u at eip %08lx; MCG_STATUS %08lx, bank 1 status %02x..%08lx\n",
+              HalpCmosRead(0x71), KiCmosGet32(0x72), KiCmosGet32(0x76), HalpCmosRead(0x7E), KiCmosGet32(0x7A));
+    HalpCmosWrite(0x70, 0);
+    XkBootMarksOn = TRUE;
+}
+
 extern "C" void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip) {
+    KiSaveLastWords(vector, eip);
     XK_SERIAL("*** unexpected exception %lu, error code %#lx, eip %#lx\n", vector, errorCode, eip);
+    if (vector == 18)
+        KiReportMachineCheckBanks("#MC");
     KiLastExceptionVector = vector;
     KiLastExceptionCode = errorCode;
     KiLastExceptionEip = eip;

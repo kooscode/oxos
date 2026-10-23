@@ -1,4 +1,5 @@
 // Memory manager initialisation, the page database and the system PTE range (spec/stock/09 §1-3, §7).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
@@ -95,8 +96,12 @@ static void MiUnlinkFreePage(ULONG pfn) {
 // colour, and each list in insertion order (boot-time pages ascending, freed system pages first).
 static ULONG MiRemoveAnyPage() {
     ULONG color = MiNextColor;
-    while (MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL)
+    for (ULONG tried = 0; MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL; tried++) {
+        if (tried == MM_COLORS) // callers checked MmAvailablePages: the count and the lists disagree
+            KeBugCheckEx(0x4E /*PFN_LIST_CORRUPT*/, 0x99, MmAvailablePages, MmRetailPfnRegion.AvailablePages,
+                         (ULONG)__builtin_return_address(0));
         color = (color + 1) & (MM_COLORS - 1);
+    }
     ULONG pfn = MiUnpack(MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, color);
     MiUnlinkFreePage(pfn);
     MiNextColor = (color + 1) & (MM_COLORS - 1);
@@ -114,10 +119,12 @@ ULONG MiAllocatePage(ULONG usage, ULONG *ownerPte, bool zero) {
         return 0;
     }
     ULONG pfn = MiRemoveAnyPage();
+    XK_MARK("mark: mm: page taken from the free list");
     ULONG alias = MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT);
     if (zero) { // through a temporary mapping at 0x80000000|PA, as the reference
         MiPteArray[pfn] = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
         RtlZeroMemory((PVOID)alias, PAGE_SIZE);
+        XK_MARK("mark: mm: page zeroed");
     }
     MiPteArray[pfn] = MiBusyEntry(usage, usage == MmVirtualPageTableUsage ? nullptr : ownerPte);
     MiInvalidatePage(alias);
@@ -270,6 +277,8 @@ bool MiAllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG a
             if (MiPteArray[pfn] != (MM_PFN_BUSY | 2))
                 found = MiRelocatePage(pfn);
         }
+        if (found && (pteBits & (PTE_PCD | PTE_PWT)))
+            MiFlushCaches(); // the run (and pages just moved out of it) leaves the caches before its new memory type
         for (ULONG i = 0; i < count; i++) {
             ULONG pfn = start + i;
             if (found) {
@@ -311,13 +320,25 @@ static inline void MiSetRun(ULONG *run, ULONG length, ULONG nextLink) {
 }
 static inline void MiSetLink(ULONG *link, ULONG *to) { *link = (ULONG)to | (*link & 3); }
 
-static void MiInsertPteRun(ULONG *start, ULONG count) {
-    RtlZeroMemory(start, count * 4);
+volatile ULONG MiPteDoubleFrees; // diagnostics: releases that overlapped free system PTEs (refused)
+
+static void MiInsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PVOID caller2 = nullptr) {
+    // Find the neighbours first: a range that overlaps a free run is being freed twice. Inserting it would make the
+    // list overlap itself (a search that loops, or slots handed out twice and their live PTEs zeroed): refuse it.
     ULONG *link = &MiSystemPteRange.Head, *prev = nullptr;
     while ((*link & ~3u) != MM_PTE_LIST_END && MiRunNext(*link) < start) {
         prev = MiRunNext(*link);
         link = prev;
     }
+    ULONG next0 = *link & ~3u;
+    if ((prev && prev + MiRunLength(prev) > start) ||
+        (next0 != MM_PTE_LIST_END && MiRunNext(next0) < start + count)) {
+        MiPteDoubleFrees = MiPteDoubleFrees + 1;
+        XK_SERIAL("*** mm: system PTEs %p (+%lu, va %08lx) freed while (partly) free; callers %p %p\n", start, count,
+                  (ULONG)start << 10, caller, caller2);
+        return;
+    }
+    RtlZeroMemory(start, count * 4);
     ULONG next = *link & ~3u;
     if (next != MM_PTE_LIST_END && start + count == MiRunNext(next)) { // join the following run
         ULONG *following = MiRunNext(next);
@@ -332,12 +353,45 @@ static void MiInsertPteRun(ULONG *start, ULONG count) {
     MiSetLink(link, start);
 }
 
+#if XK_NETLOG
+extern "C" volatile ULONG KiSampleTitlePc;
+#define MI_GROW_STEP(...) do { if (KiSampleTitlePc) XK_SERIAL(__VA_ARGS__); } while (0)
+#else
+#define MI_GROW_STEP(...) do { } while (0)
+#endif
+
+volatile ULONG MiPteListDamaged; // diagnostics: the system PTE free list failed its checks
+
+// Report a damaged free list once: where the bad link was read, its value, the run before it, and the physical
+// pages behind them (the page tables of the system PTE range).
+static void MiPteListDamage(ULONG *link, ULONG *cand, ULONG *last) {
+    ULONG n = MiPteListDamaged;
+    MiPteListDamaged = n + 1;
+    if (n >= 4)
+        return;
+    [[maybe_unused]] ULONG linkPa = MmGetPhysicalAddress(link);
+    XK_SERIAL("*** mm: system PTE list damaged: link at %p (pa %08lx) = %08lx -> run %p; previous run %p (len %lu)\n",
+              link, linkPa, *link, cand, last, last ? MiRunLength(last) : 0);
+    [[maybe_unused]] auto w = (const ULONG *)((ULONG)link & ~0x1Fu);
+    XK_SERIAL("    around it: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", w[0], w[1], w[2], w[3], w[4], w[5],
+              w[6], w[7]);
+}
+
 PVOID MiReserveSystemPtes(ULONG count) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     MMPTERANGE &r = MiSystemPteRange;
     for (;;) {
         ULONG *link = &r.Head, *last = nullptr;
         while ((*link & ~3u) != MM_PTE_LIST_END) { // first fit, lowest address first
+            // A damaged list (a stray write into these page tables) must not be followed: each run lies inside the
+            // committed PTEs, after the previous one, with a sane length.
+            ULONG *cand = MiRunNext(*link);
+            if (cand < r.FirstCommittedPte || cand >= r.LastCommittedPte || (last && cand <= last) ||
+                MiRunLength(cand) == 0 || cand + MiRunLength(cand) > r.LastCommittedPte) {
+                MiPteListDamage(link, cand, last);
+                KfLowerIrql(old);
+                return nullptr;
+            }
             ULONG *run = MiRunNext(*link), length = MiRunLength(run), next = run[0] & ~3u;
             if (length >= count) {
                 if (length == count) {
@@ -365,12 +419,16 @@ PVOID MiReserveSystemPtes(ULONG count) {
         ULONG *first = r.LastCommittedPte;
         for (ULONG i = 0; i < tables; i++) {
             ULONG *pde = (ULONG *)(((ULONG)r.LastCommittedPte >> 10 & 0x3FFFFC) + 0xC0000000);
+            MI_GROW_STEP("mm: grow: pde %p for ptes %p\n", pde, r.LastCommittedPte);
             ULONG pfn = r.AllocatePageTable(MmSystemPageTableUsage, pde, true);
+            MI_GROW_STEP("mm: grow: table pfn %04lx\n", pfn);
             *pde = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
             MiInvalidatePage((ULONG)r.LastCommittedPte);
+            MI_GROW_STEP("mm: grow: pde set\n");
             r.LastCommittedPte += 0x400;
         }
         MiInsertPteRun(first, ptes);
+        MI_GROW_STEP("mm: grow: run inserted\n");
     }
 }
 
@@ -379,7 +437,10 @@ void MiReleaseSystemPtes(PVOID va, ULONG count) {
     ULONG *first = MiGetPteAddress((ULONG)va);
     for (ULONG i = 0; i < count; i++)
         MiInvalidatePage((ULONG)va + (i << PAGE_SHIFT));
-    MiInsertPteRun(first, count);
+    // The caller's caller through the frame-pointer chain (kernel built with frame pointers).
+    auto frame = (ULONG *)__builtin_frame_address(0);
+    PVOID caller2 = frame && frame[0] >= 0x80000000 ? (PVOID)((ULONG *)frame[0])[1] : nullptr;
+    MiInsertPteRun(first, count, __builtin_return_address(0), caller2);
     KfLowerIrql(old);
 }
 
@@ -392,7 +453,106 @@ static inline void MiReloadCr3() {
 
 volatile ULONG MmPersistedPages; // pages re-adopted by the last quick reboot
 
+extern "C" volatile ULONG MiRamProbe, MiGpuSizeBefore, MiGpuSizeAfter;
+volatile ULONG MiGpuSizeBefore, MiGpuSizeAfter; // diagnostics: PFB 0x10020C before / after the 64 MB set-up
+extern "C" volatile ULONG MiRamBadPages, MiRamBadPage[4];
+extern "C" volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2];
+volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2]; // XK_EXPERIMENT_MEMTEST: {address, bits wrong}
+volatile ULONG MiRamBadPages, MiRamBadPage[4]; // diagnostics: pages whose tag read back wrong {pfn << 16 | seen pfn}
+volatile ULONG MiRamProbe; // diagnostics: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB, 3 = unclear
+
+// How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0):
+// a marker written at 64 MB + x either appears at x (only 64 MB, the address wraps) or not.
+static void MiProbeRamSize() {
+    auto low = (volatile ULONG *)0x00000FF0, high = (volatile ULONG *)(0x04000000 + 0x0FF0);
+    ULONG saved = *low;
+    *low = 0x13579BDF;
+    *high = 0x2468ACE0;
+    __asm__ volatile("wbinvd" ::: "memory");
+    ULONG l = *low, h = *high;
+    MiRamProbe = l == 0x2468ACE0 ? 1 : (l == 0x13579BDF && h == 0x2468ACE0) ? 2 : 3;
+    *low = saved;
+}
+
 void MmInitSystem(bool QuickReboot) {
+    if (!QuickReboot) {
+        MiProbeRamSize();
+        // Every allocatable page answers as itself (no two addresses on the same cells): tag each page's first and
+        // middle words with its address, then read them all back.
+        ULONG imgEnd = (0x10000 + *(ULONG *)(0x80010000 + *(ULONG *)(0x80010000 + 0x3C) + 24 + 56) + PAGE_SIZE - 1) >>
+                       PAGE_SHIFT;
+        for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+            auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
+            w[0] = 0xA5000000 ^ pfn;
+            w[512] = ~(0xA5000000 ^ pfn);
+        }
+        __asm__ volatile("wbinvd" ::: "memory");
+        for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+            auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
+            if (w[0] != (0xA5000000 ^ pfn) || w[512] != ~(0xA5000000 ^ pfn)) {
+                ULONG bad = MiRamBadPages;
+                if (bad < 4)
+                    MiRamBadPage[bad] = pfn << 16 | ((w[0] ^ 0xA5000000) & 0xFFFF);
+                MiRamBadPages = bad + 1;
+            }
+        }
+#ifdef XK_EXPERIMENT_MEMTEST
+#ifdef XK_EXPERIMENT_MEMTEST_DECAY
+#define XK_MEMTEST_PASSES 2
+#else
+#define XK_MEMTEST_PASSES 4
+#endif
+        // Experiment: a RAM test over every allocatable page (4 passes: patterns, their inverse, address-derived),
+        // to see whether the memory interface returns what was written (no pad calibration is done).
+        {
+            static const ULONG patterns[4] = {0x55555555, 0xAAAAAAAA, 0, 1};
+            for (ULONG pass = 0; pass < XK_MEMTEST_PASSES; pass++) {
+                for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+                    auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
+                    for (ULONG i = 0; i < 1024; i++)
+                        w[i] = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
+                }
+                __asm__ volatile("wbinvd" ::: "memory");
+#ifdef XK_EXPERIMENT_MEMTEST_DECAY
+                // Leave the patterns alone for 10 s before checking them (DRAM refresh / retention).
+                for (ULONG ms = 0; ms < 10000; ms++)
+                    KeStallExecutionProcessor(1000);
+#endif
+                for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+                    auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
+                    for (ULONG i = 0; i < 1024; i++) {
+                        ULONG want = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
+                        ULONG got = w[i];
+                        if (got != want) {
+                            ULONG n = MiMemtestErrors;
+                            if (n < 4) {
+                                MiMemtestError[n][0] = (pfn << 12) | (i << 2);
+                                MiMemtestError[n][1] = got ^ want;
+                            }
+                            MiMemtestErrors = n + 1;
+                        }
+                    }
+                }
+                MiMemtestPasses = pass + 1;
+            }
+        }
+#endif
+        // 64 MB consoles (no RAM answers above 64 MB): the GPU's memory interface as Cromwell leaves it for 64 MB
+        // (spec/stock/22 §11: PFB 0x100200 bit 8 clear, 0x03070003), not the 128 MB value our X-codes leave.
+        // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes
+        // it has; at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
+        auto pfb = (volatile ULONG *)0xFD100200;
+        MiGpuSizeBefore = pfb[3];
+        if (MiRamProbe != 2 && (pfb[0] & 0x100))
+            pfb[0] = pfb[0] & ~0x100u;
+        MiGpuSizeAfter = pfb[3];
+        // And the host bridge's top of memory (bus 0 device 0 register 0x84): 64 MB - 1, not 128 MB - 1.
+        if (MiRamProbe != 2) {
+            outl(0xCF8, 0x80000084);
+            if (inl(0xCFC) == 0x07FFFFFF)
+                outl(0xCFC, 0x03FFFFFF);
+        }
+    }
     // Kernel image extent from our own PE header; .text (first section) becomes read-only.
     auto image = (UCHAR *)0x80010000;
     ULONG lfanew = *(ULONG *)(image + 0x3C);
@@ -422,6 +582,10 @@ void MmInitSystem(bool QuickReboot) {
         } else if (pfn >= MM_GPU_INSTANCE_FIRST_PFN) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
         } else if (!allocatable(pfn)) {
+#ifdef XK_EXPERIMENT_GPU_LAST_MB
+            if (pfn > MM_HIGHEST_CONTIGUOUS_PFN) // held: never on the free lists
+                pte = (pfn << PAGE_SHIFT) | rw;
+#endif
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
                 pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);
         } else if (QuickReboot &&
@@ -432,6 +596,22 @@ void MmInitSystem(bool QuickReboot) {
         MiPteArray[pfn] = pte;
     }
     MmPersistedPages = persisted;
+#ifdef XK_EXPERIMENT_POISON_RAM
+    // Experiment: real RAM powers up holding garbage, xemu's holds zeros. Fill every allocatable page with
+    // pseudo-random words (through the 2BL's large pages, still in place), so code that assumes fresh memory is zero
+    // fails in xemu too.
+    if (!QuickReboot) {
+        ULONG x = 0x12345678;
+        for (ULONG pfn = 0; pfn < MM_PAGES; pfn++)
+            if (allocatable(pfn)) {
+                auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
+                for (ULONG i = 0; i < PAGE_SIZE / 4; i++) {
+                    x = x * 1664525 + 1013904223;
+                    w[i] = x;
+                }
+            }
+    }
+#endif
 
     // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
     //    count as contiguous memory.

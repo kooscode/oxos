@@ -77,7 +77,14 @@ static NTSTATUS IdexAtapiPioOnce(const UCHAR *cdb, PUCHAR data, ULONG length, bo
     if (!IdexAtapiIssue(cdb, false, length > 0xFFFE ? 0xFFFE : (length ? length : 2))) {
         status = STATUS_IO_DEVICE_ERROR;
     } else {
-        for (;;) {
+        // Bounded: a drive that keeps DRQ up (or reports a byte count of 0) must not hold the CPU here forever.
+        for (ULONG phase = 0;; phase++) {
+            if (phase == 64 || *transferred > length + 0x10000) {
+                XK_SERIAL("*** atapi: command %#x still requesting data after %lu phases, %lu bytes\n", cdb[0], phase,
+                          *transferred);
+                status = STATUS_IO_DEVICE_ERROR;
+                break;
+            }
             if (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 10000000)) {
                 status = STATUS_IO_TIMEOUT;
                 break;
@@ -89,6 +96,8 @@ static NTSTATUS IdexAtapiPioOnce(const UCHAR *cdb, PUCHAR data, ULONG length, bo
                 break;
             }
             ULONG count = inb(IDE_LBA1) | (inb(IDE_LBA2) << 8);
+            if (!count) // DRQ without a byte count: not a data phase we can serve
+                count = 2;
             for (ULONG i = 0; i < count; i += 2) {
                 USHORT w = 0;
                 if (toDevice) {
@@ -152,6 +161,7 @@ static NTSTATUS IdexCdRomComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Informati
 
 static NTSTATUS NTAPI IdexCdRomCreateClose(PDEVICE_OBJECT, PIRP Irp) { return IdexCdRomComplete(Irp, 0, 0); }
 
+extern volatile ULONG KiIrqCounts[16]; // diagnostics (ke/irql.cpp)
 volatile ULONG IdexCdRomAbsentReason; // 0 = a DVD drive, else why none was found (IdexCdRomStart)
 
 static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
@@ -629,6 +639,10 @@ static ULONG IdexCdRomIdentify() {
         return 4;
     for (int i = 0; i < 256; i++)
         inw(IDE_DATA);
+    // A drive that offers more than one block (DRQ still up) holds the channel, and the disk on the same cable with
+    // it: read until it lets go (bounded).
+    for (int i = 0; i < 65536 && (inb(IDE_ALT_STATUS) & IDE_STATUS_DRQ); i++)
+        inw(IDE_DATA);
     inb(IDE_STATUS);
     return 0;
 }
@@ -653,7 +667,23 @@ static ULONG IdexCdRomStart() {
     while (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 50000))
         if (++tries == 600)
             return 2;
+    // A drive still starting up (a fast boot: the DVD drive spins up for seconds after power-on) reads back a
+    // status without DRDY, or a floating pattern (0x3F / 0x7F / 0xFF): wait up to 10 s for it to be ready before
+    // the first command, instead of failing the transfer-mode command and taking the no-drive path.
+    for (ULONG ms = 0; ms < 10000; ms += 10) {
+        UCHAR s = inb(IDE_ALT_STATUS);
+        if (s == 0) // nothing answers (device 0 reads back 0 for an absent device 1)
+            break;
+        if (s != 0x3F && s != 0x7F && s != 0xFF && !(s & IDE_STATUS_BSY) && (s & 0x40))
+            break;
+        KeStallExecutionProcessor(10000);
+    }
     ULONG step = 0;
+#ifdef XK_EXPERIMENT_NO_DVD
+    // Experiment: take the no-drive path of a console without a DVD drive (IDENTIFY PACKET fails, status 0).
+    XK_SERIAL("dvd: attempt 1 failed at step 4, status 0 (experiment)\n");
+    return 4;
+#endif
     for (int attempt = 0; attempt < 3; attempt++) {
         step = IdexCdRomIdentify();
         if (!step)
@@ -681,16 +711,33 @@ void IdexCdRomInit() {
         IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000);
         inb(IDE_STATUS);
     }
+    XK_SERIAL("dvd: lowering IRQL %u -> %u; IRQ 14 taken %lu\n", KeGetCurrentIrql(), old, KiIrqCounts[14]);
     KfLowerIrql(old);
     XK_SERIAL("dvd: %s (step %lu)\n", IdexCdRomAbsentReason ? "no drive" : "drive found", IdexCdRomAbsentReason);
+#ifdef XK_EXPERIMENT_DVD_PAUSE
+    // Experiment: 3 s after the drive set-up, logging every 100 ms, before the device objects are created. A freeze
+    // that follows the time since the set-up stops inside this pause; one that follows the code comes after it.
+    for (ULONG i = 1; i <= 30; i++) {
+        KeStallExecutionProcessor(100000);
+        XK_SERIAL("dvd: pause %lu00 ms, status %#x\n", i, inb(IDE_ALT_STATUS));
+    }
+#endif
 
     OBJECT_STRING name, link;
     RtlInitAnsiString(&name, "\\Device\\CdRom0");
     RtlInitAnsiString(&link, "\\??\\CdRom0:");
     PDEVICE_OBJECT dev;
-    if (!NT_SUCCESS(IoCreateDevice(&IdexCdRomDriverObject, 0, &name, FILE_DEVICE_CD_ROM, FALSE, &dev)) ||
-        !NT_SUCCESS(IoCreateSymbolicLink(&link, &name)))
+    extern volatile ULONG ObpTraceSymbolicLink;
+    ObpTraceSymbolicLink = 1;
+    NTSTATUS created = IoCreateDevice(&IdexCdRomDriverObject, 0, &name, FILE_DEVICE_CD_ROM, FALSE, &dev);
+    ObpTraceSymbolicLink = 0;
+    XK_SERIAL("dvd: IoCreateDevice %#lx; IRQ 14 taken %lu\n", created, KiIrqCounts[14]);
+    ObpTraceSymbolicLink = 1;
+    NTSTATUS linked = NT_SUCCESS(created) ? IoCreateSymbolicLink(&link, &name) : created;
+    ObpTraceSymbolicLink = 0;
+    if (!NT_SUCCESS(created) || !NT_SUCCESS(linked))
         IdexFatalError(0x10E5F);
+    XK_SERIAL("dvd: link made\n");
     dev->Flags |= 0x44;
     dev->AlignmentRequirement = 1;
     dev->SectorSize = 0x800;
@@ -698,5 +745,9 @@ void IdexCdRomInit() {
     IdexCdRomDeviceObject = dev;
     KeInitializeTimerEx(&IdexCdRomRetryTimer, NotificationTimer);
     KeInitializeDpc(&IdexCdRomRetryDpc, IdexCdRomRetryRoutine, nullptr);
+    XK_SERIAL("dvd: timer and DPC set up\n");
+    // Leave device 0 (the disk) selected and both devices out of a data phase.
+    outb(IDE_DRIVE, 0xA0);
+    KeStallExecutionProcessor(1);
     XK_SERIAL("dvd: device ready, selected %#x, status %#x\n", inb(IDE_DRIVE), inb(IDE_ALT_STATUS));
 }

@@ -90,6 +90,7 @@ static NTSTATUS NTAPI IdexDiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 }
 
 static void IdexDiskCompleteIrp(PIRP Irp, NTSTATUS Status) {
+    XK_MARK(NT_SUCCESS(Status) ? "mark: disk IRP done" : "mark: disk IRP failed");
     Irp->IoStatus.Status = Status;
     if (!NT_SUCCESS(Status))
         Irp->IoStatus.Information = 0;
@@ -108,6 +109,49 @@ static void IdexDiskStartTransfer(PIRP Irp) {
     bool ext = IdexDiskLba48 && lba + count > 0x0FFFFFFF;
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
+#ifdef XK_EXPERIMENT_PIO_DISK
+    {
+        // Experiment: every transfer by polled PIO (READ / WRITE SECTORS [EXT]), no bus-master DMA at all.
+        void IdexCompletePolledTransfer(UCHAR AtaStatus, bool Error);
+        bool ok = IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000);
+        auto data = (PUSHORT)s->Parameters.Read.CacheBuffer;
+        if (ok) {
+            if (ext) {
+                outb(IDE_DRIVE, 0xE0);
+                outb(IDE_COUNT, (UCHAR)(count >> 8));
+                outb(IDE_LBA0, (UCHAR)(lba >> 24));
+                outb(IDE_LBA1, (UCHAR)(lba >> 32));
+                outb(IDE_LBA2, (UCHAR)(lba >> 40));
+                outb(IDE_COUNT, (UCHAR)count);
+                outb(IDE_LBA0, (UCHAR)lba);
+                outb(IDE_LBA1, (UCHAR)(lba >> 8));
+                outb(IDE_LBA2, (UCHAR)(lba >> 16));
+                outb(IDE_COMMAND, read ? 0x24 : 0x34); // READ / WRITE SECTORS EXT
+            } else {
+                outb(IDE_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
+                outb(IDE_LBA0, (UCHAR)lba);
+                outb(IDE_LBA1, (UCHAR)(lba >> 8));
+                outb(IDE_LBA2, (UCHAR)(lba >> 16));
+                outb(IDE_COUNT, (UCHAR)count);
+                outb(IDE_COMMAND, read ? 0x20 : 0x30); // READ / WRITE SECTORS
+            }
+            for (ULONG sector = 0; ok && sector < count; sector++) {
+                ok = IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 5000000);
+                for (ULONG w = 0; ok && w < 256; w++, data++)
+                    if (read)
+                        *data = inw(IDE_DATA);
+                    else
+                        outw(IDE_DATA, *data);
+            }
+            ok = ok && IdexWaitForStatus(IDE_STATUS_BSY, 0, 5000000);
+        }
+        UCHAR status = inb(IDE_STATUS);
+        ch->ExpectingBusMasterInterrupt = TRUE;
+        KfLowerIrql(old);
+        IdexCompletePolledTransfer(status, !ok || (status & (IDE_STATUS_ERR | IDE_STATUS_DF)));
+        return;
+    }
+#endif
     if (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000) ||
         !IdexProgramDma(s->Parameters.Read.CacheBuffer, chunk)) {
         KfLowerIrql(old);
@@ -136,6 +180,7 @@ static void IdexDiskStartTransfer(PIRP Irp) {
     ch->ExpectingBusMasterInterrupt = TRUE;
     ch->Timeout = 10;
     outb(IDE_BM_COMMAND, read ? 0x09 : 0x01);
+    XK_MARK("mark: disk DMA started");
     KfLowerIrql(old);
 }
 

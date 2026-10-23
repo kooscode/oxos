@@ -1,5 +1,6 @@
 // Object manager (spec/stock/10): headers, handle table, namespace, directories and symbolic links.
 // The Ob "lock" is DISPATCH_LEVEL, as in the reference.
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/ob.h>
 #include <xk/rtl.h>
@@ -22,6 +23,9 @@ PVOID ObpGetWaitableObject(PVOID Object) {
 }
 
 // --- Handle table: RootTable[h >> 8][(h & 0xFC) / 4]; free entries hold the next free handle | 1.
+
+volatile ULONG ObpTraceSymbolicLink; // diagnostics: step lines for one call (set by the caller)
+#define OB_STEP(...) do { if (ObpTraceSymbolicLink) XK_SERIAL(__VA_ARGS__); } while (0)
 
 static PVOID *ObpHandleEntry(ULONG h) { return &ObpObjectHandleTable.RootTable[h >> 8][(h & 0xFC) >> 2]; }
 
@@ -95,10 +99,35 @@ XBAPI void FASTCALL ObfReferenceObject(PVOID Object) {
     __atomic_add_fetch(&OBJECT_TO_OBJECT_HEADER(Object)->PointerCount, 1, __ATOMIC_SEQ_CST);
 }
 
+// Diagnostics (serial / network-log builds): name of a named object, for the integrity checks below.
+static void ObpReportObject(const char *What, PVOID Object, PVOID Caller) {
+#if XK_DEBUG_SERIAL
+    POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
+    const char *name = "";
+    USHORT len = 0;
+    if (h->Flags & OB_FLAG_NAMED_OBJECT) {
+        POBJECT_HEADER_NAME_INFO n = OBJECT_HEADER_TO_NAME_INFO(h);
+        name = n->Name.Buffer ? n->Name.Buffer : "";
+        len = n->Name.Length < 40 ? n->Name.Length : 40;
+    }
+    XK_SERIAL("*** ob: %s: object %p '%.*s' type %p flags %#x pointers %ld handles %ld, caller %p\n", What, Object,
+              (int)len, name, h->Type, h->Flags, h->PointerCount, h->HandleCount, Caller);
+#else
+    (void)What, (void)Object, (void)Caller;
+#endif
+}
+
 XBAPI void FASTCALL ObfDereferenceObject(PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
-    if (__atomic_sub_fetch(&h->PointerCount, 1, __ATOMIC_SEQ_CST) != 0)
+    LONG left = __atomic_sub_fetch(&h->PointerCount, 1, __ATOMIC_SEQ_CST);
+    if (left < 0)
+        ObpReportObject("reference count below zero", Object, __builtin_return_address(0));
+    if (left != 0)
         return;
+    if (h->Flags & OB_FLAG_ATTACHED_OBJECT) { // still linked into a directory: freeing it corrupts the hash chain
+        ObpReportObject("freeing an object still in a directory (kept)", Object, __builtin_return_address(0));
+        return;
+    }
     if (h->Type->DeleteProcedure)
         h->Type->DeleteProcedure(Object);
     h->Type->FreeProcedure((h->Flags & OB_FLAG_NAMED_OBJECT) ? (PVOID)OBJECT_HEADER_TO_NAME_INFO(h) : (PVOID)h);
@@ -162,7 +191,13 @@ static PVOID ObpLookupElementNameInDirectory(POBJECT_DIRECTORY dir, const OBJECT
         if (letter >= 0 && ObpDosDevicesDriveLetterMap[letter])
             return ObpDosDevicesDriveLetterMap[letter];
     }
+    ULONG steps = 0;
     for (POBJECT_HEADER_NAME_INFO n = dir->HashBuckets[ObpComputeHashIndex(element)]; n; n = n->ChainLink) {
+        if (++steps == 10000) {
+            XK_SERIAL("*** ob: hash chain loops in directory %p (looking up '%.*s')\n", dir, (int)element->Length,
+                      element->Buffer);
+            return nullptr;
+        }
         if (!RtlEqualString(&n->Name, element, TRUE))
             continue;
         PVOID o = (POBJECT_HEADER)(n + 1) + 1;
@@ -373,7 +408,26 @@ XBAPI NTSTATUS NTAPI ObCreateObject(POBJECT_TYPE ObjectType, POBJECT_ATTRIBUTES 
 static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     POBJECT_HEADER_NAME_INFO n = OBJECT_HEADER_TO_NAME_INFO(h);
+    XK_MARK("mark: ob: into dir, hashing");
     ULONG bucket = ObpComputeHashIndex(&n->Name);
+    XK_MARK("mark: ob: into dir, hashed");
+    OB_STEP("ob: into dir %p bucket %lu (head %p): name '%.*s' (length %u at %p)\n", dir, bucket,
+            dir->HashBuckets[bucket], (int)(n->Name.Length < 40 ? n->Name.Length : 40), n->Name.Buffer,
+            n->Name.Length, n->Name.Buffer);
+    ULONG steps = 0;
+    for (POBJECT_HEADER_NAME_INFO e = dir->HashBuckets[bucket]; e; e = e->ChainLink) {
+        if (++steps <= 8)
+            OB_STEP("ob:   chain %lu: %p -> %p\n", steps, e, e->ChainLink);
+        if (steps == 10000) {
+            XK_SERIAL("*** ob: hash chain loops in directory %p bucket %lu (inserting %p)\n", dir, bucket, Object);
+            break;
+        }
+        if (e == n) {
+            ObpReportObject("inserted twice into a directory (skipped)", Object, __builtin_return_address(0));
+            return;
+        }
+    }
+    OB_STEP("ob: into dir: chain checked (%lu entries)\n", steps);
     n->ChainLink = dir->HashBuckets[bucket];
     dir->HashBuckets[bucket] = n;
     n->Directory = dir;
@@ -386,8 +440,10 @@ static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
                 : ((POBJECT_SYMBOLIC_LINK)Object)->PathLink ? nullptr
                                                               : ((POBJECT_SYMBOLIC_LINK)Object)->LinkTargetObject;
     }
+    OB_STEP("ob: into dir: linked; referencing\n");
     ObfReferenceObject(dir);
     ObfReferenceObject(Object);
+    OB_STEP("ob: into dir: done\n");
 }
 
 // At DISPATCH_LEVEL; the caller dereferences afterwards (the directory link reference and dir reference).
@@ -426,8 +482,9 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
 
     if (h->Flags & OB_FLAG_NAMED_OBJECT) {
         OBJECT_STRING rest = *ObjectAttributes->ObjectName;
-        PVOID dir;
+        PVOID dir = nullptr; // stays null when the root does not resolve (released below only if set)
         status = ObpResolveRoot(ObjectAttributes->RootDirectory, &rest, &dir);
+        OB_STEP("ob: insert root %#lx dir %p\n", status, dir);
         // Walk to the parent directory (all elements but the last).
         while (NT_SUCCESS(status)) {
             OBJECT_STRING element;
@@ -440,7 +497,9 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
                 status = STATUS_OBJECT_PATH_NOT_FOUND;
                 break;
             }
+            OB_STEP("ob: insert element '%.*s' in %p\n", (int)element.Length, element.Buffer, dir);
             PVOID found = ObpLookupElementNameInDirectory((POBJECT_DIRECTORY)dir, &element, rest.Length != 0);
+            OB_STEP("ob: insert found %p\n", found);
             if (!rest.Length) { // final element
                 if (!found) {
                     ObpInsertIntoDirectory((POBJECT_DIRECTORY)dir, Object);
@@ -463,8 +522,10 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
         if (dir)
             ObfDereferenceObject(dir);
     }
+    OB_STEP("ob: insert status %#lx; creating handle\n", status);
     if (NT_SUCCESS(status)) {
         HANDLE handle = ObpCreateObjectHandle(target);
+        OB_STEP("ob: insert handle %p\n", handle);
         if (!handle) {
             if (target == Object && (h->Flags & OB_FLAG_ATTACHED_OBJECT))
                 ObpDetachAndRelease(Object);
@@ -476,7 +537,9 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
             *Handle = handle;
         }
     }
+    OB_STEP("ob: insert lowering IRQL to %u\n", old);
     KfLowerIrql(old);
+    OB_STEP("ob: insert dereferencing\n");
     ObfDereferenceObject(Object); // the creator's reference
     return status;
 }
@@ -638,17 +701,22 @@ static void NTAPI ObpDeleteSymbolicLink(PVOID Object) {
 
 // Permanent link LinkName -> object named TargetName (which must already exist).
 NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) {
+    bool trace = ObpTraceSymbolicLink;
     // Resolve up to the first object with a parse procedure: a target like
     // "\Device\Harddisk0\Partition1\Games\X" makes a path link into that device.
     PVOID target;
     OBJECT_STRING remaining = {};
     NTSTATUS status = ObpLookupObjectNameEx(nullptr, TargetName, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &target, 0,
                                             true, &remaining);
+    if (trace)
+        XK_SERIAL("ob: link target lookup %#lx -> %p\n", status, target);
     if (!NT_SUCCESS(status))
         return status;
     OBJECT_ATTRIBUTES attrs = {nullptr, LinkName, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     POBJECT_SYMBOLIC_LINK link;
     status = ObCreateObject(&ObSymbolicLinkObjectType, &attrs, sizeof(OBJECT_SYMBOLIC_LINK), (PVOID *)&link);
+    if (trace)
+        XK_SERIAL("ob: link object %#lx -> %p\n", status, link);
     if (!NT_SUCCESS(status)) {
         ObfDereferenceObject(target);
         return status;
@@ -665,9 +733,15 @@ NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetNam
     link->LinkTarget.Length = TargetName->Length;
     link->LinkTarget.MaximumLength = (USHORT)(TargetName->Length + 1);
     HANDLE h;
+    if (trace)
+        XK_SERIAL("ob: link target buffer %p; inserting\n", link->LinkTarget.Buffer);
     status = ObInsertObject(link, &attrs, 0, &h);
+    if (trace)
+        XK_SERIAL("ob: link inserted %#lx, handle %p\n", status, h);
     if (NT_SUCCESS(status))
         NtClose(h);
+    if (trace)
+        XK_SERIAL("ob: link handle closed\n");
     return status;
 }
 

@@ -35,6 +35,8 @@ _KernelEntry:
 _KiDoubleFaultTask:
     movb $0xDF, %al
     outb %al, $0x80
+    pushl $8
+    call _KiFaultTaskReport
 1:  cli
     hlt
     jmp 1b
@@ -43,6 +45,8 @@ _KiDoubleFaultTask:
 _KiNmiTask:
     movb $0xD2, %al
     outb %al, $0x80
+    pushl $2
+    call _KiFaultTaskReport
 1:  cli
     hlt
     jmp 1b

@@ -1,4 +1,5 @@
 // IDE channel: interrupt, completion DPC, timeout timer, packet serialisation, bus-master DMA (spec/stock/04 §1, §5).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hal.h>
 #include <xk/idex.h>
@@ -25,10 +26,50 @@ bool IdexWaitForStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
 }
 
 // Describe Buffer to the bus master; merges physically contiguous pages, never crosses a 64 KB boundary.
+volatile ULONG IdexBadDmaPages; // diagnostics: transfers refused because a page was not valid RAM
+
+// The pages of the chunk being transferred stay where they are until it is over: an unlocked page can be moved by a
+// contiguous allocation (MiRelocatePage), and the bus master would then write into its old frame, which by then
+// belongs to someone else (a hardware transfer takes milliseconds; xemu finishes it at once).
+static PVOID IdexLockedBuffer;
+static ULONG IdexLockedLength;
+
+void IdexUnlockDmaBuffer() {
+    if (IdexLockedBuffer) {
+        MmLockUnlockBufferPages(IdexLockedBuffer, IdexLockedLength, TRUE);
+        IdexLockedBuffer = nullptr;
+    }
+}
+
+static bool IdexProgramDmaPages(PVOID Buffer, ULONG Length);
+
 bool IdexProgramDma(PVOID Buffer, ULONG Length) {
+    IdexUnlockDmaBuffer();
+    MmLockUnlockBufferPages(Buffer, Length, FALSE);
+    IdexLockedBuffer = Buffer;
+    IdexLockedLength = Length;
+    if (IdexProgramDmaPages(Buffer, Length))
+        return true;
+    IdexUnlockDmaBuffer();
+    return false;
+}
+
+static bool IdexProgramDmaPages(PVOID Buffer, ULONG Length) {
     ULONG va = (ULONG)Buffer, n = 0;
     while (Length) {
+        // Real hardware hangs the bus on a transfer to an address that is not RAM (xemu ignores it): check each
+        // page is mapped and below 64 MB before the engine sees it.
+        if (!MmIsAddressValid((PVOID)va)) {
+            IdexBadDmaPages = IdexBadDmaPages + 1;
+            XK_SERIAL("*** ide: DMA buffer %p (%lu bytes left) is not mapped; transfer refused\n", (PVOID)va, Length);
+            return false;
+        }
         ULONG phys = MmGetPhysicalAddress((PVOID)va);
+        if (phys >= 0x04000000 || (phys & 1)) {
+            IdexBadDmaPages = IdexBadDmaPages + 1;
+            XK_SERIAL("*** ide: DMA buffer %p -> physical %08lx is not RAM; transfer refused\n", (PVOID)va, phys);
+            return false;
+        }
         ULONG piece = 0x1000 - (va & 0xFFF);
         if (piece > Length)
             piece = Length;
@@ -52,11 +93,15 @@ bool IdexProgramDma(PVOID Buffer, ULONG Length) {
     outb(IDE_BM_COMMAND, 0);
     outb(IDE_BM_STATUS, inb(IDE_BM_STATUS) | 6); // clear interrupt and error
     outl(IDE_BM_PRDT, IdexChannelObject.PhysicalRegionDescriptorTablePhysical);
+#ifdef XK_EXPERIMENT_DMA_WBINVD
+    __asm__ volatile("wbinvd" ::: "memory"); // experiment: the table and the buffer reach RAM, no stale lines kept
+#endif
     return true;
 }
 
 static BOOLEAN NTAPI IdexInterruptService(PKINTERRUPT, PVOID) {
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
+    XK_MARK("mark: IDE interrupt");
     if (!ch->ExpectingBusMasterInterrupt) {
         inb(IDE_STATUS); // acknowledge anything unexpected (PIO commands are polled)
         return FALSE;
@@ -73,7 +118,21 @@ static BOOLEAN NTAPI IdexInterruptService(PKINTERRUPT, PVOID) {
     return TRUE;
 }
 
+// A transfer done by polled PIO (XK_EXPERIMENT_PIO_DISK): complete it the way the DMA interrupt does.
+void IdexCompletePolledTransfer(UCHAR AtaStatus, bool Error) {
+    PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
+    IdexLastBusMasterStatus = Error ? 2 : 4;
+    IdexLastAtaStatus = AtaStatus;
+    ch->ExpectingBusMasterInterrupt = FALSE;
+    KeInsertQueueDpc(&ch->FinishDpc, nullptr, nullptr);
+}
+
 static void NTAPI IdexFinishDpc(PKDPC, PVOID, PVOID, PVOID) {
+    XK_MARK("mark: IDE finish DPC");
+    IdexUnlockDmaBuffer(); // the chunk is done (or abandoned)
+#ifdef XK_EXPERIMENT_DMA_WBINVD
+    __asm__ volatile("wbinvd" ::: "memory"); // experiment: no line cached during the transfer survives it
+#endif
     if (IdexChannelObject.FinishIoRoutine)
         IdexChannelObject.FinishIoRoutine();
 }
@@ -131,6 +190,7 @@ void NTAPI IdexChannelStartNextPacket() {
 // Both drives share one channel: requests from either device are serialised here.
 void NTAPI IdexChannelStartPacket(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
+    XK_MARK("mark: IDE start packet");
     KIRQL old = KeRaiseIrqlToDpcLevel();
     if (!KeInsertDeviceQueue(&ch->DeviceQueue, &Irp->Tail.Overlay.DeviceQueueEntry)) {
         IdexStartIo(Irp);

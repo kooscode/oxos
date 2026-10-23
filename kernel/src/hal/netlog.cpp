@@ -5,9 +5,11 @@
 // Transmit only, polled: it also works from the bug check and fatal error paths. The NIC set-up follows the
 // nForce NIC sequence of XboxDev/cromwell's etherboot forcedeth driver (GPL-2.0); the link comes from PhyInitialize.
 #include <xk/arch.h>
+#include <xk/serial.h>
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/rtl.h>
+#include <xk/mm.h>
 
 #if XK_NETLOG
 XBAPI NTSTATUS NTAPI PhyInitialize(BOOLEAN ForceReset, PVOID Parameter2);
@@ -222,6 +224,7 @@ extern "C" volatile ULONG XkTraceCount;
 #include <xk/idex.h>
 void HalpNetLogWrite(const char *Text, ULONG Length);
 #include <xk/io.h>
+extern volatile ULONG KiDbgConfigured; // ke/dbgstep.cpp
 static HANDLE HalpNetFileHandle;
 static LONGLONG HalpNetFileOffset;
 static char HalpNetFileCopy[sizeof(HalpNetFile)];
@@ -236,7 +239,7 @@ static NTSTATUS HalpNetOpenLog(HANDLE *h, ACCESS_MASK access, ULONG disposition)
 }
 
 // Append the buffered lines to E:\oxoslog.txt and flush (heartbeat thread, PASSIVE_LEVEL).
-static void HalpNetFileFlush() {
+[[maybe_unused]] static void HalpNetFileFlush() {
     ULONG flags = save_flags_cli();
     ULONG n = HalpNetFileLength;
     RtlCopyMemory(HalpNetFileCopy, HalpNetFile, n);
@@ -264,7 +267,9 @@ static void HalpNetFileFlush() {
 // Before the title starts (title launcher, PASSIVE_LEVEL): send the previous run's E:\oxoslog.txt over the network,
 // each line prefixed "prev: ", then empty the file.
 extern "C" void HalpNetLogReplay() {
-    if (HalpNetState != 2)
+    // Not while breakpoint tracing (ke/dbgstep.cpp): reading the file after a frozen run has hung the title
+    // launcher on a console, and a replay that stops half-way leaves the file for the next boot.
+    if (HalpNetState != 2 || KiDbgConfigured)
         return;
     HANDLE h;
     if (!NT_SUCCESS(HalpNetOpenLog(&h, GENERIC_READ, FILE_OPEN)))
@@ -299,10 +304,105 @@ extern "C" void HalpNetLogReplay() {
 }
 
 extern "C" void HalpSetBootLed(UCHAR Pattern);
+extern "C" ULONG KiTextSum(); // ke/startup.cpp
+
+static volatile ULONG HalpHeartbeatTick; // KeTickCount at the last beat (the watchdog's view of "threads still run")
+extern "C" volatile ULONG KiPcRing[32];
+
+// Watchdog (clock interrupt, NETLOG builds, once the title runs): no beat for 3 s means no thread at priority 30
+// runs any more (an interrupt storm, or a title spinning at raised IRQL). Then take the NIC back from the title (it
+// is not getting anywhere either) and send what the clock interrupt can see: the interrupt counts, the interrupted
+// EIP of the last 32 ticks and the title's last kernel calls. Once per boot; the PC samples continue after it.
+// A title's network stack asks for the NIC's interrupt (HalGetInterruptVector(4)): stop touching the NIC from here
+// on (no frame in flight when the title resets it); the lines go to the disk file (state 4) as after a takeover.
+void HalpNetLogReleaseNic() {
+    if (HalpNetState != 2 || KiDbgConfigured) // breakpoint tracing: its lines need the network for as long as possible
+        return;
+    static const char note[] = "netlog: a title asked for the NIC's interrupt; releasing the NIC, continuing on disk\n";
+    HalpNetLogWrite(note, sizeof(note) - 1);
+    for (ULONG us = 20000; ((HalpNetTx[0].Flags | HalpNetTx[1].Flags) & TX_VALID) && us; us -= 10)
+        KeStallExecutionProcessor(10); // let the last frames go out
+    ULONG flags = save_flags_cli();
+    HalpNetState = 4;
+    restore_flags(flags);
+}
+
+// Take the NIC back from a title that owns it (state 4) for a last report: the watchdog and the fault tasks.
+void HalpNetTakeBack() {
+    HalpNetBusy = 0;
+    if (HalpNetState == 4) {
+        HalpNetState = 3;
+        HalpNetLogStart();
+    }
+}
+
+void HalpNetWatchdog() {
+    static bool fired;
+    if (fired || !HalpHeartbeatTick || KeTickCount - HalpHeartbeatTick < 3000)
+        return;
+    fired = true;
+    HalpNetTakeBack();
+    char line[200];
+    int n = RtlSnprintf(line, sizeof(line), "*** watchdog: no heartbeat for %lu ms (tick %lu); interrupts so far:",
+                        KeTickCount - HalpHeartbeatTick, KeTickCount);
+    for (ULONG i = 0; i < 16 && n < 180; i++)
+        if (KiIrqCounts[i])
+            n += RtlSnprintf(line + n, sizeof(line) - n, " %lu:%lu", i, KiIrqCounts[i]);
+    line[n++] = '\n';
+    HalpNetLogWrite(line, (ULONG)n);
+    for (ULONG k = 0; k < 32; k += 8) {
+        ULONG t = KeTickCount + 1 + k; // oldest first
+        n = RtlSnprintf(line, sizeof(line), "    pcs %#lx %#lx %#lx %#lx %#lx %#lx %#lx %#lx\n", KiPcRing[t % 32],
+                        KiPcRing[(t + 1) % 32], KiPcRing[(t + 2) % 32], KiPcRing[(t + 3) % 32], KiPcRing[(t + 4) % 32],
+                        KiPcRing[(t + 5) % 32], KiPcRing[(t + 6) % 32], KiPcRing[(t + 7) % 32]);
+        HalpNetLogWrite(line, (ULONG)n);
+    }
+#if XK_TRACE_IMPORTS
+    if (XkTraceRing) {
+        ULONG count = XkTraceCount;
+        for (ULONG k = count > 12 ? count - 12 : 0; k < count; k++) {
+            volatile ULONG *e = XkTraceRing[k % 0x8000];
+            n = RtlSnprintf(line, sizeof(line), "  call %lu: ordinal %lu -> %#lx, from %#lx thread %#lx args %#lx %#lx %#lx\n",
+                            k, e[0], e[6], e[1], e[2], e[3], e[4], e[5]);
+            HalpNetLogWrite(line, (ULONG)n);
+        }
+    }
+#endif
+}
+
+#if XK_BOOT_SELFTEST
+// Self-test builds on hardware: which boot self-test suites have finished (spec/oxos-internal/03 §7).
+extern volatile ULONG KiTestThreadsDone, KiTestApcSuiteDone, KiTestMmDone, KiTestObDone, KiTestIoDone, KiTestHalDone,
+    KiTestIdexDone, KiTestFatxDone, KiTestDvdDone, KiTestRtlDone, KiTestSehDone, KiTestXcDone, KiTestMiscDone;
+static void HalpNetSelfTestProgress() {
+    static const struct { const char *Name; volatile ULONG *Done; } suites[] = {
+        {"threads", &KiTestThreadsDone}, {"apc", &KiTestApcSuiteDone}, {"mm", &KiTestMmDone}, {"ob", &KiTestObDone},
+        {"io", &KiTestIoDone}, {"hal", &KiTestHalDone}, {"idex", &KiTestIdexDone}, {"fatx", &KiTestFatxDone},
+        {"dvd", &KiTestDvdDone}, {"rtl", &KiTestRtlDone}, {"seh", &KiTestSehDone}, {"xc", &KiTestXcDone},
+        {"misc", &KiTestMiscDone}};
+    char line[200];
+    int n = RtlSnprintf(line, sizeof(line), "selftest: done");
+    bool all = true;
+    for (auto &t : suites)
+        if (*t.Done)
+            n += RtlSnprintf(line + n, sizeof(line) - n, " %s", t.Name);
+        else
+            all = false;
+    n += RtlSnprintf(line + n, sizeof(line) - n, all ? " (all)\n" : "; waiting:");
+    if (!all) {
+        for (auto &t : suites)
+            if (!*t.Done)
+                n += RtlSnprintf(line + n, sizeof(line) - n, " %s", t.Name);
+        line[n++] = '\n';
+    }
+    HalpNetLogWrite(line, (ULONG)n);
+}
+#endif
 
 static void NTAPI HalpNetHeartbeat(PVOID) {
     ULONG last[16] = {};
     for (ULONG beat = 1;; beat++) {
+        HalpHeartbeatTick = KeTickCount;
         LARGE_INTEGER t;
         t.QuadPart = -10000000LL;
         KeDelayExecutionThread(KernelMode, FALSE, &t);
@@ -314,10 +414,43 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
                 n += RtlSnprintf(line + n, sizeof(line) - n, " %lu:+%lu", i, c - last[i]);
             last[i] = c;
         }
+        // The alternate status register: reading 0x1F7 would clear a pending drive interrupt before the IDE ISR sees it.
         n += RtlSnprintf(line + n, sizeof(line) - n, "; ide busy %u timeout %u status %#x bm %#x\n",
-                         IdexChannelObject.ExpectingBusMasterInterrupt, IdexChannelObject.Timeout, inb(0x1F7),
+                         IdexChannelObject.ExpectingBusMasterInterrupt, IdexChannelObject.Timeout, inb(0x3F6),
                          inb(0xFF62));
         HalpNetLogWrite(line, (ULONG)n);
+        {
+            n = RtlSnprintf(line, sizeof(line), "text %08lx\n", KiTextSum());
+            HalpNetLogWrite(line, (ULONG)n);
+        }
+        // The GPU's command engines (a title waiting for its push buffer to be consumed shows why the FIFO is
+        // stuck): PMC enable/interrupts, PFIFO interrupts, DMA pusher state, cache 1 GET/PUT and status, PGRAPH
+        // status/interrupts, the memory size register.
+        {
+            auto gpu = [](ULONG o) { return *(volatile ULONG *)(0xFD000000 + o); };
+            char gl[320];
+            int gn = RtlSnprintf(gl, sizeof(gl),
+                            "gpu: pmc %08lx intr %08lx | pfifo intr %08lx caches %08lx push %08lx dma put %08lx get %08lx "
+                            "state %08lx | c1 status %08lx | pgraph status %08lx intr %08lx | fb size %08lx\n",
+                            gpu(0x200), gpu(0x100), gpu(0x2100), gpu(0x2500), gpu(0x3220), gpu(0x3240), gpu(0x3244),
+                            gpu(0x3228), gpu(0x3214), gpu(0x400700), gpu(0x400100), gpu(0x10020C));
+            HalpNetLogWrite(gl, (ULONG)gn);
+            // The code at the latest sampled title EIP (the title is not ours to disassemble otherwise): 16 bytes
+            // before and 32 after, when that page is mapped.
+            ULONG pc = KiPcRing[KeTickCount % 32];
+            if (pc >= 0x10010 && pc < 0x80000000 && MmIsAddressValid((PVOID)(pc - 16)) &&
+                MmIsAddressValid((PVOID)(pc + 32))) {
+                auto c = (const UCHAR *)(pc - 16);
+                gn = RtlSnprintf(gl, sizeof(gl), "code at %08lx-16:", pc);
+                for (ULONG i = 0; i < 48; i++)
+                    gn += RtlSnprintf(gl + gn, sizeof(gl) - gn, " %02x", c[i]);
+                gl[gn++] = '\n';
+                HalpNetLogWrite(gl, (ULONG)gn);
+            }
+        }
+#if XK_BOOT_SELFTEST
+        HalpNetSelfTestProgress();
+#endif
 #if XK_TRACE_IMPORTS
         // The title's last kernel calls (trace builds): ordinal, return value (0xDEADDEAD = still inside), arguments.
         if (XkTraceRing) {
@@ -330,8 +463,10 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
             }
         }
 #endif
-        if (HalpNetState == 4)
-            HalpNetFileFlush();
+        // No disk file any more: the heartbeat's writes to E: at top priority, next to a title's own disk I/O, are
+        // suspected in hardware freezes, and the on-screen log (hal/splash.cpp) now shows what the file was for.
+        // if (HalpNetState == 4)
+        //     HalpNetFileFlush();
         // Liveness on the front LED: the beat alternates green with orange while the log goes over the network, with
         // red once it goes to the disk file (the title owns the NIC). A frozen colour means the system stopped.
         HalpSetBootLed((beat & 1) ? 0x0F : (HalpNetState == 4 ? 0xF0 : 0xFF));
@@ -343,6 +478,8 @@ extern "C" void HalpNetLogStartHeartbeat() {
         KiCreateSystemThread(HalpNetHeartbeat, nullptr, 0, 30);
 }
 
+void HalpScreenLog(const char *Text, ULONG Length);
+
 void HalpNetLogWrite(const char *Text, ULONG Length) {
     if (__atomic_exchange_n(&HalpNetBusy, 1, __ATOMIC_SEQ_CST))
         return; // re-entered from an interrupt or another processor path: drop rather than corrupt a frame
@@ -350,7 +487,9 @@ void HalpNetLogWrite(const char *Text, ULONG Length) {
     if (HalpNetState == 2 && Nv(NvTxRing) != Phys(HalpNetTx))
         HalpNetState = 4;
     if (HalpNetState == 2) {
+        XK_MARK("mark: netlog: sending");
         HalpNetSendAll(Text, Length);
+        XK_MARK("mark: netlog: sent");
     } else if (HalpNetState == 4) {
         for (ULONG i = 0; i < Length && HalpNetFileLength < sizeof(HalpNetFile); i++)
             HalpNetFile[HalpNetFileLength++] = Text[i];
@@ -359,6 +498,8 @@ void HalpNetLogWrite(const char *Text, ULONG Length) {
         for (ULONG i = 0; i < Length && HalpNetPendingLength < sizeof(HalpNetPending); i++)
             HalpNetPending[HalpNetPendingLength++] = Text[i];
     }
+    HalpScreenLog(Text, Length); // the on-screen copy (hal/splash.cpp)
+    XK_MARK("mark: netlog: done");
     restore_flags(flags);
     __atomic_store_n(&HalpNetBusy, 0, __ATOMIC_SEQ_CST);
 }

@@ -1,6 +1,7 @@
 // Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/stock/09 §6).
 // One address space (0x00010000-0x7FFDFFFF); reservations are VADs kept in an address-sorted list.
 #include <xk/arch.h>
+#include <xk/serial.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/rtl.h>
@@ -208,7 +209,9 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
     if (base > MM_HIGHEST_USER_ADDRESS || size == 0 || size > MM_HIGHEST_USER_ADDRESS + 1 - base)
         return STATUS_INVALID_PARAMETER;
 
+    XK_MARK("mark: mm: allocate VM, taking the lock");
     Lock();
+    XK_MARK("mark: mm: allocate VM, lock taken");
     NTSTATUS status = STATUS_SUCCESS;
     MMVAD *newVad = nullptr;
     if (base == 0 || (AllocationType & MEM_RESERVE)) {
@@ -235,6 +238,7 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
             }
         }
         newVad = (MMVAD *)ExAllocatePoolWithTag(sizeof(MMVAD), 'SdaV');
+        XK_MARK("mark: mm: VAD allocated");
         if (!newVad) {
             Unlock();
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -275,6 +279,7 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
                 needed++;
             }
         }
+        XK_MARK("mark: mm: commit counted");
         if (needed > MmAvailablePages) {
             MiCommitFailures = MiCommitFailures + 1;
             MiCommitFailNeeded = needed;
@@ -282,21 +287,28 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
             status = STATUS_NO_MEMORY;
         } else {
             for (ULONG va = start; va <= end && NT_SUCCESS(status); va += PAGE_SIZE) {
+                XK_MARK("mark: mm: commit, page table");
                 if (!MiEnsureUserPageTable(va)) {
                     status = STATUS_NO_MEMORY;
                     break;
                 }
                 ULONG *pte = MiGetPteAddress(va);
                 if (*pte) {
+                    if ((*pte & PTE_PRESENT) && ((*pte ^ pteBits) & (PTE_PCD | PTE_PWT)))
+                        MiFlushCaches(); // memory type changes: flush first
                     *pte = (*pte & ~0xFFFu & ~0u) | pteBits; // recommit: apply the new protection
                     MiInvalidatePage(va);
                     continue;
                 }
+                XK_MARK("mark: mm: commit, page");
                 ULONG pfn = MiAllocatePage(Usage, pte, !(AllocationType & MEM_NOZERO));
+                XK_MARK("mark: mm: commit, page allocated");
                 if (!pfn) {
                     status = STATUS_NO_MEMORY;
                     break;
                 }
+                if (pteBits & (PTE_PCD | PTE_PWT))
+                    MiFlushCaches(); // the zeroing went through a cached alias: out of the caches before the new type
                 *pte = (pfn << PAGE_SHIFT) | pteBits;
                 MiInvalidatePage(va);
                 MiAdjustPageTableUse(va, 1);
@@ -317,6 +329,7 @@ static NTSTATUS MiAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZ
         *BaseAddress = (PVOID)base;
         *RegionSize = size;
     }
+    XK_MARK("mark: mm: allocate VM done");
     Unlock();
     return status;
 }
@@ -447,6 +460,9 @@ XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSi
     if (NT_SUCCESS(status)) {
         *OldProtect = MiPteToVmProtect(MiQueryPte(start));
         KIRQL old = KeRaiseIrqlToDpcLevel();
+        bool typeChange = (MiQueryPte(start) ^ pteBits) & (PTE_PCD | PTE_PWT);
+        if (typeChange || (NewProtect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)))
+            MiFlushCaches(); // before the new memory type (see MmSetAddressProtect)
         for (ULONG va = start; va <= end; va += PAGE_SIZE) {
             ULONG *pte = MiGetPteAddress(va);
             *pte = (*pte & ~0xFFFu) | pteBits;

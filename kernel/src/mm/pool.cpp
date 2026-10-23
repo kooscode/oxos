@@ -34,6 +34,21 @@ static UCHAR *ExpCurrentPage;
 static ULONG ExpCurrentUsed = POOL_UNITS_PER_PAGE;
 volatile ULONG ExpPoolPages, ExpPoolBlocks;
 
+// The current page's unused tail goes to the free list of its exact size; no page is current afterwards.
+// DISPATCH_LEVEL.
+static void ExpRetireCurrentPage() {
+    if (ExpCurrentPage && ExpCurrentUsed < POOL_UNITS_PER_PAGE) {
+        auto tail = (FreeBlock *)(ExpCurrentPage + ExpCurrentUsed * POOL_UNIT);
+        ULONG tailUnits = POOL_UNITS_PER_PAGE - ExpCurrentUsed;
+        tail->Header.PoolType = 0;
+        tail->Header.BlockSize = (UCHAR)tailUnits;
+        tail->Next = ExpFreeLists[tailUnits];
+        ExpFreeLists[tailUnits] = tail;
+    }
+    ExpCurrentPage = nullptr;
+    ExpCurrentUsed = POOL_UNITS_PER_PAGE;
+}
+
 void ExInitializePool() {
     for (auto &l : ExpFreeLists)
         l = nullptr;
@@ -68,19 +83,16 @@ XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag) {
         h = &larger->Header;
     } else {
         if (ExpCurrentUsed + units > POOL_UNITS_PER_PAGE) {
-            // Give the page's tail to the free list of its exact size, then start a new page.
-            if (ExpCurrentPage && ExpCurrentUsed < POOL_UNITS_PER_PAGE) {
-                auto tail = (FreeBlock *)(ExpCurrentPage + ExpCurrentUsed * POOL_UNIT);
-                ULONG tailUnits = POOL_UNITS_PER_PAGE - ExpCurrentUsed;
-                tail->Header.BlockSize = (UCHAR)tailUnits;
-                tail->Next = ExpFreeLists[tailUnits];
-                ExpFreeLists[tailUnits] = tail;
-            }
+            // Give the page's tail to the free list of its exact size and retire the page before IRQL drops for the
+            // new page: an allocation in between (another thread, a DPC) must not see the old page as current, or
+            // it hands the same tail out a second time (two owners of one block).
+            ExpRetireCurrentPage();
             KfLowerIrql(old);
             auto page = (UCHAR *)ExpAllocatePages(PAGE_SIZE);
             if (!page)
                 return nullptr;
             old = KeRaiseIrqlToDpcLevel();
+            ExpRetireCurrentPage(); // a page installed meanwhile by such an allocation
             ExpCurrentPage = page;
             ExpCurrentUsed = 0;
             ExpPoolPages = ExpPoolPages + 1;

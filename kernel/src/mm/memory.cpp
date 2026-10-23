@@ -1,4 +1,5 @@
 // Exported memory-manager routines (spec/stock/09 §2-5).
+#include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
@@ -89,17 +90,31 @@ XBAPI BOOLEAN NTAPI MmIsAddressValid(PVOID VirtualAddress) {
 // --- System PTE range: system memory, kernel stacks, I/O mappings.
 
 // Pages mapped in the system PTE range, each recorded with its usage (system memory, pool, stacks).
+#if XK_NETLOG
+extern "C" volatile ULONG KiSampleTitlePc; // set once the title runs (ke/irql.cpp)
+#define MI_STEP(...) do { if (KiSampleTitlePc) XK_SERIAL(__VA_ARGS__); } while (0)
+#else
+#define MI_STEP(...) do { } while (0)
+#endif
+
 PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage) {
     ULONG slots = pages + (guardPage ? 1 : 0);
     if (pages > MmAvailablePages)
         return nullptr;
+    MI_STEP("mm: map %lu pages (bits %lx, usage %lu, %lu free)\n", pages, pteBits, usage, MmAvailablePages);
     auto base = (ULONG)MiReserveSystemPtes(slots);
+    MI_STEP("mm: ptes at %08lx\n", base);
     if (!base)
         return nullptr;
     ULONG va = base + (guardPage ? PAGE_SIZE : 0);
+    // Uncached / write-combined pages: no line of any free page may still sit in the caches when it is mapped with
+    // another memory type (a memory-type conflict is a machine check on the P6), so flush before mapping, not after.
+    if (pteBits & (PTE_PCD | PTE_PWT))
+        MiFlushCaches();
     for (ULONG i = 0; i < pages; i++) {
         ULONG a = va + (i << PAGE_SHIFT);
         ULONG pfn = MiAllocatePage(usage, MiGetPteAddress(a), false);
+        MI_STEP("mm: page %lu at %08lx: pfn %04lx\n", i, a, pfn);
         if (!pfn) {
             for (ULONG j = 0; j < i; j++) { // undo
                 ULONG b = va + (j << PAGE_SHIFT);
@@ -111,7 +126,9 @@ PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG us
         }
         *MiGetPteAddress(a) = (pfn << PAGE_SHIFT) | pteBits | (i == pages - 1 ? PTE_END_OF_ALLOCATION : 0);
         MiInvalidatePage(a);
+        MI_STEP("mm: page %lu mapped\n", i);
     }
+    MI_STEP("mm: map done\n");
     if (pteBits & (PTE_PCD | PTE_PWT))
         MiFlushCaches();
     return (PVOID)va;
@@ -224,6 +241,16 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG va = (ULONG)BaseAddress & ~0xFFFu, end = (ULONG)BaseAddress + NumberOfBytes;
     const ULONG attrMask = PTE_PRESENT | PTE_WRITE | PTE_PWT | PTE_PCD | PTE_ACCESSED | PTE_DIRTY;
+    // A change of memory type: flush the caches first (nothing at DISPATCH_LEVEL touches these pages in between),
+    // then the new type, then flush again for anything prefetched meanwhile. Flushing only afterwards left cached
+    // lines of a page already mapped uncached.
+    bool typeChange = (NewProtect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)) != 0;
+    for (ULONG a = va; a < end && !typeChange; a += PAGE_SIZE) {
+        ULONG *pte = MiGetPteAddress(a);
+        typeChange = (*pte & PTE_PRESENT) && ((*pte ^ pteBits) & (PTE_PCD | PTE_PWT));
+    }
+    if (typeChange)
+        MiFlushCaches();
     for (; va < end; va += PAGE_SIZE) {
         ULONG *pte = MiGetPteAddress(va);
         if (*pte & PTE_PRESENT) {
@@ -231,7 +258,7 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
             MiInvalidatePage(va);
         }
     }
-    if (NewProtect & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
+    if (typeChange)
         MiFlushCaches();
     KfLowerIrql(old);
 }
@@ -255,7 +282,10 @@ XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes,
         (*MiGetPdeAddress(va) & PTE_LARGE))
         return;
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    for (ULONG *pte = MiGetPteAddress(va), *last = MiGetPteAddress(va + NumberOfBytes - 1); pte <= last; pte++) {
+    for (ULONG a = va & ~(PAGE_SIZE - 1); a < va + NumberOfBytes; a += PAGE_SIZE) {
+        if (!(*MiGetPdeAddress(a) & PTE_PRESENT) || (*MiGetPdeAddress(a) & PTE_LARGE))
+            continue; // no page table here (nothing to lock)
+        ULONG *pte = MiGetPteAddress(a);
         ULONG pfn = *pte >> PAGE_SHIFT;
         if ((*pte & PTE_PRESENT) && pfn < MM_PAGES && !(MiPteArray[pfn] & PTE_PRESENT))
             ((USHORT *)&MiPteArray[pfn])[0] += UnlockPages ? -2 : 2;

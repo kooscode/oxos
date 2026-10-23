@@ -13,10 +13,19 @@ constexpr NTSTATUS STATUS_IO_TIMEOUT_ = (NTSTATUS)0xC00000B5, STATUS_IO_DEVICE_E
 static KEVENT HalpSMBusLock;
 static bool HalpSMBusLockReady;
 
+volatile ULONG HalpSMBusRaisedWhileBusy; // diagnostics: SMBus calls at DISPATCH_LEVEL+ while a thread held the lock
+
 static void HalpAcquireSMBus() {
     if (!HalpSMBusLockReady) {
         KeInitializeEvent(&HalpSMBusLock, SynchronizationEvent, TRUE);
         HalpSMBusLockReady = true;
+    }
+    if (KeGetCurrentIrql() >= DISPATCH_LEVEL && !HalpSMBusLock.Header.SignalState) {
+        ULONG n = HalpSMBusRaisedWhileBusy;
+        HalpSMBusRaisedWhileBusy = n + 1;
+        if (n < 8)
+            XK_SERIAL("smbus: called at IRQL %u from %p while a thread holds the bus\n", KeGetCurrentIrql(),
+                      __builtin_return_address(0));
     }
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         KeWaitForSingleObject(&HalpSMBusLock, Executive, KernelMode, FALSE, nullptr);
@@ -38,8 +47,32 @@ static ULONG HalpSMBusSize(UCHAR Address, BOOLEAN WordFlag) {
 // One byte/word/block transaction, polled. The reference retries collisions/protocol errors up to 20 times, 2 ms
 // apart. A 4-byte transfer uses the block protocol: the bytes go through the FIFO (0xC009), low byte first, with the
 // byte count in the data register.
+// Each attempt runs with interrupts disabled: callers at DISPATCH_LEVEL and above (DPCs, a title's interrupt
+// routine) cannot take the lock, and one of them preempting a transaction half-way overwrote its address, command
+// and data registers (a write could reach the wrong SMC register). An attempt takes well under 1 ms.
+constexpr NTSTATUS SMB_TRY_AGAIN = 0x103; // an attempt ended in a collision or protocol error
+static NTSTATUS HalpSMBusAttempt(UCHAR Address, UCHAR Command, ULONG Size, bool Read, ULONG *Value, UCHAR *Status);
+
 static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, ULONG Size, bool Read, ULONG *Value) {
+    XK_MARK("mark: SMBus transaction");
     for (int attempt = 0; attempt < 20; attempt++) {
+        UCHAR status;
+        ULONG flags = save_flags_cli();
+        NTSTATUS result = HalpSMBusAttempt(Address, Command, Size, Read, Value, &status);
+        restore_flags(flags);
+        if (result != SMB_TRY_AGAIN) {
+            XK_MARK(NT_SUCCESS(result) ? "mark: SMBus done" : "mark: SMBus failed");
+            return result;
+        }
+        XK_MARK("mark: SMBus retry");
+        KeStallExecutionProcessor(2000);
+    }
+    return STATUS_IO_DEVICE_ERROR_;
+}
+
+// One attempt: SMB_TRY_AGAIN for a collision or protocol error (try again), else the result.
+static NTSTATUS HalpSMBusAttempt(UCHAR Address, UCHAR Command, ULONG Size, bool Read, ULONG *Value, UCHAR *Status) {
+    {
         outb(SMB_ADDRESS, Read ? (UCHAR)(Address | 1) : (UCHAR)(Address & 0xFE));
         outb(SMB_COMMAND, Command);
         if (!Read && Size == 4) {
@@ -74,11 +107,11 @@ static NTSTATUS HalpSMBusTransaction(UCHAR Address, UCHAR Command, ULONG Size, b
         }
         if (Size == 4)
             HalpSMBusLastBlock = (ULONG)status << 8 | 0xFF;
+        *Status = status;
         if (!(status & (SMB_STATUS_COLLISION | SMB_STATUS_PROTOCOL)))
             return (status & SMB_STATUS_TIMEOUT) ? STATUS_IO_TIMEOUT_ : STATUS_IO_DEVICE_ERROR_;
-        KeStallExecutionProcessor(2000);
+        return SMB_TRY_AGAIN;
     }
-    return STATUS_IO_DEVICE_ERROR_;
 }
 
 XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue,
@@ -93,6 +126,7 @@ XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BO
 
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue,
                                         ULONG DataValue) {
+    XK_MARK("mark: SMBus write, taking the lock");
     HalpAcquireSMBus();
     ULONG v = DataValue;
     NTSTATUS status = HalpSMBusTransaction(SlaveAddress, CommandCode, HalpSMBusSize(SlaveAddress, WriteWordValue), false, &v);

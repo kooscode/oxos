@@ -10,7 +10,13 @@
 constexpr ULONG PAGE_SIZE = 0x1000, PAGE_SHIFT = 12;
 constexpr ULONG MM_PAGES = 0x4000;                 // 64 MB
 constexpr ULONG MM_GPU_INSTANCE_FIRST_PFN = 0x3FE0, MM_PAGE_TABLES_FIRST_PFN = 0x3FF0;
+#ifdef XK_EXPERIMENT_GPU_LAST_MB
+// Experiment: nothing allocatable in the last MB of RAM (the NV2A's PRAMIN window), in case the GPU uses more of it
+// than the claimed instance memory.
+constexpr ULONG MM_HIGHEST_CONTIGUOUS_PFN = 0x3EFF;
+#else
 constexpr ULONG MM_HIGHEST_CONTIGUOUS_PFN = 0x3FDF;
+#endif
 constexpr ULONG MM_SYSTEM_PHYSICAL_MAP = 0x80000000;
 constexpr ULONG MM_SYSTEM_PTE_BASE = 0xD0000000, MM_SYSTEM_PTE_END = 0xF0000000;
 

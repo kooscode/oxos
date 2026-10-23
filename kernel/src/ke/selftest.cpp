@@ -1,6 +1,7 @@
 // Boot self-tests for milestone checks. Results are plain globals that tests/boot_test.py reads
 // over the emulator monitor; nothing here is part of the kernel ABI.
 #include <xk/hal.h>
+#include <xk/serial.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/ob.h>
@@ -371,6 +372,7 @@ volatile ULONG KiTestVmStatsOk;          // MmQueryStatistics
 static void NTAPI ShortThread(PVOID) {}
 
 static void NTAPI MmControllerThread(PVOID) {
+    XK_SERIAL("mm test 1: Contiguous memory.\n");
     // Contiguous memory.
     auto a = (ULONG *)MmAllocateContiguousMemory(0x3000);
     KiTestMmContiguousVa = (ULONG)a;
@@ -394,6 +396,7 @@ static void NTAPI MmControllerThread(PVOID) {
     auto a2 = MmAllocateContiguousMemory(0x3000);
     KiTestMmReuseOk = a2 == a && afterFree == before + 3;
 
+    XK_SERIAL("mm test 2: A contiguous request over a page in use:\n");
     // A contiguous request over a page in use: the page moves (contents kept, same VA); a locked page does not.
     auto sp = (ULONG *)MmAllocateSystemMemory(PAGE_SIZE, PAGE_READWRITE);
     ok = sp != nullptr;
@@ -412,6 +415,7 @@ static void NTAPI MmControllerThread(PVOID) {
     }
     KiTestMmRelocateOk = ok;
 
+    XK_SERIAL("mm test 3: System memory.\n");
     // System memory.
     auto s = (ULONG *)MmAllocateSystemMemory(0x5000, PAGE_READWRITE);
     ok = s && (ULONG)s >= MM_SYSTEM_PTE_BASE && (ULONG)s < MM_SYSTEM_PTE_END && MmQueryAllocationSize(s) == 0x5000 &&
@@ -423,6 +427,7 @@ static void NTAPI MmControllerThread(PVOID) {
     MmFreeSystemMemory(s, 0x5000);
     KiTestMmSystemOk = ok && !MmIsAddressValid(s);
 
+    XK_SERIAL("mm test 4: I/O space: alias a contiguous page throu\n");
     // I/O space: alias a contiguous page through system PTEs; MMIO pass-through.
     auto alias = (volatile ULONG *)MmMapIoSpace(MmGetPhysicalAddress(a2), 0x1000, PAGE_READWRITE);
     ok = alias && (ULONG)alias >= MM_SYSTEM_PTE_BASE;
@@ -435,6 +440,7 @@ static void NTAPI MmControllerThread(PVOID) {
     KiTestMmIoSpaceOk = ok && MmMapIoSpace(0xFD000000, 0x1000, PAGE_READWRITE | PAGE_NOCACHE) == (PVOID)0xFD000000;
     MmFreeContiguousMemory(a2);
 
+    XK_SERIAL("mm test 5: Pool.\n");
     // Pool.
     static UCHAR *blocks[500];
     ok = true;
@@ -460,23 +466,29 @@ static void NTAPI MmControllerThread(PVOID) {
     ExFreePool(big);
     KiTestMmPoolOk = ok;
 
+    XK_SERIAL("mm test 6: Layout: no user mappings, read-only kern\n");
     // Layout: no user mappings, read-only kernel code, guard page under our stack.
     PKTHREAD self = KeGetCurrentThread();
     KiTestMmLayoutOk = !MmIsAddressValid((PVOID)0x10000) && MmQueryAddressProtect((PVOID)&KiRunBootSelfTests) == PAGE_READONLY &&
                        !MmIsAddressValid((UCHAR *)self->StackLimit - 1) && MmIsAddressValid(self->StackLimit);
 
+    XK_SERIAL("mm test 7: Thread churn through the real lifecycle:\n");
     // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return.
     ULONG baseline = MmAvailablePages;
     for (int i = 0; i < 150; i++) {
         HANDLE h;
-        if (NT_SUCCESS(PsCreateSystemThread(&h, nullptr, (PVOID)ShortThread, nullptr, FALSE))) {
+        NTSTATUS created = PsCreateSystemThread(&h, nullptr, (PVOID)ShortThread, nullptr, FALSE);
+        XK_SERIAL("mm churn %d: created %#lx, free pages %lu\n", i, created, MmAvailablePages);
+        if (NT_SUCCESS(created)) {
             NtWaitForSingleObject(h, FALSE, nullptr);
+            XK_SERIAL("mm churn %d: joined\n", i);
             NtClose(h);
         }
     }
     Sleep(5);
     KiTestMmThreadChurnPages = baseline - MmAvailablePages;
 
+    XK_SERIAL("mm test 8: Virtual memory.\n");
     // Virtual memory.
     ULONG vmBaseline = MmAvailablePages;
     PVOID base = nullptr;
@@ -498,6 +510,7 @@ static void NTAPI MmControllerThread(PVOID) {
     ok &= mbi.State == MEM_COMMIT && mbi.RegionSize == 0x10000 && mbi.Protect == PAGE_READWRITE && mbi.Type == MEM_PRIVATE;
     KiTestVmReserveCommitOk = ok;
 
+    XK_SERIAL("mm test 9: Protect RW -> RO.\n");
     // Protect RW -> RO.
     PVOID pbase = commit;
     SIZE_T psize = 0x1000;
@@ -506,6 +519,7 @@ static void NTAPI MmControllerThread(PVOID) {
     NtQueryVirtualMemory(commit, &mbi);
     KiTestVmProtectOk = ok && mbi.Protect == PAGE_READONLY && mbi.RegionSize == 0x1000 && w[5] == 5;
 
+    XK_SERIAL("mm test 10: Free rules: release at a non-base addres\n");
     // Free rules: release at a non-base address fails; decommit part; release all.
     PVOID fbase = commit;
     SIZE_T fsize = 0;
@@ -521,6 +535,7 @@ static void NTAPI MmControllerThread(PVOID) {
     NtQueryVirtualMemory(base, &mbi);
     KiTestVmFreeRulesOk = ok && mbi.State == MEM_FREE;
 
+    XK_SERIAL("mm test 11: XBE-style image: reserve + commit at 0x1\n");
     // XBE-style image: reserve + commit at 0x10000; a second reservation over it conflicts.
     PVOID img = (PVOID)0x10000;
     SIZE_T imgSize = 0x30000;
@@ -535,6 +550,7 @@ static void NTAPI MmControllerThread(PVOID) {
     ok &= NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE) == 0 && !MmIsAddressValid((PVOID)0x10000);
     KiTestVmImageOk = ok;
 
+    XK_SERIAL("mm test 12: Top-down reservation.\n");
     // Top-down reservation.
     PVOID top = nullptr;
     SIZE_T topSize = 0x10000;

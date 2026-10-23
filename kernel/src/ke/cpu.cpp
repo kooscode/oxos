@@ -76,6 +76,45 @@ void InitFaultTss(KTSS &tss, void (*entry)(), UCHAR *stack) {
 
 } // namespace
 
+#if XK_NETLOG
+void HalpNetLogWrite(const char *Text, ULONG Length);
+void HalpNetTakeBack();
+XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
+extern "C" volatile ULONG KiPcRing[32];
+#endif
+
+// The double-fault and NMI tasks (entry.S), network-log builds: the task switch saved the interrupted state in KiTss;
+// send it (taking the NIC back from a title that owns it), so a fault cascade does not just stop the console.
+extern "C" void KiSaveFaultTaskLastWords(ULONG vector, ULONG eip);
+
+extern "C" void KiFaultTaskReport(ULONG Kind) {
+    KiSaveFaultTaskLastWords(Kind, KiTss.Eip); // CMOS first: needs no network (reported at the next boot)
+#if XK_NETLOG
+    HalpNetTakeBack();
+    char line[200];
+    const KTSS &t = KiTss;
+    ULONG cr2;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    int n = RtlSnprintf(line, sizeof(line),
+                        "*** %s: eip %08lx esp %08lx ebp %08lx efl %08lx eax %08lx ebx %08lx ecx %08lx edx %08lx esi "
+                        "%08lx edi %08lx cr2 %08lx\n",
+                        Kind == 2 ? "NMI" : "double fault", t.Eip, t.Esp, t.Ebp, t.EFlags, t.Eax, t.Ebx, t.Ecx,
+                        t.Edx, t.Esi, t.Edi, cr2);
+    HalpNetLogWrite(line, (ULONG)n);
+    if (t.Esp >= 0x80000000 || (t.Esp >= 0x10000 && t.Esp < 0x04000000)) {
+        auto sp = (const ULONG *)t.Esp;
+        n = RtlSnprintf(line, sizeof(line), "    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", sp[0], sp[1],
+                        sp[2], sp[3], sp[4], sp[5], sp[6], sp[7]);
+        HalpNetLogWrite(line, (ULONG)n);
+    }
+    n = RtlSnprintf(line, sizeof(line), "    last pcs %08lx %08lx %08lx %08lx\n", KiPcRing[(KeTickCount - 3) % 32],
+                    KiPcRing[(KeTickCount - 2) % 32], KiPcRing[(KeTickCount - 1) % 32], KiPcRing[KeTickCount % 32]);
+    HalpNetLogWrite(line, (ULONG)n);
+#else
+    (void)Kind;
+#endif
+}
+
 extern "C" void KiDoubleFaultTask();
 extern "C" void KiNmiTask();
 extern "C" void KiIgnoreInterrupt();
@@ -150,7 +189,29 @@ static void KiInitializePcr() {
     KiPcr.PrcbData.IdleThread = &KiIdleThread;
 }
 
+// The page attribute table as the retail 2BLs leave it (spec/stock/21 §1): PA0 WB, PA1 WC, PA2 UC-, PA3 UC, repeated.
+// With it a PTE's PWT bit means write-combined, which is what PAGE_WRITECOMBINE (PTE_PWT) and the 0xF0000000 window
+// rely on; the power-on table makes PWT write-through, i.e. cached: the CPU then keeps stale copies of memory the GPU
+// writes (fences, push-buffer state) and a title waits for it forever. Set here too so that any 2BL works; the
+// change follows Intel's procedure (caches off and flushed around the write, then a TLB flush).
+static void KiInitializePat() {
+    constexpr ULONGLONG RETAIL_PAT = 0x0007010600070106ULL;
+    ULONG a, b, c, d;
+    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
+    if (!(d & (1u << 16)) || rdmsr(0x277) == RETAIL_PAT)
+        return;
+    ULONG flags = save_flags_cli();
+    ULONG cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    __asm__ volatile("mov %0, %%cr0\n\twbinvd" ::"r"(cr0 | 0x40000000) : "memory"); // CD
+    wrmsr(0x277, RETAIL_PAT);
+    __asm__ volatile("wbinvd\n\tmov %%cr3, %%eax\n\tmov %%eax, %%cr3" ::: "eax", "memory");
+    __asm__ volatile("mov %0, %%cr0" ::"r"(cr0) : "memory");
+    restore_flags(flags);
+}
+
 void KiInitializeProcessor() {
+    KiInitializePat();
     // The PCR must be filled before FS is loaded with a descriptor pointing at it.
     KiInitializePcr();
     post(post_code::Pcr);

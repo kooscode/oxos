@@ -584,9 +584,9 @@ static NTSTATUS FatxRename(FATX_VOLUME *v, FATX_FCB *f, PFILE_OBJECT target, PUC
     if (f->Flags & FCB_DIRECTORY && !IsListEmpty(&f->ChildList))
         return STATUS_ACCESS_DENIED; // open children
     FATX_ENTRY existing;
-    ULONG index;
+    ULONG index = ~0u; // set by FatxLookup only when the name exists
     NTSTATUS status = FatxLookup(v, dir, &element, &existing, &index);
-    bool same = dir == f->Parent && index == f->DirentIndex;
+    bool same = NT_SUCCESS(status) && dir == f->Parent && index == f->DirentIndex;
     if (NT_SUCCESS(status) && !same) {
         if (!replace || (existing.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
             FatxFindOpenFcb(dir, element.Buffer, element.Length))
