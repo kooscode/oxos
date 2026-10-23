@@ -47,12 +47,21 @@ static inline void cli() { __asm__ volatile("cli" ::: "memory"); }
 static inline void sti() { __asm__ volatile("sti" ::: "memory"); }
 static inline void halt() { __asm__ volatile("hlt" ::: "memory"); }
 
+#ifdef XK_HOST_TEST
+// Host unit tests: user mode cannot change the interrupt flag, so the test harness keeps it (tests/unit/host);
+// cli/sti/hlt and the other privileged instructions fault and are emulated there.
+extern "C" ULONG HostSaveFlagsCli();
+extern "C" void HostRestoreFlags(ULONG Flags);
+static inline ULONG save_flags_cli() { return HostSaveFlagsCli(); }
+static inline void restore_flags(ULONG f) { HostRestoreFlags(f); }
+#else
 static inline ULONG save_flags_cli() {
     ULONG f;
     __asm__ volatile("pushfl; popl %0; cli" : "=r"(f)::"memory");
     return f;
 }
 static inline void restore_flags(ULONG f) { __asm__ volatile("pushl %0; popfl" ::"r"(f) : "memory", "cc"); }
+#endif
 
 // Progress codes on port 0x80: visible on an LPC POST display on real hardware.
 static inline void post(UCHAR code) { outb(0x80, code); }

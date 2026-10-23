@@ -1,4 +1,5 @@
 // RTL critical sections and executive read/write locks (spec/stock/13). Layouts are the Xbox ABI.
+#include <xk/arch.h>
 #include <xk/ke.h>
 
 typedef struct _RTL_CRITICAL_SECTION {
@@ -86,36 +87,33 @@ XBAPI void NTAPI ExInitializeReadWriteLock(PERWLOCK ReadWriteLock) {
 
 // The lock words are only touched with interrupts off (single processor), as in the reference.
 XBAPI void NTAPI ExAcquireReadWriteLockExclusive(PERWLOCK ReadWriteLock) {
-    ULONG flags = __builtin_ia32_readeflags_u32();
-    __asm__ volatile("cli");
+    ULONG flags = save_flags_cli();
     bool wait = ++ReadWriteLock->LockCount != 0;
     if (wait)
         ReadWriteLock->WritersWaitingCount++;
-    __builtin_ia32_writeeflags_u32(flags);
+    restore_flags(flags);
     if (wait)
         KeWaitForSingleObject(&ReadWriteLock->WriterEvent, Executive, KernelMode, FALSE, nullptr);
 }
 
 XBAPI void NTAPI ExAcquireReadWriteLockShared(PERWLOCK ReadWriteLock) {
-    ULONG flags = __builtin_ia32_readeflags_u32();
-    __asm__ volatile("cli");
+    ULONG flags = save_flags_cli();
     bool wait = ++ReadWriteLock->LockCount != 0 &&
                 (ReadWriteLock->ReadersEntryCount == 0 || ReadWriteLock->WritersWaitingCount != 0);
     if (wait)
         ReadWriteLock->ReadersWaitingCount++;
     else
         ReadWriteLock->ReadersEntryCount++;
-    __builtin_ia32_writeeflags_u32(flags);
+    restore_flags(flags);
     if (wait)
         KeWaitForSingleObject(&ReadWriteLock->ReaderSemaphore, Executive, KernelMode, FALSE, nullptr);
 }
 
 XBAPI void NTAPI ExReleaseReadWriteLock(PERWLOCK ReadWriteLock) {
-    ULONG flags = __builtin_ia32_readeflags_u32();
-    __asm__ volatile("cli");
+    ULONG flags = save_flags_cli();
     if (--ReadWriteLock->LockCount < 0) {
         ReadWriteLock->ReadersEntryCount = 0;
-        __builtin_ia32_writeeflags_u32(flags);
+        restore_flags(flags);
         return;
     }
     if (ReadWriteLock->ReadersEntryCount == 0) { // a writer leaves: let all waiting readers in at once
@@ -123,15 +121,15 @@ XBAPI void NTAPI ExReleaseReadWriteLock(PERWLOCK ReadWriteLock) {
         if (readers) {
             ReadWriteLock->ReadersEntryCount = readers;
             ReadWriteLock->ReadersWaitingCount = 0;
-            __builtin_ia32_writeeflags_u32(flags);
+            restore_flags(flags);
             KeReleaseSemaphore(&ReadWriteLock->ReaderSemaphore, 1, readers, FALSE);
             return;
         }
     } else if (--ReadWriteLock->ReadersEntryCount != 0) {
-        __builtin_ia32_writeeflags_u32(flags);
+        restore_flags(flags);
         return;
     }
     ReadWriteLock->WritersWaitingCount--;
-    __builtin_ia32_writeeflags_u32(flags);
+    restore_flags(flags);
     KeSetEvent(&ReadWriteLock->WriterEvent, 1, FALSE);
 }

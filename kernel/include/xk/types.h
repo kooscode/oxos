@@ -7,14 +7,25 @@ typedef unsigned short USHORT, WCHAR, *PUSHORT;
 typedef short SHORT, CSHORT;
 typedef unsigned long ULONG, *PULONG;
 typedef long LONG, NTSTATUS, *PLONG;
+#ifdef XK_HOST_TEST // i386 Linux aligns 64-bit fields to 4; the kernel's structures follow the Windows layout (8)
+typedef unsigned long long ULONGLONG __attribute__((aligned(8)));
+typedef long long LONGLONG __attribute__((aligned(8)));
+typedef LONGLONG *PLONGLONG;
+#else
 typedef unsigned long long ULONGLONG;
 typedef long long LONGLONG, *PLONGLONG;
+#endif
 typedef void VOID, *PVOID;
 typedef ULONG ULONG_PTR, SIZE_T, *PSIZE_T;
 typedef ULONG PHYSICAL_ADDRESS;
 
+#ifdef XK_HOST_TEST // host unit tests (tests/unit): a 32-bit Linux build of the core runtime
+#define NTAPI __attribute__((stdcall))
+#define FASTCALL __attribute__((fastcall))
+#else
 #define NTAPI __stdcall
 #define FASTCALL __fastcall
+#endif
 #define XBAPI extern "C"
 // State that survives a quick reboot (spec/stock/02 §1): neither re-copied from flash nor zeroed.
 #define XK_PERSIST __attribute__((section(".persist")))

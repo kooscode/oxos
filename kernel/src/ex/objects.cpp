@@ -327,8 +327,8 @@ XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDL
     return status;
 }
 
-XBAPI NTSTATUS NTAPI NtYieldExecution() {
-    LARGE_INTEGER zero;
-    zero.QuadPart = 0;
-    return KeDelayExecutionThread(KernelMode, FALSE, &zero);
-}
+NTSTATUS KiYieldExecution(); // ke/sched.cpp
+
+// Any ready thread gets the processor, lower priorities included (spec/stock/07); not a zero-length delay, which only
+// yields to equal or higher priorities.
+XBAPI NTSTATUS NTAPI NtYieldExecution() { return KiYieldExecution(); }
