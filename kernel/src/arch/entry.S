@@ -4,12 +4,23 @@
 // The 2BL's stack lives in memory we are about to wipe, so switch to our own stack first.
 
 #define BOOT_STACK_SIZE 0x3000
+#define KI_DATA_COPY_SIZE 0x1000
 
     .text
     .globl _KernelEntry
 _KernelEntry:
     cli
-    movl 4(%esp), %edx                          // arg0
+    // Keep the initialised .data (still untouched here) for quick reboots, so they do not depend on the flash copy
+    // (a network-booted kernel's flash bank holds another kernel): DOS-header fields 0x2C (bytes) and 0x34 (start).
+    movl 0x8001002C, %ecx
+    cmpl $KI_DATA_COPY_SIZE, %ecx
+    ja 1f
+    movl 0x80010034, %esi
+    movl $_KiDataInitCopy, %edi
+    cld
+    rep movsb
+    movl $_KiDataInitCopy, _KiDataInitSource
+1:  movl 4(%esp), %edx                          // arg0
     movl 8(%esp), %eax                          // keys
     movl $(_KiBootStack + BOOT_STACK_SIZE - 0x210), %esp   // NPX save area of the idle thread above
     xorl %ebp, %ebp
@@ -35,6 +46,14 @@ _KiNmiTask:
 1:  cli
     hlt
     jmp 1b
+
+    .section .persist,"aw"
+    .p2align 4
+    .globl _KiDataInitCopy, _KiDataInitSource
+_KiDataInitCopy:
+    .space KI_DATA_COPY_SIZE
+_KiDataInitSource:                              // 0: use the flash copy (header field 0x30)
+    .long 0
 
     .bss
     .p2align 4

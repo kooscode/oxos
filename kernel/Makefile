@@ -53,6 +53,9 @@ OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -m
 # On by default in trace builds (TRACE_IMPORTS=1/2): on a console the network is their only output. NETLOG_IP is the
 # console's address, NETLOG_DEST the receiver (255.255.255.255 = broadcast; a PC's address = point-to-point, still in a
 # broadcast frame since the log never receives and so cannot ask ARP).
+# NETBOOT=1: the 2BL first asks the network for a boot image (spec/oxos-internal/09-netboot.md; tools/netboot/).
+# Use its own BUILD directory (make netboot does): the 2BL is not rebuilt when only NETBOOT changes.
+NETBOOT ?= 0
 NETLOG ?= $(if $(filter-out 0,$(TRACE_IMPORTS)),1,0)
 NETLOG_IP ?= 192.168.1.222
 NETLOG_DEST ?= 255.255.255.255
@@ -136,7 +139,8 @@ OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium3 -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
-              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5)
+              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) \
+              -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP))
 BOOT := $(BUILD)/boot
 
 $(CROMWELL_DIR)/boot_rom/Xcodes.h:
@@ -153,7 +157,7 @@ $(BOOT)/reset.bin: boot/reset.S
 	$(CC) $(BOOT_FLAGS) -c $< -o $(BOOT)/reset.o
 	$(OBJCOPY) -O binary -j .reset $(BOOT)/reset.o $@
 
-$(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.ld include/xk/inflate.h
+$(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/netboot.h boot/bl.ld include/xk/inflate.h
 	@mkdir -p $(dir $@)
 	$(CC) $(BOOT_FLAGS) -c boot/start.S -o $(BOOT)/start.o
 	$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/bl.cpp -o $(BOOT)/bl.o
@@ -163,6 +167,12 @@ $(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.ld include/xk/inflate.h
 bios: $(BUILD)/bios.bin
 # A 256 KiB image (one bank, for 256 KiB flash chips and modchip banks), with the splash in the bank's spare space.
 bios-256k: $(BUILD)/bios-256k.bin
+
+# The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
+# kernel at every power-on and boots its own (a network-log build) when no PC answers.
+NETBOOT_BUILD := build/netboot
+netboot:
+	$(MAKE) BUILD=$(NETBOOT_BUILD) NETBOOT=1 NETLOG=1 SELFTEST=0 $(NETBOOT_BUILD)/bios-256k.bin $(NETBOOT_BUILD)/bios.bin
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
 ifeq ($(IMAGE),base)
@@ -418,4 +428,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios bios-256k netboot hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean

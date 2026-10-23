@@ -16,6 +16,12 @@ docstring give the details).
 | `fetch.py` | Downloads a file and saves it only if its SHA-256 matches the pinned one; the Makefile uses it to fetch the default hard-disk image (`make hdd-image`). Python standard library only. |
 | `xemu.toml.example` | An example xemu configuration file (boot ROM, BIOS, EEPROM and hard-disk paths), for running xemu by hand. |
 
+## Real consoles
+| Tool | What it does |
+|---|---|
+| `netboot/` | Boots kernels over the network: flash `make -C kernel netboot` once, then `netboot/netboot.py IMAGE` serves any OXOS image to the console at each power-on (the console boots its own kernel when no PC answers). See `netboot/README.md`. |
+| `netlog.py` | Prints the kernel's network log (`NETLOG=1` builds: UDP broadcasts to port 5140) from a console on the LAN, or from xemu (`--xemu PORT` with `run.py --net-udp PORT`); names the kernel calls in trace lines. |
+
 ## Building the BIOS and test titles
 | Tool | What it does |
 |---|---|
