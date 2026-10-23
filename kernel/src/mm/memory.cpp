@@ -59,10 +59,15 @@ XBAPI void NTAPI MmPersistContiguousMemory(PVOID BaseAddress, ULONG NumberOfByte
     KfLowerIrql(old);
 }
 
+// As the reference (0x8001de2e): counts PTEs up to the one marked as the allocation's end, at DISPATCH_LEVEL so
+// that the allocation cannot be freed or remapped meanwhile. Like the reference it trusts the caller to pass the
+// base of a live system-memory or pool allocation.
 XBAPI ULONG NTAPI MmQueryAllocationSize(PVOID BaseAddress) {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pages = 1;
     for (ULONG *pte = MiGetPteAddress((ULONG)BaseAddress); !(*pte & PTE_END_OF_ALLOCATION); pte++)
         pages++;
+    KfLowerIrql(old);
     return pages << PAGE_SHIFT;
 }
 
