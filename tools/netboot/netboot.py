@@ -23,6 +23,7 @@ PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only u
 
 
 DEBUG_CONFIG_AT = 0x6020  # free space after the payload header (kernel: src/ke/dbgstep.cpp)
+EXPERIMENT_FLAGS_AT = 0x5FF0  # 'OXEF' + u32: run-time experiment switches (kernel: KiExperimentFlags, ke/dbgstep.cpp)
 
 
 def debug_config(a):
@@ -42,7 +43,16 @@ def debug_config(a):
     return struct.pack("<4s4IIII", b"DBGC", *drs, dr7, a.steps, 1 if a.step_dr1 else 0)
 
 
-def load(path, config=None):
+def experiment_flags(a):
+    """--flags-file: a file holding one number (e.g. 0x1), read again at every request: the experiment switches the
+    kernel tests at run time, so one binary can be tried with and without each change."""
+    if not a.flags_file or not os.path.exists(a.flags_file):
+        return None
+    text = open(a.flags_file).read().split("#")[0].strip()
+    return struct.pack("<4sI", b"OXEF", int(text, 0)) if text else None
+
+
+def load(path, config=None, flags=None):
     """The image to serve (with the debug block patched in) and its CRC-32: the first 256 KiB bank of an OXOS open
     image, or the whole file (up to 1 MiB, a multiple of 1 KiB) when its kernel stream runs past the first bank."""
     data = bytearray(open(path, "rb").read())
@@ -55,6 +65,8 @@ def load(path, config=None):
         raise ValueError(f"{path}: a large image must be at most 1 MiB and a multiple of 1 KiB ({len(data):#x})")
     if config:
         data[DEBUG_CONFIG_AT:DEBUG_CONFIG_AT + len(config)] = config
+    if flags:
+        data[EXPERIMENT_FLAGS_AT:EXPERIMENT_FLAGS_AT + len(flags)] = flags
     data = bytes(data)
     return data, zlib.crc32(data)
 
@@ -127,6 +139,7 @@ def main():
     ap.add_argument("--step-dr1", action="store_true",
                     help="the first DR1 hit starts a second run of --steps (after the DR0 run has ended)")
     ap.add_argument("--once", action="store_true", help="exit after one console has booted")
+    ap.add_argument("--flags-file", help="file with the kernel's experiment switches (a number), read at every request")
     a = ap.parse_args()
     log = Log(a.out)
     socks = []
@@ -187,14 +200,15 @@ def main():
                 log.say(f"netboot: <- op {op} session {sess:08x} offset {offset:#x} length {length:#x} from {who}")
             if op == OP_HELLO:
                 try:
-                    image, crc = load(a.image, debug_config(a))
+                    image, crc = load(a.image, debug_config(a), experiment_flags(a))
                 except (OSError, ValueError) as e:
                     log.say(f"netboot: console {who} asked, but {e}")
                     continue
                 if sess != session:
                     console_mac = payload[HEADER.size:HEADER.size + 6].hex(":")
                     log.say(f"netboot: console {who} ({console_mac}) asks for a kernel; offering {a.image} "
-                            f"(CRC-32 {crc:08x}, built {time.ctime(os.path.getmtime(a.image))})")
+                            f"(CRC-32 {crc:08x}, built {time.ctime(os.path.getmtime(a.image))}"
+                            + (f", flags {struct.unpack_from('<I', image, EXPERIMENT_FLAGS_AT + 4)[0]:#x}" if image[EXPERIMENT_FLAGS_AT:EXPERIMENT_FLAGS_AT + 4] == b"OXEF" else "") + ")")
                     session, served, started = sess, set(), time.monotonic()
                 reply(HEADER.pack(MAGIC, OP_OFFER, 1, 0, sess, crc, len(image)), mac)
             elif op == OP_READ and sess == session and image:

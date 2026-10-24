@@ -69,6 +69,14 @@ reproduces it:
 - Stack 0x803FFFE8 = {return address, arg0 = 0x80400004, keys = 0x0040006C}. The 2BL itself occupies
   0x80400000-0x80405FFF, which the kernel clears.
 
+### 4.1 State at the end of start-up (observed on hardware, 2026-10-24)
+Read with the machine-state probe (`tools/statedump`) injected into a reference kernel (5838-based EvoX M8) on the
+no-DVD 1.4 console, just before the title starts: CR0 = 0x8001003B (adds **MP** and TS to the entry value; TS is the
+lazy-FPU arm of spec 07), CR4 = 0x610 (**no MCE**), microcode revision 1 (§2 step 3), PAT 0x0007010600070106,
+MTRRs as §4, IA32_DEBUGCTL = 1, the CS descriptor's limit 0xBFFFFFFF (granular). Where the reference sets CR0.MP:
+**open** (the per-thread CR0 word at FXSAVE area +0x200, spec 07, is OR-ed into CR0 at context switches).
+PCI configuration spaces, NV2A PFB registers, the ACPI/GPIO block and every other listed MSR matched OXOS's.
+
 ## 5. The open BIOS image (ours)
 `make bios` (IMAGE=open) builds a 1 MB image with no Microsoft parts that boots with or without an MCPX boot ROM.
 Each 256 KB bank (`tools/mkbios.py`, `build_open`):
