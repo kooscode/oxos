@@ -22,6 +22,18 @@ _start:
     // starts zeroed as a Microsoft BIOS leaves it (titles' USB library keeps its state there).
     movl %eax, 0
     movl %eax, 4
+#if XK_MCPX_DUMP
+    // MCPX ROM dumper (spec/oxos-internal/12-mcpx-dump.md): entered through the TEA (MCPX 1.1) or RC4 (1.0) attack
+    // instead of the overflow trick, the boot ROM is still mapped over the top 512 bytes: copy them to RAM 0x2000 and
+    // mark the copy ('MCPX' at 0x2200) for the netboot code, which sends it once the link is up.
+    movl $0xFFFFFE00, %esi
+    movl $0x2000, %edi
+    movl $128, %ecx
+    cld
+    rep movsl
+    movl $0x5850434D, 0x2200
+    xorl %eax, %eax
+#endif
 
     // Caches off while the MTRRs change.
     movl %cr0, %eax

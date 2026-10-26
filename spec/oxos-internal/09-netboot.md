@@ -59,6 +59,7 @@ All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel t
 | 3 READ | console | byte offset / 1024 | none |
 | 4 DATA | PC | the same offset / 1024 | the 1024 bytes |
 | 5 BOOT | console | 0 = booting the download, 1 = rejected, booting flash / 0 | none |
+| 6 MCPX | console (`MCPX_DUMP=1` images only) | 0 / 512 | the MCPX boot ROM, sent three times before the first HELLO (spec 12) |
 
 1. HELLO every 250 ms, 8 times, until an OFFER arrives.
 2. READ the 256 chunks in order. Each request is repeated after 100 ms without a matching DATA, 30 times at most.

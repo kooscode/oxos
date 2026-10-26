@@ -56,6 +56,9 @@ OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -m
 # NETBOOT=1: the 2BL first asks the network for a boot image (spec/oxos-internal/09-netboot.md; tools/netboot/).
 # Use its own BUILD directory (make netboot does): the 2BL is not rebuilt when only NETBOOT changes.
 NETBOOT ?= 0
+# MCPX_DUMP=1 (with NETBOOT=1): the 2BL copies the MCPX boot ROM at entry and sends it over the network
+# (spec/oxos-internal/12-mcpx-dump.md; tools/mcpx-dump/). make mcpx-dump builds that payload image.
+MCPX_DUMP ?= 0
 NETLOG ?= $(if $(filter-out 0,$(TRACE_IMPORTS)),1,0)
 NETLOG_IP ?= 192.168.1.222
 NETLOG_DEST ?= 255.255.255.255
@@ -143,7 +146,7 @@ OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium3 -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
-              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) \
+              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) \
               -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP))
 BOOT := $(BUILD)/boot
 
@@ -177,6 +180,11 @@ bios-256k: $(BUILD)/bios-256k.bin
 NETBOOT_BUILD := build/netboot
 netboot:
 	$(MAKE) BUILD=$(NETBOOT_BUILD) NETBOOT=1 NETLOG=1 SELFTEST=0 $(NETBOOT_BUILD)/bios-256k.bin $(NETBOOT_BUILD)/bios.bin
+
+# The MCPX ROM dumper's payload (tools/mcpx-dump/README.md): a netboot image whose 2BL also sends the boot ROM.
+MCPX_DUMP_BUILD := build/mcpx-dump
+mcpx-dump:
+	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 NETLOG=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios-256k.bin
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
 ifeq ($(IMAGE),base)
@@ -432,4 +440,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k netboot hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios bios-256k netboot mcpx-dump hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
