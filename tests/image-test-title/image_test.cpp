@@ -24,15 +24,14 @@ namespace {
 constexpr unsigned int Width = 640, Height = 480;
 constexpr unsigned int PictureHeight = 330; // the picture's band; the status lines go below it
 constexpr int TextX = 30, TextY = 340;
-constexpr unsigned int TextLines = 4, LinePitch = 17; // debugPrint: a 16-pixel font, 17-pixel lines
-constexpr unsigned int XboxGreen = 0x0052B043;       // nxdk's debugPrint draws white; the band is recoloured
+constexpr const char *PicturePath = "D:\\picture.jpg";
 
 enum class PictureStatus : unsigned int { Loading = 0, Shown = 1, Missing = 2, Undecodable = 3, OutOfMemory = 4 };
 
 const char *Describe(PictureStatus s) {
     switch (s) {
     case PictureStatus::Shown: return "shown";
-    case PictureStatus::Missing: return "D:\\picture.jpg not found";
+    case PictureStatus::Missing: return "not found";
     case PictureStatus::Undecodable: return "decode failed";
     case PictureStatus::OutOfMemory: return "out of memory";
     default: return "loading";
@@ -167,13 +166,6 @@ unsigned int FreePages() {
     return NT_SUCCESS(MmQueryStatistics(&s)) ? s.AvailablePages : 0;
 }
 
-void RecolourText() {
-    auto band = reinterpret_cast<unsigned int *>(XVideoGetFB()) + TextY * Width;
-    for (unsigned int i = 0; i < TextLines * LinePitch * Width; i++)
-        if ((band[i] & 0x00FFFFFF) == 0x00FFFFFF)
-            band[i] = XboxGreen;
-}
-
 constexpr std::array<std::array<XLEDColor, 4>, 4> LedPatterns{{
     {XLED_GREEN, XLED_GREEN, XLED_GREEN, XLED_GREEN},
     {XLED_ORANGE, XLED_ORANGE, XLED_ORANGE, XLED_ORANGE},
@@ -190,7 +182,7 @@ int main() {
     debugPrint(""); // debugPrint learns the screen size on its first call; until then debugMoveCursor is ignored
     const bool widescreen = XVideoGetEncoderSettings() & VIDEO_WIDESCREEN;
     XkImageTest.Widescreen = widescreen;
-    auto status = ShowPicture("D:\\picture.jpg", widescreen);
+    auto status = ShowPicture(PicturePath, widescreen);
     XkImageTest.Status = static_cast<unsigned int>(status);
 
     const DWORD start = GetTickCount();
@@ -210,14 +202,12 @@ int main() {
         debugMoveCursor(TextX, TextY);
         debugPrint("OXOS image test - kernel %u.%u.%u.%u            \n", XboxKrnlVersion.Major, XboxKrnlVersion.Minor,
                    XboxKrnlVersion.Build, XboxKrnlVersion.Qfe & 0x7FFF);
-        debugPrint("alive %u s, %u frames (%u per s)             \n", static_cast<unsigned int>(seconds), frames,
+        debugPrint("Uptime: %u s, %u frames (%u per s)             \n", static_cast<unsigned int>(seconds), frames,
                    seconds ? frames / static_cast<unsigned int>(seconds) : 0);
-        debugPrint("free memory %u KB                            \n", XkImageTest.FreePages * 4);
+        debugPrint("Free memory %u KB                            \n", XkImageTest.FreePages * 4);
         if (status == PictureStatus::Shown)
-            debugPrint("picture %ux%u from D:\\picture.jpg in %u ms, %s       \n", XkImageTest.PictureWidth,
-                       XkImageTest.PictureHeight, XkImageTest.PictureMs, widescreen ? "widescreen" : "4:3");
+            debugPrint("Image: %s                                        \n", PicturePath);
         else
-            debugPrint("picture: %s                                  \n", Describe(status));
-        RecolourText();
+            debugPrint("Image: %s (%s)                                   \n", PicturePath, Describe(status));
     }
 }
