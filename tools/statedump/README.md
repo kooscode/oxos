@@ -8,7 +8,6 @@ Header-only and freestanding: port I/O, MSR reads and plain memory reads, no ker
 - **OXOS**: build with `EXTRA_FLAGS=-DXK_EXPERIMENT_STATEDUMP`; the lines go to the network log (after the memory
   manager and before the title launcher).
 - **A reference kernel**: compile it into a small blob linked at a free address, inject it into the kernel image and
-  call it at the end of start-up (2026-10-24: done for a 5838-based kernel through `experimental/`, untracked
-  because the image is not ours).
+  call it at the end of start-up.
 
 Compare two dumps line by line; spec/stock/01 §4.1 records the first comparison.
