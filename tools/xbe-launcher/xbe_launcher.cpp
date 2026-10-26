@@ -4,13 +4,17 @@
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <hal/xbox.h>
-#include <stdio.h>
-#include <string.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 
-// The retail drive letters and the extra exFAT drive F: (spec/oxos-internal/05-exfat-storage-spec.md).
-static const char *PartitionOf(char letter) {
+#include <cstdio>
+#include <cstring>
+#include <string_view>
+
+namespace {
+
+// The retail drive letters and the extra exFAT drives F: and G: (spec/oxos-internal/05-exfat-storage-spec.md).
+const char *PartitionOf(char letter) {
     switch (letter & ~0x20) {
     case 'C': return "\\Device\\Harddisk0\\Partition2";
     case 'E': return "\\Device\\Harddisk0\\Partition1";
@@ -19,69 +23,77 @@ static const char *PartitionOf(char letter) {
     case 'Z': return "\\Device\\Harddisk0\\Partition5";
     case 'F': return "\\Device\\Harddisk0\\Partition6";
     case 'G': return "\\Device\\Harddisk0\\Partition7";
-    default: return NULL;
+    default: return nullptr;
     }
 }
 
-static NTSTATUS OpenStatus(const char *path) {
+NTSTATUS OpenStatus(const char *path) {
     ANSI_STRING name;
     OBJECT_ATTRIBUTES attributes;
     IO_STATUS_BLOCK iosb;
     HANDLE handle;
     RtlInitAnsiString(&name, path);
-    InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
     NTSTATUS status = NtOpenFile(&handle, GENERIC_READ, &attributes, &iosb, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE);
     if (NT_SUCCESS(status))
         NtClose(handle);
     return status;
 }
 
-static void Stay(void) {
+[[noreturn]] void Stay() {
     for (;;)
         Sleep(1000);
 }
 
-int main(void) {
+// The first line of D:\launch.txt, trimmed, with '/' as '\'.
+std::size_t ReadLaunchLine(char *text, std::size_t capacity) {
+    std::size_t n = 0;
+    if (std::FILE *f = std::fopen("D:\\launch.txt", "rb")) {
+        n = std::fread(text, 1, capacity - 1, f);
+        std::fclose(f);
+    }
+    std::string_view line(text, n);
+    line = line.substr(0, line.find_first_of("\r\n"));
+    while (!line.empty() && (line.front() == ' ' || line.front() == '\t'))
+        line.remove_prefix(1);
+    while (!line.empty() && (line.back() == ' ' || line.back() == '\t'))
+        line.remove_suffix(1);
+    std::memmove(text, line.data(), line.size());
+    text[line.size()] = 0;
+    for (std::size_t i = 0; i < line.size(); i++)
+        if (text[i] == '/')
+            text[i] = '\\';
+    return line.size();
+}
+
+} // namespace
+
+int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     debugPrint("OXOS XBE launcher\n\n");
 
-    char text[300] = {0};
-    FILE *f = fopen("D:\\launch.txt", "rb");
-    size_t n = f ? fread(text, 1, sizeof(text) - 1, f) : 0;
-    if (f)
-        fclose(f);
-    text[n] = 0;
-    char *start = text;
-    while (*start == ' ' || *start == '\t')
-        start++;
-    char *end = start + strcspn(start, "\r\n");
-    while (end > start && (end[-1] == ' ' || end[-1] == '\t'))
-        end--;
-    *end = 0;
-    for (char *p = start; *p; p++)
-        if (*p == '/')
-            *p = '\\';
-    if (!*start) {
+    char start[300] = {};
+    if (!ReadLaunchLine(start, sizeof(start))) {
         debugPrint("D:\\launch.txt is missing or empty.\n");
         Stay();
     }
 
     char path[300];
-    if (!strncmp(start, "\\Device\\", 8)) {
-        snprintf(path, sizeof(path), "%s", start);
+    if (!std::strncmp(start, "\\Device\\", 8)) {
+        std::snprintf(path, sizeof(path), "%s", start);
     } else {
-        const char *partition = start[1] == ':' ? PartitionOf(start[0]) : NULL;
+        const char *partition = start[1] == ':' ? PartitionOf(start[0]) : nullptr;
         if (!partition) {
             debugPrint("Unknown drive in \"%s\" (C, E, F, G, X, Y, Z or a \\Device\\ path).\n", start);
             Stay();
         }
-        snprintf(path, sizeof(path), "%s%s%s", partition, start[2] == '\\' ? "" : "\\", start + 2);
+        std::snprintf(path, sizeof(path), "%s%s%s", partition, start[2] == '\\' ? "" : "\\", start + 2);
     }
 
     debugPrint("%s\n= %s\n\n", start, path);
     NTSTATUS status = OpenStatus(path);
     if (!NT_SUCCESS(status)) {
-        debugPrint("Cannot open it: status 0x%08lx\n", (unsigned long)status);
+        debugPrint("Cannot open it: status 0x%08lx\n", static_cast<unsigned long>(status));
         Stay();
     }
     debugPrint("Launching...\n");
@@ -89,5 +101,4 @@ int main(void) {
     XLaunchXBE(path);
     debugPrint("The launch failed.\n");
     Stay();
-    return 0;
 }

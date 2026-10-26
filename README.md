@@ -10,6 +10,11 @@ kernel was studied to write behavioural specifications, and the kernel is writte
 The one kind of data taken from Microsoft images is the video encoders' register tables (functional hardware
 constants). The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md).
 
+**Languages:** all native code in this repository is **C++ (C++20)**: the kernel, the 2BL, the unit tests, the test
+titles and the tools that run on the Xbox. Assembly is used only where the hardware needs it (start-up, context
+switches, trap entry), and the PC-side tools are Python. There are no C sources; new code is C++ too (nxdk titles
+set `NXDK_CXX = y`).
+
 ![OXOS boot splash in xemu](docs/splash-screenshot.png)
 
 *The OXOS boot splash, captured in xemu.*
