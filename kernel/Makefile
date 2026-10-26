@@ -380,6 +380,18 @@ nxdk: $(NXDK_DIR)/Makefile
 $(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.c $(CONTROLLER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(CONTROLLER_DIR) -j8
 
+# Image test title (tests/image-test-title, an nxdk title): a picture decoded on the console, a status panel and
+# the front LED changing once a second: the kernel, a title and video work. make image-test builds its disc image;
+# make run-image-test boots it in xemu with the release BIOS (RUN_OPTS as make run).
+IMAGE_TEST_DIR := $(ROOT)/tests/image-test-title
+IMAGE_TEST_ISO := $(IMAGE_TEST_DIR)/image-test.iso
+$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.c $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.png
+	$(NXDK_ENV) $(MAKE) -C $(IMAGE_TEST_DIR) -j8
+image-test: $(IMAGE_TEST_ISO)
+run-image-test: $(IMAGE_TEST_ISO) $(PLAY_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin --iso $(IMAGE_TEST_ISO) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(RUN_OPTS)
+
 test-controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 	$(if $(filter stock,$(CONTROLLER_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
 	python3 -I $(ROOT)/tests/controller_test.py --bios $(if $(filter stock,$(CONTROLLER_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
@@ -440,4 +452,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k netboot mcpx-dump hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean

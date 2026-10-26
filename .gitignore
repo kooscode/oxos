@@ -21,6 +21,11 @@ tests/*-test-title/*.obj
 tests/*-test-title/*.d
 tests/*-test-title/*.exe
 tests/*-test-title/*.pdb
+tests/*-title/bin/
+tests/*-title/*.obj
+tests/*-title/*.d
+tests/*-title/*.exe
+tests/*-title/*.pdb
 __pycache__/
 
 # Local tool state
