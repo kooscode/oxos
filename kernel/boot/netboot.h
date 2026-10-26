@@ -19,7 +19,7 @@ constexpr ULONG RX_COUNT = 32, BUFFER = 2048, BANK_SIZE = 0x40000, CHUNK = 1024;
 constexpr ULONG MAX_IMAGE = 0x100000; // a download is one bank or more (a kernel too large for one bank), at most 1 MiB
 constexpr unsigned short PORT = 5141;
 constexpr ULONG MAGIC = 0x424E584F;                   // 'OXNB'
-enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5 };
+enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5, OP_MCPX = 6 };
 
 enum : ULONG {
     NvIrqStatus = 0x000, NvIrqMask = 0x004, NvSetup6 = 0x008, NvPollingInterval = 0x00C, NvMisc1 = 0x080,
@@ -285,6 +285,16 @@ static const UCHAR *Fetch() {
     if (!Start())
         return nullptr;
     const ULONG session = Now() ^ 0x4F584E42;
+#if XK_MCPX_DUMP
+    // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs
+    // (tools/mcpx-dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
+    if (*(volatile ULONG *)0x2200 == 0x5850434D)
+        for (int i = 0; i < 3; i++) {
+            const Message dump = {MAGIC, OP_MCPX, 1, 0, session, 0, 512};
+            Send(dump, (const void *)0x2000, 512);
+            Stall(100000);
+        }
+#endif
     Message m = {MAGIC, OP_HELLO, 1, 0, session, 0, 0};
     const UCHAR *data;
     const Message *r = nullptr;
