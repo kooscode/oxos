@@ -20,6 +20,7 @@ docstring give the details).
 | Tool | What it does |
 |---|---|
 | `netboot/` | Boots kernels over the network: flash `make -C kernel netboot` once, then `netboot/netboot.py IMAGE` serves any OXOS image to the console at each power-on (the console boots its own kernel when no PC answers). See `netboot/README.md`. |
+| `modxo/` | The Modxo debug rig's PC side: `console.py` logs COM1, POST codes and the modchip's LPC status, and presses the console's power button (`on`, `off`, `cycle`); `bootrun.py` boots N times and classifies each boot; `flash-uf2.sh` reflashes the Pico over USB. Needs Modxo's `oxos-debug` firmware branch. See `modxo/README.md`. |
 | `mcpx-dump/` | Dumps a console's MCPX boot ROM (MCPX 1.0 and 1.1) over the network: `mcpx_dump.py build` makes a flash image from your own retail BIOS and `make -C kernel mcpx-dump`'s payload, `mcpx_dump.py receive` saves and checks the dump. See `mcpx-dump/README.md`. |
 | `netlog.py` | Prints the kernel's network log (`NETLOG=1` builds: UDP broadcasts to port 5140) from a console on the LAN, or from xemu (`--xemu PORT` with `run.py --net-udp PORT`); names the kernel calls in trace lines. |
 
