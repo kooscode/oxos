@@ -87,6 +87,7 @@ static ULONG KiBootStackUsed() {
 #define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
 #endif
 
+extern "C" void XeReadNetbootTitle(); // xe/nettitle.cpp
 static void KiEnableMachineChecks();
 static void KiReportLastWords();
 
@@ -192,6 +193,8 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #if XK_NETLOG
     KiReadDebugConfig(); // before anything reuses the downloaded bank (ke/dbgstep.cpp)
 #endif
+    if (!KiQuickRebootFlag)
+        XeReadNetbootTitle(); // a title delivered by netboot (xe/nettitle.cpp): before the bank's pages are reused
 #ifdef XK_EXPERIMENT_PADCAL
     KiPadCalibrate(); // the retail 2BL's NV2A pad calibration (ke/padcal.cpp), before RAM sees much traffic
 #endif

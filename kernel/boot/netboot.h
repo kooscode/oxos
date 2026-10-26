@@ -16,7 +16,9 @@ constexpr ULONG RING = 0x00300000;                    // RX_COUNT receive descri
 constexpr ULONG RX_BUFFERS = 0x00301000, TX_BUFFERS = 0x00320000;
 constexpr ULONG IMAGE = 0x00800000;                   // the downloaded bank
 constexpr ULONG RX_COUNT = 32, BUFFER = 2048, BANK_SIZE = 0x40000, CHUNK = 1024;
-constexpr ULONG MAX_IMAGE = 0x100000; // a download is one bank or more (a kernel too large for one bank), at most 1 MiB
+// A download is one bank or more (a kernel too large for one bank, a netbooted title's files after it), at most
+// 4 MiB: 0x800000-0xBFFFFF, free RAM while the 2BL runs (the kernel keeps a title's pages: xe/nettitle.cpp).
+constexpr ULONG MAX_IMAGE = 0x400000;
 constexpr unsigned short PORT = 5141;
 constexpr ULONG MAGIC = 0x424E584F;                   // 'OXNB'
 enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5, OP_MCPX = 6 };

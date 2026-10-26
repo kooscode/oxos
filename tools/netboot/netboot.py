@@ -16,7 +16,8 @@ Standard library only. No root needed on the LAN: the console has no IP stack, s
 """
 import argparse, os, re, select, socket, struct, sys, time, zlib
 
-PORT, LOG_PORT, MAGIC, BANK, MAX_IMAGE = 5141, 5140, 0x424E584F, 0x40000, 0x100000
+PORT, LOG_PORT, MAGIC, BANK, MAX_IMAGE = 5141, 5140, 0x424E584F, 0x40000, 0x400000
+MAX_KERNEL_IMAGE = 0x100000  # an image whose kernel stream runs past the first bank: at most 1 MiB
 OP_HELLO, OP_OFFER, OP_READ, OP_DATA, OP_BOOT = 1, 2, 3, 4, 5
 HEADER = struct.Struct("<IBBHIII")  # magic, op, version, reserved, session, offset, length
 PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only used for frames injected into xemu
@@ -24,6 +25,7 @@ PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only u
 
 DEBUG_CONFIG_AT = 0x6020  # free space after the payload header (kernel: src/ke/dbgstep.cpp)
 EXPERIMENT_FLAGS_AT = 0x5FF0  # 'OXEF' + u32: run-time experiment switches (kernel: KiExperimentFlags, ke/dbgstep.cpp)
+TITLE_AT = 0x5FE0  # 'OXTI' + package offset + package size: a title's files after the image (kernel: xe/nettitle.cpp)
 
 
 def debug_config(a):
@@ -52,7 +54,34 @@ def experiment_flags(a):
     return struct.pack("<4sI", b"OXEF", int(text, 0)) if text else None
 
 
-def load(path, config=None, flags=None):
+def title_package(folder, name):
+    """A title's files as the kernel installs them (spec/oxos-internal/09-netboot.md §7): the folder's files, with
+    default.xbe stored as NAME.xbe. Header {'OXTP', version 1, count, name[16]}, then per file {name[64], offset,
+    size} (from the package's start), then the files, each 16-byte aligned; padded to a multiple of 1 KiB."""
+    if not name or len(name) > 15 or any(c in name for c in "\\/:"):
+        raise ValueError(f"title name {name!r}: 1-15 characters, no path separators")
+    files = []
+    for f in sorted(os.listdir(folder)):
+        full = os.path.join(folder, f)
+        if os.path.isfile(full):
+            stored = f"{name}.xbe" if f.lower() == "default.xbe" else f
+            if len(stored) > 63:
+                raise ValueError(f"{f}: file name longer than 63 characters")
+            files.append((stored, open(full, "rb").read()))
+    if not any(n == f"{name}.xbe" for n, _ in files):
+        raise ValueError(f"{folder}: no default.xbe")
+    at = 28 + 72 * len(files)
+    entries, blobs = b"", b""
+    for stored, data in files:
+        at = (at + 15) & ~15
+        entries += struct.pack("<64sII", stored.encode(), at, len(data))
+        blobs = blobs.ljust(at - (28 + 72 * len(files)), b"\0") + data
+        at += len(data)
+    package = struct.pack("<4sII16s", b"OXTP", 1, len(files), name.encode()) + entries + blobs
+    return package + bytes(-len(package) % 1024)
+
+
+def load(path, config=None, flags=None, title=None):
     """The image to serve (with the debug block patched in) and its CRC-32: the first 256 KiB bank of an OXOS open
     image, or the whole file (up to 1 MiB, a multiple of 1 KiB) when its kernel stream runs past the first bank."""
     data = bytearray(open(path, "rb").read())
@@ -61,8 +90,14 @@ def load(path, config=None, flags=None):
     kstart, packed = struct.unpack_from("<II", data, 0x6004)
     if kstart + packed <= BANK:
         data = data[:BANK]
-    elif len(data) > MAX_IMAGE or len(data) % 1024:
+    elif len(data) > MAX_KERNEL_IMAGE or len(data) % 1024:
         raise ValueError(f"{path}: a large image must be at most 1 MiB and a multiple of 1 KiB ({len(data):#x})")
+    if title:
+        data += bytes(-len(data) % 4096)  # the package starts on a page (the kernel keeps those pages)
+        struct.pack_into("<4sII", data, TITLE_AT, b"OXTI", len(data), len(title))
+        data += title
+        if len(data) > MAX_IMAGE:
+            raise ValueError(f"image and title: {len(data):#x} bytes, more than the 2BL's {MAX_IMAGE:#x}")
     if config:
         data[DEBUG_CONFIG_AT:DEBUG_CONFIG_AT + len(config)] = config
     if flags:
@@ -140,6 +175,9 @@ def main():
                     help="the first DR1 hit starts a second run of --steps (after the DR0 run has ended)")
     ap.add_argument("--once", action="store_true", help="exit after one console has booted")
     ap.add_argument("--flags-file", help="file with the kernel's experiment switches (a number), read at every request")
+    ap.add_argument("--title", metavar="DIR", help="also send this folder's files (a title: default.xbe and its data); "
+                    "the kernel installs them as E:\\NAME\\ and runs NAME.xbe instead of the disc or dashboard")
+    ap.add_argument("--title-name", default="imgtest", help="the title's folder and XBE name on E: (default %(default)s)")
     a = ap.parse_args()
     log = Log(a.out)
     socks = []
@@ -200,7 +238,8 @@ def main():
                 log.say(f"netboot: <- op {op} session {sess:08x} offset {offset:#x} length {length:#x} from {who}")
             if op == OP_HELLO:
                 try:
-                    image, crc = load(a.image, debug_config(a), experiment_flags(a))
+                    image, crc = load(a.image, debug_config(a), experiment_flags(a),
+                                      title_package(a.title, a.title_name) if a.title else None)
                 except (OSError, ValueError) as e:
                     log.say(f"netboot: console {who} asked, but {e}")
                     continue
@@ -208,7 +247,8 @@ def main():
                     console_mac = payload[HEADER.size:HEADER.size + 6].hex(":")
                     log.say(f"netboot: console {who} ({console_mac}) asks for a kernel; offering {a.image} "
                             f"(CRC-32 {crc:08x}, built {time.ctime(os.path.getmtime(a.image))}"
-                            + (f", flags {struct.unpack_from('<I', image, EXPERIMENT_FLAGS_AT + 4)[0]:#x}" if image[EXPERIMENT_FLAGS_AT:EXPERIMENT_FLAGS_AT + 4] == b"OXEF" else "") + ")")
+                            + (f", flags {struct.unpack_from('<I', image, EXPERIMENT_FLAGS_AT + 4)[0]:#x}" if image[EXPERIMENT_FLAGS_AT:EXPERIMENT_FLAGS_AT + 4] == b"OXEF" else "")
+                            + (f", title {a.title} as E:\\{a.title_name}\\{a.title_name}.xbe" if a.title else "") + ")")
                     session, served, started = sess, set(), time.monotonic()
                 reply(HEADER.pack(MAGIC, OP_OFFER, 1, 0, sess, crc, len(image)), mac)
             elif op == OP_READ and sess == session and image:
