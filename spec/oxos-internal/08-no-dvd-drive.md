@@ -12,7 +12,10 @@ PIO 4 and UDMA 2, IDENTIFY PACKET DEVICE). It counts as absent when:
    device 1 is selected;
 2. it stays busy for 30 s (600 polls of 50 ms, the reference's limit);
 3. a SET FEATURES fails;
-4. IDENTIFY PACKET DEVICE gives no data within 5 s.
+4. IDENTIFY PACKET DEVICE gives no data within 5 s, or the status register stays exactly 0 for 100 ms after the
+   command (added 2026-10-25). With some disks (seen with two SSDs) device 0 answers status reads for an absent
+   device 1 with 0x00, so the SET FEATURES of step 3 seem to pass and the 5 s wait ran out on every boot; a drive
+   that is there shows BSY within microseconds of a command, then DRQ, DRDY or ERR.
 `IdexCdRomAbsentReason` records the step (0 when a drive was found). Device 0 is selected again afterwards.
 
 ## 2. Behaviour without a drive
