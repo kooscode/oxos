@@ -17,6 +17,7 @@ compiled into the self-test build only), which leave their results in kernel var
 | `make test-lba48` | Separate (not part of `make test`): the self-tests on a 2 TB disk (a sparse copy of the test disk in `xemu-state/oxos-xemu-lba48/`). The kernel writes test sectors either side of the 28-bit limit and at the end of the disk; the test then finds each one at its exact place in the image and checks that the start of the disk is untouched (spec/oxos-internal/04-lba48.md). |
 | `make test-mcpx` | Only with `MCPX_ROM=...`: the dashboard phase again, booted through a real MCPX boot ROM. |
 | `make test-controller` | Separate (not part of `make test`): every input of a virtual gamepad reaches an nxdk title as the right Xbox controller input. Needs cmake, flex, bison and access to `/dev/uinput`. |
+| `make image-test` / `make run-image-test` | Separate: the image test title (`image-test-title/`): a picture decoded on the console, a live status panel and a changing front LED; a quick check that the kernel, a title and video work. |
 | `make test-memory` | Separate (not part of `make test`): how much memory a title is given, as built (the XBE flag "limit to 64 MB", as retail games have it) and with the flag cleared; `MEMORY=128` for a 128 MB console, `MEMORY_BIOS=...` (with `MCPX_ROM=...`) to measure another BIOS. Needs nxdk, like the controller test. |
 
 ## Files
