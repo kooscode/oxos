@@ -377,7 +377,7 @@ $(NXDK_DIR)/Makefile:
 	git -C $(NXDK_DIR) submodule update -q --init --recursive
 nxdk: $(NXDK_DIR)/Makefile
 
-$(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.c $(CONTROLLER_DIR)/Makefile
+$(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.cpp $(CONTROLLER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(CONTROLLER_DIR) -j8
 
 # Image test title (tests/image-test-title, an nxdk title): a picture decoded on the console, a status panel and
@@ -385,7 +385,7 @@ $(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.
 # make run-image-test boots it in xemu with the release BIOS (RUN_OPTS as make run).
 IMAGE_TEST_DIR := $(ROOT)/tests/image-test-title
 IMAGE_TEST_ISO := $(IMAGE_TEST_DIR)/image-test.iso
-$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.c $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.png
+$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.png
 	$(NXDK_ENV) $(MAKE) -C $(IMAGE_TEST_DIR) -j8
 image-test: $(IMAGE_TEST_ISO)
 run-image-test: $(IMAGE_TEST_ISO) $(PLAY_FETCH)
@@ -408,7 +408,7 @@ LAUNCHER_DIR := $(ROOT)/tools/xbe-launcher
 LAUNCHER_XBE := $(LAUNCHER_DIR)/bin/default.xbe
 XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xemu-state/oxos-exfat)
 
-$(LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(LAUNCHER_DIR)/xbe_launcher.c $(LAUNCHER_DIR)/Makefile
+$(LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(LAUNCHER_DIR)/xbe_launcher.cpp $(LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(LAUNCHER_DIR) -j8
 
 xbe-disc: $(LAUNCHER_XBE) $(PLAY_FETCH)
@@ -434,7 +434,7 @@ run-trace-xbe: xbe-disc
 MEMORY_DIR  := $(ROOT)/tests/memory-test-title
 MEMORY_XBE  := $(MEMORY_DIR)/bin/default.xbe
 
-$(MEMORY_XBE): $(NXDK_DIR)/Makefile $(MEMORY_DIR)/memory_test_title.c $(MEMORY_DIR)/Makefile
+$(MEMORY_XBE): $(NXDK_DIR)/Makefile $(MEMORY_DIR)/memory_test_title.cpp $(MEMORY_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(MEMORY_DIR) -j8
 
 test-memory: $(MEMORY_XBE) $(HDD_FETCH)
