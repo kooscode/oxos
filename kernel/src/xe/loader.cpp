@@ -435,6 +435,8 @@ static ULONG XepCheckFirstBoot() {
     return reason;
 }
 
+bool XeLaunchNetbootTitle(); // xe/nettitle.cpp
+
 static void XepLaunchDashboard() {
     if (NT_SUCCESS(XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE)))
         return;
@@ -518,7 +520,13 @@ static void XepLaunchTitle(ULONG Reason) {
         if (linked)
             IoDeleteSymbolicLink(&link);
     } else {
-        // B. The disc, else the dashboard.
+        // B. A title delivered by netboot (xe/nettitle.cpp), else the disc, else the dashboard. The netbooted title
+        // runs whatever the dashboard would be asked to do (a console without a clock backup always has a reason:
+        // the clock is not set).
+        if (XeLaunchNetbootTitle()) {
+            XeTitleLaunched = 1;
+            return;
+        }
         ULONG tray, before, after;
         HalReadSMCTrayState(&tray, &before);
         status = XeLoadImage("\\Device\\CdRom0\\default.xbe", FALSE);

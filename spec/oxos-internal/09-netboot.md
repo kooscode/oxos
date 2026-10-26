@@ -41,7 +41,7 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 | 0x00300000 | 32 receive descriptors, then 2 transmit descriptors |
 | 0x00301000–0x00310FFF | receive buffers (32 × 2 KiB) |
 | 0x00320000–0x00320FFF | transmit frames (2 × 2 KiB) |
-| 0x00800000–0x008FFFFF | the downloaded image (one 256 KiB bank, or up to 1 MiB) |
+| 0x00800000–0x00BFFFFF | the downloaded image (one 256 KiB bank, up to 1 MiB with a large kernel, up to 4 MiB with a title, §7) |
 
 All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel treats all of it as free memory.
 
@@ -88,3 +88,22 @@ bytes packed) is served as one larger image: the same layout as a bank (payload 
 stream), the stream simply running past 0x40000. The PC offers the file's size (a multiple of 1 KiB, at most 1 MiB;
 `netboot.py` sends the first bank only when the kernel stream ends inside it, so ordinary 1 MiB `bios.bin` images
 still go out as 256 KiB). Loaders flashed before this change accept only 0x40000 and boot from flash otherwise.
+
+## 7. A title delivered with the kernel (2026-10-25)
+For hardware-in-the-loop tests: `netboot.py --title DIR [--title-name NAME]` (default name `imgtest`) also sends a
+title, and the kernel installs it on the hard disk and runs it instead of the disc or the dashboard. There is no
+RAM disc: the title runs from the disk, as any title launched from it.
+- **Image:** the image as usual (the first bank, or the whole large image), padded to a 4 KiB boundary, then the
+  package. At bank offset 0x5FE0: 'OXTI' (0x4954584F), the package's offset in the image, its size. The download
+  limit is 4 MiB (loaders flashed before accept at most 1 MiB).
+- **Package:** {'OXTP', version 1, count, name[16]}, then per file {name[64], offset, size} (offsets from the
+  package's start, each file 16-byte aligned), then the files; padded to a multiple of 1 KiB. DIR's `default.xbe`
+  is stored as NAME.xbe; the other files keep their names.
+- **Kernel entry** (cold boots only, `xe/nettitle.cpp`): with 'OXKP' at bank 0x6000 and the marker present, note
+  the package's physical range and clear the marker, so a quick reboot does not find it again.
+- **Memory manager start-up:** the package's pages are held (mapped, counted as contiguous memory), not put on the
+  free lists, and skipped by the page tag test.
+- **Title launch** (path B of spec/stock/05 §2, before the disc): create `E:\NAME\`, write each file, give the
+  pages back, link D: to the folder, load `E:\NAME\NAME.xbe`. This happens whatever the dashboard would be asked to
+  do: a console without a clock backup always has a reason (the clock is not set). If writing or loading fails,
+  the usual disc / dashboard selection follows. Each step is on the log ("netboot title: ...").

@@ -53,6 +53,8 @@ the new build.
 | `--once` | Exit after one console has booted. |
 | `--verbose` | Print every request (debugging the protocol). |
 | `--xemu PORT` | Serve an xemu console started with `tools/run.py BIOS --net-udp PORT` instead of the LAN (see 4). |
+| `--title DIR` | Also send a title (DIR's `default.xbe` and its files). The kernel writes it to `E:\\NAME\\` and runs `NAME.xbe` instead of the disc or dashboard (spec/oxos-internal/09 §7). Needs a netboot image flashed after 2026-10-25 (4 MiB downloads). |
+| `--title-name NAME` | The title's folder and XBE name on E: (default `imgtest`). |
 
 ## 3. On the console
 
@@ -87,3 +89,14 @@ port 9131. `netboot.py --xemu` answers there and prints the network log too.
 - **"asks" but no "downloaded":** the replies are not reaching the console. Try `--to` with the LAN's broadcast
   address.
 - **It always boots the flash kernel:** the console's flash does not hold a netboot image (`make netboot`).
+
+## 5. Running a test title on the console
+Any nxdk title (or other XBE) can run on the console without touching its disk, for example the image test:
+
+```sh
+make -C kernel image-test        # tests/image-test-title/bin: default.xbe + picture.png
+python3 tools/netboot/netboot.py kernel/build/netlog/bios-256k.bin --title tests/image-test-title/bin --log
+```
+
+At power-on the console downloads the kernel and the title, installs the title as `E:\imgtest\imgtest.xbe` (with its
+files beside it; D: is that folder) and runs it.

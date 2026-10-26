@@ -496,6 +496,8 @@ static void MiProbeRamSize() {
     *low = saved;
 }
 
+bool MiIsNetbootTitlePage(ULONG pfn); // xe/nettitle.cpp
+
 void MmInitSystem(bool QuickReboot) {
     if (!QuickReboot) {
         MiProbeRamSize();
@@ -504,12 +506,16 @@ void MmInitSystem(bool QuickReboot) {
         ULONG imgEnd = (0x10000 + *(ULONG *)(0x80010000 + *(ULONG *)(0x80010000 + 0x3C) + 24 + 56) + PAGE_SIZE - 1) >>
                        PAGE_SHIFT;
         for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+            if (MiIsNetbootTitlePage(pfn))
+                continue;
             auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
             w[0] = 0xA5000000 ^ pfn;
             w[512] = ~(0xA5000000 ^ pfn);
         }
         __asm__ volatile("wbinvd" ::: "memory");
         for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+            if (MiIsNetbootTitlePage(pfn))
+                continue;
             auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
             if (w[0] != (0xA5000000 ^ pfn) || w[512] != ~(0xA5000000 ^ pfn)) {
                 ULONG bad = MiRamBadPages;
@@ -530,6 +536,8 @@ void MmInitSystem(bool QuickReboot) {
             static const ULONG patterns[4] = {0x55555555, 0xAAAAAAAA, 0, 1};
             for (ULONG pass = 0; pass < XK_MEMTEST_PASSES; pass++) {
                 for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+                    if (MiIsNetbootTitlePage(pfn))
+                        continue;
                     auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
                     for (ULONG i = 0; i < 1024; i++)
                         w[i] = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
@@ -541,6 +549,8 @@ void MmInitSystem(bool QuickReboot) {
                     KeStallExecutionProcessor(1000);
 #endif
                 for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+                    if (MiIsNetbootTitlePage(pfn))
+                        continue;
                     auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
                     for (ULONG i = 0; i < 1024; i++) {
                         ULONG want = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
@@ -591,7 +601,8 @@ void MmInitSystem(bool QuickReboot) {
     //    allocations (PTE bit 10) there.
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
     auto allocatable = [&](ULONG pfn) {
-        return (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
+        return ((pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN)) &&
+               !MiIsNetbootTitlePage(pfn);
     };
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
     //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
@@ -609,6 +620,8 @@ void MmInitSystem(bool QuickReboot) {
             if (pfn > MM_HIGHEST_CONTIGUOUS_PFN) // held: never on the free lists
                 pte = (pfn << PAGE_SHIFT) | rw;
 #endif
+            if (MiIsNetbootTitlePage(pfn)) // a netbooted title's files: held (contiguous usage) until installed
+                pte = (pfn << PAGE_SHIFT) | rw;
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
                 pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);
         } else if (QuickReboot &&
