@@ -385,7 +385,7 @@ $(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.
 # make run-image-test boots it in xemu with the release BIOS (RUN_OPTS as make run).
 IMAGE_TEST_DIR := $(ROOT)/tests/image-test-title
 IMAGE_TEST_ISO := $(IMAGE_TEST_DIR)/image-test.iso
-$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.png
+$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.jpg
 	$(NXDK_ENV) $(MAKE) -C $(IMAGE_TEST_DIR) -j8
 image-test: $(IMAGE_TEST_ISO)
 run-image-test: $(IMAGE_TEST_ISO) $(PLAY_FETCH)
