@@ -623,6 +623,24 @@ DRIVER_OBJECT IdexCdRomDriverObject = {
 // Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
 // 4 IDENTIFY PACKET). Called at the channel's IRQL.
 // One attempt at bringing device 1 up (SET FEATURES PIO 4, UDMA 2; IDENTIFY PACKET DEVICE): 0, or the failing step.
+// Wait for (status & mask) == value, as IdexWaitForStatus, but give up early when nothing answers: a command
+// written with device 1 selected and no device 1 on the cable leaves the status register at 0 (device 0 answers
+// the read for it; seen with SSDs), while a device that is there shows BSY within microseconds and then DRQ, DRDY
+// or ERR. 1 = the status was reached, 0 = timed out, -1 = the status stayed 0 for 100 ms (no device 1).
+static int IdexCdRomWaitForStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
+    ULONG quiet = 0;
+    for (ULONG i = 0; i < timeoutUs; i += 10) {
+        UCHAR s = inb(IDE_ALT_STATUS);
+        if ((s & mask) == value)
+            return 1;
+        quiet = s ? 0 : quiet + 10;
+        if (quiet >= 100000)
+            return -1;
+        KeStallExecutionProcessor(10);
+    }
+    return (inb(IDE_ALT_STATUS) & mask) == value ? 1 : 0;
+}
+
 static ULONG IdexCdRomIdentify() {
     static const UCHAR modes[] = {0x0C, 0x42};
     for (UCHAR mode : modes) {
@@ -635,7 +653,7 @@ static ULONG IdexCdRomIdentify() {
     }
     outb(IDE_COMMAND, 0xA1); // IDENTIFY PACKET DEVICE
     KeStallExecutionProcessor(1);
-    if (!IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 5000000))
+    if (IdexCdRomWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ, 5000000) != 1)
         return 4;
     for (int i = 0; i < 256; i++)
         inw(IDE_DATA);
