@@ -7,8 +7,9 @@
 #   OXOS_KERNEL_OPT=-O2 tools/unit-tests.sh   the kernel sources at the console build's optimisation (own build dir)
 #   OXOS_STRESS_SECONDS=N               length of each Stress.* test (default 5)
 #
-# The tests are a 32-bit (i386) build. Without a local multilib toolchain (g++-multilib, googletest sources in
-# /usr/src/googletest) the script builds and runs them in a Docker image (tests/unit/Dockerfile).
+# The tests are a 32-bit (i386) build with plain make (tests/unit/Makefile). Without a local multilib toolchain
+# (g++-multilib, googletest sources in /usr/src/googletest) the script builds and runs them in a Docker image
+# (tests/unit/Dockerfile).
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COVERAGE=OFF
@@ -17,9 +18,8 @@ if [ "${1:-}" = "--" ]; then shift; fi
 
 inner() {
     BUILD=$ROOT/tests/unit/build$( [ "$COVERAGE" = ON ] && echo -cov || true )$( [ -n "${OXOS_KERNEL_OPT:-}" ] && echo "-opt$(echo "$OXOS_KERNEL_OPT" | tr -dc 'A-Za-z0-9')" || true )
-    CC=clang CXX=clang++ cmake -S "$ROOT/tests/unit" -B "$BUILD" -G Ninja -DOXOS_COVERAGE=$COVERAGE \
-        "-DOXOS_KERNEL_OPT=${OXOS_KERNEL_OPT:-}" >/dev/null
-    ninja -C "$BUILD" oxos_unit_tests
+    make -s -C "$ROOT/tests/unit" -j"$(nproc)" CC=clang CXX=clang++ BUILD="$BUILD" \
+        COVERAGE=$( [ "$COVERAGE" = ON ] && echo 1 || echo 0 ) KERNEL_OPT="${OXOS_KERNEL_OPT:-}"
     if [ "$COVERAGE" = ON ]; then
         rm -f "$BUILD"/*.profraw
         LLVM_PROFILE_FILE="$BUILD/run.profraw" "$BUILD/oxos_unit_tests" "$@" || status=$?

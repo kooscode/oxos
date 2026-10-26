@@ -12,8 +12,10 @@ built from the kernel's own sources as a 32-bit Linux program. How it works: `sp
     OXOS_STRESS_SECONDS=120 tools/unit-tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
     OXOS_KERNEL_OPT=-O2 tools/unit-tests.sh      # kernel sources at the console build's optimisation
 
-Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`,
-cmake, ninja) or Docker: without the toolchain the script builds the image from `Dockerfile` here and runs inside it.
+Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`, make)
+or Docker: without the toolchain the script builds the image from `Dockerfile` here and runs inside it. The build is
+the plain `Makefile` in this folder (`make -C tests/unit`; `COVERAGE=1`, `KERNEL_OPT=-O2` and `BUILD=dir` as the
+script passes them); it compiles GoogleTest from those sources itself.
 
 ## Layout
 
@@ -26,6 +28,8 @@ cmake, ninja) or Docker: without the toolchain the script builds the image from 
 | `host/checks.cpp` | page-database checker, thread spawn/join helpers |
 | `kernel_test.h` | shared helpers: `CheckPfnDatabase`, `EXPECT_BUGCHECK`, `Spawn`/`Join`, `SleepMs` |
 | `test_*.cpp` | the tests |
+| `Makefile` | the build: the kernel sources into `liboxos_core.a`, the harness and tests, GoogleTest from its sources |
+| `host/kernel_text.ld` | link script: `liboxos_core.a`'s code in a section of its own (asynchronous interrupts land only there) |
 
 ## Writing tests
 
