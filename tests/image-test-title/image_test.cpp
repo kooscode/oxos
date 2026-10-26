@@ -1,6 +1,6 @@
 // Image test title (nxdk, open source): the simplest title that shows the kernel, a title and video all work.
-// It sets a video mode, loads a PNG from its disc (D:\picture.png) and decodes it on the console with libpng (file
-// I/O, zlib, memory allocation), shows it, and then keeps a status panel and the front LED changing once a second, so
+// It sets a video mode, loads a JPEG from its disc (D:\picture.jpg) and decodes it on the console with libjpeg
+// (file I/O, memory allocation), shows it, and then keeps a status panel and the front LED changing once a second, so
 // a frozen console is obvious (README.md in this folder). The same state is kept in XkImageTest for automated runs
 // (found in RAM by its signature).
 #include <hal/debug.h>
@@ -8,14 +8,16 @@
 extern "C" {
 #include <hal/led.h> // no C++ linkage guard of its own
 }
-#include <png.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 
 #include <array>
+#include <csetjmp>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+
+#include <jpeglib.h> // after <cstdio>: it uses FILE
 
 namespace {
 
@@ -30,7 +32,7 @@ enum class PictureStatus : unsigned int { Loading = 0, Shown = 1, Missing = 2, U
 const char *Describe(PictureStatus s) {
     switch (s) {
     case PictureStatus::Shown: return "shown";
-    case PictureStatus::Missing: return "D:\\picture.png not found";
+    case PictureStatus::Missing: return "D:\\picture.jpg not found";
     case PictureStatus::Undecodable: return "decode failed";
     case PictureStatus::OutOfMemory: return "out of memory";
     default: return "loading";
@@ -67,38 +69,82 @@ volatile struct {
     unsigned int Self;      // this block's virtual address
     unsigned int Seconds;   // seconds since the title started (from its own tick count)
     unsigned int Frames;    // vertical blanks waited for
-    unsigned int PngStatus; // a PictureStatus
-    unsigned int PngWidth, PngHeight, PngMs;
+    unsigned int Status; // a PictureStatus
+    unsigned int PictureWidth, PictureHeight, PictureMs;
     unsigned int FreePages;
+    unsigned int Widescreen; // 1 when the console's video setting is widescreen (the picture is drawn 3/4 as wide)
 } XkImageTest = {{'X', 'K', 'I', 'M', 'G', 'T', 'S', '1'}};
 
 namespace {
 
-// Decode the PNG and draw it scaled (keeping its aspect) and centred into the picture band of the framebuffer.
-PictureStatus ShowPicture(const char *path) {
+// libjpeg reports a fatal error by calling error_exit, which must not return: it jumps back to DecodeJpeg's setjmp.
+// DecodeJpeg holds no objects with destructors, so the jump skips nothing.
+struct JpegError {
+    jpeg_error_mgr Manager; // first: libjpeg passes &Manager as cinfo->err
+    std::jmp_buf Jump;
+};
+
+void JpegErrorExit(j_common_ptr cinfo) {
+    std::longjmp(reinterpret_cast<JpegError *>(cinfo->err)->Jump, 1);
+}
+
+// Decodes a JPEG into 32-bit pixels in the framebuffer's byte order (B, G, R, x). The pixels are allocated with
+// new[] and handed to *pixels as soon as they exist, so the caller frees them on every path.
+PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned char **pixels, unsigned int &width,
+                         unsigned int &height) {
+    jpeg_decompress_struct cinfo;
+    JpegError error;
+    cinfo.err = jpeg_std_error(&error.Manager);
+    error.Manager.error_exit = JpegErrorExit;
+    if (setjmp(error.Jump)) {
+        jpeg_destroy_decompress(&cinfo);
+        return PictureStatus::Undecodable;
+    }
+    jpeg_create_decompress(&cinfo);
+    jpeg_mem_src(&cinfo, data, static_cast<unsigned long>(size));
+    if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
+        jpeg_destroy_decompress(&cinfo);
+        return PictureStatus::Undecodable;
+    }
+    cinfo.out_color_space = JCS_EXT_BGRX;
+    jpeg_start_decompress(&cinfo);
+    width = cinfo.output_width;
+    height = cinfo.output_height;
+    *pixels = new (std::nothrow) unsigned char[static_cast<std::size_t>(width) * height * 4];
+    if (!*pixels) {
+        jpeg_destroy_decompress(&cinfo);
+        return PictureStatus::OutOfMemory;
+    }
+    while (cinfo.output_scanline < height) {
+        JSAMPROW row = *pixels + static_cast<std::size_t>(cinfo.output_scanline) * width * 4;
+        jpeg_read_scanlines(&cinfo, &row, 1);
+    }
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+    return PictureStatus::Shown;
+}
+
+// Decode the JPEG and draw it scaled (keeping its aspect on the TV) and centred into the picture band of the
+// framebuffer. In widescreen the TV stretches the 640-pixel width over 16:9 instead of 4:3, so every framebuffer
+// pixel shows 4/3 as wide: the picture is drawn 3/4 as wide to come out right.
+PictureStatus ShowPicture(const char *path, bool widescreen) {
     DWORD start = GetTickCount();
     std::size_t size;
     auto file = LoadWholeFile(path, size);
     if (!file)
         return PictureStatus::Missing;
-    png_image image{};
-    image.version = PNG_IMAGE_VERSION;
-    if (!png_image_begin_read_from_memory(&image, file.get(), size))
-        return PictureStatus::Undecodable;
-    image.format = PNG_FORMAT_BGRA; // the framebuffer's byte order (32 bpp: B, G, R, A)
-    std::unique_ptr<unsigned char[]> pixels(new (std::nothrow) unsigned char[PNG_IMAGE_SIZE(image)]);
-    if (!pixels) {
-        png_image_free(&image);
-        return PictureStatus::OutOfMemory;
-    }
-    if (!png_image_finish_read(&image, nullptr, pixels.get(), 0, nullptr))
-        return PictureStatus::Undecodable;
+    unsigned char *decoded = nullptr;
+    unsigned int w = 0, h = 0;
+    PictureStatus status = DecodeJpeg(file.get(), size, &decoded, w, h);
+    std::unique_ptr<unsigned char[]> pixels(decoded);
+    if (status != PictureStatus::Shown)
+        return status;
     file.reset();
-    const unsigned int w = image.width, h = image.height;
-    unsigned int dw = Width, dh = static_cast<unsigned int>(static_cast<unsigned long long>(h) * Width / w);
+    const unsigned long long pixelW = widescreen ? 4 : 1, pixelH = widescreen ? 3 : 1; // a pixel's shape on the TV
+    unsigned int dw = Width, dh = static_cast<unsigned int>(h * Width * pixelW / (w * pixelH));
     if (dh > PictureHeight) {
         dh = PictureHeight;
-        dw = static_cast<unsigned int>(static_cast<unsigned long long>(w) * PictureHeight / h);
+        dw = static_cast<unsigned int>(w * PictureHeight * pixelH / (h * pixelW));
     }
     const unsigned int x0 = (Width - dw) / 2, y0 = (PictureHeight - dh) / 2;
     auto fb = reinterpret_cast<unsigned int *>(XVideoGetFB());
@@ -109,9 +155,9 @@ PictureStatus ShowPicture(const char *path) {
         for (unsigned int x = 0; x < dw; x++)
             dst[x] = row[static_cast<unsigned long long>(x) * w / dw];
     }
-    XkImageTest.PngWidth = w;
-    XkImageTest.PngHeight = h;
-    XkImageTest.PngMs = GetTickCount() - start;
+    XkImageTest.PictureWidth = w;
+    XkImageTest.PictureHeight = h;
+    XkImageTest.PictureMs = GetTickCount() - start;
     return PictureStatus::Shown;
 }
 
@@ -142,8 +188,10 @@ int main() {
     XVideoSetMode(Width, Height, 32, REFRESH_DEFAULT);
     std::memset(XVideoGetFB(), 0, Width * Height * 4);
     debugPrint(""); // debugPrint learns the screen size on its first call; until then debugMoveCursor is ignored
-    auto status = ShowPicture("D:\\picture.png");
-    XkImageTest.PngStatus = static_cast<unsigned int>(status);
+    const bool widescreen = XVideoGetEncoderSettings() & VIDEO_WIDESCREEN;
+    XkImageTest.Widescreen = widescreen;
+    auto status = ShowPicture("D:\\picture.jpg", widescreen);
+    XkImageTest.Status = static_cast<unsigned int>(status);
 
     const DWORD start = GetTickCount();
     DWORD lastSecond = static_cast<DWORD>(-1);
@@ -166,8 +214,8 @@ int main() {
                    seconds ? frames / static_cast<unsigned int>(seconds) : 0);
         debugPrint("free memory %u KB                            \n", XkImageTest.FreePages * 4);
         if (status == PictureStatus::Shown)
-            debugPrint("picture %ux%u from D:\\picture.png in %u ms       \n", XkImageTest.PngWidth,
-                       XkImageTest.PngHeight, XkImageTest.PngMs);
+            debugPrint("picture %ux%u from D:\\picture.jpg in %u ms, %s       \n", XkImageTest.PictureWidth,
+                       XkImageTest.PictureHeight, XkImageTest.PictureMs, widescreen ? "widescreen" : "4:3");
         else
             debugPrint("picture: %s                                  \n", Describe(status));
         RecolourText();
