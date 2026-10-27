@@ -205,6 +205,8 @@ void IdexChannelInit() {
     ch->PhysicalRegionDescriptorTablePhysical = MmGetPhysicalAddress(IdexPrdTable);
     IdexDiskInit();
     IdexCdRomInit();
+    void VdInitialize(); // vd/vdisc.cpp: disc images (the control device)
+    VdInitialize();
 }
 
 // Software reset of both devices (SRST through the device control register), then wait for the master.

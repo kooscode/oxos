@@ -221,7 +221,7 @@ NTSTATUS FatxDeleteDirent(FATX_VOLUME *v, FATX_FCB *f) {
         if (NT_SUCCESS(status))
             status = ExfatFreeFile(v, f);
         f->FirstCluster = 0;
-        f->FileSize = 0;
+        f->FileSize = f->FileSizeHigh = 0;
         f->HintCluster = 0;
         f->ExFlags = 0;
         f->ExAllocClusters = 0;
@@ -283,6 +283,7 @@ FATX_FCB *FatxCreateFcb(FATX_FCB *Parent, const FATX_ENTRY *e, ULONG Index) {
     RtlCopyMemory(f->Name, e->FileName, e->FileNameLength);
     f->FirstCluster = e->FirstCluster;
     f->FileSize = (f->Flags & FCB_DIRECTORY) ? 0 : e->FileSize;
+    f->FileSizeHigh = (f->Flags & FCB_DIRECTORY) ? 0 : e->FileSizeHigh;
     f->DirentIndex = Index;
     f->CreationTime = e->CreationTime;
     f->LastWriteTime = e->LastWriteTime;

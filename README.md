@@ -33,6 +33,10 @@ pad calibration tables (functional hardware constants). The method and its legal
 - **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
   composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
   programmed from their register tables; checked in xemu on all three of its encoder models.
+- **Games from disc images:** XISO, full dumps and CCI images on the hard disk (whole or in two parts, and over
+  4 GB on exFAT) play as if they were in the drive. The [ISO launcher](tools/iso-launcher) mounts one and starts
+  it, with the same device interface as Cerbios. Halo 2 runs this way on a 1.4 console from an exFAT SSD
+  ([`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md)).
 - **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
   from a 500 GB exFAT SSD, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
 
@@ -66,6 +70,18 @@ checked in xemu and on a 1.4 console (a 500 GB SSD).
 
 `tests/exfat.py --from-fatx SRC.qcow2 OUT.qcow2` builds such a disk image from an existing Xbox disk image. The
 design is in [`spec/oxos-internal/05-exfat-storage-spec.md`](spec/oxos-internal/05-exfat-storage-spec.md).
+
+## Playing games from disc images
+1. Copy the images to the hard disk, e.g. `F:\games\` (`/F/games` on an exFAT disk). XISO, full disc dumps and
+   `.cci` work, whole or split in two (`name.1.iso` + `name.2.iso`; on FATX images must be split below 4 GB). Keep
+   names to 42 characters or fewer.
+2. Build the ISO launcher (`make -C kernel iso-launcher`, output `tools/iso-launcher/bin/default.xbe`). Either put a
+   copy next to each image, or put it anywhere with an `iso.txt` naming the image (`F:\games\Halo 2.iso`).
+3. Start the launcher from the dashboard. It mounts the image as the console's disc and the game starts. The image
+   stays mounted through the game's own restarts until the console is switched off; an `iso.txt` of `none`
+   unmounts it.
+
+Details: [`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md).
 
 ## Getting Started (Kernel Developer)
 To build OXOS yourself, change it, run its tests or debug the kernel and your own nxdk titles.

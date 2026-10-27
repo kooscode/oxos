@@ -90,5 +90,9 @@ created (CD-ROM type for `D`/`d`, disk otherwise; sector size by type), the stor
 - Keeping the slot table in memory that survives a quick reboot is what lets a dashboard mount, then relaunch.
 
 ## Open
-- The exact replies to the CD-ROM queries for images (TOC, region, disc structure).
+- Replies to CD-ROM queries for images, now traced: READ_TOC and GET_LAST_SESSION return 12 constant bytes
+  (`00 12 01 01 00 14 01 00 00 00 02 00`, one data track); GET_DRIVE_GEOMETRY returns the image size in sectors,
+  media type 0xB, 1 track, 1 sector, 2048 bytes; CHECK_VERIFY and AUTHENTICATE_DISK succeed. Everything else
+  fails, including DVD_READ_STRUCTURE and SCSI pass-through. Reads past the end, and writes, fail with
+  STATUS_INVALID_PARAMETER; reads on an unmounted slot fail with STATUS_NO_MEDIA_IN_DEVICE.
 - What writers put in bit 31 of a CCI index entry (the read path ignores it).

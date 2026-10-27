@@ -35,6 +35,7 @@ struct FATX_ENTRY : FATX_DIRENT {
     UCHAR ExEntries;       // entries in the set (file, stream, names)
     ULONG ExAllocClusters; // clusters allocated (DataLength rounded up)
     ULONG ExDirLength;     // directories: DataLength
+    ULONG FileSizeHigh;    // exFAT files of 4 GB or more: the size's high dword (such files are read-only)
 };
 
 constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40,
@@ -58,7 +59,10 @@ struct FATX_FCB {
     ULONG HintClusterIndex, HintCluster; // last chain position looked up
     UCHAR ExFlags, ExEntries;             // exFAT (FATX_ENTRY)
     ULONG ExAllocClusters, ExDirLength;
+    ULONG FileSizeHigh; // exFAT: files of 4 GB or more (read-only: FATX sizes are 32-bit)
 };
+
+inline ULONGLONG FatxFileSize64(const FATX_FCB *f) { return (ULONGLONG)f->FileSizeHigh << 32 | f->FileSize; }
 
 // Per file object (FsContext2): directory enumeration state.
 struct FATX_CCB {

@@ -37,14 +37,43 @@ def tree_from_dir(path):
     return tree
 
 
+class High(bytes):
+    """File data placed beyond 4 GB in the image (HIGH_SECTOR on), for the large-image read paths."""
+
+
+HIGH_SECTOR = (4 << 30) // SECTOR + 64
+
+
+class Sparse:
+    """A large image held as pieces: len(), slices (zeros between the pieces) and bool, like bytes."""
+
+    def __init__(self, size, pieces):
+        self.size, self.pieces = size, sorted(pieces)  # [(offset, bytes)]
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, k):
+        start, stop, _ = k.indices(self.size)
+        out = bytearray(max(0, stop - start))
+        for off, data in self.pieces:
+            lo, hi = max(start, off), min(stop, off + len(data))
+            if lo < hi:
+                out[lo - start:hi - start] = data[lo - off:hi - off]
+        return bytes(out)
+
+
 def write_image(path, tree):
-    """An XISO of tree (name -> bytes or dict) at path."""
+    """An XISO of tree (name -> bytes, High or dict) at path. Returns the image: bytes, or a Sparse one when a High
+    file puts it beyond 4 GB (the file on disk is then sparse)."""
     sectors = {}  # sector -> bytes
     next_sector = [33]
+    high_sector = [HIGH_SECTOR]
 
-    def alloc(nbytes):
-        s = next_sector[0]
-        next_sector[0] += max(1, (nbytes + SECTOR - 1) // SECTOR)
+    def alloc(nbytes, high=False):
+        at = high_sector if high else next_sector
+        s = at[0]
+        at[0] += max(1, (nbytes + SECTOR - 1) // SECTOR)
         return s
 
     def write_dir(d):
@@ -57,8 +86,8 @@ def write_image(path, tree):
                 s, size = write_dir(v)
                 info[n] = (s, size, 0x10)
             else:
-                s = alloc(len(v))
-                sectors[s] = v
+                s = alloc(len(v), isinstance(v, High))
+                sectors[s] = bytes(v)
                 info[n] = (s, len(v), 0x00)
         # balanced tree: middle element is the root of each range; lay entries out in pre-order
         order = []
@@ -97,17 +126,31 @@ def write_image(path, tree):
 
     root_sector, root_size = write_dir(tree)
     total = next_sector[0] + 16
-    img = bytearray(total * SECTOR)
+    if high_sector[0] > HIGH_SECTOR:
+        total = high_sector[0] + 16
+    low = min(total, next_sector[0] + 16)
+    img = bytearray(low * SECTOR)
     vd = bytearray(SECTOR)
     vd[0:20] = MAGIC
     vd[20:28] = struct.pack("<II", root_sector, root_size)
     vd[28:36] = struct.pack("<Q", 0x01C0000000000000)
     vd[0x7EC:0x800] = MAGIC
     img[32 * SECTOR:33 * SECTOR] = vd
+    high = {}
     for s, data in sectors.items():
-        img[s * SECTOR:s * SECTOR + len(data)] = data
-    open(path, "wb").write(img)
-    return img
+        if s >= HIGH_SECTOR:
+            high[s] = data
+        else:
+            img[s * SECTOR:s * SECTOR + len(data)] = data
+    with open(path, "wb") as f:
+        f.write(img)
+        for s, data in high.items():
+            f.seek(s * SECTOR)
+            f.write(data)
+        f.truncate(total * SECTOR)
+    if not high:
+        return img
+    return Sparse(total * SECTOR, [(0, bytes(img))] + [(s * SECTOR, d) for s, d in high.items()])
 
 
 def checksum(data):

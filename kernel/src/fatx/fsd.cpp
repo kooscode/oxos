@@ -241,6 +241,11 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
         }
         if (NT_SUCCESS(status))
             status = FatxCheckAttributes(access, options, f->Attributes);
+        // exFAT files of 4 GB or more (disc images) are read-only: FATX sizes, writes and allocation are 32-bit.
+        if (NT_SUCCESS(status) && f->FileSizeHigh &&
+            ((access & (0x2 | 0x4 | 0x10000 | 0x10000000 | 0x40000000)) || // write, append, delete, all, generic write
+             disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE || disposition == FILE_OVERWRITE_IF))
+            status = STATUS_ACCESS_DENIED;
     }
     ULONG info = created ? FILE_CREATED : FILE_OPENED;
     if (NT_SUCCESS(status))
@@ -314,10 +319,11 @@ static NTSTATUS NTAPI FatxFsdClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 // --- Read / write
 
-static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONG offset, PUCHAR buffer, ULONG length) {
+static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer,
+                             ULONG length) {
     while (length) {
-        ULONG within = offset & (v->BytesPerCluster - 1), cluster;
-        NTSTATUS status = FatxClusterAtIndex(v, f, offset >> v->ClusterShift, &cluster);
+        ULONG within = (ULONG)offset & (v->BytesPerCluster - 1), cluster;
+        NTSTATUS status = FatxClusterAtIndex(v, f, (ULONG)(offset >> v->ClusterShift), &cluster);
         if (!NT_SUCCESS(status))
             return status == STATUS_END_OF_FILE ? (NTSTATUS)0xC0000032 : status;
         // Extend the run over physically consecutive clusters.
@@ -366,8 +372,8 @@ static NTSTATUS FatxTransfer(FATX_VOLUME *v, FATX_FCB *f, bool write, ULONG offs
 }
 
 // Scatter/gather: one page-sized piece of the transfer per segment element (spec/stock/11 §5).
-static NTSTATUS FatxTransferIrp(FATX_VOLUME *v, FATX_FCB *f, PIRP Irp, bool write, ULONG offset, PUCHAR buffer,
-                                ULONG length) {
+static NTSTATUS FatxTransferIrp(FATX_VOLUME *v, FATX_FCB *f, PIRP Irp, bool write, ULONGLONG offset,
+                                PUCHAR buffer, ULONG length) {
     if (!Irp->SegmentArray)
         return FatxTransfer(v, f, write, offset, buffer, length);
     for (ULONG i = 0; length; i++) {
@@ -407,6 +413,8 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                      ((offset.LowPart | length) & (v->SectorSize - 1));
     if (write && unaligned)
         return FatxComplete(Irp, STATUS_INVALID_PARAMETER);
+    if (write && f->FileSizeHigh) // a read-only file of 4 GB or more
+        return FatxComplete(Irp, STATUS_ACCESS_DENIED);
     FatxAcquireVolume(v);
     NTSTATUS status = STATUS_SUCCESS;
     ULONG done = 0;
@@ -427,13 +435,15 @@ static NTSTATUS NTAPI FatxFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             f->Flags |= FCB_DIRENT_DIRTY;
         }
     } else {
-        if (offset.HighPart || offset.LowPart >= f->FileSize) {
+        ULONGLONG size = FatxFileSize64(f);
+        if (offset.QuadPart < 0 || (ULONGLONG)offset.QuadPart >= size) {
             status = length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
         } else if (unaligned) {
             status = STATUS_INVALID_PARAMETER;
         } else {
-            done = f->FileSize - offset.LowPart < length ? f->FileSize - offset.LowPart : length;
-            status = FatxTransferIrp(v, f, Irp, false, offset.LowPart, buffer, done);
+            ULONGLONG left = size - (ULONGLONG)offset.QuadPart;
+            done = left < length ? (ULONG)left : length;
+            status = FatxTransferIrp(v, f, Irp, false, (ULONGLONG)offset.QuadPart, buffer, done);
             if (!NT_SUCCESS(status))
                 done = 0;
         }
@@ -455,10 +465,10 @@ static void FatxFillTimes(FATX_FCB *f, PLARGE_INTEGER times /*creation, access, 
 
 static ULONG FatxAttributesOut(UCHAR a) { return a ? a : FILE_ATTRIBUTE_NORMAL; }
 
-static ULONG FatxAllocationSize(FATX_VOLUME *v, FATX_FCB *f) {
+static ULONGLONG FatxAllocationSize(FATX_VOLUME *v, FATX_FCB *f) {
     if (f->Flags & FCB_DIRECTORY)
         return 0;
-    return (ULONG)(((ULONGLONG)f->FileSize + v->BytesPerCluster - 1) & ~(ULONGLONG)(v->BytesPerCluster - 1));
+    return (FatxFileSize64(f) + v->BytesPerCluster - 1) & ~(ULONGLONG)(v->BytesPerCluster - 1);
 }
 
 static ULONG FatxFullName(FATX_FCB *f, PCHAR out, ULONG max) {
@@ -501,8 +511,8 @@ static NTSTATUS NTAPI FatxFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP 
         break;
     case FileStandardInformation: {
         auto p = (PULONG)out;
-        p[0] = FatxAllocationSize(v, f), p[1] = 0;
-        p[2] = f->FileSize, p[3] = 0;
+        *(ULONGLONG *)p = FatxAllocationSize(v, f);
+        p[2] = f->FileSize, p[3] = f->FileSizeHigh;
         p[4] = 1;
         out[20] = (f->Flags & FCB_DELETE_PENDING) != 0;
         out[21] = (f->Flags & FCB_DIRECTORY) != 0;
@@ -533,8 +543,8 @@ static NTSTATUS NTAPI FatxFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP 
     case FileNetworkOpenInformation: {
         RtlCopyMemory(out, times, 32);
         auto p = (PULONG)(out + 32);
-        p[0] = FatxAllocationSize(v, f), p[1] = 0;
-        p[2] = f->FileSize, p[3] = 0;
+        *(ULONGLONG *)p = FatxAllocationSize(v, f);
+        p[2] = f->FileSize, p[3] = f->FileSizeHigh;
         p[4] = FatxAttributesOut(f->Attributes);
         p[5] = 0;
         info = 56;
@@ -545,8 +555,9 @@ static NTSTATUS NTAPI FatxFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP 
         RtlZeroMemory(out, 0x68);
         RtlCopyMemory(out, times, 32);
         *(PULONG)(out + 32) = FatxAttributesOut(f->Attributes);
-        *(PULONG)(out + 40) = FatxAllocationSize(v, f);
+        *(ULONGLONG *)(out + 40) = FatxAllocationSize(v, f);
         *(PULONG)(out + 48) = f->FileSize;
+        *(PULONG)(out + 52) = f->FileSizeHigh;
         *(PULONG)(out + 56) = 1;
         out[60] = (f->Flags & FCB_DELETE_PENDING) != 0;
         out[61] = (f->Flags & FCB_DIRECTORY) != 0;
@@ -678,6 +689,8 @@ static NTSTATUS NTAPI FatxFsdSetInformation(PDEVICE_OBJECT DeviceObject, PIRP Ir
         LARGE_INTEGER size = *(PLARGE_INTEGER)in;
         if (f->Flags & FCB_DIRECTORY)
             status = STATUS_INVALID_PARAMETER;
+        else if (f->FileSizeHigh) // a read-only file of 4 GB or more
+            status = STATUS_ACCESS_DENIED;
         else if (size.HighPart)
             status = (NTSTATUS)0xC000007F;
         else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||
@@ -766,9 +779,9 @@ static NTSTATUS NTAPI FatxFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP 
             FatxTimestampToTime(e->LastWriteTime, (PLARGE_INTEGER)(p + 0x18));
             *(PLARGE_INTEGER)(p + 0x20) = *(PLARGE_INTEGER)(p + 0x18);
             bool isDir = e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-            *(PULONG)(p + 0x28) = isDir ? 0 : e->FileSize;
-            *(PULONG)(p + 0x30) =
-                isDir ? 0 : (e->FileSize + v->BytesPerCluster - 1) & ~(v->BytesPerCluster - 1);
+            ULONGLONG size = isDir ? 0 : (ULONGLONG)e->FileSizeHigh << 32 | e->FileSize;
+            *(ULONGLONG *)(p + 0x28) = size;
+            *(ULONGLONG *)(p + 0x30) = (size + v->BytesPerCluster - 1) & ~(ULONGLONG)(v->BytesPerCluster - 1);
             *(PULONG)(p + 0x38) = FatxAttributesOut(e->FileAttributes);
             *(PULONG)(p + 0x3C) = nameLen;
         } else {
