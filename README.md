@@ -106,6 +106,37 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
   On a console the MCPX boot ROM runs Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without
   any Microsoft key. Without a boot ROM (xemu), our reset code runs the same X-codes. The hard disk unlocks with
   Cromwell's EEPROM key states, as Cromwell has done for twenty years.
+- **Hardware in the loop.** Most of the kernel was built and tested in xemu. Real consoles are then tested with a
+  rig that boots a fresh kernel on a real Xbox in about a minute, with no chip to flash and nobody at the console.
+  An AI coding agent (Claude Code) drives it from the PC: it builds, boots, watches the console and powers it off.
+
+  ![The hardware-in-the-loop rig: an RP2040 Modxo on the LPC header of a 1.4 Xbox](docs/hwitl-rig.jpg)
+
+  *An RP2040-Zero running [Modxo](https://github.com/Shalx/Modxo) on a perfboard, wired to the console's LPC header
+  (the ribbon cable) and to its power switch (the white wire, through a transistor). One USB cable to the PC.*
+
+  - **The modchip is the debug port.** The Pico runs Modxo with an OXOS debug module
+    ([`tools/modxo`](tools/modxo/README.md), firmware on the `oxos-debug` branch of
+    [kooscode/modxo](https://github.com/kooscode/modxo)). Over its one USB cable it:
+    - holds the BIOS image, reflashed over USB;
+    - emulates the console's SuperIO serial port, so the kernel's boot log and crash reports reach the PC (COM1);
+    - streams every POST code (port 0x80 writes) and the LPC power and reset state;
+    - presses the power button: `console.py on`, `off`, `cycle`.
+  - **Network boot.** The BIOS flashed on the Modxo is a netboot image. Its 2BL asks the PC for a kernel at every
+    power-on, so a new build needs no flashing. [`tools/netboot`](tools/netboot/README.md) serves the kernel over
+    UDP, and can add a title package: an XBE and its files (the ISO launcher and its `iso.txt`, a test title),
+    installed on E: and started instead of the dashboard. Network-log builds also send the kernel's log over UDP
+    (`tools/netlog.py`), even when no serial port is wired.
+  - **Eyes on the screen.** The console's video goes through an HDMI adapter into a USB capture card. Screenshots and
+    videos of the real screen are taken with `ffmpeg`, so the agent can check what the console shows (the splash,
+    the dashboard, a game's title screen). The serial log and the frames are matched by their timestamps.
+  - **One iteration:** build (`make -C kernel BUILD=... SERIAL=1`) → `netboot.py` serves it → `console.py on` → read
+    the serial log, POST codes and capture frames → `console.py off`. `bootrun.py` repeats a boot N times and
+    classifies each one (PASS / FREEZE / NOBOOT), which found the layout-dependent boot freeze that only showed on
+    hardware (`spec/oxos-internal/13-flash-mapping.md`).
+  - **Results so far:** the boot freezes on the 1.4 console were found and fixed this way, along with the CPU
+    set-up, interrupt start-up and NV2A pad calibration (specs 13–15). So was the first retail game on real
+    hardware: Halo 2 from an XISO on an exFAT SSD.
 
 ### Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
