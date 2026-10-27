@@ -31,8 +31,10 @@ struct POOL_FREE_BLOCK {
     LIST_ENTRY Links;
 };
 
-// S-list header (rtl/runtime.cpp): {Next, Depth, Sequence}.
-struct POOL_SLIST {
+// S-list header (rtl/runtime.cpp): {Next, Depth, Sequence}. 8-byte aligned, as an S-list header must be: the
+// push/pop is a locked cmpxchg8b, and a misaligned one is a split lock when it crosses a cache line (very slow on a
+// console; a modern Linux host throttles the unit tests to a crawl on it).
+struct alignas(8) POOL_SLIST {
     PVOID Next;
     USHORT Depth, Sequence;
 };
@@ -46,7 +48,7 @@ struct POOL_LOOKASIDE {
     ULONG AllocateHits;
     ULONG Spare2;
 };
-static_assert(sizeof(POOL_LOOKASIDE) == 0x18);
+static_assert(sizeof(POOL_LOOKASIDE) == 0x18 && alignof(POOL_LOOKASIDE) == 8);
 
 constexpr ULONG POOL_SMALL_LIMIT = 0xFD8, POOL_UNIT = 32, POOL_UNITS_PER_PAGE = PAGE_SIZE / POOL_UNIT;
 constexpr ULONG POOL_LOOKASIDE_UNITS = 8, POOL_LOOKASIDE_DEPTH = 2;
