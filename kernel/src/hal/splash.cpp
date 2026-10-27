@@ -276,10 +276,6 @@ void HalpScreenLog(const char *Text, ULONG Length) {
 // Cold boot, with an AV pack connected.
 void HalpStartSplash() {
     KeInitializeEvent(&HalpSplashDone, NotificationEvent, TRUE);
-#ifdef XK_EXPERIMENT_NO_SPLASH
-    XK_SERIAL("splash: compiled out (experiment)\n");
-    return;
-#endif
     if (HalBootSMCVideoMode == 7)
         return;
     // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/stock/05 §5): titles
@@ -311,7 +307,7 @@ void HalpEndSplash() {
         ObfDereferenceObject(HalpSplashThreadObject);
         HalpSplashThreadObject = nullptr;
     }
-#if !defined(XK_EXPERIMENT_KEEP_SPLASH) && !XK_NETLOG
+#if !XK_NETLOG
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = nullptr;

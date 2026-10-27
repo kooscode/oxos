@@ -240,13 +240,6 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     }
     status = XeReadFile(h, head, 0x1000, 0, &got);
     XK_SERIAL("load: first page read %#lx (%lu bytes)\n", status, got);
-#ifdef XK_EXPERIMENT_WATCHDOG_TEST
-    {
-        ULONG efl;
-        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
-        XK_SERIAL("load: eflags %08lx, IRQL %u, thread %p\n", efl, KeGetCurrentIrql(), KeGetCurrentThread());
-    }
-#endif
     ULONG sizeOfHeaders = *(ULONG *)(head + 0x108), sizeOfImage = *(ULONG *)(head + 0x10C);
     bool reserved = false;
     if (NT_SUCCESS(status) && (got < 0x178 || *(ULONG *)head != XBE_MAGIC || sizeOfHeaders < 0x179 ||
@@ -635,9 +628,7 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     XepChooseTitle();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
-#ifndef XK_MARKS_IN_TITLE
     XkBootMarksDone();
-#endif
 #if XK_NETLOG
     {
         void HalpScreenLogStop();

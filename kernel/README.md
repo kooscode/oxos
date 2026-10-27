@@ -161,15 +161,23 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      (1.4–1.5) and Xcalibur (1.6) are programmed from their register maps (`../tools/gen_av_tables.py` writes
      `src/hal/av_modes.inc` from the specs), SD composite / S-video / SCART / component and 480p / 720p / 1080i, with
      the encoder options; the NV2A timing follows each encoder's row. `make test-encoders` passes on all three of
-     xemu's encoder models; Halo, Halo 2 (480p) and Enter the Matrix (1080i) run on each. Not yet tried on hardware.
+     xemu's encoder models; Halo, Halo 2 (480p) and Enter the Matrix (1080i) run on each.
+   - 21: **real hardware** (no-DVD 1.4 console, Modxo, FATX and exFAT disks): network boot of kernels and test titles
+     (`../tools/netboot`, `../spec/oxos-internal/09-netboot.md`), then start-up as the stock kernel does it where the
+     hardware cares: the flash mapping cleared (the layout-dependent hard freeze, `../spec/oxos-internal/13-flash-mapping.md`),
+     Intel microcode, machine checks off, the 0xBFFFFFFF code limit and a spinning idle loop (`14-cpu-setup.md`),
+     interrupts on at APC_LEVEL with the clock running from the memory manager on, and the 2BL's NV2A memory pad
+     calibration exactly as Cerbios does it on 1.0-1.5 (`15-pad-calibration.md`, `../spec/stock/21-mcpx-bringup.md` §3).
+     ✅ the dashboard boots on the console (serial, netlog and release builds).
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
 
 ## Known deviations (tracked)
-- CPU microcode update (spec 01 §2.3) is not applied (no redistributable blob); emulators ignore it.
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
-- Flash PDE 0x3FF stays mapped (the reference clears it); only 64 MB RAM is supported, like the 4627 kernel.
+- Only 64 MB RAM is supported, like the 4627 kernel.
+- IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used
+  and the SMBus is polled.
 - exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster
   size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
   a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters, and
@@ -180,4 +188,4 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 - Video (milestone 20; `../spec/oxos-internal/02-display-modes.md`): the NV2A timing is OXOS's own (derived from each
   encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait
   for the vertical blank phase before a mode change; Macrovision stays off; the Xcalibur is left alone on AV pack
-  events. Nothing of it has been tried on a real console yet.
+  events. On hardware so far: the Focus encoder (1.4) in composite.

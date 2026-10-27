@@ -109,14 +109,6 @@ static void KiSamplePc(PULONG frame, KIRQL irql) {
 }
 #endif
 
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-// Experiment: from the network log's start to "clock interrupt on", IRQ 0 stays unmasked at every IRQL and only
-// samples the interrupted EIP (10 per second), so a hang in phase 1 shows where the CPU is.
-extern "C" volatile ULONG KiEarlySample;
-volatile ULONG KiEarlySample;
-[[maybe_unused]] static ULONG KiEarlyTicks;
-#endif
-
 extern "C" void XkBootMarkWatchdog(ULONG Eip, UCHAR Irql);
 
 // Called from the IRQ entry stubs with interrupts disabled.
@@ -125,16 +117,6 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         return;
     if (irq == 0) // start-up watchdog (ke/startup.cpp); the frame as KiSamplePc reads it
         XkBootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-    if (irq == 0 && KiEarlySample) {
-#if XK_NETLOG && !defined(XK_EARLY_SAMPLE_QUIET)
-        if (++KiEarlyTicks % 100 == 0)
-            KiSamplePc((PULONG)__builtin_frame_address(0) + 3, KiPcr.Irql);
-#endif // quiet: only the start-up watchdog above runs (CMOS, any build)
-        HalpEoi(0);
-        return;
-    }
-#endif
 #if XK_NETLOG
     // The stub's frame starts above our argument: EBP + 8 is irq, then the eight registers of pushal (built with
     // frame pointers: -fno-omit-frame-pointer).

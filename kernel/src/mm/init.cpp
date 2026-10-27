@@ -432,26 +432,6 @@ PVOID MiReserveSystemPtes(ULONG count) {
     }
 }
 
-#ifdef XK_EXPERIMENT_STAGE
-// Elimination series: the system PTE free list's shape (runs, longest run), walked with the same checks.
-ULONG KiStressPteRuns(ULONG *longest) {
-    KIRQL old = KeRaiseIrqlToDpcLevel();
-    MMPTERANGE &r = MiSystemPteRange;
-    ULONG runs = 0;
-    *longest = 0;
-    for (ULONG *link = &r.Head; (*link & ~3u) != MM_PTE_LIST_END && runs < 100000; runs++) {
-        ULONG *run = MiRunNext(*link);
-        if (run < r.FirstCommittedPte || run >= r.LastCommittedPte)
-            break;
-        if (MiRunLength(run) > *longest)
-            *longest = MiRunLength(run);
-        link = run;
-    }
-    KfLowerIrql(old);
-    return runs;
-}
-#endif
-
 void MiReleaseSystemPtes(PVOID va, ULONG count) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG *first = MiGetPteAddress((ULONG)va);
@@ -475,10 +455,6 @@ volatile ULONG MmPersistedPages; // pages re-adopted by the last quick reboot
 
 extern "C" volatile ULONG MiRamProbe, MiGpuSizeBefore, MiGpuSizeAfter;
 volatile ULONG MiGpuSizeBefore, MiGpuSizeAfter; // diagnostics: PFB 0x10020C before / after the 64 MB set-up
-extern "C" volatile ULONG MiRamBadPages, MiRamBadPage[4];
-extern "C" volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2];
-volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2]; // XK_EXPERIMENT_MEMTEST: {address, bits wrong}
-volatile ULONG MiRamBadPages, MiRamBadPage[4]; // diagnostics: pages whose tag read back wrong {pfn << 16 | seen pfn}
 volatile ULONG MiRamProbe; // diagnostics: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB, 3 = unclear
 
 // How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0 and
@@ -501,74 +477,6 @@ bool MiIsNetbootTitlePage(ULONG pfn); // xe/nettitle.cpp
 void MmInitSystem(bool QuickReboot) {
     if (!QuickReboot) {
         MiProbeRamSize();
-        // Every allocatable page answers as itself (no two addresses on the same cells): tag each page's first and
-        // middle words with its address, then read them all back.
-        ULONG imgEnd = (0x10000 + *(ULONG *)(0x80010000 + *(ULONG *)(0x80010000 + 0x3C) + 24 + 56) + PAGE_SIZE - 1) >>
-                       PAGE_SHIFT;
-        for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
-            if (MiIsNetbootTitlePage(pfn))
-                continue;
-            auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
-            w[0] = 0xA5000000 ^ pfn;
-            w[512] = ~(0xA5000000 ^ pfn);
-        }
-        __asm__ volatile("wbinvd" ::: "memory");
-        for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
-            if (MiIsNetbootTitlePage(pfn))
-                continue;
-            auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
-            if (w[0] != (0xA5000000 ^ pfn) || w[512] != ~(0xA5000000 ^ pfn)) {
-                ULONG bad = MiRamBadPages;
-                if (bad < 4)
-                    MiRamBadPage[bad] = pfn << 16 | ((w[0] ^ 0xA5000000) & 0xFFFF);
-                MiRamBadPages = bad + 1;
-            }
-        }
-#ifdef XK_EXPERIMENT_MEMTEST
-#ifdef XK_EXPERIMENT_MEMTEST_DECAY
-#define XK_MEMTEST_PASSES 2
-#else
-#define XK_MEMTEST_PASSES 4
-#endif
-        // Experiment: a RAM test over every allocatable page (4 passes: patterns, their inverse, address-derived),
-        // to see whether the memory interface returns what was written (no pad calibration is done).
-        {
-            static const ULONG patterns[4] = {0x55555555, 0xAAAAAAAA, 0, 1};
-            for (ULONG pass = 0; pass < XK_MEMTEST_PASSES; pass++) {
-                for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
-                    if (MiIsNetbootTitlePage(pfn))
-                        continue;
-                    auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
-                    for (ULONG i = 0; i < 1024; i++)
-                        w[i] = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
-                }
-                __asm__ volatile("wbinvd" ::: "memory");
-#ifdef XK_EXPERIMENT_MEMTEST_DECAY
-                // Leave the patterns alone for 10 s before checking them (DRAM refresh / retention).
-                for (ULONG ms = 0; ms < 10000; ms++)
-                    KeStallExecutionProcessor(1000);
-#endif
-                for (ULONG pfn = imgEnd; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
-                    if (MiIsNetbootTitlePage(pfn))
-                        continue;
-                    auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
-                    for (ULONG i = 0; i < 1024; i++) {
-                        ULONG want = pass < 2 ? patterns[pass] : (pass == 2 ? (pfn << 12 | i << 2) : ~(pfn << 12 | i << 2));
-                        ULONG got = w[i];
-                        if (got != want) {
-                            ULONG n = MiMemtestErrors;
-                            if (n < 4) {
-                                MiMemtestError[n][0] = (pfn << 12) | (i << 2);
-                                MiMemtestError[n][1] = got ^ want;
-                            }
-                            MiMemtestErrors = n + 1;
-                        }
-                    }
-                }
-                MiMemtestPasses = pass + 1;
-            }
-        }
-#endif
         // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
         // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
         // Our 2BL sets the DRAM up as the retail X-codes do (spec/stock/22 §6.3: 64 MB = 0x100200 0x03070103 with
@@ -616,10 +524,6 @@ void MmInitSystem(bool QuickReboot) {
         } else if (pfn >= MM_GPU_INSTANCE_FIRST_PFN) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
         } else if (!allocatable(pfn)) {
-#ifdef XK_EXPERIMENT_GPU_LAST_MB
-            if (pfn > MM_HIGHEST_CONTIGUOUS_PFN) // held: never on the free lists
-                pte = (pfn << PAGE_SHIFT) | rw;
-#endif
             if (MiIsNetbootTitlePage(pfn)) // a netbooted title's files: held (contiguous usage) until installed
                 pte = (pfn << PAGE_SHIFT) | rw;
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
@@ -632,22 +536,6 @@ void MmInitSystem(bool QuickReboot) {
         MiPteArray[pfn] = pte;
     }
     MmPersistedPages = persisted;
-#ifdef XK_EXPERIMENT_POISON_RAM
-    // Experiment: real RAM powers up holding garbage, xemu's holds zeros. Fill every allocatable page with
-    // pseudo-random words (through the 2BL's large pages, still in place), so code that assumes fresh memory is zero
-    // fails in xemu too.
-    if (!QuickReboot) {
-        ULONG x = 0x12345678;
-        for (ULONG pfn = 0; pfn < MM_PAGES; pfn++)
-            if (allocatable(pfn)) {
-                auto w = (volatile ULONG *)(0x80000000 + (pfn << PAGE_SHIFT));
-                for (ULONG i = 0; i < PAGE_SIZE / 4; i++) {
-                    x = x * 1664525 + 1013904223;
-                    w[i] = x;
-                }
-            }
-    }
-#endif
 
     // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
     //    count as contiguous memory.
@@ -678,7 +566,11 @@ void MmInitSystem(bool QuickReboot) {
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_LARGE;
     for (ULONG i = 0x3E0; i < 0x3FE; i++) // 0xF8000000-0xFF7FFFFF: uncached large pages
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_PCD | PTE_LARGE;
-    // PDE 0x3FF (flash) is kept for the quick-reboot .data copy (the reference clears it; spec/stock/09).
+    // PDE 0x3FF (flash, 0xFFC00000) is cleared, as the reference does (spec/stock/09). The 2BL maps it write-back,
+    // and the top 512 KB is write-protect in the MTRRs, a type the CPU may read speculatively: left mapped, stray
+    // speculative reads reach the flash over LPC, and real consoles freeze hard at layout-dependent points
+    // (spec/oxos-internal/13). Quick reboot uses KernelEntry's RAM copy of .data.
+    pd[0x3FF] = 0;
     MiReloadCr3();
 
     MiSystemPteRange.Head = MM_PTE_LIST_END;

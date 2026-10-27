@@ -12,6 +12,9 @@ _KiQuickReboot:
     movl _KiDataInitSource, %esi  // the copy KernelEntry made, else the flash copy
     testl %esi, %esi
     jnz 1f
+    movl $0xFFC000FB, 0xC0300FFC  // flash copy: map PDE 0x3FF again (MmInit cleared it), uncached
+    movl %cr3, %eax
+    movl %eax, %cr3
     movl 0x80010030, %esi
 1:
     movl 0x80010034, %edi

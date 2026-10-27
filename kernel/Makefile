@@ -64,6 +64,12 @@ NETLOG_IP ?= 192.168.1.222
 NETLOG_DEST ?= 255.255.255.255
 comma := ,
 SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS) $(NETLOG)),1,0)
+# STATEDUMP=1: print the machine-state probe (tools/statedump) on the debug serial port at the end of start-up, for
+# comparing the set-up with a reference kernel's. Turns SERIAL on.
+STATEDUMP ?= 0
+ifeq ($(STATEDUMP),1)
+SERIAL := 1
+endif
 
 CXX := clang++
 CC  := clang
@@ -74,10 +80,10 @@ TARGET  := --target=i386-pc-win32
 # instructions). Not a fix for the 1.4 console's start-up freeze: that one depends on the exact binary layout with
 # either setting (2026-10-23).
 ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
-# EXTRA_FLAGS: more compiler flags for one-off experiments (e.g. EXTRA_FLAGS=-DXK_EXPERIMENT_...), in their own BUILD.
+# EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_NETLOG=$(NETLOG) -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP)) -DXK_NETLOG_DEST=$(subst .,$(comma),$(NETLOG_DEST))
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_NETLOG=$(NETLOG) -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP)) -DXK_NETLOG_DEST=$(subst .,$(comma),$(NETLOG_DEST))
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
@@ -144,7 +150,7 @@ CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
 MCPX16          ?= 0
 OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18/bin/llvm-objcopy)
 GNU_OBJCOPY     := objcopy
-BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium3 -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
+BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
               $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) \
               -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP))
@@ -154,9 +160,33 @@ $(CROMWELL_DIR)/boot_rom/Xcodes.h:
 	git clone -q https://github.com/XboxDev/cromwell $(CROMWELL_DIR)
 	git -C $(CROMWELL_DIR) checkout -q $(CROMWELL_COMMIT)
 
-$(BOOT)/xcodes.bin: boot/xcodes.S $(CROMWELL_DIR)/boot_rom/Xcodes.h
+# --- CPU microcode (spec/stock/01 §2 step 3): Intel's updates for the Xbox's Pentium III (signatures 0x686 and
+# 0x68A, platform 4), loaded at start-up as the reference kernel does. Fetched from Intel's public microcode
+# repository at a pinned commit and checked by SHA-256; tools/mkucode.py picks the platform-4 updates, unmodified.
+# Intel's licence (third_party/intel-ucode/license) allows redistribution in binary form without modification.
+UCODE_COMMIT := bdc92abe5c499c3fd7988b76a128d05c9120a520
+UCODE_URL    := https://raw.githubusercontent.com/intel/Intel-Linux-Processor-Microcode-Data-Files/$(UCODE_COMMIT)
+UCODE_DIR    := $(abspath $(ROOT)/third_party/intel-ucode)
+UCODE_FILES  := $(UCODE_DIR)/06-08-06 $(UCODE_DIR)/06-08-0a
+
+$(UCODE_DIR)/license:
+	python3 -I $(ROOT)/tools/fetch.py $(UCODE_URL)/license \
+	    03efb1491c7e899feb2665fa299363e64035e5444c1b8bc1f6ebed30de964e12 $@
+$(UCODE_DIR)/06-08-06: | $(UCODE_DIR)/license
+	python3 -I $(ROOT)/tools/fetch.py $(UCODE_URL)/intel-ucode/06-08-06 \
+	    dd90fc7684fcd47e9fe38849cb54c49a8bcbfbda2a2b3776662521362ccdba79 $@
+$(UCODE_DIR)/06-08-0a: | $(UCODE_DIR)/license
+	python3 -I $(ROOT)/tools/fetch.py $(UCODE_URL)/intel-ucode/06-08-0a \
+	    0e6f043737168b0642c65cb3a7ebcf8f833fbe189e0ca2f6e787caadbb8dab40 $@
+$(BUILD)/ucode.inc: $(UCODE_FILES) $(ROOT)/tools/mkucode.py
 	@mkdir -p $(dir $@)
-	$(CC) $(BOOT_FLAGS) -I$(CROMWELL_DIR)/boot_rom -c $< -o $(BOOT)/xcodes.o
+	python3 -I $(ROOT)/tools/mkucode.py $@ $(UCODE_FILES)
+$(BUILD)/ke/cpu.obj: $(BUILD)/ucode.inc
+$(BUILD)/ke/cpu.obj: CXXFLAGS += -I$(BUILD)
+
+$(BOOT)/xcodes.bin: boot/xcodes.S boot/padcal_table.inc $(CROMWELL_DIR)/boot_rom/Xcodes.h
+	@mkdir -p $(dir $@)
+	$(CC) $(BOOT_FLAGS) -I$(CROMWELL_DIR)/boot_rom -Iboot -c $< -o $(BOOT)/xcodes.o
 	$(OBJCOPY) -O binary -j .xcodes $(BOOT)/xcodes.o $@
 
 $(BOOT)/reset.bin: boot/reset.S

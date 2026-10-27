@@ -93,9 +93,6 @@ static bool IdexProgramDmaPages(PVOID Buffer, ULONG Length) {
     outb(IDE_BM_COMMAND, 0);
     outb(IDE_BM_STATUS, inb(IDE_BM_STATUS) | 6); // clear interrupt and error
     outl(IDE_BM_PRDT, IdexChannelObject.PhysicalRegionDescriptorTablePhysical);
-#ifdef XK_EXPERIMENT_DMA_WBINVD
-    __asm__ volatile("wbinvd" ::: "memory"); // experiment: the table and the buffer reach RAM, no stale lines kept
-#endif
     return true;
 }
 
@@ -118,21 +115,9 @@ static BOOLEAN NTAPI IdexInterruptService(PKINTERRUPT, PVOID) {
     return TRUE;
 }
 
-// A transfer done by polled PIO (XK_EXPERIMENT_PIO_DISK): complete it the way the DMA interrupt does.
-void IdexCompletePolledTransfer(UCHAR AtaStatus, bool Error) {
-    PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
-    IdexLastBusMasterStatus = Error ? 2 : 4;
-    IdexLastAtaStatus = AtaStatus;
-    ch->ExpectingBusMasterInterrupt = FALSE;
-    KeInsertQueueDpc(&ch->FinishDpc, nullptr, nullptr);
-}
-
 static void NTAPI IdexFinishDpc(PKDPC, PVOID, PVOID, PVOID) {
     XK_MARK("mark: IDE finish DPC");
     IdexUnlockDmaBuffer(); // the chunk is done (or abandoned)
-#ifdef XK_EXPERIMENT_DMA_WBINVD
-    __asm__ volatile("wbinvd" ::: "memory"); // experiment: no line cached during the transfer survives it
-#endif
     if (IdexChannelObject.FinishIoRoutine)
         IdexChannelObject.FinishIoRoutine();
 }
@@ -218,15 +203,6 @@ void IdexChannelInit() {
     if (!KeConnectInterrupt(&ch->InterruptObject))
         KeBugCheckEx(0x2066B, (ULONG_PTR)(NTSTATUS)0xC0000001, 0, 0, 0);
     ch->PhysicalRegionDescriptorTablePhysical = MmGetPhysicalAddress(IdexPrdTable);
-#ifdef XK_IDE_PART
-    XK_SERIAL("ide: experiment: set-up up to part %d (1 channel, 2 + disk, 3 + DVD)\n", XK_IDE_PART);
-    if (XK_IDE_PART >= 2)
-        IdexDiskInit();
-    if (XK_IDE_PART >= 3)
-        IdexCdRomInit();
-    XK_SERIAL("ide: experiment: set-up done\n");
-    return;
-#endif
     IdexDiskInit();
     IdexCdRomInit();
 }

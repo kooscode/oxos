@@ -294,7 +294,12 @@ void KiIdleLoop() {
             continue;
         }
         Prcb.QuantumEnd = 0;
-        __asm__ volatile("sti\n\thlt" ::: "memory");
+        // Spin, as the reference does (spec/stock/01 §3: no hlt); interrupts are taken between the sti and the next cli.
+#ifdef XK_HOST_TEST
+        __asm__ volatile("sti\n\thlt" ::: "memory"); // the host harness advances its fake clock at hlt
+#else
+        __asm__ volatile("sti\n\tnop" ::: "memory");
+#endif
     }
 }
 

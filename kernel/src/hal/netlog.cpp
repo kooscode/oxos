@@ -49,7 +49,6 @@ static ULONG HalpNetPendingLength;
 static char HalpNetFile[16384];
 static ULONG HalpNetFileLength;
 
-
 static volatile ULONG &Nv(ULONG offset) { return *(volatile ULONG *)(NIC + offset); }
 static ULONG Phys(const void *p) { return (ULONG)p & 0x7FFFFFFF; } // the kernel image: 0x80000000 + physical
 
@@ -109,11 +108,6 @@ static void HalpNetSend(const char *Text, ULONG Length) {
     d.Flags = TX_FLAGS;
     Nv(NvTxRxControl) = TXRX_KICK; // as cromwell (bit 2 would stop DMA)
     (void)Nv(NvTxRxControl);
-#ifdef XK_NETLOG_SYNC_TX
-    // Experiment: wait until the NIC has fetched the frame (its DMA is over) before going on.
-    for (ULONG us = 2000; (d.Flags & TX_VALID) && us; us -= 2)
-        KeStallExecutionProcessor(2);
-#endif
     HalpNetNext++;
     HalpNetSent = HalpNetSent + 1;
 }
@@ -434,30 +428,6 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
         // Off by default: reading the registers of a GPU engine that is switched off (PMC 0x200) is not answered
         // properly, and with memory traffic going on it froze a console within a minute (2026-10-23, elimination
         // series stage 1). XK_HEARTBEAT_GPU turns it back on for debugging a title's GPU set-up.
-#ifdef XK_HEARTBEAT_GPU
-        {
-            auto gpu = [](ULONG o) { return *(volatile ULONG *)(0xFD000000 + o); };
-            char gl[320];
-            int gn = RtlSnprintf(gl, sizeof(gl),
-                            "gpu: pmc %08lx intr %08lx | pfifo intr %08lx caches %08lx push %08lx dma put %08lx get %08lx "
-                            "state %08lx | c1 status %08lx | pgraph status %08lx intr %08lx | fb size %08lx\n",
-                            gpu(0x200), gpu(0x100), gpu(0x2100), gpu(0x2500), gpu(0x3220), gpu(0x3240), gpu(0x3244),
-                            gpu(0x3228), gpu(0x3214), gpu(0x400700), gpu(0x400100), gpu(0x10020C));
-            HalpNetLogWrite(gl, (ULONG)gn);
-            // The code at the latest sampled title EIP (the title is not ours to disassemble otherwise): 16 bytes
-            // before and 32 after, when that page is mapped.
-            ULONG pc = KiPcRing[KeTickCount % 32];
-            if (pc >= 0x10010 && pc < 0x80000000 && MmIsAddressValid((PVOID)(pc - 16)) &&
-                MmIsAddressValid((PVOID)(pc + 32))) {
-                auto c = (const UCHAR *)(pc - 16);
-                gn = RtlSnprintf(gl, sizeof(gl), "code at %08lx-16:", pc);
-                for (ULONG i = 0; i < 48; i++)
-                    gn += RtlSnprintf(gl + gn, sizeof(gl) - gn, " %02x", c[i]);
-                gl[gn++] = '\n';
-                HalpNetLogWrite(gl, (ULONG)gn);
-            }
-        }
-#endif
 #if XK_BOOT_SELFTEST
         HalpNetSelfTestProgress();
 #endif
@@ -479,9 +449,7 @@ static void NTAPI HalpNetHeartbeat(PVOID) {
         //     HalpNetFileFlush();
         // Liveness on the front LED: the beat alternates green with orange while the log goes over the network, with
         // red once it goes to the disk file (the title owns the NIC). A frozen colour means the system stopped.
-#ifndef XK_HEARTBEAT_NO_LED
         HalpSetBootLed((beat & 1) ? 0x0F : (HalpNetState == 4 ? 0xF0 : 0xFF));
-#endif
     }
 }
 

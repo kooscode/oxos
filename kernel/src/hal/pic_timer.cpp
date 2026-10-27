@@ -39,16 +39,8 @@ static USHORT HalpLevelMask(KIRQL irql) {
     return mask;
 }
 
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-extern "C" volatile ULONG KiEarlySample;
-#endif
-
 void HalpSetIrqlMask(KIRQL irql) {
     USHORT mask = HalpDisabledMask | HalpLevelMask(irql);
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-    if (KiEarlySample)
-        mask &= ~1u; // the early EIP sampler (ke/irql.cpp)
-#endif
     if ((mask & 0xFF00) != 0xFF00)
         mask &= ~(1u << CASCADE_IRQ); // keep the cascade open while any slave IRQ is live
     HalpWritePicMask(mask);
@@ -70,8 +62,10 @@ void HalpInitPic() {
     HalpPicMask = 0xFFFF;
     HalpDisabledMask = 0xFFFF;
     HalpElcr = (USHORT)(inb(ELCR1) | inb(ELCR2) << 8);
-    // The reference returns with interrupts enabled; our caller decides when to enable.
-    restore_flags(flags);
+    // As the reference (0x80013F98): returns with interrupts enabled whatever the caller had. Every line is masked
+    // here, so nothing arrives until a driver enables its line.
+    (void)flags;
+    sti();
 }
 
 void HalpEoi(ULONG irq) {
@@ -100,12 +94,6 @@ XBAPI ULONG NTAPI HalGetInterruptVector(ULONG BusInterruptLevel, PKIRQL Irql) {
 #if XK_NETLOG
     if (BusInterruptLevel == 4) // a network stack is about to drive the NIC: the network log lets go of it now
         HalpNetLogReleaseNic();
-#endif
-#ifdef XK_EXPERIMENT_NO_NIC_IRQ
-    if (BusInterruptLevel == 4) { // experiment: no network card interrupt (a title's network stack does not start)
-        XK_SERIAL("hal: experiment: no interrupt vector for the NIC\n");
-        return 0;
-    }
 #endif
     ULONG vector = BusInterruptLevel + HAL_IRQ_BASE_VECTOR;
     if (vector < HAL_IRQ_BASE_VECTOR || vector > 0x4A)

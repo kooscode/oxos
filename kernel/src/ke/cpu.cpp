@@ -128,7 +128,13 @@ KTHREAD KiIdleThread;
 static void KiInitializeGdt() {
     constexpr UCHAR TSS_AVAILABLE = 0x89;
     KiGdt[0] = {};
-    KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xFFFFF, 0x9B, 0xC); // flat 4 GB: titles run code from pool (0xD0000000+)
+#if XK_TRACE_IMPORTS
+    KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xFFFFF, 0x9B, 0xC); // 4 GB: the import-trace stubs run from pool (0xD0000000+)
+#else
+    // The reference's code-segment limit (spec/stock/23 §6.4): 0xBFFFFFFF, so a jump into the page tables, pool, the
+    // MMIO and AGP windows or the flash is an immediate #GP instead of running whatever is there.
+    KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xBFFFF, 0x9B, 0xC);
+#endif
     KiGdt[KGDT_R0_DATA / 8] = MakeSegment(0, 0xFFFFF, 0x93, 0xC);
     KiGdt[KGDT_TSS / 8] = MakeSegment((ULONG)&KiTss, sizeof(KTSS), TSS_AVAILABLE, 0);
     KiGdt[KGDT_R0_PCR / 8] = MakeSegment((ULONG)&KiPcr, 0x27C, 0x93, 0xC);
@@ -213,7 +219,35 @@ static void KiInitializePat() {
     restore_flags(flags);
 }
 
+// CPU microcode (spec/stock/01 §2 step 3): the reference loads an update at start-up when cpuid(1) reports 0x686 or
+// 0x68A. Ours are Intel's published updates for those steppings on platform 4 (generated into ucode.inc by
+// tools/mkucode.py); one is loaded when both the signature and the platform (MSR 0x17 bits 50-52) match.
+#ifndef XK_HOST_TEST
+alignas(16) static const ULONG KiMicrocode[][512] = {
+#include "ucode.inc"
+};
+#endif
+ULONG KiMicrocodeRevision; // after the load (MSR 0x8B high half); 0 = none reported
+
+static void KiLoadMicrocode() {
+#ifndef XK_HOST_TEST
+    ULONG a, b, c, d;
+    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
+    ULONG platform = (ULONG)(rdmsr(0x17) >> 50) & 7;
+    for (const auto &update : KiMicrocode) {
+        if (update[3] != a || !(update[6] & (1u << platform)))
+            continue;
+        wrmsr(0x79, (ULONGLONG)(ULONG)&update[12]); // IA32_BIOS_UPDT_TRIG <- the update data, after the 48-byte header
+        break;
+    }
+    wrmsr(0x8B, 0);
+    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1) : "memory");
+    KiMicrocodeRevision = (ULONG)(rdmsr(0x8B) >> 32);
+#endif
+}
+
 void KiInitializeProcessor() {
+    KiLoadMicrocode();
     KiInitializePat();
     // The PCR must be filled before FS is loaded with a descriptor pointing at it.
     KiInitializePcr();
