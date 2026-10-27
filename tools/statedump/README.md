@@ -5,8 +5,9 @@ a safe list of Pentium III MSRs, PCI configuration spaces, NV2A PFB / clock / CR
 I/O block, page-directory entries), one `sd ...` line at a time, through a print function the caller supplies.
 Header-only and freestanding: port I/O, MSR reads and plain memory reads, no kernel imports.
 
-- **OXOS**: build with `EXTRA_FLAGS=-DXK_EXPERIMENT_STATEDUMP`; the lines go to the network log (after the memory
-  manager and before the title launcher).
+- **OXOS**: build with `make STATEDUMP=1`; the lines go to the debug serial port (and the network log in NETLOG
+  builds) at the end of start-up, before the title launcher. Only PCI functions known to exist are probed: reading
+  a missing one (e.g. 0:0.1) hangs a real console.
 - **A reference kernel**: compile it into a small blob linked at a free address, inject it into the kernel image and
   call it at the end of start-up.
 

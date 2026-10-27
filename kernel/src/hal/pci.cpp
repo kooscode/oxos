@@ -35,7 +35,9 @@ XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG R
         }
         i += n;
     }
-    restore_flags(flags);
+    // As the reference (0x8001530C): cli ... sti around the cycles, so it always returns with interrupts enabled.
+    (void)flags;
+    sti();
 }
 
 UCHAR HalpPciRead8(ULONG bus, ULONG dev, ULONG reg) {
@@ -55,7 +57,6 @@ void HalpPciWrite32(ULONG bus, ULONG dev, ULONG reg, ULONG v) { HalReadWritePCIS
 static void PciOr8(ULONG bus, ULONG dev, ULONG reg, UCHAR bits) {
     HalpPciWrite8(bus, dev, reg, HalpPciRead8(bus, dev, reg) | bits);
 }
-
 
 // A function's whole configuration space read, edited and written back, as the reference does for each device it
 // sets up (0x80063908): every register is rewritten with its current value (status bits that are write-one-to-clear
@@ -205,11 +206,7 @@ void HalpInitPci() {
 
     // AC'97 and APU.
     PciEditAll(0, DEV_AC97, [](PciSpace &c) {
-#ifdef XK_EXPERIMENT_NO_AUDIO_DMA
-        c.b[4] |= 3; // experiment: audio devices without bus mastering (I/O and memory decode only)
-#else
         c.b[4] |= 7;
-#endif
         c.Set8(0x3C, 6);
         c.Set8(0x3D, 0);
         c.Set32(0x10, 0x0000D001);
@@ -217,11 +214,7 @@ void HalpInitPci() {
         c.Set32(0x18, 0xFEC00000);
     });
     PciEditAll(0, DEV_APU, [](PciSpace &c) {
-#ifdef XK_EXPERIMENT_NO_AUDIO_DMA
-        c.b[4] |= 3;
-#else
         c.b[4] |= 7;
-#endif
         c.Set8(0x3C, 5);
         c.Set8(0x3D, 0);
         c.Set32(0x10, 0xFE800000);

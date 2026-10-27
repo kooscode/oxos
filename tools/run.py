@@ -60,6 +60,8 @@ ap.add_argument("--trace-map", help="import-trace build's map: dump the kernel c
 ap.add_argument("--dump-dir", default=".", help="where --trace-map writes the dumps (default: here)")
 ap.add_argument("--exports", default=os.path.join(root, "kernel/exports.tsv"), help="export names for the dumps")
 ap.add_argument("--gdb", type=int, metavar="PORT", help="GDB server on localhost:PORT, paused at power-on")
+ap.add_argument("--xemu-arg", action="append", default=[], metavar="ARG",
+                help="extra xemu argument, repeatable (e.g. --xemu-arg=-trace --xemu-arg=nv2a_reg_write)")
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 ap.add_argument("--net-udp", type=int, metavar="PORT",
                 help="network: xemu's udp backend, sending the console's Ethernet frames to 127.0.0.1:PORT "
@@ -307,7 +309,7 @@ try:
         gdb = ["-gdb", f"tcp:127.0.0.1:{a.gdb}", "-S"]
         print(f"GDB server: localhost:{a.gdb} (paused at power-on until the debugger continues)")
     encoder = ["-machine", f"video-encoder={a.encoder}"] if a.encoder else []
-    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb + encoder, stdout=open(os.path.join(work, "xemu.log"), "w"),
+    p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb + encoder + a.xemu_arg, stdout=open(os.path.join(work, "xemu.log"), "w"),
                          stderr=subprocess.STDOUT, start_new_session=True)
     if a.serial:
         threading.Thread(target=follow, args=(serial_log, p, dumper.on_serial if dumper else None),

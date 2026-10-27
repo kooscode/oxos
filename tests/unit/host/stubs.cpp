@@ -43,3 +43,6 @@ void KiSaveFaultTaskLastWords(ULONG, ULONG) {}
 
 // io/fsc.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
 ULONG *FscCachePte(ULONG) { return nullptr; }
+
+// xe/nettitle.cpp: no network-delivered title in host tests (no page holds one).
+bool MiIsNetbootTitlePage(ULONG) { return false; }

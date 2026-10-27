@@ -4,7 +4,7 @@
 
 ## Clean-Room Architecture & Execution Method
 
-To keep our kernel implementation independent of the original's code, this project was developed with a **Clean-Room Reverse Engineering Pipeline**: the analysis of the proprietary binary and the writing of the open-source code are separated by a wall, and the only things allowed to cross it are written behavioural specifications and the encoder register data of §5.
+To keep our kernel implementation independent of the original's code, this project was developed with a **Clean-Room Reverse Engineering Pipeline**: the analysis of the proprietary binary and the writing of the open-source code are separated by a wall, and the only things allowed to cross it are written behavioural specifications and the encoder and NV2A calibration register data of §5.
 
 The work was iterative: each feature (a kernel subsystem, a driver, a milestone such as "Halo reaches its main menu") went through its own cycle of analysis, specification, implementation and verification, and features were added one after another. The wall applies in every cycle.
 
@@ -23,7 +23,8 @@ The work was iterative: each feature (a kernel subsystem, a driver, a milestone 
 │  [THE WALL: INTEROPERABILITY SPECIFICATION]                    │
 │  Crosses: plain-text behavioural specs (spec/stock,            │
 │           spec/cerbios), and the video encoder register        │
-│           tables as flat data (§5). Nothing else.              │
+│           and NV2A calibration tables as flat data (§5).       │
+│           Nothing else.                                        │
 │  *ZERO source, machine or disassembled code past this wall*    │
 │                                                                │
 │                               ▼                                │
@@ -67,8 +68,8 @@ Both phases were carried out by one AI agent with explicit instructions abide ke
 ### 4. Verification: Black-Box Comparison
 OXOS was checked against the retail kernel by running the same software on both in xemu, and comparing only what can be observed from outside: whether a title boots and plays, function results, the free memory a title starts with, the controller test, the display modes titles ask for (logged with debugger breakpoints at the kernel's entry points), and the state of the emulated hardware. Register values read from the running retail kernel are used only to see whether OXOS's values agree or differ; differences are recorded as behaviour in the specification, and the values themselves are not copied. Every difference found this way went back through Phase 1 before the code changed.
 
-### 5. Integration of Video Encoder Lookup Tables (LUTs)
-Hardware-level configuration constants (the I2C register values required to initialize the Conexant, Focus, or Xcalibur video chips) were extracted as flat data from the kernel in the Complex 4627 BIOS image and from the 5838 BIOS image. They are recorded as plain english description of register maps and function (register, value, functional purpose) in `spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md` and `20-xcalibur-encoder.md`. Phase 2 derives functional hardware constants from those described encoder maps for the sole purpose of achieving an interoperable working video output on original physical hardware (the kernel's switch to them is in progress at the time of writing).
+### 5. Integration of Video Encoder and NV2A Calibration Lookup Tables (LUTs)
+Hardware-level configuration constants (the I2C register values required to initialize the Conexant, Focus, or Xcalibur video chips, and the NV2A memory pad drive/slew/delay calibration table the boot loader interpolates between) were extracted as flat data from the kernel in the Complex 4627 BIOS image and from the 5838 BIOS image. They are recorded as plain english description of register maps and function (register, value, functional purpose) in `spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md` and `20-xcalibur-encoder.md`. Phase 2 derives functional hardware constants from those described encoder maps for the sole purpose of achieving an interoperable working video output on original physical hardware (the kernel's switch to them is in progress at the time of writing).
 
 ***
 

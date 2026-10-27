@@ -7,17 +7,13 @@ dump is needed to build or run it. It boots retail software in [xemu](https://xe
 
 **Clean-room:** OXOS contains no Microsoft source code, machine code, disassembly or decompiled code. The retail
 kernel was studied to write behavioural specifications, and the kernel is written from those specifications only.
-The one kind of data taken from Microsoft images is the video encoders' register tables (functional hardware
-constants). The method and its legal basis are in [`dmca-compliance.md`](dmca-compliance.md).
+The one kind of data taken from bios images readily available on the internet is the video encoder and NV2A memory 
+pad calibration tables (functional hardware constants). The method and its legal basis are in 
+[`dmca-compliance.md`](dmca-compliance.md).
 
-**Languages:** all native code in this repository is **C++ (C++20)**: the kernel, the 2BL, the unit tests, the test
-titles and the tools that run on the Xbox. Assembly is used only where the hardware needs it (start-up, context
-switches, trap entry), and the PC-side tools are Python. There are no C sources; new code is C++ too (nxdk titles
-set `NXDK_CXX = y`).
+![OXOS Running MS Dash!!](docs/dash-running.jpg)
 
-![OXOS boot splash in xemu](docs/splash-screenshot.png)
-
-*The OXOS boot splash, captured in xemu.*
+*HDMI Capture of OXOS running MS Dash on 1.4 XBOX with 500GB exFAT formatted SSD!!*
 
 **Status:**
 - Every function and variable the 4627 kernel exports is implemented.
@@ -37,7 +33,8 @@ set `NXDK_CXX = y`).
 - **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
   composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
   programmed from their register tables; checked in xemu on all three of its encoder models.
-- **Hardware testing TBD:** OXOS has not run on a real console yet.
+- **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
+  from a 500 GB exFAT SSD, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
@@ -53,11 +50,11 @@ Free, Legal and Open Source!!
 5. Start the machine: the OXOS splash fades in and the dashboard starts. Load your own game discs (XISO) from
    xemu's *Machine* menu.
 
-OXOS has only been tested in xemu so far, not on a real console.
+The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far (see Status).
 
 ## Using an exFAT disk
 OXOS also runs from a hard disk formatted as exFAT on a PC (Windows, macOS or Linux), with no Xbox tools. Experimental:
-checked in xemu only.
+checked in xemu and on a 1.4 console (a 500 GB SSD).
 1. Partition the disk with GPT (or MBR) and one exFAT partition starting at 1 MiB or later (the default on every
    PC). OXOS keeps the Xbox's reserved sectors (refurb record, cache database) in the gap before the partition.
 2. Copy the dashboard's files into a folder `/C` at the root of the volume, and saves (`TDATA`, `UDATA`) into `/E`.
@@ -77,8 +74,8 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
 - **The kernel** (`kernel/src`): the reference kernel was studied with Ghidra to write behavioural specifications
   (`spec/stock/`), and the kernel is written from those specs only. No Microsoft source code, machine code,
   disassembly, decompiled code or keys are included. The one kind of data taken from Microsoft images is the video
-  encoder register tables, recorded as plain register maps in `spec/stock/18`–`20` (functional hardware constants;
-  [`dmca-compliance.md`](dmca-compliance.md) §5).
+  encoder register tables and the NV2A memory pad calibration table, recorded as plain register maps in
+  `spec/stock/18`–`20` and `spec/stock/21` §3 (functional hardware constants; [`dmca-compliance.md`](dmca-compliance.md) §5).
 - **Planned features** (`spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its
   features (128 MB, large disks, a second hard disk, virtual discs, IGR and more) were written up as behavioural
   specs for later OXOS work.
@@ -121,6 +118,12 @@ Nothing else needs fetching by hand. On first use the build fetches into `third_
 - the [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) hard-disk image (MIT-licensed, an open
   dashboard on a formatted drive), checked by SHA-256, by `make test` and `make run`: the default hard disk;
 - [nxdk](https://github.com/XboxDev/nxdk), by the controller test.
+- Intel's CPU microcode updates for the Xbox's Pentium III (`intel-ucode/06-08-06` and `06-08-0a` from
+  [Intel's microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files)), checked by
+  SHA-256, by every kernel build. The kernel carries the two platform-4 updates unmodified and loads one at start-up.
+  They are Intel's, under Intel's licence (`third_party/intel-ucode/license`): Copyright (c) 2018-2021 Intel
+  Corporation, all rights reserved; redistribution in binary form without modification is permitted; provided
+  "as is", without warranty.
 
 **4. Optionally, add games and your own files.**
 - Your game discs (XISO) go in `xiso/`.
@@ -224,7 +227,7 @@ serial port) is not implemented yet.
 
 ## About the BIOS image you build
 `make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0, and
-no Microsoft code. The one Microsoft-derived data in it is the video encoders' register tables, functional hardware
+no Microsoft code. The one Microsoft-derived data in it is the video encoder and NV2A memory pad calibration tables, functional hardware
 constants ([`dmca-compliance.md`](dmca-compliance.md) §5). One known gap: there is no certificate key. Games therefore derive
 different save-signature and System Link keys than a stock console does: saves made on a stock console do not
 verify under OXOS, and System Link with stock consoles does not work. Saves made under OXOS work among themselves.
@@ -233,8 +236,9 @@ verify under OXOS, and System Link with stock consoles does not work. Saves made
 Microsoft's 2BL and keys: do not distribute that one.
 
 ## Next steps
-- **Real hardware (TBD):** testing on real consoles, video output first (all three encoders, component HD via HDMI
-  adapters), then the rest of the hardware (the open image's 1.6 values, `MCPX16=1`, are untested).
+- **Real hardware:** more consoles and revisions (1.0-1.3 Conexant, 1.6), component HD through HDMI adapters, games;
+  the 1.6 pad calibration (rows from the EEPROM) is not implemented, and the 1.6 image values (`MCPX16=1`) are
+  untested. One release-build boot in five on the 1.4 console showed no video (undiagnosed).
 - **exFAT:** saving the cache partitions' format settings on the disk (`/OXOS/partitions.ini`), a compatibility pass
   over more titles, and exFAT memory units.
 - **Certificate key:** a bring-your-own-key option for stock-compatible saves and System Link.

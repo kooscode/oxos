@@ -2,16 +2,15 @@
 #define XK_STR2(x) #x
 #define XK_STR(x) XK_STR2(x)
 #include <xk/arch.h>
+#if XK_STATEDUMP
+#include "../../../tools/statedump/statedump.h"
+#endif
 #include <xk/hal.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
 #include <xk/serial.h>
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-extern "C" volatile ULONG KiEarlySample;
-void HalpSetIrqlMask(KIRQL irql);
-#endif
 void HalpSmcInitColdBoot();
 void HalpSmcStartEvents();
 void HalpStartSplash();
@@ -44,10 +43,6 @@ extern "C" void HalpSetBootLed(UCHAR Pattern);
 void ExInitEeprom();          // spec/stock/12: EEPROM shadow, HD key, game region
 void AvInit();                // spec/stock/12: AV pack, video encoder
 void KiInitializeSystemTime(); // system time from the RTC
-
-// MTRRs as the boot loader left them (we do not program our own): default type, then 8 base/mask pairs, each MSR
-// as {low, high}.
-volatile ULONG KiBootMtrr[2 + 32];
 
 // Open BIOS image (spec/stock/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from XboxDev/cromwell)
 // that ExInitEeprom tries in turn. Kept across quick reboots, which re-enter with arg0 = 0.
@@ -88,13 +83,14 @@ static ULONG KiBootStackUsed() {
 #endif
 
 extern "C" void XeReadNetbootTitle(); // xe/nettitle.cpp
-static void KiEnableMachineChecks();
+static void KiReportMachineChecksAtBoot();
+static void KiReportNvPads(const char *When);
+static ULONG KiPadRecord[13]; // the 2BL's pad calibration record, copied before the memory manager unmaps page 2
+extern ULONG KiMicrocodeRevision; // ke/cpu.cpp
 static void KiReportLastWords();
 
 #if XK_NETLOG
 extern "C" void KiReadDebugConfig();
-extern "C" void KiPadCalibrate(); // experiment XK_EXPERIMENT_PADCAL (ke/padcal.cpp)
-extern "C" void KiPadReport();
 extern "C" void KiArmDebugRegisters();
 #endif
 
@@ -112,9 +108,6 @@ volatile ULONG XkLastMarkTick; // XkWatchdogTicks at the last mark (the clock in
 static volatile ULONG XkWatchdogTicks; // clock interrupts seen by the watchdog (also before KeTickCount runs: the
                                        // early sampler experiment unmasks IRQ 0 in phase 0)
 extern "C" void XkBootMark(const char *Format) {
-#ifdef XK_NO_MARKS
-    return; // experiment: no CMOS writes for the start-up marks
-#endif
     if (!XkBootMarksOn)
         return;
     ULONG flags = save_flags_cli(); // the index / data pairs must not interleave with another CMOS access
@@ -124,15 +117,6 @@ extern "C" void XkBootMark(const char *Format) {
         HalpCmosWrite((UCHAR)(0x71 + i), (UCHAR)((ULONG)Format >> (8 * i)));
     HalpCmosWrite(0x75, (UCHAR)XkBootMarkCount);
     HalpCmosWrite(0x76, (UCHAR)(XkBootMarkCount >> 8));
-#ifdef XK_MARK_CALLER
-    {
-        // Experiment: also the caller of the function that set the mark (frame-pointer chain), CMOS 0x78-0x7B.
-        auto frame = (ULONG *)__builtin_frame_address(0);
-        ULONG ra = frame && frame[0] >= 0x80000000 ? ((ULONG *)frame[0])[1] : 0;
-        for (int i = 0; i < 4; i++)
-            HalpCmosWrite((UCHAR)(0x78 + i), (UCHAR)(ra >> (8 * i)));
-    }
-#endif
     if (XkLastMarkTick + 3000 <= XkWatchdogTicks)
         HalpCmosWrite(0x77, 0); // a stall record of an earlier pause is stale now
     XkLastMarkTick = XkWatchdogTicks;
@@ -175,10 +159,6 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         for (int i = 0; i < 4; i++)
             KiPrevMark |= (ULONG)HalpCmosRead((UCHAR)(0x71 + i)) << (8 * i);
         KiPrevMarkCount = HalpCmosRead(0x75) | HalpCmosRead(0x76) << 8;
-#ifdef XK_MARK_CALLER
-        for (int i = 0; i < 4; i++)
-            KiPrevMarkCaller |= (ULONG)HalpCmosRead((UCHAR)(0x78 + i)) << (8 * i);
-#endif
         if (HalpCmosRead(0x77) == 'W') {
             KiPrevStallFound = true;
             for (int i = 0; i < 4; i++)
@@ -195,21 +175,11 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #endif
     if (!KiQuickRebootFlag)
         XeReadNetbootTitle(); // a title delivered by netboot (xe/nettitle.cpp): before the bank's pages are reused
-#ifdef XK_EXPERIMENT_PADCAL
-    KiPadCalibrate(); // the retail 2BL's NV2A pad calibration (ke/padcal.cpp), before RAM sees much traffic
-#endif
     KiSetStage(post_code::Entry);
 #if XK_DEBUG_SERIAL
-#ifndef XK_NO_SERIAL_PROBE
     HalpSerialInit();
-#endif
     XK_SERIAL("\nOXOS kernel (" __DATE__ " " __TIME__ "): %s boot\n", KiQuickRebootFlag ? "quick" : "cold");
 #endif
-    for (ULONG i = 0; i < 17; i++) {
-        ULONGLONG v = rdmsr(i ? 0x200 + i - 1 : 0x2FF);
-        KiBootMtrr[2 * i] = (ULONG)v;
-        KiBootMtrr[2 * i + 1] = (ULONG)(v >> 32);
-    }
 
     // Take the keys, then erase the 2BL image (0x6000 bytes at 0x80400000), as the stock kernel does. A quick
     // reboot keeps memory: the keys come from the persisted copy and nothing is erased.
@@ -231,11 +201,17 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiBootStep("processor");
     KiInitializeProcessor();
 
+    // As the reference (KfLowerIrql(1) at 0x8001C838, before its executive init): the start-up runs at APC_LEVEL, and
+    // with interrupts enabled from the PIC set-up on, so the clock, timers and DPCs run while the drivers start.
+    // (The PIC is not set up yet: only the IRQL value changes here; HalpInitPic masks every line.)
+    KiPcr.Irql = APC_LEVEL;
     KiSetStage(post_code::HalPhase0);
     KiBootStep("HAL phase 0");
     HalInitSystemPhase0(/*coldBoot=*/!quick);
     HalpSetBootLed(0x5F); // alternating green / orange: the kernel is starting
 
+    for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
+        KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
     KiBootStep("memory manager");
     MmInitSystem(quick);
 #if XK_NETLOG
@@ -244,58 +220,34 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         HalpNetLogStart(); // the NIC registers are mapped from here on
     }
 #endif
-    KiEnableMachineChecks();
+    KiReportMachineChecksAtBoot();
+    KiReportNvPads("after the memory manager");
     KiReportLastWords();
-#ifdef XK_NMI_SELFTEST_EARLY
-    XK_SERIAL("boot: experiment: software NMI (int 2) to test the NMI task on this CPU\n");
-    __asm__ volatile("int $2");
-    XK_SERIAL("boot: experiment: back from the NMI task (it should not return)\n");
-#endif
 #if XK_NETLOG
     KiArmDebugRegisters();
 #endif
     XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
-#ifdef XK_EXPERIMENT_PADCAL
-    KiPadReport();
-#endif
     {
         extern volatile ULONG MiRamProbe, MiGpuSizeBefore, MiGpuSizeAfter;
         [[maybe_unused]] static const char *what[] = {"not run", "64 MB (64 MB + x reads back at x)", "more than 64 MB",
                                      "unclear"};
-        extern volatile ULONG MiRamBadPages, MiRamBadPage[4];
-        extern volatile ULONG MiMemtestErrors, MiMemtestPasses, MiMemtestError[4][2];
-        if (MiMemtestPasses)
-            XK_SERIAL("ram: memory test: %lu passes, %lu words wrong; first at %08lx (bits %08lx) %08lx (%08lx) "
-                      "%08lx (%08lx)\n", MiMemtestPasses, MiMemtestErrors, MiMemtestError[0][0], MiMemtestError[0][1],
-                      MiMemtestError[1][0], MiMemtestError[1][1], MiMemtestError[2][0], MiMemtestError[2][1]);
-        XK_SERIAL("ram: page tag test: %lu pages wrong; first %08lx %08lx %08lx %08lx (pfn << 16 | pfn seen)\n",
-                  MiRamBadPages, MiRamBadPage[0], MiRamBadPage[1], MiRamBadPage[2], MiRamBadPage[3]);
         [[maybe_unused]] ULONG top;
         HalReadWritePCISpace(0, 0, 0x84, &top, 4, FALSE);
         XK_SERIAL("ram: %s; GPU memory size %08lx -> %08lx (PFB 0x100200 %08lx); host top of memory %08lx\n",
                   what[MiRamProbe & 3], MiGpuSizeBefore, MiGpuSizeAfter, *(volatile ULONG *)0xFD100200, top);
     }
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-    {
-        KiEarlySample = 1;
-        HalpSetIrqlMask(KiPcr.Irql);
-        __asm__ volatile("sti");
-        XK_SERIAL("boot: early EIP sampler on\n");
-    }
-#endif
-#ifdef XK_DIAG_PAD
-    __asm__ volatile("jmp 1f\n\t.skip " XK_STR(XK_DIAG_PAD) "\n1:");
-    {
-        static volatile char pad[XK_DIAG_PAD] = {1};
-        (void)pad[0];
-    }
-#endif
     if (!quick)
         HalpDetectHardware();
     KiInitializeDpcs();
     KiInitializeTimers();
     KiBootStep("scheduler");
     KiInitializeScheduler(KiBootStack + BOOT_STACK_SIZE, KiBootStack);
+    // The reference enables its system interrupts here (0x80031876, called at 0x80015907, after the memory manager
+    // and the hardware detection, before the object and I/O managers): the clock (IRQ 0, latched) first. Its IRQ 8
+    // (RTC, whose interrupts stay off) and IRQ 11 (SMBus) handlers have no counterpart here yet (our SMBus polls);
+    // IRQ 12 (SMC events) is enabled by HalpSmcStartEvents below.
+    HalEnableSystemInterrupt(0, Latched); // PIT clock
+    XK_SERIAL("boot: clock interrupt on\n");
     KiBootStep("object manager");
     ObInitSystem();
     KiBootStep("I/O manager");
@@ -304,78 +256,41 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiInitializeSystemTime();
     KiBootStep("EEPROM");
     ExInitEeprom();
-#ifdef XK_EXPERIMENT_STAGE
-    // Experiment (elimination series): stage 1 = core kernel only, 2 = + AV and splash, 3 = + IDE; 4 or none = all.
-    XK_SERIAL("boot: experiment: stage %d\n", XK_EXPERIMENT_STAGE);
-#define XK_STAGE(n) (XK_EXPERIMENT_STAGE >= (n))
-#else
-#define XK_STAGE(n) 1
-#endif
     KiBootStep("AV");
-    if (XK_STAGE(2))
-        AvInit();
+    AvInit();
     if (!quick)
         HalpSmcInitColdBoot();
     KiBootStep("IDE");
-    if (XK_STAGE(3))
-        IdexChannelInit();
+    IdexChannelInit();
     XK_SERIAL("boot: IDE done\n");
-#ifdef XK_EXPERIMENT_EARLY_SAMPLE
-    KiEarlySample = 0;
-#endif
-    HalEnableSystemInterrupt(0, Latched); // PIT clock
-    XK_SERIAL("boot: clock interrupt on\n");
     HalpSmcStartEvents();
     XK_SERIAL("boot: SMC events started\n");
-    if (!quick && XK_STAGE(2))
+    if (!quick)
         HalpStartSplash();
     XK_SERIAL("boot: splash started\n");
-#ifdef XK_EXPERIMENT_WATCHDOG_TEST
-    {
-        // Experiment: 5 s without a mark (interrupts on), then show what the start-up watchdog left in CMOS.
-        ULONG efl;
-        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
-        XK_SERIAL("watchdog test: IRQL %u, eflags %08lx, PIC mask %02x %02x\n", KeGetCurrentIrql(), efl, inb(0x21), inb(0xA1));
-        KfLowerIrql(DISPATCH_LEVEL); // the clock interrupt runs, no other thread does (none of them marks)
-        __asm__ volatile("pushfl; popl %0" : "=r"(efl));
-        XK_SERIAL("watchdog test: IRQL %u, eflags %08lx, PIC mask %02x %02x\n", KeGetCurrentIrql(), efl, inb(0x21), inb(0xA1));
-        __asm__ volatile("sti"); // as in a thread (the title loader runs with interrupts on)
-        ULONG t0 = KeTickCount;
-        for (ULONG i = 0; i < 100000000 && KeTickCount - t0 < 5000; i++)
-            KeStallExecutionProcessor(100);
-        XK_SERIAL("watchdog test: %lu ticks; CMOS 77 %02x eip %02x%02x%02x%02x irql %u seconds %u\n", KeTickCount - t0, HalpCmosRead(0x77),
-                  HalpCmosRead(0x7B), HalpCmosRead(0x7A), HalpCmosRead(0x79), HalpCmosRead(0x78), HalpCmosRead(0x7C),
-                  HalpCmosRead(0x7D));
-        (void)t0;
-        __asm__ volatile("cli");
-    }
-#endif
 
 #if XK_BOOT_SELFTEST
     if (!quick)
         KiRunBootSelfTests();
 #endif
+    KiReportNvPads("at the title launcher");
+#if XK_STATEDUMP
+    {
+        // The machine-state probe (tools/statedump, make STATEDUMP=1), where a reference dump is taken.
+        struct P { static void Out(const char *Line) { XK_SERIAL("%s", Line); } };
+        statedump::Dump(P::Out, "OXOS (end of start-up)");
+    }
+#endif
     KiBootStep("title launcher");
 #if XK_NETLOG
     {
         void HalpNetLogStartHeartbeat();
-#ifndef XK_STRESS_NO_HEARTBEAT
         HalpNetLogStartHeartbeat();
-#else
-        XK_SERIAL("boot: experiment: no heartbeat thread\n");
-#endif
     }
 #endif
-    if (XK_STAGE(4)) {
-        XeStartTitleLauncher();
-    } else {
-#ifdef XK_EXPERIMENT_STAGE
-        void KiStartStressThreads();
-        KiStartStressThreads();
-#endif
-    }
+    XeStartTitleLauncher();
 
-    KfLowerIrql(DISPATCH_LEVEL);
+    KfRaiseIrql(DISPATCH_LEVEL); // the idle loop runs at DISPATCH_LEVEL
     KiSetStage(post_code::Idle);
     KiIdleLoop();
 }
@@ -386,9 +301,8 @@ volatile ULONG KiLastExceptionVector = 0xFFFFFFFF;
 volatile ULONG KiLastExceptionCode;
 volatile ULONG KiLastExceptionEip;
 
-// Machine checks (OXOS addition, spec/oxos-internal/03 §8): with CR4.MCE clear a machine-check error puts the
-// CPU in the shutdown state (a silent, total freeze). Enable the exception and the error banks, and report what the
-// banks hold, at boot (errors logged before the last warm reset) and in the #MC handler.
+// Machine checks stay off, as in the reference (spec/stock/23 §1: CR4.MCE clear, no MCG_CTL or MCi_CTL write). The
+// banks are only read: what they hold at boot (errors logged before the last reset) goes to the debug log.
 static ULONG KiMcaBanks;
 static void KiReportMachineCheckBanks(const char *When) {
     for (ULONG i = 0; i < KiMcaBanks; i++) {
@@ -403,30 +317,33 @@ static void KiReportMachineCheckBanks(const char *When) {
         XK_SERIAL("machine check: MCG_STATUS %08lx (%s)\n", (ULONG)rdmsr(0x17A), When);
 }
 
-static void KiEnableMachineChecks() {
+// NV2A memory pad registers (debug log): the X-codes set them; read at two points to see whether they change.
+static void KiReportNvPads([[maybe_unused]] const char *When) {
+    [[maybe_unused]] auto nv = [](ULONG o) { return *(volatile ULONG *)(0xFD000000 + o); };
+    XK_SERIAL("nv pads (%s): 1214 %08lx 122c %08lx 1230 %08lx 1234 %08lx 1238 %08lx 123c %08lx 1240 %08lx 1244 %08lx "
+              "1248 %08lx 1250 %08lx\n", When, nv(0x1214), nv(0x122C), nv(0x1230), nv(0x1234), nv(0x1238), nv(0x123C),
+              nv(0x1240), nv(0x1244), nv(0x1248), nv(0x1250));
+    // The 2BL's pad calibration record (boot/bl.cpp BL_PAD_RESULT, physical 0x2300), printed once.
+    static bool shown;
+    [[maybe_unused]] auto r = KiPadRecord;
+    if (!shown && (r[0] == 0x43444150 || r[0] == 0x4E444150)) {
+        shown = true;
+        if (r[0] == 0x4E444150)
+            XK_SERIAL("nv pads: the 2BL did not calibrate (no table in this image)\n");
+        else
+            XK_SERIAL("nv pads: 2BL calibration A %#lx B %#lx strap %08lx -> %08lx %08lx %08lx %08lx %08lx %08lx %08lx "
+                      "%08lx %08lx\n", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]);
+    }
+}
+
+static void KiReportMachineChecksAtBoot() {
     ULONG a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
-    if (!(d & (1u << 7))) // no machine-check exception
+    XK_SERIAL("cpu: signature %08lx, microcode revision %lu\n", a, KiMicrocodeRevision);
+    if (!(d & (1u << 7)) || !(d & (1u << 14))) // no machine-check exception or architecture
         return;
-    if (d & (1u << 14)) { // machine-check architecture
-        ULONG cap = (ULONG)rdmsr(0x179);
-        KiMcaBanks = cap & 0xFF;
-        XK_SERIAL("machine check: MCG_CAP %08lx, %lu banks\n", cap, KiMcaBanks);
-        KiReportMachineCheckBanks("at boot");
-#ifdef XK_EXPERIMENT_NO_MCE
-        XK_SERIAL("machine check: experiment: left off (as the reference)\n");
-        return;
-#endif
-        if (cap & 0x100)
-            wrmsr(0x17B, ~0ULL); // MCG_CTL: every error type
-        for (ULONG i = 1; i < KiMcaBanks; i++) // bank 0 is the firmware's on the P6 family
-            wrmsr(0x400 + 4 * i, ~0ULL);
-        for (ULONG i = 0; i < KiMcaBanks; i++)
-            wrmsr(0x401 + 4 * i, 0);
-    }
-    ULONG cr4;
-    __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
-    __asm__ volatile("mov %0, %%cr4" ::"r"(cr4 | 0x40));
+    KiMcaBanks = (ULONG)rdmsr(0x179) & 0xFF;
+    KiReportMachineCheckBanks("at boot");
 }
 
 // Last words that survive a power cycle and need no network (spec/oxos-internal/03 §8): CMOS bytes 0x70-0x7F (free;

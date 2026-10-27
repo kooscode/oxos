@@ -102,7 +102,7 @@ RAM disc: the title runs from the disk, as any title launched from it.
 - **Kernel entry** (cold boots only, `xe/nettitle.cpp`): with 'OXKP' at bank 0x6000 and the marker present, note
   the package's physical range and clear the marker, so a quick reboot does not find it again.
 - **Memory manager start-up:** the package's pages are held (mapped, counted as contiguous memory), not put on the
-  free lists, and skipped by the page tag test.
+  free lists.
 - **Title launch** (path B of spec/stock/05 §2, before the disc): create `E:\NAME\`, write each file, give the
   pages back, link D: to the folder, load `E:\NAME\NAME.xbe`. This happens whatever the dashboard would be asked to
   do: a console without a clock backup always has a reason (the clock is not set). If writing or loading fails,

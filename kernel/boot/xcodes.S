@@ -69,4 +69,11 @@
 #endif
     .org 0x80
 #include "Xcodes.h"
+    // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.7a).
+#ifndef MCPXREVD5
+    .org 0xc90
+#else
+    .org 0xdc0
+#endif
+#include "padcal_table.inc"
     .org 0x1000

@@ -107,15 +107,19 @@ static u32 PciRead(u32 bus, u32 dev, u32 reg) {
 }
 
 static void Pci(Out out) {
-    static const u8 devs[][2] = {{0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 9}, {0, 0x1E}, {1, 0}};
+    // Function 0 of each device, plus 0:1.1 (SMBus). Probing functions that do not exist hangs the console.
+    static const u8 devs[][3] = {{0, 0, 0}, {0, 1, 0}, {0, 1, 1}, {0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0},
+                                 {0, 6, 0}, {0, 9, 0}, {0, 0x1E, 0}, {1, 0, 0}};
     Line l;
     for (auto &d : devs) {
-        if (PciRead(d[0], d[1], 0) == 0xFFFFFFFF)
+        u32 df = (u32)d[1] << 3 | d[2];
+        auto read = [&](u32 reg) { return PciRead(d[0], 0, df << 8 | reg); };
+        if (read(0) == 0xFFFFFFFF)
             continue;
         for (u32 r = 0; r < 0x100; r += 0x20) {
-            l.s("sd pci ").x(d[0], 1).s(":").x(d[1], 2).s(" ").x(r, 2);
+            l.s("sd pci ").x(d[0], 1).s(":").x(d[1], 2).s(".").x(d[2], 1).s(" ").x(r, 2);
             for (u32 k = r; k < r + 0x20; k += 4)
-                l.sp().x(PciRead(d[0], d[1], k));
+                l.sp().x(read(k));
             l.put(out);
         }
     }
@@ -127,12 +131,18 @@ static void Gpu(Out out) {
     l.s("sd nv pmc ").x(r(0)).sp().x(r(0x100)).sp().x(r(0x140)).sp().x(r(0x200)).s(" pll ").x(r(0x680500)).sp()
         .x(r(0x680504)).sp().x(r(0x680508)).sp().x(r(0x68050C)).s(" gc ").x(r(0x680600)).s(" crtc ").x(r(0x600100))
         .sp().x(r(0x600140)).sp().x(r(0x600800)).put(out);
-    for (u32 o = 0x100000; o < 0x100400; o += 0x20) {
-        l.s("sd nv pfb ").x(o, 6);
-        for (u32 k = o; k < o + 0x20; k += 4)
-            l.sp().x(r(k));
-        l.put(out);
-    }
+    // The blocks that set up memory and the display, read whole: PMC, PBUS (memory timing and pads), PFB, PEXTDEV
+    // (straps), PCRTC and PRAMDAC. Not PFIFO, PGRAPH or PTIMER (running state, and PGRAPH reads can have effects).
+    static const struct { const char *name; u32 from, to; } blocks[] = {
+        {"pmc", 0x000000, 0x000400}, {"pbus", 0x001000, 0x002000}, {"pfb", 0x100000, 0x101000},
+        {"pextdev", 0x101000, 0x101100}, {"pcrtc", 0x600000, 0x601000}, {"pramdac", 0x680000, 0x681000}};
+    for (auto &b : blocks)
+        for (u32 o = b.from; o < b.to; o += 0x20) {
+            l.s("sd nv ").s(b.name).sp().x(o, 6);
+            for (u32 k = o; k < o + 0x20; k += 4)
+                l.sp().x(r(k));
+            l.put(out);
+        }
 }
 
 static void Io(Out out) {
