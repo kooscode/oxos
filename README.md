@@ -113,7 +113,8 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
   ![The hardware-in-the-loop rig: an RP2040 Modxo on the LPC header of a 1.4 Xbox](docs/hwitl-rig.jpg)
 
   *An RP2040-Zero running [Modxo](https://github.com/Shalx/Modxo) on a perfboard, wired to the console's LPC header
-  (the ribbon cable) and to its power switch (the white wire, through a transistor). One USB cable to the PC.*
+  (the ribbon cable) and to its power switch (the white wire). The Pico presses the button through a 2N2222: GPIO →
+  1 kΩ → base, collector to the Xbox power-switch line, emitter to ground. One USB cable to the PC.*
 
   - **The modchip is the debug port.** The Pico runs Modxo with an OXOS debug module
     ([`tools/modxo`](tools/modxo/README.md), firmware on the `oxos-debug` branch of
