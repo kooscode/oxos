@@ -16,28 +16,16 @@
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 
+#include "mount_iso.h"
+
 #include <cstdio>
 #include <cstring>
 #include <string_view>
 
 namespace {
 
-constexpr ULONG IOCTL_VD_MOUNT = 0x1EE7CD01, IOCTL_VD_UNMOUNT = 0x1EE7CD02;
 constexpr std::size_t PATH = 300;
-
-// The retail drive letters and the extra exFAT drives F: and G: (spec/oxos-internal/05-exfat-storage-spec.md).
-const char *PartitionOf(char letter) {
-    switch (letter & ~0x20) {
-    case 'C': return "\\Device\\Harddisk0\\Partition2";
-    case 'E': return "\\Device\\Harddisk0\\Partition1";
-    case 'X': return "\\Device\\Harddisk0\\Partition3";
-    case 'Y': return "\\Device\\Harddisk0\\Partition4";
-    case 'Z': return "\\Device\\Harddisk0\\Partition5";
-    case 'F': return "\\Device\\Harddisk0\\Partition6";
-    case 'G': return "\\Device\\Harddisk0\\Partition7";
-    default: return nullptr;
-    }
-}
+using oxos_vdisc::PartitionOf; // the retail drive letters and the exFAT drives F: and G:
 
 [[noreturn]] void Stay() {
     for (;;)
@@ -194,26 +182,6 @@ void ListFolder(const char *folder) {
     NtClose(h);
 }
 
-// The mount request (spec/cerbios/07 §2.1): part count, type, the parts' paths and a link name, as counted strings.
-struct MountRequest {
-    UCHAR Parts, Type, Pad[2];
-    ANSI_STRING Path[8];
-    ANSI_STRING Link;
-};
-static_assert(sizeof(MountRequest) == 0x4C, "the Cerbios request layout");
-
-NTSTATUS Control(ULONG code, MountRequest *request) {
-    HANDLE h;
-    NTSTATUS status = Open(&h, "\\Device\\CdRom1", 0);
-    if (!NT_SUCCESS(status))
-        return status;
-    IO_STATUS_BLOCK iosb;
-    status = NtDeviceIoControlFile(h, nullptr, nullptr, nullptr, &iosb, code, request,
-                                   request ? sizeof(*request) : 0, nullptr, 0);
-    NtClose(h);
-    return status;
-}
-
 // The title name from the image's default.xbe certificate (UTF-16, 40 characters), as ASCII.
 void TitleName(char *out, std::size_t size) {
     out[0] = 0;
@@ -246,10 +214,10 @@ int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     debugPrint("OXOS ISO launcher\n\n");
 
-    static char line[PATH], path[PATH], folder[PATH], parts[2][PATH];
+    static char line[PATH], path[PATH], folder[PATH];
     std::size_t length = ReadLine("D:\\iso.txt", line, sizeof(line));
     if (length && (!std::strcmp(line, "none") || !std::strcmp(line, "NONE"))) {
-        NTSTATUS status = Control(IOCTL_VD_UNMOUNT, nullptr);
+        NTSTATUS status = UnmountISO();
         debugPrint("Unmount: status 0x%08lx. Starting the dashboard...\n", static_cast<unsigned long>(status));
         Sleep(1000);
         XLaunchXBE(nullptr);
@@ -290,27 +258,9 @@ int main() {
         Stay();
     }
 
-    // A split image: name.1.iso + name.2.iso.
-    std::string_view p(path);
-    bool cci = EndsWith(p, ".cci");
-    int count = 1;
-    std::snprintf(parts[0], PATH, "%s", path);
-    if (EndsWith(p, ".1.iso") || EndsWith(p, ".1.cci")) {
-        std::snprintf(parts[1], PATH, "%s", path);
-        parts[1][p.size() - 5] = '2';
-        if (IsFile(parts[1]))
-            count = 2;
-    }
-    debugPrint("Image: %s%s\n", parts[0], count == 2 ? " (+ part 2)" : "");
-
-    // Mount: a plain image as the drive (type 0, which Cerbios also takes as "replace \Device\CdRom0"); CCI as 'd'.
-    MountRequest request{};
-    request.Parts = UCHAR(count);
-    request.Type = cci ? 'd' : 0;
-    for (int i = 0; i < count; i++)
-        RtlInitAnsiString(&request.Path[i], parts[i]);
-    RtlInitAnsiString(&request.Link, "\\Device\\CdRom0");
-    NTSTATUS status = Control(IOCTL_VD_MOUNT, &request);
+    // Mount (a split image's second part is found by MountISO).
+    debugPrint("Image: %s\n", path);
+    NTSTATUS status = MountISO(path);
     if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
         debugPrint("\nThis BIOS cannot mount disc images (no \\Device\\CdRom1).\n");
         Stay();
