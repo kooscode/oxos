@@ -1,7 +1,7 @@
-# 16. Virtual discs: games from disc images on the hard disk
+# 16. Virtual discs: titles from disc images on the hard disk
 
-Implemented 2026-10-27. An Xbox disc image on the hard disk stands in for the DVD drive, so a game starts and runs from
-it as from a disc. The device interface is the one Cerbios has (spec/cerbios/07), so tools written for Cerbios work
+Implemented 2026-10-27. An image of an Xbox disc (made from the user's own disc) on the hard disk stands in for the DVD
+drive, so a title starts and runs from it as from the disc. The device interface is the one Cerbios has (spec/cerbios/07), so tools written for Cerbios work
 here, and the OXOS ISO launcher works on Cerbios. Code: `kernel/src/vd/vdisc.cpp`, `tools/iso-launcher/`.
 
 ## 1. Images
@@ -62,7 +62,7 @@ An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
   report the full 64-bit size.
 
 ## 5. Quick reboots
-The slot table (type, part paths, link name) is in `.persist`. A mount survives quick reboots (launches, a game's own
+The slot table (type, part paths, link name) is in `.persist`. A mount survives quick reboots (launches, a title's own
 restarts) and ends at a cold boot. On a console with a DVD drive an eject also ends it: opening the tray while a title
 runs resets the console through the SMC, and that is a cold boot. At each boot the title-launch thread re-attaches every
 saved slot before choosing a title (`VdRestoreMounts`). A slot whose files no longer open is dropped.
@@ -89,7 +89,7 @@ nearest folder above it that does.
 
 ## 7. Tests
 - `make test-iso` boots the release build in xemu with a disc that holds the launcher. The image, of the kernel test
-  title with relaunch.txt, sits in `F:\games` on an exFAT disk, in four forms: one `.iso`; a `.1.iso` + `.2.iso`
+  title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in four forms: one `.iso`; a `.1.iso` + `.2.iso`
   pair; a `.cci` named through its folder; and a >4 GB image whose `media\a.txt` lies beyond 4 GB. The title must
   start from `\Device\CdRom0\default.xbe`, pass its checks, relaunch itself twice through quick reboots (the mount
   survives), and end in the dashboard. The mount must succeed with no failed image reads.

@@ -475,7 +475,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
 
 
 # --- Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher on the disc mounts an image of the kernel
-# test title (with relaunch.txt) from F:\games on an exFAT disk; the title then runs from the image, relaunches
+# test title (with relaunch.txt) from F:\titles on an exFAT disk; the title then runs from the image, relaunches
 # itself (the mount survives the quick reboots) and ends in the dashboard.
 ISO_KINDS = ("plain", "split", "cci", "large")
 
@@ -489,19 +489,19 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
     tree["media"] = media
     img = mkxiso.write_image(os.path.join(work, "inner.iso"), tree)
     os.remove(os.path.join(work, "inner.iso"))
-    name = "Test Game"
+    name = "Test Title"
     if a.iso_kind == "split":
         cut = (len(img) // 2) & ~0x7FF
         files = {f"{name}.1.iso": bytes(img[:cut]), f"{name}.2.iso": bytes(img[cut:])}
-        launch = f"F:\\games\\{name}.1.iso"
+        launch = f"F:\\titles\\{name}.1.iso"
     elif a.iso_kind == "cci":
         cci = os.path.join(work, "inner.cci")
         mkcci.write(bytes(img), cci)
         files = {f"{name}.cci": open(cci, "rb").read()}
-        launch = f"F:\\games\\{name}"  # a folder: the launcher picks the image in it
+        launch = f"F:\\titles\\{name}"  # a folder: the launcher picks the image in it
     else:
         files = {f"{name}.iso": img}
-        launch = f"F:\\games\\{name}.iso"
+        launch = f"F:\\titles\\{name}.iso"
     import fatx
     src = Qcow2(a.hdd)
     b = exfat.Builder(256 << 30, 16 << 10)
@@ -516,7 +516,7 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
                 b.add(dest, part.read_chain(cl, sz), attrs=attr)
     for letter in ("C", "E"):
         copy(fatx.Fatx(src, letter), letter)
-    folder = f"/F/games/{name}" if a.iso_kind == "cci" else "/F/games"
+    folder = f"/F/titles/{name}" if a.iso_kind == "cci" else "/F/titles"
     for n, data in files.items():
         b.add(f"{folder}/{n}", data)
     b.write(hdd_copy, src.read(0, 0x400 * 512))

@@ -148,7 +148,7 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      - A title formatting its cache partition through the volume handle empties that folder.
      - `make test-exfat` runs the FATX self-tests on E: as a folder and checks the disk afterwards with an independent
        reader (`../tests/exfat.py`, which also builds exFAT disks from FATX ones).
-     - **Halo plays on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
+     - **Halo runs on an exFAT disk in xemu**: it formats its cache in /Z, loads a level, saves its profile, and
        continues after a reboot. The dashboard boots from /C.
      - **Halo 2 runs on an exFAT disk** (2026-10-21): started from the dashboard on a 500 GB SATA drive formatted on a
        PC and attached to xemu over USB, it formats its two cache partitions and reaches its title screen. Getting

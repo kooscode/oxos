@@ -326,7 +326,7 @@ test-udf: $(BUILD)/bios.bin $(HDD_FETCH)
 # 1920x1080 window at twice the render resolution: WIDE=0 (no EEPROM widescreen flag; a flag already saved in STATE
 # stays until FRESH=1 or the dashboard clears it), ASPECT=auto|native|4x3|16x9 (xemu's picture aspect; auto follows the
 # widescreen signal each game sends), SIZE= (window size), SCALE=1..10, FULL=1 (full screen). HD=1: the HDTV AV pack
-# and the EEPROM's 480p/720p/1080i flags (HD=480p,720p for a subset), so games use their HD modes. ENCODER=focus or
+# and the EEPROM's 480p/720p/1080i flags (HD=480p,720p for a subset), so titles use their HD modes. ENCODER=focus or
 # xcalibur: the video encoder xemu presents (default conexant).
 # PLAY_HDD: the disk image the run targets start from, by default the stock Microsoft dashboard image when you have
 # one (its Settings set up video modes, clock, language); the tests keep using HDD_IMAGE. One state directory per
@@ -460,9 +460,9 @@ run-trace-xbe: xbe-disc
 
 # Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher (tools/iso-launcher, nxdk) mounts an image
 # from the hard disk as the console's disc and starts its game. make test-iso: the release build boots a disc with
-# the launcher; the image (the kernel test title, relaunch variant) is on an exFAT disk's F:\games, as one .iso, a
+# the launcher; the image (the kernel test title, relaunch variant) is on an exFAT disk's F:\titles, as one .iso, a
 # split .1.iso/.2.iso pair, a .cci and an image over 4 GB; the title runs from it, relaunches itself and ends in the
-# dashboard. make run-iso ISO='F:\games\Halo 2.iso' boots the launcher in xemu for an image on the run-xbe disk.
+# dashboard. make run-iso ISO='F:\titles\Halo 2.iso' boots the launcher in xemu for an image on the run-xbe disk.
 ISO_LAUNCHER_DIR := $(ROOT)/tools/iso-launcher
 ISO_LAUNCHER_XBE := $(ISO_LAUNCHER_DIR)/bin/default.xbe
 ISO_KINDS ?= plain split cci large
@@ -479,7 +479,7 @@ test-iso: $(ISO_LAUNCHER_XBE) $(TEST_TITLE).xbe $(HDD_FETCH)
 	        --title-map $(TEST_TITLE).map --iso-launch $(ISO_LAUNCHER_XBE) --iso-kind $$kind --boot-wait 1; done
 
 iso-disc: $(ISO_LAUNCHER_XBE) $(PLAY_FETCH)
-	@test -n '$(ISO)' || { printf '%s\n' "usage: make run-iso ISO='F:\\games\\Halo 2.iso' [STATE=...]"; exit 1; }
+	@test -n '$(ISO)' || { printf '%s\n' "usage: make run-iso ISO='F:\\titles\\Halo 2.iso' [STATE=...]"; exit 1; }
 	@test -f $(XBE_STATE)/hdd.qcow2 || { mkdir -p $(XBE_STATE) && \
 	    python3 -I $(ROOT)/tests/exfat.py --from-fatx $(PLAY_HDD) $(XBE_STATE)/hdd.qcow2 --size 256G --cluster 16K; }
 	@mkdir -p $(OUT)/run-iso
