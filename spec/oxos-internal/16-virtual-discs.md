@@ -70,7 +70,14 @@ saved slot before choosing a title (`VdRestoreMounts`). A slot whose files no lo
 Unmounting stops new requests to the slot and waits for running ones to finish. It then closes the files, deletes
 the image's link and frees the slot. The image device stays (a later mount reuses it).
 
-## 6. The ISO launcher (`tools/iso-launcher`)
+## 6. Mounting from a title: `MountISO`
+`tools/iso-launcher/mount_iso.h` is a header-only helper for nxdk titles such as dashboards. `MountISO(path)` takes a
+drive path (C E F G X Y Z) or a `\Device\` path to an `.iso` or `.cci` image and builds the request itself: drive
+letter to partition, the second part of a `name.1.iso` split image, CCI from the extension. The caller then
+launches `\Device\CdRom0\default.xbe`. `UnmountISO()` makes `\Device\CdRom0` the drive again. Parts are pieces of
+one disc image (FATX files stop at 4 GB), not the discs of a multi-disc title.
+
+## 7. The ISO launcher (`tools/iso-launcher`)
 An nxdk title, built with `make -C kernel iso-launcher`.
 1. **Which image.** The first line of `D:\iso.txt` names it: an image, a folder holding one, or a `\Device\` path.
    Drive letters follow the title launcher (C E X Y Z, F G). Without `iso.txt`, the launcher uses the image in its
@@ -87,7 +94,7 @@ An nxdk title, built with `make -C kernel iso-launcher`.
 When something is missing, the launcher stays on screen and says why. For a path that does not exist, it lists the
 nearest folder above it that does.
 
-## 7. Tests
+## 8. Tests
 - `make test-iso` boots the release build in xemu with a disc that holds the launcher. The image, of the kernel test
   title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in four forms: one `.iso`; a `.1.iso` + `.2.iso`
   pair; a `.cci` named through its folder; and a >4 GB image whose `media\a.txt` lies beyond 4 GB. The title must
