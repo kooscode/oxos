@@ -1,15 +1,15 @@
-// ISO launcher (nxdk, open source): mounts an Xbox disc image from the hard disk as the console's disc and starts the
-// game on it, the way a disc in the drive starts (spec/oxos-internal/16-virtual-discs.md).
+// ISO launcher (nxdk, open source): mounts an image of an Xbox disc (made from your own disc) from the hard disk as
+// the console's disc and starts the title on it, the way a disc in the drive starts (spec/oxos-internal/16-virtual-discs.md).
 //
 // Which image:
-//   - D:\iso.txt, one line: an image (F:\games\Halo 2.iso), a folder holding one (F:\games\Halo 2), or a \Device\...
+//   - D:\iso.txt, one line: an image (F:\titles\Halo 2.iso), a folder holding one (F:\titles\Halo 2), or a \Device\...
 //     path. "none" unmounts the image and starts the dashboard.
 //   - Without iso.txt: the image in the launcher's own folder, so a copy of the launcher next to an image starts it.
 // Images: XISO or a full disc dump (.iso), CCI (.cci), either one whole or split in two (name.1.iso + name.2.iso).
 //
 // The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then
 // \Device\CdRom0\default.xbe is launched through the launch data page and a quick reboot; the mount stays for the
-// game's own reboots until the console is switched off (or the disc tray is opened).
+// title's own reboots until the console is switched off (or the disc tray is opened).
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <hal/xbox.h>
@@ -100,7 +100,7 @@ std::size_t ReadLine(const char *file, char *text, std::size_t capacity) {
     return line.size();
 }
 
-// A drive path (F:\games\x.iso) or a \Device\ path as a \Device\ path; false for an unknown drive.
+// A drive path (F:\titles\x.iso) or a \Device\ path as a \Device\ path; false for an unknown drive.
 bool DevicePath(const char *in, char *out) {
     if (!std::strncmp(in, "\\Device\\", 8)) {
         std::snprintf(out, PATH, "%s", in);

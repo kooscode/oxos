@@ -47,8 +47,8 @@ Memory units come last (§9). Out of scope: changing what titles do.
   | `/F` | Partition6 | F: | games and apps: the rest of the disk (§2.1) |
   | `/OXOS` | none | none | kernel files (settings) |
 
-  Folder names are matched case-insensitively. A user can copy a game folder to `/F/Games/Halo` from a PC and
-  launch it from a dashboard as `F:\Games\Halo\default.xbe`.
+  Folder names are matched case-insensitively. A user can copy a title's folder to `/F/Titles/Halo` from a PC and
+  launch it from a dashboard as `F:\Titles\Halo\default.xbe`.
 
 ### 2.1 F: is the only extra drive (decided)
 On FATX disks the extended partitions (F:, G:, and Cerbios's J:–N:) exist because each partition has a size limit.

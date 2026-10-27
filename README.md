@@ -18,10 +18,11 @@ mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher): po
 Halo 2's intros and title screen!!*
 
 **Status:**
-- **Retail games on real hardware:** Halo 2 runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
+- **Retail titles on real hardware:** Halo 2 runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
   FATX, no 4 GB file limit), and the MS dashboard boots from the same disk.
 - Every function and variable the 4627 kernel exports is implemented.
-- In xemu it boots the dashboard, So far played **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2** and **Enter The Matrix**
+- In xemu it boots the dashboard and runs retail titles: so far **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2**
+  and **Enter The Matrix**
 - The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
 - **Boot chain:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, with full glitch
   support (the X-code overflow trick): no Microsoft key or boot-ROM dump needed.
@@ -37,9 +38,10 @@ Halo 2's intros and title screen!!*
 - **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
   composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
   programmed from their register tables; checked in xemu on all three of its encoder models.
-- **Games from disc images:** XISO, full dumps and CCI images on the hard disk (whole or in two parts, and over
-  4 GB on exFAT) play as if they were in the drive. The [ISO launcher](tools/iso-launcher) mounts one and starts
-  it, with the same device interface as Cerbios. Halo 2 runs this way on a 1.4 console from an exFAT SSD
+- **Titles from images of your own discs:** an XISO, full dump or CCI image made from a disc you own, on the hard
+  disk (whole or in two parts, and over 4 GB on exFAT), runs as if the disc were in the drive. The
+  [ISO launcher](tools/iso-launcher) mounts one and starts it, with the same device interface as Cerbios. Halo 2
+  runs this way on a 1.4 console from an exFAT SSD
   ([`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md)).
 - **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
   from a 500 GB exFAT SSD, and runs Halo 2 there from a mounted XISO, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
@@ -55,7 +57,7 @@ Free, Legal and Open Source!!
    *MCPX Boot ROM File* empty.
 4. Set the hard disk to the free [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk image
    (`xbox_hdd.qcow2` from its latest release; MIT-licensed, with an open dashboard), or your own Xbox disk image.
-5. Start the machine: the OXOS splash fades in and the dashboard starts. Load your own game discs (XISO) from
+5. Start the machine: the OXOS splash fades in and the dashboard starts. Load images of your own discs (XISO) from
    xemu's *Machine* menu.
 
 The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far: the dashboard, and Halo 2 from an XISO (see Status).
@@ -66,7 +68,7 @@ checked in xemu and on a 1.4 console (a 500 GB SSD).
 1. Partition the disk with GPT (or MBR) and one exFAT partition starting at 1 MiB or later (the default on every
    PC). OXOS keeps the Xbox's reserved sectors (refurb record, cache database) in the gap before the partition.
 2. Copy the dashboard's files into a folder `/C` at the root of the volume, and saves (`TDATA`, `UDATA`) into `/E`.
-   The other folders (`/X`, `/Y`, `/Z` for game caches, `/F` for games and apps, `/OXOS`) are created when first
+   The other folders (`/X`, `/Y`, `/Z` for title caches, `/F` for titles and apps, `/OXOS`) are created when first
    used. Folder names are not case-sensitive.
 3. Attach the disk as the console's hard disk. In xemu, a small qcow2 overlay on the raw disk keeps the disk itself
    untouched: `qemu-img create -f qcow2 -F raw -b /dev/sdX overlay.qcow2`, then use `overlay.qcow2` as the hard disk
@@ -75,14 +77,17 @@ checked in xemu and on a 1.4 console (a 500 GB SSD).
 `tests/exfat.py --from-fatx SRC.qcow2 OUT.qcow2` builds such a disk image from an existing Xbox disk image. The
 design is in [`spec/oxos-internal/05-exfat-storage-spec.md`](spec/oxos-internal/05-exfat-storage-spec.md).
 
-## Playing games from disc images
-1. Copy the images to the hard disk, e.g. `F:\games\` (`/F/games` on an exFAT disk). XISO, full disc dumps and
+## Running titles from images of your own discs
+OXOS can run a title from an image of a disc you own, so the disc itself can stay on the shelf (and consoles without a
+working DVD drive can still run it). OXOS includes no titles; make the images from your own discs.
+
+1. Copy the images to the hard disk, e.g. `F:\titles\` (`/F/titles` on an exFAT disk). XISO, full disc dumps and
    `.cci` work, whole or split in two (`name.1.iso` + `name.2.iso`; on FATX images must be split below 4 GB). Keep
    names to 42 characters or fewer.
 2. Build the ISO launcher (`make -C kernel iso-launcher`, output `tools/iso-launcher/bin/default.xbe`). Either put a
-   copy next to each image, or put it anywhere with an `iso.txt` naming the image (`F:\games\Halo 2.iso`).
-3. Start the launcher from the dashboard. It mounts the image as the console's disc and the game starts. The image
-   stays mounted through the game's own restarts until the console is switched off; an `iso.txt` of `none`
+   copy next to each image, or put it anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
+3. Start the launcher from the dashboard. It mounts the image as the console's disc and the title starts. The image
+   stays mounted through the title's own restarts until the console is switched off; an `iso.txt` of `none`
    unmounts it.
 
 Details: [`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md).
@@ -131,13 +136,13 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
     (`tools/netlog.py`), even when no serial port is wired.
   - **Eyes on the screen.** The console's video goes through an HDMI adapter into a USB capture card. Screenshots and
     videos of the real screen are taken with `ffmpeg`, so the agent can check what the console shows (the splash,
-    the dashboard, a game's title screen). The serial log and the frames are matched by their timestamps.
+    the dashboard, a title's start screen). The serial log and the frames are matched by their timestamps.
   - **One iteration:** build (`make -C kernel BUILD=... SERIAL=1`) → `netboot.py` serves it → `console.py on` → read
     the serial log, POST codes and capture frames → `console.py off`. `bootrun.py` repeats a boot N times and
     classifies each one (PASS / FREEZE / NOBOOT), which found the layout-dependent boot freeze that only showed on
     hardware (`spec/oxos-internal/13-flash-mapping.md`).
   - **Results so far:** the boot freezes on the 1.4 console were found and fixed this way, along with the CPU
-    set-up, interrupt start-up and NV2A pad calibration (specs 13–15). So was the first retail game on real
+    set-up, interrupt start-up and NV2A pad calibration (specs 13–15). So was the first retail title on real
     hardware: Halo 2 from an XISO on an exFAT SSD.
 
 ### Setting up
@@ -177,8 +182,8 @@ Nothing else needs fetching by hand. On first use the build fetches into `third_
   Corporation, all rights reserved; redistribution in binary form without modification is permitted; provided
   "as is", without warranty.
 
-**4. Optionally, add games and your own files.**
-- Your game discs (XISO) go in `xiso/`.
+**4. Optionally, add titles and your own files.**
+- Images of your own discs (XISO) go in `xiso/`.
 - `xbox-files/` holds your own copyrighted files, which are never committed: for example a disk with the stock
   Microsoft dashboard (its Settings set video modes, clock and language) as `xbox-files/hdd/msdash.qcow2`,
   which `make run` then prefers over the default disk.
@@ -191,7 +196,7 @@ are git-ignored.
 cd kernel
 make bios      # kernel/build/selftest/bios.bin, the open BIOS image
 make test      # boots it in xemu and checks every milestone (a few minutes; xemu windows open and close)
-make run       # an interactive xemu window: the dashboard, or a game with ISO=../xiso/game.iso
+make run       # an interactive xemu window: the dashboard, or a title with ISO=../xiso/title.iso
 ```
 
 **Optional extras:**
@@ -211,7 +216,7 @@ make run       # an interactive xemu window: the dashboard, or a game with ISO=.
 cd kernel
 make bios                        # build/selftest/bios.bin, the open BIOS image
 make test                        # boot it in xemu and check every milestone
-make run ISO=../xiso/game.iso    # play: the release BIOS in an interactive xemu window
+make run ISO=../xiso/title.iso   # run a title: the release BIOS in an interactive xemu window
 make test-mcpx MCPX_ROM=...      # optional: the dashboard again, through a real MCPX boot ROM
 make run-stock ISO=...           # optional: your original BIOS, for comparison
 make run-trace-basic ISO=...     # optional: a trace build, for troubleshooting (debug serial output)
@@ -225,12 +230,12 @@ pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard 
 hard-disk copy and EEPROM in `xemu-state/oxos-<instance>/`: `oxos-msdash`, `oxos-xemu` for the default disk, or
 `INSTANCE=name` for any other. Saves and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run-stock` uses
 `xemu-state/stock-<instance>/`).
-It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; games that
-support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each game sends). Change that
+It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; titles that
+support widescreen show 16:9 and the others 4:3 (xemu follows the widescreen signal each title sends). Change that
 with `WIDE=0`, `ASPECT=16x9` (force xemu's aspect: auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1`
-(full screen). With HD modes enabled in the dashboard, games run in 480p, 720p or 1080i (spec 17): 720p and 1080i
-always show at 16:9, while 480p follows the game's own widescreen signal as on the original kernel, so a widescreen
-game that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`
+(full screen). With HD modes enabled in the dashboard, titles run in 480p, 720p or 1080i (spec 17): 720p and 1080i
+always show at 16:9, while 480p follows the title's own widescreen signal as on the original kernel, so a widescreen
+title that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`
 (`make run ISO=../xiso/halo2-xiso.iso ASPECT=16x9`). Enter the Matrix in 720p or 1080i crashes xemu at render scale
 2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
 
@@ -280,7 +285,7 @@ serial port) is not implemented yet.
 ## About the BIOS image you build
 `make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0, and
 no Microsoft code. The one Microsoft-derived data in it is the video encoder and NV2A memory pad calibration tables, functional hardware
-constants ([`dmca-compliance.md`](dmca-compliance.md) §5). One known gap: there is no certificate key. Games therefore derive
+constants ([`dmca-compliance.md`](dmca-compliance.md) §5). One known gap: there is no certificate key. Titles therefore derive
 different save-signature and System Link keys than a stock console does: saves made on a stock console do not
 verify under OXOS, and System Link with stock consoles does not work. Saves made under OXOS work among themselves.
 
@@ -288,7 +293,7 @@ verify under OXOS, and System Link with stock consoles does not work. Saves made
 Microsoft's 2BL and keys: do not distribute that one.
 
 ## Next steps
-- **Real hardware:** more consoles and revisions (1.0-1.3 Conexant, 1.6), component HD through HDMI adapters, games;
+- **Real hardware:** more consoles and revisions (1.0-1.3 Conexant, 1.6), component HD through HDMI adapters, more titles;
   the 1.6 pad calibration (rows from the EEPROM) is not implemented, and the 1.6 image values (`MCPX16=1`) are
   untested. One release-build boot in five on the 1.4 console showed no video (undiagnosed).
 - **exFAT:** saving the cache partitions' format settings on the disk (`/OXOS/partitions.ini`), a compatibility pass
@@ -306,5 +311,6 @@ in `third_party/xemu-dashboard/LICENSE`) as the default disk; `tests/controller-
 
 ## Legal
 This is an independent project, not affiliated with or endorsed by Microsoft. "Xbox" is a trademark of
-Microsoft Corporation. Use it with game discs you own.
+Microsoft Corporation. OXOS includes no titles. Use it only with software you own: disc images must be made from
+your own discs.
 How OXOS was developed, and the legal basis for it, is documented in [`dmca-compliance.md`](dmca-compliance.md).

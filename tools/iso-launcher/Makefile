@@ -1,4 +1,4 @@
-# ISO launcher (nxdk): mounts the disc image named in D:\iso.txt (or the one next to it) and starts its game
+# ISO launcher (nxdk): mounts the disc image named in D:\iso.txt (or the one next to it) and starts its title
 # (spec/oxos-internal/16-virtual-discs.md). Built with nxdk (../../third_party/nxdk).
 XBE_TITLE = OXOS\ ISO\ launcher
 SRCS = $(CURDIR)/iso_launcher.cpp
