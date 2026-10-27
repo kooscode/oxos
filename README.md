@@ -16,6 +16,11 @@ pad calibration tables (functional hardware constants). The method and its legal
 *HDMI capture of OXOS running **Halo 2 on a real 1.4 Xbox**, from a 4.7 GB XISO on a 500 GB exFAT-formatted SSD,
 mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher)!!*
 
+https://github.com/user-attachments/assets/b83a2e0a-5928-423e-a473-f38f3930c434
+
+*The whole boot on the same console, captured over HDMI: power on, the OXOS splash, the ISO launcher mounting Halo 2
+from the exFAT SSD, then Halo 2's intros and title screen.*
+
 **Status:**
 - **Retail games on real hardware:** Halo 2 runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
   FATX, no 4 GB file limit), and the MS dashboard boots from the same disk.
