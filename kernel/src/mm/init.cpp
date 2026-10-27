@@ -150,6 +150,36 @@ void MiFreeContiguousPage(ULONG pfn) {
     KfLowerIrql(old);
 }
 
+// --- Boot-only pages (spec/oxos-internal/18-boot-memory.md): the image's last pages, holding its discardable sections
+// (boot-only code and data, and the tables of every video encoder). MmFreeBootPages frees them before the first
+// title starts; a quick reboot re-enters this image with them still free (MmInitSystem counts them as free memory,
+// re-adopting any persisted allocation there).
+constexpr ULONG IMAGE_SCN_MEM_DISCARDABLE = 0x02000000;
+static ULONG MiBootFirstPfn, MiBootEndPfn;
+XK_PERSIST static ULONG MiBootPagesFreed[2]; // bit n: page MiBootFirstPfn + n has been freed
+static bool MiBootPageFreed(ULONG pfn) {
+    ULONG n = pfn - MiBootFirstPfn;
+    return pfn >= MiBootFirstPfn && n < 64 && (MiBootPagesFreed[n / 32] >> (n % 32) & 1);
+}
+
+ULONG MmFreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd) {
+    if (MiBootPagesFreed[0] | MiBootPagesFreed[1])
+        return 0;
+    ULONG freed = 0;
+    for (ULONG pfn = MiBootFirstPfn; pfn < MiBootEndPfn && pfn - MiBootFirstPfn < 64; pfn++) {
+        ULONG_PTR va = MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT);
+        if (va < KeepEnd && va + PAGE_SIZE > KeepStart)
+            continue;
+        ULONG n = pfn - MiBootFirstPfn;
+        MiBootPagesFreed[n / 32] |= 1u << (n % 32);
+        MiFreeContiguousPage(pfn);
+        freed++;
+    }
+    XK_SERIAL("mm: %lu boot-only pages freed (pages %#lx-%#lx; kept %08lx-%08lx)\n", freed, MiBootFirstPfn,
+              MiBootEndPfn - 1, KeepStart, KeepEnd);
+    return freed;
+}
+
 // --- Moving a page that is in use (for a contiguous request). Its mapping is found from the busy entry: page
 // tables through the page directory, title pages through the title page tables, the rest through the system PTE
 // range. The copy and the switch run with interrupts off, so the page may be the current stack.
@@ -503,13 +533,26 @@ void MmInitSystem(bool QuickReboot) {
     ULONG textEnd = *(ULONG *)(sections + 12) + *(ULONG *)(sections + 8); // VA + VirtualSize of .text
     ULONG imageEndPfn = (0x10000 + sizeOfImage + PAGE_SIZE - 1) >> PAGE_SHIFT;
     ULONG textEndPfn = (0x10000 + (textEnd & ~(PAGE_SIZE - 1))) >> PAGE_SHIFT;
+    // The boot-only pages (MmFreeBootPages): from the first page that holds only discardable sections (the linker
+    // places those last) to the end of the image. A cold boot starts with all of them in use.
+    ULONG discardVa = sizeOfImage;
+    for (USHORT i = 0, n = *(USHORT *)(image + lfanew + 6); i < n; i++) {
+        UCHAR *h = sections + 40 * i;
+        if ((*(ULONG *)(h + 36) & IMAGE_SCN_MEM_DISCARDABLE) && *(ULONG *)(h + 12) < discardVa)
+            discardVa = *(ULONG *)(h + 12);
+    }
+    MiBootFirstPfn = (0x10000 + discardVa + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    MiBootEndPfn = imageEndPfn > MiBootFirstPfn ? imageEndPfn : MiBootFirstPfn;
+    if (!QuickReboot)
+        MiBootPagesFreed[0] = MiBootPagesFreed[1] = 0;
 
     // 1. The page database (still reachable through the 2BL large pages). Pages 1-14 (below the page directory)
     //    and those between the image and the GPU memory are allocatable; a quick reboot re-adopts persisted
     //    allocations (PTE bit 10) there.
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
     auto allocatable = [&](ULONG pfn) {
-        return ((pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN)) &&
+        return ((pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN) ||
+                MiBootPageFreed(pfn)) &&
                !MiIsNetbootTitlePage(pfn);
     };
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own

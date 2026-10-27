@@ -320,7 +320,9 @@ static void NTAPI ApcControllerThread(PVOID) {
     for (auto &item : QueueItems)
         KeInsertQueue(&TestQueue, &item);
     Sleep(20);
-    KQUEUE emptyQueue;
+    // Static: KeRemoveQueue leaves this thread associated with the queue (as NT does) until the thread ends, and the
+    // waits below and the thread's exit still update it (a stack queue would be overwritten by then).
+    static KQUEUE emptyQueue;
     KeInitializeQueue(&emptyQueue, 1);
     LARGE_INTEGER t;
     t.QuadPart = -10 * 10000;

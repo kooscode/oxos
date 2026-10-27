@@ -47,7 +47,9 @@ TRACE_IMPORTS ?= 0
 # them from the source. The BIOS packs the kernel as usual; xboxkrnl.elf (the same link with the debug info kept,
 # converted to ELF, which gdb reads better than PE) is the symbol file for gdb.
 DEBUG     ?= 0
-OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-O2 -g0)
+# The kernel is built for size (-Oz): its code stays resident, in memory titles count on (spec/oxos-internal/18). Code
+# where speed shows uses -O2 (FAST_SRCS below).
+OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-Oz -g0)
 # Debug serial port (spec/oxos-internal/03-debug-serial.md): on in the self-test and trace builds, off in release builds.
 # NETLOG=1: the serial log also goes out as UDP broadcasts (spec/oxos-internal/03-debug-serial.md §7; tools/netlog.py)
 # On by default in trace builds (TRACE_IMPORTS=1/2): on a console the network is their only output. NETLOG_IP is the
@@ -87,6 +89,7 @@ CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exce
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
+           /SECTION:.xka,D /SECTION:.xkb,D \
            /Brepro /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and
@@ -98,11 +101,28 @@ OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj)
 
 all: $(BUILD)/xboxkrnl.exe
 
+# Boot-only code (spec/oxos-internal/18-boot-memory.md): these files may call one another's boot-only functions.
+BOOT_OBJS := splash.obj,png.obj,jingle.obj,bootsound.obj
+# ... and the boot-only functions kept code calls during a cold boot, before the pages are freed.
+BOOT_ENTRIES := HalpStartSplash
+# The quick-reboot copy of the initialised .data (src/arch/entry.S).
+KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
+
+# Per-file optimization (not in DEBUG builds): -O2 for the hashes and ciphers (XBE sections, saves), memcpy and memset,
+# the virtual-disc decompressor (it runs for every sector a title reads from a CCI) and the boot-only code (the splash
+# and the jingle have to keep up with the clock; their pages are freed before the title starts, so their size costs
+# nothing then).
+FAST_SRCS  := src/xc/crypto.cpp src/rtl/memory.cpp src/vd/%.cpp src/hal/png.cpp src/hal/splash.cpp src/hal/jingle.cpp \
+              src/hal/bootsound.cpp
+ifneq ($(DEBUG),1)
+$(patsubst src/%.cpp,$(BUILD)/%.obj,$(FAST_SRCS)): FILE_OPT := -O2
+endif
+
 # Each object also depends on every header it includes (the compiler writes the list; -MP keeps a removed header
 # from breaking the build), including headers next to the sources such as src/fatx/fatx.h.
 $(BUILD)/%.obj: src/%.cpp $(wildcard include/xk/*.h)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
 -include $(OBJS:.obj=.d)
 
 $(BUILD)/%.obj: src/%.S
@@ -125,6 +145,8 @@ else
 $(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
 endif
+	python3 -I $(ROOT)/tools/check_kernel_layout.py --exe $@ --map $(BUILD)/xboxkrnl.map --boot-objs $(BOOT_OBJS) \
+	    --boot-entries $(BOOT_ENTRIES) --data-copy $(KI_DATA_COPY_SIZE) $(OBJS) || { rm -f $@; exit 1; }
 
 # Kernel test title (tests/kernel-test-title): a minimal freestanding "game" the boot tests run from a disc to check
 # the title loader and the kernel functions titles rely on. PE at 0x10000 -> XBE.

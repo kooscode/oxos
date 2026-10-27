@@ -46,5 +46,7 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
 ## 3. Memory
 - The launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the scanout on
   the screen buffer, so the title starts with no splash pages held, as on the reference (stock spec 17 §6).
+- The splash's code and its PNG decoder are boot-only memory, freed at the same point
+  (spec/oxos-internal/18-boot-memory.md).
 - Until 2026-10-17 the screen buffer was kept as the persisted display (`AvSetSavedDataAddress`), which held 301
   pages (1.2 MB) at the title's entry point that the reference does not.

@@ -49,6 +49,9 @@ void MiFreePage(ULONG pfn);
 bool MiAllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits,
                                ULONG *firstPfn);
 void MiFreeContiguousPage(ULONG pfn);
+// Frees the boot-only pages (the image's discardable sections) except those overlapping [KeepStart, KeepEnd), once;
+// quick reboots keep them free. Returns the number of pages freed.
+ULONG MmFreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd);
 
 // System PTE range 0xD0000000-0xEFFFFFFF
 PVOID MiReserveSystemPtes(ULONG count);

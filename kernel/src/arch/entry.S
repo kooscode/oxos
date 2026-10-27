@@ -4,7 +4,7 @@
 // The 2BL's stack lives in memory we are about to wipe, so switch to our own stack first.
 
 #define BOOT_STACK_SIZE 0x3000
-#define KI_DATA_COPY_SIZE 0x1000
+#define KI_DATA_COPY_SIZE 0x600 // the initialised .data (tools/check_kernel_layout.py checks that it fits)
 
     .text
     .globl _KernelEntry

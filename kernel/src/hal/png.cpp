@@ -2,6 +2,10 @@
 // (tools/mkbios.py writes a 256-colour palette image). Inflate is shared with the open-image 2BL (xk/inflate.h).
 #include <xk/arch.h>
 
+// Boot-only code and tables (the splash decodes its picture once), the inflater's included: freed before the first
+// title starts (spec/oxos-internal/18).
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
 #include <xk/inflate.h>
 
 namespace {

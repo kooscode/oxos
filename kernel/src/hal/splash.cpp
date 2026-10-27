@@ -10,6 +10,10 @@
 
 #include "jingle.h"
 
+// The splash runs only during a cold boot: its code is boot-only (freed before the first title starts, spec/oxos-internal/
+// 18-boot-memory.md), except HalpEndSplash, which every title start calls, and the network-log builds' on-screen log.
+#pragma code_seg(".xkb")
+
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
@@ -215,6 +219,7 @@ static void NTAPI HalpSplashThread(PVOID) {
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
 
+#pragma code_seg()
 #if XK_NETLOG
 // On-screen log (network-log builds, spec/oxos-internal/03 §10): once the splash has faded in, every log line is also
 // drawn into the splash's framebuffer, 16 rows at the bottom, the newest marked '>'. A console that freezes keeps
@@ -300,6 +305,7 @@ void HalpScreenLog(const char *Text, ULONG Length) {
     }
 }
 #endif
+#pragma code_seg(".xkb")
 
 // Cold boot, with an AV pack connected.
 void HalpStartSplash() {
@@ -323,13 +329,27 @@ void HalpStartSplash() {
     HalpSplashThreadObject = KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
 }
 
+#pragma code_seg()
+
+// The boot-only pages, keeping the tables of the console's video encoder (once; quick reboots find them freed).
+void AvTablesInUse(ULONG_PTR *Start, ULONG_PTR *End);
+static void HalpFreeBootPages() {
+    ULONG_PTR start, end;
+    AvTablesInUse(&start, &end);
+    MmFreeBootPages(start, end);
+}
+
 // Before the title starts: wait for the splash and free its memory, but leave the scanout on its last frame. The
 // reference does the same with its boot animation (its framebuffer is in the INIT section, freed before the title
 // starts), so the title gets the whole budget; freed pages go to the end of the free lists, so the picture usually
 // stays up until the title sets its own display mode (spec/stock/09 §7).
 void HalpEndSplash() {
-    if (!HalpSplashScreen)
+    static bool ended; // network-log builds keep HalpSplashScreen
+    if (!HalpSplashScreen || ended) {
+        HalpFreeBootPages();
         return;
+    }
+    ended = true;
     KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
     if (HalpSplashThreadObject) { // until it has exited: the next switch back frees its stack
         KeWaitForSingleObject(HalpSplashThreadObject, Executive, KernelMode, FALSE, nullptr);
@@ -344,4 +364,5 @@ void HalpEndSplash() {
 #endif
     // Network-log builds keep the splash framebuffer for the on-screen log (it stays the scanout until the title
     // sets its own display mode).
+    HalpFreeBootPages(); // the splash and the jingle have ended: their code goes
 }

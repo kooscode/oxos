@@ -11,6 +11,11 @@
 //   - a stereo reverb (four damped comb filters and two all-pass filters per side).
 #include "jingle.h"
 
+#ifdef _WIN32 // the kernel: boot-only code, freed before the first title starts (spec/oxos-internal/18)
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
+#endif
+
 namespace jingle {
 namespace {
 
