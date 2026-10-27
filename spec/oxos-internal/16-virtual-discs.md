@@ -9,7 +9,9 @@ here, and the OXOS ISO launcher works on Cerbios. Code: `kernel/src/vd/vdisc.cpp
   §2.1): its first part is larger than 0x18310800 bytes and the 2048-byte sector at 0x18310000 starts and ends with
   `MICROSOFT*XBOX*MEDIA`. Every read is then offset by 0x18300000. OXOS also reports the game partition's size, not the
   file's.
-- **CCI** (LZ4-compressed blocks, format in spec/cerbios/07 §4).
+- **CCI** (LZ4-compressed blocks, format in spec/cerbios/07 §4). A split CCI is two whole CCI files, each with its
+  own header and index for its run of sectors; part 0 holds the first ones. `tools/mkcci` converts an `.iso` into
+  one or two parts and checks them against the input.
 - **One or two parts**, read as one image (part 0's sectors first). A FATX disk needs split images (files stop at
   4 GB); on exFAT an image may be one file of any size (§4).
 
@@ -96,8 +98,8 @@ nearest folder above it that does.
 
 ## 8. Tests
 - `make test-iso` boots the release build in xemu with a disc that holds the launcher. The image, of the kernel test
-  title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in four forms: one `.iso`; a `.1.iso` + `.2.iso`
-  pair; a `.cci` named through its folder; and a >4 GB image whose `media\a.txt` lies beyond 4 GB. The title must
+  title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in five forms: one `.iso`; a `.1.iso` + `.2.iso`
+  pair; a `.cci` named through its folder; a `.1.cci` + `.2.cci` pair; and a >4 GB image whose `media\a.txt` lies beyond 4 GB. The title must
   start from `\Device\CdRom0\default.xbe`, pass its checks, relaunch itself twice through quick reboots (the mount
   survives), and end in the dashboard. The mount must succeed with no failed image reads.
 - `tests/mkcci.py` writes CCI images (a greedy LZ4 compressor), and `tests/mkxiso.py` places `High` files beyond
