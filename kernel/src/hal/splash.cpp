@@ -8,6 +8,8 @@
 #include <xk/ob.h>
 #include <xk/rtl.h>
 
+#include "jingle.h"
+
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
@@ -15,17 +17,19 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
 XBAPI UCHAR HalBootSMCVideoMode;
 
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
-// ~1 s fade-in, running alongside the rest of boot; the picture then stays up until the title shows its own frame.
-constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40;
-// How long the faded-in splash stays before the first title (dashboard or game) starts: a cold boot shows it for a
-// few seconds, as the retail boot animation, also when the title is ready sooner. HDMI adapters and capture cards
-// take about 2 s to lock onto the boot display, so the hold starts after the fade.
-constexpr ULONG SPLASH_HOLD_MS = 4500;
+// The fade-in follows the clock from the jingle's start and reaches full intensity as the jingle's build-up lands on
+// its final chord (jingle::ClimaxMs), a frame about every 40 ms; the picture then stays up until the title shows its
+// own frame.
+constexpr ULONG SPLASH_FRAME_MS = 40;
+// How long the splash stays, from the start of the fade, before the first title (dashboard or game) starts: a cold
+// boot shows it for a few seconds, as the retail boot animation, also when the title is ready sooner.
+constexpr ULONG SPLASH_SHOWN_MS = 5500;
 
 static KEVENT HalpSplashDone;
 static PKTHREAD HalpSplashThreadObject; // waited for before the title starts, so its stack is freed by then
 static ULONG *HalpSplashScreen, *HalpSplashImage;
 volatile ULONG HalpSplashFrames; // frames shown (boot tests)
+volatile ULONG HalpSplashFadeMs, HalpSplashFullMs; // the fade's planned length, and when full intensity was drawn
 volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = flash image (boot tests)
 volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header 0x100+, HalpDecodePng step 1-9)
 
@@ -131,6 +135,10 @@ static ULONG HalpLoadFlashSplash(ULONG *img) {
     return status;
 }
 
+void HalpStartBootSound();
+void HalpBootSoundGo();
+void HalpEndBootSound();
+
 ULONG AvBootModeWord();
 void AvPrepareBootDisplay();
 void AvLoadBootGamma();
@@ -170,24 +178,34 @@ static void NTAPI HalpSplashThread(PVOID) {
             XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
         }
     }
-    for (ULONG f = 1; f <= SPLASH_FADE_FRAMES; f++) {
+    HalpBootSoundGo(); // the jingle starts with the fade-in
+    const ULONG fadeMs = jingle::ClimaxMs();
+    const ULONGLONG start = KeQueryInterruptTime(); // 100 ns units
+    auto elapsedMs = [&] { return (ULONG)((KeQueryInterruptTime() - start) / 10000); };
+    HalpSplashFadeMs = fadeMs;
+    for (;;) {
+        ULONG ms = elapsedMs(), level = ms >= fadeMs ? 256 : ms * 256 / fadeMs; // intensity, 256 = full
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
             ULONG p = HalpSplashImage[i];
             if (!p)
                 continue;
-            ULONG r = (p >> 16 & 0xFF) * f / SPLASH_FADE_FRAMES, g = (p >> 8 & 0xFF) * f / SPLASH_FADE_FRAMES,
-                  b = (p & 0xFF) * f / SPLASH_FADE_FRAMES;
+            ULONG r = (p >> 16 & 0xFF) * level >> 8, g = (p >> 8 & 0xFF) * level >> 8, b = (p & 0xFF) * level >> 8;
             HalpSplashScreen[i] = r << 16 | g << 8 | b;
         }
-        HalpSplashFrames = f;
+        HalpSplashFrames = HalpSplashFrames + 1;
+        if (level == 256) {
+            HalpSplashFullMs = ms;
+            break;
+        }
+        // The next frame in 40 ms, or at the full-intensity time if that comes first.
         LARGE_INTEGER t;
-        t.QuadPart = -10000LL * SPLASH_FRAME_MS;
+        t.QuadPart = -10000LL * (fadeMs - ms < SPLASH_FRAME_MS ? fadeMs - ms : SPLASH_FRAME_MS);
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     XK_SERIAL("splash: faded in\n");
-    {
+    if (ULONG ms = elapsedMs(); ms < SPLASH_SHOWN_MS) {
         LARGE_INTEGER t;
-        t.QuadPart = -10000LL * SPLASH_HOLD_MS;
+        t.QuadPart = -10000LL * (SPLASH_SHOWN_MS - ms);
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     XK_SERIAL("splash: shown\n");
@@ -301,6 +319,7 @@ void HalpStartSplash() {
         return;
     }
     KeResetEvent(&HalpSplashDone);
+    HalpStartBootSound(); // synthesizing before the splash thread needs it
     HalpSplashThreadObject = KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
 }
 
@@ -317,6 +336,7 @@ void HalpEndSplash() {
         ObfDereferenceObject(HalpSplashThreadObject);
         HalpSplashThreadObject = nullptr;
     }
+    HalpEndBootSound(); // the jingle has ended and the audio controller is stopped
 #if !XK_NETLOG
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);

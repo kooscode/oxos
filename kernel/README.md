@@ -175,6 +175,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      of 4 GB or more are readable (read-only). The ISO launcher (`../tools/iso-launcher`) mounts an image and starts it.
      ✅ `make test-iso` passes (plain, split, CCI, >4 GB); Halo 2 reaches its title screen from a 4.7 GB XISO on
      exFAT in xemu and on the 1.4 console.
+   - 23: **boot jingle** (`../spec/oxos-internal/17-boot-jingle.md`): an original six-second piece for cellos, bass and
+     drums, synthesized in integer arithmetic at boot (`src/hal/jingle.cpp`) and played through the AC'97
+     controller with the splash's fade-in (`src/hal/bootsound.cpp`). `../tools/jingle` renders it to a WAV file.
+     ✅ `make test-dash` checks that it plays to the end; heard on the 1.4 console through the HDMI capture card.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
