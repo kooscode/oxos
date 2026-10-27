@@ -583,12 +583,23 @@ def misc_checks(mon):
     }
 
 
-def dash_checks(mon):
+def dash_checks(mon, jingle_pcm=None):
+    if jingle_pcm:  # once synthesis has finished (the jingle is still playing): the whole buffer
+        for _ in range(200):
+            if mon.read("HalpBootSoundSynthMs"):
+                break
+            time.sleep(0.05)
+        r = mon.hmp(f"pmemsave {mon.read('HalpBootSoundBuffer'):#x} {mon.read('HalpBootSoundBytes'):#x} \"{jingle_pcm}\"")
+        print("  jingle samples saved:", jingle_pcm, r.strip() if isinstance(r, str) else r)
     for _ in range(60):
         if mon.read("XeTitleLaunched"):
             break
         time.sleep(0.25)
     time.sleep(4)
+    for _ in range(40):  # the jingle (and the splash) end a little after the dashboard has loaded
+        if mon.read("HalpBootSoundStatus") >= 3:
+            break
+        time.sleep(0.25)
     exc = mon.read("KiLastExceptionVector")
     t0 = mon.read("KeTickCount")
     time.sleep(0.5)
@@ -605,9 +616,18 @@ def dash_checks(mon):
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
-        "boot splash shown (all fade frames) before the dashboard": mon.read("HalpSplashFrames") == 24,
+        f"boot splash faded in before the dashboard, full intensity {mon.read('HalpSplashFullMs')} ms after the jingle's "
+        f"start, at its climax ({mon.read('HalpSplashFadeMs')} ms)":
+            mon.read("HalpSplashFrames") >= 10 and mon.read("HalpSplashFadeMs") > 0
+            and 0 <= mon.read("HalpSplashFullMs") - mon.read("HalpSplashFadeMs") < 100,
         "splash image read from flash bank 1 and decoded": mon.read("HalpSplashSource") == 2
             and mon.read("HalpSplashStatus") == 0,
+        f"boot jingle played to its last buffer through the AC'97 controller (status {mon.read('HalpBootSoundStatus'):#x}, "
+        f"buffer {mon.read('HalpBootSoundPosition')} at the end, the jingle's last {mon.read('HalpBootSoundLast')}, "
+        f"{mon.read('HalpBootSoundAhead')} ms synthesized ahead, {mon.read('HalpBootSoundUnderruns')} underruns, "
+        f"synthesis {mon.read('HalpBootSoundSynthMs') & 0x7FFFFFFF} ms)":
+            mon.read("HalpBootSoundStatus") == 3
+            and mon.read("HalpBootSoundPosition") >= mon.read("HalpBootSoundLast") > 0,
     }, "M5e": launch_reason_checks(mon)}
 
 
@@ -807,6 +827,8 @@ def main():
     ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
                     help="boot the ISO launcher (tools/iso-launcher) with an image of --title on an exFAT disk")
     ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
+    ap.add_argument("--jingle-pcm", help="--dash: save the boot jingle's synthesized samples (guest memory) to this "
+                    "file while it plays, to compare with tools/jingle's render")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), help="present this video encoder (xemu -machine "
                     "video-encoder=...) and check that the kernel finds and reports it")
     a = ap.parse_args()
@@ -854,7 +876,7 @@ def main():
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
         elif a.dash:
-            results = dash_checks(mon)
+            results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm))
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True)}
         elif a.iso_launch:
