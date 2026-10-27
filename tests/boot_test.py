@@ -477,7 +477,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
 # --- Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher on the disc mounts an image of the kernel
 # test title (with relaunch.txt) from F:\titles on an exFAT disk; the title then runs from the image, relaunches
 # itself (the mount survives the quick reboots) and ends in the dashboard.
-ISO_KINDS = ("plain", "split", "cci", "large")
+ISO_KINDS = ("plain", "split", "cci", "splitcci", "large")
 
 
 def iso_launch_setup(a, work, dvd, hdd_copy):
@@ -499,6 +499,14 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
         mkcci.write(bytes(img), cci)
         files = {f"{name}.cci": open(cci, "rb").read()}
         launch = f"F:\\titles\\{name}"  # a folder: the launcher picks the image in it
+    elif a.iso_kind == "splitcci":  # two CCI files, each for its half of the sectors
+        cut = (len(img) // 2) & ~0x7FF
+        files = {}
+        for i, half in ((1, img[:cut]), (2, img[cut:])):
+            cci = os.path.join(work, f"inner.{i}.cci")
+            mkcci.write(bytes(half), cci)
+            files[f"{name}.{i}.cci"] = open(cci, "rb").read()
+        launch = f"F:\\titles\\{name}.1.cci"
     else:
         files = {f"{name}.iso": img}
         launch = f"F:\\titles\\{name}.iso"

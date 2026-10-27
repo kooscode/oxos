@@ -43,3 +43,4 @@ tools/iso-launcher/*.exe
 tools/iso-launcher/*.pdb
 # Host unit-test build output
 tests/unit/build*/
+tools/mkcci/bin/
