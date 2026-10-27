@@ -35,7 +35,11 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
   `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header, 0x102 bad
   header, 0x103 out of memory, 1–10 decoder step) record what happened.
-- It fades in over 24 frames (~1 s) while boot continues; there is no fixed hold time.
+- It fades in over 24 frames (~1 s) while boot continues, then stays for 4.5 s more (`SPLASH_HOLD_MS`), as the
+  retail boot animation shows for a few seconds. The first title is loaded meanwhile but starts only after that.
+  Added 2026-10-27: a title delivered by netboot started 0.6 s after the fade. HDMI adapters and capture cards take
+  about 2 s to lock onto the boot display (measured on the 1.4 console), so the hold counts from the end of the fade,
+  leaving about 3.7 s of splash on an HDMI screen (about 6 s at the console). Quick reboots show no splash.
 
 ## 3. Memory
 - The launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the scanout on

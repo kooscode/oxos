@@ -422,6 +422,7 @@ static void NTAPI HalpSmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) {
     if (NT_SUCCESS(HalReadSMBusValue(SMC_ADDRESS, SMC_INTERRUPT_REASON, FALSE, &reason))) {
         HalpSmcLastReason = reason;
         HalpSmcEventCount = HalpSmcEventCount + 1;
+        XK_SERIAL("smc: event %#lx\n", reason);
         HalpSmcHandleEvents(reason);
     }
     KeSetEvent(&HalpSMBusLock, 0, FALSE);

@@ -17,6 +17,10 @@ XBAPI UCHAR HalBootSMCVideoMode;
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
 // ~1 s fade-in, running alongside the rest of boot; the picture then stays up until the title shows its own frame.
 constexpr ULONG SPLASH_FADE_FRAMES = 24, SPLASH_FRAME_MS = 40;
+// How long the faded-in splash stays before the first title (dashboard or game) starts: a cold boot shows it for a
+// few seconds, as the retail boot animation, also when the title is ready sooner. HDMI adapters and capture cards
+// take about 2 s to lock onto the boot display, so the hold starts after the fade.
+constexpr ULONG SPLASH_HOLD_MS = 4500;
 
 static KEVENT HalpSplashDone;
 static PKTHREAD HalpSplashThreadObject; // waited for before the title starts, so its stack is freed by then
@@ -181,6 +185,12 @@ static void NTAPI HalpSplashThread(PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     XK_SERIAL("splash: faded in\n");
+    {
+        LARGE_INTEGER t;
+        t.QuadPart = -10000LL * SPLASH_HOLD_MS;
+        KeDelayExecutionThread(KernelMode, FALSE, &t);
+    }
+    XK_SERIAL("splash: shown\n");
 #if XK_NETLOG
     HalpScreenLogOn = true;
 #endif
