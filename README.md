@@ -2,7 +2,7 @@
 
 A clean-room, ABI-compatible reimplementation of the original Xbox kernel (`xboxkrnl.exe` 1.0.4627.1) in C++,
 built on Linux with clang and lld, inside a **fully open 1 MB BIOS image**: no Microsoft code, keys or boot-ROM
-dump is needed to build or run it. It boots retail software in [xemu](https://xemu.app). Console revisions
+dump is needed to build or run it. It boots retail software in [xemu](https://xemu.app) and on a real console. Console revisions
 1.0–1.5 are the target; on 1.6 the video encoder is driven too, the rest of that revision is untested.
 
 **Clean-room:** OXOS contains no Microsoft source code, machine code, disassembly or decompiled code. The retail
@@ -11,11 +11,14 @@ The one kind of data taken from bios images readily available on the internet is
 pad calibration tables (functional hardware constants). The method and its legal basis are in 
 [`dmca-compliance.md`](dmca-compliance.md).
 
-![OXOS Running MS Dash!!](docs/dash-running.jpg)
+![OXOS running Halo 2 from an XISO on real hardware!!](docs/halo2-xiso-running.jpg)
 
-*HDMI Capture of OXOS running MS Dash on 1.4 XBOX with 500GB exFAT formatted SSD!!*
+*HDMI capture of OXOS running **Halo 2 on a real 1.4 Xbox**, from a 4.7 GB XISO on a 500 GB exFAT-formatted SSD,
+mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher)!!*
 
 **Status:**
+- **Retail games on real hardware:** Halo 2 runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
+  FATX, no 4 GB file limit), and the MS dashboard boots from the same disk.
 - Every function and variable the 4627 kernel exports is implemented.
 - In xemu it boots the dashboard, So far played **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2** and **Enter The Matrix**
 - The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
@@ -38,7 +41,7 @@ pad calibration tables (functional hardware constants). The method and its legal
   it, with the same device interface as Cerbios. Halo 2 runs this way on a 1.4 console from an exFAT SSD
   ([`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md)).
 - **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
-  from a 500 GB exFAT SSD, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
+  from a 500 GB exFAT SSD, and runs Halo 2 there from a mounted XISO, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
@@ -54,7 +57,7 @@ Free, Legal and Open Source!!
 5. Start the machine: the OXOS splash fades in and the dashboard starts. Load your own game discs (XISO) from
    xemu's *Machine* menu.
 
-The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far (see Status).
+The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far: the dashboard, and Halo 2 from an XISO (see Status).
 
 ## Using an exFAT disk
 OXOS also runs from a hard disk formatted as exFAT on a PC (Windows, macOS or Linux), with no Xbox tools. Experimental:
