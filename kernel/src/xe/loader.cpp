@@ -179,6 +179,8 @@ static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
     return status;
 }
 
+bool VdDvdImageMounted(); // vd/vdisc.cpp
+
 // Media of the launch device (spec/stock/05 §4.10): 1 hard disk, CD 0xC, DVD variants otherwise.
 static NTSTATUS XepMediaFlags(HANDLE file, ULONG *flags) {
     IO_STATUS_BLOCK iosb;
@@ -190,7 +192,7 @@ static NTSTATUS XepMediaFlags(HANDLE file, ULONG *flags) {
         *flags = 1;
         return STATUS_SUCCESS;
     }
-    if (XeTitleDiscAuthenticated) { // an authenticated Xbox game disc
+    if (XeTitleDiscAuthenticated || VdDvdImageMounted()) { // an authenticated Xbox game disc, or a disc image
         *flags = 2;
         return STATUS_SUCCESS;
     }
@@ -620,6 +622,8 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
 #if XK_NETLOG
     HalpNetLogReplay(); // the previous run's on-disk log (after a title had taken the NIC)
 #endif
+    void VdRestoreMounts(); // vd/vdisc.cpp: disc images mounted before a quick reboot
+    VdRestoreMounts();
     if (!KiQuickRebootFlag) {
         if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
             IdexFatalError(21);

@@ -169,6 +169,12 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      interrupts on at APC_LEVEL with the clock running from the memory manager on, and the 2BL's NV2A memory pad
      calibration exactly as Cerbios does it on 1.0-1.5 (`15-pad-calibration.md`, `../spec/stock/21-mcpx-bringup.md` §3).
      ✅ the dashboard boots on the console (serial, netlog and release builds).
+   - 22: **virtual discs** (`../spec/oxos-internal/16-virtual-discs.md`, Cerbios's interface in
+     `../spec/cerbios/07-virtual-discs.md`): XISO, full-dump and CCI images, one or two parts, mounted through
+     `\Device\CdRom1` and served as `\Device\CdRom0` (`src/vd/vdisc.cpp`). Mounts survive quick reboots. exFAT files
+     of 4 GB or more are readable (read-only). The ISO launcher (`../tools/iso-launcher`) mounts an image and starts it.
+     ✅ `make test-iso` passes (plain, split, CCI, >4 GB); Halo 2 reaches its title screen from a 4.7 GB XISO on
+     exFAT in xemu and on the 1.4 console.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

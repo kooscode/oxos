@@ -16,6 +16,7 @@ import exfat  # noqa: E402
 from fatx import Fatx  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
+import mkcci  # noqa: E402
 
 
 def map_symbols(path):
@@ -414,7 +415,8 @@ def dvd_checks(mon):
     }
 
 
-def title_checks(mon, title_map, relaunch=False):
+def title_checks(mon, title_map, relaunch=False, reboots=0):
+    # reboots: quick reboots before the title's first run (the ISO launcher's launch)
     if not title_map:
         return {"test title built": False}
     syms = map_symbols(title_map)
@@ -439,7 +441,7 @@ def title_checks(mon, title_map, relaunch=False):
     name, second = text(words[9:25]), text(words[28:44])
     checks = {
         "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
-            and mon.read("XeTitleLaunched") == (3 if relaunch else 1),
+            and mon.read("XeTitleLaunched") == (3 if relaunch or reboots else 1),
         "XeImageFileName": name == "\\Device\\CdRom0\\default.xbe",
         "kernel thunks resolved: KeTickCount (data) + sleep": words[2] == 1,
         "pool, disc file read, system thread from the title": words[3] == 1 and words[4] == 1 and words[5] == 1,
@@ -450,7 +452,7 @@ def title_checks(mon, title_map, relaunch=False):
     }
     if relaunch:
         for _ in range(80):
-            if mon.read("KiQuickRebootCount") == 2 and mon.read("XeTitleLaunched") == 2:
+            if mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("XeTitleLaunched") == 2:
                 break
             time.sleep(0.25)
         # What the kernel wrote to the launch page for the dashboard (a dashboard may consume the page itself, as
@@ -461,7 +463,7 @@ def title_checks(mon, title_map, relaunch=False):
         del checks["path symbolic link \\??\\T: -> Partition1\\XkTest"]  # keep.bin comes from the FATX self-test
         checks |= {
             "quick reboot (HalReturnToFirmware(2)): kernel re-entered (twice), LaunchDataPage re-adopted":
-                mon.read("KiQuickRebootCount") == 2 and mon.read("MmPersistedPages") >= 1,
+                mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("MmPersistedPages") >= 1,
             "LaunchDataPage launch of media;second.xbe, first run's results carried over": words[25] == 1
                 and second == "\\Device\\CdRom0\\media\\second.xbe",
             "persisted launch page contents (type, title id, flags, data)": words[27] == 1,
@@ -469,6 +471,62 @@ def title_checks(mon, title_map, relaunch=False):
         }
     else:
         checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
+    return checks
+
+
+# --- Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher on the disc mounts an image of the kernel
+# test title (with relaunch.txt) from F:\games on an exFAT disk; the title then runs from the image, relaunches
+# itself (the mount survives the quick reboots) and ends in the dashboard.
+ISO_KINDS = ("plain", "split", "cci", "large")
+
+
+def iso_launch_setup(a, work, dvd, hdd_copy):
+    xbe = open(a.title, "rb").read()
+    tree = dict(mkxiso.TREE, **{"default.xbe": xbe, "relaunch.txt": b"quick reboot"})
+    media = dict(tree["media"], **{"second.xbe": xbe})
+    if a.iso_kind == "large":  # the file the title reads lies beyond 4 GB in a > 4 GB image
+        media["a.txt"] = mkxiso.High(media["a.txt"])
+    tree["media"] = media
+    img = mkxiso.write_image(os.path.join(work, "inner.iso"), tree)
+    os.remove(os.path.join(work, "inner.iso"))
+    name = "Test Game"
+    if a.iso_kind == "split":
+        cut = (len(img) // 2) & ~0x7FF
+        files = {f"{name}.1.iso": bytes(img[:cut]), f"{name}.2.iso": bytes(img[cut:])}
+        launch = f"F:\\games\\{name}.1.iso"
+    elif a.iso_kind == "cci":
+        cci = os.path.join(work, "inner.cci")
+        mkcci.write(bytes(img), cci)
+        files = {f"{name}.cci": open(cci, "rb").read()}
+        launch = f"F:\\games\\{name}"  # a folder: the launcher picks the image in it
+    else:
+        files = {f"{name}.iso": img}
+        launch = f"F:\\games\\{name}.iso"
+    import fatx
+    src = Qcow2(a.hdd)
+    b = exfat.Builder(256 << 30, 16 << 10)
+
+    def copy(part, letter, first=None, prefix=""):
+        for n, attr, cl, sz, _ in part.listdir(first):
+            dest = f"/{letter}{prefix}/{n}"
+            if attr & 0x10:
+                b.add(dest, attrs=attr)
+                copy(part, letter, cl, f"{prefix}/{n}")
+            else:
+                b.add(dest, part.read_chain(cl, sz), attrs=attr)
+    for letter in ("C", "E"):
+        copy(fatx.Fatx(src, letter), letter)
+    folder = f"/F/games/{name}" if a.iso_kind == "cci" else "/F/games"
+    for n, data in files.items():
+        b.add(f"{folder}/{n}", data)
+    b.write(hdd_copy, src.read(0, 0x400 * 512))
+    mkxiso.write_image(dvd, {"default.xbe": open(a.iso_launch, "rb").read(), "iso.txt": launch.encode() + b"\r\n"})
+
+
+def iso_checks(mon, a):
+    checks = title_checks(mon, a.title_map, relaunch=True, reboots=1)
+    checks["image mounted by the launcher (VdLastMountStatus 0), read without errors"] = \
+        mon.read("VdLastMountStatus") == 0 and mon.read("VdReads") > 0 and mon.read("VdErrors") == 0
     return checks
 
 
@@ -738,6 +796,9 @@ def main():
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
+    ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
+                    help="boot the ISO launcher (tools/iso-launcher) with an image of --title on an exFAT disk")
+    ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), help="present this video encoder (xemu -machine "
                     "video-encoder=...) and check that the kernel finds and reports it")
     a = ap.parse_args()
@@ -747,12 +808,14 @@ def main():
     cfg = os.path.join(work, "xemu.toml")
     hdd_copy = os.path.join(work, "hdd.qcow2")
     dvd = os.path.join(work, "test.iso")
-    if not a.no_disc:
+    if a.iso_launch:
+        iso_launch_setup(a, work, dvd, hdd_copy)
+    elif not a.no_disc:
         if a.udf:
             mkudf.build(dvd)
         else:
             mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
-    if a.hdd:
+    if a.hdd and not a.iso_launch:
         shutil.copyfile(a.hdd, hdd_copy)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys.files]\n"
@@ -786,6 +849,8 @@ def main():
             results = dash_checks(mon)
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True)}
+        elif a.iso_launch:
+            results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:
             results = run_checks(mon, a.hdd, a.title_map)
         if a.serial:
@@ -808,7 +873,7 @@ def main():
         passed = fatal_code > 4 and bool(history & (1 << (fatal_code - 5)))
         print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
         ok &= passed
-    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder:
+    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder and not a.iso_launch:
         for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed

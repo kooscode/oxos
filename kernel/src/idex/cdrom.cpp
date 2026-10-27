@@ -164,7 +164,12 @@ static NTSTATUS NTAPI IdexCdRomCreateClose(PDEVICE_OBJECT, PIRP Irp) { return Id
 extern volatile ULONG KiIrqCounts[16]; // diagnostics (ke/irql.cpp)
 volatile ULONG IdexCdRomAbsentReason; // 0 = a DVD drive, else why none was found (IdexCdRomStart)
 
+bool VdServeCdRom(PIRP Irp, NTSTATUS *Status); // vd/vdisc.cpp: a mounted disc image stands in for the drive
+
 static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    NTSTATUS served;
+    if (VdServeCdRom(Irp, &served))
+        return served;
     if (IdexCdRomAbsentReason) // no drive: an empty tray
         return IdexCdRomComplete(Irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
@@ -187,6 +192,9 @@ static NTSTATUS NTAPI IdexCdRomRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 static NTSTATUS IdexCdRomAuthenticate();
 
 static NTSTATUS NTAPI IdexCdRomDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    NTSTATUS served;
+    if (VdServeCdRom(Irp, &served))
+        return served;
     if (IdexCdRomAbsentReason) // no drive: an empty tray
         return IdexCdRomComplete(Irp, STATUS_NO_MEDIA_IN_DEVICE, 0);
     switch (IoGetCurrentIrpStackLocation(Irp)->Parameters.DeviceIoControl.IoControlCode) {
@@ -292,34 +300,47 @@ static void IdexCdRomBuildSecuritySector(PUCHAR sector) {
     XcSHAFinal(sha, sector + 0x4CF);
 }
 
-// SCSI pass-through for the security commands on an emulating drive; false = send the command to the drive.
-static bool IdexCdRomEmulateSecurity(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got) {
-    bool sense = cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E;
-    bool select = cdb[0] == 0x55 && data && length >= 9 && (data[8] & 0x3F) == 0x3E;
-    bool read = IdexCdRomIsSecurityRead(cdb);
-    if (!(sense || select || read) || !IdexCdRomEmulatingSecurity())
-        return false;
+static bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length) {
+    return (cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E) ||                       // MODE SENSE, page 0x3E
+           (cdb[0] == 0x55 && data && length >= 9 && (data[8] & 0x3F) == 0x3E) || // MODE SELECT (a challenge)
+           IdexCdRomIsSecurityRead(cdb);
+}
+
+// The emulated answer to a security command (IdexCdRomIsSecurityCommand), without the drive. Disc images use it too
+// (vd/vdisc.cpp): the security sector comes back signed for the open key, as from an emulating drive.
+void IdexCdRomEmulatedSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got) {
     *status = STATUS_SUCCESS;
     *got = 0;
-    if (sense) {
+    if (cdb[0] == 0x5A) {
+        // Challenges done (10), Xbox disc (11), authenticated (12), disc id byte (13).
+        static const UCHAR page[28] = {0, 0x1A, 0, 0, 0, 0, 0, 0, 0x3E, 0x12, 1, 1, 1, 1};
+        *got = length < sizeof(page) ? length : sizeof(page);
+        if (data)
+            RtlCopyMemory(data, page, *got);
+    } else if (IdexCdRomIsSecurityRead(cdb)) {
+        if (!data || length < SECURITY_SECTOR_SIZE) {
+            *status = STATUS_INVALID_PARAMETER;
+            return;
+        }
+        IdexCdRomBuildSecuritySector(data);
+        IdexCdRomSignSecuritySector(data);
+        *got = SECURITY_SECTOR_SIZE;
+    } // MODE SELECT (a challenge): accepted
+}
+
+// SCSI pass-through for the security commands on an emulating drive; false = send the command to the drive.
+static bool IdexCdRomEmulateSecurity(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got) {
+    if (!IdexCdRomIsSecurityCommand(cdb, data, length) || !IdexCdRomEmulatingSecurity())
+        return false;
+    if (cdb[0] == 0x5A) {
         // The drive still gets the command, as with a drive that has the page: its answer is dropped. After a disc
         // change the first command reports it (xemu: "no media" once, then UNIT ATTENTION), and the mount's
         // authentication is the command that takes it, as on the reference.
         UCHAR scratch[28];
         ULONG ignored;
         IdexAtapiPio(cdb, scratch, sizeof(scratch), false, &ignored);
-        // Challenges done (10), Xbox disc (11), authenticated (12), disc id byte (13).
-        static const UCHAR page[28] = {0, 0x1A, 0, 0, 0, 0, 0, 0, 0x3E, 0x12, 1, 1, 1, 1};
-        *got = length < sizeof(page) ? length : sizeof(page);
-        RtlCopyMemory(data, page, *got);
-    } else if (read) {
-        if (!data || length < SECURITY_SECTOR_SIZE) {
-            *status = STATUS_INVALID_PARAMETER;
-            return true;
-        }
-        IdexCdRomBuildSecuritySector(data);
-        *got = SECURITY_SECTOR_SIZE;
-    } // MODE SELECT (a challenge): accepted
+    }
+    IdexCdRomEmulatedSecurityReply(cdb, data, length, status, got);
     return true;
 }
 

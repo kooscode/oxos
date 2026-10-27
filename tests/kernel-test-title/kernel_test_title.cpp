@@ -207,9 +207,10 @@ static void Relaunch(volatile RESULTS &r, const char *path) {
 // The title's entry point: runs each test in turn and records the result (see the list at the top of the file).
 extern "C" void __cdecl XkTitleEntry() {
     volatile RESULTS &r = XkTitleResults;
-    // A launch page means this is the relaunch test's second run.
+    // A launch page with this title's marker means this is the relaunch test's second run (a page from another
+    // launcher, such as tools/iso-launcher, is not).
     auto ldp = *(LAUNCH_DATA_PAGE **)XkThunks[I_LaunchDataPage];
-    if (ldp)
+    if (ldp && *(ULONG *)ldp->LaunchData == LaunchMarker)
         SecondRun(r, ldp);
 
     // Test 1: the loader started the title, and XeImageFileName holds the path it was loaded from.

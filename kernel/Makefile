@@ -458,6 +458,36 @@ run-xbe: xbe-disc
 run-trace-xbe: xbe-disc
 	$(MAKE) run-trace-full ISO=$(OUT)/run-xbe/launcher.iso STATE=$(XBE_STATE)
 
+# Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher (tools/iso-launcher, nxdk) mounts an image
+# from the hard disk as the console's disc and starts its game. make test-iso: the release build boots a disc with
+# the launcher; the image (the kernel test title, relaunch variant) is on an exFAT disk's F:\games, as one .iso, a
+# split .1.iso/.2.iso pair, a .cci and an image over 4 GB; the title runs from it, relaunches itself and ends in the
+# dashboard. make run-iso ISO='F:\games\Halo 2.iso' boots the launcher in xemu for an image on the run-xbe disk.
+ISO_LAUNCHER_DIR := $(ROOT)/tools/iso-launcher
+ISO_LAUNCHER_XBE := $(ISO_LAUNCHER_DIR)/bin/default.xbe
+ISO_KINDS ?= plain split cci large
+
+$(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
+iso-launcher: $(ISO_LAUNCHER_XBE)
+
+test-iso: $(ISO_LAUNCHER_XBE) $(TEST_TITLE).xbe $(HDD_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	set -e; for kind in $(ISO_KINDS); do \
+	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	        --title-map $(TEST_TITLE).map --iso-launch $(ISO_LAUNCHER_XBE) --iso-kind $$kind --boot-wait 1; done
+
+iso-disc: $(ISO_LAUNCHER_XBE) $(PLAY_FETCH)
+	@test -n '$(ISO)' || { printf '%s\n' "usage: make run-iso ISO='F:\\games\\Halo 2.iso' [STATE=...]"; exit 1; }
+	@test -f $(XBE_STATE)/hdd.qcow2 || { mkdir -p $(XBE_STATE) && \
+	    python3 -I $(ROOT)/tests/exfat.py --from-fatx $(PLAY_HDD) $(XBE_STATE)/hdd.qcow2 --size 256G --cluster 16K; }
+	@mkdir -p $(OUT)/run-iso
+	python3 -I $(ROOT)/tests/mkxiso.py $(OUT)/run-iso/launcher.iso --add default.xbe=$(ISO_LAUNCHER_XBE) --text 'iso.txt=$(ISO)'
+
+run-iso: iso-disc
+	$(MAKE) run ISO=$(OUT)/run-iso/launcher.iso STATE=$(XBE_STATE)
+
 # Memory test (tests/memory-test-title, an nxdk title): how much memory a title is given, as built (XBE flag
 # "limit to 64 MB") and with the flag cleared. MEMORY=128 for a 128 MB console; MEMORY_BIOS=... (with MCPX_ROM=...)
 # runs another BIOS instead of the release build, e.g. for comparison.
@@ -482,4 +512,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean
+.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean iso-launcher test-iso iso-disc run-iso

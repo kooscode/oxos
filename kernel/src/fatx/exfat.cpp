@@ -100,8 +100,9 @@ static NTSTATUS ExWriteSet(FATX_VOLUME *v, FATX_FCB *dir, ULONG Slot, EX_SET *Se
     return STATUS_SUCCESS;
 }
 
-// A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set) and a
-// size below 4 GB. Other files stay on the disk untouched and are invisible.
+// A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set). Files
+// of 4 GB or more (disc images) are visible but read-only (FileSizeHigh); directories must stay below 4 GB. Other
+// sets stay on the disk untouched and are invisible.
 static bool ExEntryFromSet(FATX_VOLUME *v, const EX_SET *s, FATX_ENTRY *Out) {
     const UCHAR *f = s->e[0], *st = s->e[1];
     ULONG nameLength = st[3];
@@ -109,7 +110,7 @@ static bool ExEntryFromSet(FATX_VOLUME *v, const EX_SET *s, FATX_ENTRY *Out) {
         return false;
     USHORT attributes = *(const USHORT *)(f + 4);
     ULONGLONG length = *(const ULONGLONG *)(st + 24);
-    if (length > 0xFFFFFFFFull)
+    if (length > 0xFFFFFFFFull && (attributes & FILE_ATTRIBUTE_DIRECTORY))
         return false;
     RtlZeroMemory(Out, sizeof(*Out));
     for (ULONG i = 0; i < nameLength; i++) {
@@ -129,6 +130,7 @@ static bool ExEntryFromSet(FATX_VOLUME *v, const EX_SET *s, FATX_ENTRY *Out) {
     Out->FileAttributes = (UCHAR)(attributes & 0x37);
     Out->FirstCluster = *(const ULONG *)(st + 20);
     Out->FileSize = isDir ? 0 : (ULONG)length;
+    Out->FileSizeHigh = isDir ? 0 : (ULONG)(length >> 32);
     Out->CreationTime = ExToFatxTime(*(const ULONG *)(f + 8));
     Out->LastWriteTime = ExToFatxTime(*(const ULONG *)(f + 12));
     Out->LastAccessTime = ExToFatxTime(*(const ULONG *)(f + 16));
@@ -408,7 +410,7 @@ NTSTATUS ExfatFlushFcb(FATX_VOLUME *v, FATX_FCB *f) {
     bool isDir = f->Flags & FCB_DIRECTORY;
     EX_SET set;
     ExBuildSet(&set, f->Name, f->NameLength, f->Attributes, f->CreationTime, f->LastWriteTime, f->LastAccessTime,
-               f->FirstCluster, isDir ? f->ExDirLength : f->FileSize, f->ExFlags & EXFAT_NOFATCHAIN);
+               f->FirstCluster, isDir ? f->ExDirLength : FatxFileSize64(f), f->ExFlags & EXFAT_NOFATCHAIN);
     NTSTATUS status = STATUS_SUCCESS;
     if (set.Count != f->ExEntries) { // the name needs another number of entries: move the set
         status = ExfatRemoveDirent(v, f);
