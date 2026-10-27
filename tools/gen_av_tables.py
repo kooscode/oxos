@@ -279,7 +279,8 @@ def generate():
             "static const UCHAR AvpXcMap[4][32] = {"] + [f"    {c_bytes(c)}," for c in cols] + ["};",
             "// One table entry: Count 32-bit writes to Register.. from AvpXcValues[Value..]; Variant 0xFF = always,",
             "// 0-3 = only for that variant, 0x10 | b = only when (variant & 1) == b; Late = rewritten by option 0x0E.",
-            "struct AVP_XC_WRITE { UCHAR Register, Variant, Count, Late; USHORT Value; };"]
+            "// Packed in 32 bits (the table stays resident on an Xcalibur console).",
+            "struct AVP_XC_WRITE { ULONG Register : 8, Variant : 8, Count : 5, Late : 1, Value : 10; };"]
     rows = [b for b in section(xc, "6.2")]
     values, writes, starts, timings = [], [], [], [None]
     index = {}
@@ -302,6 +303,7 @@ def generate():
             t["width"], t["height"] = pic[0], pic[1]
         timings.append(t)
     starts.append(len(writes))
+    assert all(r < 256 and c < 32 and i < 1024 for r, _, c, _, i in writes), "AVP_XC_WRITE field widths"
     out += [f"static const AVP_XC_WRITE AvpXcWrites[{len(writes)}] = {{"]
     out += ["    " + ", ".join(f"{{0x{r:02X}, 0x{v:02X}, {c}, {l}, {i}}}" for r, v, c, l, i in writes[k:k + 6]) + ","
             for k in range(0, len(writes), 6)] + ["};"]
@@ -325,6 +327,10 @@ def generate():
         out.append("    },")
     out += ["};"]
     out += nv_tables()
+    # Each encoder's tables go in their own section (AVP_CX, AVP_FO, AVP_XC in hal/av.cpp): the kernel frees the
+    # pages of the two the console does not have (spec/oxos-internal/18-boot-memory.md).
+    out = [re.sub(r"^static const (\w+) Avp(Cx|Fo|Xc)", lambda m: f"AVP_{m[2].upper()} static const {m[1]} Avp{m[2]}", l)
+           for l in out]
     return "\n".join(out) + "\n"
 
 

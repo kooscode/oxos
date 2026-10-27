@@ -174,7 +174,10 @@ pool pages fewer. Now: the splash is freed before the title starts and its threa
 gone (spec/oxos-internal/00-boot-splash.md §3); the launcher stack is 0x3000; SMC events run in a DPC (spec/stock/12); system PTE runs live in the PTEs
 (§8); the 16 cache pages are allocated at boot (spec/stock/16); the image is 45 resident pages again (title page-table
 use counts moved into the page database, bits 17–27 of a title page table's entry; the disk unlock buffer moved to
-the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5).
+the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5). Later features grew the
+image to 69 pages; since 2026-10-27 the kernel is built for size and frees its boot-only code and the tables of the
+encoders the console does not have before the first title starts: 43 resident pages (45 with an Xcalibur), see
+spec/oxos-internal/18-boot-memory.md.
 
 ## 8. Page database and allocation order (milestone 13)
 Evidence: `ev_e3d73cd7…` (0x800557f4 physical init), `ev_c2735117…` (0x8001dc6c MmAllocateContiguousMemoryEx,

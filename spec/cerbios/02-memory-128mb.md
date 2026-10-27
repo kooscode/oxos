@@ -64,7 +64,7 @@ The memory test title (`tests/memory-test-title`) asks MmQueryStatistics, asks f
 | BIOS, memory | XBE init flags | TotalPhysicalPages | Available at start | Title got | Pages above 64 MB |
 |---|---|---|---|---|---|
 | stock 4627, 64 MB | 0x5 or 0x1 | 16 384 | 15 917 | 62 MB | 0 |
-| OXOS, 64 or 128 MB | 0x5 or 0x1 | 16 384 | 15 916 | 62 MB | 0 |
+| OXOS, 64 or 128 MB | 0x5 or 0x1 | 16 384 | 15 919 | 62 MB | 0 |
 | Cerbios, 128 MB | 0x5 (limit to 64 MB) | 32 768 | 15 904 | 62 MB | 0 |
 | Cerbios, 128 MB | 0x1 | 32 768 | 32 242 | 125 MB | 16 111 (highest PA 0x7F2D000) |
 

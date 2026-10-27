@@ -34,6 +34,7 @@ docstring give the details).
 | `lzx.py` | The LZX compressor (and a small decoder for self-checks) for the kernel stream the 2BL unpacks at boot. |
 | `gen_def.py` | Generates the kernel's export `.def` file from `kernel/exports.tsv`: every function and variable at its ordinal (variables as data exports); the two debugger-only rows are kept in the table but not exported. |
 | `gen_av_tables.py` | Writes the video encoder tables (`kernel/src/hal/av_modes.inc`) from the encoder specs `spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md` and `20-xcalibur-encoder.md` (their register maps), with the NV2A timing of each SD row derived from the encoder's own settings (`spec/oxos-internal/02-display-modes.md` §1). `--out FILE` writes the tables; `--check FILE` fails if FILE is stale. |
+| `check_kernel_layout.py` | Runs after every kernel link: fails when kept code uses a symbol of the boot-only sections (`.xka`, `.xkb`; an inline function or constant the linker took from a boot-only file), or when the initialised `.data` outgrows its quick-reboot copy ([`spec/oxos-internal/18-boot-memory.md`](../spec/oxos-internal/18-boot-memory.md) §5). |
 | `mkxbe.py` | Converts a PE linked at 0x10000 into an XBE (headers, certificate, section digests); used for the kernel test title (`tests/kernel-test-title`) the boot tests run. |
 
 The tests' own helpers (`tests/boot_test.py`, `tests/mkxiso.py`, `tests/mkudf.py`, `tests/qcow2.py`, ...) live in

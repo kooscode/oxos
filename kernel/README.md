@@ -179,6 +179,12 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      drums, synthesized in integer arithmetic at boot (`src/hal/jingle.cpp`) and played through the AC'97
      controller with the splash's fade-in (`src/hal/bootsound.cpp`). `../tools/jingle` renders it to a WAV file.
      ✅ `make test-dash` checks that it plays to the end; heard on the 1.4 console through the HDMI capture card.
+   - 24: **boot-only memory** (`../spec/oxos-internal/18-boot-memory.md`): the kernel is built for size (`-Oz`, `-O2`
+     where speed shows); the splash, the PNG decoder, the jingle, the microcode updates and the tables of the two
+     video encoders the console does not have sit in discardable sections whose pages are freed before the first
+     title starts (`MmFreeBootPages`), and stay free across quick reboots. 43 resident kernel pages (stock 45).
+     ✅ `make test-dash`, `test-relaunch`, `test-encoders`, `test-memory` pass; titles start with more free memory
+     than on the stock kernel again (memory test title 15 919 vs 15 917, Half-Life 2 +1 to +3 pages).
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

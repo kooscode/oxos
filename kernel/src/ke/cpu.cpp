@@ -42,7 +42,8 @@ constexpr USHORT KGDT_R0_CODE = 0x08, KGDT_R0_DATA = 0x10, KGDT_TSS = 0x18, KGDT
                  KGDT_DF_TSS = 0x28, KGDT_NMI_TSS = 0x30;
 constexpr ULONG GDT_ENTRIES = 7;
 constexpr ULONG IDT_ENTRIES = 64;
-constexpr ULONG FAULT_STACK_SIZE = 0x1000;
+// Double-fault and NMI stacks: their handlers only record the fault in CMOS, except in network-log builds (a report).
+constexpr ULONG FAULT_STACK_SIZE = XK_NETLOG ? 0x1000 : 0x400;
 
 alignas(8) SegmentDescriptor KiGdt[GDT_ENTRIES];
 alignas(8) GateDescriptor KiIdt[IDT_ENTRIES];
@@ -221,20 +222,25 @@ static void KiInitializePat() {
 
 // CPU microcode (spec/stock/01 §2 step 3): the reference loads an update at start-up when cpuid(1) reports 0x686 or
 // 0x68A. Ours are Intel's published updates for those steppings on platform 4 (generated into ucode.inc by
-// tools/mkucode.py); one is loaded when both the signature and the platform (MSR 0x17 bits 50-52) match.
+// tools/mkucode.py); one is loaded when both the signature and the platform (MSR 0x17 bits 50-52) match. Only at a
+// cold boot: a quick reboot does not reset the processor, so the update stays loaded, and the table is boot-only
+// memory (spec/oxos-internal/18-boot-memory.md).
 #ifndef XK_HOST_TEST
-alignas(16) static const ULONG KiMicrocode[][512] = {
+alignas(16) XK_BOOT_DATA static const ULONG KiMicrocode[][512] = {
 #include "ucode.inc"
 };
 #endif
 ULONG KiMicrocodeRevision; // after the load (MSR 0x8B high half); 0 = none reported
 
+extern "C" volatile UCHAR KiQuickRebootFlag;
 static void KiLoadMicrocode() {
 #ifndef XK_HOST_TEST
     ULONG a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
     ULONG platform = (ULONG)(rdmsr(0x17) >> 50) & 7;
     for (const auto &update : KiMicrocode) {
+        if (KiQuickRebootFlag) // loaded at the cold boot (the table's pages are free memory now)
+            break;
         if (update[3] != a || !(update[6] & (1u << platform)))
             continue;
         wrmsr(0x79, (ULONGLONG)(ULONG)&update[12]); // IA32_BIOS_UPDT_TRIG <- the update data, after the 48-byte header

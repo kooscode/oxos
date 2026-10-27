@@ -9,6 +9,9 @@
 
 #include "jingle.h"
 
+// Boot-only code (cold boot, with the splash): freed before the first title starts (spec/oxos-internal/18).
+#pragma code_seg(".xkb")
+
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
 
 // For the boot tests: 1 synthesizing, 2 playing, 3 played to the end, 5 played with gaps (synthesis fell behind);

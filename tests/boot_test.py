@@ -604,6 +604,13 @@ def dash_checks(mon, jingle_pcm=None):
     t0 = mon.read("KeTickCount")
     time.sleep(0.5)
     ticking = mon.read("KeTickCount") > t0
+    # Boot-only memory (spec/oxos-internal/18): pages freed, and the page database (the PTEs at 0x83FF0000) no longer
+    # maps the splash's code; the tables of xemu's encoder (a Conexant) stay mapped.
+    boot_freed = bin(mon.read("MiBootPagesFreed")).count("1") + bin(mon.read_offset("MiBootPagesFreed", 4)).count("1")
+    def mapped(name):
+        pfn = (mon.addr(name) & 0x03FFFFFF) >> 12
+        return int(mon.hmp(f"x/1wx {0x83FF0000 + 4 * pfn:#x}").split(":")[1].split()[0], 16) & 1
+    boot_code_present, tables_present = mapped("HalpStartSplash"), mapped("AvpCxTables")
     start = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)
     fb = start & 0x03FFFFFF
     words = []
@@ -628,6 +635,8 @@ def dash_checks(mon, jingle_pcm=None):
         f"synthesis {mon.read('HalpBootSoundSynthMs') & 0x7FFFFFFF} ms)":
             mon.read("HalpBootSoundStatus") == 3
             and mon.read("HalpBootSoundPosition") >= mon.read("HalpBootSoundLast") > 0,
+        f"boot-only pages freed before the dashboard ({boot_freed} pages; the splash code's page free, the encoder "
+        f"tables' kept)": boot_freed >= 5 and not boot_code_present and tables_present,
     }, "M5e": launch_reason_checks(mon)}
 
 

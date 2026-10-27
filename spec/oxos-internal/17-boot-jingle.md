@@ -50,7 +50,8 @@ The MCPX AC'97 controller's memory-mapped registers (PCI BAR2, 0xFEC00000) are u
    player keeps time itself, 48 frames a millisecond from the start, and stops both channels when the jingle's
    length has passed. A buffer not yet synthesized would play the silence it was cleared to.
 5. `HalpEndSplash` waits for the player to finish. It resets both channels, clears their list addresses, frees its
-   memory and exits before the title starts. Titles find the controller idle.
+   memory and exits before the title starts. Titles find the controller idle. The synthesizer's and the player's code
+   and the score are boot-only memory, freed then too (spec/oxos-internal/18-boot-memory.md).
 
 Quick reboots (no splash) have no jingle. `HalpBootSoundOn = 0` turns it off.
 

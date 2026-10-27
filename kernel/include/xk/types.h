@@ -29,6 +29,10 @@ typedef ULONG PHYSICAL_ADDRESS;
 #define XBAPI extern "C"
 // State that survives a quick reboot (spec/stock/02 §1): neither re-copied from flash nor zeroed.
 #define XK_PERSIST __attribute__((section(".persist")))
+// Boot-only memory (spec/oxos-internal/18-boot-memory.md): code under #pragma code_seg(".xkb") and read-only data
+// marked XK_BOOT_DATA (or under #pragma const_seg(".xka$y")) are used only during a cold boot; their pages are freed
+// before the first title starts.
+#define XK_BOOT_DATA __attribute__((section(".xka$y")))
 
 #define TRUE 1
 #define FALSE 0
