@@ -10,7 +10,7 @@ Each run: switch the console off (if on), on, then watch LOG's COM1 lines:
   NOBOOT  no kernel banner ("OXOS kernel") within --boot seconds (BIOS, netboot or wiring trouble)
 then switch it off. One line per run, with the kernel's last COM1 line, and a summary.
 
-  bootrun.py --log LOG [--runs N] [--image IMG --serve SERVE] [--flags 0xNN --flags-file F] [--pass TEXT]
+  bootrun.py --log LOG [--runs N] [--image IMG --serve SERVE] [--pass TEXT]
 """
 import argparse
 import os
@@ -80,8 +80,6 @@ def main():
     p.add_argument("--port", type=int, default=console.PORT, help="the logger's command port")
     p.add_argument("--image", help="netboot: point SERVE at this image first")
     p.add_argument("--serve", help="netboot: the path netboot.py serves (a symlink)")
-    p.add_argument("--flags", help="netboot: write this experiment-flags value to --flags-file first")
-    p.add_argument("--flags-file", help="netboot: the file netboot.py --flags-file reads")
     p.add_argument("--banner", default="OXOS kernel", help="text that marks the kernel's start (default: %(default)s)")
     p.add_argument("--pass", dest="pass_text", default="boot: title launcher",
                    help="text that marks a good boot (default: %(default)s)")
@@ -99,11 +97,6 @@ def main():
         if os.path.lexists(args.serve):
             os.remove(args.serve)
         os.symlink(os.path.abspath(args.image), args.serve)
-    if args.flags:
-        if not args.flags_file:
-            sys.exit("--flags needs --flags-file")
-        with open(args.flags_file, "w") as f:
-            f.write(args.flags + "\n")
     counts = {}
     for i in range(args.runs):
         result, elapsed, last = one_run(args)

@@ -42,8 +42,8 @@ constexpr USHORT KGDT_R0_CODE = 0x08, KGDT_R0_DATA = 0x10, KGDT_TSS = 0x18, KGDT
                  KGDT_DF_TSS = 0x28, KGDT_NMI_TSS = 0x30;
 constexpr ULONG GDT_ENTRIES = 7;
 constexpr ULONG IDT_ENTRIES = 64;
-// Double-fault and NMI stacks: their handlers only record the fault in CMOS, except in network-log builds (a report).
-constexpr ULONG FAULT_STACK_SIZE = XK_NETLOG ? 0x1000 : 0x400;
+// Double-fault and NMI stacks: their handlers only record the fault in CMOS.
+constexpr ULONG FAULT_STACK_SIZE = 0x400;
 
 alignas(8) SegmentDescriptor KiGdt[GDT_ENTRIES];
 alignas(8) GateDescriptor KiIdt[IDT_ENTRIES];
@@ -77,44 +77,12 @@ void InitFaultTss(KTSS &tss, void (*entry)(), UCHAR *stack) {
 
 } // namespace
 
-#if XK_NETLOG
-void HalpNetLogWrite(const char *Text, ULONG Length);
-void HalpNetTakeBack();
-XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
-extern "C" volatile ULONG KiPcRing[32];
-#endif
 
-// The double-fault and NMI tasks (entry.S), network-log builds: the task switch saved the interrupted state in KiTss;
-// send it (taking the NIC back from a title that owns it), so a fault cascade does not just stop the console.
+// The double-fault and NMI tasks (entry.S): the task switch saved the interrupted state in KiTss; record where it
+// was in CMOS (reported at the next boot), so a fault cascade does not just stop the console without a trace.
 extern "C" void KiSaveFaultTaskLastWords(ULONG vector, ULONG eip);
 
-extern "C" void KiFaultTaskReport(ULONG Kind) {
-    KiSaveFaultTaskLastWords(Kind, KiTss.Eip); // CMOS first: needs no network (reported at the next boot)
-#if XK_NETLOG
-    HalpNetTakeBack();
-    char line[200];
-    const KTSS &t = KiTss;
-    ULONG cr2;
-    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-    int n = RtlSnprintf(line, sizeof(line),
-                        "*** %s: eip %08lx esp %08lx ebp %08lx efl %08lx eax %08lx ebx %08lx ecx %08lx edx %08lx esi "
-                        "%08lx edi %08lx cr2 %08lx\n",
-                        Kind == 2 ? "NMI" : "double fault", t.Eip, t.Esp, t.Ebp, t.EFlags, t.Eax, t.Ebx, t.Ecx,
-                        t.Edx, t.Esi, t.Edi, cr2);
-    HalpNetLogWrite(line, (ULONG)n);
-    if (t.Esp >= 0x80000000 || (t.Esp >= 0x10000 && t.Esp < 0x04000000)) {
-        auto sp = (const ULONG *)t.Esp;
-        n = RtlSnprintf(line, sizeof(line), "    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", sp[0], sp[1],
-                        sp[2], sp[3], sp[4], sp[5], sp[6], sp[7]);
-        HalpNetLogWrite(line, (ULONG)n);
-    }
-    n = RtlSnprintf(line, sizeof(line), "    last pcs %08lx %08lx %08lx %08lx\n", KiPcRing[(KeTickCount - 3) % 32],
-                    KiPcRing[(KeTickCount - 2) % 32], KiPcRing[(KeTickCount - 1) % 32], KiPcRing[KeTickCount % 32]);
-    HalpNetLogWrite(line, (ULONG)n);
-#else
-    (void)Kind;
-#endif
-}
+extern "C" void KiFaultTaskReport(ULONG Kind) { KiSaveFaultTaskLastWords(Kind, KiTss.Eip); }
 
 extern "C" void KiDoubleFaultTask();
 extern "C" void KiNmiTask();

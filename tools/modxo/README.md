@@ -2,7 +2,7 @@
 
 An RP2040 [Modxo](https://github.com/Shalx/Modxo) modchip on the console's LPC header, with the **oxos_debug**
 firmware module, turns one USB cable into a console debug rig:
-- **COM1:** the emulated serial port (an OXOS kernel's boot log; `SERIAL=1` / network-log builds).
+- **COM1:** the emulated serial port (an OXOS kernel's boot log; `SERIAL=1` builds).
 - **POST codes:** every write to I/O port 0x80, as it happens (the 2BL's and kernel's progress codes).
 - **Status lines:** LPC power and reset pins, LPC cycle counts and last addresses, the first memory reads after
   power-up (the boot ROM fetching X-codes).
@@ -53,7 +53,7 @@ Flash an OXOS netboot image once (`make -C kernel netboot`; see `tools/netboot/R
 
 ```sh
 python3 tools/netboot/netboot.py serve.bin --to 192.168.1.255 &       # serve.bin: a symlink to the image
-python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/netlog/bios-256k.bin --serve serve.bin
+python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/serial/bios-256k.bin --serve serve.bin
 ```
 
 ## Notes

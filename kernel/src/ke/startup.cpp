@@ -50,37 +50,8 @@ constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584
 XK_PERSIST ULONG KiEepromKeyStates[8][10];
 XK_PERSIST ULONG KiEepromKeyStateCount;
 
-// Checksum of the kernel's code section as it is in memory (network-log builds): h = rotl(h, 5) ^ word over the
-// first section's VirtualSize. tools compare it with the same sum of the built file: a different value means the
-// code in RAM is not what was built (a bad download / inflate, or something overwriting it later).
-extern "C" ULONG KiTextSum() {
-    auto image = (const UCHAR *)0x80010000;
-    ULONG lfanew = *(const ULONG *)(image + 0x3C);
-    USHORT optSize = *(const USHORT *)(image + lfanew + 20);
-    const UCHAR *section = image + lfanew + 24 + optSize;
-    ULONG va = *(const ULONG *)(section + 12), size = *(const ULONG *)(section + 8);
-    auto w = (const volatile ULONG *)(image + va);
-    ULONG h = 0;
-    for (ULONG i = 0; i < size / 4; i++)
-        h = ((h << 5) | (h >> 27)) ^ w[i];
-    return h;
-}
-
 // Serial log of the start-up steps (SERIAL=1 builds, spec/oxos-internal/03-debug-serial.md).
-#if XK_NETLOG
-// Boot stack use (network-log builds): the stack is filled with a pattern at entry; the lowest overwritten word.
-extern "C" UCHAR KiBootStack[];
-static ULONG KiBootStackUsed() {
-    auto w = (const ULONG *)KiBootStack;
-    ULONG i = 0;
-    while (i < 0x3000 / 4 && w[i] == 0x5A5A5A5A)
-        i++;
-    return 0x3000 - i * 4;
-}
-#define KiBootStep(name) XK_SERIAL("boot: %s (text %08lx, boot stack %#lx of 0x3000 used)\n", name, KiTextSum(), KiBootStackUsed())
-#else
 #define KiBootStep(name) XK_SERIAL("boot: %s\n", name)
-#endif
 
 extern "C" void XeReadNetbootTitle(); // xe/nettitle.cpp
 static void KiReportMachineChecksAtBoot();
@@ -89,10 +60,6 @@ static ULONG KiPadRecord[13]; // the 2BL's pad calibration record, copied before
 extern ULONG KiMicrocodeRevision; // ke/cpu.cpp
 static void KiReportLastWords();
 
-#if XK_NETLOG
-extern "C" void KiReadDebugConfig();
-extern "C" void KiArmDebugRegisters();
-#endif
 
 // Start-up marks (xk/serial.h). Off once the title starts, or once a fault or a step record owns the CMOS bytes.
 UCHAR HalpCmosRead(UCHAR reg);
@@ -145,14 +112,6 @@ extern "C" void XkBootMarksDone() {
 }
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
-#if XK_NETLOG
-    {
-        ULONG sp;
-        __asm__ volatile("movl %%esp, %0" : "=r"(sp));
-        for (auto w = (ULONG *)KiBootStack; (ULONG)w < sp - 0x100; w++)
-            *w = 0x5A5A5A5A;
-    }
-#endif
     // The previous boot's start-up record, before this boot's first mark overwrites it.
     if (HalpCmosRead(0x70) == 'P') {
         KiPrevMarkFound = true;
@@ -170,9 +129,6 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     }
     if (HalpCmosRead(0x70) != 'X' && HalpCmosRead(0x70) != 'S' && HalpCmosRead(0x70) != 'B')
         XkBootMarksOn = TRUE; // else the fault / step record stays until KiReportLastWords has shown it
-#if XK_NETLOG
-    KiReadDebugConfig(); // before anything reuses the downloaded bank (ke/dbgstep.cpp)
-#endif
     if (!KiQuickRebootFlag)
         XeReadNetbootTitle(); // a title delivered by netboot (xe/nettitle.cpp): before the bank's pages are reused
     KiSetStage(post_code::Entry);
@@ -214,18 +170,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
     KiBootStep("memory manager");
     MmInitSystem(quick);
-#if XK_NETLOG
-    {
-        void HalpNetLogStart();
-        HalpNetLogStart(); // the NIC registers are mapped from here on
-    }
-#endif
     KiReportMachineChecksAtBoot();
     KiReportNvPads("after the memory manager");
     KiReportLastWords();
-#if XK_NETLOG
-    KiArmDebugRegisters();
-#endif
     XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
     {
         extern volatile ULONG MiRamProbe, MiGpuSizeBefore, MiGpuSizeAfter;
@@ -282,12 +229,6 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     }
 #endif
     KiBootStep("title launcher");
-#if XK_NETLOG
-    {
-        void HalpNetLogStartHeartbeat();
-        HalpNetLogStartHeartbeat();
-    }
-#endif
     XeStartTitleLauncher();
 
     KfRaiseIrql(DISPATCH_LEVEL); // the idle loop runs at DISPATCH_LEVEL

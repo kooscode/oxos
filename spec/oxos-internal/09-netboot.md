@@ -11,18 +11,19 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 - Paging off, interrupts off, polled; physical addresses throughout.
 - Time comes from the MCPX ACPI PM timer (I/O 0x8008, 3.375 MHz). If it does not advance over about 1 ms of port
   cycles, netboot is skipped.
-- Built by `make netboot` (`BUILD=build/netboot NETBOOT=1 NETLOG=1 SELFTEST=0`): the 2BL with netboot and a
-  network-log kernel as the flash fallback.
+- Built by `make netboot` (`BUILD=build/netboot NETBOOT=1 SERIAL=1 SELFTEST=0`): the 2BL with netboot and a
+  serial-log kernel as the flash fallback (a network-log kernel until 2026-10-28, spec 03 §7).
 
 ## 2. NIC use
 - PCI device 4: BAR0 = 0xFEF00000, BAR1 = 0xE001 (what the kernel's `HalpInitPci` assigns), command |= I/O, memory,
   bus master.
-- Set-up as the kernel's network log (spec/oxos-internal/03 §7). The differences:
+- Set-up in XboxDev/cromwell's etherboot `forcedeth.c` order (as the removed network log did, spec 03 §7). The
+  differences from that transmit-only set-up:
   - a receive ring of 32 descriptors;
   - packet filter 0x7F0020 (always + own address; broadcasts are received);
   - receiver started (0x094 = 1);
   - MAC registers in nxdk byte order (A = bytes 0–3, B = bytes 4–5).
-- MAC address 02:58:42:4F:58:31; IP address `NETLOG_IP` (only as the packets' source).
+- MAC address 02:58:42:4F:58:31; IP address `NETBOOT_IP` (only as the packets' source; `NETLOG_IP` before 2026-10-28).
 - Receive descriptors: {buffer, length, flags}. Handed to the NIC with length 2048 and flags bit 15. A received frame
   has bit 15 clear and bit 0 (valid) set; error bits 7–12 drop it. The descriptor is given back and TxRxControl bit 1
   written (nxdk's nvnetdrv, MIT).
@@ -46,7 +47,7 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel treats all of it as free memory.
 
 ## 4. Protocol
-- UDP port 5141 both ways. The console sends broadcasts (to 255.255.255.255) from `NETLOG_IP`. The PC replies with
+- UDP port 5141 both ways. The console sends broadcasts (to 255.255.255.255) from `NETBOOT_IP`. The PC replies with
   broadcasts, since the console answers no ARP.
 - Every message starts with a 20-byte little-endian header: magic `'OXNB'` (0x424E584F), op (byte), version (byte,
   1), reserved (16 bits), session, offset, length (32 bits each).

@@ -15,8 +15,7 @@ pages are freed anyway). Debug builds (`DEBUG=1`) keep `-Og`.
 ## 2. Boot-only sections
 Code and data used only during a cold boot go in two sections of their own, which the kernel frees before the first
 title starts:
-- `.xkb`, code: the splash (`src/hal/splash.cpp`, except `HalpEndSplash`, which every title start calls, and the
-  network-log builds' on-screen log), its PNG decoder and inflater (`src/hal/png.cpp`), the jingle's synthesizer and
+- `.xkb`, code: the splash (`src/hal/splash.cpp`, except `HalpEndSplash`, which every title start calls), its PNG decoder and inflater (`src/hal/png.cpp`), the jingle's synthesizer and
   player (`src/hal/jingle.cpp`, `src/hal/bootsound.cpp`). The files say `#pragma code_seg(".xkb")`.
 - `.xka`, read-only data, in this order (COFF grouped sections, sorted by the name after `$`):
   `$c0`/`$c1` the Conexant's tables, `$f0`/`$f1` the Focus's, `$x0`/`$x1` the Xcalibur's, `$x9` the end marker
@@ -57,8 +56,7 @@ stays loaded). The kept encoder's tables are still in place: a console's encoder
 - The initialised `.data` must fit in the quick-reboot copy (`KI_DATA_COPY_SIZE`, `src/arch/entry.S`).
 
 ## 6. Smaller items
-- Double-fault and NMI stacks: 1 KB each (their handlers only record the fault in CMOS); 4 KB in network-log builds,
-  which also send a report.
+- Double-fault and NMI stacks: 1 KB each (their handlers only record the fault in CMOS).
 - The quick-reboot copy of `.data`: 0x600 bytes (`.data` holds 0x500).
 - Start-up marks in release builds: each log point leaves the address of a one-byte mark instead of its format
   string, which only serial builds print (about 5.5 KB of strings). The map names a mark after the function that

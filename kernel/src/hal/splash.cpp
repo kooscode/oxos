@@ -11,7 +11,7 @@
 #include "jingle.h"
 
 // The splash runs only during a cold boot: its code is boot-only (freed before the first title starts, spec/oxos-internal/
-// 18-boot-memory.md), except HalpEndSplash, which every title start calls, and the network-log builds' on-screen log.
+// 18-boot-memory.md), except HalpEndSplash, which every title start calls.
 #pragma code_seg(".xkb")
 
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
@@ -147,9 +147,6 @@ ULONG AvBootModeWord();
 void AvPrepareBootDisplay();
 void AvLoadBootGamma();
 
-#if XK_NETLOG
-static volatile bool HalpScreenLogOn; // the on-screen log (below)
-#endif
 
 static void NTAPI HalpSplashThread(PVOID) {
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
@@ -213,98 +210,10 @@ static void NTAPI HalpSplashThread(PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     XK_SERIAL("splash: shown\n");
-#if XK_NETLOG
-    HalpScreenLogOn = true;
-#endif
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
 
 #pragma code_seg()
-#if XK_NETLOG
-// On-screen log (network-log builds, spec/oxos-internal/03 §10): once the splash has faded in, every log line is also
-// drawn into the splash's framebuffer, 16 rows at the bottom, the newest marked '>'. A console that freezes keeps
-// its last lines on screen (a capture card reads them), when neither the NIC nor the disk can carry them any more.
-#include "screenfont.inc"
-static ULONG HalpScreenRow;
-static char HalpScreenLine[107], HalpScreenRows[16][107];
-static ULONG HalpScreenLineLength, HalpScreenRowLength[16];
-constexpr ULONG SCREEN_ROWS = 16, SCREEN_TOP = SPLASH_H - SCREEN_ROWS * 11 - 4;
-
-// The buffer being scanned out: the splash, or once a title has set its own display mode, the title's front
-// buffer (PCRTC 0x600800; contiguous memory, mapped at 0x80000000 + physical), with the pitch of the last mode set
-// (32 bits per pixel assumed). The panel sits at the bottom of the splash and at the top of a title's screen (every
-// mode has at least 480 lines).
-extern volatile ULONG AvpScreenPitch; // hal/av.cpp
-static ULONG *HalpScreenTarget(ULONG *pitch, ULONG *top) {
-    ULONG start = *(volatile ULONG *)0xFD600800 & 0x03FFFFFF;
-    auto fb = (ULONG *)(0x80000000 | start);
-    *pitch = SPLASH_W;
-    *top = SCREEN_TOP;
-    if (start == MmGetPhysicalAddress(HalpSplashScreen))
-        return HalpSplashScreen;
-    ULONG p = AvpScreenPitch / 4;
-    if (p < SPLASH_W || p > 2048)
-        p = SPLASH_W;
-    if (!MmIsAddressValid(fb) || !MmIsAddressValid((UCHAR *)fb + p * 4 * (24 + SCREEN_ROWS * 11) - 4))
-        return HalpSplashScreen;
-    *pitch = p;
-    *top = 24;
-    return fb;
-}
-
-static void HalpScreenDrawRow(ULONG row, const char *text, ULONG length, bool newest) {
-    ULONG pitch, top;
-    ULONG *fb = HalpScreenTarget(&pitch, &top);
-    ULONG y0 = top + row * 11;
-    for (ULONG y = 0; y < 11; y++)
-        for (ULONG x = 0; x < SPLASH_W; x++)
-            fb[(y0 + y) * pitch + x] = 0;
-    for (ULONG i = 0; i <= length && i < 106; i++) {
-        UCHAR c = i == 0 ? (newest ? '>' : ' ') : (UCHAR)text[i - 1];
-        if (c < 0x20 || c > 0x7E)
-            c = '?';
-        const unsigned char *g = HalpScreenFont[c - 0x20];
-        for (ULONG r = 0; r < 10; r++)
-            for (ULONG b = 0; b < 6; b++)
-                if (g[r] & (0x20 >> b))
-                    fb[(y0 + r) * pitch + i * 6 + b] = newest ? 0x80FF80 : 0x40C040;
-    }
-}
-
-// From the clock interrupt, 10 times a second: draw the whole panel again into the buffer being shown, so a
-// title's rendering does not hide it for long and a frozen console shows its last lines.
-extern "C" void HalpScreenRefresh() {
-    if (!HalpScreenLogOn || !HalpSplashScreen)
-        return;
-    for (ULONG r = 0; r < SCREEN_ROWS; r++)
-        HalpScreenDrawRow(r, HalpScreenRows[r], HalpScreenRowLength[r], r == HalpScreenRow);
-}
-
-// The title is starting: no more drawing. From now on the buffer being scanned out belongs to the title, and the one
-// the panel last drew into may already be the title's memory (the freed splash buffer, its textures or push buffer):
-// drawing there corrupted the dashboard and froze consoles (2026-10-23).
-void HalpScreenLogStop() { HalpScreenLogOn = false; }
-
-void HalpScreenLog(const char *Text, ULONG Length) {
-    if (!HalpScreenLogOn || !HalpSplashScreen)
-        return;
-    for (ULONG i = 0; i < Length; i++) {
-        if (Text[i] != '\n') {
-            if (HalpScreenLineLength < sizeof(HalpScreenLine) - 1)
-                HalpScreenLine[HalpScreenLineLength++] = Text[i];
-            continue;
-        }
-        // The previous newest row loses its marker; this line takes the next row (cycling).
-        HalpScreenDrawRow(HalpScreenRow, HalpScreenRows[HalpScreenRow], HalpScreenRowLength[HalpScreenRow], false);
-        HalpScreenRow = (HalpScreenRow + 1) % SCREEN_ROWS;
-        for (ULONG k = 0; k < HalpScreenLineLength; k++)
-            HalpScreenRows[HalpScreenRow][k] = HalpScreenLine[k];
-        HalpScreenRowLength[HalpScreenRow] = HalpScreenLineLength;
-        HalpScreenDrawRow(HalpScreenRow, HalpScreenLine, HalpScreenLineLength, true);
-        HalpScreenLineLength = 0;
-    }
-}
-#endif
 #pragma code_seg(".xkb")
 
 // Cold boot, with an AV pack connected.
@@ -343,12 +252,10 @@ static void HalpFreeBootPages() {
 // the whole budget (spec/stock/09 §7). The reference frees its boot animation's framebuffer too (it is in the INIT
 // section); the title's display-mode change and first frame turn the screen on again.
 void HalpEndSplash() {
-    static bool ended; // network-log builds keep HalpSplashScreen
-    if (!HalpSplashScreen || ended) {
+    if (!HalpSplashScreen) {
         HalpFreeBootPages();
         return;
     }
-    ended = true;
     KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
     if (HalpSplashThreadObject) { // until it has exited: the next switch back frees its stack
         KeWaitForSingleObject(HalpSplashThreadObject, Executive, KernelMode, FALSE, nullptr);
@@ -360,12 +267,8 @@ void HalpEndSplash() {
     // out of (and, freed below, may reuse it), which garbled the last splash frame on screen. A title's display-mode
     // change leaves the screen off too and turns it on itself (option 9 with 0, spec/stock/22).
     AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
-#if !XK_NETLOG
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = nullptr;
-#endif
-    // Network-log builds keep the splash framebuffer for the on-screen log (it stays the scanout until the title
-    // sets its own display mode).
     HalpFreeBootPages(); // the splash and the jingle have ended: their code goes
 }

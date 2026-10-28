@@ -115,15 +115,8 @@ static ULONG KiFloatStatusCode(UCHAR vector) {
     return STATUS_FLOAT_INEXACT_RESULT_;
 }
 
-#if XK_NETLOG
-bool KiDebugTrap(ULONG *eip, ULONG *eflags, ULONG edi, ULONG ecx, ULONG ebp); // ke/dbgstep.cpp
-#endif
 
 extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
-#if XK_NETLOG
-    if (Frame->Vector == 1 && KiDebugTrap(&Frame->Eip, &Frame->EFlags, Frame->Edi, Frame->Ecx, Frame->Ebp))
-        return;
-#endif
     EXCEPTION_RECORD record = {};
     record.ExceptionAddress = (PVOID)Frame->Eip;
     ULONG vector = Frame->Vector;

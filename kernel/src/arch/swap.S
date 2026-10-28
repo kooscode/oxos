@@ -44,11 +44,6 @@ _KiThreadStartup:
     xorl %ecx, %ecx
     call @KfLowerIrql@4                          // PASSIVE_LEVEL
     popl %eax
-    pushl %eax
-    pushl %eax
-    call _KiLogThreadStart                       // network-log builds: the title's threads as they start
-    addl $4, %esp
-    popl %eax
     call *%eax                                   // SystemRoutine(StartRoutine, StartContext), stdcall
     call _KiThreadReturned                       // system routines must terminate the thread
 1:  hlt
