@@ -56,6 +56,7 @@ XK_PERSIST ULONG KiEepromKeyStateCount;
 extern "C" void XeReadNetbootTitle(); // xe/nettitle.cpp
 static void KiReportMachineChecksAtBoot();
 static void KiReportNvPads(const char *When);
+void HalpTakeSplashRecord(bool QuickReboot); // hal/splash.cpp
 static ULONG KiPadRecord[13]; // the 2BL's pad calibration record, copied before the memory manager unmaps page 2
 extern ULONG KiMicrocodeRevision; // ke/cpu.cpp
 static void KiReportLastWords();
@@ -168,6 +169,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 
     for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
         KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
+    HalpTakeSplashRecord(quick); // boot/bl.cpp's splash record at 0x2380, before the memory manager
     KiBootStep("memory manager");
     MmInitSystem(quick);
     KiReportMachineChecksAtBoot();

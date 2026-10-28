@@ -498,6 +498,7 @@ static void MiProbeRamSize() {
 }
 
 bool MiIsNetbootTitlePage(ULONG pfn); // xe/nettitle.cpp
+bool HalpIsSplashPage(ULONG pfn);      // hal/splash.cpp: the 2BL's copy of the boot splash
 
 void MmInitSystem(bool QuickReboot) {
     if (!QuickReboot) {
@@ -548,7 +549,7 @@ void MmInitSystem(bool QuickReboot) {
     auto allocatable = [&](ULONG pfn) {
         return ((pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN) ||
                 MiBootPageFreed(pfn)) &&
-               !MiIsNetbootTitlePage(pfn);
+               !MiIsNetbootTitlePage(pfn) && !HalpIsSplashPage(pfn);
     };
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
     //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
@@ -562,8 +563,8 @@ void MmInitSystem(bool QuickReboot) {
         } else if (pfn >= MM_GPU_INSTANCE_FIRST_PFN) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
         } else if (!allocatable(pfn)) {
-            if (MiIsNetbootTitlePage(pfn)) // a netbooted title's files: held (contiguous usage) until installed
-                pte = (pfn << PAGE_SHIFT) | rw;
+            if (MiIsNetbootTitlePage(pfn) || HalpIsSplashPage(pfn)) // a netbooted title's files, the splash copy:
+                pte = (pfn << PAGE_SHIFT) | rw;                       // held (contiguous usage) until used
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
                 pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);
         } else if (QuickReboot &&

@@ -632,7 +632,7 @@ def dash_checks(mon, jingle_pcm=None, evox=False):
         f"start, at its climax ({mon.read('HalpSplashFadeMs')} ms)":
             mon.read("HalpSplashFrames") >= 10 and mon.read("HalpSplashFadeMs") > 0
             and 0 <= mon.read("HalpSplashFullMs") - mon.read("HalpSplashFadeMs") < 100,
-        "splash image read from flash bank 1 and decoded": mon.read("HalpSplashSource") == 2
+        "splash image (flash bank 1, copied to RAM by the 2BL) decoded": mon.read("HalpSplashSource") == 2
             and mon.read("HalpSplashStatus") == 0,
         f"boot jingle played to its last buffer through the AC'97 controller (status {mon.read('HalpBootSoundStatus'):#x}, "
         f"buffer {mon.read('HalpBootSoundPosition')} at the end, the jingle's last {mon.read('HalpBootSoundLast')}, "

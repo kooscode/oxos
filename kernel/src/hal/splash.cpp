@@ -40,11 +40,9 @@ volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header
 ULONG HalpPngScratchSize(ULONG Width, ULONG Height);
 ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, ULONG Height, UCHAR *Scratch);
 
-// "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG: in flash bank 1 of a
-// 1 MiB image, else (a 256 KiB image) the copy in the boot bank that the payload header at bank offset 0x6000 points
-// to (words 6 and 7: offset and size, 0 when there is none).
-constexpr ULONG SPLASH_FLASH = 0xFFF40000, SPLASH_FLASH_SIZE = 0x40000, SPLASH_HEADER = 20;
-constexpr ULONG SPLASH_BOOT_BANK = 0xFFFC0000, SPLASH_PAYLOAD = 0x6000, SPLASH_PAYLOAD_MAGIC = 0x504B584F;
+// "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG: tools/mkbios.py puts it
+// in flash bank 1 of a 1 MiB image, else in the boot bank; the 2BL copies it into RAM for the kernel.
+constexpr ULONG SPLASH_HEADER = 20;
 
 // 5x7 glyphs, one byte per row (bit 4 = leftmost column), for the caption's letters.
 static const struct {
@@ -102,7 +100,7 @@ static void HalpDrawEmblem(ULONG *img) {
 }
 
 // Decode the splash at Splash (Room bytes available after it); 0 = shown.
-static ULONG HalpDecodeFlashSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
+static ULONG HalpDecodeSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
     static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
     for (int i = 0; i < 8; i++)
         if (Splash[i] != (UCHAR)magic[i])
@@ -118,24 +116,17 @@ static ULONG HalpDecodeFlashSplash(const UCHAR *Splash, ULONG Room, ULONG *img) 
     return status;
 }
 
-static ULONG HalpLoadFlashSplash(ULONG *img) {
-    auto flash = (const UCHAR *)MmMapIoSpace(SPLASH_FLASH, SPLASH_FLASH_SIZE, PAGE_READONLY | PAGE_NOCACHE);
-    if (!flash)
+// The 2BL's copy of the splash (boot/bl.cpp BlCopySplash): decoded from RAM, then its pages are freed. Without one (an
+// older 2BL, or no splash in the image) the emblem is drawn; the kernel does not read the flash itself.
+extern ULONG HalpSplashRamPhys, HalpSplashRamSize;
+static ULONG HalpLoadSplash(ULONG *img) {
+    if (!HalpSplashRamSize)
         return 0x100;
-    ULONG status = HalpDecodeFlashSplash(flash, SPLASH_FLASH_SIZE, img);
-    MmUnmapIoSpace((PVOID)flash, SPLASH_FLASH_SIZE);
-    if (status != 0x101)
-        return status;
-    // No bank 1 splash (a 256 KiB chip mirrors the boot bank there): the boot bank's own copy.
-    auto bank = (const UCHAR *)MmMapIoSpace(SPLASH_BOOT_BANK, SPLASH_FLASH_SIZE, PAGE_READONLY | PAGE_NOCACHE);
-    if (!bank)
-        return 0x100;
-    auto payload = (const ULONG *)(bank + SPLASH_PAYLOAD);
-    ULONG offset = payload[6], size = payload[7];
-    if (payload[0] == SPLASH_PAYLOAD_MAGIC && offset >= SPLASH_PAYLOAD + 0x40 && size >= SPLASH_HEADER &&
-        offset < SPLASH_FLASH_SIZE && size <= SPLASH_FLASH_SIZE - offset)
-        status = HalpDecodeFlashSplash(bank + offset, size, img);
-    MmUnmapIoSpace((PVOID)bank, SPLASH_FLASH_SIZE);
+    ULONG status = HalpDecodeSplash((const UCHAR *)(MM_SYSTEM_PHYSICAL_MAP | HalpSplashRamPhys), HalpSplashRamSize, img);
+    ULONG first = HalpSplashRamPhys >> PAGE_SHIFT, end = (HalpSplashRamPhys + HalpSplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    HalpSplashRamSize = 0;
+    for (ULONG pfn = first; pfn < end; pfn++)
+        MiFreeContiguousPage(pfn);
     return status;
 }
 
@@ -150,7 +141,7 @@ void AvLoadBootGamma();
 
 static void NTAPI HalpSplashThread(PVOID) {
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
-    HalpSplashStatus = HalpLoadFlashSplash(HalpSplashImage);
+    HalpSplashStatus = HalpLoadSplash(HalpSplashImage);
     XK_SERIAL("splash: image status %#lx\n", HalpSplashStatus);
     if (!HalpSplashStatus) {
         HalpSplashSource = 2;
@@ -271,4 +262,25 @@ void HalpEndSplash() {
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = nullptr;
     HalpFreeBootPages(); // the splash and the jingle have ended: their code goes
+}
+
+// --- The 2BL's splash record (boot/bl.cpp: 'OXSP', physical address, size at physical 0x2380), taken on a cold boot
+// before the memory manager starts, which keeps those pages until the splash has been decoded. Normal code: the memory
+// manager asks on quick reboots too.
+ULONG HalpSplashRamPhys, HalpSplashRamSize;
+
+void HalpTakeSplashRecord(bool QuickReboot) {
+    HalpSplashRamPhys = HalpSplashRamSize = 0;
+    auto record = (volatile ULONG *)0x80002380;
+    if (QuickReboot || record[0] != 0x5053584F)
+        return;
+    ULONG phys = record[1], size = record[2];
+    record[0] = 0;
+    if (size && size <= 0x40000 && !(phys & (PAGE_SIZE - 1)) && phys >= 0x100000 && phys + size <= 0x3000000)
+        HalpSplashRamPhys = phys, HalpSplashRamSize = size;
+}
+
+bool HalpIsSplashPage(ULONG pfn) {
+    return HalpSplashRamSize && pfn >= (HalpSplashRamPhys >> PAGE_SHIFT) &&
+           pfn < ((HalpSplashRamPhys + HalpSplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT);
 }

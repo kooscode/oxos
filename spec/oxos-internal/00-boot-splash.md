@@ -26,15 +26,23 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
   kernel grows past the room, the 1 MiB build warns and keeps only bank 1, and the 256 KiB build fails.
 
 ## 2. Showing it
-- The splash thread maps bank 1 with `MmMapIoSpace(…, PAGE_READONLY | PAGE_NOCACHE)`; without a header there (on a
-  256 KiB chip that address mirrors the boot bank) it maps the boot bank at 0xFFFC0000 and uses the copy the payload
-  header points to. It decodes the image with
+- The 2BL copies the image into RAM before it unpacks the kernel (`boot/bl.cpp` `BlCopySplash`, since 2026-10-28):
+  the "XKSPLASH" blob from bank 1 (0xFFF40000), or, without a header there (on a 256 KiB chip that address mirrors the
+  boot bank), the copy the payload header of the boot bank (or of a netboot download) points to. It goes to physical
+  0xC00000 (at most 256 KiB), and a record at physical 0x2380 (next to the pad calibration record at 0x2300) gives
+  'OXSP' (0x5053584F), the physical address and the size (0: none).
+- The kernel takes the record before the memory manager starts (`HalpTakeSplashRecord`, cold boot only); the memory
+  manager keeps those pages in use (`HalpIsSplashPage`, like a netboot title's pages) and the splash thread frees them
+  once the image is decoded. The kernel does not read the flash: decoding the PNG byte by byte from uncached flash
+  while the kernel ran coincided with bits of RAM changing on a Modxo console (a crash in about one cold boot in
+  ten), and long flash reads hung that console. Without a record (an older 2BL) the drawn emblem is shown.
+- It decodes the image with
   `src/hal/png.cpp`: inflate (RFC 1951), Adler-32 check, PNG scanline un-filtering. Supported input is exactly what
   mkbios writes, plus 8-bit RGB/RGBA: not interlaced, one IDAT. The inflated scanlines (≤ 1.2 MB) go to a temporary
   buffer below 16 MB.
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
-  `HalpSplashSource` (1 = drawn, 2 = flash image) and `HalpSplashStatus` (0 = shown; 0x101 no header, 0x102 bad
-  header, 0x103 out of memory, 1–10 decoder step) record what happened.
+  `HalpSplashSource` (1 = drawn, 2 = the image) and `HalpSplashStatus` (0 = shown; 0x100 no copy from the 2BL, 0x101
+  no header, 0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
 - It fades in while boot continues, with the boot jingle (spec/oxos-internal/17-boot-jingle.md): the fade follows
   the clock from the jingle's start, a frame about every 40 ms, and reaches full intensity as the jingle's build-up
   lands on its final chord (`jingle::ClimaxMs`, 2.6 s; `HalpSplashFullMs` records when it did). It stays until

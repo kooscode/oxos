@@ -24,6 +24,12 @@ struct XK_BOOT_PAYLOAD {
 
 constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + 0x6000, PAYLOAD_MAGIC = 0x504B584F, BOOT_MAGIC = 0x534F584F;
 constexpr ULONG KERNEL_PHYS = 0x10000, PAGE_DIRECTORY = 0xF000;
+// The boot splash, copied into RAM for the kernel (spec/oxos-internal/00-boot-splash.md): "XKSPLASH" header (20 bytes)
+// + PNG, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the pad
+// calibration record at 0x2300). The kernel decodes it from RAM: decoding it straight from flash, byte by byte over
+// LPC while the kernel runs, coincided with bits of RAM changing on a Modxo console (2026-10-28).
+constexpr ULONG SPLASH_RAM = 0x00C00000, SPLASH_RAM_MAX = 0x40000, SPLASH_RECORD = 0x2380, SPLASH_RECORD_MAGIC = 0x5053584F;
+constexpr ULONG SPLASH_BANK1 = 0xFFF40000, SPLASH_HEADER = 20;
 
 static UCHAR BlKeys[1024];
 
@@ -272,6 +278,44 @@ struct BL_PAD_RESULT {
 #include "netboot.h"
 #endif
 
+// A splash blob ("XKSPLASH", version 1, PNG length; Room bytes available): its whole size, 0 if there is none.
+static ULONG BlSplashSize(const volatile UCHAR *Blob, ULONG Room) {
+    static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
+    if (Room < SPLASH_HEADER)
+        return 0;
+    for (int i = 0; i < 8; i++)
+        if (Blob[i] != (UCHAR)magic[i])
+            return 0;
+    ULONG version = *(const volatile ULONG *)(Blob + 8), length = *(const volatile ULONG *)(Blob + 12);
+    return version == 1 && length <= Room - SPLASH_HEADER ? SPLASH_HEADER + length : 0;
+}
+
+// Copy the splash to SPLASH_RAM: flash bank 1 (a 1 MiB image), else the copy that the payload of Bank points to
+// (the flash boot bank, or a netboot download). The record says where it is (size 0: none).
+static void BlCopySplash(ULONG Bank) {
+    auto record = (volatile ULONG *)SPLASH_RECORD;
+    record[0] = SPLASH_RECORD_MAGIC;
+    record[1] = SPLASH_RAM;
+    record[2] = 0;
+    auto bank1 = (const volatile UCHAR *)SPLASH_BANK1;
+    const volatile UCHAR *from = bank1;
+    ULONG size = BlSplashSize(bank1, 0x40000);
+    if (!size) {
+        auto payload = (const volatile ULONG *)(Bank + 0x6000);
+        ULONG offset = payload[6], room = payload[7];
+        if (payload[0] == PAYLOAD_MAGIC && offset >= 0x6040 && offset < 0x40000 && room <= 0x40000 - offset) {
+            from = (const volatile UCHAR *)(Bank + offset);
+            size = BlSplashSize(from, room);
+        }
+    }
+    if (!size || size > SPLASH_RAM_MAX)
+        return;
+    auto to = (UCHAR *)SPLASH_RAM;
+    for (ULONG i = 0; i < size; i++)
+        to[i] = from[i];
+    record[2] = size;
+}
+
 extern "C" [[noreturn]] void BlMain() {
     BlPost(0x20);
     // The reference 2BL's order (spec/stock/21 §2): device 1 register 0x80 byte 0 = 0x02 (a byte cycle), the SMC
@@ -309,6 +353,7 @@ extern "C" [[noreturn]] void BlMain() {
     if (payload->Magic != PAYLOAD_MAGIC || payload->KeysSize > sizeof(BlKeys))
         BlFail(0xE0);
 
+    BlCopySplash(bank); // before the kernel is in RAM
     Inflater s = {(const UCHAR *)(bank + payload->KernelOffset), payload->KernelPacked, 0, 0, 0,
                   (UCHAR *)KERNEL_PHYS, payload->KernelSize, 0, false};
     if (!Inflate(s) || s.OutPos != payload->KernelSize)
