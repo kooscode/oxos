@@ -44,8 +44,11 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
   the fade. Quick reboots show no splash.
 
 ## 3. Memory
-- The launcher waits for the fade, then frees both the decode buffer and the screen buffer and leaves the scanout on
-  the screen buffer, so the title starts with no splash pages held, as on the reference (stock spec 17 §6).
+- The launcher waits for the fade, turns the screen off (`AvSendTVEncoderOption` option 9 with 1), then frees both the
+  decode buffer and the screen buffer, so the title starts with no splash pages held, as on the reference (stock
+  spec 17 §6). The title's display-mode change leaves the screen off and its first frame turns it on (option 9 with
+  0, stock spec 22). Until 2026-10-28 the scanout stayed on the freed buffer, and the title's graphics set-up
+  garbled the last splash frame on screen (and the network-log builds' text panel) before its first frame.
 - The splash's code and its PNG decoder are boot-only memory, freed at the same point
   (spec/oxos-internal/18-boot-memory.md).
 - Until 2026-10-17 the screen buffer was kept as the persisted display (`AvSetSavedDataAddress`), which held 301
