@@ -19,6 +19,7 @@ XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...
 XBAPI LONG FASTCALL InterlockedIncrement(volatile LONG *);
 XBAPI LONG FASTCALL InterlockedDecrement(volatile LONG *);
 void IdexCdRomEmulatedSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got);
+bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length);
 XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject);
 extern PDEVICE_OBJECT IdexCdRomDeviceObject;
 extern ULONG XeDiscTitleId;
@@ -214,8 +215,11 @@ NTSTATUS ImageRead(VD_SLOT *s, PIRP Irp) {
     if (st->MajorFunction != IRP_MJ_READ)
         return Complete(Irp, STATUS_INVALID_PARAMETER); // read-only media
     if ((length | (ULONG)offset) & (VD_SECTOR - 1) || offset < 0 || (ULONGLONG)offset + length > s->Length ||
-        Irp->SegmentArray)
+        Irp->SegmentArray) {
+        XK_SERIAL("vd: read %#llx+%#lx rejected (image %#llx bytes%s)\n", (ULONGLONG)offset, length, s->Length,
+                  Irp->SegmentArray ? ", scatter list" : "");
         return Complete(Irp, STATUS_INVALID_PARAMETER);
+    }
     VdReads++;
     NTSTATUS status = length ? ReadImage(s, (ULONGLONG)offset, buffer, length) : STATUS_SUCCESS;
     if (!NT_SUCCESS(status)) {
@@ -229,6 +233,9 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
     PIO_STACK_LOCATION st = IoGetCurrentIrpStackLocation(Irp);
     ULONG outLen = st->Parameters.DeviceIoControl.OutputBufferLength;
     auto out = (PUCHAR)Irp->UserBuffer;
+    if (st->Parameters.DeviceIoControl.IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) // logged with its command
+        XK_SERIAL("vd: device control %#lx (in %lu, out %lu)\n", st->Parameters.DeviceIoControl.IoControlCode,
+                  st->Parameters.DeviceIoControl.InputBufferLength, outLen);
     switch (st->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_CDROM_READ_TOC:
     case IOCTL_CDROM_GET_LAST_SESSION: {
@@ -271,17 +278,23 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
         ULONG got = 0;
         const UCHAR *cdb = p->Cdb;
         auto data = (PUCHAR)p->DataBuffer;
-        bool security = (cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E) || cdb[0] == 0x55 ||
-                        (cdb[0] == 0xAD && cdb[7] == 0xFE);
+        // The same set as the drive emulation's: MODE SENSE / SELECT of page 0x3E and READ DVD STRUCTURE of the
+        // security sector (address 0xFF02FDFF, layer 0xFE). This used to test the layer in the wrong byte, so a
+        // title's own security-sector read failed ("dirty disc": Prince of Persia).
+        bool security = IdexCdRomIsSecurityCommand(cdb, data, p->DataTransferLength);
         if (security)
             IdexCdRomEmulatedSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
         else if (cdb[0] != 0x00) // TEST UNIT READY
             status = STATUS_INVALID_DEVICE_REQUEST;
+        XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n",
+                  cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5], cdb[6], cdb[7], cdb[8], cdb[9], p->DataTransferLength,
+                  status, got, security ? " (security, emulated)" : "");
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2;
         p->DataTransferLength = got;
         return Complete(Irp, status, got);
     }
     default:
+        XK_SERIAL("vd:   not supported\n");
         return Complete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     }
 }

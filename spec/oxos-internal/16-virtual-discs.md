@@ -47,7 +47,7 @@ drive's read and device-control routines hand every request to the image (`VdSer
 | 0x24000 READ_TOC, 0x24038 GET_LAST_SESSION | Cerbios's 12 bytes: one data track (`00 12 01 01 00 14 01 00 00 00 02 00`) |
 | 0x2404C GET_DRIVE_GEOMETRY | image sectors, RemovableMedia, 1, 1, 2048 |
 | 0x24800 CHECK_VERIFY, 0x24080 AUTHENTICATE_DISK | success |
-| 0x4D014 SCSI pass-through | the Xbox security commands get the drive emulation's replies (spec/stock/04 §3a): the authenticated mode page 0x3E, an accepted MODE SELECT, a security sector built for the running title and signed for the open key. TEST UNIT READY succeeds; other commands fail. Cerbios fails all pass-through on images; OXOS answers so that titles which check the disc themselves still start. |
+| 0x4D014 SCSI pass-through | the Xbox security commands (the drive emulation's own test, `IdexCdRomIsSecurityCommand`: MODE SENSE / SELECT of page 0x3E, READ DVD STRUCTURE at 0xFF02FDFF layer 0xFE) get the drive emulation's replies (spec/stock/04 §3a): the authenticated mode page 0x3E, an accepted MODE SELECT, a security sector built for the running title and signed for the open key. TEST UNIT READY succeeds; other commands fail. Cerbios fails all pass-through on images; OXOS answers so that titles which check the disc themselves still start. |
 | others (e.g. 0x335140 DVD_READ_STRUCTURE) | STATUS_INVALID_DEVICE_REQUEST, as Cerbios |
 
 An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.

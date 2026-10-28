@@ -300,7 +300,8 @@ static void IdexCdRomBuildSecuritySector(PUCHAR sector) {
     XcSHAFinal(sha, sector + 0x4CF);
 }
 
-static bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length) {
+// The Xbox security commands (spec/stock/04 §3a); disc images (vd/vdisc.cpp) answer the same set.
+bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length) {
     return (cdb[0] == 0x5A && (cdb[2] & 0x3F) == 0x3E) ||                       // MODE SENSE, page 0x3E
            (cdb[0] == 0x55 && data && length >= 9 && (data[8] & 0x3F) == 0x3E) || // MODE SELECT (a challenge)
            IdexCdRomIsSecurityRead(cdb);
