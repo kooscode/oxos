@@ -57,7 +57,11 @@ FATX driver object at 0x80012470. **Status: implemented (milestone 3c-2).**
     - directory with anything but OPEN/OPEN_IF → NAME_COLLISION
     - directory + NON_DIRECTORY_FILE → FILE_IS_A_DIRECTORY
 - **Access and sharing on open:**
-  - read-only attribute + write or delete access → ACCESS_DENIED
+  - access check (4627 0x8002a047; the create path passes whether the file is new): ACCESS_DENIED for the attribute
+    bits 0xC8 or access bits 0xFEE0FE00 (after the generic mapping); on a read-only file, write access (0xFEE0FE46:
+    write data, append, write EA and the bits above) → ACCESS_DENIED only when the file already exists (a new file
+    may be created read-only with write access: UnleashX extracts its read-only skin files to X: this way), and
+    DELETE_ON_CLOSE → CANNOT_DELETE whether new or not
   - share access is checked per file; SUPERSEDE / OVERWRITE(_IF) truncate → FILE_OVERWRITTEN (or FILE_SUPERSEDED)
   - DELETE_ON_CLOSE marks a file delete-pending
 - **Read / write:**
