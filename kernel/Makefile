@@ -496,6 +496,14 @@ $(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $
 	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
 iso-launcher: $(ISO_LAUNCHER_XBE)
 
+# Title launcher (tools/title-launcher, nxdk): lists F:\titles and starts a disc image (mounted) or an XBE chosen with
+# the controller. make title-launcher builds bin/default.xbe and title-launcher.iso.
+TITLE_LAUNCHER_DIR := $(ROOT)/tools/title-launcher
+TITLE_LAUNCHER_XBE := $(TITLE_LAUNCHER_DIR)/bin/default.xbe
+$(TITLE_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(TITLE_LAUNCHER_DIR)/title_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h $(TITLE_LAUNCHER_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(TITLE_LAUNCHER_DIR) -j8
+title-launcher: $(TITLE_LAUNCHER_XBE)
+
 test-iso: $(ISO_LAUNCHER_XBE) $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	set -e; for kind in $(ISO_KINDS); do \
@@ -537,4 +545,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean iso-launcher test-iso iso-disc run-iso
+.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean iso-launcher title-launcher test-iso iso-disc run-iso
