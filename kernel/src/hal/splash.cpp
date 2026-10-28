@@ -1,7 +1,7 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
 // 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/oxos-internal/00-boot-splash.md), or, without one, a
-// drawn emblem and caption. The title launcher waits for it and frees its memory before the title starts, leaving the
-// last frame on screen, as the reference does with its animation.
+// drawn emblem and caption. The title launcher waits for it, turns the screen off and frees its memory before the title
+// starts; the title turns the screen on with its first frame.
 #include <xk/serial.h>
 #include <xk/ke.h>
 #include <xk/mm.h>
@@ -339,10 +339,9 @@ static void HalpFreeBootPages() {
     MmFreeBootPages(start, end);
 }
 
-// Before the title starts: wait for the splash and free its memory, but leave the scanout on its last frame. The
-// reference does the same with its boot animation (its framebuffer is in the INIT section, freed before the title
-// starts), so the title gets the whole budget; freed pages go to the end of the free lists, so the picture usually
-// stays up until the title sets its own display mode (spec/stock/09 §7).
+// Before the title starts: wait for the splash, turn the screen off and free the splash's memory, so the title gets
+// the whole budget (spec/stock/09 §7). The reference frees its boot animation's framebuffer too (it is in the INIT
+// section); the title's display-mode change and first frame turn the screen on again.
 void HalpEndSplash() {
     static bool ended; // network-log builds keep HalpSplashScreen
     if (!HalpSplashScreen || ended) {
@@ -357,6 +356,10 @@ void HalpEndSplash() {
         HalpSplashThreadObject = nullptr;
     }
     HalpEndBootSound(); // the jingle has ended and the audio controller is stopped
+    // Screen off until the title shows its first frame: its graphics set-up writes the memory the splash is scanned
+    // out of (and, freed below, may reuse it), which garbled the last splash frame on screen. A title's display-mode
+    // change leaves the screen off too and turns it on itself (option 9 with 0, spec/stock/22).
+    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
 #if !XK_NETLOG
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
