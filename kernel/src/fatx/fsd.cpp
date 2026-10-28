@@ -10,11 +10,19 @@ static NTSTATUS FatxComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 
 
 static FATX_FCB *FatxFcbOf(PFILE_OBJECT f) { return (FATX_FCB *)f->FsContext; }
 
-// Access allowed by the attributes (read-only files and directories refuse data writes and deletion).
-static NTSTATUS FatxCheckAttributes(ACCESS_MASK access, ULONG options, UCHAR attributes) {
-    if ((attributes & FILE_ATTRIBUTE_READONLY) &&
-        ((access & (FILE_WRITE_DATA | FILE_APPEND_DATA | DELETE)) || (options & FILE_DELETE_ON_CLOSE)))
+// Access allowed by the attributes (spec/stock/04b): rights FATX has no use for, and the volume-label, device and
+// "normal" attribute bits, are refused; a read-only file or directory refuses write rights once it exists (a new
+// one is created with the attribute and any access: titles extract read-only files and write them), and
+// delete-on-close always.
+static NTSTATUS FatxCheckAttributes(ACCESS_MASK access, ULONG options, UCHAR attributes, bool creating) {
+    if ((attributes & 0xC8) || (access & 0xFEE0FE00))
         return STATUS_ACCESS_DENIED;
+    if (attributes & FILE_ATTRIBUTE_READONLY) {
+        if (!creating && (access & 0xFEE0FE46)) // write data, append, write EA, and the bits above
+            return STATUS_ACCESS_DENIED;
+        if (options & FILE_DELETE_ON_CLOSE)
+            return (NTSTATUS)0xC0000121; // STATUS_CANNOT_DELETE
+    }
     return STATUS_SUCCESS;
 }
 
@@ -197,7 +205,7 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
             else {
                 bool isDir = options & FILE_DIRECTORY_FILE;
                 UCHAR attrs = (UCHAR)(attributes | (isDir ? FILE_ATTRIBUTE_DIRECTORY : 0));
-                status = FatxCheckAttributes(access, options, attrs);
+                status = FatxCheckAttributes(access, options, attrs, true);
                 ULONG first = 0;
                 if (NT_SUCCESS(status) && isDir) // a new directory gets one cluster of end markers
                     status = FatxInitDirectory(v, &first);
@@ -240,7 +248,7 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
             status = (NTSTATUS)0xC00000BA; // STATUS_FILE_IS_A_DIRECTORY
         }
         if (NT_SUCCESS(status))
-            status = FatxCheckAttributes(access, options, f->Attributes);
+            status = FatxCheckAttributes(access, options, f->Attributes, false);
         // exFAT files of 4 GB or more (disc images) are read-only: FATX sizes, writes and allocation are 32-bit.
         if (NT_SUCCESS(status) && f->FileSizeHigh &&
             ((access & (0x2 | 0x4 | 0x10000 | 0x10000000 | 0x40000000)) || // write, append, delete, all, generic write
