@@ -11,14 +11,14 @@ The one kind of data taken from bios images readily available on the internet is
 pad calibration tables (functional hardware constants). The method and its legal basis are in 
 [`dmca-compliance.md`](dmca-compliance.md).
 
-https://github.com/user-attachments/assets/b83a2e0a-5928-423e-a473-f38f3930c434
+https://github.com/user-attachments/assets/bffc85c4-109c-4fdb-a597-2168cf89328b
 
-*HDMI capture of OXOS running **Halo 2 on a real 1.4 Xbox**, from a 4.7 GB XISO on a 500 GB exFAT-formatted SSD,
-mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher): power on, the OXOS splash, then
-Halo 2's intros and title screen!!*
+*HDMI capture of OXOS running **Brute Force on a real 1.4 Xbox**, from an XISO on a 500 GB exFAT-formatted SSD,
+mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher): power on, the OXOS splash and boot
+jingle, then Brute Force's intros and title screen!!*
 
 **Status:**
-- **Retail titles on real hardware:** Halo 2 runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
+- **Retail titles on real hardware:** Brute Force runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
   FATX, no 4 GB file limit), and the MS dashboard boots from the same disk.
 - Every function and variable the 4627 kernel exports is implemented.
 - In xemu it boots the dashboard and runs retail titles: so far **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2**
@@ -40,11 +40,11 @@ Halo 2's intros and title screen!!*
   programmed from their register tables; checked in xemu on all three of its encoder models.
 - **Titles from images of your own discs:** an XISO, full dump or CCI image made from a disc you own, on the hard
   disk (whole or in two parts, and over 4 GB on exFAT), runs as if the disc were in the drive. The
-  [ISO launcher](tools/iso-launcher) mounts one and starts it, with the same device interface as Cerbios. Halo 2
+  [ISO launcher](tools/iso-launcher) mounts one and starts it, with the same device interface as Cerbios. Brute Force
   runs this way on a 1.4 console from an exFAT SSD
   ([`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md)).
 - **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
-  from a 500 GB exFAT SSD, and runs Halo 2 there from a mounted XISO, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
+  from a 500 GB exFAT SSD, and runs Brute Force there from a mounted XISO, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!
@@ -60,7 +60,7 @@ Free, Legal and Open Source!!
 5. Start the machine: the OXOS splash fades in and the dashboard starts. Load images of your own discs (XISO) from
    xemu's *Machine* menu.
 
-The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far: the dashboard, and Halo 2 from an XISO (see Status).
+The release images are tested in xemu. On real hardware OXOS has run on a 1.4 console so far: the dashboard, and Brute Force from an XISO (see Status).
 
 ## Using an exFAT disk
 OXOS also runs from a hard disk formatted as exFAT on a PC (Windows, macOS or Linux), with no Xbox tools. Experimental:
@@ -143,7 +143,7 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
     hardware (`spec/oxos-internal/13-flash-mapping.md`).
   - **Results so far:** the boot freezes on the 1.4 console were found and fixed this way, along with the CPU
     set-up, interrupt start-up and NV2A pad calibration (specs 13–15). So was the first retail title on real
-    hardware: Halo 2 from an XISO on an exFAT SSD.
+    hardware: Halo 2 from an XISO on an exFAT SSD, and later Brute Force the same way.
 
 ### Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
