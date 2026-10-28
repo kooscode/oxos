@@ -1,4 +1,5 @@
 // XDVDFS (Xbox game disc file system), read-only (spec/stock/04c).
+#include <xk/serial.h>
 #include <xk/fsc.h>
 #include <xk/idex.h>
 #include <xk/rtl.h>
@@ -312,8 +313,11 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     // must report END_OF_FILE (Brute Force copies its .tgz files to the cache partition until it sees it).
     if (offset.HighPart || offset.LowPart >= f->Size)
         return XdvdfsComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
-    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1)))
+    if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1))) {
+        XK_SERIAL("xdvdfs: non-cached read %#lx at unaligned %#lx (file sector %#lx)\n", length, offset.LowPart,
+                  f->StartSector);
         return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
+    }
     // The reference rounds a read that ends the file up to whole sectors only when the caller asked for at least
     // that much (0x8002b4e0): then the transfer may fill the buffer up to the sector's end.
     bool toEnd = length >= ((f->Size + XDVDFS_SECTOR - 1) & ~(XDVDFS_SECTOR - 1)) - offset.LowPart;
@@ -326,6 +330,9 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                           ? XdvdfsReadDirect(v, disc, Irp->UserBuffer, length)
                           : FscCachedRead(&v->CacheExtension, fo->Flags, disc, length, Irp->UserBuffer, toEnd);
     KeSetEvent(&v->Lock, 0, FALSE);
+    if (!NT_SUCCESS(status))
+        XK_SERIAL("xdvdfs: read %#lx at %#lx (file sector %#lx, %s): %#lx\n", length, offset.LowPart, f->StartSector,
+                  (fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) ? "non-cached" : "cached", status);
     if (NT_SUCCESS(status) && (fo->Flags & FO_SYNCHRONOUS_IO))
         fo->CurrentByteOffset.QuadPart = offset.QuadPart + length;
     return XdvdfsComplete(Irp, status, NT_SUCCESS(status) ? length : 0);

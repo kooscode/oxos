@@ -3,6 +3,7 @@
 #include <xk/rtl.h>
 #include <xk/ob.h>
 #include <xk/io.h>
+#include <xk/serial.h>
 
 constexpr ULONG XK_TRACE_MAX_IMPORTS = 512, XK_TRACE_RING = 0x8000;
 
@@ -62,17 +63,92 @@ static void XkTraceName(volatile ULONG *e, ULONG p, bool string) {
         out[i] = str->Buffer[skip + i];
 }
 
+#if XK_DEBUG_SERIAL
+// On a console the ring cannot be read (no QMP): calls that return an error status (0xC0xxxxxx) are also printed on
+// the serial port as they return - "t fail ordinal N -> status from ADDR args A B C [name]" - with runs of the same
+// call from the same place counted instead of repeated. tools/modxo logs show them; kernel/exports.tsv names N.
+static ULONG XkFailOrdinal, XkFailFrom, XkFailResult, XkFailRepeats;
+static void XkTraceReportFailure(volatile ULONG *e, ULONG result) {
+    ULONG ordinal = e[0], from = e[1];
+    if (ordinal == XkFailOrdinal && from == XkFailFrom && result == XkFailResult) {
+        XkFailRepeats++;
+        return;
+    }
+    if (XkFailRepeats)
+        XK_SERIAL("t   (x%lu more)\n", XkFailRepeats);
+    XkFailOrdinal = ordinal, XkFailFrom = from, XkFailResult = result, XkFailRepeats = 0;
+    char name[32] = {};
+    // The calls XkTraceRecord stores a name for: file opens keep 23 characters (then their share and options).
+    int n = ordinal == 190 || ordinal == 202 ? 23 : ordinal == 210 || ordinal == 195 || ordinal == 67 || ordinal == 69 ? 31 : 0;
+    for (int i = 0; i < n; i++)
+        name[i] = ((volatile char *)(e + 7))[i];
+    if (ordinal == 219) // NtReadFile: handle, length, byte offset
+        XK_SERIAL("t fail NtReadFile(%#lx, %#lx bytes at %#lx'%08lx) -> %#lx from %#lx\n", e[3], e[11], e[13], e[12],
+                  result, from);
+    else
+        XK_SERIAL("t fail ordinal %lu -> %#lx from %#lx args %#lx %#lx %#lx %s\n", ordinal, result, from, e[3], e[4],
+                  e[5], name);
+}
+
+// Successful reads, the first 30 of each handle: "t read HANDLE LENGTH at OFFSET -> BYTES" (offset -1: the current
+// position).
+static ULONG XkTraceReadHandles[64], XkTraceReadCounts[64];
+static void XkTraceReportRead(volatile ULONG *e) {
+    ULONG i = 0;
+    while (i < 64 && XkTraceReadHandles[i] && XkTraceReadHandles[i] != e[3])
+        i++;
+    if (i == 64)
+        return;
+    XkTraceReadHandles[i] = e[3];
+    if (XkTraceReadCounts[i]++ >= 30)
+        return;
+    auto iosb = (PIO_STATUS_BLOCK)e[9];
+    ULONG got = (ULONG)iosb >= 0x10000 ? (ULONG)iosb->Information : 0xFFFFFFFF;
+    XK_SERIAL("t read %#lx %#lx at %#lx'%08lx -> %#lx bytes, status %#lx (event %#lx apc %#lx)\n", e[3], e[11],
+              e[13], e[12], got, e[6], e[4], e[5]);
+    auto data = (const UCHAR *)e[10];
+    if (got != 0xFFFFFFFF && got && (ULONG)data >= 0x10000)
+        XK_SERIAL("t   data %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", data[0],
+                  data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
+                  data[12], data[13], data[14], data[15]);
+}
+
+// Successful file opens, so a failure on a handle can be matched to its file: "t open HANDLE name".
+static void XkTraceReportOpen(volatile ULONG *e) {
+    char name[24] = {};
+    for (int i = 0; i < 23; i++)
+        name[i] = ((volatile char *)(e + 7))[i];
+    auto handle = (PHANDLE)e[3];
+    if ((ULONG)handle >= 0x10000)
+        XK_SERIAL("t open %#lx %s\n", (ULONG)*handle, name);
+}
+#endif
+
 ULONG __cdecl XkTraceLeave(ULONG result) {
     ULONG flags;
     __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags));
     XK_TRACE_SLOT *s = XkTraceSlot((ULONG)KeGetCurrentThread());
     ULONG ret = 0;
+    [[maybe_unused]] volatile ULONG *failed = nullptr;
     if (s && s->Depth) {
         s->Depth--;
         ret = s->Return[s->Depth];
-        XkTraceRing[s->Entry[s->Depth] % XK_TRACE_RING][6] = result;
+        volatile ULONG *e = XkTraceRing[s->Entry[s->Depth] % XK_TRACE_RING];
+        e[6] = result;
+        if ((result & 0xFF000000) == 0xC0000000 || (!result && (e[0] == 190 || e[0] == 202)) ||
+            (e[0] == 219 && (result & 0xFF000000) != 0xC0000000) ||
+            (result & 0xFF000000) == 0x80000000 || result == 0x102 || result == 0x103) // warnings, timeouts, pending
+            failed = e;
     }
     __asm__ volatile("pushl %0; popfl" ::"r"(flags) : "cc");
+#if XK_DEBUG_SERIAL
+    if (failed && failed[0] == 219 && (result & 0xFF000000) != 0xC0000000)
+        XkTraceReportRead(failed);
+    else if (failed && result)
+        XkTraceReportFailure(failed, result);
+    else if (failed)
+        XkTraceReportOpen(failed);
+#endif
     return ret;
 }
 
