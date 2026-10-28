@@ -13,7 +13,7 @@ import hmac, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, ti
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2
 import exfat  # noqa: E402
-from fatx import Fatx  # noqa: E402
+from fatx import Fatx, FatxWriter  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
@@ -583,7 +583,7 @@ def misc_checks(mon):
     }
 
 
-def dash_checks(mon, jingle_pcm=None):
+def dash_checks(mon, jingle_pcm=None, evox=False):
     if jingle_pcm:  # once synthesis has finished (the jingle is still playing): the whole buffer
         for _ in range(200):
             if mon.read("HalpBootSoundSynthMs"):
@@ -617,9 +617,14 @@ def dash_checks(mon, jingle_pcm=None):
     for off in range(0, 640 * 4 * 40, 4096):  # first 40 lines of a 640-wide 32 bpp surface
         out = mon.hmp(f"xp/16wx {fb + off:#x}")
         words += [int(w, 16) for w in re.findall(r"0x([0-9a-f]{8})", out.split(":", 1)[1] if ":" in out else "")]
+    ptr = mon.read_offset("XeImageFileName", 4)  # ANSI_STRING: Length, MaximumLength, Buffer
+    raw = b"".join(struct.pack("<I", int(w, 16)) for w in re.findall(r"0x([0-9a-f]{8})",
+                   mon.hmp(f"x/16wx {ptr:#x}").split(":", 1)[1]))
+    dash = raw.split(b"\0")[0].decode("latin-1")
+    want = "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if evox else "xboxdash.xbe")
     return {"M4b-2": {
-        "dashboard (C:\\xboxdash.xbe) launched without a disc": mon.read("XeTitleLaunched") == 2
-            and mon.read("XeLastLoadStatus") == 0,
+        f"dashboard launched without a disc: {dash} ({'EvoX first' if evox else 'no EvoX: the Xbox dashboard'})":
+            mon.read("XeTitleLaunched") == 2 and mon.read("XeLastLoadStatus") == 0 and dash == want,
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
@@ -836,6 +841,8 @@ def main():
     ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
                     help="boot the ISO launcher (tools/iso-launcher) with an image of --title on an exFAT disk")
     ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
+    ap.add_argument("--evox", action="store_true", help="--dash: put C:\\evoxdash.xbe on the disk copy and check that "
+                    "the kernel starts it instead of C:\\xboxdash.xbe")
     ap.add_argument("--jingle-pcm", help="--dash: save the boot jingle's synthesized samples (guest memory) to this "
                     "file while it plays, to compare with tools/jingle's render")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), help="present this video encoder (xemu -machine "
@@ -856,6 +863,11 @@ def main():
             mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
     if a.hdd and not a.iso_launch:
         shutil.copyfile(a.hdd, hdd_copy)
+        if a.evox:  # an EvoX-style install: C:\evoxdash.xbe (here a copy of C:\xboxdash.xbe)
+            q = Qcow2(hdd_copy)
+            FatxWriter(q, "C").write_file("evoxdash.xbe", Fatx(q, "C").read_file("xboxdash.xbe"))
+            q.save(hdd_copy + ".new")
+            os.replace(hdd_copy + ".new", hdd_copy)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
@@ -885,7 +897,7 @@ def main():
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
         elif a.dash:
-            results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm))
+            results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox)
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True)}
         elif a.iso_launch:
