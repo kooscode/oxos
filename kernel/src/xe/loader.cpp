@@ -432,9 +432,18 @@ static ULONG XepCheckFirstBoot() {
 
 bool XeLaunchNetbootTitle(); // xe/nettitle.cpp
 
+// The dashboard: EvoX's when it is installed (C:\evoxdash.xbe, or E:\evoxdash.xbe), else the Xbox dashboard
+// (C:\xboxdash.xbe). The first that loads is started (spec/oxos-internal/19-dashboard-choice.md).
+static const char *const XepDashboards[] = {
+    "\\Device\\Harddisk0\\Partition2\\evoxdash.xbe",
+    "\\Device\\Harddisk0\\Partition1\\evoxdash.xbe",
+    "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe",
+};
+
 static void XepLaunchDashboard() {
-    if (NT_SUCCESS(XeLoadImage("\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", TRUE)))
-        return;
+    for (const char *path : XepDashboards)
+        if (NT_SUCCESS(XeLoadImage(path, TRUE)))
+            return;
     if (!KiQuickRebootFlag) {
         auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
         ULONG code = 13;

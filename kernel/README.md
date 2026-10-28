@@ -185,6 +185,9 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      title starts (`MmFreeBootPages`), and stay free across quick reboots. 43 resident kernel pages (stock 45).
      ✅ `make test-dash`, `test-relaunch`, `test-encoders`, `test-memory` pass; titles start with more free memory
      than on the stock kernel again (memory test title 15 919 vs 15 917, Half-Life 2 +1 to +3 pages).
+   - 25: **dashboard choice** (`../spec/oxos-internal/19-dashboard-choice.md`): the dashboard started is EvoX's when it
+     is installed (C:\evoxdash.xbe, then E:\evoxdash.xbe), else the Xbox dashboard (C:\xboxdash.xbe).
+     ✅ `make test-dash` covers both.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
