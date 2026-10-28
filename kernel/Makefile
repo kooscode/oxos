@@ -51,21 +51,16 @@ DEBUG     ?= 0
 # where speed shows uses -O2 (FAST_SRCS below).
 OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-Oz -g0)
 # Debug serial port (spec/oxos-internal/03-debug-serial.md): on in the self-test and trace builds, off in release builds.
-# NETLOG=1: the serial log also goes out as UDP broadcasts (spec/oxos-internal/03-debug-serial.md §7; tools/netlog.py)
-# On by default in trace builds (TRACE_IMPORTS=1/2): on a console the network is their only output. NETLOG_IP is the
-# console's address, NETLOG_DEST the receiver (255.255.255.255 = broadcast; a PC's address = point-to-point, still in a
-# broadcast frame since the log never receives and so cannot ask ARP).
 # NETBOOT=1: the 2BL first asks the network for a boot image (spec/oxos-internal/09-netboot.md; tools/netboot/).
+# NETBOOT_IP is the address the console puts in its netboot packets (it needs no DHCP and answers no ARP).
 # Use its own BUILD directory (make netboot does): the 2BL is not rebuilt when only NETBOOT changes.
 NETBOOT ?= 0
 # MCPX_DUMP=1 (with NETBOOT=1): the 2BL copies the MCPX boot ROM at entry and sends it over the network
 # (spec/oxos-internal/12-mcpx-dump.md; tools/mcpx-dump/). make mcpx-dump builds that payload image.
 MCPX_DUMP ?= 0
-NETLOG ?= $(if $(filter-out 0,$(TRACE_IMPORTS)),1,0)
-NETLOG_IP ?= 192.168.1.222
-NETLOG_DEST ?= 255.255.255.255
+NETBOOT_IP ?= 192.168.1.222
 comma := ,
-SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS) $(NETLOG)),1,0)
+SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # STATEDUMP=1: print the machine-state probe (tools/statedump) on the debug serial port at the end of start-up, for
 # comparing the set-up with a reference kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
@@ -85,7 +80,7 @@ ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_NETLOG=$(NETLOG) -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP)) -DXK_NETLOG_DEST=$(subst .,$(comma),$(NETLOG_DEST))
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
@@ -175,7 +170,7 @@ GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
               $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) \
-              -DXK_NETLOG_IP=$(subst .,$(comma),$(NETLOG_IP))
+              -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 BOOT := $(BUILD)/boot
 
 $(CROMWELL_DIR)/boot_rom/Xcodes.h:
@@ -228,15 +223,15 @@ bios: $(BUILD)/bios.bin
 bios-256k: $(BUILD)/bios-256k.bin
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
-# kernel at every power-on and boots its own (a network-log build) when no PC answers.
+# kernel at every power-on and boots its own (a serial-log build) when no PC answers.
 NETBOOT_BUILD := build/netboot
 netboot:
-	$(MAKE) BUILD=$(NETBOOT_BUILD) NETBOOT=1 NETLOG=1 SELFTEST=0 $(NETBOOT_BUILD)/bios-256k.bin $(NETBOOT_BUILD)/bios.bin
+	$(MAKE) BUILD=$(NETBOOT_BUILD) NETBOOT=1 SERIAL=1 SELFTEST=0 $(NETBOOT_BUILD)/bios-256k.bin $(NETBOOT_BUILD)/bios.bin
 
 # The MCPX ROM dumper's payload (tools/mcpx-dump/README.md): a netboot image whose 2BL also sends the boot ROM.
 MCPX_DUMP_BUILD := build/mcpx-dump
 mcpx-dump:
-	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 NETLOG=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios-256k.bin
+	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios-256k.bin
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
 ifeq ($(IMAGE),base)

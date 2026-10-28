@@ -65,7 +65,7 @@ ap.add_argument("--xemu-arg", action="append", default=[], metavar="ARG",
 ap.add_argument("--keep", action="store_true", help="keep the temporary directory (HDD copy, EEPROM, log)")
 ap.add_argument("--net-udp", type=int, metavar="PORT",
                 help="network: xemu's udp backend, sending the console's Ethernet frames to 127.0.0.1:PORT "
-                "(tools/netlog.py --xemu PORT prints a NETLOG=1 build's log from them)")
+                "(tools/netboot/netboot.py --xemu PORT serves netboot from them)")
 a = ap.parse_args()
 
 work = tempfile.mkdtemp(prefix="xk-run-")

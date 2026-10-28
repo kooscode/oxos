@@ -383,12 +383,7 @@ static void MiInsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PV
     MiSetLink(link, start);
 }
 
-#if XK_NETLOG
-extern "C" volatile ULONG KiSampleTitlePc;
-#define MI_GROW_STEP(...) do { if (KiSampleTitlePc) XK_SERIAL(__VA_ARGS__); } while (0)
-#else
 #define MI_GROW_STEP(...) do { } while (0)
-#endif
 
 volatile ULONG MiPteListDamaged; // diagnostics: the system PTE free list failed its checks
 

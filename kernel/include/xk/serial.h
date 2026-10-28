@@ -4,7 +4,7 @@
 
 // Start-up marks (spec/oxos-internal/03 §8): until the title starts, every log point also leaves an address of its own
 // in CMOS 0x70-0x76 ('P', address, count), in every build. A console that freezes during start-up with no log (a
-// release build) names the last log point it passed at the next boot (a network-log build reports it). With the
+// release build) names the last log point it passed at the next boot (a serial build reports it). With the
 // serial log the address is the format string's; without it (release builds) the text is not needed, so each log
 // point has a one-byte mark instead, named in the map after the function that holds it (the strings would take
 // about 5 KB of resident memory, spec/oxos-internal/18-boot-memory.md).

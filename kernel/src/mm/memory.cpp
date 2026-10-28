@@ -95,12 +95,7 @@ XBAPI BOOLEAN NTAPI MmIsAddressValid(PVOID VirtualAddress) {
 // --- System PTE range: system memory, kernel stacks, I/O mappings.
 
 // Pages mapped in the system PTE range, each recorded with its usage (system memory, pool, stacks).
-#if XK_NETLOG
-extern "C" volatile ULONG KiSampleTitlePc; // set once the title runs (ke/irql.cpp)
-#define MI_STEP(...) do { if (KiSampleTitlePc) XK_SERIAL(__VA_ARGS__); } while (0)
-#else
 #define MI_STEP(...) do { } while (0)
-#endif
 
 PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage) {
     ULONG slots = pages + (guardPage ? 1 : 0);

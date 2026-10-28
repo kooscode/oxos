@@ -99,7 +99,7 @@ XBAPI void FASTCALL ObfReferenceObject(PVOID Object) {
     __atomic_add_fetch(&OBJECT_TO_OBJECT_HEADER(Object)->PointerCount, 1, __ATOMIC_SEQ_CST);
 }
 
-// Diagnostics (serial / network-log builds): name of a named object, for the integrity checks below.
+// Diagnostics (serial builds): name of a named object, for the integrity checks below.
 static void ObpReportObject(const char *What, PVOID Object, PVOID Caller) {
 #if XK_DEBUG_SERIAL
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);

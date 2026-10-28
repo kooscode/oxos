@@ -86,15 +86,8 @@ bool HalpIsSpuriousIrq(ULONG irq) {
     return !inService;
 }
 
-#if XK_NETLOG
-void HalpNetLogReleaseNic();
-#endif
 
 XBAPI ULONG NTAPI HalGetInterruptVector(ULONG BusInterruptLevel, PKIRQL Irql) {
-#if XK_NETLOG
-    if (BusInterruptLevel == 4) // a network stack is about to drive the NIC: the network log lets go of it now
-        HalpNetLogReleaseNic();
-#endif
     ULONG vector = BusInterruptLevel + HAL_IRQ_BASE_VECTOR;
     if (vector < HAL_IRQ_BASE_VECTOR || vector > 0x4A)
         return 0;

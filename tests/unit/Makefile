@@ -24,8 +24,8 @@ BUILD      ?= build$(if $(filter 1,$(COVERAGE)),-cov)$(if $(KERNEL_OPT),-opt$(su
 # in the tests and libraries) realign their own frames.
 M32      := -m32 -march=pentium3
 COMMON   := $(M32) -g -O1 -fno-omit-frame-pointer -fno-pic -fno-pie -mstackrealign -MMD -MP
-DEFINES  := -DXK_HOST_TEST=1 -DXK_BOOT_SELFTEST=0 -DXK_DEBUG_SERIAL=1 -DXK_NETLOG=0 -DXK_TRACE_IMPORTS=0 \
-            -DXK_RETAIL_MEDIA_POLICY=0 -DXK_NETLOG_IP=0,0,0,0 -DXK_NETLOG_DEST=0,0,0,0
+DEFINES  := -DXK_HOST_TEST=1 -DXK_BOOT_SELFTEST=0 -DXK_DEBUG_SERIAL=1 -DXK_TRACE_IMPORTS=0 \
+            -DXK_RETAIL_MEDIA_POLICY=0
 COVFLAGS := $(if $(filter 1,$(COVERAGE)),-fprofile-instr-generate -fcoverage-mapping)
 
 # The core runtime under test: the kernel's own sources, unchanged apart from XK_HOST_TEST hooks.

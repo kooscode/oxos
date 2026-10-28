@@ -557,8 +557,6 @@ static void XepLaunchTitle(ULONG Reason) {
 void HalpEndSplash();
 extern "C" void HalpSetBootLed(UCHAR Pattern);
 extern "C" void XkBootMarksDone();
-extern "C" volatile ULONG KiSampleTitlePc; // NETLOG builds: the clock interrupt samples the interrupted EIP (irql.cpp)
-extern "C" void HalpNetLogReplay();
 
 static void XepPrepareToEnterTitle() {
     HalpEndSplash();
@@ -628,9 +626,6 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
-#if XK_NETLOG
-    HalpNetLogReplay(); // the previous run's on-disk log (after a title had taken the NIC)
-#endif
     void VdRestoreMounts(); // vd/vdisc.cpp: disc images mounted before a quick reboot
     VdRestoreMounts();
     if (!KiQuickRebootFlag) {
@@ -642,15 +637,6 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
     XkBootMarksDone();
-#if XK_NETLOG
-    {
-        void HalpScreenLogStop();
-        HalpScreenLogStop();
-    }
-#endif
-#if XK_NETLOG
-    KiSampleTitlePc = 1;
-#endif
     ((void(__cdecl *)())XbeField(0x128))();
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

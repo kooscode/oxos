@@ -6,37 +6,6 @@
 
 constexpr ULONG XK_TRACE_MAX_IMPORTS = 512, XK_TRACE_RING = 0x8000;
 
-#if XK_NETLOG
-// Live trace (TRACE_IMPORTS with NETLOG): every recorded call and its return also goes out on the network log as it
-// happens, so the last line received shows where a console stopped even when it freezes with interrupts off. Runs of
-// the same call from the same place are counted instead of repeated.
-void HalpNetLogWrite(const char *Text, ULONG Length);
-XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
-static ULONG XkLiveOrdinal, XkLiveFrom, XkLiveRepeats;
-static void XkLiveCall(ULONG ordinal, ULONG from, ULONG thread, const PULONG frame) {
-    char line[160];
-    int n;
-    if (ordinal == XkLiveOrdinal && from == XkLiveFrom) {
-        XkLiveRepeats++;
-        return;
-    }
-    if (XkLiveRepeats) {
-        n = RtlSnprintf(line, sizeof(line), "t   (x%lu more)\n", XkLiveRepeats);
-        HalpNetLogWrite(line, (ULONG)n);
-    }
-    XkLiveOrdinal = ordinal, XkLiveFrom = from, XkLiveRepeats = 0;
-    n = RtlSnprintf(line, sizeof(line), "t ordinal %lu from %#lx thread %#lx args %#lx %#lx %#lx %#lx\n", ordinal, from,
-                    thread, frame[1], frame[2], frame[3], frame[4]);
-    HalpNetLogWrite(line, (ULONG)n);
-}
-static void XkLiveReturn(ULONG ordinal, ULONG result) {
-    if (XkLiveRepeats)
-        return;
-    char line[80];
-    int n = RtlSnprintf(line, sizeof(line), "t   ordinal %lu -> %#lx\n", ordinal, result);
-    HalpNetLogWrite(line, (ULONG)n);
-}
-#endif
 
 extern "C" {
 ULONG XkTraceTargets[XK_TRACE_MAX_IMPORTS];
@@ -102,9 +71,6 @@ ULONG __cdecl XkTraceLeave(ULONG result) {
         s->Depth--;
         ret = s->Return[s->Depth];
         XkTraceRing[s->Entry[s->Depth] % XK_TRACE_RING][6] = result;
-#if XK_NETLOG
-        XkLiveReturn(XkTraceRing[s->Entry[s->Depth] % XK_TRACE_RING][0], result);
-#endif
     }
     __asm__ volatile("pushl %0; popfl" ::"r"(flags) : "cc");
     return ret;
@@ -169,9 +135,6 @@ void __cdecl XkTraceRecord(ULONG index, PULONG frame) {
         e[7] = 0;
     }
     XkTraceCount = XkTraceCount + 1;
-#if XK_NETLOG
-    XkLiveCall(e[0], frame[0], e[2], frame);
-#endif
     if (XK_TRACE_SLOT *s = XkTraceSlot(e[2]); s && s->Depth < 8) { // catch the return
         s->Return[s->Depth] = frame[0];
         s->Entry[s->Depth] = entry;

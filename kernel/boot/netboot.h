@@ -4,8 +4,8 @@
 // into RAM and boots the kernel and key block from it instead. No answer, no link, or a bad download: the flash image
 // boots as usual.
 //
-// Runs with paging off (physical addresses), interrupts off, polled. The NIC sequence follows the kernel's network
-// log (kernel/src/hal/netlog.cpp: XboxDev/cromwell's etherboot forcedeth order); the receive ring follows nxdk's
+// Runs with paging off (physical addresses), interrupts off, polled. The NIC sequence follows XboxDev/cromwell's
+// etherboot forcedeth order (once also the kernel's network log, removed 2026-10-28); the receive ring follows nxdk's
 // nvnetdrv (MIT): a descriptor handed to the NIC has flags bit 15 (available) set; the NIC clears it and sets bit 0
 // (valid) and the length; the driver gives it back and writes TxRxControl bit 1 (get).
 
@@ -96,8 +96,8 @@ static unsigned short IpChecksum(const UCHAR *p, ULONG n) {
     return (unsigned short)~sum;
 }
 
-static const UCHAR Mac[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31}; // as the kernel's network log
-static const UCHAR SourceIp[4] = {XK_NETLOG_IP};                  // make NETLOG_IP=
+static const UCHAR Mac[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31}; // locally administered
+static const UCHAR SourceIp[4] = {XK_NETBOOT_IP};                 // make NETBOOT_IP=
 
 // One UDP broadcast from SourceIp:5141 to 255.255.255.255:5141.
 static void Send(const Message &m, const void *data, ULONG length) {

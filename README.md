@@ -132,8 +132,8 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
   - **Network boot.** The BIOS flashed on the Modxo is a netboot image. Its 2BL asks the PC for a kernel at every
     power-on, so a new build needs no flashing. [`tools/netboot`](tools/netboot/README.md) serves the kernel over
     UDP, and can add a title package: an XBE and its files (the ISO launcher and its `iso.txt`, a test title),
-    installed on E: and started instead of the dashboard. Network-log builds also send the kernel's log over UDP
-    (`tools/netlog.py`), even when no serial port is wired.
+    installed on E: and started instead of the dashboard. The kernel's log is the serial log (`SERIAL=1` builds),
+    which the Modxo passes to the PC.
   - **Eyes on the screen.** The console's video goes through an HDMI adapter into a USB capture card. Screenshots and
     videos of the real screen are taken with `ffmpeg`, so the agent can check what the console shows (the splash,
     the dashboard, a title's start screen). The serial log and the frames are matched by their timestamps.

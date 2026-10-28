@@ -12,7 +12,7 @@ constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 
 static volatile ULONG KiPendingSoftwareInterrupts;
 static PKINTERRUPT KiInterruptObjects[16];
-volatile ULONG KiIrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the network log's heartbeat prints them)
+volatile ULONG KiIrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the serial log prints them)
 
 // Interrupts are disabled on entry and exit; enabled while a handler runs.
 void KiDeliverSoftwareInterrupts() {
@@ -88,26 +88,6 @@ XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
     restore_flags(flags);
 }
 
-#if XK_NETLOG
-// PC sampling (network-log builds, once the title runs): every 100 clock ticks the clock interrupt sends the
-// interrupted EIP, IRQL, EFLAGS and the top stack words, so a console that spins at raised IRQL shows where, and one
-// that freezes with interrupts off shows the last place it ran.
-void HalpNetLogWrite(const char *Text, ULONG Length);
-XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
-extern "C" volatile ULONG KiSampleTitlePc;
-volatile ULONG KiSampleTitlePc;
-extern "C" volatile ULONG KiPcRing[32]; // the interrupted EIP of the last 32 clock ticks (the watchdog prints them)
-volatile ULONG KiPcRing[32];
-void HalpNetWatchdog();
-static void KiSamplePc(PULONG frame, KIRQL irql) {
-    // frame: eight saved registers (pushal), the IRQ number pushed by the stub, then EIP, CS, EFLAGS of the interrupted code
-    // (same privilege: no SS:ESP), then its stack.
-    char line[160];
-    int n = RtlSnprintf(line, sizeof(line), "pc %#lx irql %u efl %#lx stack %#lx %#lx %#lx %#lx\n", frame[9], irql,
-                        frame[11], frame[12], frame[13], frame[14], frame[15]);
-    HalpNetLogWrite(line, (ULONG)n);
-}
-#endif
 
 extern "C" void XkBootMarkWatchdog(ULONG Eip, UCHAR Irql);
 
@@ -117,21 +97,6 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         return;
     if (irq == 0) // start-up watchdog (ke/startup.cpp); the frame as KiSamplePc reads it
         XkBootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
-#if XK_NETLOG
-    // The stub's frame starts above our argument: EBP + 8 is irq, then the eight registers of pushal (built with
-    // frame pointers: -fno-omit-frame-pointer).
-    if (irq == 0 && KiSampleTitlePc) {
-        PULONG frame = (PULONG)__builtin_frame_address(0) + 3;
-        KiPcRing[KeTickCount % 32] = frame[9];
-        if (KeTickCount % 100 == 0)
-            KiSamplePc(frame, KiPcr.Irql);
-        else if (KeTickCount % 100 == 50) {
-            void HalpScreenRefresh(); // hal/splash.cpp (C linkage here)
-            HalpScreenRefresh();
-        }
-        HalpNetWatchdog();
-    }
-#endif
     KIRQL old = KiPcr.Irql;
     KIRQL level = HalpGetIrqLevel(irq);
     KiPcr.Irql = level;
@@ -141,7 +106,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (irq < 16)
         KiIrqCounts[irq] = KiIrqCounts[irq] + 1;
 #if XK_DEBUG_SERIAL
-    // Interrupt-storm detector (serial and network-log builds): more than 5000 interrupts of one line within one clock
+    // Interrupt-storm detector (serial builds): more than 5000 interrupts of one line within one clock
     // tick (1 ms) freezes the console; log it once and mask the line, so the system and its log keep running.
     if (irq) {
         static ULONG stormTick[16], stormCount[16];
