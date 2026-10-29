@@ -129,9 +129,9 @@ static void BlPciWrite(ULONG Device, ULONG Register, ULONG Value) {
     BlOut32(0xCFC, Value);
 }
 
-// The memory size is left to the X-codes: an OXOS probe that then wrote the 64 MB values of spec 22 §6.3 (PFB 0x100204 =
-// 0x11338000, host 0x84 = 0x03FFFFFF) stopped a 1.4 console in the memory manager (2026-10-22), so that reading of the
-// X-codes is not right for every console; the X-codes' own values work.
+// The memory size is decided before this (boot/start.S, the retail X-codes' probe, spec 22 §6.3). An earlier OXOS probe
+// that wrote 0x100204 = 0x11338000 on a 1.4 console stopped it in the memory manager (2026-10-22): that row is for
+// eight smaller chips, not the four 128 Mbit chips of a retail 64 MB console, which keep 0x11448000.
 
 // Bridge chip (device 1) and host set-up in the reference 2BL's order (spec/stock/21 §2): BlMain does step 1 (device 1
 // register 0x80 byte 0 = 0x02, the MCPX boot ROM off), the SMC challenge with step 5 (register 0x8C = 0x40000000: bit
@@ -150,8 +150,8 @@ static void BlSetUpChipset() {
     if (BlIn8(0xCFC) >= 0xD1)
         BlPciWrite(1, 0xC8, 0x8F00);
     // Not written here, as in the retail 2BLs (spec/stock/21 §2, spec/stock/22 §6.3): the NV2A memory configuration
-    // PFB 0x100200 / 0x100204 and the host bridge's top of memory 0x84. The X-codes set them from their memory-size
-    // probe (0x100204 = 0x11338000 on a 64 MB console); overwriting them with cromwell's 128 MB values (as earlier
+    // PFB 0x100200 / 0x100204 and the host bridge's top of memory 0x84. The memory-size probe sets them (boot/start.S;
+    // a retail 64 MB console: 0x03070003, 0x11448000, 64 MB); overwriting them with cromwell's 128 MB values (as earlier
     // OXOS images did) gave the GPU the wrong memory layout: a scrambled picture on 1.4 and 1.x consoles.
 }
 

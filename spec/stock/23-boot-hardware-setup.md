@@ -13,20 +13,19 @@ INIT 0x8003C3E0–0x80048FFF, 0x8004D574–0x80052CFF, 0x80054750–0x80061E23, 
 and call of the PCI helper inside these ranges was enumerated; byte patterns that look like such instructions
 outside them are data (checked: 0x8006356B, 0x80065871, 0x80067A22, 0x800687CC, 0x8006B55E, 0x8007257C …).
 
-## 0. What the stock kernel never does (5838 and 4627)
-| Item | Finding |
+## 0. Processor and memory state the kernel inherits and keeps (5838 and 4627)
+The kernel keeps most of the processor and memory-type state the 2BL leaves; these are the only places it changes
+any of it.
+| State | Behaviour |
 |---|---|
-| `mov cr4` | none. CR4 stays as the 2BL left it (0x610: PSE, OSFXSR, OSXMMEXCPT). **PGE and MCE are never set.** |
-| `wrmsr` | exactly two sites: microcode trigger MSR 0x79 (0x80061E21) and IA32_APIC_BASE 0x1B (0x80061D52, through the helper 0x80031CF4). **No MTRR, PAT, MCG_CTL, MCi_CTL/STATUS or IA32_DEBUGCTL (0x1D9) write.** (4627: 0x80062905 and 0x80030E44, same two MSRs.) |
-| `mov cr0` | only FPU bits (MP, EM, TS) in the lazy-FPU code (§6.1). CD/NW are never touched. |
-| `mov cr3` | only reloads of the current value (0x80018FAB, 0x80018FB3, 0x8001FF1F). The page directory never moves: it is the 2BL's (CR3 = 0xF000), edited in place through the self-map at 0xC0300000. |
-| `invd` | none. |
-| `wbinvd` | two code sites: the TLB+cache flush helper 0x80018FB0 (§5.5) and the graphics library at 0x80041863 (§2.7). |
-| Global pages | no PTE/PDE has bit 8 set; CR4.PGE is off, so every CR3 reload flushes the whole TLB. |
-| PAT bit in PTE/PDE | never set (bit 7 of a 4 KB PTE, bit 12 of a 4 MB PDE). Only PWT/PCD select the type (§5.1). |
-| Locked instructions | essentially none: three `lock inc` of one counter (0x8003B8A0) in trap code; the interlocked exports use interrupt masking. |
-| Port 0xCF8/0xCFC outside the PCI helper | none (all accesses go through `HalReadWritePCISpace`, ord 46, 0x8001530C). |
-| Writes to NV2A PBUS 0x1200–0x1264 | none (§4). |
+| CR4 | kept as the 2BL leaves it (0x610: PSE, OSFXSR, OSXMMEXCPT); PGE and MCE stay clear (no `mov cr4`). |
+| MSRs | two are written: the microcode trigger 0x79 (0x80061E21) and IA32_APIC_BASE 0x1B (0x80061D52, through the helper 0x80031CF4); 4627: 0x80062905 and 0x80030E44, the same two. The MTRRs, PAT, MCG_CTL, MCi_CTL / MCi_STATUS and IA32_DEBUGCTL (0x1D9) keep the 2BL's values. |
+| CR0 | only the FPU bits (MP, EM, TS) change, in the lazy-FPU code (§6.1); CD / NW keep the 2BL's values. |
+| CR3, page directory | the 2BL's directory at 0xF000 stays in use and is edited in place through the self-map at 0xC0300000; CR3 is only reloaded with its current value (0x80018FAB, 0x80018FB3, 0x8001FF1F). |
+| Caches | written back and invalidated (`wbinvd`) at two places: the TLB-and-cache flush helper 0x80018FB0 (§5.4) and the graphics library at 0x80041863 (§2.7); `invd` is not used. |
+| Global pages | no PTE or PDE has bit 8 set, and with CR4.PGE clear every CR3 reload flushes the whole TLB. |
+| Memory types in page tables | PWT / PCD select the type (§5.1); the PAT bit (bit 7 of a 4 KB PTE, bit 12 of a 4 MB PDE) is always clear. |
+| NV2A PBUS 0x1200–0x1264 (pad registers) | kept as the 2BL leaves them (§4). |
 
 ## 1. Processor start-up (cold boot)
 | # | Address | Write | Value / effect |
@@ -128,6 +127,8 @@ resumes at the IDT step (spec 02 §1). The 4 KB tables are rebuilt by §2.2.
 
 ## 3. PCI configuration (item 2)
 ### 3.1 Every PCI write (only `HalReadWritePCISpace`; callers 0x80062E24 ×29, MmInit ×1 read, detection ×1 read)
+All configuration accesses go through `HalReadWritePCISpace` (ordinal 46, 0x8001530C); no other code uses ports
+0xCF8 / 0xCFC.
 "Full" = the whole 256-byte space read, edited, written back as 64 dword cycles (every register rewritten with its
 current value; write-one-to-clear status bits get cleared).
 | # | Dev | Access | Value |
@@ -274,7 +275,7 @@ Measured over the code ranges above (96 147 instructions) and OXOS `exp-nv` `.te
 | `tzcnt` (F3 0F BC; executes as `bsf` on a Pentium III) | none | 1 (0x8001534D) |
 | Padding between functions | mostly none: 603 of 1597 entries at odd addresses, 394 16-byte aligned; gaps filled with 0x90 or 0xCC runs (0–8 bytes) | 772 of 834 entries 16-byte aligned; 0x90 runs (10 838 single-byte NOPs) |
 | Loop alignment filler | `lea esp,[esp+0]` / `lea ebx,[ebx+0]` multi-byte forms (65) and `mov edi,edi` (53) | 0x90 runs |
-| `lock` prefix | 3 real | 67 |
+| `lock` prefix | 3 real (`lock inc` of one counter, 0x8003B8A0, in trap code; the interlocked exports mask interrupts instead) | 67 |
 | SSE / x87 | SSE and x87 in the INIT graphics/animation code | none |
 | `pause` | none in .text | 3 |
 | Read-only data in code pages | `.text` mixes code with read-only tables at its start and end | `.rdata` merged after code; trap/IRQ stubs at 0x80048CA0/0x80048D20 sit after `.rdata` |

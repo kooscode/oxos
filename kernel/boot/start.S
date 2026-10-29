@@ -107,8 +107,9 @@ _start:
     movl $0x04555548, %esi
 9:  cmpl $0x100, %ecx
     jne 5b
-    // No lane with the larger chips (64 MB): 0x100200 0x03070103 and 0x100204 0x11338000, top of memory 64 MB.
-    // Every lane (128 MB): 0x03070103, the X-codes' 0x11448000, 128 MB. Mixed: 0x03070003, 0x11448000, 64 MB.
+    // No lane large (eight smaller chips, 64 MB): 0x100200 0x03070103 and 0x100204 0x11338000, top of memory 64 MB.
+    // Every lane large (128 MB): 0x03070103, the X-codes' 0x11448000, 128 MB. Otherwise, the retail default and the
+    // result on a retail 64 MB console (lanes 0-3 large, 4-7 absent): 0x03070003, 0x11448000, 64 MB.
     movl $0x03FFFFFF, %edi
     testl %ebx, %ebx
     jnz 10f
