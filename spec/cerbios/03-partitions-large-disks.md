@@ -46,6 +46,23 @@ which holds **5** in the 3.1.0 image (the retail kernel's value is 3); it is not
 - Each automatic partition is capped at **0x74000000 sectors** (about 928 GiB) and is
   marked in use only if larger than **0x200000 sectors** (1 GiB). The size's high 16 bits are 0.
 - Default 5 = F: covers the rest of the first 128 GiB, G: everything after it (each at most ~928 GiB).
+- **Exact arithmetic** (extension 0x3163–0x33A8; N = the disk's sector count, 64-bit):
+  - The rules run only when N > 0xEE8AB0.
+  - F: (bit 0): start = E:'s entry start + E:'s entry size (both 48-bit, so 0xEE8AB0 with the built-in table);
+    end = **min(N, 0x0FFFFFFF)** (N ≥ 0x0FFFFFFF gives 0x0FFFFFFF); size = end − start, then capped at 0x74000000.
+    The entry's name (16 bytes) is copied from a constant ("XBOX F"), its start high 16 bits are set, its size high
+    16 bits cleared.
+  - F: (bit 1): the same with end = N.
+  - G: (bit 2): start = F:'s start + F:'s size as just set; size = N − start, capped at 0x74000000; name "XBOX G".
+  - An entry is marked in use (flags 0x80000000) only when its size is above 0x200000 sectors (or its 64-bit
+    size has a non-zero high part before the cap).
+  - So with the default 5 on a disk of N ≥ 0x0FFFFFFF sectors: F: = 0xEE8AB0 … 0x0FFFFFFF (0xF11754F sectors,
+    ~120.7 GiB), G: = 0x0FFFFFFF … min(N, 0x0FFFFFFF + 0x74000000).
+- The same F: is what EvoX lays out (spec/evox/03 §2); EvoX's G: has no cap, so the two differ on disks above
+  0x0FFFFFFF + 0x74000000 sectors (~1.06 TB).
+- Disk tools (XBPartitioner, FATXplorer) write a PARTINFO table to sector 0 instead, which wins (§2). Seen on a
+  2 TB disk formatted by XBPartitioner: entries 0–4 the retail five, entry 5 (F:) 0xEE8AB0 + 0xF11754F, entry 6
+  (G:) 0x0FFFFFFF + 0xD8E088B1 (to the end of the disk, larger than the automatic cap).
 
 ## 4. Drive letters (extension)
 Partition numbers by letter: **C 2, E 1, F 6, G 7, X 3, Y 4, Z 5**; and per disk J–N = partitions 10–14 (strings
@@ -58,6 +75,11 @@ returns: 0xCAFEBABE, 0xBABEFACE, version **4**, three zero dwords, and a **point
 table** (in kernel memory). Shorter buffers →
 STATUS_BUFFER_TOO_SMALL (0xC0000023). The other handled codes are the retail ones (geometry 0x70000, partition info
 0x74004, 0x70014, and 0x4D028 pass-through).
+
+## For OXOS (notes, not Cerbios behaviour)
+- OXOS reads the PARTINFO table and lays out the automatic F:/G: as in §2–§3 (default 5) on FATX disks
+  (`kernel/src/idex/disk.cpp`, `IdexDiskReadPartitionTable`, `IdexDiskDefaultPartitions`): partition N is entry
+  N − 1's start and size. exFAT disks keep their own layout (spec/oxos-internal/05).
 
 ## Open
 - The DMA EXT command bytes and the read/write path (expected 0x25/0x35); how partition devices are created for
