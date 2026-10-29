@@ -8,6 +8,7 @@
 // REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot) and SITE POWEROFF.
 // RNTO moves a file or folder to another folder of the same drive. Passive data ports are 50000-50099.
 // The address (DHCP, else 192.168.1.223) is on the screen and, with a SERIAL=1 kernel, on the debug serial port.
+// BACK on any controller reboots the console (as SITE REBOOT).
 // The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
 #include <cstdarg>
 #include <cstdio>
@@ -18,6 +19,8 @@
 
 #include <hal/debug.h>
 #include <hal/video.h>
+#include <usbh_lib.h>
+#include <xid_driver.h>
 #include <lwip/sockets.h>
 #include <lwip/netif.h>
 #include <lwip/netifapi.h>
@@ -30,6 +33,7 @@
 extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 
 namespace {
+
 
 constexpr unsigned short ControlPort = 21, DataPortFirst = 50000, DataPorts = 100;
 constexpr unsigned BufferSize = 64 * 1024;
@@ -743,12 +747,54 @@ DWORD WINAPI SessionThread(LPVOID parameter) {
     return 0;
 }
 
+// --- BACK reboots -----------------------------------------------------------------------------------------------
+
+constexpr unsigned short PadBack = 0x20;
+volatile LONG BackPressed;
+
+void PadReport(UTR_T *utr) {
+    auto dev = static_cast<xid_dev_t *>(utr->context);
+    if (utr->status < 0 || !dev)
+        return;
+    if (utr->xfer_len >= static_cast<int>(sizeof(xid_gamepad_in)) &&
+        (reinterpret_cast<const xid_gamepad_in *>(utr->buff)->dButtons & PadBack))
+        BackPressed = 1;
+    utr->xfer_len = 0;
+    utr->bIsTransferDone = 0;
+    usbh_int_xfer(utr);
+}
+
+void PadConnected(xid_dev_t *dev, int) {
+    if (usbh_xid_get_type(dev) >> 8 == XID_TYPE_GAMECONTROLLER)
+        usbh_xid_read(dev, 0, reinterpret_cast<void *>(&PadReport)); // the API takes the callback as void *
+}
+
+void PadDisconnected(xid_dev_t *, int) {}
+
+// Polls the controllers; on BACK reboots the console (cold, as SITE REBOOT: every device starts reset, and a
+// netbooted console starts what the PC serves). Quitting to the dashboard with a quick reboot hung the Xbox
+// dashboard on the 1.4 console.
+DWORD WINAPI PadThread(LPVOID) {
+    usbh_core_init();
+    usbh_xid_init();
+    usbh_install_xid_conn_callback(PadConnected, PadDisconnected);
+    while (!BackPressed) {
+        usbh_pooling_hubs();
+        Sleep(10);
+    }
+    Log("BACK: reboot");
+    HalReturnToFirmware(HalRebootRoutine);
+    return 0;
+}
+
 } // namespace
 
 int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     InitializeCriticalSection(&PrintLock);
-    debugPrint("OXOS FTP server\n\n");
+    debugPrint("OXOS FTP server    (BACK: reboot)\n\n");
+    if (HANDLE pad = CreateThread(nullptr, 16 * 1024, PadThread, nullptr, 0, nullptr))
+        CloseHandle(pad);
 
     nx_net_parameters_t dhcp = {};
     dhcp.ipv4_mode = NX_NET_DHCP;
