@@ -579,7 +579,7 @@ static ULONG IopFileMode(PFILE_OBJECT f) {
 
 // Query/set through an IRP. Asynchronous file objects still behave synchronously: wait on a local event.
 static NTSTATUS IopInformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                  ULONG Class, UCHAR major) {
+                                  ULONG Class, UCHAR major, PFILE_OBJECT Target = nullptr) {
     KEVENT event;
     IO_STATUS_BLOCK localIosb;
     PIRP irp = IopAllocateRequestIrp(r, IoStatusBlock, nullptr, nullptr, major);
@@ -595,6 +595,8 @@ static NTSTATUS IopInformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock
     PIO_STACK_LOCATION stack = IoGetNextIrpStackLocation(irp);
     stack->Parameters.QueryFile.Length = Length;
     stack->Parameters.QueryFile.FileInformationClass = (FILE_INFORMATION_CLASS)Class;
+    if (major == IRP_MJ_SET_INFORMATION)
+        stack->Parameters.SetFile.FileObject = Target;
     IopQueueThreadIrp(irp);
     NTSTATUS status = IofCallDriver(r->Device, irp);
     if (status == STATUS_PENDING) {
@@ -711,8 +713,37 @@ XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK Io
         ObfDereferenceObject(port);
         return done(STATUS_INVALID_PARAMETER);
     }
-    // Rename/link targets are passed to the file system as given (relative names resolve in the FSD).
-    return IopInformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_SET_INFORMATION);
+    // Rename to a full path ("\\...") or relative to RootDirectory: the target's directory is opened first
+    // (IO_OPEN_TARGET_DIRECTORY), must be on the same volume, and goes to the file system with the request; the
+    // handle is closed afterwards. A plain name renames in place (resolved in the FSD).
+    HANDLE targetHandle = nullptr;
+    PFILE_OBJECT target = nullptr;
+    if (c == FileRenameInformation) {
+        auto info = (FILE_RENAME_INFORMATION *)FileInformation;
+        if ((info->FileName.Length && info->FileName.Buffer[0] == '\\') || info->RootDirectory) {
+            OBJECT_ATTRIBUTES oa = {info->RootDirectory, &info->FileName, OBJ_CASE_INSENSITIVE};
+            IO_STATUS_BLOCK iosb;
+            status = IoCreateFile(&targetHandle, SYNCHRONIZE | FILE_WRITE_DATA, &oa, &iosb, nullptr, 0,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, FILE_OPEN_FOR_BACKUP_INTENT,
+                                  IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY | IO_FORCE_ACCESS_CHECK);
+            if (!NT_SUCCESS(status))
+                return IopAbortRequest(&r, status);
+            status = ObReferenceObjectByHandle(targetHandle, &IoFileObjectType, (PVOID *)&target);
+            if (NT_SUCCESS(status)) {
+                ObfDereferenceObject(target); // the handle keeps it
+                if (target->DeviceObject != f->DeviceObject)
+                    status = STATUS_NOT_SAME_DEVICE;
+            }
+            if (!NT_SUCCESS(status)) {
+                NtClose(targetHandle);
+                return IopAbortRequest(&r, status);
+            }
+        }
+    }
+    status = IopInformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_SET_INFORMATION, target);
+    if (targetHandle)
+        NtClose(targetHandle);
+    return status;
 }
 
 XBAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock,

@@ -59,8 +59,9 @@ An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
   per part), then the stored block. A block stored as 2048 bytes is raw. Otherwise its first byte is a padding count
   p, and the next (length − 1 − p) bytes are an LZ4 block that must decode to exactly 2048 bytes.
 - **exFAT files of 4 GB or more** (spec/oxos-internal/07 §2) are visible and readable with 64-bit offsets. They are
-  read-only, because FATX sizes, writes and allocation are 32-bit. Opening one for writing, appending, deleting or
-  overwriting fails with STATUS_ACCESS_DENIED, and so does setting its size. Size queries and directory listings
+  read-only, because FATX sizes, writes and allocation are 32-bit. Opening one for writing, appending or
+  overwriting fails with STATUS_ACCESS_DENIED, and so does setting its size. Renaming, moving it to another folder
+  and deleting it work (spec 07). Size queries and directory listings
   report the full 64-bit size.
 
 ## 5. Quick reboots
@@ -93,7 +94,11 @@ An nxdk title, built with `make -C kernel iso-launcher`.
 5. **Launch.** The launcher shows the OXOS boot splash for one second (12 frames of fade in, 36 of hold, 12 of fade to
    black at 60 Hz; the picture is `kernel/splash/splash.png`, packed at build time by `gen_splash.py` and unpacked
    with the kernel's inflater), as a dashboard fades out when it starts a title. It then launches
-   `\Device\CdRom0\default.xbe` through the launch data page and a quick reboot.
+   `\Device\CdRom0\default.xbe` through the launch data page and a quick reboot. The page names the launcher as
+   the caller with nxdk's default title ID 0xFFFF0002 (launch data type 0, no data), not the certificate's: a
+   launcher made by oxos-isonator carries the game's certificate, and a game that finds its own title ID there
+   with no data takes the launch as a return from its own relaunch (Prince of Persia: The Sands of Time then starts
+   the dashboard; 2026-10-29, console and xemu).
 
 When something is missing, the launcher shows text instead and says why (the screen holds no text otherwise).
 

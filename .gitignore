@@ -42,6 +42,16 @@ tools/iso-launcher/splash_image.h
 tools/iso-launcher/*.d
 tools/iso-launcher/*.exe
 tools/iso-launcher/*.pdb
+tools/title-launcher/bin/
+tools/title-launcher/*.obj
+tools/title-launcher/*.d
+tools/title-launcher/*.exe
+tools/title-launcher/*.pdb
+tools/ftp-server/bin/
+tools/ftp-server/*.obj
+tools/ftp-server/*.d
+tools/ftp-server/*.exe
+tools/ftp-server/*.pdb
 # Host unit-test build output
 tests/unit/build*/
 tools/mkcci/bin/
