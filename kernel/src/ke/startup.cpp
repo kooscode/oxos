@@ -56,6 +56,7 @@ XK_PERSIST ULONG KiEepromKeyStateCount;
 extern "C" void XeReadNetbootTitle(); // xe/nettitle.cpp
 static void KiReportMachineChecksAtBoot();
 static void KiReportNvPads(const char *When);
+static void KiReportRefresh();
 void HalpTakeSplashRecord(bool QuickReboot); // hal/splash.cpp
 static ULONG KiPadRecord[13]; // the 2BL's pad calibration record, copied before the memory manager unmaps page 2
 extern ULONG KiMicrocodeRevision; // ke/cpu.cpp
@@ -112,7 +113,21 @@ extern "C" void XkBootMarksDone() {
     HalpCmosWrite(0x70, 'T');
 }
 
+// DRAM refresh at kernel entry (spec/oxos-internal/20): PFB 0x100210 bit 31 must be set. A boot loader that leaves it
+// clear lets RAM lose bits within seconds; it is set here before the kernel relies on memory. The boot loader's own
+// fixes (OXOS's start.S and 2BL, records at physical 0x23D8 and 0x23D0) and this one are logged once the serial port
+// is up (KiReportRefresh).
+static ULONG KiRefreshFoundOff = 0xFFFFFFFF; // the value found when refresh was off at entry (0xFFFFFFFF: it was on)
+static ULONG KiRefreshBootFix[4];            // start.S's record ('RFS0', value), the 2BL's record ('RFEN', value)
+
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
+    {
+        auto refresh = (volatile ULONG *)0xFD100210; // NV2A registers, mapped by the boot loader's page directory
+        if (!(*refresh & 0x80000000)) {
+            KiRefreshFoundOff = *refresh;
+            *refresh = 0x80000000;
+        }
+    }
     // The previous boot's start-up record, before this boot's first mark overwrites it.
     if (HalpCmosRead(0x70) == 'P') {
         KiPrevMarkFound = true;
@@ -167,6 +182,8 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     HalInitSystemPhase0(/*coldBoot=*/!quick);
     HalpSetBootLed(0x5F); // alternating green / orange: the kernel is starting
 
+    for (int i = 0; i < 4; i++) // the boot loader's refresh records (boot/start.S at 0x23D8, boot/bl.cpp at 0x23D0)
+        KiRefreshBootFix[i] = quick ? 0 : ((volatile ULONG *)0x800023D0)[i < 2 ? i + 2 : i - 2];
     for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
         KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
     HalpTakeSplashRecord(quick); // boot/bl.cpp's splash record at 0x2380, before the memory manager
@@ -174,6 +191,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     MmInitSystem(quick);
     KiReportMachineChecksAtBoot();
     KiReportNvPads("after the memory manager");
+    KiReportRefresh();
     KiReportLastWords();
     XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
     {
@@ -258,6 +276,17 @@ static void KiReportMachineCheckBanks(const char *When) {
     }
     if (KiMcaBanks)
         XK_SERIAL("machine check: MCG_STATUS %08lx (%s)\n", (ULONG)rdmsr(0x17A), When);
+}
+
+// Whether DRAM refresh had to be switched on before or at kernel entry (debug log, spec/oxos-internal/20).
+static void KiReportRefresh() {
+    [[maybe_unused]] const ULONG *r = KiRefreshBootFix;
+    if (r[0] == 0x30534652) // 'RFS0'
+        XK_SERIAL("*** refresh: DRAM refresh was off after the X-codes (PFB 0x100210 %08lx); start.S set it\n", r[1]);
+    if (r[2] == 0x4E454652) // 'RFEN'
+        XK_SERIAL("*** refresh: the 2BL found DRAM refresh off before the kernel (PFB 0x100210 %08lx) and set it\n", r[3]);
+    if (KiRefreshFoundOff != 0xFFFFFFFF)
+        XK_SERIAL("*** refresh: DRAM refresh was off at kernel entry (PFB 0x100210 %08lx); set\n", KiRefreshFoundOff);
 }
 
 // NV2A memory pad registers (debug log): the X-codes set them; read at two points to see whether they change.

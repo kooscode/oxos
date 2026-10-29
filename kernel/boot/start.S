@@ -83,6 +83,19 @@ _start:
     // 0x03070103, 0x100204 0x11448000, host 0x84 128 MB). For each of 8 byte lanes (four at 0x00555548 + 16n, four
     // at 0x04555548 + 16n) write the address and the address + 32 MB: a lane where the second write leaves the first
     // alone has the larger chips (ebx); one that does not keep a value is faulty (ebp, not used further).
+    // DRAM refresh (spec/oxos-internal/20): every reference X-code table enables it (PFB 0x100210 = 0x80000000) and then
+    // reprograms the memory clock, and nothing in a reference boot chain checks it again. On a warm 1.4 console it
+    // was found off here in about one cold boot in five, and the unrefreshed cells lost bits within seconds. Before
+    // anything is stored in RAM: if bit 31 is clear, set it as the X-codes do, and leave a record for the kernel's log
+    // (physical 0x23D8: 'RFS0', then the value found).
+    movl $0, 0x23D8
+    movl 0xFD100210, %eax
+    testl $0x80000000, %eax
+    jnz 14f
+    movl %eax, 0x23DC
+    movl $0x80000000, 0xFD100210
+    movl $0x30534652, 0x23D8
+14:
     cmpl $0x11448000, 0xFD100204            // X-codes that sized the memory themselves: keep their set-up
     jne 13f
     xorl %ebx, %ebx
