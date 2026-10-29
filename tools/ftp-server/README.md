@@ -31,6 +31,8 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   4 GB or split them (`tools/oxos-isonator --split`), or copy big images with the disk on a PC.
 - **SITE REBOOT** restarts the console (cold); **SITE POWEROFF** turns it off. In a client:
   `curl ftp://ADDR/ -Q 'SITE POWEROFF'`.
+- **BACK** on any controller restarts the console as SITE REBOOT does (a netbooted console then starts what the PC
+  serves, e.g. the title launcher).
 - **Network:** DHCP; with no answer in 10 s the fixed address 192.168.1.223/24. Passive data ports are 50000-50099
   (open them in a firewall between the PC and the console). Writes go straight to the disk, so the console can be
   switched off as soon as a transfer has finished.
