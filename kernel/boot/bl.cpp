@@ -376,6 +376,16 @@ extern "C" [[noreturn]] void BlMain() {
     auto image = (const UCHAR *)KERNEL_PHYS;
     ULONG nt = *(const ULONG *)(image + 0x3C);
     ULONG entry = *(const ULONG *)(image + nt + 0x34) + *(const ULONG *)(image + nt + 0x28); // ImageBase + entry RVA
+    // DRAM refresh must be on when the kernel starts (spec/oxos-internal/20). boot/start.S makes sure of it after the
+    // X-codes; checked again here, after everything the 2BL does, with its own record (physical 0x23D0: 'RFEN', then
+    // the value found).
+    if (!(BlNv(0x100210) & 0x80000000)) {
+        ((volatile ULONG *)0x23D0)[1] = BlNv(0x100210);
+        BlNv(0x100210) = 0x80000000;
+        ((volatile ULONG *)0x23D0)[0] = 0x4E454652; // 'RFEN'
+    } else {
+        ((volatile ULONG *)0x23D0)[0] = 0;
+    }
     BlPost(0x22);
     __asm__ volatile("fninit\n\t"
                      "movl %%cr4, %%eax\n\t"
