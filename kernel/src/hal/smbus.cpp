@@ -230,7 +230,18 @@ extern "C" void KiQuickRebootQuiesce() {
     *(volatile ULONG *)0xFED00008 = 1; // OHCI host controller resets (USB 0 and 1)
     *(volatile ULONG *)0xFED08008 = 1;
     *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
-    *(volatile ULONG *)0xFEF00084 = 0; // NIC: tx/rx DMA off
+    // NIC, as at cold boot (spec/oxos-internal/10 §2.4): with only the transmitter off, the receiver of a title that
+    // used the network (an nxdk title, which leaves it running) kept writing packets into that title's receive
+    // buffers, memory the next title gets: the Xbox dashboard hung at random after the FTP server quit to it.
+    auto nic = [](ULONG r) -> volatile ULONG & { return *(volatile ULONG *)(0xFEF00000 + r); };
+    nic(0x84) = 0;     // transmitter off
+    nic(0x94) = 0;     // receiver off
+    nic(0x004) = 0;    // interrupts masked
+    nic(0x144) = 0x14; // TxRxControl: reset
+    KeStallExecutionProcessor(10);
+    nic(0x144) = 0x04;
+    nic(0x100) = 0;    // ring addresses
+    nic(0x104) = 0;
 }
 extern "C" void KiQuickReboot() __attribute__((noreturn));
 extern "C" volatile UCHAR KiQuickRebootFlag;
