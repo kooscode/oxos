@@ -15,18 +15,18 @@ https://github.com/user-attachments/assets/bffc85c4-109c-4fdb-a597-2168cf89328b
 
 *HDMI capture of OXOS running **Brute Force on a real 1.4 Xbox**, from an XISO on a 500 GB exFAT-formatted SSD,
 mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher): power on, the OXOS splash and boot
-jingle, then Brute Force's intros and title screen!!*
+jingle, then Brute Force's intros and title screen! (Turn on Sound!)*
 
 **Status:**
 - **Real hardware:** a 1.4 console (no DVD drive) boots the MS dashboard and runs retail games such as Brute Force
-  from disc images on a PC-formatted exFAT SSD.
+  via ISO image on a PC-formatted exFAT SSD.
 - **Complete kernel:** every function and variable the 4627 kernel exports is implemented; in xemu it runs the
   dashboard, Halo, Halo 2, Brute Force, Half-Life 2 and Enter The Matrix.
 - **Open BIOS:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, ours from the first
   instruction: no Microsoft code, keys or boot-ROM dump.
-- **Games from your own disc images:** XISO, full-dump and CCI images (also over 4 GB, split in two) mounted as the
+- **Games from your own disc images:** XISO (No file size limit) and legacy CCI images (split ISO) mounted as the
   console's disc by the [ISO launcher](tools/iso-launcher).
-- **Big, modern disks:** exFAT (format on any PC; the Xbox partitions are folders, see
+- **No Size Limit HDD and Files:** exFAT (format on any PC; the Xbox partitions are folders and no file size limit, see
   [Using an exFAT disk](#using-an-exfat-disk)) and LBA48 (no size limit).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to component up to 1080i.
 - **More memory for titles** than the stock kernel, in every title measured.
