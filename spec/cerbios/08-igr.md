@@ -3,8 +3,7 @@
 Studied in Cerbios 3.1.0 Beta: the kernel's controller-state hook and the combo handler. Behaviour and formats only.
 
 ## 1. Where the buttons come from
-The kernel intercepts the completion of the controller state request that titles make (the XInput "get state" path)
-and passes the returned state and the controller's port number to the combo handler. The state is the usual
+The kernel intercepts the title's XInputGetState (the hook on `KeRaiseIrqlToDpcLevel`, see Open) and passes the returned state and the controller's port number to the combo handler. The state is the usual
 XINPUT_STATE layout: packet number (4 bytes), then the gamepad: digital buttons (u16 at +4) and eight analog button
 bytes (+6 … +13: A, B, X, Y, BLACK, WHITE, LT, RT).
 
@@ -41,5 +40,8 @@ this order on every state report:
 ## Open
 - What the scratch value 0x0C asks of the next boot (bit 0x04 skips the boot animation, spec 06 §1; 0x08 is not
   yet traced).
-- The exact request the hook recognises (it checks a type byte of 0xA3 in the request before chaining its
-  completion).
+- (Resolved 2026-10-29.) The hook is on `KeRaiseIrqlToDpcLevel` (0x8001a316, ahead of the body at 0x8001a374):
+  a caller below 0x80000000 whose code at the return address is `8B ?? 24 0C` with the dword 0xA3 at +6 (XAPI's
+  XInputGetState: `mov reg, [esp+0Ch]; mov/cmp [edx+0A3h]`) gets its frame moved 12 bytes down and its return
+  address replaced by 0x8001a355. That code runs after the function's `ret 8`: with status 0 it calls the combo
+  handler (0x8001654d) with pState and the port at [[hDevice]]+0x14. OXOS's version: spec/oxos-internal/22.

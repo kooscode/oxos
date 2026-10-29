@@ -70,7 +70,7 @@ XBAPI void FASTCALL KfLowerIrql(KIRQL NewIrql) {
     restore_flags(flags);
 }
 
-XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() { return KfRaiseIrql(DISPATCH_LEVEL); }
+// KeRaiseIrqlToDpcLevel is in src/arch/igr.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game reset hook.
 
 XBAPI KIRQL NTAPI KeRaiseIrqlToSynchLevel() { return KfRaiseIrql(SYNCH_LEVEL); }
 

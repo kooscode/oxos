@@ -80,6 +80,9 @@ working DVD drive can still run it). OXOS includes no titles; make the images fr
    stays mounted through the title's own restarts until the console is switched off; an `iso.txt` of `none`
    unmounts it.
 
+To leave a game, hold **LT + RT + BACK + BLACK** on any controller: the console reboots (and unmounts the image), so a
+netbooted console returns to the launcher ([`spec/oxos-internal/22-in-game-reset.md`](spec/oxos-internal/22-in-game-reset.md)).
+
 Details: [`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md).
 
 ## Getting Started (Kernel Developer)
