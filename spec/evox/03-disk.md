@@ -19,9 +19,21 @@ the INIT copies 0x800B2770 / 0x800B2784 of entries 0 and 4 (hooked at INIT 0x800
 ## 2. Extra partitions
 - Option bytes read at disk set-up (0x8003C5C4–0x8003C5C5, INIT copy 0x800B2734–35): +0 "lay out the extra
   partitions", +1 "do not read PARTINFO from the disk" (values 2 and 0 in this build). **[I]**
-- When the disk count exceeds **0xEE8AB0 sectors** (the stock 8 GB disk) and option byte +0 is set, the space above
-  it becomes extra partitions (sizes from the remainder; layout details **[O]**). **[C]** The XBE loader area also
-  holds partition 6 / "F:" sizing from 0xEE8AB0 sectors (spec 02 §3).
+- When the disk count exceeds **0xEE8AB0 sectors** (the stock 8 GB disk) and option byte +0 (mode) is non-zero, the
+  space above it becomes extra partitions, written into the default PARTINFO table (at INIT 0x800B28B0, magic
+  `****PARTINFO****`) by the start-up hook 0x800B2B30 before the retail disk set-up runs. **[C]** With N the disk's
+  sector count:
+  - **entry 5 (partition 6, F:)**: name `DRIVE F:` (space-padded), flags 0x80000000, first sector **0xEE8AB0**,
+    sector count N − 0xEE8AB0; but when N > 0x0FFFFFFF and mode ≠ 1, the count is **0x0FFFFFFF − 0xEE8AB0** (F:
+    ends at sector 0x0FFFFFFF, the 28-bit limit, about 128 GiB);
+  - **entry 6 (partition 7, G:)**: only when N > 0x0FFFFFFF and mode is neither 1 nor 3: name `DRIVE P:`, flags
+    0x80000000, first sector 0x0FFFFFFF (F:'s end), sector count **N − 0x0FFFFFFF** (the rest of the disk, no cap).
+  - So mode 1 = F: is the whole rest of the disk; mode 3 = F: up to 0x0FFFFFFF and no G:; other non-zero values
+    (2 in this build) = F: up to 0x0FFFFFFF and G: after it.
+  - High 16 bits of start and count stay 0. A PARTINFO sector found on the disk (§3) replaces the whole table.
+  - Compared with Cerbios (spec/cerbios/03 §3): F: starts at the same sector (E:'s end = 0xEE8AB0); Cerbios caps
+    each automatic partition at 0x74000000 sectors, EvoX does not, so on disks above ~1.06 TB their G: sizes differ.
+  The XBE loader area also holds partition 6 / "F:" sizing from 0xEE8AB0 sectors (spec 02 §3).
 
 ## 3. Partition table (PARTINFO)
 - **Format** (same magic and entry layout as Cerbios, spec/cerbios/03 §2): 16-byte magic `****PARTINFO****`, then at
@@ -41,4 +53,4 @@ information (the block at 0x8003C5C0 — dword 3, dword 2, **[I]** version / fea
 to the caller (dashboards read the table this way). Exact output layout **[O]**.
 
 ## Open questions
-- Extra-partition layout rules (§2) and the exact 0xCAFEBABE output (§4).
+- The exact 0xCAFEBABE output (§4). (§2's layout rules: resolved 2026-10-29.)

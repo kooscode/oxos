@@ -36,6 +36,12 @@ static PDEVICE_OBJECT IdexDiskPhysical; // the whole disk without remapping (not
 static KEVENT IdexDiskLayoutLock;
 static volatile LONG IdexDiskLayoutKnown;
 static const char *const IdexDiskFolders[] = {nullptr, "E", "C", "X", "Y", "Z", "F"};
+// FATX disk partitions 1-14 (sectors): the retail five, the automatic F: and G: of a larger disk, or the disk's own
+// PARTINFO table (spec/cerbios/03 §2-§3). Index = partition number.
+struct IDE_PARTITION {
+    ULONGLONG Start, Length;
+};
+static IDE_PARTITION IdexDiskPartitions[15];
 static UCHAR IdexKind(PDEVICE_OBJECT dev) { return ((IDE_DISK_DEVICE *)dev->DeviceExtension)->Kind; }
 constexpr ULONG IDE_MAX_TRANSFER = 0x20000;
 UCHAR IdexGetCompletionStatus(PUCHAR BusMasterStatus);
@@ -360,8 +366,6 @@ PCSZ IdexDiskFolderOf(PDEVICE_OBJECT Device) {
 }
 
 static NTSTATUS IdexDiskCreatePartitionDevice(ULONG Number) {
-    ULONG startLba;
-    LONGLONG length;
     PDEVICE_OBJECT dev;
     if (IdexDiskExfatLayout) {
         if (Number < 1 || Number > 6)
@@ -377,19 +381,10 @@ static NTSTATUS IdexDiskCreatePartitionDevice(ULONG Number) {
             IoDeleteDevice(dev);
         return STATUS_SUCCESS;
     }
-    if (Number == 1) {
-        startLba = 0x55F400;
-        length = 0x1312D6000LL;
-    } else if (Number == 2) {
-        startLba = 0x465400;
-        length = 0x1F400000;
-    } else if (Number >= 3 && Number <= 5) {
-        startLba = 0x400 + (Number - 3) * 0x177000;
-        length = 0x2EE00000;
-    } else {
+    if (Number < 1 || Number > 14 || !IdexDiskPartitions[Number].Length)
         return STATUS_OBJECT_NAME_NOT_FOUND;
-    }
-    NTSTATUS status = IdexDiskCreateDevice(Number, (LONGLONG)startLba << 9, length, &dev);
+    const IDE_PARTITION &p = IdexDiskPartitions[Number];
+    NTSTATUS status = IdexDiskCreateDevice(Number, (LONGLONG)(p.Start << 9), (LONGLONG)(p.Length << 9), &dev);
     if (!NT_SUCCESS(status))
         return status;
     PDEVICE_OBJECT expected = nullptr;
@@ -453,6 +448,51 @@ static bool IdexDiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULON
     return found;
 }
 
+// FATX partitions without a table (spec/cerbios/03 §3, Cerbios's default 5): the retail five; on a disk larger than the retail
+// 8 GB one, F: from E:'s end up to sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end, each
+// capped at 0x74000000 sectors and used only when larger than 0x200000 sectors (1 GiB).
+static void IdexDiskDefaultPartitions() {
+    constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF, CAP = 0x74000000, MIN = 0x200000;
+    IdexDiskPartitions[1] = {0x55F400, 0x9896B0}; // E:
+    IdexDiskPartitions[2] = {0x465400, 0xFA000};  // C:
+    for (ULONG i = 0; i < 3; i++)                 // X:, Y:, Z:
+        IdexDiskPartitions[3 + i] = {0x400 + i * 0x177000, 0x177000};
+    ULONGLONG n = IdexDiskLengthInSectors;
+    if (n <= RETAIL_END)
+        return;
+    auto place = [&](ULONG number, ULONGLONG start, ULONGLONG end) {
+        ULONGLONG length = end > start ? end - start : 0;
+        if (length > CAP)
+            length = CAP;
+        if (length > MIN)
+            IdexDiskPartitions[number] = {start, length};
+        return start + length;
+    };
+    ULONGLONG fEnd = place(6, RETAIL_END, n < LBA28_END ? n : LBA28_END);
+    place(7, fEnd, n);
+}
+
+// A PARTINFO table (spec/cerbios/03 §2) at sector 0, 8 sectors before the end or the last sector replaces the whole table.
+static bool IdexDiskReadPartitionTable(PUCHAR Sector) {
+    ULONGLONG n = IdexDiskLengthInSectors;
+    const ULONGLONG places[] = {0, n - 8, n - 1};
+    for (ULONGLONG lba : places) {
+        if (!NT_SUCCESS(IdexDiskReadPhysical(lba, Sector, 512)) || RtlCompareMemory(Sector, "****PARTINFO****", 16) != 16)
+            continue;
+        RtlZeroMemory(IdexDiskPartitions, sizeof(IdexDiskPartitions));
+        for (ULONG i = 0; i < 14; i++) {
+            PUCHAR e = Sector + 0x30 + 0x20 * i;
+            ULONGLONG start = *(PULONG)(e + 0x14) | (ULONGLONG)*(PUSHORT)(e + 0x1C) << 32;
+            ULONGLONG length = *(PULONG)(e + 0x18) | (ULONGLONG)*(PUSHORT)(e + 0x1E) << 32;
+            if ((*(PULONG)(e + 0x10) & 0x80000000) && length && start < n && length <= n - start)
+                IdexDiskPartitions[i + 1] = {start, length};
+        }
+        XK_SERIAL("disk: partition table at sector %llu\n", lba);
+        return true;
+    }
+    return false;
+}
+
 static void IdexDiskDetectLayout() {
     if (IdexDiskLayoutKnown)
         return;
@@ -482,6 +522,14 @@ static void IdexDiskDetectLayout() {
         if (found && NT_SUCCESS(IdexDiskCreateDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9),
                                                      &IdexDiskExfatVolume, IDE_KIND_VOLUME)))
             IdexDiskExfatLayout = TRUE;
+        if (!IdexDiskExfatLayout) { // FATX: the disk's table, else the default layout
+            if (!sector || !IdexDiskReadPartitionTable(sector))
+                IdexDiskDefaultPartitions();
+            for ([[maybe_unused]] ULONG i = 1; i < 15; i++)
+                if (IdexDiskPartitions[i].Length)
+                    XK_SERIAL("disk: partition %lu at sector %#llx, %#llx sectors\n", i, IdexDiskPartitions[i].Start,
+                              IdexDiskPartitions[i].Length);
+        }
         if (sector)
             ExFreePool(sector);
         IdexDiskLayoutKnown = 1;
