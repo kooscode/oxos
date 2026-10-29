@@ -250,8 +250,10 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
         if (NT_SUCCESS(status))
             status = FatxCheckAttributes(access, options, f->Attributes, false);
         // exFAT files of 4 GB or more (disc images) are read-only: FATX sizes, writes and allocation are 32-bit.
+        // Delete access stays allowed: moving, renaming and deleting rewrite only directory entries (the set keeps
+        // the 64-bit size) and free clusters by count.
         if (NT_SUCCESS(status) && f->FileSizeHigh &&
-            ((access & (0x2 | 0x4 | 0x10000 | 0x10000000 | 0x40000000)) || // write, append, delete, all, generic write
+            ((access & (0x2 | 0x4 | 0x10000000 | 0x40000000)) || // write, append, all, generic write
              disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE || disposition == FILE_OVERWRITE_IF))
             status = STATUS_ACCESS_DENIED;
     }

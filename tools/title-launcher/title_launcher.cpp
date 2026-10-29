@@ -1,4 +1,5 @@
-// Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles and starts the one chosen with the controller.
+// Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles (and their game folders) and starts
+// the one chosen with the controller.
 //   D-pad up / down: move (held: repeats), A: start the selected title.
 // Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files.
 // A disc image is mounted as the console's disc (tools/iso-launcher/mount_iso.h) and its default.xbe started; an
@@ -56,10 +57,12 @@ bool LessNoCase(const std::string &a, const std::string &b) {
     return a.size() < b.size();
 }
 
-// The files of one folder that can be started, added as "folder\\file".
-NTSTATUS ReadFolder(const char *sub, std::vector<std::string> &list) {
+// The files of one folder that can be started, added as "folder\\file". A game folder one level down
+// (F:\\games\\Halo\\) is listed by its default.xbe (a launcher made by tools/oxos-isonator, or the game itself)
+// when it has one, else by the images and XBEs in it.
+NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int depth = 0) {
     char path[300];
-    std::snprintf(path, sizeof(path), "%s\\%s", FolderDevice, sub);
+    std::snprintf(path, sizeof(path), "%s\\%s", FolderDevice, sub.c_str());
     ANSI_STRING name;
     OBJECT_ATTRIBUTES attributes;
     IO_STATUS_BLOCK iosb;
@@ -72,6 +75,7 @@ NTSTATUS ReadFolder(const char *sub, std::vector<std::string> &list) {
     if (!NT_SUCCESS(status))
         return status;
     alignas(8) static unsigned char buffer[4096];
+    std::vector<std::string> folders;
     for (bool first = true;; first = false) {
         status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
                                       FileDirectoryInformation, nullptr, first);
@@ -81,13 +85,27 @@ NTSTATUS ReadFolder(const char *sub, std::vector<std::string> &list) {
             auto entry = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer + offset);
             std::string file(entry->FileName, entry->FileNameLength);
             if (!(entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) && Listed(file))
-                list.push_back(std::string(sub) + "\\" + file);
+                list.push_back(sub + "\\" + file);
+            else if ((entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) && depth == 0)
+                folders.push_back(sub + "\\" + file);
             if (!entry->NextEntryOffset)
                 break;
             offset += entry->NextEntryOffset;
         }
     }
     NtClose(folder);
+    for (const auto &game : folders) { // after closing: the buffer is shared
+        std::vector<std::string> inside;
+        ReadFolder(game, inside, depth + 1);
+        std::string launcher = game + "\\default.xbe";
+        bool hasLauncher = false;
+        for (const auto &file : inside)
+            hasLauncher |= !LessNoCase(file, launcher) && !LessNoCase(launcher, file); // the same, in any case
+        if (hasLauncher)
+            list.push_back(launcher);
+        else
+            list.insert(list.end(), inside.begin(), inside.end());
+    }
     return STATUS_SUCCESS;
 }
 

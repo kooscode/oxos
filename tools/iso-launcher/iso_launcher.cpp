@@ -257,6 +257,26 @@ void TitleName(char *out, std::size_t size) {
     out[n] = 0;
 }
 
+// Start the mounted disc's title through the launch data page and a quick reboot, as XLaunchXBE does, but with this
+// launcher's own title ID (nxdk's default) in the page. oxos-isonator copies the game's certificate into the
+// launcher, so XLaunchXBE would name the game itself as the launcher: a game then sees a launch "from itself" with
+// no data and may take it as a return from its own relaunch (Prince of Persia goes to the dashboard).
+[[noreturn]] void StartDisc() {
+    constexpr DWORD LauncherTitleId = 0xFFFF0002;
+    if (!LaunchDataPage)
+        LaunchDataPage = static_cast<PLAUNCH_DATA_PAGE>(MmAllocateContiguousMemory(0x1000));
+    if (LaunchDataPage) {
+        MmPersistContiguousMemory(LaunchDataPage, 0x1000, TRUE);
+        std::memset(LaunchDataPage, 0, 0x1000);
+        LaunchDataPage->Header.dwLaunchDataType = LDT_TITLE;
+        LaunchDataPage->Header.dwTitleId = LauncherTitleId;
+        std::strcpy(LaunchDataPage->Header.szLaunchPath, "\\Device\\CdRom0;default.xbe");
+        HalReturnToFirmware(HalQuickRebootRoutine);
+    }
+    for (;;)
+        Sleep(1000);
+}
+
 } // namespace
 
 int main() {
@@ -325,7 +345,8 @@ int main() {
     }
 
     ShowSplash();
-    XLaunchXBE("\\Device\\CdRom0\\default.xbe");
+    if (IsFile("\\Device\\CdRom0\\default.xbe"))
+        StartDisc();
     char title[48];
     TitleName(title, sizeof(title));
     debugClearScreen();

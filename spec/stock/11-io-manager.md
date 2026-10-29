@@ -143,6 +143,16 @@ files: if pending, wait on the file's Event (alertable per file) and take FinalS
   (get/set the SYNCHRONOUS/ALERTABLE/SEQUENTIAL flags); FileAlignmentInformation (17); FileCompletionInformation
   (30, once only: {Port handle, Key}). The rest become IRPs; synchronous-API calls on asynchronous files wait on a
   local event.
+- FileRenameInformation (10, {BOOLEAN ReplaceIfExists; HANDLE RootDirectory; OBJECT_STRING FileName}): when the name
+  starts with `\` or RootDirectory is set, the I/O manager first opens the target's directory with
+  `IoCreateFile(&h, SYNCHRONIZE | FILE_WRITE_DATA (0x100002), {RootDirectory, &FileName, OBJ_CASE_INSENSITIVE}, iosb,
+  NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, FILE_OPEN_FOR_BACKUP_INTENT (0x4000), 0x105)` (options:
+  IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY | IO_FORCE_ACCESS_CHECK, so the create stack location has
+  SL_OPEN_TARGET_DIRECTORY and the file system opens the parent and reports whether the final name exists). The
+  target file object must be on the same device as the file, else the handle is closed and the call fails with
+  STATUS_NOT_SAME_DEVICE (0xC00000D4). The file object goes to the driver in `Parameters.SetFile.FileObject`; the
+  handle is closed when the request is done. A plain name (no `\`, no RootDirectory) goes to the driver with no
+  target object and renames in place (4627 NtSetInformationFile 0x80016F61, target open 0x80017D42).
 - `NtQueryVolumeInformationFile`, `NtQueryDirectoryFile(h, event, apc, ctx, iosb, buf, len, class, mask, restart)`,
   `NtFlushBuffersFile(h, iosb)` follow the same pattern (majors 7, 8, 6).
 - `IoQueryFileInformation` / `IoQueryVolumeInformation(fileObject, class, len, buf, &returned)`: kernel callers with a
