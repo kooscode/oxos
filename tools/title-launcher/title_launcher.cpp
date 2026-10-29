@@ -1,5 +1,5 @@
-// Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles (and their game folders) and starts
-// the one chosen with the controller.
+// Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles (and their game folders) and the
+// tools in F:\Tools (one folder each, e.g. F:\Tools\ftp\ftp.xbe), and starts the one chosen with the controller.
 //   D-pad up / down: move (held: repeats), A: start the selected title.
 // Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files.
 // A disc image is mounted as the console's disc (tools/iso-launcher/mount_iso.h) and its default.xbe started; an
@@ -25,7 +25,7 @@ namespace {
 // The folders listed, on F: (exFAT partition 6); entries are kept as "folder\\file".
 constexpr const char *FolderDevice = "\\Device\\Harddisk0\\Partition6"; // F:
 constexpr const char *FolderShown = "F:";
-constexpr const char *Folders[] = {"games", "titles"};
+constexpr const char *Folders[] = {"games", "titles", "Tools"};
 // nxdk's text output (hal/debug.c) fits about 23 lines of 65 characters on 640x480 (16-pixel font, 25-pixel
 // margins) and clears the whole screen when text runs past the bottom: 3 header lines, the list, 2 message lines.
 constexpr int VisibleRows = 16, NameWidth = 60;
@@ -109,7 +109,8 @@ NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int 
     return STATUS_SUCCESS;
 }
 
-// The files in F:\games and F:\titles that can be started, sorted by name; a failure only when neither opens.
+// The files in F:\games, F:\titles and F:\Tools that can be started, sorted by name (the tools come last); a
+// failure only when none opens.
 NTSTATUS ReadList(std::vector<std::string> &list) {
     list.clear();
     NTSTATUS status = STATUS_OBJECT_PATH_NOT_FOUND;
@@ -164,7 +165,7 @@ constexpr unsigned char APressed = 0x30; // analog button: pressed above this
 
 void Draw(const std::vector<std::string> &list, int selected, int top, const char *message) {
     debugResetCursor();
-    debugPrint("%-*s\n", NameWidth + 2, "OXOS title launcher - F:\\games, F:\\titles");
+    debugPrint("%-*s\n", NameWidth + 2, "OXOS title launcher - F:\\games, F:\\titles, F:\\Tools");
     debugPrint("%-*s\n\n", NameWidth + 2, "D-pad: move    A: start");
     for (int row = 0; row < VisibleRows; row++) {
         if (list.empty() && row == 0) {
@@ -219,7 +220,7 @@ int main() {
     static char message[120];
     NTSTATUS status = ReadList(list);
     if (!NT_SUCCESS(status))
-        std::snprintf(message, sizeof(message), "Neither F:\\games nor F:\\titles opens: status 0x%08lx",
+        std::snprintf(message, sizeof(message), "None of F:\\games, F:\\titles, F:\\Tools opens: status 0x%08lx",
                       static_cast<unsigned long>(status));
 
     int selected = 0, top = 0, held = 0;
