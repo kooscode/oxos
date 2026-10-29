@@ -257,15 +257,45 @@ struct BL_PAD_RESULT {
         if (i < 3)
             v1214 = v1214 << 3 | c12;
     }
-    ULONG reg[9] = {0x122C, 0x123C, 0x1230, 0x1240, 0x1234, 0x1244, 0x1238, 0x1248, 0x1214};
+    static const ULONG reg[9] = {0x122C, 0x123C, 0x1230, 0x1240, 0x1234, 0x1244, 0x1238, 0x1248, 0x1214};
     ULONG val[9] = {BlPadNibbles(o[0], o[1]),   BlPadNibbles(o[2], o[3]),   BlPadNibbles(o[4], o[5]),
                     BlPadNibbles(o[6], o[7]),   BlPadNibbles(o[8], o[9]),   BlPadNibbles(o[10], o[11]),
                     BlPadNibbles(o[12], o[13]), BlPadNibbles(o[14], o[15]), v1214};
-    __asm__ volatile("wbinvd" ::: "memory");
-    // A register whose value is 0 is not written; the reference then stores that 0 at NV2A offset 0 instead (its
-    // read-only identification register), which this keeps.
-    for (int i = 0; i < 9; i++)
-        BlNv(val[i] ? reg[i] : 0) = val[i];
+    // The write window (spec/stock/21 §3.6a): the stores change the drive, slew and delay of the DRAM interface, so
+    // from the first to the last of them the CPU must not touch memory. Everything is computed first, into an
+    // {offset, value} array (a register whose value is 0 is not written; the reference then stores that 0 at NV2A
+    // offset 0 instead, its read-only identification register, which this keeps). Then, in one asm block with
+    // interrupts off: wbinvd; a dry pass that runs the same loop and loads but stores nothing, bringing its code
+    // and the array into the caches; the storing pass, which then runs from the caches only (no calls, no stack).
+    alignas(32) ULONG pairs[18];
+    for (int i = 0; i < 9; i++) {
+        pairs[2 * i] = val[i] ? reg[i] : 0;
+        pairs[2 * i + 1] = val[i];
+    }
+    ULONG pass, index, value, offset;
+    __asm__ volatile("pushfl\n\t"
+                     "cli\n\t"
+                     "wbinvd\n\t"
+                     "xorl %[pass], %[pass]\n"
+                     "1:\n\t"
+                     "xorl %[index], %[index]\n"
+                     "2:\n\t"
+                     "movl 4(%[pairs],%[index],8), %[value]\n\t"
+                     "movl (%[pairs],%[index],8), %[offset]\n\t"
+                     "testl %[pass], %[pass]\n\t"
+                     "jz 3f\n\t"
+                     "movl %[value], (%[nv],%[offset])\n"
+                     "3:\n\t"
+                     "incl %[index]\n\t"
+                     "cmpl $9, %[index]\n\t"
+                     "jb 2b\n\t"
+                     "incl %[pass]\n\t"
+                     "cmpl $2, %[pass]\n\t"
+                     "jb 1b\n\t"
+                     "popfl"
+                     : [pass] "=&r"(pass), [index] "=&r"(index), [value] "=&r"(value), [offset] "=&r"(offset)
+                     : [pairs] "r"(pairs), [nv] "r"(0xFD000000u)
+                     : "memory", "cc");
     result->A = a;
     result->B = b;
     result->Strap = strap;
