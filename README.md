@@ -112,7 +112,9 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
   On a console the MCPX boot ROM runs Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without
   any Microsoft key. Without a boot ROM (xemu), our reset code runs the same X-codes. The hard disk unlocks with
   Cromwell's EEPROM key states, as Cromwell has done for twenty years.
-- **Hardware in the loop.** Most of the kernel was built and tested in xemu. Real consoles are then tested with a
+
+## Automated "Hardware In The Loop" Testing.
+- **Full agentic HWITL.** Most of the kernel was built and tested in xemu. Real consoles are then tested with a
   rig that boots a fresh kernel on a real Xbox in about a minute, with no chip to flash and nobody at the console.
   An AI coding agent (Claude Code) drives it from the PC: it builds, boots, watches the console and powers it off.
 
@@ -145,7 +147,7 @@ To build OXOS yourself, change it, run its tests or debug the kernel and your ow
     set-up, interrupt start-up and NV2A pad calibration (specs 13–15). So was the first retail title on real
     hardware: Halo 2 from an XISO on an exFAT SSD, and later Brute Force the same way.
 
-### Setting up
+## Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
 same packages under their own names.
 
