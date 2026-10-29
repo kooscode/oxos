@@ -487,7 +487,8 @@ ISO_LAUNCHER_DIR := $(ROOT)/tools/iso-launcher
 ISO_LAUNCHER_XBE := $(ISO_LAUNCHER_DIR)/bin/default.xbe
 ISO_KINDS ?= plain split cci splitcci large
 
-$(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h $(ISO_LAUNCHER_DIR)/Makefile
+$(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h $(ISO_LAUNCHER_DIR)/Makefile \
+    $(ISO_LAUNCHER_DIR)/gen_splash.py $(ROOT)/kernel/splash/splash.png $(ROOT)/kernel/include/xk/inflate.h
 	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
 iso-launcher: $(ISO_LAUNCHER_XBE)
 

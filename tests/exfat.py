@@ -14,6 +14,7 @@ and that the allocation bitmap marks exactly the clusters in use.
 Shell:
   exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E;
        [--add /F/dir=HOST ...]                                              also copy a host file or folder in
+       (OUT.raw: a sparse raw disk, the added files streamed: for disc images larger than memory)
   exfat.py --check IMG.qcow2                                                check a volume, list problems
   exfat.py --has IMG.qcow2 'F:\\dir\\x.xbe'                                    is that file there (exit 0)
   exfat.py --ls IMG.qcow2 [/path]                                           list a directory
@@ -105,6 +106,48 @@ class Node:
         self.clusters = []
 
 
+class HostFile:
+    """A host file added by path and read only while the disk is written (for files too large to hold in memory)."""
+
+    def __init__(self, path):
+        self.path, self.size = path, os.path.getsize(path)
+
+    def __len__(self):
+        return self.size
+
+    def __bool__(self):
+        return self.size > 0
+
+    def __getitem__(self, k):
+        start, stop, _ = k.indices(self.size)
+        with open(self.path, "rb") as f:
+            f.seek(start)
+            return f.read(max(0, stop - start))
+
+    def chunks(self, size):
+        with open(self.path, "rb") as f:
+            while True:
+                b = f.read(size)
+                if not b:
+                    return
+                yield b
+
+
+class RawDisk:
+    """A raw (sparse) disk file written in place: the Qcow2.blank stand-in for disks larger than memory."""
+
+    def __init__(self, path, size):
+        self.f = open(path, "wb")
+        self.f.truncate(size)
+
+    def write(self, offset, data):
+        self.f.seek(offset)
+        self.f.write(data)
+
+    def save(self, path):
+        self.f.close()
+
+
 class Builder:
     def __init__(self, size, cluster=128 << 10, folders=FOLDERS, serial=0x0A0B0C0D):
         self.size, self.cluster, self.serial = size, cluster, serial
@@ -126,13 +169,14 @@ class Builder:
             cur = cur.children[key]
         return cur
 
-    def add_tree(self, path, host):
+    def add_tree(self, path, host, lazy=False):
         for dirpath, dirs, files in os.walk(host):
             rel = os.path.relpath(dirpath, host).replace(os.sep, "/")
             base = path if rel == "." else f"{path}/{rel}"
             self.add(base)
             for f in files:
-                self.add(f"{base}/{f}", open(os.path.join(dirpath, f), "rb").read())
+                self.add(f"{base}/{f}", HostFile(os.path.join(dirpath, f)) if lazy else
+                         open(os.path.join(dirpath, f), "rb").read())
 
     def _geometry(self, sectors):
         csec = self.cluster // SECTOR
@@ -168,7 +212,7 @@ class Builder:
         struct.pack_into("<H", out, 2, sum16(out, (2, 3)))
         return bytes(out)
 
-    def write(self, path, reserved=None):
+    def write(self, path, reserved=None, raw=False):
         sectors = self.size // SECTOR
         last_usable = sectors - 34
         part_sectors = last_usable - PART_START + 1
@@ -217,7 +261,7 @@ class Builder:
                     chain(node.clusters)
 
         layout(self.root)
-        q = Qcow2.blank(self.size)
+        q = RawDisk(path, self.size) if raw else Qcow2.blank(self.size)
         base = PART_START * SECTOR
         heap_at = base + heap * SECTOR
 
@@ -225,9 +269,17 @@ class Builder:
             return heap_at + (c - 2) * cs
 
         def put(clusters, data):
+            if isinstance(data, HostFile):  # contiguous clusters: stream the file
+                assert clusters == list(range(clusters[0], clusters[0] + len(clusters)))
+                at = coff(clusters[0])
+                for piece in data.chunks(8 << 20):
+                    if piece.count(0) != len(piece):
+                        q.write(at, piece)
+                    at += len(piece)
+                return
             for i, c in enumerate(clusters):
                 piece = data[i * cs:(i + 1) * cs]
-                if any(piece):
+                if piece.count(0) != len(piece):
                     q.write(coff(c), piece)
 
         def serialize(node):
@@ -522,7 +574,10 @@ class Exfat:
 
 
 def from_fatx(src, out, size, cluster, extra=()):
+    """OUT ending in .raw: a sparse raw disk, with the --add files read while it is written (no size limit from
+    memory; qemu-img convert -O qcow2 makes a qcow2 of it)."""
     import fatx
+    raw = out.endswith(".raw")
     disk = Qcow2(src)
     b = Builder(size, cluster)
 
@@ -539,10 +594,10 @@ def from_fatx(src, out, size, cluster, extra=()):
         copy(fatx.Fatx(disk, letter), letter)
     for dest, host in extra:  # --add /F/apps/demo=HOST: a host file or folder copied in
         if os.path.isdir(host):
-            b.add_tree(dest, host)
+            b.add_tree(dest, host, lazy=raw)
         else:
-            b.add(dest, open(host, "rb").read())
-    b.write(out, disk.read(0, 0x400 * SECTOR))
+            b.add(dest, HostFile(host) if raw else open(host, "rb").read())
+    b.write(out, disk.read(0, 0x400 * SECTOR), raw=raw)
 
 
 if __name__ == "__main__":
