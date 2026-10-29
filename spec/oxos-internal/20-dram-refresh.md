@@ -32,8 +32,9 @@ A debug build logs each one that acted ("*** refresh: ..."), after the memory ma
 
 ## 3. Result on the 1.4 console
 Warm band (A 0x5C-0x5E), cold boots 8 s apart: before, 8 bad of 40; with the check, 0 bad of 56. The start.S check
-found refresh off on 6 of those 56 boots and switched it on; the 2BL and kernel checks never had to act. xemu
-(make test-dash) unaffected.
+found refresh off on 6 of those 56 boots and switched it on; the 2BL and kernel checks never had to act. The
+released build (v0.3.5): 46 boots, no crash, refresh found off and switched on twice. xemu (make test-dash)
+unaffected. The investigation that found the cause: spec/oxos-internal/21.
 
 ## 4. Open
 - Whether the retail X-codes on the same console leave refresh off too (not tested: the Cromwell table is used; its

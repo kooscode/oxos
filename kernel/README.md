@@ -188,6 +188,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
    - 25: **dashboard choice** (`../spec/oxos-internal/19-dashboard-choice.md`): the dashboard started is EvoX's when it
      is installed (C:\evoxdash.xbe, then E:\evoxdash.xbe), else the Xbox dashboard (C:\xboxdash.xbe).
      ✅ `make test-dash` covers both.
+   - 26: **DRAM refresh check** (`../spec/oxos-internal/20-dram-refresh.md`; the investigation in
+     `../spec/oxos-internal/21-ram-bit-changes.md`): on a warm console the X-code stage sometimes leaves DRAM refresh
+     off. `boot/start.S`, the 2BL and the kernel's first code switch it back on.
+     ✅ 1.4 console: 0 bad boots of 56 in the warm band (8 of 40 before), 46 more with no crash; `make test-dash`.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
