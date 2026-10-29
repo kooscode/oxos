@@ -7,9 +7,10 @@
 //   - Without iso.txt: the image in the launcher's own folder, so a copy of the launcher next to an image starts it.
 // Images: XISO or a full disc dump (.iso), CCI (.cci), either one whole or split in two (name.1.iso + name.2.iso).
 //
-// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then
-// \Device\CdRom0\default.xbe is launched through the launch data page and a quick reboot; the mount stays for the
-// title's own reboots until the console is switched off (or the disc tray is opened).
+// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), the OXOS
+// splash shows for a second (as a dashboard fades out when it starts a title), then \Device\CdRom0\default.xbe is
+// launched through the launch data page and a quick reboot; the mount stays for the title's own reboots until the
+// console is switched off (or the disc tray is opened). The screen shows text only when something is wrong.
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <hal/xbox.h>
@@ -17,6 +18,9 @@
 #include <xboxkrnl/xboxkrnl.h>
 
 #include "mount_iso.h"
+#include "splash_image.h" // generated from kernel/splash/splash.png by gen_splash.py
+
+#include "../../kernel/include/xk/inflate.h"
 
 #include <cstdio>
 #include <cstring>
@@ -182,6 +186,51 @@ void ListFolder(const char *folder) {
     NtClose(h);
 }
 
+// The heading above any message (the screen is otherwise left for the splash).
+void Heading() {
+    static bool shown;
+    if (!shown)
+        debugPrint("OXOS ISO launcher\n\n");
+    shown = true;
+}
+
+// The boot splash for about a second: a quick fade in, a hold and a fade out to black, one step per frame.
+void ShowSplash() {
+    static unsigned char index[SplashWidth * SplashHeight];
+    xk_inflate::Inflater s = {SplashPacked, SplashPackedSize, 0, 0, 0, index, sizeof(index), 0, false};
+    if (!xk_inflate::Inflate(s) || s.OutPos != s.OutSize)
+        return;
+    VIDEO_MODE mode = XVideoGetMode();
+    if (mode.width < SplashWidth || mode.height < SplashHeight || mode.bpp != 32)
+        return;
+    auto *fb = reinterpret_cast<volatile unsigned *>(XVideoGetFB());
+    auto draw = [&](unsigned level) { // 0 (black) to 256 (full)
+        unsigned colour[256];
+        for (int i = 0; i < 256; i++) {
+            unsigned c = SplashPalette[i];
+            colour[i] = (((c >> 16 & 0xFF) * level >> 8) << 16) | (((c >> 8 & 0xFF) * level >> 8) << 8) |
+                        ((c & 0xFF) * level >> 8);
+        }
+        const unsigned char *p = index;
+        for (int y = 0; y < SplashHeight; y++) {
+            volatile unsigned *row = fb + y * mode.width;
+            for (int x = 0; x < SplashWidth; x++)
+                row[x] = colour[*p++];
+        }
+    };
+    constexpr int fade = 12, hold = 36; // frames: 12 + 36 + 12 = one second at 60 Hz
+    for (int i = 1; i <= fade; i++) {
+        XVideoWaitForVBlank();
+        draw(256 * i / fade);
+    }
+    for (int i = 0; i < hold; i++)
+        XVideoWaitForVBlank();
+    for (int i = fade - 1; i >= 0; i--) {
+        XVideoWaitForVBlank();
+        draw(256 * i / fade);
+    }
+}
+
 // The title name from the image's default.xbe certificate (UTF-16, 40 characters), as ASCII.
 void TitleName(char *out, std::size_t size) {
     out[0] = 0;
@@ -212,12 +261,12 @@ void TitleName(char *out, std::size_t size) {
 
 int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-    debugPrint("OXOS ISO launcher\n\n");
 
     static char line[PATH], path[PATH], folder[PATH];
     std::size_t length = ReadLine("D:\\iso.txt", line, sizeof(line));
     if (length && (!std::strcmp(line, "none") || !std::strcmp(line, "NONE"))) {
         NTSTATUS status = UnmountISO();
+        Heading();
         debugPrint("Unmount: status 0x%08lx. Starting the dashboard...\n", static_cast<unsigned long>(status));
         Sleep(1000);
         XLaunchXBE(nullptr);
@@ -225,6 +274,7 @@ int main() {
     }
     if (length) {
         if (!DevicePath(line, path)) {
+            Heading();
             debugPrint("Unknown drive in \"%s\" (C, E, F, G, X, Y, Z or a \\Device\\ path).\n", line);
             Stay();
         }
@@ -237,12 +287,14 @@ int main() {
         Found found;
         ListImages(path, &found);
         if (!found.Count) {
+            Heading();
             debugPrint("No .iso or .cci image in %s\n", length ? line : path);
             Stay();
         }
         std::snprintf(folder, sizeof(folder), "%s", path);
         std::snprintf(path, sizeof(path), "%s\\%s", folder, found.Name[0]);
     } else if (!IsFile(path)) {
+        Heading();
         debugPrint("Cannot find %s\n= %s\n", length ? line : "an image", path);
         // Show what is there: the nearest folder above the path that exists.
         std::snprintf(folder, sizeof(folder), "%s", path);
@@ -259,24 +311,25 @@ int main() {
     }
 
     // Mount (a split image's second part is found by MountISO).
-    debugPrint("Image: %s\n", path);
     NTSTATUS status = MountISO(path);
     if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
-        debugPrint("\nThis BIOS cannot mount disc images (no \\Device\\CdRom1).\n");
+        Heading();
+        debugPrint("Image: %s\n\nThis BIOS cannot mount disc images (no \\Device\\CdRom1).\n", path);
         Stay();
     }
     if (!NT_SUCCESS(status)) {
-        debugPrint("\nThe mount failed: status 0x%08lx (not a disc image?)\n", static_cast<unsigned long>(status));
+        Heading();
+        debugPrint("Image: %s\n\nThe mount failed: status 0x%08lx (not a disc image?)\n", path,
+                   static_cast<unsigned long>(status));
         Stay();
     }
 
+    ShowSplash();
+    XLaunchXBE("\\Device\\CdRom0\\default.xbe");
     char title[48];
     TitleName(title, sizeof(title));
-    if (title[0])
-        debugPrint("Title: %s\n", title);
-    debugPrint("\nLaunching...\n");
-    Sleep(500);
-    XLaunchXBE("\\Device\\CdRom0\\default.xbe");
-    debugPrint("The launch failed.\n");
+    debugClearScreen();
+    Heading();
+    debugPrint("Image: %s\nTitle: %s\n\nThe launch failed.\n", path, title[0] ? title : "(no default.xbe?)");
     Stay();
 }

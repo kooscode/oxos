@@ -73,6 +73,9 @@ working DVD drive can still run it). OXOS includes no titles; make the images fr
    names to 42 characters or fewer.
 2. Build the ISO launcher (`make -C kernel iso-launcher`, output `tools/iso-launcher/bin/default.xbe`). Either put a
    copy next to each image, or put it anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
+   [`tools/oxos-isonator`](tools/oxos-isonator) does this for you: it gives each image a folder of its own and a
+   launcher that carries the game's name, title ID and artwork, so dashboards such as XBMC4Gamers list it as the game.
+   It also builds an XISO from an extracted game folder. The folders work on Cerbios too.
 3. Start the launcher from the dashboard. It mounts the image as the console's disc and the title starts. The image
    stays mounted through the title's own restarts until the console is switched off; an `iso.txt` of `none`
    unmounts it.

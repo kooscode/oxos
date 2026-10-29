@@ -90,10 +90,20 @@ An nxdk title, built with `make -C kernel iso-launcher`.
 3. **Two parts.** For `name.1.iso` (or `.1.cci`), `name.2.iso` is added when it exists.
 4. **Mount.** Type 0 for plain images (on Cerbios too, that type replaces `\Device\CdRom0`). Type `d` with the link
    `\Device\CdRom0` for CCI.
-5. **Launch.** The launcher shows the title name from the image's `default.xbe`, then launches
+5. **Launch.** The launcher shows the OXOS boot splash for one second (12 frames of fade in, 36 of hold, 12 of fade to
+   black at 60 Hz; the picture is `kernel/splash/splash.png`, packed at build time by `gen_splash.py` and unpacked
+   with the kernel's inflater), as a dashboard fades out when it starts a title. It then launches
    `\Device\CdRom0\default.xbe` through the launch data page and a quick reboot.
 
-When something is missing, the launcher stays on screen and says why. For a path that does not exist, it lists the
+When something is missing, the launcher shows text instead and says why (the screen holds no text otherwise).
+
+### 7a. Game folders (`tools/oxos-isonator`)
+A host tool (Python, standard library) that makes a dashboard game folder per image: the image (an XISO it builds from
+an extracted game folder, or an existing image) and a `default.xbe` next to it. That `default.xbe` is the ISO launcher
+with the game's certificate fields (title ID, title name, alternate title IDs, region, ratings, disc number, version)
+and its title image section (`$$XTIMAGE`) copied in, so dashboards list the game itself. Started, it takes the image in
+its own folder (step 1). Images are one file unless `--split` (two parts under 4 GB, for FATX). Checked in xemu on OXOS
+(exFAT, F:) and on Cerbios 3.1.0 (FATX, E:): the launcher mounts the image and the game starts. For a path that does not exist, it lists the
 nearest folder above it that does.
 
 ## 8. Tests
