@@ -33,9 +33,9 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   `curl ftp://ADDR/ -Q 'SITE POWEROFF'`.
 - **BACK** on any controller restarts the console as SITE REBOOT does (a netbooted console then starts what the PC
   serves, e.g. the title launcher).
-- **Network:** DHCP; with no answer in 10 s the fixed address 192.168.1.223/24. Passive data ports are 50000-50099
+- **Network:** DHCP; with no answer in 10 s the fixed address 192.168.1.223/24. Passive data ports are 49152-65535
   (open them in a firewall between the PC and the console). Writes go straight to the disk, so the console can be
   switched off as soon as a transfer has finished.
-- **xemu:** `tools/run.py BIOS --iso tools/ftp-server/ftp-server.iso --net-forward 2121:21` plus `--net-forward P:P`
-  for each passive port P in 50000-50099, then `ftp://127.0.0.1:2121/` (a client that ignores the address in the PASV
-  reply, as curl and `ftplib` with `trust_server_pasv_ipv4_address = False` do).
+- **xemu:** `tools/run.py BIOS --iso tools/ftp-server/ftp-server.iso --net-forward 2121:21`, then active mode with
+  the address the console sees the PC at: `curl -P 10.0.2.2 ftp://127.0.0.1:2121/` (passive ports are picked
+  at random, so they cannot be forwarded).

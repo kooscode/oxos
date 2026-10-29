@@ -97,6 +97,12 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         return;
     if (irq == 0) // start-up watchdog (ke/startup.cpp); the frame as KiSamplePc reads it
         XkBootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
+#if XK_DEBUG_SERIAL
+    // Sampler (serial builds): every 5 s, where the processor was interrupted, so a hang names its code.
+    if (irq == 0 && KeTickCount % 5000 == 0)
+        XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9],
+                  (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
+#endif
     KIRQL old = KiPcr.Irql;
     KIRQL level = HalpGetIrqLevel(irq);
     KiPcr.Irql = level;

@@ -19,6 +19,14 @@ format + Cr0NpxState), Edi, Esi, Ebx, Edx, Ecx, Eax, Ebp, Eip, SegCs, EFlags, Es
 | 16 | x87: from the status word (stack check, invalid, divide by zero, denormal, overflow, underflow, inexact) |
 | 17 | STATUS_DATATYPE_MISALIGNMENT 0x80000002 |
 | 19 | STATUS_FLOAT_MULTIPLE_TRAPS 0xC00002B5 |
+| 0x2D | debug service (0x8001B424): STATUS_BREAKPOINT at the int3 that follows `int 2Dh`, parameters {EAX (service), ECX, EDX} |
+
+**Debug services** (`mov eax, service; int 2Dh; int 3`, the way titles' DbgPrint / OutputDebugString reach the
+kernel). With no kernel debugger the breakpoint goes first to 0x80018B06, which takes it when parameter 0 is 1, 3,
+4, 7, 8 or 0xB: a print (1, and 0xB) hands parameter 1, a counted STRING, to the serial-output routine 0x80018AC0
+and sets the context's Eax to 0; in every taken case Eip is moved past the int3 and execution continues. Any other
+service, and a plain int3 (vector 3, parameter 0 = 0), is dispatched as an ordinary exception: unhandled, it ends
+in bug check 0x1E.
 Handlers run with interrupts enabled if the faulting code had them enabled. NMI and double fault are task gates
 (halt). An exception that no handler takes → **bug check 0x1E** (KMODE_EXCEPTION_NOT_HANDLED: code, address,
 parameters).
