@@ -25,7 +25,8 @@ jingle, then Brute Force's intros and title screen! (Turn on Sound!)*
 - **Open BIOS:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, ours from the first
   instruction: no Microsoft code, keys or boot-ROM dump.
 - **Games from your own disc images:** XISO (No file size limit) and legacy CCI images (split ISO) mounted as the
-  console's disc by the [ISO launcher](tools/iso-launcher).
+  console's disc by the [ISO launcher](tools/iso-launcher).  
+- **In-Game-Reset:** To activate IGR while playing, hit LT + RT + Back + Black to reset the console.
 - **No Size Limit HDD and Files:** exFAT (format on any PC; the Xbox partitions are folders and no file size limit, see
   [Using an exFAT disk](#using-an-exfat-disk)) and LBA48 (no size limit).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to component up to 1080i.
