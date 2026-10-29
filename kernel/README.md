@@ -192,6 +192,10 @@ the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run-stock`. The 
      `../spec/oxos-internal/21-ram-bit-changes.md`): on a warm console the X-code stage sometimes leaves DRAM refresh
      off. `boot/start.S`, the 2BL and the kernel's first code switch it back on.
      ✅ 1.4 console: 0 bad boots of 56 in the warm band (8 of 40 before), 46 more with no crash; `make test-dash`.
+   - 27: **in-game reset** (`../spec/oxos-internal/22-in-game-reset.md`): LT + RT + BACK + BLACK in an XDK title
+     reboots the console (cold: a netbooted console comes back to the launcher). `KeRaiseIrqlToDpcLevel` spots
+     XInputGetState as its caller and sees the state it returns (`src/arch/igr.S`, `src/hal/igr.cpp`).
+     ✅ xemu: Halo still reaches its menu with the hook; 1.4 console: the combo in Halo reboots.
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
