@@ -27,6 +27,9 @@ static void XkLogWrite(const char *s, ULONG n) {
 #endif
 }
 
+// Debug service 1 (int 0x2D, print): the counted string a title's OutputDebugString / DbgPrint passes (spec/stock/14).
+void KdPrintString(const char *Text, ULONG Length) { XkLogWrite(Text, Length > 512 ? 512 : Length); }
+
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...) {
     char line[512];
     va_list ap;

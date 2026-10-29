@@ -57,6 +57,8 @@ EXC_NOERR 28
 EXC_NOERR 29
 EXC_NOERR 30
 EXC_NOERR 31
+    .globl _KiTrap45
+EXC_NOERR 45                        // int 0x2D: debug service (spec/stock/14)
 
 // Trap frame (KTRAP_FRAME_XK): edi esi ebp esp ebx edx ecx eax | vector error | eip cs eflags.
 // KiDispatchTrap returns when execution resumes with the (possibly edited) frame; a context with a different

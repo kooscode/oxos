@@ -116,11 +116,35 @@ static ULONG KiFloatStatusCode(UCHAR vector) {
 }
 
 
+void KdPrintString(const char *Text, ULONG Length);
+
 extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     EXCEPTION_RECORD record = {};
     record.ExceptionAddress = (PVOID)Frame->Eip;
     ULONG vector = Frame->Vector;
-    switch (vector) {
+    if (vector == 0x2D) {
+        // Debug service (spec/stock/14): "mov eax, service; int 2Dh; int 3". Eip is at the int3. With no kernel
+        // debugger the reference takes services 1, 3, 4, 7, 8 and 0xB itself: a print (1, 0xB) writes the counted
+        // string at ECX and returns 0 in EAX, and every one resumes after the int3. Others are STATUS_BREAKPOINT
+        // at the int3, parameters {service, ECX, EDX}.
+        ULONG service = Frame->Eax;
+        if (service == 1 || service == 3 || service == 4 || service == 7 || service == 8 || service == 0xB) {
+            if (service == 1 || service == 0xB) {
+                auto text = (const USHORT *)Frame->Ecx; // STRING: Length, MaximumLength, Buffer
+                if (text && text[0])
+                    KdPrintString(*(const char *const *)(text + 2), text[0]);
+                Frame->Eax = 0;
+            }
+            Frame->Eip++;
+            return;
+        }
+        record.ExceptionCode = STATUS_BREAKPOINT_;
+        record.NumberParameters = 3;
+        record.ExceptionInformation[0] = service;
+        record.ExceptionInformation[1] = Frame->Ecx;
+        record.ExceptionInformation[2] = Frame->Edx;
+        vector = 3;
+    } else switch (vector) {
     case 0: record.ExceptionCode = STATUS_INTEGER_DIVIDE_BY_ZERO_; break;
     case 1: record.ExceptionCode = STATUS_SINGLE_STEP_; break;
     case 3: // int3: report the breakpoint instruction itself

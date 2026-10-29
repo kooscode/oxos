@@ -6,7 +6,7 @@
 //
 // Commands: USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE
 // REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot) and SITE POWEROFF.
-// RNTO moves a file or folder to another folder of the same drive. Passive data ports are 50000-50099.
+// RNTO moves a file or folder to another folder of the same drive. Passive data ports are lwIP's 49152-65535.
 // The address (DHCP, else 192.168.1.223) is on the screen and, with a SERIAL=1 kernel, on the debug serial port.
 // BACK on any controller reboots the console (as SITE REBOOT).
 // The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
@@ -35,7 +35,7 @@ extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 namespace {
 
 
-constexpr unsigned short ControlPort = 21, DataPortFirst = 50000, DataPorts = 100;
+constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
 constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
@@ -279,7 +279,7 @@ const char *StatusText(NTSTATUS s) {
 
 // --- Sessions -----------------------------------------------------------------------------------------------------
 
-volatile LONG NextDataPort = 0, SessionCount = 0;
+volatile LONG SessionCount = 0;
 
 struct Session {
     int control;
@@ -351,14 +351,19 @@ struct Session {
         sockaddr_in local = {};
         socklen_t length = sizeof(local);
         lwip_getsockname(control, reinterpret_cast<sockaddr *>(&local), &length);
-        for (int tries = 0; tries < DataPorts; tries++) {
-            unsigned short port = DataPortFirst + (unsigned)InterlockedIncrement(&NextDataPort) % DataPorts;
+        // Port 0: lwIP picks a free port in 49152-65535, skipping ports still in TIME_WAIT. (A closed data
+        // connection keeps its port for 2 minutes; a fixed set of 100 ports ran out when copying many small files.)
+        {
             int s = lwip_socket(AF_INET, SOCK_STREAM, 0);
             sockaddr_in a = {};
             a.sin_family = AF_INET;
-            a.sin_port = htons(port);
+            a.sin_port = 0;
             a.sin_addr.s_addr = INADDR_ANY;
-            if (lwip_bind(s, reinterpret_cast<sockaddr *>(&a), sizeof(a)) == 0 && lwip_listen(s, 1) == 0) {
+            sockaddr_in bound = {};
+            socklen_t boundLength = sizeof(bound);
+            if (s >= 0 && lwip_bind(s, reinterpret_cast<sockaddr *>(&a), sizeof(a)) == 0 && lwip_listen(s, 1) == 0 &&
+                lwip_getsockname(s, reinterpret_cast<sockaddr *>(&bound), &boundLength) == 0) {
+                unsigned short port = ntohs(bound.sin_port);
                 passive = s;
                 unsigned ip = ntohl(local.sin_addr.s_addr);
                 if (extended)
@@ -368,7 +373,8 @@ struct Session {
                           ip & 255, port >> 8, port & 255);
                 return;
             }
-            lwip_close(s);
+            if (s >= 0)
+                lwip_close(s);
         }
         Reply(425, "No data port free");
     }

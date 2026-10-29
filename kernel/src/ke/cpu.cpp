@@ -88,6 +88,7 @@ extern "C" void KiDoubleFaultTask();
 extern "C" void KiNmiTask();
 extern "C" void KiIgnoreInterrupt();
 extern "C" PVOID KiTrapStubs[32];
+extern "C" void KiTrap45();
 extern "C" PVOID KiIrqStubs[16];
 extern "C" UCHAR KiBootStack[];
 
@@ -148,6 +149,7 @@ static void KiInitializeIdt() {
         KiIdt[v] = MakeInterruptGate((PVOID)KiIgnoreInterrupt);
     for (ULONG irq = 0; irq < 16; irq++)
         KiIdt[0x30 + irq] = MakeInterruptGate(KiIrqStubs[irq]);
+    KiIdt[0x2D] = MakeInterruptGate((PVOID)KiTrap45); // debug service (spec/stock/14)
 
     DescriptorTableRegister idtr = {sizeof(KiIdt) - 1, (ULONG)KiIdt};
     __asm__ volatile("lidt %0" ::"m"(idtr) : "memory");
