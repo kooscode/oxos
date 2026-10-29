@@ -687,25 +687,111 @@ The same mode word selects the same row numbers on every encoder (§3.3); the en
   (§1). Its power-on value and whether the scanout then uses 0x600800 is not determined.
 
 ### 6.3 Memory interface before scanout
-- X-codes (flash header): PFB 0x100200 ← 0x03070103 (temporarily 0x03070003 during the memory-size probe; the final
-  value is 0x03070103), PFB 0x100204 ← 0x11448000, then 0x11338000 if the probe finds the smaller memory (64 MB; the
-  probe below); PFB 0x100210 ← 0x80000000; PFB 0x100228 ← 0x081205FF; PFB 0x1002C0–0x1002D4 sequence (0x11, 0x32,
-  0x132; 0x1002C4 / 0x1002CC 0x00100042 in Complex 4627, 0x00100000 in 5838; 0x1002D0 ← 1 twice; 0x1002D4 ← 1);
-  0x100328 ← 1, 0x10032C ← 0xFFFFCFFF, 0x100330 ← 0x84848888, 0x100338 ← 0xDF, 0x100410 ← 0x11000016; NV2A strap
-  0x101000 ← 0x803D4401 on NV2A revision 0xA1 only (Complex 4627); NVPLL 0x680500 ← 0x00011701 on NV2A revision
-  0xA1, else 0x00011C01 (Complex 4627; 5838 always 0x00011C01); 0x68050C ← 0x000A0400.
-- X-code memory-size probe (Complex 4627 X-code table, entries 169–314): with 0x100200 = 0x03070103 and 0x100204 =
-  0x11448000, for each of 8 lanes *n* (address *a* = 0x00555548 + 16*n* for *n* = 0–3, 0x04555548 + 16(*n* − 4) for
-  *n* = 4–7): write 0xAAAAAAAA at *a* and 0x5A5A5A5A at *a* + 32 MB. If *a* + 32 MB does not read back 0x5A5A5A5A,
-  lane *n* is marked faulty; else if *a* still reads 0xAAAAAAAA, lane *n* is marked "large" (bit *n* of a mask
-  kept in PCI 0:2:0 register 0x3C); then 0x55555555 is written at *a* and must read back, else the lane is marked
-  faulty (mask in PCI 0:3:0 register 0x3C). Result, from the "large" mask:
-  - 0 (no lane large: 64 MB): 0x100200 ← 0x03070103, 0x100204 ← **0x11338000**, host 0x84 ← 0x03FFFFFF;
-  - 0xFF (every lane large: 128 MB): 0x100200 ← 0x03070103, 0x100204 stays 0x11448000, host 0x84 ← 0x07FFFFFF;
-  - anything else: 0x100200 ← 0x03070003, 0x100204 stays 0x11448000, host 0x84 ← 0x03FFFFFF.
-  The two masks are then sent to the SMC (SMBus address 0x20, commands 0x13 "large" and 0x12 "faulty").
-  So bit 8 of 0x100200 is set on both regular 64 MB and 128 MB consoles; 0x03070003 is only the mixed case.
+Read from the X-code tables of xbox-files/bios (Complex_4627.bin: the last 256 KB bank; 5838.bin;
+cerbios-hybrid-3.1.0.bin; evox.m8plus.fc.137.nodvd.bin) and of OXOS's own image (XboxDev/cromwell's table,
+kernel/boot/xcodes.S). X-code entries are 9 bytes from bank offset 0x80: opcode, operand 1, operand 2; offsets below are
+bank offsets of the entry. Opcode 0x08 **jumps when the current result is not equal** to operand 1 (seen from the
+memory probe: a lane whose +32 MB read-back is not 0x5A5A5A5A goes to the "faulty" marking). The tables were replayed
+for a 1.4 console (NV2A PMC 0x000000 low byte 0xA3, strap 0x861D4401, SMBus devices SMC, Focus encoder and EEPROM
+present, nothing at the 1.6 encoder's address 0x70 or the Conexant's 0x45) to see which branch such a console takes.
+
+**Branches by console.**
+- Complex 4627 (one table for 1.0-1.5): NV2A revision 0xA1 vs other. On a non-A1 NV2A: 0x0010B0 ← 0x07633461,
+  0x0010CC ← 0x66660000, 0x0010D4 ← 9 (entries 0x0158-0x0173); on A1: 0x07633451, 0, 5 (0x012B-0x0146). Strap
+  0x101000 ← 0x803D4401 on A1 only (0x0203-0x020C). NVPLL 0x680500 ← 0x00011701 on A1, else 0x00011C01
+  (0x0467-0x0482).
+- Cerbios 3.1.0 and EvoX M8+: first an SMBus read of slave 0x70 (address byte 0xE1; Cerbios entries 0x012B-0x0185):
+  a device there (the 1.6 encoder) selects the 1.6 table (0x0010B0 ← 0x01000010, ...); no answer jumps to a 1.0-1.5
+  table (Cerbios from 0x0857, EvoX from 0x0ED8) that equals OXOS's/Cromwell's table below for an A3 NV2A, including
+  the strap rewrite (peek 0x101000, keep its other bits, set bit 31 and bits from the revision: 0x861D4401 here).
+- 5838: the 1.6 table only (0x0010B0 ← 0x01000010 at 0x0134, then a jump over the 1.0-1.5 values).
+- A 1.4 console therefore takes the 4627 non-A1 branch, Cerbios's/EvoX's 1.0-1.5 table, or (OXOS) Cromwell's table.
+
+**Values on a 1.4 console (NV2A A3), final value of each register written by the X-codes:**
+| Register | Complex 4627 | Cerbios / EvoX (1.0-1.5 table) | OXOS (Cromwell) | 5838 (1.6 table) |
+|---|---|---|---|---|
+| 0x0010B0, 0x0010B8, 0x0010BC | 0x07633461, 0xFFFF0000, 0x5866 | same | same | 0x01000010, 0, 0x5860 |
+| 0x0010C4, 0x0010C8, 0x0010CC, 0x0010D4 | 0x0351C858, 0x30007D67, 0x66660000, 9 | same | same | 0xAAAA0000, 0x7D67, 0x66660000, 0xF |
+| 0x0010DC, 0x0010E8 | 0xA0423635, 0x0C6558C6 | same | same | 0, 0x04000000 |
+| 0x001210, 0x001218 | 0x10, 0x00010000 | same | same | 0, 0 |
+| 0x001214 (before calibration) | 0x12121212 (strap bits 18/19 set; 0x10101010 if clear) | 0x09090909 | 0x09090909 | 0 |
+| 0x00122C, 0x001234, 0x001238 | 0xAAAAAAAA | same | same | 0, 0xAAAAAAAA, 0xAAAAAAAA |
+| 0x001230, 0x001240 | 0xAAAAAAAA, 0x8B8B8B8B | 0xFFFFFFFF, 0xFFFFFFFF | same as Cerbios | 0xFFFFFFFF |
+| 0x00123C, 0x001244, 0x001248 | 0x8B8B8B8B | same | same | same |
+| 0x00124C, 0x001250 | 0xAA8BAA8B, 0x0000AA8B | same | same | 0xAA8BAA8B, 0x00005474 |
+| 0x1002C0/C8 sequence; 0x1002C4/CC | 0x11, 0x32, 0x132; 0x00100042 | same | same | same; 0x00100000 |
+| 0x1002D0 (twice), 0x1002D4 | 1, 1 | same | same | same |
+| 0x100210 | 0x80000000 | same | same | same |
+| 0x100228 | 0x081205FF | same | same | same |
+| 0x100328, 0x10032C, 0x100330, 0x100338, 0x100410 | 1, 0xFFFFCFFF, 0x84848888, 0xDF, 0x11000016 | same | same | same |
+| 0x101000 (strap) | not written on A3 | rewritten (0x861D4401) | rewritten (0x861D4401) | rewritten |
+| NVPLL 0x680500, 0x68050C | 0x00011C01, 0x000A0400 | same | same | same |
+| host 0:0:3 0x6C | 0x00230801 then 0x01230801 (both at the end, before the memory probe) | same | same | same |
+| host 0:0:3 0x6C, earlier | 0x01000000 unless SMC register 0x01 reads 0x50 (4627 0x03FB-0x044C) | same condition | not written | same condition |
+So for NV2A < D3 the refresh/timing values (0x100210, 0x100228), the mode-register sequence (0x1002C0-0x1002D4),
+the controller set-up at 0x100328-0x100410, NVPLL and the memory PLL writes are identical in every image. The
+differences on a 1.4 console are the pre-calibration pad defaults (0x1214, 0x1230, 0x1240, all rewritten by the 2BL
+calibration, spec 21 §3), the 4627 table not rewriting the strap on A3, and the early SMC-dependent host 0x6C write
+that Cromwell's table lacks (whether it happens on a given console depends on its SMC version byte; to be logged).
+
+**Memory-size probe** (Complex 4627 entries 0x0671-0x0B66; the same logic in Cerbios from 0x0DF7, EvoX from 0x14ED,
+5838 from 0x07FD; OXOS does it in boot/start.S because Cromwell's table has none): 0x100200 ← 0x03070103 and
+0x100204 ← 0x11448000; PCI 0:2:0 and 0:3:0 register 0x3C cleared. For each of 8 lanes *n*, address *a* =
+0x00555548 + 16*n* (*n* = 0-3, below 64 MB) or 0x04555548 + 16(*n* − 4) (*n* = 4-7, at 64 MB and up): write
+0xAAAAAAAA at *a* and 0x5A5A5A5A at *a* + 32 MB; if *a* + 32 MB does not read back 0x5A5A5A5A the lane is marked
+faulty (bit *n* of 0:3:0 0x3C); else if *a* still reads 0xAAAAAAAA (no alias at +32 MB) the lane is marked "large"
+(bit *n* of 0:2:0 0x3C); then 0x55555555 at *a* must read back, else faulty. Then (0x0B15-0x0B8A):
+- **default, written first:** 0x100200 ← 0x03070003, host 0x84 ← 0x03FFFFFF (64 MB);
+- "large" mask 0: 0x100200 ← 0x03070103, 0x100204 ← 0x11338000 (64 MB);
+- "large" mask 0xFF: 0x100200 ← 0x03070103, host 0x84 ← 0x07FFFFFF (128 MB);
+- any other mask: the default stays (0x03070003, 0x11448000, 64 MB).
+The masks go to the SMC (SMBus 0x20, commands 0x13 "large", 0x12 "faulty").
+**What a retail 1.0-1.5 console gets:** its 64 MB are four 32-bit chips on the first 64 MB of address space; lanes
+4-7 address the second 64 MB, which is not populated, so they fail the +32 MB read-back (faulty) and are not large;
+lanes 0-3 do not alias at +32 MB (the 0x11448000 layout spreads the 64 MB so that *a* and *a* + 32 MB are different
+cells), so they are large. Large mask 0x0F, faulty mask 0xF0: the "any other mask" row, **0x100200 = 0x03070003,
+0x100204 = 0x11448000, 64 MB**. This is the ordinary retail result on such a console, observed on the 1.4 console
+(OXOS's start.S makes the same decision every boot and logs 0x03070003 / 0x11448000 at kernel entry). The mask-0 row
+(0x03070103 + 0x11338000) is a different chip population: every lane aliasing at +32 MB, i.e. memory on all eight
+lanes but only 32 MB per 64 MB half.
+- 0x100204 layout, inferred (not documented in the binaries): the two rows differ only in bits 20-27 (0x44 vs 0x33).
+  Taking each nibble as a chip-select's row-address width minus 8 fits both rows: 0x4 = 12 row bits, which with 8
+  column bits, 4 banks and 32-bit chips gives 16 MB per chip (128 Mbit) and 64 MB for four; 0x3 = 11 row bits, 8 MB
+  per chip (64 Mbit), 64 MB for eight chips on two chip selects. This is an interpretation that matches the probe's
+  logic, not a register description.
 - 2BL: pad calibration (spec 21 §3) only.
+
+### 6.3a After kernel entry: the stock kernels' accesses to the memory interface
+A search of xboxkrnl-4627.exe and the 5838 kernel (xbox-files/5838-unpacked/xboxkrnl.exe) for every 32-bit
+immediate or displacement naming PFB 0x100200-0x10023C, 0x1002C0-0x1002DC, 0x100300, 0x100328-0x100338, 0x100410,
+the strap 0x101000, PBUS 0x1210-0x1264 and the PLLs 0x680500-0x68050C, each hit checked in the disassembly (hits that
+decode as data are not listed). Addresses are 4627; the 5838 kernel has each at a parallel place (e.g. 0x80046F3E ->
+0x800467DE).
+| Where (4627) | Access | Register | Value |
+|---|---|---|---|
+| 0x800482F1, 0x800482FD (graphics device creation) | read, saved in the device | PFB 0x100200, 0x100204 | - |
+| 0x80048309 | read, bit 8 tested | PBUS 0x1218 | - |
+| 0x800497D6, 0x800497EE | read, copied to PGRAPH 0x4009A4 / 0x4009A8 | PFB 0x100200, 0x100204 | - |
+| 0x8004656C | read | PFB 0x10020C (memory size) | - |
+| 0x8004828D, 0x800481B3, 0x80048222 | read (clock computation) | NVPLL 0x680500, MPLL 0x680504, VPLL 0x680508 | - |
+| 0x800483AC-0x800483B1 | read-modify-write | PFB 0x100214 | bit 0 cleared |
+| 0x80046CB9, 0x80046D9D | write | PFB 0x100300 + 4·i (one register per surface region) | region value / 0 |
+| 0x800424AE-0x800424CA | read-modify-write, then poll until bit 16 clears | PFB 0x100410 | bit 16 set |
+| 0x800466A3-0x800466B1 | PBUS 0x184C written with bits 8-9 cleared, then its old value; then PMC 0x200 | PMC 0x000200 | 0xFFFFFFFF |
+| 0x80046F3E, 0x80046F4A, 0x80046F56 (device teardown) | write back the saved values | PFB 0x100200, 0x100204, PMC 0x000200 | as read at creation |
+| 0x80030779 (AvSetDisplayMode) | read-modify-write | 0x68050C | pixel-clock source (§2) |
+| 0x800550BC | read | strap 0x101000 | - |
+- Not written by either kernel: PFB 0x100210, 0x100228, 0x1002C0-0x1002D4, 0x100328-0x100338, the pad registers
+  0x1214-0x1250 (0x1218 is only read), the strap, NVPLL / MPLL. No write of a host-bridge configuration address
+  (0x8000036C, 0x8000006C, 0x80000084) occurs as an encoded constant; the kernels reach PCI configuration space
+  through HalReadWritePCISpace with separate bus / slot / register arguments, so a call-site audit for host 0:0:3
+  0x6C is still open.
+- PMC 0x200: the only writes are 0xFFFFFFFF and the teardown's write-back of the value read at creation; nothing
+  clears a bit that was set before the graphics device started (OXOS reads 0x01110000 there at kernel entry on the
+  1.4 console), so whichever bit enables the memory controller is never toggled.
+- Two writes to "+0x200" in .text (0x8001AB74, 0x8001ACC5) are the floating-point save area of a thread (fxsave /
+  ldmxcsr nearby), not NV2A.
+
 - Kernel `AvSetDisplayMode`: nothing (§1).
 - Kernel graphics library (§7): PMC 0x200 ← 0xFFFFFFFF (all engines enabled), saves PFB 0x100200 / 0x100204 and writes
   them back when the device is destroyed, clears PFB 0x100214 bit 0, claims the GPU instance memory and zeroes

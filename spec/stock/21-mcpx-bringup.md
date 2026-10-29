@@ -140,6 +140,44 @@ else the second; then averages that group (sum >> 2).
 - 4627: an entry whose value is 0 has its register replaced by 0, so that 0 is stored at NV2A offset 0 (PMC_BOOT_0,
   read-only) instead. 5838 has the same loop but its test compares the register (never 0), so it writes all nine.
 
+### 3.6a The write window: no memory traffic while the pads change (requirement)
+The nine stores change the drive, slew and delay of the NV2A's own DRAM interface. The reference arranges its code so
+that **from the first pad store to the last, the CPU makes no memory (DRAM) access at all**: every instruction fetch
+and every data access hits the caches, and nothing dirty is written back. Getting the register values right is not
+enough; an OXOS implementation must keep this invariant too. Read from the instructions of the Complex 4627 2BL
+(addresses at its 0x400000 run address; the decompiler hides the second point):
+1. Order. All arithmetic first: the 16 A nibbles and c10, c11, c12 (each a round-to-nibble of the §3.5 product)
+   are computed into registers and stack slots. Then **`wbinvd`** (0x400DE0): caches written back and emptied. Only
+   after it are the nine 32-bit values built (the pattern of §3.6, a helper called eight times, then the 0x1214
+   value) and stored, each with its register offset, into a local array of nine {offset, value} pairs on the stack.
+   Those stores (write-allocate on the P6) bring the array's lines into the cache. A second loop over the array
+   then replaces the offset of every entry whose offset or value is 0 by 0 (the "zero store" of §3.7a step 4), which
+   reads and writes the same, now cached, lines.
+2. Store loop (0x400EEA-0x400F08): an outer counter 0..1 around an inner loop over the nine entries; the inner
+   body loads value and offset and stores the value to NV2A base + offset **only when the outer counter is 1**.
+   Pass 0 does no load and no store: it only executes the loop's instructions, bringing its two 32-byte code lines
+   into the instruction cache. Pass 1 then runs entirely from the caches: its code lines were fetched by pass 0, the
+   array lines are cached (and dirty) since step 1, there is no call, push or other stack access, and the only bus
+   cycles are the nine uncached MMIO stores to 0xFD00xxxx. The few dirty lines are not evicted (a handful of lines in
+   an empty cache), so no write-back happens either. Interrupts are off in the 2BL.
+3. Invariant (what the next step relies on): between the first and the last pad store the memory controller sees
+   no CPU read, write or write-back; the DRAM interface is reprogrammed while it is idle. Before the first store,
+   everything the store loop will need (code, the value array) is already in the caches; after `wbinvd` nothing
+   else is touched until the last store.
+Requirements for OXOS (kernel/boot/bl.cpp BlPadCalibrate and any later re-calibration):
+- Compute all nine values and their offsets **before** the `wbinvd`; after it, only fill the {offset, value} array
+  (or registers) and run the store loop.
+- Write the store loop so the compiler cannot move arithmetic, spills or other stack traffic into the window: an
+  inline-assembly loop over the array (or with all nine values and offsets in registers), with **a dry pass first**
+  that executes the same loop code without storing (warming its code lines), then the storing pass; no calls, no
+  stack accesses and no other memory references between the first and the last store; interrupts off.
+- Keep the store order (§3.6: 0x122C, 0x123C, 0x1230, 0x1240, 0x1234, 0x1244, 0x1238, 0x1248, 0x1214) and the
+  zero-store behaviour.
+- Nothing that writes memory may follow in the window, e.g. logging the result (OXOS's record at 0x2300) comes
+  after the last store.
+- Status (2026-10-28): implemented in OXOS's 2BL (inline-assembly loop with a dry pass); it is kept as reference
+  behaviour, but on the 1.4 console it did not change the rate of single-bit RAM changes (§3.8).
+
 ### 3.7 5838 row source (NV2A ≥ D3; 1.6)
 - 25 SMBus word reads of the EEPROM (slave 0xA8), commands 0xC4, 0xC6, ..., 0xF4 (50 bytes, 0xC4-0xF5).
 - Row r (r = 0..4) from EEPROM bytes 0xC4 + 10r .. 0xCD + 10r: each of the first nine bytes gives two nibbles (high
@@ -172,7 +210,8 @@ Addresses below are those load addresses. Every step was read from the code; val
       0x1220 ← 0.
    4. Values and writes (shared routine 0x90B08): exactly §3.5 and §3.6 for the 4627 variant (unsigned divisions,
       the 1/2^20 weight above the top breakpoint, breakpoints T[2,4,6,8,10] for A and T[3,5,7,9,11] for B,
-      `wbinvd`, the nine stores in order, a zero value stored at NV2A offset 0 instead of its register).
+      `wbinvd`, the nine stores in order, a zero value stored at NV2A offset 0 instead of its register), with the
+      write window of §3.6a: no memory access between the first and the last pad store.
 7. AGP/host (0x91187): device 1 0x54 |= 0x88000000; host 0x64 |= 0x88000000; host 0x6C: read v, write v & ~1,
    write v (the LDT reset); host 0x80 ← 0x00000100.
 8. Device 1 0x08 read as a byte; if ≥ 0xD1: device 1 0xC8 ← 0x00008F00 (0x90710).
@@ -190,6 +229,32 @@ Addresses below are those load addresses. Every step was read from the code; val
 A = 0x5E-0x63, B = 0x5D-0x61 over six boots, strap 0x861D4401 (first row set); written: 0x122C 0x99999999,
 0x123C 0x8E8E8E8E, 0x1230 0xFFFFFFFF, 0x1240 0xFFFFFFFF, 0x1234 0x99999999, 0x1244 0x8E8E8E8E, 0x1238 0x99999999,
 0x1248 0x8E8E8E8E, 0x1214 0x09090909. 0x1240 stays 0xFFFFFFFF with this table.
+
+**Drift with time powered (2026-10-28, ~430 cold boots, 8 s off between boots).** A and B are not constants of the
+console. After a long rest the first boot reads A ≈ 0x65; in back-to-back boots (~35 s apart) A falls steadily
+(0x62, 0x61, 0x60 over the first ~5 min, 0x5E-0x5F by ~8 min, 0x5C-0x5D from ~12 min) and B follows ~1-2 below it.
+Over the whole day A ranged 0x5A-0x66 and B 0x5A-0x63. The strap read 0x861D4401 on almost every boot and
+0x1E1D4401 on a few (both select row set 1).
+
+**What the retail arithmetic writes for each A** (the Complex 4627 2BL's routine at 0x400980 run in an emulator with
+the console's strap, readings A ×4 then B = A − 1 ×4; the same nine values from OXOS's implementation, which
+matches it write for write, §3.7a):
+| A | 0x122C, 0x1234, 0x1238 | 0x123C, 0x1244, 0x1248 | 0x1230, 0x1240 | 0x1214 |
+|---|---|---|---|---|
+| 0x56 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x01010101 |
+| 0x57 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
+| 0x58-0x59 | 0xAAAAAAAA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
+| 0x5A-0x5B | 0xA9A9A9A9 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
+| 0x5C-0x6A | 0x99999999 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
+So for every A from 0x5C up the retail 2BL writes exactly what OXOS writes on this console; the step to a stronger
+setting is at A = 0x5B / 0x5C (the A breakpoint T[6] = 0x5D of the table, with rounding).
+
+**Single-bit RAM changes on this console (OXOS, spec/oxos-internal/21).** Boots whose A had drifted to 0x5C-0x5E
+showed single bits of RAM set within a few seconds of the kernel starting (about 1 boot in 5-7 in that band; none at
+A ≥ 0x5F in 36 boots, 1 in 53 at A ≤ 0x5B). The write window of §3.6a was implemented and did not change the rate
+(4 of 30 boots, same cells). The cause was not the pads: in exactly those boots DRAM refresh (PFB 0x100210) was off
+after the X-codes (spec/oxos-internal/20). A, the console's warmth and the lost refresh go together; the pad values
+themselves are the reference ones.
 
 ### 3.9 The calibration table (Cerbios layout, 0x135 bytes)
 Functional hardware constants (as the encoder tables of specs 18-20): the breakpoints the measurements A and B are

@@ -18,33 +18,20 @@ mounted as the console's disc by the OXOS [ISO launcher](tools/iso-launcher): po
 jingle, then Brute Force's intros and title screen!!*
 
 **Status:**
-- **Retail titles on real hardware:** Brute Force runs on a 1.4 console from an XISO on an exFAT SSD (no DVD drive, no
-  FATX, no 4 GB file limit), and the MS dashboard boots from the same disk.
-- Every function and variable the 4627 kernel exports is implemented.
-- In xemu it boots the dashboard and runs retail titles: so far **Halo**, **Halo 2**, **Brute Force**, **Half-Life 2**
-  and **Enter The Matrix**
-- The BIOS image is ours from the first instruction, and xemu runs it without an MCPX boot ROM file.
-- **Boot chain:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, with full glitch
-  support (the X-code overflow trick): no Microsoft key or boot-ROM dump needed.
-- **Memory:** titles start with slightly more free memory than on the stock kernel (in every title measured).
-- **SuperIO serial support:** boot log, `DbgPrint` output and crash reports over the serial port.
-- **Kernel call tracing:** a record of the kernel calls a title makes, saved automatically when it crashes.
-- **Interactive source-level debugging** of the kernel and nxdk titles in xemu, with gdb or VS Code.
-- **IDE LBA48 Support** allows large disks beyond 2TB (i.e NO size limit)
-- **exFAT Support** for standard exFAT formatted disks, No file or disk size limit: format a disk on any PC, copy
-  the dashboard into `/C`, and the Xbox partitions are folders (`/C`, `/E`, `/X`–`/Z`, `/F`). The dashboard,
-  **Halo** and **Halo 2** run from one in xemu, including a 500 GB SATA drive formatted on a PC and attached over
-  USB (see [Using an exFAT disk](#using-an-exfat-disk)).
-- **TV output on every revision:** the Conexant (1.0–1.3), Focus (1.4–1.5) and Xcalibur (1.6) video encoders, in
-  composite, S-video, SCART RGB and component (480i/576i, **480p, 720p, 1080i**, the signal HDMI adapters take),
-  programmed from their register tables; checked in xemu on all three of its encoder models.
-- **Titles from images of your own discs:** an XISO, full dump or CCI image made from a disc you own, on the hard
-  disk (whole or in two parts, and over 4 GB on exFAT), runs as if the disc were in the drive. The
-  [ISO launcher](tools/iso-launcher) mounts one and starts it, with the same device interface as Cerbios. Brute Force
-  runs this way on a 1.4 console from an exFAT SSD
-  ([`spec/oxos-internal/16-virtual-discs.md`](spec/oxos-internal/16-virtual-discs.md)).
-- **Real hardware:** boots the dashboard on a 1.4 console (Focus encoder, MCPX 1.1, no DVD drive) from a FATX disk and
-  from a 500 GB exFAT SSD, and runs Brute Force there from a mounted XISO, with network boot for development ([`tools/netboot`](tools/netboot/README.md)) 
+- **Real hardware:** a 1.4 console (no DVD drive) boots the MS dashboard and runs retail games such as Brute Force
+  from disc images on a PC-formatted exFAT SSD.
+- **Complete kernel:** every function and variable the 4627 kernel exports is implemented; in xemu it runs the
+  dashboard, Halo, Halo 2, Brute Force, Half-Life 2 and Enter The Matrix.
+- **Open BIOS:** our own 2BL on [Cromwell](https://github.com/XboxDev/cromwell)'s X-codes, ours from the first
+  instruction: no Microsoft code, keys or boot-ROM dump.
+- **Games from your own disc images:** XISO, full-dump and CCI images (also over 4 GB, split in two) mounted as the
+  console's disc by the [ISO launcher](tools/iso-launcher).
+- **Big, modern disks:** exFAT (format on any PC; the Xbox partitions are folders, see
+  [Using an exFAT disk](#using-an-exfat-disk)) and LBA48 (no size limit).
+- **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to component up to 1080i.
+- **More memory for titles** than the stock kernel, in every title measured.
+- **Developer tools:** serial boot log and crash reports, kernel call tracing, network boot
+  ([`tools/netboot`](tools/netboot/README.md)), and source-level debugging in xemu (gdb / VS Code).
 
 ## Running OXOS in xemu today !!
 No building, no code and **no Microsoft files** - Just download the ready BIOS image and drop it into xemu!

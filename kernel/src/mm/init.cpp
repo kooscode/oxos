@@ -505,9 +505,10 @@ void MmInitSystem(bool QuickReboot) {
         MiProbeRamSize();
         // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
         // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
-        // Our 2BL sets the DRAM up as the retail X-codes do (spec/stock/22 §6.3: 64 MB = 0x100200 0x03070103 with
-        // 0x100204 0x11338000). Only an older 2BL that left the larger chips' 0x11448000 on a 64 MB console needs
-        // the fallback: PFB 0x100200 bit 8 clear, as Cromwell does.
+        // Our 2BL sizes the DRAM as the retail X-codes do (spec/stock/22 §6.3); on a retail 64 MB console of four
+        // 128 Mbit chips that ends with 0x100200 0x03070003 and 0x100204 0x11448000 (bit 8 clear). Only an older 2BL
+        // that left 0x03070103 with 0x11448000 on a 64 MB console needs this fallback: PFB 0x100200 bit 8 clear, as
+        // the retail probe and Cromwell leave it.
         auto pfb = (volatile ULONG *)0xFD100200;
         MiGpuSizeBefore = pfb[3];
         if (MiRamProbe != 2 && pfb[1] != 0x11338000 && (pfb[0] & 0x100))
