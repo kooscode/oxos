@@ -648,11 +648,13 @@ def main():
         if os.path.isfile(s):
             do_image(s, a, template)
         elif os.path.isdir(s):
-            imgs = images_in(s)
+            xbe = default_xbe_in(s)
+            # A game's own default.xbe makes it a game folder, even with .iso data files in it (CS-CTHDX.ISO).
+            imgs = [] if xbe and not is_launcher(open(xbe, "rb").read()) else images_in(s)
             if imgs:
                 for p in imgs:
                     do_image(p, a, template)
-            elif default_xbe_in(s):
+            elif xbe:
                 do_folder(s, a, template)
             else:
                 subs = [e.path for e in sorted(os.scandir(s), key=lambda e: e.name) if e.is_dir()]
