@@ -577,6 +577,17 @@ def do_image(path, a, template):
     log(f"{name}: {kind}, {describe(game)}\n  launcher {out}")
 
 
+def default_xbe_in(folder):
+    """The folder's default.xbe in any letter case (Default.xbe, DEFAULT.XBE: the console ignores case), or None."""
+    try:
+        for e in os.scandir(folder):
+            if e.is_file() and e.name.lower() == "default.xbe":
+                return e.path
+    except OSError:
+        pass
+    return None
+
+
 def do_folder(src, a, template):
     """An extracted game: an XISO of it in OUT/<name>/, and its launcher."""
     src = os.path.abspath(src)
@@ -584,7 +595,8 @@ def do_folder(src, a, template):
     dest = os.path.join(os.path.abspath(a.output), name)
     if os.path.commonpath([dest, src]) == src or os.path.commonpath([dest, src]) == dest:
         fail(f"the output folder {dest} must not be the source folder, inside it, or around it (-o picks another)")
-    game = Xbe(open(os.path.join(src, "default.xbe"), "rb").read(), os.path.join(src, "default.xbe"))
+    xbe = default_xbe_in(src)
+    game = Xbe(open(xbe, "rb").read(), xbe)
     os.makedirs(dest, exist_ok=True)
     log(f"{name}: building the image from {src}")
     tree = tree_from_folder(src)
@@ -640,7 +652,7 @@ def main():
             if imgs:
                 for p in imgs:
                     do_image(p, a, template)
-            elif os.path.isfile(os.path.join(s, "default.xbe")):
+            elif default_xbe_in(s):
                 do_folder(s, a, template)
             else:
                 subs = [e.path for e in sorted(os.scandir(s), key=lambda e: e.name) if e.is_dir()]
