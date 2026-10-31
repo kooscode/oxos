@@ -91,9 +91,8 @@ An nxdk title, built with `make -C kernel iso-launcher`.
 3. **Two parts.** For `name.1.iso` (or `.1.cci`), `name.2.iso` is added when it exists.
 4. **Mount.** Type 0 for plain images (on Cerbios too, that type replaces `\Device\CdRom0`). Type `d` with the link
    `\Device\CdRom0` for CCI.
-5. **Launch.** The launcher shows the OXOS boot splash for one second (12 frames of fade in, 36 of hold, 12 of fade to
-   black at 60 Hz; the picture is `kernel/splash/splash.png`, packed at build time by `gen_splash.py` and unpacked
-   with the kernel's inflater), as a dashboard fades out when it starts a title. It then launches
+5. **Launch.** The launcher leaves the screen alone (no video mode change of its own, so the title's is the only
+   one; it sets a mode only to show an error). It launches
    `\Device\CdRom0\default.xbe` through the launch data page and a quick reboot. The page names the launcher as
    the caller with nxdk's default title ID 0xFFFF0002 (launch data type 0, no data), not the certificate's: a
    launcher made by oxos-isonator carries the game's certificate, and a game that finds its own title ID there

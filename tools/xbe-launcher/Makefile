@@ -5,3 +5,4 @@ SRCS = $(CURDIR)/xbe_launcher.cpp
 NXDK_CXX = y
 NXDK_DIR ?= $(CURDIR)/../../third_party/nxdk
 include $(NXDK_DIR)/Makefile
+
