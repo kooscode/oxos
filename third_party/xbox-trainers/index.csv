@@ -1,0 +1,999 @@
+folder,file,title_id,cheats,region,trainer_name,md5,original_files
+trainers,Vexx.etm,41430005,3,NTSC,Vexx (+3),b4e5eb2000cb45c058563f8774d4a5fd,Vexx [plus3].etm | Vexx p3 ntsc.etm | Vexx p3.etm | vexx.etm
+trainers,Burnout.etm,41430006,1,NTSC,Burnout +1,64b1ef695cb29a49712906df3a7693ae,Burnout [plus1].etm | Burnout p1 ntsc.etm | Burnout p1.etm | gunhero-burnout.etm
+trainers,NBA Jam.etm,41430013,2,NTSC,NBA Jam 2k4 +2 (USA),b73fe587cb97c3f6f4565fed774d07ed,NBA Jam 2004 [plus2] (USA).etm | NBA Jam 2004 p2 ntsc.etm | mxt-jam4.etm | nba jam 2004 p2.etm
+trainers,Alias.etm,41430016,4,PAL,Alias (PAL) +3,248aefe6888214479f86158069da98fb,Alias [plus3] (PAL).etm | Alias _3 (Multi).etm | Alias p3 pal.etm | EVT-ALS.ETM
+trainers,Burnout 2 - Point of Impact.etm,41430019,2,NTSC,Burnout2 +2 (USA/NTSC) v1.1 ,7ad9fe7095c6bef7ccf2c2beaab8d948,BO2.ETM | Burnout 2 [plus2] (NTSC-USA).etm | Burnout 2 p2 ntsc v1_1.etm | Burnout 2 p2.etm | Burnout 2 p4 ntsc.etm | burn out 2 p2.etm | burnout 2.etm
+trainers,Juiced.etm,4143001E,4,PAL-NTSC,Juiced PAL & NTSC +3,45314e8ab95dab2a6762d6ade6e8a7ab,Juiced [plus3] (NTSC-PAL).etm | Juiced p3 multi.etm | TD_Juiced.ETM
+variants,Juiced (PAL-NTSC p3).etm,4143001E,3,PAL-NTSC,Juiced PAL & NTSC +3,e16af6e282985fb6a1249832d981f298,Juiced p3.ETM
+variants,Juiced (PAL-NTSC p2).etm,4143001E,2,PAL-NTSC,Juiced PAL & NTSC +2,55544e32a511a73889977e5ceb8fdef3,juiced p2.etm
+trainers,Red Star.etm,41430022,7,PAL,Red Star +7,11bd1b9c27e987f419dc1712c8a50b08,Red Star p7 pal.etm | Red Star p7.etm
+variants,Red Star (p3).etm,41430022,3,,Red Star,181ebd78b9eed7d93629e98182f9e958,REDSTAR.ETM
+trainers,Playboy - The Mansion.etm,41480002,4,NTSC,Playboy Mansion +4,68d3497664c0a9ed000c69b3e8b9a1b4,Playboy Mansion p4 ntsc.etm | Playboy Mansion p4.etm
+variants,Playboy - The Mansion (NTSC p2).etm,41480002,2,NTSC,Playboy Mansion +2,0a433c668895b69be74a66bb197db057,Playboy Mansion [plus2].etm | Playboy Mansion p2 ntsc.etm | Playboy Mansion p2.etm | pboym.etm
+trainers,Galleon.etm,41540004,2,NTSC,Galleon +2 NTSC,da2ba710afabf23d60f11a378c09c723,Galleon [plus2] (NTSC).etm | Galleon p2 ntsc.etm | Galleon p2.etm | evt-gall.etm | galleon.etm
+trainers,Blade II.etm,41560005,9,NTSC,Blade II +9,c901f5412caf47383e6dbad030de7c44,Blade 2 p9 ntsc.etm | Blade II [plus9].etm | Blade II.etm | BladeII-plus9.etm | blade 2 p9.etm
+variants,Blade II (PAL p4).etm,41560005,4,PAL,Blade II +4 (PAL),05bff9e2f1bced5923fe93fe7617868f,Blade2_PAL.etm
+variants,Blade II (PAL p2).etm,41560005,2,PAL,Blade II +2 (PAL),427fad85b3bae1ad0f436d1ad27ab8a9,Blade 2 p2 pal.etm | Blade II [plus2] (PAL).etm
+trainers,True Crime - Streets of LA.etm,4156000E,7,PAL-NTSC,True Crimes: Streets of LA +7 PAL/NTSC (v0.3),66f946b733246259638e3220c6cdd22e,MXT-TCMU.ETM | True Crime SOLA p7 pal ntsc v0_3.etm | True Crime SOLA p7.etm | True Crime SoLA p7 multi.etm | True Crimes Streets of LA 7.etm | True Crimes Streets of LA [plus7] (NTS.etm | true crime streets of la p7.etm
+variants,True Crime - Streets of LA (p7).etm,4156000E,7,,True Crimes: Streets of LA +7 (v0.2),f88867e51f6b4d2d93b6ad235d42a1de,True Crimes Streets of LA [plus7] (v0..etm | mxt-tcla.etm
+variants,True Crime - Streets of (PAL-NTSC p7).etm,4156000E,7,PAL-NTSC,True Crimes: Streets of LA +7 PAL/NTSC (v0.3),a5e1da467373ce7fddd1951354bd55a6,mxt-tcmu_additional_pal_xbe.etm | true crime.etm
+variants,True Crime - Streets of LA (p4).etm,4156000E,4,,True Crimes: Streets of LA +4 (v0.2),ce8f1690b0353996c5a8d5c40b1f78c3,True Crimes Streets of LA [plus4] (v0..etm | tcsola2.etm
+variants,True Crime - Streets of LA (p1).etm,4156000E,1,,True Crimes: Streets of LA +1 (v0.1),dcb8fff1123e2a6d3e44abbe18888289,TCSOLA.ETM | True Crimes Streets of LA [plus1] (v0..etm
+trainers,Return to Castle Wolfenstein - Tides o.etm,41560010,3,NTSC,Return To Castle Wolfenstein +3 (NTSC),f8aa9f88564b72a6f1c5a0309a7b76c9,Return To Castle Wolfenstein [plus3] (.etm | Return To Castle Wolfenstein p3 NTSC.etm | Return To Castle Wolfenstein p3.etm | wolf.etm
+trainers,Star Wars - Jedi Knight II - Jedi Outc.etm,41560015,6,NTSC,Star Wars Jedi Knight 2: Jedi Outcast USA +6,8471153fca1a3d3966bf06751d7fd266,Jedi Knight2 USA.ETM | Jedi Knight2.ETM
+trainers,Pitfall - The Lost Expedition.etm,41560018,3,PAL,Pitfall +3 (PAL),89ba39250fb85540a72149a9ef037cdf,Pitfall [plus3] (PAL).etm | Pitfall p3 pal.etm | Pitfall_PAL.etm
+variants,Pitfall - The Lost Expeditio (NTSC p2).etm,41560018,2,NTSC,Pitfall (USA) +2,1f95c0c08ce53c22ffffac3c84367643,Pitfall [plus2] (USA).etm | Pitfall p2 ntsc.etm | evt-pitf.etm | pitfall p2.etm
+trainers,Cabela's Dangerous Hunts.etm,41560019,1,NTSC,Cabelas Dangerous Hunts +1,6a31b8f6d928acce2a6bc7c9f640d0ee,Cabelas Dangerous Hunts [plus1].etm | Cabelas Dangerous Hunts p1 ntsc.etm
+variants,Cabela's Dangerous Hunts (p1).etm,41560019,1,,Cabelas Dangerous Hunts +1,13f26d9426a3bf4110b1e90f815ace69,DangerousHunts-plus1.etm
+trainers,Fantastic 4.etm,4156001A,13,NTSC,Fantastic 4 +13-Xored,9b8f6e0a6fd16f02190ee20aeb9720ef,Fantastic 4 [plus13].etm | Fantastic 4 p13 ntsc.etm | Fantastic 4 p13.etm | XoredFantastic4.etm | xorfan4.etm
+variants,Fantastic 4 (NTSC p1).etm,4156001A,1,NTSC,FANTASTIC 4     +1 NTSC,d6dd50f3253bf0d4eb2b830d9de5cd21,FANTA41NTSC.ETM | Fantastic 4 [plus1] (NTSC).etm | Fantastic 4 p1.etm | Fantastic4.etm
+trainers,Soldier of Fortune II - Double Helix.etm,4156001B,3,NTSC,Soldier of Fortune 2 +3 (NTSC),bd39e763642336acedd690d996c18f3a,Soldier of Fortune 2 [plus3] (NTSC).etm | Soldier of Fortune 2 p3 ntsc.etm | Soldier of Fortune 2 p3.etm | soldier of fortune 2.etm
+trainers,X-Men Legends.etm,4156001E,8,NTSC,X-Men Legends (NTSC) +7,e542d3b9cdff403b61600e60c3ebb91d,X-Men Legends [plus7] (NTSC).etm | X-Men Legends p7.etm | X-Men Legends p8 ntsc.etm | Xmen Legends p8 ntsc.etm | evt-xmenl.etm | xmen legends p8.etm
+variants,X-Men Legends (NTSC p7).etm,4156001E,7,NTSC,X-Men Legends (NTSC) +7,01bc08f64c27ee5c4976a62740dcc34c,x-men legends.etm
+trainers,Doom 3.etm,41560020,4,NTSC,Doom 3 +4,4908ceb563106ee0d1acda854ba65602,Doom 3 p4 ntsc.etm | Doom 3 p4.etm | Doom 3.etm | Doom3.etm
+variants,Doom 3 (PAL-NTSC p4).etm,41560020,4,PAL-NTSC,Doom 3 +4 NTSC/PAL,bda6e27cc41b7c50576efd451ad2ace2,Doom 3 [plus4] (NTSC-PAL).etm
+trainers,Tenchu - Return from Darkness.etm,41560026,5,NTSC,Tenchu +4,a6ac1821f877696496ed054d917e3d86,Tenchu [plus4].etm | Tenchu p4 ntsc.etm | Tenchu p4.etm | evt-tchu.etm | tenchu.etm
+trainers,Call of Duty - Finest Hour.etm,4156002A,9,NTSC,Call of Duty: FH +10 (NTSC),52252f3fe4e47b31c9614e43c327348f,Call of Duty Finest Hour [plus10] (NTS.etm | Call of Duty Finest Hour p10 ntsc.etm | Call of Duty p10 ntsc.etm | EVT-COD.ETM | call of duty p10.etm
+variants,Call of Duty - Finest Hour (NTSC p9).etm,4156002A,9,NTSC,Call of Duty: FH +10 (NTSC),a94342f93ba5d3b10b9a7efeb8c460f1,Call Of Duty - Finest Hour.etm
+variants,Call of Duty - Finest Hour (NTSC p9) 2.etm,4156002A,9,NTSC,Call of Duty: FH +10 (NTSC),d3c4d7506c781f0befeccca05951bc9e,call of duty ntsc.etm
+variants,Call of Duty - Finest Hour (p4).etm,4156002A,4,,a_callofduty,4cc7a89381657005931345fdf4a56a2c,Call of Duty [plus5].ETM
+variants,Call of Duty - Finest Hour (PAL p3).etm,4156002A,3,PAL,COD (PAL) +3,6b70bfba1ab641eeabf4b980a02ba0c8,COD.ETM | Call of Duty Finest Hour p3 pal.etm | Call of Duty [plus3] (PAL).etm | Call of Duty p3 pal.etm | call of duty pal.etm
+trainers,Spider-Man 2.etm,4156002B,6,NTSC,Spider-man 2 (USA) +5,f984789d2d6e7f6836a62493b0d67431,Spider-man 2 [plus5] (USA).etm | Spiderman 2 p5 ntsc.etm | spiderman 2 p5.etm | spiderman 2.etm
+variants,Spider-Man 2 (PAL p6).etm,4156002B,6,PAL,Spider-man 2 (PAL) +5,58f603d790c2374ad698e14426dc0075,Spider-man 2 [plus5] (PAL).etm | Spiderman 2 p5 pal.etm | spiderman 2 pal p5.etm
+variants,Spider-Man 2 (PAL p6) 2.etm,4156002B,6,PAL,Spider-man 2 (PAL) +5,33425f24aaf0d5d62ba7d9d437ddea8f,evt-sdr2_pal.etm
+variants,Spider-Man 2 (NTSC p1).etm,4156002B,1,NTSC,spiderman 2 ntsc +1,cb550cb1663fcfd0940e32ec34602878,spide2ntsc1.ETM
+trainers,Tony Hawk's Underground.etm,4156002D,25,NTSC,THUG 1 (USA) +24,bf0e0f1eb584a7fcb3f616b9e7333a36,THUG 1 p24 ntsc.etm | THUG 1 p24.etm | Tony Hawk Underground 1 [plus24] (USA).etm | Tony Hawk Underground 1 p24.etm | Tony Hawk Underground p24 ntsc.etm | evt-thu1.etm
+trainers,Cabela's Deer Hunt - 2004 Season.etm,41560030,2,NTSC,Deer Hunt 2004 Season +2,a59fee3c8119e8ca0c429fcea4ed5014,Cabelas Deer Hunt 2004 Season [plus2].etm | Deer Hunt 2004 Season p2 ntsc.etm | Deer Hunt 2004 Season p2.etm
+variants,Cabela's Deer Hunt - 2004 Season (p2).etm,41560030,2,,Deer Hunt 2004 Season +2,ee41af2699e980a83929099e8b827c1a,DeerHunt2004-plus2.etm
+trainers,Ultimate Spider-Man.etm,41560035,4,NTSC,Ultimate Spider-Man (USA) +4,b948768c5903bd69d2b19122a0c3321b,Ultimate Spider-Man p4 ntsc.etm | Ultimate Spider-Man p4.etm | Unltimate Spider-Man.etm
+variants,Ultimate Spider-Man (NTSC p3).etm,41560035,3,NTSC,Ultimate Spider-Man (USA) +3,62fa62f93c06b94b1e2bbf96a85f8f8e,Ultimate Spider-Man [plus3] (USA).etm | Ultimate Spider-Man p3.etm | evt-uspm.etm
+trainers,Shrek 2.etm,41560037,2,NTSC,Shrek2 (USA) +2,4c13f7a114460bb26c7cfd5eac160b7c,Shrek 2 p2 ntsc.etm | Shrek 2 p2.etm | Shrek2 [plus2] (USA).etm | evt-shk2.etm | shrek 2.etm
+trainers,DreamWorks Shark Tale.etm,41560038,1,NTSC,Sharks Tale +1 (NTSC),e70db356dbe281632bac4020818e7086,EVT-STAL.ETM | Sharks Tale [plus1] (NTSC).etm | Sharks Tale p1 ntsc.etm | sharks tale p1.etm | sharks tale.etm
+trainers,DreamWorks Madagascar.etm,4156003B,6,NTSC,Madagascar (USA) +6,4221cc8a1d0ffa758794037d9ce1304c,Madagascar p6 ntsc.etm | Madagascar p6.etm
+trainers,Tony Hawk's Underground 2.etm,4156003C,25,NTSC,THUG 2 (USA) +25,297b9f87ba54df8ed97ddf10a6791e7c,THUG 2 p25 ntsc.etm | THUG 2 p25.etm | Tony Hawk Underground 2 [plus25] (USA).etm | Tony Hawk Underground 2 p25 ntsc.etm | Tony Hawk Underground 2 p25.etm | evt-thu2.etm | tony hawk underground 2.etm
+trainers,Bicycle Casino Includes - Texas Hold'e.etm,41560040,1,NTSC,Bicycle Casino (USA) +1,13aa93d055eeeb8ce53bd467747fc085,Bicycle Casino [plus1] (USA).etm | Bicycle Casino p1 ntsc.etm | Bicycle Casino p1.etm | EVT-BCAS.ETM | bicycle casino.etm
+trainers,Greg Hastings' Tournament Paintball.etm,41560042,7,,GH Tourn Paintball +8 v1.1,c6ed86a2ab6619e185b0d629f3cc3104,GH Tourn Paintball [plus8] (v1.1).etm | GH Tournament Paintball [plus8] (v1.1).etm | Greg Hastings TP p8 v1_1.etm | Greg Hastings TP p8.etm | paintb.etm
+variants,Greg Hastings' Tournament Paintba (p7).etm,41560042,7,,GH Tournament Paintball +8,d52dcc2b4815fbdc81cfa49565255395,paintball.etm
+trainers,True Crime - New York City.etm,41560045,23,PAL,True Crime New York + 23 Xored [PAL],74be240205f1021de896aa6588975465,True Crime NYC p23 pal.etm | True Crime New York p23 pal.etm
+variants,True Crime - New York City (NTSC p21).etm,41560045,21,NTSC,True Crime: New York City (USA) +21,3acd32cb3c237f2fb16e3acbb32978b4,EVT-TCNY.ETM | True Crime NYC p21 ntsc.etm | True Crime New York City p21.etm
+variants,True Crime - New York Cit (NTSC p21) 2.etm,41560045,21,NTSC,True Crime: New York City (USA) +21,162e2ad58c27ce4d1919323008092f0b,TrueCrimeNYC.etm
+variants,True Crime - New York City (NTSC p20).etm,41560045,20,NTSC,True Crime: New York City (USA) +20,1ec32d0da4f29571217d64b91adb7bdc,True Crime NYC p20 ntsc.etm | True Crime NYC p20.etm
+trainers,X-Men - The Official Game.etm,41560046,4,PAL-NTSC,X-men: The Official Game (GLOBAL) +4,179320afe7e0c64649cabfc1b94171a0,Xmen The Official Game p4 global.etm | Xmen The Official Game p4.etm
+variants,X-Men - The Official Gam (PAL-NTSC p4).etm,41560046,4,PAL-NTSC,X-men: The Official Game (GLOBAL) +4,cea3c2d0bd3c748ae2bf0188da0458e9,evt-xmtog.etm
+variants,X-Men - The Official Gam (PAL-NTSC p2).etm,41560046,2,PAL-NTSC,X-men: The Official Game (GLOBAL) +2,3391fb4db1da3dd85744ee481fcbd478,Xmen The Official Game p2 global.etm | Xmen The Official Game p2.etm
+trainers,X-Men Legends II - Rise of Apocalypse.etm,41560047,10,NTSC,X-Men Legends 2 Rise of Apocalypse (USA) +10 (rev4),9a544a2b4fe30de3c6d199a14e5bf804,X-Men Legends 2 ROTA p10 ntsc rev4.etm | X-Men Legends 2 Rise of Apocalypse [pl.etm | X-Men Legends 2 RoA p10 ntsc.etm | X-Men Legends 2 p10.etm | X-Men Legends 2.etm
+variants,X-Men Legends II - Rise of A (NTSC p9).etm,41560047,9,NTSC,X-Men Legends 2 Rise of Apocalypse (USA) +9 (rev3),d3df7909fd40745b13e8bc8a62ca80d7,X-Men Legends 2 ROA p9 ntsc rev3.etm
+variants,X-Men Legends II - Rise of A (NTSC p8).etm,41560047,8,NTSC,X-Men Legends 2 Rise of Apocalypse (USA) +8 (rev2),2dd66812fd8d6ac0fa938037c9fb9051,evt-xml2.etm
+trainers,Tony Hawk's American Wasteland.etm,41560049,27,NTSC,Tony Hawk: American Wasteland (USA) +27 (rev4),59e65c5f6e171013cfe214e8b21008b7,Tony Hawk AW p28.etm | Tony Hawk American Wasteland p27 ntsc.etm | Tony Hawk American Wasteland p27.etm
+variants,Tony Hawk's American Wastela (NTSC p7).etm,41560049,7,NTSC,Tony Hawk: American Wasteland (USA) +7,fbf16e687027485a6e098df55e8ef4f6,Tony Hawk American Wasteland [plus7] (.etm | Tony Hawk American Wasteland p7.etm | evt-thaw.etm
+trainers,Gun.etm,4156004B,8,NTSC,Gun (USA) +8,a57a10df55b9ce39e8cba33bd7dbd59f,Gun p8 multi.etm | Gun p8 rev2.etm | Gun.etm
+variants,Gun (NTSC p8).etm,4156004B,8,NTSC,Gun (USA) +8,9bc8eb0f93cdcfb2a37f9ea2c892325f,Gun p8 ntsc.etm | Gun p8.etm
+variants,Gun (NTSC p8) 2.etm,4156004B,8,NTSC,Gun (USA) +8 (rev3),9116b1511d40933cdef8e24fd83d6f01,EVT-GUN.ETM
+variants,Gun (NTSC p6).etm,4156004B,6,NTSC,Gun (USA) +6,9a3899a20cdd6fab2ed846221042f027,Gun p6 ntsc.etm | Gun p6.etm
+trainers,Cabela's Outdoor Adventures.etm,4156004D,7,NTSC,Cabelas Outdoor Adventure 2K6 (USA) +7,e62dc7d343c2a34cf095170430b21eec,Cabela's Outdoor Adv 2006 p7 ntsc.etm | Cabelas Outdoor Adv 2006 p7 ntsc.etm | Cabelas Outdoor Adv 2006 p7.etm | Cabelas Outdoor Adventure 2006 [plus7].etm | EVT-COA6.ETM
+trainers,Doom 3 - Resurrection of Evil.etm,4156004E,7,NTSC,Doom RoE +7,af6a40fdc8bb05edab550646cada5add,Doom 3 - Resurrection Of Evil.etm | Doom 3 Resurrection of Evil p7.etm | Doom ROE ntsc p7.etm | Doom ROE p7 ntsc.etm | Doom RoE [plus7].etm | xordroe.etm
+trainers,Call of Duty 2 - Big Red One.etm,41560051,4,NTSC,Call Of Duty 2 (USA) +4,73c8f866373842d8d833e82725c44772,Call Of Duty 2 - Big Red 1.etm | Call of Duty 2 BRO p4 ntsc.etm | Call of Duty 2 p4 ntsc.etm | Call of Duty 2 p4.etm
+variants,Call of Duty 2 - Big Red One (NTSC p4).etm,41560051,4,NTSC,Call Of Duty 2 (USA) +4 (NORMAL/COLLECTOR),afc9b2a55d37cf054784ed5e3306d77e,EVT-COD2.ETM
+trainers,Cabela's Dangerous Hunts 2.etm,41560052,3,NTSC,Cabelas Dangerous Hunts 2 (USA) +3,bbd1c1c28c326bd7a80dc15a7729f303,Cabela Dangerous Hunts 2 p3.etm | Cabela's Dngrs Hunts 2 p3 ntsc.etm | Cabelas Dangerous Hunts 2 p3 ntsc.etm | EVT-CDH2.ETM
+trainers,World Series of Poker.etm,41560054,1,NTSC,World Series Of Poker +1,1e045b9d2ff47e896c3d1a68fbe0a145,WSPOKER.ETM | World Series of Poker p1 ntsc.etm | World Series of Poker p1.etm
+trainers,TY the Tasmanian Tiger - Night of the.etm,41560055,2,,Tazmanian tiger 3 +2,6d5d57c2aba65c663314bd10fcb4b3eb,Ty Tasmanian Tiger 3 p2.ETM | Ty Tazmanian Tiger 3 p2.ETM | Ty32.ETM
+trainers,Greg Hastings' Tournament Paintball Ma.etm,41560057,7,NTSC,GH Paintball MAX +7 (NTSC),6340a12b9ec624d7239208eedcbdaff2,GH Paintball MAX [plus7] (NTSC).etm | GH Paintball MAX p7.etm | Greg Hastings TP Maxed p7 ntsc.etm | Greg Hastings TP maxd p7.etm | pbmax.etm
+trainers,DreamWorks Over the Hedge.etm,41560058,2,NTSC,Over the Hedge (USA) +2,c4c579d276dd9d8b2c82d06d27374b59,Over the Hedge p2 ntsc.etm | Over the Hedge p2.etm
+trainers,The Hustle - Detroit Streets.etm,4156005B,7,PAL-NTSC,The Hustle (GLOBAL) +7,b90f5e973f3c238d4d267932f968b641,The Hustle Detroit Strts p7 ntsc.etm | The Hustle Detroit Strts p7.etm
+trainers,Marvel - Ultimate Alliance.etm,4156005C,4,PAL-NTSC,Marvel: Ultimate Alliance (GLOBAL) +4,a7fe12c8a3714cfec4c271abbfb1d04e,evt-marv.etm
+trainers,Call of Duty 3.etm,4156005D,4,PAL-NTSC,Call of Duty 3 (NTSC/PAL) +4,c6cc11e8b4dacf44ab06568420cdfa0c,EVT-COD3.ETM
+trainers,Tony Hawk's Project 8.etm,4156005E,8,PAL-NTSC,Tony Hawks Project 8 (GLOBAL) +8,6108150626a825b57d723ce088ec2849,evt-thp8.etm
+trainers,Stubbs the Zombie in Rebel Without a P.etm,41590002,3,NTSC,Stubbs The Zombie (USA) +3,872cdfd333be24fb2c41840bd5bea830,Stubbs The Zombie [plus3] (USA).etm | Stubbs The Zombie.etm | Stubbs the Zombie p3 ntsc.etm | Stubbs the Zombie p3.etm | evt-stub.etm
+trainers,Dreamfall - The Longest Journey.etm,41590004,3,JAP,Dreamfall: The Longest Journey (NTSC/JPN) +3,137046d8286e17d4ed16a3d96ad367ac,Dreamfall ntscj p3.etm | Dreamfall p3 ntsc.etm | Dreamfall p3.etm | EVT-DFAL.ETM
+trainers,Digimon World 4.etm,42410002,7,NTSC,Digimon World 4 +7 (USA),926124865557ddcb12086f178573a61c,Digimon World 4 [plus7] (USA).etm | Digimon World 4 p7 ntsc.ETM | Digimon World 4 p7.ETM | digimon 4 p7.ETM | rp-dw47bu.ETM
+variants,Digimon World 4 (NTSC p5).etm,42410002,5,NTSC,Digimon World 4 +5 (USA),8fb44e48bad8f58ba7d64ec78c640245,Digimon World 4 [plus5] (USA).etm | Digimon World 4 p5.etm | rp-dw45u.ETM
+trainers,Wallace & Gromit in Project Zoo.etm,424D0003,3,NTSC,Wallace and Gromit: Project Zoo +3,d65e70c91b6d43f6f90587349f1c3560,ProjectZoo-plus3.etm | Wallace and Gromit Project Zoo p3 ntsc.etm | Wallace and Gromit Project Zoo p3.etm
+variants,Wallace & Gromit in Project Zoo (p3).etm,424D0003,3,,Wallace and Gromit - Project Zoo +3,fc4ce8149b4b8db686349cb307a0866c,Wallace and Gromit Project Zoo [plus3].etm | walaceg.etm
+trainers,The Elder Scrolls III - Morrowind - Ga.etm,42530005,17,NTSC,Morrowind - Game Of The Year + 17 NTSC,eb703a55d1f4d788589b47f5c5311b54,Morrowind GotY Ed p17 ntsc.etm | Morrowind GotY Ed p17.etm
+trainers,Call of Cthulhu - Dark Corners of the.etm,42530007,18,NTSC,Call of Cthulhu: DCoE (USA) +18 (rev3),b78f36d315ed1c6d44e9635780466fdc,Call of Cthulhu - Dark Corners.etm | Call of Cthulhu p18 ntsc.etm | Call of Cthulhu p18.etm
+variants,Call of Cthulhu - Dark Corn (NTSC p18).etm,42530007,18,NTSC,Call of Cthulhu: DCoE (USA) +18 (rev3),5d40f51b094848be30358c5929b5223c,EVT-CTHU.ETM
+trainers,Malice.etm,4253000A,3,NTSC,Malice (USA) +2,03ab909d9b7a05e2e7eaae3830ba5092,Malice [plus2] (USA).etm | Malice p2 ntsc.etm | Malice p2.etm | malice.etm
+trainers,High Rollers Casino.etm,4253000F,1,NTSC,High Roller Casino (USA) +1,170baf8445e3bd0ad593d3a859a01309,High Roller Casino [plus1] (USA).etm | High Roller Casino p1 ntsc.etm | High Roller Casino p1.etm | high roller casino.etm
+trainers,Tron 2.0 - Killer App.etm,42560001,3,NTSC,Tron 2.0: Killer App (USA) +2,041cf660f37168d340631d179af17b64,Tron 2 Killer App p2 ntsc.etm | Tron 2 Killer App p2.etm | Tron 2.0 Killer App [plus2] (USA).etm | evt-tron.etm
+variants,Tron 2.0 - Killer App (NTSC p3).etm,42560001,3,NTSC,Tron 2.0: Killer App (USA) +2,225e0441e066089a47e6fe290afa2588,Tron 2 Killer App p3 ntsc.etm
+trainers,Disney's Chicken Little.etm,42560002,11,NTSC,Chicken Little (USA) +11,4999a32352aea108fe48e21a6819f2f7,Chicken Little p11 ntsc.etm | Chicken Little p11.etm | EVT-CHKN.ETM
+trainers,The Chronicles of Narnia - The Lion th.etm,42560003,7,NTSC,The Chronicles of Narnia: The Lion.. (USA) +7,e88cb6f3476baa6a4826dcda3de2668f,Chronicles of Narnia TLTWATW p7 ntsc.etm | EVT-TCN.ETM | The Chronicles of Narnia p7 ntsc.etm | The Chronicles of Narnia p7.etm
+variants,The Chronicles of Narnia - T (NTSC p5).etm,42560003,5,NTSC,The Chronicles of Narnia: The Lion.. (USA) +5,16c7745144ef5d60fab7f5ea5beed461,The Chronicles Of Narnia.etm | The Chronicles of Narnia LWW p5.etm
+variants,The Chronicles of Narnia - T (NTSC p4).etm,42560003,4,NTSC,The Chronicles of Narnia: The Lion (USA) +4,a32e9eb0770c2b49933d8c5db9882972,The Chronicles of Narnia p4 ntsc.etm | The Chronicles of Narnia p4.etm
+trainers,Tim Burton's The Nightmare Before Chri.etm,42560004,5,NTSC,The Nightmare Before Christmas (NTSC) +5,7751d93322bd1b4f3bacf6eeda1123ce,The Nightmare Before Christmas p5.etm | The Nightmare Bfr Xmas p5 ntsc.etm
+variants,Tim Burton's The Nightmare B (NTSC p5).etm,42560004,5,NTSC,The Nightmare Before Christmas (NTSC) +5,d94c1241e0cbf80e0d72cb3fbaa89ca8,EVT-TNBC.ETM
+trainers,Genma Onimusha.etm,43430001,4,PAL,genma onimusha [pal],3015d49456928aabb07a1032199ab8b0,Genma Onimusha [plus4] (PAL).etm | Genma Onimusha p4 pal.etm | Genma pal p4.etm | genma.etm
+trainers,Steel Battalion.etm,43430002,6,NTSC,Steel Battalion +6 (usa),834a988ee7a6d4b81edd60cdce2a1350,Steel Battalion [plus6] (USA).etm | Steel Battalion p6 ntsc.ETM | Steel Battalion p6.ETM | Steelbattalion6usa.ETM
+variants,Steel Battalion (NTSC p4).etm,43430002,4,NTSC,Steel Battalion +4 (usa),c7c6a2cfbf1b947e26b51166ac65fd77,Steel Battalion [plus4] (USA).etm | Steel Battalion p4.etm | SteelBatt4usa.ETM
+variants,Steel Battalion (NTSC p3).etm,43430002,3,NTSC,Steel Battalion +3 (NTSC/USA),d86509a27ddac6479b84ff99e250c00d,STEELTSCUSA.ETM | Steel Battalion [plus3] (NTSC-USA).etm | Steel Battalion p3.etm
+trainers,Dino Crisis 3.etm,43430003,6,NTSC,DINO CRISIS 3 +6,4e986874b308d20d9646d807035943fa,Dino Crisis 3 [plus6].etm | Dino Crisis 3 p6 ntsc.etm | Dino Crisis 3 p6.etm | Dino Crisis 3.etm | DinoCrisis3-plus6.etm
+variants,Dino Crisis 3 (PAL p6).etm,43430003,6,PAL,Dino Crisis 3 +6 PAL,239eefcf9512adc02a26752c10c549cd,Dino Crisis 3 p6 pal.etm
+variants,Dino Crisis 3 (PAL p2).etm,43430003,2,PAL,Dino Crisis 3 (PAL) +2 ,f28690662e1480b0d6f3126e3a75f130,Dino Crisis 3 p2 PAL.etm
+variants,Dino Crisis 3 (JAP p1).etm,43430003,1,JAP,Dino Crisis3 +1,b5067f75cca9892b5c81e5988caa6c5e,Dino Cisis 3 [plus1] (NTSC-JAP).etm | Dino Cisis 3 p1 ntsc jap.etm | Dino Cisis 3 p1 ntscj.etm | DinoCisis3_plus1_ntscj.etm
+trainers,Marvel vs. Capcom 2 - New Age of Heroe.etm,43430007,3,PAL,Marvel vs. Capcom 2 +3 (UK/PAL),25619bf29b46899b483b008df326778c,Marvel vs Capcom 2 p3 pal.etm | Marvel vs Capcom 2 p3 uk pal.etm | Marvel vs. Capcom 2 [plus3] (PAL-UK).etm | evt-mvc2.etm
+trainers,Robin Hood - Defender of the Crown.etm,4343000C,5,PAL-NTSC,Robinhood: Defender of the Crown +5 (PAL/NTSC),819fa2e2c831c096898c0854a798583f,EVT-DOTC.ETM | Robinhood DOTC p5 multi.etm | Robinhood DOTC p5 pal ntsc.etm | Robinhood Defender of the Crown [plus6.etm | Robinhood Defender of the Crown p6.etm | robinhood defender of the crown p5.etm
+variants,Robin Hood - Defender of the (NTSC p5).etm,4343000C,5,NTSC,Robinhood: Defender of the Crown +5 (USA),882a70786b7135b49a969a5826865d39,MXT-RHDC.ETM | Robinhood Defender of the Crown [plus5.etm | robin hood defender crown p6.etm
+variants,Robin Hood - Defender of the Crow (p4).etm,4343000C,4,,Robinhood: Defender of the Crown +4 (Multi),4b969118ddd250605b39ebc64d771aaa,Robinhood Defender of the Crown [plus4.etm | mxt-dotc.etm
+trainers,Street Fighter Anniversary Collection.etm,4343000F,10,PAL,Street Fighter III: 3rd Strike (PAL) +10,6146f5d654d3a4cc1a4e2d1a36cbd172,Street Fighter 3rd Strk p10 pal.etm
+variants,Street Fighter Anniversary Collec (p1).etm,4343000F,1,,Street Fighter 3RD,ddeab22e2abaf23840ad692a93829286,Street Fighter Third Strike p1.etm | strike.etm
+variants,Street Fighter Anniversary Coll (p1) 2.etm,4343000F,1,,Street Fighter HSF,2661a0cef6df9b2dba64291208a129c5,Street Fighter HSF p1.etm
+variants,Street Fighter Anniversary Coll (p1) 3.etm,4343000F,1,,Street Fighter HSF,75cccfebcd0fde595946d8559f45e583,hsf.etm
+trainers,Capcom Fighting Evolution ~ Capcom Fig.etm,43430010,7,PAL-NTSC,Capcom Fighting Evolution (GLOBAL) +7,0d6913b035e552e07d0d63ca3047d4f7,Capcom Fighting Evo p7 global.etm | Capcom Fighting Evo p7.etm
+trainers,Mega Man Anniversary Collection.etm,43430011,107,NTSC,Megaman AC +99,e23d68efef656131e6d2709914eb5bca,EVT-MMAC.ETM | Mega Man Ann. Collection p99 ntsc.etm | Mega Man Ann. Collection p99.etm
+trainers,Final Fight - Streetwise.etm,43430013,15,NTSC,Final Fight X: Street Wise (USA) +15,39312788185b8c018ff96648457085ae,Final Fight Streetwise p15 ntsc.etm | Final Fight Streetwise p15.etm
+variants,Final Fight - Streetwise (PAL p15).etm,43430013,15,PAL,Final Fight Streetwise (PAL) +15,e4246892fbc3a7954c60feac445a1278,Final Fight Streetwise p15 pal.etm
+variants,Final Fight - Streetwise (NTSC p9).etm,43430013,9,NTSC,Final Fight X: Street Wise (USA) +9,6633cfa7968080519fb633c4d27b15b0,EVT-FFSW.ETM | Final Fight Streetwise p9.etm
+trainers,Beat Down - Fists of Vengeance.etm,43430015,10,NTSC,Beatdown: Fists Of Vengence (NTSC) +10,781781babdcfd5d2716b3a70e6522aca,Beatdown Fists Of Vengence [plus10] (N.etm | Beatdown Fists Of Vengence p10 ntsc.etm | Beatdown Fists Of Vengence p10.etm | EVT-BDFV.ETM
+variants,Beat Down - Fists of Vengean (NTSC p8).etm,43430015,8,NTSC,Beatdown: Fists Of Vengence (NTSC) +8,f778101628f7e02785f1c20679dadf35,XoredBeatdown.etm
+trainers,Darkwatch.etm,43430016,8,NTSC,Darkwatch (USA) +8,aaf76ea26eb379921384f1f8dd665b1a,Dark Watch p8 ntsc.etm | Dark Watch p8.etm | Darkwatch [plus8] (USA).etm | Darkwatch p8 ntsc.etm | Darkwatch.etm | EVT-DRKW.ETM | XoredDarkwatchp8.etm
+trainers,Capcom Classics Collection Vol. 1.etm,43430018,15,NTSC,Capcom Classic Collection (USA) +15,9290f90d55b988d3da55179f40413b9a,Capcom Classic Collection [plus15] (US.etm | Capcom Classic Collection ntsc p15.etm | Capcom Classic Collection p15.etm | EVT-CCLC.ETM
+trainers,TOCA Race Driver 2.etm,434D0011,9,,Race Driver 2 +9 v1.2,bc5823cf03291b25ca71aa072d8bb4fe,Race Driver 2 [plus9] (v1.2).etm | Race Driver 2 p9 v1_2.etm | Race Driver 2 p9.etm | TOCA Race Driver 2 p9.etm | evt-rd2b.etm
+variants,TOCA Race Driver 2 (p9).etm,434D0011,9,,Race Driver 2 +9 (MULTI),7ec1dba30d2934bbeff879b3bcd927ba,Race Driver 2 [plus9] (MULTI).etm | evt-rd2.etm
+trainers,Second Sight.etm,434D0047,4,PAL-NTSC,Second Sight +4 NTSC/PAL rev0.2,5796a6ed33f37c21b27c5dc9724e3c0f,Second Sight [plus4] (NTSC-PAL) (REV0..etm | Second Sight p4 pal ntsc rev0_2.etm | Second Sight p4 rev2.etm | evt-secs.etm | second sight p4.etm | second sight.etm
+variants,Second Sight (PAL-NTSC p4).etm,434D0047,4,PAL-NTSC,Second Sight +4 NTSC/NTSC/PAL rev0.3,9e6c454ebdc73bf27c9b6edff3d538e6,Second Sight p4 multi.etm | Second Sight p4 rev3.etm
+trainers,TOCA Race Driver 3.etm,434D0050,3,PAL-NTSC,Toca Race Driver 3 (GLOBAL) +3,60f76c3bc93e706084abf671d647bc61,EVT-TCR3.ETM | TOCA 3 p3 multi.etm | Toca Race Driver 3 p3 glbl.etm | Toca Race Driver 3 p3.etm
+trainers,Trigger Man.etm,43560009,3,NTSC,Trigger Man +3 (USA/NTSC),71451ffd52df29a96809ac1b4ae31a52,Trigger Man [plus3] (NTSC-USA).etm | Triggerman p3 ntsc.etm | Triggerman p3.etm | evt-tman.etm
+trainers,Arx Fatalis.etm,44430002,7,NTSC,Arx Fatalis (USA) +7,5340d12cb14b81c0b8ed8a22e5d6af1e,Arx Fatalis [plus7] (USA).etm | Arx Fatalis p7 ntsc.etm | EVT-ARXF.ETM | arx fatalis p7.etm
+trainers,Painkiller - Hell Wars.etm,44430003,7,PAL-NTSC,Painkiller (GLOBAL) +7,415b456713da71d45111c4cd04bcd3ed,EVT-PKIL.ETM | Painkiller Hell Wars p7 ntsc.etm | Painkiller Hell Wars p7.etm
+trainers,Cold War.etm,44430004,5,NTSC,Cold War (USA) +5,1f51da5109dd45b60e213c642f99c75c,Cold War p5.etm | EVT-CWAR.ETM
+variants,Cold War (NTSC p5).etm,44430004,5,NTSC,Cold War (USA) +5,37547442fb6dffe2c2dc83e266035386,Cold War p5 ntsc.etm
+trainers,Miami Vice.etm,44580001,2,PAL,Miami Vice PAL +3,2045c40aa47530ac600dea0324f2c22a,Miami Vice p3 pal aus.etm
+trainers,SSX Tricky.etm,45410004,1,NTSC,SSX Tricky +1 (USA)(v0.1),12841927e6c66bb6ea68928305cdbfb4,SSX Tricky [plus1] (USA) (v0.1).etm | SSX Tricky p1 ntsc v0_1.etm | SSX Tricky p1 ntsc.etm | ssx tricky p1.etm | ssxt.etm
+trainers,Knockout Kings 2002.etm,4541000A,7,,Knockout Kings 2002,619043b21dd6236d4e2d32de24eea264,Knock out kings 2002 p7.ETM | Knockgs2002.ETM | Knockout Kings 2002 [plus7].etm
+trainers,007 - Agent Under Fire.etm,4541000D,3,NTSC,Bond 007: Agent Under Fire +3 (USA/NTSC) BETA,00a1c173b8b1143a4b29565ad5158d25,007 Agent Under Fire p3 b1.etm | evt-007auf.etm | evt-djny2 (7).etm
+variants,007 - Agent Under Fire (NTSC p3).etm,4541000D,3,NTSC,Bond 007: Agent Under Fire +3 (USA/NTSC) BETA v2,5a7b03ab6587919c3b8a8a3ffba7f27c,007 Agent Under Fire p3 b2.etm | evt-007aufRev2.etm
+variants,007 - Agent Under Fire (NTSC p1).etm,4541000D,1,NTSC,007 - Agent Under Fire NTSC +1,d56673e29b4c1b6d1104c2583c9e5bb5,007 Agent Under Fire [plus1] (NTSC).etm | 007 Agent Under Fire p1.ETM | agentunderfire.ETM
+variants,007 - Agent Under Fire (PAL p1).etm,4541000D,1,PAL,Agent under Fire +1 (GER),49477d5ce5ff2828ff6bf9a10dc5d839,007 Agent under Fire [plus1] (GER).etm | Agent_under_Fire_GER.etm
+variants,007 - Agent Under Fire (PAL p1) 2.etm,4541000D,1,PAL,Agent under Fire +1 (ENG),0946d27f62c91297495e8760825e9d6b,007 Agent under Fire [plus1] (ENG).etm
+trainers,Buffy the Vampire Slayer.etm,45410012,5,NTSC,Buffy The Vampire Slayer (USA) +5,b994b14bc1501ebdc1da146cfc1b648c,Buffy the Vampier Slayer p5 ntsc.etm | Buffy the Vampier Slayer p5.etm
+trainers,Pirates - The Legend of Black Kat.etm,45410015,1,NTSC,Pirates : TLOBK +1,e5e413b3dd233ab5c18f01ddeaea4cfb,Pirates The Legend of BK p1 ntsc.ETM | Pirates The Legend of BK p1.ETM | Pirates The Legend of Black Kat [plus1.etm | Pirates The Legend of Black Kat p1.ETM
+variants,Pirates - The Legend of Black Kat (p1).etm,45410015,1,,Pirates : TLOBK +1,642bc3333b89f3fec8ba63078d6b7416,PiratTLOBK1.ETM
+trainers,Medal of Honor - Frontline.etm,4541001A,1,PAL,Medal Of Honor Frontline,f3678e382b0c6221da68ba6801227a23,Medal Of Honor Frontline [plus1].etm | Medal of Honor Frontline p1 pal.ETM | Medalntline.ETM
+variants,Medal of Honor - Frontline (p1).etm,4541001A,1,,Medal of Honor Frontline +1,9da8c9cc89e92733a7e02b712c8d3a55,Medaltline1.ETM
+trainers,007 - Nightfire.etm,45410026,2,PAL,James Bond: Nightfire +2 Trainer (PAL),c8f0b239f57ec49012d5ba5d29dcf075,007 Nightfire [plus2] (PAL).etm | 007 Nightfire p2 pal.etm | nightfire.etm
+trainers,Need for Speed - Hot Pursuit 2.etm,45410028,4,NTSC,Need For Speed: Hot Persuit 2 (+4),6770f9f0934aabfd60d97a6c25711d33,NFSHP2.etm | Need For Speed Hot Persuit 2 [plus4].etm | Need for Speed hot Pursuit 2 p4 ntsc.etm | Need for Speed hot Pursuit 2 p4.etm
+trainers,TY the Tasmanian Tiger.etm,45410029,2,PAL,Ty: The Tasmanian Tiger +2 (PAL/GERMAN),6e45cb02655e77ddd999d41cf53ff3cd,The Tasmanian Tiger [plus2] (PAL-GER).etm | Ty Tasmanian Tiger p2 pal ger.etm | ty tasmanian tiger p2.etm
+trainers,Freedom Fighters.etm,4541002A,2,PAL,Freedom Fighters +2 (PAL/GER),05ecc838e57380abf72bae4a21d3f0e1,FreeFightGER.etm | Freedom Fighters [plus1] (PAL-GER).etm | Freedom Fighters p2 pal ger.etm
+variants,Freedom Fighters (PAL p1).etm,4541002A,1,PAL,Freedom Fighters +1 (PAL),fdfc92cc1b5e1a7fda87c5a0a9fbd6aa,Freedom Fighters [plus1] (PAL).etm | Freedom Fighters p1 pal.etm | Freedom.etm
+trainers,Dead to Rights.etm,4541002C,3,PAL,Dead to Rights +3 (PAL),b89c8b3d57aa8c807ece6db36b8110bb,Dead to Rights [plus3] (PAL).etm | Dead to Rights p3 pal.etm | DeadtoRightsPAL.etm
+trainers,Freedom Fighters (USA).etm,4541002E,2,NTSC,Freedom Fighters +1 (NTSC),9095ff71116897216b0ef14f638f3717,Freedom Fighters [plus1] (NTSC).etm | Freedom Fighters p1 ntsc.ETM | Freedom Fighters p1.ETM | freedfighter.ETM
+trainers,Madden NFL 2004.etm,45410036,4,NTSC,Madden 2k4 (USA) +4,8f4255f771f857b6eba96fb99c8f6e10,Madden 2004 p4 ntsc.etm | Madden 2004 p4.etm | Madden 2k4 [plus4] (USA).etm | evt-m2k4.etm
+trainers,Tiger Woods PGA Tour 2004.etm,4541003A,3,NTSC,Tiger Wood PGA Tour 2k4 +3 (USA),51a0a2b83be6f08e53a459dd74374359,TW2K4.ETM | Tiger Wood PGA Tour 2004 [plus3] (USA).etm | Tiger Woods 2004 p3 ntsc.etm | tiger woods 2004 p3.etm
+variants,Tiger Woods PGA Tour 2004 (PAL p3).etm,4541003A,3,PAL,Tiger Woods PGA Tour 2004 (PAL) +3,c6ef2ed81e202b1983145f2d571237fa,TW2K4PAL.ETM | Tiger Woods 2004 p3 pal.ETM | Tiger Woods PGA Tour 2004 [plus3] (PAL.etm
+trainers,FIFA Soccer 2004.etm,4541003B,3,PAL,Fifa 2k4 +3 (PAL),2a86ba22ea96851d4f1b65623910e071,Fifa 2004 [plus3] (PAL) (REV).etm | Fifa 2004 p3 pal.etm | fifa 2004.etm | mxt-f24p-fixed.etm
+variants,FIFA Soccer 2004 (PAL p3).etm,4541003B,3,PAL,Fifa 2k4 +3 (PAL),668b620037969e80f64f62c0708c8796,Fifa 2004 [plus3] (PAL).etm | MXT-F24P.ETM
+trainers,SSX 3.etm,4541003C,2,NTSC,SSX 3: +2 (v0.1),c716629a3b4c8ec4c69dd7034362294d,SSX 3 p2 ntsc v0_1.etm | SSX 3 p2 ntsc.etm | SSX 3 p2.etm | SSX 3.etm
+variants,SSX 3 (p2).etm,4541003C,2,,SSX 3: +2 (v0.1),0dda88df6bae53aa5d38ea1d6d4f962a,SSX 3 [plus2] (v0.1).etm | ssx3.etm
+trainers,Medal of Honor - Rising Sun.etm,4541003F,2,NTSC,Medal Of Honor Rising Sun +2,10cf616a9235c590f66d173a53eea7db,Medal Of Honor Rising Sun [plus2].etm | Medal of Honor Rising Sun p2 ntsc.etm | Medal of Honor Rising Sun p2.etm | mohrs.etm
+variants,Medal of Honor - Rising Sun (PAL p1).etm,4541003F,1,PAL,MoH : Rising Sun +1 (PAL/GER),b88774426c6939055708c62f37ff1889,Medal Of Honor Rising Sun [plus1] (PAL.etm | Medal of Honor Rising Sun p1 pal ger.etm | MoHRSGER.etm
+trainers,007 - Everything or Nothing.etm,45410042,5,NTSC,James Bond: 007 Everything Or Nothing (USA) +6 v0.2,96d14df0cc33f445f6441e2826492769,007 Everything Or Nothing p6.etm | evt-007b 2.etm | evt-007b usa.etm
+variants,007 - Everything or Nothing (NTSC p5).etm,45410042,5,NTSC,James Bond: 007 Everything Or Nothing (USA) +6 v0.2,1a1d68c87fe7baa54fc79aad60819d50,007 Everything or Nothing p6 ntsc v0_2.etm
+variants,007 - Everything or Nothin (NTSC p5) 2.etm,45410042,5,NTSC,James Bond: 007 Everything Or Nothing (USA) +6 v0.2,a28e95b47e8b9e3f9579ac852815bb55,evt-007b.etm
+trainers,The Sims - Bustin' Out.etm,45410043,16,NTSC,The Sims: Bustin Out (+16),41db1021b8028ffd10ae2af8eec31148,FNG-SIMS_BO_16.ETM | Sims Bustin Out p16 ntsc.etm | The Sims Bustin Out [plus_16].etm | The Sims Bustin Out p16 ntsc.ETM | The Sims Bustin Out p16.ETM
+variants,The Sims - Bustin' Out (PAL p8).etm,45410043,8,PAL,The Sims: Bustin Out +8,e23e61ab04e214cfb6fd174856074c28,Sims Bustin Out p8 pal.etm | SimsBustinOut-plus8.etm | The Sims Bustin Out [plus8].etm | The Sims Bustin Out p8 pal.etm | sims bustin out.etm
+trainers,Need for Speed - Underground.etm,45410047,2,NTSC,NFS: Underground +2,879b25cbf39b58744a30b5d517d16107,NFSUnderground-plus2.etm | Need For Speed Underground p2 ntsc.etm | Need For Speed Underground p2.etm | Need for Speed Underground [plus2].etm
+variants,Need for Speed - Underground (PAL p1).etm,45410047,1,PAL,NfS Underground PAL +1,1e619c9472f417d17e6581396c5f1fef,Need for Speed Underground [plus1] (PA.etm | Need for Speed Underground p1 pal.etm | nfsu.etm | nfsu_pal.etm
+trainers,NFL Street.etm,45410048,10,NTSC,NFL Street (+10),1c5315ae239ed53ea0a8efcccab681c2,NFL Street [plus10].etm | NFL Street [plus_10].etm | NFL Street p10 ntsc.etm | NFL Street p10.etm | NFLStr.etm
+variants,NFL Street (p2).etm,45410048,2,,NFL Street (+2),4752f4894f1678c941e8423440f56929,NFL Street [plus2].etm | NFLS.ETM
+trainers,Def Jam - Fight for NY.etm,45410049,9,NTSC,DefJam FFNY +9 (NTSC),4d82f7809c93685a3ea2bb3288b46b94,DefJam FFNY [plus9] (NTSC).etm | Defjam Fight For New York p9 ntsc.etm | Defjam Fight For New York p9.etm | EVT-DJNY.ETM
+variants,Def Jam - Fight for NY (PAL p9).etm,45410049,9,PAL,DefJam FFNY +9 (PAL),b9fa08524e8708fb155a02e9e695e654,DefJam FFNY [plus9] (PAL).etm | Defjam Fight For New York p9 pal.etm | defjam ffny pal.etm | evt-djny_PAL.etm
+variants,Def Jam - Fight for NY (NTSC p9).etm,45410049,9,NTSC,DefJam FFNY +9 (NTSC),452a1ae66dc13361c218c90747ea6747,defjam ffny ntsc.etm
+variants,Def Jam - Fight for NY (NTSC p9) 2.etm,45410049,9,NTSC,DefJam FFNY +9 (NTSC) temp fix,c3267cc0dad37ff51d665b437c0ac598,evt-djny2.etm | evt-djnytemp.etm
+variants,Def Jam - Fight for NY (PAL p9) 2.etm,45410049,9,PAL,DefJam FFNY +9 (PAL) temp fix,9db53cbe9a28b6b8a8b9f929540f377e,evt-djny_PALfix.etm
+trainers,Fight Night 2004.etm,4541004B,8,NTSC,Fight Night 2K4 +8 r1.2 (NTSC),77e7d058efd31675ebc6253b0df258f5,Fight Night 2004 p8 ntsc v1_2.etm | Fight Night 2004 p8 ntsc.etm | Fight Night 2004 p8.etm | Fight Night 2K4 [plus8] (NTSC).etm | evt-fn2k4r1[2].etm
+variants,Fight Night 2004 (p8).etm,4541004B,8,,Fight Night 2004 +8 v1.1,5e6fb0b6098f81059787aae819a28200,Fight Night 2004 [plus8] (v1.1).etm | Fight Night 2004 [plus8].etm | evt-FN2K4v1_1.etm | final night 2k4.etm
+variants,Fight Night 2004 (p7).etm,4541004B,7,,Fight Night 2004 +6,1415d103582b39b867316364ee558b58,Fight Night 2004 [plus6].etm | FightNight2kPLUS6.ETM
+variants,Fight Night 2004 (NTSC p5).etm,4541004B,5,NTSC,Fight Night 2004 +5,e24ab68f9ac6c39684fc5e247bc21385,Fight Night 2004 [plus5] (NTSC).etm | Fight Night 2004 p5.etm | FightNight2k +5.ETM | Fightnight2k _5.etm
+variants,Fight Night 2004 (PAL p5).etm,4541004B,5,PAL,Fight Night 2004 +5,ddc26a7f7955f84cc04e8347ff15f6fc,Fight Night 2004 [plus5] (EUR).etm | FightNight2kPlus3EUR.ETM
+variants,Fight Night 2004 (p5).etm,4541004B,5,,Fight Night 2004 Beta,331703fa2fdd7f98d79071868085ddaa,Fight Night 2004 [plus5] (BETA).etm | fn2k4_Beta.etm
+variants,Fight Night 2004 (NTSC p3).etm,4541004B,3,NTSC,Fight Night 2004 (NTSC) +3 v1.1,dfd65e5b1b07518e45b4ca5731baac6a,FN2K4.etm | Fight Night 2004 [plus3] (NTSC) (v1.1).etm | Fight Night 2004 p3.etm
+trainers,Madden NFL 2005.etm,4541004D,5,NTSC,Madden 2k5 (USA) +4 BETA,a5455f642e7a4f79beca193fb92af4a8,Madden 2005 [plus4] (USA) (BETA).etm | Madden 2005 p4 ntsc beta.etm | Madden 2005 p4 ntsc.etm | Madden 2005 p4.etm | Madden 2k5 [plus4] (USA) (BETA).etm | evt-ma2k5b.etm | madden 2k5.etm
+trainers,FIFA Soccer 2005.etm,4541004E,4,PAL-NTSC,FIFA 2005 + 4 PAL,6a61d312284edcc7f61e150c6a68eb53,FIFA 2005 [plus4] (PAL).etm | Fifa 2005 p4 ntsc.etm | Fifa2k5ntsc.etm
+variants,FIFA Soccer 2005 (PAL p4).etm,4541004E,4,PAL,FIFA 2005 + 4 PAL,bbd1c5acee8ff0e7a94455db9e16544f,Fifa 2005 p4 pal.etm | Fifa 2005 p4.etm | Fifa2k5pal.etm
+variants,FIFA Soccer 2005 (PAL p3).etm,4541004E,3,PAL,FIFA 2005 + 3 PAL,c48655c977ab708e37dab19742fac623,FIFA 2005 [plus3] (PAL).etm | fifa2k5.etm
+trainers,Tiger Woods PGA Tour 2005.etm,45410054,8,,Tiger Woods 2005 + 8,2dc9a542af82e6b0247bfc4365ea0fa5,Tiger Woods 2005 [plus8].etm | Tiger Woods 2005 p8.etm | tiger.etm
+variants,Tiger Woods PGA Tour 2005 (NTSC p6).etm,45410054,6,NTSC,Tiger Woods 2k5 +6 (NTSC),6cc8efff36348310e0695a72368e6e70,Tiger Woods 2005 [plus6] (NTSC).etm | Tiger Woods 2005 p6 ntsc.etm | Tiger Woods 2K5.etm | evt-tw25_usa.etm | tiger woods 2005 p6.etm
+variants,Tiger Woods PGA Tour 2005 (PAL p6).etm,45410054,6,PAL,Tiger Woods 2k5 +6 (PAL),96e0edbd47a17e01ca87d054227993e8,Tiger Woods 2005 [plus6] (PAL).etm | Tiger Woods 2005 p6 pal.etm | evt-tw25_PAL.etm | tiger woods 2005 pal p6.etm
+variants,Tiger Woods PGA Tour 2005 (NTSC p4).etm,45410054,4,NTSC,Tiger Woods 2k5 +4 (NTSC),872d916b8107e9cba847681d501875e5,Tiger Woods 2005 [plus4] (NTSC).etm | Tiger Woods 2005 p4.etm | tiger wood 2k5.etm
+trainers,Fight Night Round 2.etm,45410055,7,NTSC,Fight Night Round 2 + 7 (NTSC) v1.3,daacb2dd0a23e73657d26a02216ea06b,Fight Night Round 2 [plus7] [1.3] (NTS.etm | Fight Night Round 2 p7 1.3.etm | Fight Night Round 2 p7 ntsc v1_3.etm | Fight Night Round 2 p7 ntsc.etm | evt-fnr2v1[3].etm
+variants,Fight Night Round 2 (NTSC p7).etm,45410055,7,NTSC,Fight Night Round 2 + 7 (NTSC) v1.1,75ae090f63971f24d766078cf88f8993,Fight Night Round 2 [plus7] [1.1] (NTS.etm | Fight Night Round 2 p7 1.1.etm | evt-fnr2v1_1.etm
+variants,Fight Night Round 2 (NTSC p7) 2.etm,45410055,7,NTSC,Fight Night Round 2 + 7 (NTSC) v1.2,fdc8afa9a4784199ffc3c5a91f8519d9,Fight Night Round 2 [plus7] (NTSC).etm | evt-fnr2tv1[2].etm
+variants,Fight Night Round 2 (NTSC p4).etm,45410055,4,NTSC,Fight Night Round 2 + 4 trainer v1.0,f4014175656287b011e0bbf49cb1baa6,FNR2-EVT.ETM | Fight Night Round 2 [plus4].etm | evt-fnr2 ntsc.etm | evt-fnr2.etm
+variants,Fight Night Round 2 (NTSC p3).etm,45410055,3,NTSC,Fight Night 2 (NTSC)  + 3,1b9984c48a77b214edd6ec7217601270,Fight Night 2 [plus3] (NTSC).etm | Fight Night 2 p3.etm | FightNight2.ETM
+trainers,NFL Street 2.etm,45410057,2,NTSC,NFL STREET 2 (NTSC) +2,384912cbf980d69d8fc58cb7fdb15db7,NFL Street 2 p2 ntsc.etm | NFL Streets 2 [plus2] (NTSC).etm | nfl street 2.etm
+variants,NFL Street 2 (NTSC p1).etm,45410057,1,NTSC,NFL STREET 2 (NTSC) +1,595b42f94b48c4927c62b398889c2b09,NFL Street 2 [plus1] (NTSC).etm | NFL Street 2 p1.etm | NFLST2b2.ETM
+variants,NFL Street 2 (NTSC p1) 2.etm,45410057,1,NTSC,NFL STREET 2 (NTSC) +2,7e7571cf78fba5a8da4c8c24cc9a0737,NFLST2NTSC2.ETM
+trainers,NBA Street V3.etm,45410058,5,NTSC,NBA STREET v3 +5,63502aab07ae888debdd8b8b1a903d99,NBA Street 3 p5 ntsc.etm | NBA Street 3 p5.etm | NBA Streets 3 [plus5].etm | evt-NbaV3.etm
+trainers,Need for Speed - Underground 2.etm,4541005A,10,NTSC,NFSU:2 (USA) +10,fab495b484b0a7c814443930c0c3b3f5,Need for Speed Underground 2 p10 2.etm | Need for Speed Underground 2 p10 ntsc.etm | evt-NFSU2.etm | evt-NFSU2USA.etm | evt-djny2 (2).etm | need for speed underground 2 p10.etm | nfsu 2.etm
+variants,Need for Speed - Undergroun (NTSC p10).etm,4541005A,10,NTSC,NFSU:2 (USA) +10,3fed8ed140ad773f21d569a505ffd437,Need for Speed Underground 2 (plus10).etm | evt-sug2.etm
+trainers,Burnout 3 - Takedown.etm,4541005B,7,,Burnout 3 +8 (MULTI),ca60fa02969fa400238b3739290c9998,BO3MULTI.ETM | Burnout 3 [plus8] (MULTI).etm | Burnout 3 p8 multi.etm
+variants,Burnout 3 - Takedown (NTSC p6).etm,4541005B,6,NTSC,Burnout 3 +7 (NTSC/USA),3c6c728d7f7507e93e598e2711159b4b,Burnout 3 - Takedown.etm | Burnout 3 [plus7] (NTSC-USA).etm | Burnout 3 p7 ntsc.etm | Burnout 3 p7.etm | EVT-BO3.ETM
+variants,Burnout 3 - Takedown (NTSC p5).etm,4541005B,5,NTSC,Burnout 3 +6 (NTSC/USA),bc3862c7181fa6596cb817deacec2da4,BO3.ETM | Burnout 3 [plus6] (NTSC-USA).etm | Burnout 3 p6.etm
+variants,Burnout 3 - Takedown (NTSC p2).etm,4541005B,2,NTSC,Burnout 3 +3 (NTSC),2a06cfedcf27bcbb2ef70d8e15746af8,Burnout 3 [plus3] (NTSC).etm | Burnout 3 p3.etm | burnout 3.etm
+variants,Burnout 3 - Takedown (NTSC p2) 2.etm,4541005B,2,NTSC,Burnout 3 +3 (NTSC),ebda788ded75f3a0abe95e8b064fef6f,BO31.ETM
+variants,Burnout 3 - Takedown (PAL p1).etm,4541005B,1,PAL,Burnout III (Pal),4044435c44ccd416205f275923b39dd0,Burnout 3 (Pal).etm | Burnout 3 p1 pal.etm | burnout3-pal.etm
+variants,Burnout 3 - Takedown (JAP p1).etm,4541005B,1,JAP,Burnout III : Takedown (NTSC-J),f701199499c8c8585f04ee874243cef1,Burnout 3 Takedown (NTSC-JAP).etm | Burnout 3 Takedown ntscj.etm | burnout3-ntscJ.etm
+trainers,Catwoman.etm,4541005C,2,NTSC,Catwoman (USA) +2,614f52a93773c348ba5f2ce23ded53a0,Catwoman [plus2] (USA).etm | Catwoman p2 ntsc.etm | Catwoman p2.etm | Catwoman_p2_ntsc.etm | EVT-CWMN.ETM | cat women.etm
+trainers,GoldenEye - Rogue Agent.etm,4541005D,5,NTSC,Goldeneye: Rogue Agent (USA) +5,491c543cf2fd1b4f80246128a304e2f2,007 Goldeneye Rogue Agent [plus5] (USA.etm | 007 Goldeneye Rogue Agent p5 ntsc.etm | 007 Rogue Agent p5.etm | golden eye.etm
+variants,GoldenEye - Rogue Agent (PAL p5).etm,4541005D,5,PAL,Goldeneye Rogue Agent(PAL),6c9045ea95078b43a7f753898aff5562,007 Goldeneye Rogue Agent p4 pal.etm
+variants,GoldenEye - Rogue Agent (NTSC p4).etm,4541005D,4,NTSC,Goldeneye: Rogue Agent (USA),53ccb240cb4c7ef51411bee55bb04de0,007 Rogue Agent [plus4] (USA).etm | 007 Rogue Agent p4.etm | EVT-GEYE.ETM
+variants,GoldenEye - Rogue Agent (NTSC p4) 2.etm,4541005D,4,NTSC,Goldeneye: Rogue Agent (USA),64b7d731ca909bfa25bdd92b9d96e239,Goldeneye Rogue Agent [plus4] (USA).etm | james bond goldeneye rogue agent p4.etm
+trainers,Medal of Honor - European Assault.etm,4541005E,3,PAL-NTSC,MOH EURO,8dbb7fef1548a530069fbd111041eed5,MOHEURO3.ETM | Medal Of Honour EURO [plus2] (REV).etm | Medal of Honor EA p3 ntsc.ETM | Medal of Honor EA p3.ETM | Medal of Honor Euro Assault p3 ntsc.etm | Medal of Honor European Assault.etm
+variants,Medal of Honor - European Ass (PAL p3).etm,4541005E,3,PAL,Medal of Honor: European Assault +3,d1c0ef874ee35b8bcf1b00efccae3d9a,Medal of Honor European Assault [plus3.etm | xormoh-ea.etm
+variants,Medal of Honor - European A (PAL p3) 2.etm,4541005E,3,PAL,MOH European Assault (PaL) +3,cb4b12a204a1e97202f9149df98fa241,MOHEultPaL3.etm
+variants,Medal of Honor - European Ass (PAL p2).etm,4541005E,2,PAL,MOH EURO,06df045a0f5a957b388512f5829df9de,MOHEURO2.ETM | Medal Of Honour EURO [plus2].etm
+trainers,The Lord of the Rings - The Third Age.etm,4541005F,4,NTSC,LOTR 3rd AGE Trainer v1.0,f66b1e72cd7bbebbd80fa9f3c1e7c943,Lord of the Rings TTA p4.etm | Lord of the Rings Third Age p4 ntsc.etm
+variants,The Lord of the Rings - The (NTSC p3).etm,4541005F,3,NTSC,LOTR: The Third Age (USA) +3,3f5ed850edf5c5bdb9aac9b4b69a5103,LTR3-EVT.ETM | Lord Of The Rings The Third Age (NTSC-.etm | Lord Of The Rings The Third Age (USA).etm | Lord of the Rings The Third Age [plus3.etm | Lord of the Rings the 3rd Age p3 ntsc.etm | Lord of the Rings the 3rd Age p3.etm | evt-ltr3 ntsc.etm | evt-ltr3.etm | lotr the third age.etm
+variants,The Lord of the Rings - The T (PAL p3).etm,4541005F,3,PAL,LOTR 3 (Pal) +3,2fcaa7c16a3fd97d0c8ac39657f6f466,Lord of the Rings 3 [plus3] (Pal).etm | Lord of the Rings the Third Age p3 pal.etm | lotr.etm
+variants,The Lord of the Rings - The (PAL p3) 2.etm,4541005F,3,PAL,LOTR 3 (Pal) +3,562dc04e82db581c933efbc59489ec2d,Lord of the Rings Third Age p3 pal.etm
+trainers,The Urbz - Sims in the City.etm,45410060,50,NTSC,The urbz (USA) +17,782941b31f643002b54823e90cfb4874,Urbz [plus17] (USA).etm | Urbz p17.etm | the urbz sims in the city.etm
+variants,The Urbz - Sims in the City (NTSC p20).etm,45410060,20,NTSC,The urbz (USA) +20,ede0cc8af5a4487ed9c9160bf6499b64,The Urbz p20 ntsc.etm | The Urbz p20.etm | The urbz [plus20] (USA).etm | Urbz Sims in the City p20 ntsc.etm | evt-urbz.etm
+variants,The Urbz - Sims in the City (NTSC p6).etm,45410060,6,NTSC,Urbz: The Sims in the City +6,644becacafed98b09d8f45ee02ecd4b7,Urbz Sims in the City p6.etm | Urbz The Sims in the City [plus6].etm | Urbz the Sims in the City p6 ntsc.etm | Urbz the Sims in the City p6.etm | urbz.etm
+variants,The Urbz - Sims in the City (PAL p2).etm,45410060,2,PAL,Urbz Sims In The City PAL By DDKram BETA R2,319c7c5e8f100afbfb625bf0315f7e51,Urbz PAL Beta by DDKram R2.ETM | Urbz Sims In The City [plus2] (PAL) (R.etm | Urbz Sims In The City p2 PAL BETA R2.ETM | Urbz Sims in the City p2 pal.etm
+variants,The Urbz - Sims in the City (PAL p1).etm,45410060,1,PAL,Urbz Sims In The City PAL By DDKram BETA,9e2145a9d32b374eee04efe15d2c1810,Urbz PAL BETA BY DDKRAM.ETM | Urbz Sims In The City [plus2] (PAL) (B.etm | evt-djny2 (8).ETM
+trainers,Battlefield 2 - Modern Combat.etm,45410062,4,NTSC,Battlefield 2: Modern Combat (USA) +4,b122e099b68ac7f9b026a706fff107aa,Battlefield 2 Modern Combat p4 ntsc.etm | Battlefield 2 Modern Combat p4.etm | EVT-BF2.ETM
+variants,Battlefield 2 - Modern Comba (NTSC p4).etm,45410062,4,NTSC,Battlefield 2: Modern Combat (USA) +4,6e1b4ac99edfdd187ab498bef7270ac2,Battlefield 2  Modern Combat.etm | Battlefield 2 - Modern Combat.etm
+trainers,TY the Tasmanian Tiger 2 - Bush Rescue.etm,45410063,3,,TY2 Bush Rescue +3,800af6c3f77b0f483a44b969884f4a51,TY2 Bush Rescue p3.etm | TY2.etm | The Tasmanian Tiger 2 [plus3].etm | Ty Tasmanian Tiger 2 p3.etm
+variants,TY the Tasmanian Tiger 2 - B (NTSC p2).etm,45410063,2,NTSC,Ty Tiger 2 (NTSC) +2,ce33a6255ee41b226058cf4b3cb36098,The Tasmanian Tiger 2 [plus2] (NTSC).etm | The Tasmanian Tiger 2 p2.etm | Ty Tasmanian Tiger p2 ntsc.etm | ty the tasmanian tiger 2.etm | ty.etm
+trainers,TimeSplitters - Future Perfect.etm,45410066,2,NTSC,TimeSplitters Future Perfect +2 (NTSC),336f9f6d97a83c693f421a6c978f409b,Time Splitters 3 - Future Perfect.etm | Time Splitters Future Perfect p2 ntsc.ETM | TimeSplitters Future Perfect [plus2] (.etm | TimeSplitters Future Perfect p2.etm | fx-tsfpp2us.ETM
+variants,TimeSplitters - Future Perfe (NTSC p1).etm,45410066,1,NTSC,TimeSplitters Future Perfect +1 (NTSC),2c902ed62d5e36807af197c318f90dd5,TimeSplitters Future Perfect [plus1] (.etm | TimeSplitters Future Perfect p1.etm | fx-tsfp1.ETM
+trainers,Oddworld - Stranger's Wrath.etm,4541006D,6,NTSC,Strangers Wrath +6 (NTSC),9e96849a031fdb9a37857f8eb54504b5,Oddworld 2 - Stranger's Wrath.etm | Oddworld Strangers Wrath p6 ntsc.etm | Oddworld Strangers Wrath p6.etm | Strangers Wrath [plus6] (NTSC).etm | Strangers Wrath p6.etm | strangw.etm
+variants,Oddworld - Stranger's Wrath (PAL p5).etm,4541006D,5,PAL,Oddworld Strangers Wrath + 5 XORED [PAL],7b0b47229b90eefda6b6e02f4b0431a4,Oddworld Strangers Wrath [plus5] (PAL).etm | Oddworld Strangers Wrath p5 pal.etm | odd.etm
+trainers,Need for Speed - Underground 2 (Europe.etm,4541006F,10,PAL,NFSU:2 (PAL) +10,4652fc14be4c711e928325928fa71352,Need for Speed Underground 2 p10 pal.etm | evt-NFSU2PAL.etm | evt-djny2 (3).etm
+variants,Need for Speed - Underground (PAL p10).etm,4541006F,10,PAL,NFSU:2 (PAL) +10,1136e33cbb2d73aac00dc217faba9c6b,Need for Speed Underground 2 [plus10].etm
+variants,Need for Speed - Undergrou (PAL p10) 2.etm,4541006F,10,PAL,NFSU:2 (PAL) +10,eaf58ebf1a27942db3870068752499b5,evt-sug2_PAL.etm
+trainers,FIFA Street.etm,45410072,2,NTSC,Fifa Street +2,83f862af582ca25fa1d347182868ef67,Fifa Street [plus2].etm | Fifa Street p2 ntsc.etm | Fifa Street p2.etm | fifas.etm
+trainers,Madden NFL 06.etm,45410075,11,NTSC,Madden 2k6 (USA) +9,61866878c183160ea85212ab59b81b6a,Madden 2006 P9.etm | Madden 2006 p11 ntsc.etm | Madden 2k6 [plus9] (USA).etm | evt-m2k6.etm
+variants,Madden NFL 06 (NTSC p9).etm,45410075,9,NTSC,Madden 2k6 (USA) +9,07545feaeda98c6510c72f71de14d4fe,Madden2006.etm
+trainers,Burnout Revenge.etm,45410076,11,NTSC,Burnout Revenge +11,549a502c108aa00e9d70aba7015a4df7,Burnout Revenge LCD p11 ntsc.etm | Burnout Revenge LCD p11.etm | Burnout Revenge [plus11].etm | xorbrnr-LCD.etm
+variants,Burnout Revenge (NTSC p11).etm,45410076,11,NTSC,Burnout Revenge +11,0b61eedffe9e99c280a8ffb90a711823,Burnout Revenge p11 ntsc.etm | Burnout Revenge p11.etm | Burnout Revenge.etm | burnoutrevenge.etm
+variants,Burnout Revenge (PAL p11).etm,45410076,11,PAL,Burnout Revenge +11 xored [PAL] ,d1f5bb6d73219007cd2bc96eb519add9,BO4.ETM
+variants,Burnout Revenge (p11).etm,45410076,11,,Burnout Revenge +11,d419e6f8124dcec36bd24e8f92370030,XORBRNR.ETM
+trainers,Harry Potter and the Goblet of Fire.etm,45410077,4,,Harry Potter: GoB (MULTI) +4,a459ddd4f48ca1fc59435a371b3ac7db,EVT-HGOF.ETM | Harry Potter Goblet of Fire p4.etm
+variants,Harry Potter and the Goblet (NTSC p1).etm,45410077,1,NTSC,Harry Potter GOF,f6a016fa972487e94318db85e76ccbc7,Harry Potter GoF p1 ntsc.etm | Harry Potter GoF p1.etm
+trainers,FIFA Soccer 06.etm,45410078,4,PAL,FIFA 2006 + 4 Xored [PAL],43079de04717ef6fdf4d6627c3531a72,FIFA2K6.ETM | Fifa 2006 p4 multi.etm
+variants,FIFA Soccer 06 (PAL p4).etm,45410078,4,PAL,FIFA 2006 + 4 Xored [PAL],32d790e1014ee251ac465fd8f2f5c97f,Fifa 2006 p5 pal.etm
+trainers,007 - From Russia with Love.etm,45410079,9,NTSC,James Bond From Russia With Love (USA) +9,b98cb4e956f7285a89e41ba71cb6b41c,007 From Russia with Love _9 (NTSC).etm | 007 From Russia with Love p9 ntsc.etm | 007 From Russia with Love p9.etm | EVT-FRWL.ETM
+variants,007 - From Russia with Love (NTSC p5).etm,45410079,5,NTSC,James Bond From Russia With Love (USA) +5,aff1630d4a7e801258ae270ae347d534,007 From Russia with Love p5 ntsc.etm | 007 From Russia with Love p5.etm
+trainers,Need for Speed - Most Wanted - Black E.etm,4541007B,16,NTSC,NFS: MW (BE) (USA) +16,5d9ef055a33d3fdf29ae208b04abe233,EVT-NFSB.ETM | Need For Speed Black p16 ntsc.etm | Need For Speed MWBE p16 ntsc.etm | Need For Speed Most Wanted BE p16.etm
+variants,Need for Speed - Most Wanted (PAL p16).etm,4541007B,16,PAL,NFS: MW (PAL) +16,3f2079cc43d6d8cd1cecd2242f773898,Need For Speed MWBE p16 pal aus.etm | evt-nfsp.etm
+variants,Need for Speed - Most Wante (NTSC p16).etm,4541007B,16,NTSC,NFS: MW (BE) (USA) +16,d908c46a51b1b18fd43db7948f39c0cb,NFS Most Wanted Black Edition.etm
+variants,Need for Speed - Most Wante (NTSC p13).etm,4541007B,13,NTSC,NFS: MW (BE) (USA) +13,ad8b4b84a33388637f761eef1d32fa0d,Need 4 Speed MWBE p13 ntsc.etm | Need 4 Speed MWBE p13.etm
+variants,Need for Speed - Most Wante (NTSC p11).etm,4541007B,11,NTSC,Need For Speed: Most Wanted +11,b09314bf6b7b2fea5ef753d65fa87c92,Need for Speed Most Wanted p11 ntsc.etm
+variants,Need for Speed - Most Wanted - B (p11).etm,4541007B,11,,Need For Speed: Most Wanted +11,78c027faacefd5a0ac46d7097c7f7c76,XORNFSMW.ETM
+variants,Need for Speed - Most Wanted - Bl (p1).etm,4541007B,1,,NFS MW +1,6c45c1f345f7736892e4c707d37a17e9,NFS-MW1.ETM
+variants,Need for Speed - Most Wanted (p1) 2.etm,4541007B,1,,Need for Speed Most Wanted+1,4330403d1b8b218fe06e6ba688b00596,NeedfWanted.ETM
+trainers,NHL 06.etm,4541007C,8,NTSC,NHL 06 +8 (NTSC),aa4568313d0fbd458e30f8a0b1134d2b,NHL 06 p8 ntsc.etm | NHL 06 p8.etm
+variants,NHL 06 (NTSC p2).etm,4541007C,2,NTSC,NHL 06 +2,fbe5fa16df2a94658b07c48c61581d10,NHL Hockey 06 p2 NTSC.ETM | evt-NHL062.ETM
+trainers,The Godfather - The Game.etm,4541007D,12,NTSC,The Godfather: LIMITED EDITON (NTSC) +12,90fd82924cb3270bcc1b08d9762bdc28,The Godfather p12 ntsc.etm | The Godfather p12.etm
+variants,The Godfather - The Game (NTSC p12).etm,4541007D,12,NTSC,The Godfather: LIMITED EDITON (NTSC) +12,d255e1d96c9a9ed0055b7c0bdb5d9a2b,EVT-GODF.ETM
+variants,The Godfather - The Game (NTSC p12) 2.etm,4541007D,12,NTSC,The Godfather: LIMITED EDITON (NTSC) +12,a74f8b5fd92fe900f6fb860098fc8a65,Godfather Ltd&Normal Edtn p12 multi.etm
+variants,The Godfather - The Game (PAL p12).etm,4541007D,12,PAL,The Godfather: (PAL) +12,73adb1b19e4167dcddd1e2723aaa2633,The Godfather p12 PAL.etm
+trainers,Tiger Woods PGA Tour 06.etm,4541007E,10,PAL,Tiger Woods PGA TOUR 06 (PAL) +10,8d6e1a2406b48bd3230e02b257ece3af,Tiger Woods 2006 p10 pal.etm
+variants,Tiger Woods PGA Tour 06 (NTSC p8).etm,4541007E,8,NTSC,Tiger Woods PGA Tour 2k6 (USA) +8 (rev2),e016fcf6bc05a2a3b3d36172d518869a,Tiger Woods 2006 p8 ntsc rev2.etm | Tiger Woods 2006 p8 ntsc.etm | Tiger Woods 2K6.etm | Tiger Woods PGA Tour 2006 [plus8] (USA.etm | Tiger Woods PGA Tour 2006 p8.etm | evt-tw26.etm
+variants,Tiger Woods PGA Tour 06 (PAL p7).etm,4541007E,7,PAL,Tiger Woods 2006 + 7 Xored [PAL],77c06fc54a3dcd194a6538068cea93b2,GOLF06.ETM
+trainers,NCAA Football 06.etm,45410080,5,NTSC,NCAA Football 2006 +5,98c109cfab60ab55377e2f160ed5f033,NCAA Football 2006 [plsu5].etm | NCAA Football 2006 p5 ntsc.etm | NCAA Football 2006 p5.etm | xorncaa06.etm
+trainers,SSX on Tour.etm,45410082,10,NTSC,SSX: On Tour (USA) +10 (rev4),3ee10b3417f27398f7f87470472b6f3f,SSX On Tour [plus10] (USA) (REV4).etm | SSX On Tour p10 ntsc.etm | SSX On Tour p10.etm | SSX On Tour.etm | evt-sxot.etm
+variants,SSX on Tour (NTSC p9).etm,45410082,9,NTSC,SSX: On Tour (USA) +9 (rev2),8330f73fa64d95a6cfc1d1b7efaad1db,SSX On Tour p9 ntsc.etm | SSX On Tour p9.etm
+trainers,Black.etm,45410083,9,NTSC,Black (NTSC) +9,bf9bb00675d4fcc3d9f51a856093fa85,Black p9 ntsc.etm | Black p9.etm | EVT-BLKN.ETM
+variants,Black (PAL p9).etm,45410083,9,PAL,Black (PAL) +9,a74e814b507f68c85ea4df777a9c3c59,Black p9 pal.etm | EVT-BLKP.ETM
+variants,Black (PAL p3).etm,45410083,3,PAL,Black (PAL) +3,9916da018ec1e66f05b7a090f52d36ab,Black p3 pal.etm | Black.etm
+trainers,FIFA Street 2.etm,45410085,7,PAL-NTSC,Fifa Street 2 (NTSC/PAL) +7,9c44fe3672c3d057cedc28967e392565,EVT-FS2.ETM | Fifa Street 2 p7 multi.etm | Fifa Street 2 p7 pal ntsc.etm | Fifa Street p7 ntsc.etm | Fifa Street p7.etm | Final Fight Streetwise p9 ntsc.etm
+trainers,Fight Night Round 3.etm,45410086,9,NTSC,Fight Night Round 3 (USA) +9,6045d22d69c9341fc0902f84b947dd32,EVT-FNR3.ETM | Fight Night Round 3 p9 ntsc.etm | Fight Night Round 3 p9.etm | FightNightRound3_9.etm
+variants,Fight Night Round 3 (PAL p9).etm,45410086,9,PAL,Fight Night Round 3 (PAL) +9,bd0aa34bcb8160e837c3ac69f0d77de5,Fight Night Round 3 p9 pal.etm
+variants,Fight Night Round 3 (NTSC p1).etm,45410086,1,NTSC,Fight Night Round 3 +1 (USA),bdde70430c0ff25010207d48f44e9d6f,Fight Night 3 p1 ntsc.etm | Fight Night 3 p1.etm
+trainers,Rugby 06.etm,45410087,2,NTSC,RUGBY 06 (NTSC) +2,8ad1a427058947b3be5272418412e987,EVT-RG06.ETM | Rugby 06 p2 ntsc.etm | Rugby 06 p2.etm
+trainers,Half-Life 2.etm,45410091,6,NTSC,Half Life 2 + 6 Xored [NTSC],84e48867ba62bab8db4d3c0435e2ff33,Half Life 2 p6.etm | Half-Life 2.etm | HalfLife2 Xored.etm
+variants,Half-Life 2 (PAL-NTSC p6).etm,45410091,6,PAL-NTSC,Half Life 2 + 6 Xored [NTSC/PAL],c88bba4eef1ab8dec605a757981b099c,HALF2.ETM | Half Life 2 p6 multi.etm
+trainers,Arena Football.etm,45410094,6,NTSC,Arena Football (USA) +6,ffcd3eb38f3ca17fb5247eb81749b7cd,Arena Football _6 (NTSC).etm | Arena Football p6 ntsc.etm | EVT-AFTB.ETM
+trainers,FIFA World Cup Germany 2006.etm,4541009C,5,PAL,2006 FIFA World Cup (PAL) +5,a3fca24a056a592a009da412f9c80e9f,2006 FIFA World Cup _5 (PAL).etm
+trainers,Need for Speed - Carbon.etm,4541009E,13,PAL,Need For Speed Carbon (PAL/AUS) +13,947c66215cdbba96353097f28095549a,evt-nfsc-pal-aus.etm
+variants,Need for Speed - Carbon (PAL-NTSC p13).etm,4541009E,13,PAL-NTSC,Need For Speed: Carbon (GLOBAL) +13,f1187e032a1e81710b390b9b97b6191e,evt-nfsc.etm
+variants,Need for Speed - Carbon (PAL-NTSC p8).etm,4541009E,8,PAL-NTSC,Need For Speed: Carbon (GLOBAL) +8,6caa785daef439e4c11d9c0620e12492,evt-nfsc1.etm | evt-nfscv1.etm
+trainers,Madden NFL 07.etm,4541009F,16,NTSC,Madden NFL 07 (NTSC) +16,af4dbbe3a39018565a13715f0faac2a5,evt-Madden07.etm
+trainers,NCAA Football 07.etm,454100A2,9,NTSC,NCAA 2k7 (USA) +9,05b86645877a881eb8222e02223b38e2,EVT-NC27.ETM
+trainers,NHL 07.etm,454100A5,8,NTSC,NHL 07 +8 (NTSC),4a24c35695bb6070fcc57484936b3ee7,evt-NHL07.etm
+trainers,Batman Begins.etm,45410389,7,NTSC,Batman Begins +7    ,8c1845e28ad312d0e247dcc14d1bc3b0,Batman Begins [plus7].etm | Batman Begins p7 ntsc.etm | Batman Begins p7.etm | xorbat.etm
+variants,Batman Begins (NTSC p2).etm,45410389,2,NTSC,BATMAN BEGINS +2 NTSC,de10148a8d5f4548e47ae0b5df6a94c2,BATMAN2.ETM | Batman Begins [plus2] (NTSC).etm | Batman Begins p2.etm | Batman Begins.etm
+variants,Batman Begins (PAL p2).etm,45410389,2,PAL,BATMAN BEGINS +2 PAL MULTI,854c03534da2a10cc562b700d8fc3b2d,BATMANPAL2.ETM | Batman Begins p2 multi.etm
+variants,Batman Begins (NTSC p1).etm,45410389,1,NTSC,BATMAN BEGINS +1 (NTSC),42ee153c594014f6cf915a832da03f24,Batman Begins [plus1] (NTSC).etm | Batman Begins p1.etm | Batman_1.etm | batmanplus1.etm
+trainers,Marvel Nemesis - Rise of the Imperfect.etm,4541038A,8,NTSC,Marvel Nemesis: Rise Of The Imperfects (USA) +8 (rev2),c5f5be0216656a7dab0ebae25ae4261f,Marvel Nemesis Rise Of The Imperfects P8.etm | Marvel Nemesis Rise Of The Imperfects.etm | Marvel Nemesis RotI p8 ntsc.etm | Rise of the Imperfects p8.etm | Rise of the Imperfects.etm | evt-roti.etm
+variants,Marvel Nemesis - Rise of the (NTSC p7).etm,4541038A,7,NTSC,Marvel Nemesis: Rise Of The Imperfects (USA) +7,753bc39c186d4f40f5b21bd34c5726fd,Marvel Nemesis Rise Imperfects p7 ntsc.etm | Marvel Nemesis Rise Imperfects p7.etm
+trainers,The Sims 2.etm,4541038B,8,NTSC,Sims 2 NTSC +8,4a646ce3bbe810c3b0fdaf5062b5248e,SIMS2.ETM | Sims 2 p8 ntsc.etm | The Sims 2 p8.etm
+variants,The Sims 2 (NTSC p5).etm,4541038B,5,NTSC,Sims 2 NTSC +5,52c1a00bb89cf8a9bfe53c4c34423cb3,The Sims 2 p5 ntsc.etm | The Sims 2 p5.etm
+variants,The Sims 2 (PAL p5).etm,4541038B,5,PAL,sims 2 + 5 Xored [PAL],80a1b3d544c4ad3595f2f81fcf72a665,Sims 2 p5 pal.etm
+variants,The Sims 2 (NTSC p2).etm,4541038B,2,NTSC,The Sims 2 NUDE PATCH,989f6820a47bd2f1827bcaa60be5dab7,SIMS2-NUDE.etm | Sims 2 p2 nude patch ntsc.etm | Sims 2 p2.etm
+trainers,Heroes of the Pacific.etm,45430004,5,NTSC,Heroes Of The Pacific (USA) +5,e7f938774d5c0d678f6f37b414375e3c,Heroes of the Pacific p5 ntsc.etm | Heroes of the Pacific p5.etm
+variants,Heroes of the Pacific (NTSC p5).etm,45430004,5,NTSC,Heroes Of The Pacific (USA) +5,f1b0c776b73503b07b8c92eae77e9c0f,EVT-HPCF.ETM
+trainers,Ghost Master - The Gravenville Chronic.etm,454D0004,1,PAL,Ghost Master +1 PAL,5a8bcd171492c79cc381a6dd73afc7f0,EVT-GMAS.ETM | Ghost Master [plus1] (PAL).etm | Ghost Master p1 pal.etm
+trainers,Starsky & Hutch.etm,454D0005,2,NTSC,Starsky & Hutch +2 (NTSC) v0.01,70d05084ff9ba869486ec95b9158e803,STARSKY.ETM | Starsky and Hutch [plus2] (NTSC) (v0.0.etm | Starsky and Hutch p2 ntsc v0_01.etm | Starsky and Hutch p2 ntsc.etm | starsky and hutch p2.etm
+trainers,Bad Boys II.etm,454D0008,2,NTSC,Bad Boys II +2 (NTSC),c1dfbfc2e2fd04a37e833c2716857dc0,Bad Boys 2 p2 ntsc.etm | Bad Boys 2 p2.etm | bad boys 2 [plus2] (NTSC).etm | bad boys 2.etm | bad_boys_2.etm | evt-bb2.etm
+variants,Bad Boys II (PAL p2).etm,454D0008,2,PAL,Bad Boys II +2 (GER),ce83b8c7eed4590fd8028e5082f60599,Bad Boys II [plus2] (GER).etm | Bad_Boys_II_GER.etm
+trainers,FlatOut.etm,454D0009,4,NTSC,FlatOut (USA) +4,30be96d3641ce4de29854dc6129bf8e7,EVT-FLAT.ETM | FlatOut [plus4] (USA).etm | Flatout p4 ntsc.etm | Flatout p4.etm
+variants,FlatOut (PAL p4).etm,454D0009,4,PAL,Flat Out (Pal) +4,4116357b278741adde3e2c1c2a634e9e,Flat Out [plus4].etm | FlatOut.etm | Flatout p4 pal.etm
+variants,FlatOut (PAL p2).etm,454D0009,2,PAL,Flat Out Pal +2,41262fb8d76fb0b1085f7da05974ede8,Flat Out Pal [plus2] (PAL).etm | flat out.etm
+trainers,Big Mutha Truckers 2.etm,454D0017,12,NTSC,Big Mutha Trucker 2 (USA) +12,59d289500ee0b4ea9ab6d7ffed2205d7,Big Mutha Trucker 2 [plus12] (USA).etm | Big Mutha Trucker 2 p12 ntsc.etm | Big Mutha Trucker 2 p12.etm | EVT-BMT2.ETM
+variants,Big Mutha Truckers 2 (PAL p10).etm,454D0017,10,PAL,Big Mutha Trucker 2 (PAL) +10,92ba8e15078df4f2a1790f0a3049c6d9,BMT2P.ETM | Big Mugha Truckers2 p10 pal.etm | Big Mutha Truckers 2 p10 pal.etm
+trainers,Thief - Deadly Shadows.etm,45530004,4,NTSC,Thief: Deadly Shadows (USA) +4,945417d764c1fe07b534b4df7805c760,Theif Deadly Shadows p4 ntsc.etm | Theif Deadly Shadows p4.etm | Thief Deadly Shadows [plus4] (USA).etm | evt-thds.etm
+variants,Thief - Deadly Shadows (NTSC p1).etm,45530004,1,NTSC,Thief 3: Deadly Shadows +1 (USA/NTSC),53180ceea9e34b469225a85b6fd5fd42,Thief 3 Deadly Shadows [plus1] (NTSC-U.etm | Thief 3 Deadly Shadows p1 ntsc.etm | Thief 3 Deadly Shadows p1.etm | evt-t3.etm | thief 3.etm
+trainers,Deus Ex - Invisible War.etm,45530005,3,NTSC,Deus Ex +3 (USA)(v0.1),c6bc0d3a90b884014f314821694a74c5,Deus EX p3 ntsc v0_1.etm | Deus EX p3 ntsc.etm | Deus Ex Invisible War.etm | Deus Ex [plus3] (USA).etm | deus ex p3.etm
+variants,Deus Ex - Invisible War (NTSC p3).etm,45530005,3,NTSC,Deus Ex +3 (USA)(v0.1),6914c5132d90065ce99f0a1b38316dfe,DEUS.ETM | deus ex.etm
+variants,Deus Ex - Invisible War (PAL p3).etm,45530005,3,PAL,Deus EX Invisible War +3 (GER),5e542719bd53cab805dac9017c3c1e77,Deus EX Invisible War [plus3] (GER).etm | DeusEXGER.etm
+trainers,Blood Omen 2 - The Legacy of Kain Seri.etm,45530006,1,NTSC,Blood Omen 2 +1 (USA)(v0.1),a22474bce8a90ac82094c8511454778e,Blood Omen 2 [plus1] (USA).etm | Blood Omen 2 p1 ntsc v0_1.etm | Blood Omen 2 p1 ntsc.etm | Blood Omen 2 p1.etm | BloodOmen2.etm | blood omen 2.etm
+trainers,Hitman 2 - Silent Assassin.etm,45530009,6,NTSC,Hitman2: Silent Assassin (NTSC) +6,2f2b8169521486259aaf6489a864e15c,Hitman 2 Silent Assassin p6 ntsc.etm | Hitman 2 Silent Assassin p6.etm
+trainers,TimeSplitters 2.etm,4553000A,6,NTSC,Time Splitters 2 +5 (NTSC) v0.01,617e92d54651f1f94ba021f28e9830cc,TS2INJ.ETM | Time Splitters 2 [plus5] (NTSC) (v0.01.etm | Time Splitters 2 p5 ntsc v0_01.etm | Time Splitters 2 p5 ntsc.etm | time splitters 2 p5.etm
+variants,TimeSplitters 2 (PAL p2).etm,4553000A,2,PAL,Time Splitters 2 +2 Trainer (PAL/GERMAN),72c2e3721209b43fb21f703dc0727e19,Time Splitters 2 [plus2] (PAL-GER).etm | Time Splitters 2 p2 pal ger&aus.etm | Timesplitters 2 p2 pal ger.etm | timesplitters2.etm
+variants,TimeSplitters 2 (NTSC p2).etm,4553000A,2,NTSC,Time Splitters 2 +2 (USA)(v0.1),36b86c33c2f357b4bb6d8f6d7e6ecf48,Time Splitters 2 [plus2] (USA)(v0.1).etm | Time Splitters 2 p2.etm
+variants,TimeSplitters 2 (NTSC p2) 2.etm,4553000A,2,NTSC,Time Splitters 2 +2 (USA)(v0.1),5123bb6bfda72f05b8d537bdd9826103,TS2.ETM
+trainers,Legacy of Kain - Defiance.etm,4553000F,4,PAL-NTSC,LoK: Defiance +4 (PAL/NTSC),54074558c28b10d770f27280744436e4,Legacy of Kain Defiance p4 multi.etm | Legacy of Kain Defiance p4 ntsc pal.etm | Legacy of Kain Defiance p4.etm | LoK Defiance [plus4] (PALNTSC).etm | evt-lokdef.etm
+variants,Legacy of Kain - Defiance (NTSC p4).etm,4553000F,4,NTSC,LoK: Defiance +4 (NTSC),34c9d92dc878c0d0fe05a23bb3a7458f,LoK Defiance P4.etm | LoK Defiance [plus4] (NTSC).etm | legacy of kain defiance.etm
+trainers,Hitman - Contracts.etm,45530012,4,NTSC,Hitman: Contracts (USA) +3,d47d71fb5fa14a042f2c6977e39600e7,Hitman Contracts [plus3] (USA).etm | Hitman Contracts p3 ntsc.etm | hitman 3.etm | hitman contracts p3.etm
+variants,Hitman - Contracts (NTSC p4).etm,45530012,4,NTSC,Hitman: Contracts (USA) +3,e1b1fa3bdc81c7617ec3bcb4d2487ade,EVT-HIT3.ETM
+trainers,ShellShock - Nam '67.etm,45530013,2,,evt-shellshock nam 67,63646a1d05c7954386dace0b1b57992e,Shell Shock NAM 67 p2.etm | shell shock.etm
+variants,ShellShock - Nam '67 (p2).etm,45530013,2,,evt-shellshock nam 67,85e07bc13423a8bded6dd9d7fea1b75c,Shellshock Nam 67 [plus2].etm | evt-sknam67.ETM
+trainers,Crash 'n' Burn.etm,45530014,5,NTSC,Crash N Burn (USA) +5,6575d7231fdb180c26bd3283c5595bc6,Crash N Burn [plus5] (USA).etm | Crash n Burn p5 ntsc.etm | Crash n Burn p5.etm | EVT-CRNB.ETM | crash n burn.etm
+trainers,Backyard Wrestling 2 - There Goes the.etm,45530016,5,NTSC,Backyard Wrestling 2 (USA) +5 rev1,ff2f840c31ff91647dafa084d4f339ce,Backyard Wrestling 2 [plus5] (USA).etm | Backyard Wrestling 2 p5 ntsc rev1.etm | Backyard Wrestling 2 p5 ntsc.etm | Backyard Wrestling 2 p5.etm
+variants,Backyard Wrestling 2 - There (NTSC p5).etm,45530016,5,NTSC,Backyard Wrestling 2 (USA) +5 rev1,7fd68cae557ffd96459f91ae61345e9f,EVT-BYW2.ETM
+variants,Backyard Wrestling 2 - The (NTSC p5) 2.etm,45530016,5,NTSC,Backyard Wrestling 2 (USA) +5,ed038a863524f9805dec805210bc9e87,backyard wresting 2.etm
+trainers,25 to Life.etm,45530018,5,NTSC,25 To Life + 5 [NTSC],35091e597f58403568ebb437a4eddad6,25 To Life p5 ntsc.etm
+trainers,Project - Snowblind.etm,45530019,6,PAL,project snowblind +6 [pal],8eab60e7703ab5ef2f654fe9e7592a57,Project Snowblind [plus6] (PAL).etm | Project Snowblind p6 pal.etm | snowblind.etm
+variants,Project - Snowblind (NTSC p4).etm,45530019,4,NTSC,Project: Snowblind +4 (NTSC),0871176731db821176b46611dffd8c44,Project Snowblind [plus4] (NTSC).etm | Project Snowblind p4 ntsc.etm | Project Snowblind p4.etm | Project Snowblind.etm | snow.etm
+trainers,LEGO Star Wars - The Video Game.etm,4553001D,3,NTSC,Lego Star Wars +3,4ff8a22eb5f3930543783aa6e7ba7686,LSW.ETM | Lego Star Wars p3 ntsc.etm | Lego Star Wars p3.etm
+trainers,Futurama.etm,46490002,7,PAL,Futurama (PAL) +7,515826d3a4f3842c241cc8f7094330da,Futurama p7 pal.etm
+variants,Futurama (PAL p1).etm,46490002,1,PAL,Futurama German (PAL) +1,472fbe062297173b0fbcfd49473e3b17,Futurama [plus1] (PAL-GER).etm | Futurama p1 pal.ETM | Futurma p1 pal ger.etm | FuturmaPAL.ETM
+variants,Futurama (p1).etm,46490002,1,,Futurama +1,bd38548ff8214d6ad433ec16ef2125fb,futurama.etm
+trainers,Otogi - Myth of Demons.etm,46530002,3,,Otogi: Myth of Demons +3 (Multi),810cc2067ee642497cd33dbcc276a358,Otigi Myth of Demons p3 multi.etm | Otogi Myth of Demons 3 [plus4] (Multi).etm | Otogi Myth of Demons [plus3] (Multi).etm | Otogi Myth of Demons p3 multi.etm | mxt-otom.etm | otogi.etm
+variants,Otogi - Myth of Demons (NTSC p3).etm,46530002,3,NTSC,Otogi: Myth of Demons +3 (USA),88408902e579dbe1c88fe3d84783d8dc,Otogi Myth of Demons [plus3] (USA).etm | Otogi Myth of Demons p3 ntsc.etm | Otogi Myth of Demons p3.etm | mxt-otag.etm | otogi myth of demons p3 usa.etm
+trainers,Otogi 2 - Immortal Warriors.etm,46530004,5,NTSC,Otogi 2 (USA) +5 (rev2),08b9367607fe1a5ffecee1d038be02fb,Otogi 2 [plus5] (USA) (REV2).etm | Otogi 2 p5 ntsc rev2.etm | Otogi 2 p5 ntsc.etm | otogi 2 p5.etm
+variants,Otogi 2 - Immortal Warriors (NTSC p5).etm,46530004,5,NTSC,Otogi 2 (USA) +5,e17eb2342b5c96d2fc2552c91064ef62,Otogi 2 [plus5] (USA).etm | Otogi 2.etm | otogi 2 (usa).etm
+variants,Otogi 2 - Immortal Warrior (NTSC p5) 2.etm,46530004,5,NTSC,Otogi 2 (USA) +5,a334a5962f3d6f948fc7e785b58ece47,evt-oto2.etm
+variants,Otogi 2 - Immortal Warriors (JAP p4).etm,46530004,4,JAP,Otogi: Hyakki Toubatsu Emaki +4 (JAP),d02dfacca14982e89eceaba039478c86,Otigi Hyakki Toubatsu Emaki p4 jap.etm | Otogi Hyakki Toubatsu Emaki [plus4] (J.etm | Otogi HyakkiToubatsuEmaki p4 ntsc jap.etm | mxt-oto2.etm | otogi 2 (jap).etm
+trainers,Metal Wolf Chaos.etm,46530006,7,JAP,Metal Wolf Chaos (JP) +7 V1.1,826d9a41b7a91c7c92f164fb45ef0192,Metal Wolf Chaos [plus7] (JP) (v1.1).etm | Metal Wolf Chaos p7 Jap.etm | Metal Wolf Chaos p7 ntsc jap.etm | Metal Wolf p7 jap.etm | MetalWolfChaos.etm | metal wolf chaos.etm
+trainers,Pariah.etm,47560001,4,NTSC,Pariah + 4,ba3c800b5cdd78d7cb919c7e9e367f58,Pariah [plus4].etm | Pariah p4 ntsc.etm | Pariah p4.etm | pariah.etm
+trainers,Combat - Task Force 121.etm,47560003,3,NTSC,Combat Task Force 121 (USA) +3,957802a382eb0ed224dc786c67f80749,EVT-CMTF.ETM
+trainers,World War II Combat - Road to Berlin.etm,47560009,3,NTSC,WWII Combat: Road To Berlin (USA) +3,0cac58bd4d896ab3a9274548dd3e212d,EVT-WW2C.ETM | World War II Road To Berlin p3 ntsc.etm | World War II Road To Berlin p3.etm
+trainers,WarPath.etm,4756000A,10,PAL-NTSC,Warpath (GLOBAL) +10,53b575af0302b95122c0600403b0e0a2,evt-wpath.etm
+trainers,Stolen.etm,48500001,7,NTSC,Stolen +7 Trainer (NTSC/USA) V1.0,ca860b34a85d34857b57499e8d201344,Stolen [plus7] (NTSC-USA) (V1.0).etm | Stolen p7 ntsc V1_0.etm | Stolen p7 ntsc.etm | Stolen p7.etm | evt-stolen[1].etm
+variants,Stolen (p5).etm,48500001,5,,Stolen +5,67eb2993611e7df56f1eaeba7b5916e2,Stolen [plus5].etm | stolen.etm
+trainers,Counter Terrorist Special Forces - Fir.etm,48500002,4,PAL-NTSC,CT Special Forces +4,d05155407170033619059be3e9a11dfd,CT Special Forces [plus4].etm | CT Special Forces p4 multi.etm | CT Special Forces p4 ntsc-pal.etm | CT Special Forces p4.etm | CTFORCE.ETM
+trainers,Bloody Roar - Extreme.etm,48550001,2,NTSC,Bloody Roar Extream +2 (NTSC),204aafc113b0818eec86b07426120e15,BROAR.ETM | Bloody Roar Extream [plus2] (NTSC).etm | Bloody Roar Extream p2.etm
+trainers,Zapper.etm,49470012,1,NTSC,Zapper +1,09bc1304ba148d6575fbe17c151e984b,Zapper [plus1].etm | Zapper p1 ntsc.etm | Zapper p1.etm | Zapper-plus1.etm
+trainers,Dungeons & Dragons - Heroes.etm,49470013,8,NTSC,D&D Heroes +7 (USA) (v0.3),94a1333c68bffb91ce1564bcc6fbf700,Dungeons  Dragons Heros p7.etm | Dungeons & Dragons Heroes [plus7] (NTS.etm | Dungeons & Dragons Heroes [plus7] (USA.etm | Dungeons and Dragons Heros p7 ntsc v3.etm | Dungeons and Dragons Heros p7 ntsc.etm | dungeons and dragons heros p7.etm
+variants,Dungeons & Dragons - Heroes (PAL p2).etm,49470013,2,PAL,D&D Heroes +2 (PAL),8be287d0c6a1f1ab823c74e26433e02d,DDHeroes_PAL.etm | Dungeons & Dragons Heroes [plus2] (PAL.etm | Dungeons and Dragons Heros p2 pal.etm
+variants,Dungeons & Dragons - Heroes (p2).etm,49470013,2,,Dungeons and Dragons : Heroes,30e84611827fb7c16f9443b0395c875e,DDHEROES.ETM
+variants,Dungeons & Dragons - Heroes (p1).etm,49470013,1,,Dungeons & Dragons: Heroes,a1d4af8149e1319618b9213e26d7c8d1,DandD.etm | Dungeons  Dragons Heroes p1.etm | Dungeons & Dragons Heroes [plus1] (NTS.etm
+trainers,JSRF - Jet Set Radio Future.etm,49470018,1,PAL,Jet Set Radio Future PAL+1,ed3bdcd971dc307e5bac99334ff79f66,Jet Set Radio Future [plus1] (PAL).etm | Jet Set Radio Future p1 pal.ETM | JetSet pal.ETM | JetSet.ETM
+trainers,Mission - Impossible - Operation Surma.etm,4947001F,7,JAP,M:I - OP SURMA (NTSC/JPN) +7,ed5aaf67e62b48a81925c57e7acab59c,evt-mios.etm
+trainers,The Terminator - Dawn of Fate.etm,49470026,3,NTSC,The Terminator: Dawn of Fate,215eba0df69454beef7a5bb5cd33c227,TTDOF.ETM | Terminator Dawn of Fate p3 ntsc.etm | The Terminator Dawn of Fate [plus3].etm | terminator dawn of fate p3.etm
+variants,The Terminator - Dawn of Fate (PAL p2).etm,49470026,2,PAL,Terminator:Dawn of Fate / PAL+2,77e99bfd5192f1cb3dd4a6bbe603be86,TDoF-Pal.etm | Terminator Dawn of Fate [plus2] (PAL).etm | Terminator Dawn of Fate p2 pal.etm
+trainers,Panzer Dragoon Orta.etm,4947002B,1,PAL,Panzer Dragoon Orta +1 (PAL v1.2),e96b4d2283f76c6e068c3ea1bc4cf8b6,Panzer Dragon Orta p1 pal v1_2.ETM | Panzer Dragoon Orta [plus1] (PAL) (v1..etm | Panzer Dragoon Orta p1 pal.etm | evt-pdo12-PAL.ETM
+trainers,Driv3r.etm,49470038,3,NTSC,Driv3r +3,23acf009306341088dae767a69c98981,DRIV3R.ETM | Driv3r [plus3].etm | Driv3r p3 ntsc.etm | Driv3r p3.etm
+trainers,Terminator 3 - Rise of the Machines.etm,4947003B,3,PAL,Terminator 3:Rise of the Machines +3 (PAL),b81711677ef6c0f88844058702e80555,T3_RotM_Pal.etm | Terminator 3 Rise of the Machines [plu.etm
+variants,Terminator 3 - Rise of the Ma (PAL p3).etm,4947003B,3,PAL,Terminator 3:Rise of the Machines +3 (PAL),d7928d416f2b95da24a2279a33c91961,Terminator 3 ROTM p3 pal.etm | Terminator 3 p3 pal.etm
+variants,Terminator 3 - Rise of the M (NTSC p2).etm,4947003B,2,NTSC,Terminator 3 +2,c2b40f1542c124225cd9e0efcdaa6a7d,Terminator 3 [plus2].etm | Terminator 3 p2 cont.etm | Terminator 3 p2 ntsc.etm | terminator 3 p2.etm
+trainers,Terminator 3 - The Redemption.etm,4947003E,3,JAP,Terminator 3: The Redemption (NTSC/JPN) +3,d3974dce913d99796ba723047caf020e,EVT-TRED.ETM
+variants,Terminator 3 - The Redemption (p2).etm,4947003E,2,,evt-t3redemtion,a57be5462d7a5ff4c104a78d07d2d361,Terminator 3 Redemtion [plus2].etm | Terminator 3 p2 terra.etm | terminator 3.etm
+variants,Terminator 3 - The Redemption (p1).etm,4947003E,1,,Terminator 3,86a4cfc37ab1d7ae99aea37eae9697af,t3.etm
+trainers,Shadow Ops - Red Mercury.etm,49470041,2,PAL,shadow op red mercury [pal],5652644035a0a4dd2df6a028f241eb08,Shadow Ops Red Mercury p2 pal.etm
+trainers,Godzilla - Save the Earth.etm,49470073,4,NTSC,Godzilla Save the Earth (USA) +4,9646e71007248b28a2788c440c188eac,EVT-GDZ2.ETM | Godzilla Save the Earth [plus4] (USA).etm | Godzilla Save the Earth p4 ntsc.etm
+trainers,Forgotten Realms - Demon Stone.etm,49470074,9,NTSC,Demon Stone (USA) +9 rev1,7b2d00c91e4f1d4b7e0bba15c7469064,Demon Stone [plus9] (USA).etm | Demon Stone p9 ntsc rev1.etm | Demon Stone p9.etm | evt-demsrev1.etm | evt-djny2 (6).etm
+variants,Forgotten Realms - Demon Sto (NTSC p9).etm,49470074,9,NTSC,Demon Stone (USA) +9 rev1,4b8080e6144ad367214b9530231422d7,Demon Stone p9 ntsc.etm
+variants,Forgotten Realms - Demon S (NTSC p9) 2.etm,49470074,9,NTSC,Demon Stone (USA) +9 rev1,f8006492fbf5cfa2f52d1111c7627799,EVT-DEMS.ETM
+variants,Forgotten Realms - Demon S (NTSC p9) 3.etm,49470074,9,NTSC,Demon Stone (USA) +9,f332c6bfbfc866efb2e6631f19e2909f,demon stone.etm
+trainers,Test Drive - Eve of Destruction.etm,49470075,3,NTSC,Test Drive EOD +3 NTSC,9427d0739a200b549e393a3e297fea3a,Test Drive EOD [plus3] (NTSC).etm | Test Drive EOD p3 ntsc.etm | Test Drive EOD p3.etm | Test Drive Eve Of Distruction [plus3].etm | evt-tdeod.etm | test drive eod.etm
+trainers,Atari Anthology.etm,49470079,1,NTSC,Atari Anthology (USA) +1,a655161fa50d7614211c78ef9ddafca9,Atari Anthology [plus1] (USA).etm | Atari Anthology p1 ntsc.etm | Atari Anthology p1.etm | Atari_Anthology-evt.etm | EVT-AANT.ETM
+trainers,Dragon Ball Z - Sagas.etm,4947007A,6,NTSC,Dragon Ball Z Sagas (USA) +6,72fcd7b8afca09d369b9c83556af8915,Dragonball Z Sagas p6 ntsc.etm | Dragonball Z Sagas p6.etm
+variants,Dragon Ball Z - Sagas (NTSC p5).etm,4947007A,5,NTSC,Dragonball Z Sagas NTSC (+5),b242126e350f328257edbeba13a67184,Dragonball Z Sagas [plus5] (NTSC).etm | Dragonball Z Sagas p5 ntsc.ETM | Dragonball Z Sagas p5.ETM | DragosNTSC5.ETM
+variants,Dragon Ball Z - Sagas (NTSC p2).etm,4947007A,2,NTSC,Dragonball Z Sagas USA +2,debb2f4f3e593f9a69723513368a1ff9,Dragoas.etm | Dragonball Z Sagas [plus2] (USA).etm | Dragonball Z Sagas p2.etm
+trainers,Indigo Prophecy.etm,4947007B,1,NTSC,Indigo Prophecy (USA) +1,bd5ee672ef89d2ca31d4cfe4d2d42606,EVT-INDP.ETM | Indigo Prophecy [plus1] (USA).etm | Indigo Prophecy p1 ntsc.etm | Indigo Prophecy p1.etm
+trainers,The Matrix - Path of Neo.etm,4947007C,3,NTSC,The Matrix Path Of Neo +3,235d6fe310f97930081f4227df387af4,Matrix PoN p3 ntsc.etm | The Matrix PoN p3 ntsc.etm | The Matrix PoN p3.etm
+variants,The Matrix - Path of Neo (PAL p3).etm,4947007C,3,PAL,The Matrix Path Of Neo (PAL) +3,ab286ecbc065978ba774b9e1e002facf,Matrix PoN p3 pal.etm
+variants,The Matrix - Path of Neo (NTSC p2).etm,4947007C,2,NTSC,The Matrix: Path of Neo +2,7e27971471da42bf06815a4d3f49ba51,The Matrix PoN p2 ntsc.etm | The Matrix PoN p2.etm
+variants,The Matrix - Path of Neo (NTSC p1).etm,4947007C,1,NTSC,The Matrix Path of Neo +1,5f2128fcb22c0d5e4c7e52f0c5cc3e7d,Matrix Path of Neo p1 ntsc.etm | Matrix Path of Neo p1.etm
+trainers,Marc Ecko's Getting Up - Contents Unde.etm,4947007D,17,NTSC,Marc Eckos Getting Up (Normal/Limited) (USA) +17,9f57c1c17f8106469be692d07eb05b25,EVT-MEGU.ETM | Mark Ecko Getting Up p17 ntsc.etm | Mark Ecko Getting Up p17.etm
+variants,Marc Ecko's Getting Up - Co (NTSC p15).etm,4947007D,15,NTSC,Marc Eckos Getting Up (Normal/Limited) (USA) +15,ace3d2adb9d77bf097546cee5b2c6a13,Mark Ecko p15 ntsc.etm | Mark Ecko p15.etm
+trainers,Driver - Parallel Lines.etm,4947007F,8,PAL-NTSC,Driver : Parallel Lines (GLOBAL) +8,f58e398bd41e0743c9f8f9517d7dcf8c,Driver Parallel Lines p8 ntsc.etm | Driver Parallel Lines p8.etm
+variants,Driver - Parallel Lines (PAL-NTSC p8).etm,4947007F,8,PAL-NTSC,Driver : Parallel Lines (GLOBAL) +8,8617e370765507df1d31df26cead80b7,Driver 4 Parallel Lines p8 multi.etm
+variants,Driver - Parallel Lines (PAL-NTSC p5).etm,4947007F,5,PAL-NTSC,Driver : Parallel Lines (GLOBAL) +5,5bf0290f75fff6728d8c891a1037c68a,Driver Parallel Lines p7 ntsc.etm | Driver Parallel Lines p7.etm | EVT-DRV4.ETM
+variants,Driver - Parallel Line (PAL-NTSC p5) 2.etm,4947007F,5,PAL-NTSC,Driver : Parallel Lines (GLOBAL) +5,65ffeae5ed7ba8ee4b7f7fadfabd5892,Driv3r Parallel Lines.etm
+trainers,Far Cry Instincts.etm,494D8050,6,NTSC,Far Cry Instincts [Demo] (USA) +6,50f4d7367099d99d65cfa7473a8a31f1,EVT-FCDE.ETM | Far Cry Instincts [plus6] (USA) [DEMO].etm | Far Cry Instincts p6 demo.etm
+trainers,Animaniacs - The Great Edgar Hunt.etm,494F0003,2,PAL,Animaniacs: The Great Edgar Hunt (PAL) +2,95a70c060c20f10e6d997f688f9393dc,Animaniacs - The Great Edgar Hunt _2 (.etm | Animaniacs The Great Edgar Hunt p4 pal.etm | EVT-AGEH.ETM
+trainers,Metal Slug 3.etm,494F0005,5,PAL,Metal Slug 3 (PAL) +5,822edc87c84d8689e398fd6a247ab8a5,Metal Slug 3 [plus5] (PAL).etm | Metal Slug 3 p5 pal.etm | evt-ms3_pal.etm
+trainers,Fallout - Brotherhood of Steel.etm,49500008,5,NTSC,Fallout Brotherhood of Steel (USA) +5,04ff3baef06f08191c4a512ce2d5f4d3,EVT-FOUT.ETM | Fallout Brotherhood of Steel [plus5] (.etm | Fallout Brotherhood of Steel p5 ntsc.etm | Fallout Brotherhood of Steel p5.etm
+trainers,Baldur's Gate - Dark Alliance II.etm,4950000A,16,NTSC,Baldurs Gate Dark Alliance 2 +16 NTSC,93bc4d05964724abd7553df540ee910b,Baldurs Gate Dark Alliance 2 p16 ntsc.etm | Baulder's Gate Dark Allianc 2 p16 ntsc.etm | Baulders Gate Dark 2 p16.etm | Baulders Gate Dark Alliance 2 p16 ntsc.etm
+variants,Baldur's Gate - Dark Allian (NTSC p16).etm,4950000A,16,NTSC,Baldurs Gate Dark Alliance 2 +16 NTSC,aff4a870e003eebcc2334b9004714f2a,Baldurs Gate Dark Alliance 2 [pus16] (.etm | Baldurs Gate Dark Alliance 2 p16.etm | evt-bgda2.etm
+variants,Baldur's Gate - Dark Alli (NTSC p16) 2.etm,4950000A,16,NTSC,Baldurs Gate Dark Alliance 2 +16 NTSC (USA),1546be38ce6d598cd0e486fa4ac53759,Baldurs Gate - Dark Alliance 2.etm
+variants,Baldur's Gate - Dark Allian (NTSC p11).etm,4950000A,11,NTSC,Baldurs Gate Dark Alliance 2 +11 NTSC,307754ac7c488d9faa953f1435d85ae1,Baldurs Gate Dark Alliance 2 [plus11].etm | Baldurs Gate Dark Alliance 2 p11.etm
+variants,Baldur's Gate - Dark Allianc (NTSC p6).etm,4950000A,6,NTSC,Baldurs Gate DA2 +6,6f9d67809d53c3f41a1605fe4b147e8d,BaldGateDA2_6_ntsc.etm | BalduteDA2 p6.ETM
+variants,Baldur's Gate - Dark Alliance (PAL p4).etm,4950000A,4,PAL,BALDURS GATE DARK ALLIANCE II +4 (PAL),88c4de9590d50f00a705597bf301e13f,BGDA2Pal.etm | BaldGateDA2_Pal.etm | Baldurs Gate Dark Alliance 2 [plus4] (.etm | Baldurs Gate Dark Alliance 2 p4 pal.etm | Baulders Gate Dark Alliance 2 p4 pal.etm | Bladurs Gate Dark Alliance II [plus4].etm
+variants,Baldur's Gate - Dark Alliance II (p2).etm,4950000A,2,,Baulders Gate: DA II (+2),363bd52bbeabc1e0bff25a74b26a1fd8,BGDA2.ETM | Baulders Gate Dark Alliance II [plus2].etm
+variants,Baldur's Gate - Dark Alliance II (p1).etm,4950000A,1,,Baldurs Gate 2,7f9e1ae4bd82adc392acfca870fa6779,Baldurs Gate 2.ETM | BaldusGate2.ETM
+trainers,The Bard's Tale.etm,49580001,9,PAL,Bard tale +9 (pal),fdb901f7c8090f36d07030dfbe050a16,Bards Tale p9 pal.etm | The Bards Tale p9 pal.etm | evobard's tale.etm
+variants,The Bard's Tale (PAL p9).etm,49580001,9,PAL,Bard tale +9 (pal),5c6b20d4a1db081d5df4f86df246936a,Bard tale [plus9] (PAL).etm | xorbard's tale.etm
+variants,The Bard's Tale (NTSC p7).etm,49580001,7,NTSC,The Bards Tale (USA) +7,9514d934fb525e46ee75a004b545dc07,BARD.ETM | Bards Tale p7 ntsc.etm | The Bards Tale [plus7] (USA).etm | The Bards Tale p7 ntsc.etm | the bards tale p7.etm
+variants,The Bard's Tale (NTSC p6).etm,49580001,6,NTSC,The Bards Tale (USA) +6,82c00f943260217ac82fcaf810fa9028,The Bards Tale [plus6] (USA).etm | The Bards Tale p6.etm | the bard's tale.etm
+trainers,Night Caster II - Equinox.etm,4A410002,1,NTSC,NightCaster 2 +1 (NTSC),e7426c99b5d33bc7e490aab02dc4f878,NC21N.ETM | Night Caster 2 p1 ntsc.etm
+trainers,Panzer Elite Action - Fields of Glory.etm,4A570009,4,PAL,Panzer Elite Action (PAL) +4,9ed39152a841daa661b7f7c9d7c0fa57,Panzer Elite Action p4 pal.etm
+trainers,Batman - Dark Tomorrow.etm,4B420001,5,PAL,Batman: Dark Tomorrow +5 (PAL),f2d2ad5c7bca7937976b79ff0105259c,BATMAN.ETM | Batman Dark Tomorrow [plus5] (PAL).etm | Batman Dark Tomorrow p5 pal.etm | Batman dark tomorrow p5.etm
+trainers,Chicago Enforcer.etm,4B420005,1,NTSC,Chicago Enforcer +5 (NTSC),cca81e084ca9699f774a37f377744cb2,Chicago Enforcer [plus5] (NTSC).etm | Chicago Enforcer p5 ntsc.etm | Chicago Enforcer p5.etm | ENF.ETM
+trainers,AirForce Delta Storm.etm,4B4E0002,4,NTSC,AIR FORCE DELTA STORM4,854b501a5c79e5102da8cb1c38590cc8,AIRFOSTORM4.ETM | Airforce Delta Storm [plus4].etm | Airforce Delta Storm _4 (NTSC).etm | Airforce Delta Storm p4 ntsc.ETM | Airforce Delta Storm p4.ETM
+variants,AirForce Delta Storm (JAP p3).etm,4B4E0002,3,JAP,AIRFORCE DELTA II (JAP),2c70baee23f45afbf29503e7bd5aa848,Air Force 2 [Plus3] (NTSC).etm | AirForce2_Plus3_NTSCJ.etm | Airforce Delta 2 [plus3] (NTSC-JAP).etm | Airforce Delta 2 _3 (JAP).etm | Airforce Delta 2 p3 jap ntsc.etm | Airforce Delta 2 p3 ntsc jap.etm | Airforce Delta 2 p3 ntscj.etm
+variants,AirForce Delta Storm (p3).etm,4B4E0002,3,,Deadly Skies +3 Revised,f6f3689a56593dc003e8b6fef778a139,Deadly Skies [plus3] (Revised).etm | Deadly Skies p3 Revised.ETM | Deadly Skies p3.etm | DeadlySkiesRevised.ETM
+variants,AirForce Delta Storm (p3) 2.etm,4B4E0002,3,,Deadly Skies,cc0532b263534ff8ca71a6e395c5c3df,Deadly Skies [plus3].etm | DeadlySkies.ETM
+variants,AirForce Delta Storm (p3) 3.etm,4B4E0002,3,,Deadly Skies,6f0c13a502ad016652f5388892534a3c,DeadlySkies2.ETM
+variants,AirForce Delta Storm (NTSC p3).etm,4B4E0002,3,NTSC,AIRFORCE DELTA STORM(NTSC)(BETA)1.1,ed345ed386a6648ac45f6a38215a7b7b,AIRFORCE DELTA STORM(NTSC)1.1BETA.ETM | Airforce Delta Storm [plus3] (NTSC-BET.etm | Airforce Delta Storm p3.etm
+trainers,Silent Hill 2 - Restless Dreams.etm,4B4E0004,5,,Silent Hill 2: Restless Dreams (+5),1797db4667d59f7f9dea98783e244455,SH2RD.etm | Silent Hill 2 Restless Dreams [plus5].etm | Silent Hill 2 p5.etm | silent hill 2.etm
+variants,Silent Hill 2 - Restless Drea (PAL p1).etm,4B4E0004,1,PAL,Silent Hill 2: Inner Fears  Pal Trainer,b5ae04f3cd3184a0cc8f55c0d84f04ac,SilenrsPal.ETM
+trainers,Metal Gear Solid 2 - Substance.etm,4B4E0007,10,NTSC,Metal Gear Solid 2: Substance +10 (NTSC) v1.2,37c935b0e38ce0760c50480685a8bea4,Metal Gear Solid 2 [plis10] (NTSC) (v1.etm | Metal Gear Solid 2 [plus10] (NTSC) (v1.etm | Metal Gear Solid 2 p10 ntsc v1_2.ETM | metal gear solid 2 p10 NTSC.ETM | metal gear solid 2 p10.ETM | mgs 2.etm | mxt-mgs2s12_NTSC.ETM
+variants,Metal Gear Solid 2 - Substan (PAL p10).etm,4B4E0007,10,PAL,Metal Gear Solid 2: Substance +10 (PAL) v1.2,7c71c39c03bfc37f5373dbaea84feed2,Metal Gear Solid 2 [plus10] (PAL) (v1..etm | Metal Gear Solid 2 p10 pal v1_2.ETM | metal gear solid 2 p10 PAL.ETM | mxt-mgs2s12_PAL.ETM
+variants,Metal Gear Solid 2 - Substance (p3).etm,4B4E0007,3,,Metal Gear Solid 2 +3,4aa1cd73ec68c22650932f00338c3b60,MGS2.ETM | Metal Gear Solid 2 [plus3].etm
+trainers,Winter X Games Snowboarding 2002.etm,4B4E0009,1,NTSC,ESPN Winter X Games Snowboarding 2 +1,930984b23c945a696ae329f0ce668daa,ESPN Winter Games Snow Board 2 p1 ntsc.ETM | ESPN Winter Games Snow Board 2 p1.ETM | ESPN Winter X Games Snowboarding 2 [pl.etm | ESPN WinterXGamesSnowboard 2 p1 ntsc.etm | ESPNWinteXGamesSnowboarding2.etm | ESPNwinterxgamessnowboarding2.ETM
+trainers,Shadow of Memories.etm,4B4E000E,1,PAL,Shadow of Memories +1 (PAL),4c0bf28b5c79efae59ec1faecb017ef9,Shadow of Memories [plus1] (PAL).etm | Shadow of Memories p1 PAL.ETM | SoM.ETM
+trainers,Frogger Beyond.etm,4B4E0013,4,NTSC,Frogger +4 (USA)(v0.1),be5936af90b921bc9ec6e687cd842ced,Frogger Beyond p4 ntsc.etm | Frogger [plus4] (USA)(v0.1).etm | Frogger p4 ntsc v0_1.etm | frogger p4.etm | mxt-frogger.etm
+variants,Frogger Beyond (NTSC p1).etm,4B4E0013,1,NTSC,Frogger Beyond +1,648e822172e38eeb9a2b1bbfdb8da313,Frogger Beyond [plus1].etm | Frogger Beyond p1 ntsc.etm | frogger beyond p1.etm | frogger beyond.etm | froggerb.etm
+trainers,Silent Scope Complete.etm,4B4E001A,10,NTSC,Silent Scope Complete (USA) +4,8930437cb79b4700cfde948ee62cbed2,Silent Scope Complete [plus4] (USA).etm | Silent Scope Complete p4 ntsc.etm | Silent Scope Complete p4.etm | ssc.etm
+variants,Silent Scope Complete (NTSC p9).etm,4B4E001A,9,NTSC,Silent Scope Complete (USA) +3,4c3728f474a55d0da63d72b4ccf20d42,EVT-SSC.ETM | Silent Scope Complete [plus3] (USA).etm | silent scope complete p3.etm
+variants,Silent Scope Complete (PAL-NTSC p9).etm,4B4E001A,9,PAL-NTSC,Silent Scope Complete (PAL) +3,9d08d0b075b96eda1fc89ecea750017e,Silent Scope Complete [plus3] (PAL).etm | Silent Scope Complete p3 pal.etm | SilentScope PAL3.etm
+variants,Silent Scope Complete (NTSC p5).etm,4B4E001A,5,NTSC,SSC: Silent Scope 3 (+5),4f1a7e066211f4a952b60139ab71bcdd,Silent Scope 3 [plus5].etm | Silent Scope 3 p5 ntsc.etm | Silent Scope 3 p5.etm | ssc_ss3.etm
+trainers,Teenage Mutant Ninja Turtles.etm,4B4E001B,3,NTSC,Teenage Mutant Ninja Turtles +3 (USA)(v0.1),26ee5492cbbb06c5c4c674d8f31a5b78,TMNT p3 ntsc v0_1.etm | TMNT p3 ntsc.etm | TMNT p3.etm | Teenage Mutant Ninja Turtles [plus3] (.etm | Teenage Mutant Ninja Turtles p3.etm | teenage mutant nija turtles p3.etm
+variants,Teenage Mutant Ninja Turtles (p1).etm,4B4E001B,1,,Teenage Mutant Ninja Turtles +1,45c946a13545aefd86e2a50ab8b1e0a0,TMNT2.ETM
+trainers,Crime Life - Gang Wars.etm,4B4E001C,11,PAL-NTSC,Crime Life: Gang Wars (USA/PAL) +11,894124822219e50d4f6c9dd14e1347e3,Crime Life Gang Wars p11 multi.etm | Crime Life Gang Wars p11 ntsc pal.etm | Crime Life Gang Wars p11.etm | EVT-CLGW.ETM
+trainers,Yu-Gi-Oh! The Dawn of Destiny.etm,4B4E001E,3,NTSC,Yu-Gi-Oh! (USA) +2,5bce1a99479803c114a13bc1dc0ec1f6,Yu-Gi-Oh! [plus2] (USA).etm | Yu-gi-oh p2 ntsc.etm | evt-yugi.etm | yu-gi-oh p2.etm | yugioh.etm
+variants,Yu-Gi-Oh! The Dawn of Destiny (p1).etm,4B4E001E,1,,Yugi Oh Dawn of Destiny,88d24969bfd35bc17f73779ff67fcddf,Yugio Dawn of Destiny p2.etm
+trainers,Silent Hill 4 - The Room.etm,4B4E001F,3,NTSC,Silent Hill 4 +3 (NTSC),60c0590c950029d547755bd0f37f7c6a,Silent Hill 4 [plus3] (NTSC).etm | Silent Hill 4 p3 ntsc.etm | Silent Hill 4 p3.etm | evt-sh4.etm
+variants,Silent Hill 4 - The Room (NTSC p2).etm,4B4E001F,2,NTSC,Silent Hill 4 +2 (NTSC),42ef3d12444e6a7e1de57a5a056e4fba,Silent Hill 4 [plus2] (NTSC).etm | Silent Hill 4 p2.etm | silent hill 4.etm
+variants,Silent Hill 4 - The Room (NTSC p1).etm,4B4E001F,1,NTSC,Sillen Hill 4,e5303f3b6def7689337c3147696e844a,Sillen Hill 4 [plus1].etm | SillenHill4 infinite items.ETM | SillenHill4.infitems.ntsc.ETM
+variants,Silent Hill 4 - The Room (p1).etm,4B4E001F,1,,silent hill 4 +1,635f864148ce1189839170252c48e192,Silenthill 4 1.ETM
+trainers,TMNT - Mutant Melee.etm,4B4E0020,8,NTSC,TMNT: Mutant Melee (USA) +8,d130ccf377e7d670fff674d7c13dd98b,TMNT Mutant Melee p8 ntsc.etm | TMNT Mutant Melee p8.etm | Teenage Mutant Ninja Turtles Mutant Me.etm | Teenage Mutant Ninja Turtles Mutant Melee p8.etm | evt-tmmm.etm
+variants,TMNT - Mutant Melee (p4).etm,4B4E0020,4,,TMNT - Mutant Melee +4,6044178178a26465f5a9851b1a10c23f,TMNT Mutant Melee p4.etm | tmnt.etm
+trainers,Teenage Mutant Ninja Turtles 2 - Battl.etm,4B4E0023,5,NTSC,TMNT 2 (USA) +5,b5c36728ea8e78d1d11e5dae05eb3fb0,Knights of The Temple [plus5] (USA).etm | TMNT 2 p5 ntsc.etm | TMNT 2 p5.etm | evt-tmt2.etm
+variants,Teenage Mutant Ninja Turtles (NTSC p2).etm,4B4E0023,2,NTSC,TMNT 2 (USA) +2,f54c26915be19d2ae697b4658b107a2f,Teenage Mutant Ninja Turtles 2 [plus2].etm | Teenage Mutant Ninja Turtles 2 p2.etm | tmnt 2.etm
+trainers,King Arthur.etm,4B4E0024,5,NTSC,King Arthur (USA) +5,d2b5329ca391adccea537aaf32f1028b,EVT-KNGA.ETM | King Arthur [plus5] (USA).etm | King Arthur p5 ntsc.etm | King Arthur p5.etm | king arthur.etm
+trainers,World Soccer Winning Eleven 8 - Intern.etm,4B4E0027,2,NTSC,Winning Eleven 8 International (USA) +2,240147294e5e2ed2fb83306507ec9977,Winning Eleven 8 International p2 ntsc.etm | Winning Eleven 8 p2 ntsc.etm | Winning Eleven 8 p2.etm
+trainers,Dance Dance Revolution Ultramix 3.etm,4B4E0029,2,NTSC,Dance Dance Revolution Ultramix 3 (USA) +2,9c4ec99f9ea03fa42ccee56ce6342211,DDR Ultramix 3 p2 ntsc.etm | DDR Ultramix 3 p3 ntsc.etm | EVT-DDU3.ETM
+trainers,Teenage Mutant Ninja Turtles 3 - Mutan.etm,4B4E002A,14,NTSC,TMNT 3: Mutant Nightmates (USA) +14,e5f166b54ec62aa8067f26af65e248e4,TMNT 3 Muntant Nightmares p14 ntsc.etm | TMNT 3 Muntant Nightmares p14.etm | Teenage Mut Nin Turt 3 MN p14 ntsc.etm
+variants,Teenage Mutant Ninja Turtle (NTSC p12).etm,4B4E002A,12,NTSC,TMNT 3: Mutant Nightmates (USA) +12,40b49fb2e36f9490fe14046f964a83ed,EVT-TMMN.ETM
+trainers,Frogger - Ancient Shadow.etm,4B4E002C,1,PAL,Frogger Ancient Shadow +1,c27e4906362f7a1a983db90e09981663,Frogger Ancient Shadow p1 pal.etm
+trainers,Castlevania - Curse of Darkness.etm,4B4E002D,23,NTSC,Castlevania: CoD (USA) +23,4846530a08236adffc86c158cb01b67d,Castlevania Curse of Darkness p23 ntsc.etm | Castlevania Curse of Darkness p23.etm | EVT-CCOD.ETM
+variants,Castlevania - Curse of Dark (NTSC p20).etm,4B4E002D,20,NTSC,Castlevania: CoD (USA) +20,2bdc0d3d1ffdfbea5554ae6841fed6d4,Castlevania Curse of Darkness p20 ntsc.etm | Castlevania Curse of Darkness p20.etm
+variants,Castlevania - Curse of Da (NTSC p20) 2.etm,4B4E002D,20,NTSC,Castlevania: CoD (USA) +20,2989858dfea71a1ff94b049b2998078a,Castlevania - Curse Of Darkness.etm
+variants,Castlevania - Curse of Darkn (PAL p17).etm,4B4E002D,17,PAL,Castlevania COD + 17 Xored [PAL],0c20c95aaddb9dd68ab7c8c7a35d637f,Castlevania Curse of Darkness p17 pal.etm
+variants,Castlevania - Curse of Darkn (NTSC p8).etm,4B4E002D,8,NTSC,Castlevania: CoD (USA) +8,ae28985996784450934c3572ec9ff0ea,Castlevania Curse of Darkness p8 ntsc.etm | Castlevania Curse of Darkness p8.etm
+trainers,World Soccer Winning Eleven 9.etm,4B4E002F,2,NTSC,Winning Eleven 9 International (USA) +2,4dac9c272fd50705fae9ca588cc37425,EVT-W119.ETM | Winning Eleven 9 p2 ntsc.etm | Winning Eleven 9 p2.etm
+trainers,Pro Evolution Soccer 5.etm,4B4E0030,3,PAL,Pro Evo Soccer 5 + 3 Xored [PAL],82a1a0b6d702202d476ee4795901d3d8,Pro Evo Soccer 5 p3 pal.etm | Pro Evolution Soccer 5 p3 Pal.etm
+trainers,Crimson Sea.etm,4B4F0002,3,NTSC,Crimson Sea +3 (NTSC),7398fa5980be072f54c969b497953832,CRIMSEA.ETM | Crimson Sea [plus3] (NTSC).etm | Crimson Sea p3 ntsc.etm | crimson sea p3.etm
+variants,Crimson Sea (NTSC p3).etm,4B4F0002,3,NTSC,Crimson Sea +3 (NTSC),bd96ba8e0900068e47f164b4a714f35c,crimson sea.etm
+trainers,Dynasty Warriors 3.etm,4B4F0003,3,NTSC,Dynasty Warriors 3 +3 (USA/NTSC),cb5610add79bc82e0d93a8419b40ac6e,Dynasty Warriors 3 [plus3] (NTSC-USA).etm | Dynasty Warriors 3 p3 ntsc.etm | EVT-DW3.ETM | dinasti warriors 3.etm | dynasty warriors 3 p3.etm
+variants,Dynasty Warriors 3 (p2).etm,4B4F0003,2,,Dynasty Warriors +2,34147a7f897af1a14e1a23072a29b9c3,Dynasiors32.ETM | Dynasty Warriors 3 p2.etm | Dynasty Warriors [plus2].etm | Dynasty Warriors p2.ETM
+trainers,Dynasty Warriors 4.etm,4B4F0004,3,NTSC,Dynasty Warriors 4 +3 (USA/NTSC),ab429660873dbce6e7105ded13bd16d2,Dynasty Warriors 4 [plus3] (NTSC-USA).etm | Dynasty Warriors 4 p3 ntsc.etm | EVT-DW4.ETM | dinasti warriors 4.etm | dynasty warriors 4 p3.etm | evt-dw4_ntsc.etm
+variants,Dynasty Warriors 4 (PAL p3).etm,4B4F0004,3,PAL,Dynasty Warrior 4 +3 (PAL),2d3f70e28118f98d8f78e46649cf0c34,Dynasty Warriors 4 p3 pal.etm | evt-dw4_pal.etm
+variants,Dynasty Warriors 4 (p3).etm,4B4F0004,3,,Dynasty Warriors 4 +2 Beta,9b654e489fd14f3524bfaf6bec68e82b,Dynas42Beta.ETM | Dynasty Warriors 4 [plus2] (Beta).etm
+trainers,Samurai Warriors.etm,4B4F0006,3,NTSC,Samurai Warriors +3 (07/28/05),9daa9b018e7cfed4636e376386dbe3de,Samurai Warriors [plus3].etm | Samurai Warriors p3 ntsc.etm | Samurai Warriors p3.etm | evt-samu.etm
+variants,Samurai Warriors (p2).etm,4B4F0006,2,,Samurai Warriors +2,4572f679815fe947b9ce73c5c7909b7d,Samurai Warriors [plus2].etm | samurai warriors.etm
+trainers,Dynasty Warriors 5.etm,4B4F0007,6,NTSC,Dynasty Warriors 5 (USA) +4 (rev2),720a4531c65226c93558949ac149117c,Dynasty Warriors 5 [plus5] (USA).etm | Dynasty Warriors 5 p5.etm | Dynasty Warriors 5 p6 ntsc rev2.etm | Dynasty Warriors 5 p6 ntsc.etm | Dynasty Warriors 5 p6.etm | EVT-DYW5.ETM
+variants,Dynasty Warriors 5 (JAP p5).etm,4B4F0007,5,JAP,Shin Sangokumusou 4 (JAP+5) V1.1,3984e6f7efc8f088f8a7ce25ed283dd8,Shin Sangokumusou 4 [plus5] (JAP) (v1..etm | Sky-SM4.etm
+trainers,WinBack 2 - Project Poseidon.etm,4B4F0008,5,PAL-NTSC,WINBACK2 (GLOBAL) +5,ea5dab94609625bf7388ec0c4abdb92c,EVT-WB2P.ETM | Winback 2 PP p5 global.etm
+trainers,Silent Hill 2 - Saigo no Uta.etm,4B540001,5,JAP,Silent Hill 2 (JAP) +5,e1d20715536c83ddc146066b9596199f,SH2JAP5.ETM | Silent Hill 2 [plus5] (JAP).etm | Silent Hill 2 p5 jap.ETM | Silent Hill 2 p5 ntsc jap.etm
+trainers,Star Wars - Obi-Wan.etm,4C410001,1,NTSC,Star Wars: Obi-Wan +1 (USA/NTSC),e0b299daf092ce5ac323af3cee397223,Star Wars Obi-Wan [plus1] (NTSC-USA).etm | Star Wars Obiwan p1 ntsc.etm | evt-obiwan.etm | star wars obi-wan.etm | star wars obiwan p1.etm
+trainers,Star Wars - Knights of the Old Republi.etm,4C410003,6,NTSC,Starwars: KOTOR +6,d6a1c22a71fe448742fc420663a847e3,EVT-KTOR.ETM | Star Wars KOTOR p6 ntsc.etm | Star Wars Knights of the Old Republic.etm | Starwars KOTOR p6.etm | Starwars Kights of the Old Republic [p.etm
+variants,Star Wars - Knights of the O (NTSC p4).etm,4C410003,4,NTSC,Star Wars: KotOR +4 (NTSC),4df5991938a42c705e02d2121a568a5a,Star Wars Knights Republic p4.etm | Star Wars kights of the Old Republic [.etm | mxt_starwars_kotor.etm | starwars kotor 1.etm
+variants,Star Wars - Knights of the Ol (PAL p4).etm,4C410003,4,PAL,Star Wars : Knights of the Old Republic +4 (GER),3ef0b0a97e904e79da840e974ac7c492,SWKotor_GER.ETM | Star Wars KotOR p4 pal ger.etm | Star Wars KotoR p4 Ger.etm
+variants,Star Wars - Knights of the (PAL p4) 2.etm,4C410003,4,PAL,Star Wars Kotor PAL+4,d957a968bd25315da2f95cbfa35aa6b3,Star Wars KotoR p4 pal.etm
+trainers,Secret Weapons over Normandy.etm,4C410006,1,NTSC,Secret Weapons Over Normandy NTSC +1,ba9ab0ec99bca579e59b6d725826b569,Secret Weapons Over Normandy [plus1] (.etm | Secret Weapons Over Normandy p1 ntsc.etm | Secret Weapons Over Normandy p1.etm | swon p1.etm | swon_ntsc.etm
+trainers,Indiana Jones and the Emperor's Tomb.etm,4C410007,6,NTSC,Indiana Jones & The Emp Tomb (USA) +6,88ae78b041547a5519497d3ab11f1052,EVT-INDJ.ETM | Indiana Jones TET p6 ntsc.etm | Indiana Jones TET p6.etm
+variants,Indiana Jones and the Empero (NTSC p4).etm,4C410007,4,NTSC,Indiana Jones and the Emperors Tomb,f72696484cf0fdac35107fe3c95b6ad1,IndianaJonesTET(USA).ETM | IndianaJonesTET.ETM
+trainers,Gladius.etm,4C410008,5,NTSC,Gladius +5 (USA),0733423d9829e3e2fd760b03d19b69a7,Gladius [plus5] (USA).etm | Gladius p5 ntsc.etm | gladius p5.etm | mxt-gla2.etm
+variants,Gladius (PAL p4).etm,4C410008,4,PAL,Gladius +4 PAL,5e6d6f0e1efdfae1a305a6783999a16e,Gladius [plus4] (PAL).etm | Gladius p4 pal.etm | GladiusPAL.etm
+variants,Gladius (NTSC p4).etm,4C410008,4,NTSC,Gladius +4 (USA),1949cc64dce88c5351d1f9d04a78d3ea,Gladius [plus4] (USA).etm | Gladius p4.etm | MXT-GLAD.ETM
+trainers,Armed and Dangerous.etm,4C41000D,2,NTSC,Armed and Dangerous +2 (USA) (v0.1),e74d21a34aa4c356cd1b118eac66efa4,Armed and Dangerous [plus2] (USA) (v0..etm | armed and dangerous p2.etm | mxt-aad.etm
+variants,Armed and Dangerous (NTSC p2).etm,4C41000D,2,NTSC,Armed and Dangerous +2 FIXED (USA)(v0.1),2fabbb05aa5b0670a299abe72cad2e63,Armed and Dangerous [plus2] FIXED (USA.etm | Armed and Dangerous p2 FIXED ntsc.etm | Armed and Dangerous p2 fixed.etm | Armed and Dangerous p2 ntsc.etm | ArmedDangerous.etm | armed and dangerous.etm
+trainers,Wrath Unleashed.etm,4C41000F,5,NTSC,Wrath Unleashed (USA) +5,880b404da5fa896c60334d02dc9ed7d6,Wrath Unleashed [plus5] (USA).etm | Wrath Unleashed p5 ntsc.etm | Wrath Unleashed p5.etm | evt-wrth.etm
+trainers,Star Wars - Battlefront.etm,4C410011,5,PAL-NTSC,Star Wars: Battlefront +5 (NTSC/PAL) Rev. 03,9fa7484b4181fe04f979a2a3a78a52cf,EvoX_T_StarWars_BF_P5_Rev03.etm | Star Wars Battlefront [plus5] (NTSC-PA.etm | Star Wars Battlefront p5 multi.etm | Star Wars Battlefront p5 ntsc pal.etm | Star Wars Battlefront p5.etm | StarWars Battlefront 2.etm
+variants,Star Wars - Battlefront (PAL-NTSC p3).etm,4C410011,3,PAL-NTSC,Star Wars: Battlefront +3 (NTSC/PAL),1fe262744ef18f2efdf54f8d8cd760c9,Star Wars Battlefront [plus3] (NTSC-PA.etm | star wars battlefront p3.etm
+variants,Star Wars - Battlefron (PAL-NTSC p3) 2.etm,4C410011,3,PAL-NTSC,Star Wars: Battlefront +3 (NTSC/PAL),ca073f36aa2d1ac330cf0f4a760825f3,Star Wars Battlefront p3 ntsc pal.etm | evt-swbf.etm
+variants,Star Wars - Battlefron (PAL-NTSC p3) 3.etm,4C410011,3,PAL-NTSC,Star Wars: Battlefront +3 (NTSC/PAL),5ebf449a1306a21e8ccdaaece68ae270,StarWars Battlefront.etm | star wars battlefront.etm
+trainers,Star Wars - Republic Commando.etm,4C410013,4,NTSC,Star Wars: Republic Commando +4 (USA/NTSC),d6043f7bf5b6e341be0f18d97388b7f6,Star Wars Republic Commando p4 ntsc.etm | StarWars Republic Commando.etm
+trainers,Star Wars - Knights of the Old Repub 2.etm,4C410014,12,NTSC,SW Kotor 2 (USA) +12 pubbeta,6dbfad7f2d761179791f1ba544983579,EVT-KOT2.ETM | Star Wars KOTOR 2 p12 ntsc beta.etm | Star Wars KotOR 2 p12 ntsc.etm | Starwars Knights of the Old Republic 2 p12.etm | Starwars Knights of the Old Republic 2.etm | evt-djny2 (1).etm | star wars KOTOR 2 p12.etm
+variants,Star Wars - Knights of the Old Re (p4).etm,4C410014,4,,Star Wars: KotOR II +4,ba2b9915d7017ea51b62a0259a63522c,Star Wars Knight of the Old Republic 2.etm | rat-kotor2p4.etm
+variants,Star Wars - Knights of the Old (p4) 2.etm,4C410014,4,,Star Wars: KotOR II +4,8256fffe196a13245b981fb71d3c66a3,starwars kotor 2.etm
+variants,Star Wars - Knights of the O (NTSC p1).etm,4C410014,1,NTSC,Star Wars: KotOR II +1 (NTSC-U),79a43a67cf1eac8f6dd1ad7533605079,Star Wars Knights Republic 2 p1.etm | evt-djny2 (5).ETM | rp-kotor2.ETM
+trainers,Mercenaries.etm,4C410015,8,NTSC,Mercenaries +8 (NTSC/USA),8721b2cfbf38be36a84ed77f099038d9,Mercenaries [plus8] (NTSC-USA).etm | Mercenaries p8 ntsc.etm | Mercenaries p8.etm | evt-mercs.etm
+variants,Mercenaries (NTSC p7).etm,4C410015,7,NTSC,Mercenaries +7 (NTSC/USA),6da039a375025710937666af81b79f60,Mercenaries [plus7] (NTSC-USA).etm | Mercenaries p7.etm
+variants,Mercenaries (NTSC p7) 2.etm,4C410015,7,NTSC,Mercenaries +7 (NTSC/USA),6b5f0c4ae6fb99d4fd0846440c0a9e46,mercenaries.etm
+variants,Mercenaries (NTSC p7) 3.etm,4C410015,7,NTSC,Mercenaries +7 (NTSC/USA),30316ff7a8ac2da658bab4a982431499,mercs.etm
+trainers,Star Wars - Episode III - Revenge of t.etm,4C410017,3,,Starwars E3 ROTS +3,551b38d306dd75bede17ded6b2e35a33,SWARS3.ETM
+trainers,Star Wars - Battlefront II.etm,4C41001A,8,PAL-NTSC,Star Wars: Battlefront 2 +8,7e4cb097862460bb46642dd52b10ba06,Star Wars Battlefront 2 p8 multi.etm | Star Wars Battlefront 2 p8 ntsc pal.etm | Star Wars Battlefront 2 p8.etm
+variants,Star Wars - Battlefront II (p8).etm,4C41001A,8,,Star Wars: Battlefront 2 +8,02ef337d40b4587b4e37cab6fc1d8598,SWBF2 p8.etm | rat_swbf2.etm
+variants,Star Wars - Battlefront II (p6).etm,4C41001A,6,,Star Wars: Battlefront 2,cb4e45fec279ba30283a74b32c4f760e,rat-swbf2.etm
+trainers,Thrillville.etm,4C410022,2,PAL-NTSC,Thrillville (GLOBAL) +2,91f7e6e7e15c357269ad735bc31108c8,evt-thrl.etm
+trainers,ObsCure.etm,4D490009,6,PAL,ObsCure +5 (PAL),29c71bf5c0bb424b16a03f47cc1f7e3e,ObsCure [plus5] (PAL) (v1.0).etm | evt-obsc.etm | obscure.etm
+variants,ObsCure (PAL p6).etm,4D490009,6,PAL,Obscure +6(PAL),8612cc17418696d26fd4d8c9cedb22a0,Obscure [plus6] (PAL).etm | Obscure6PAL.ETM
+variants,ObsCure (PAL p6) 2.etm,4D490009,6,PAL,Obscure +6(PAL),aa31cca0c2d8250ad9fb08064274826f,Obscure p6 pal.ETM
+variants,ObsCure (PAL p5).etm,4D490009,5,PAL,Obscure +5 PAL,e2d59efd160678e21c665bf7fce30664,Obscure [plus5] (PAL).etm | Obscure5PAL.ETM
+variants,ObsCure (NTSC p5).etm,4D490009,5,NTSC,ObsCure (USA) +5 rev1,b29d728c9577ef646fc05f94ec0f5024,Obscure p5 ntsc.etm | Obscure p5.etm
+variants,ObsCure (NTSC p5) 2.etm,4D490009,5,NTSC,ObsCure (USA) +5 rev1,4688553a082bf46a568c80ce3355f8a3,ObscureP7.etm
+variants,ObsCure (p4).etm,4D490009,4,,Obscure ITA4,0789cd96ece44ace680b22039822ba0d,ObscureITA4.ETM
+trainers,Sniper Elite.etm,4D49000D,22,NTSC,Sniper Elite (USA) +22 (rev3),8fe191cdc14f1a15196d4356ec6227bd,EVT-SNIE.ETM | Sniper Elite p22 ntsc.etm | Sniper Elite p22.etm | Sniper Elite.etm
+variants,Sniper Elite (PAL p20).etm,4D49000D,20,PAL,Sniper Elite +20 [PAL],50c59bac3053f58ac85a26f71ad05180,SNIPER.ETM | Sniper Elite p20 pal.etm
+trainers,BloodRayne.etm,4D4A0001,2,NTSC,BloodRayne +2,eb863681335d6ad9a7f7afcbb7dd144b,Blood Rayne p2 ntsc.etm | Blood Rayne p2.etm | BloodRayne [plus2].etm | BloodRayne-plus2.etm
+variants,BloodRayne (NTSC p1).etm,4D4A0001,1,NTSC,BloodRayne,02f5f5c08fd99eaf5510318817d05b17,Blood Rayne p1 multi.etm | BloodRayne (NTSC-USA).etm | BloodRayne.etm
+trainers,Gunmetal.etm,4D4A0003,2,NTSC,Gun Metal +2 (USA/NTSC),29ddbf88e70e5925f03243d120159b65,Gun Metal [plus2] (NTSC-USA).etm | Gun Metal p2 ntsc.ETM | gun metal p2.ETM | mxt-gunm.ETM
+trainers,Advent Rising.etm,4D4A0009,4,NTSC,Advent Rising +4 (NTSC/USA) v1.1,08fa6c2687cf52b6bbfaae7e0f7491e3,AVENT1.ETM | Advent Rising [plus4] (NTSC-USA).etm | Advent Rising _4 (NTSC).etm | Advent Rising p4 ntsc v1_1.etm | Advent Rising p4 ntsc.etm | Advent Rising p4.etm | avent1[1].etm
+variants,Advent Rising (NTSC p3).etm,4D4A0009,3,NTSC,Advent Rising +3 (NTSC/USA) v1.0,a04166ac164eebf92454f16a56e26754,AVENT.ETM | Advent Rising [plus3] (NTSC-USA).etm | Advent Rising p3.etm
+trainers,Ultra Bust-A-Move.etm,4D4A000C,3,NTSC,Ultra Bust A Move (USA) +3,9d2107d67ae9b9c30d946d09dbecc12a,Ultra Bust A Move [plus3] (USA).etm | Ultra Bust a Move p3 ntsc.etm | Ultra Bust a Move p3.etm | evt-ubam.etm
+variants,Ultra Bust-A-Move (NTSC p2).etm,4D4A000C,2,NTSC,Ultra Bust A Move (USA) +2,4e646ddf2f7338c20b9f330673f43652,Ultra Bust A Move [plus2] (USA).etm | Ultra Bust A Move p2.etm | ultra bust a move.etm
+trainers,BloodRayne 2.etm,4D4A000D,2,NTSC,Bloodrayne 2 (USA) +2,3410928ffe46090f38ccfcc0723b4b47,Blood Rayne 2 p2 ntsc.etm | Blood Rayne 2 p2.etm | Bloodrayne 2 [plus2] (USA).etm | EVT-BLR2.ETM
+variants,BloodRayne 2 (p1).etm,4D4A000D,1,,BloodRayne 2 - Unlock Everything,aee567f61edf0bcb7687badc73082d2f,BloodRayne2.ETM
+trainers,Jaws Unleashed.etm,4D4A000F,8,NTSC,JAWS Unleashed (NTSC) +8,5341bfcbc609c07efe709602c1e08b62,EVT-JAWS.ETM | Jaws p8 ntsc.etm | Jaws p8.etm
+trainers,Psychonauts.etm,4D4A0012,2,NTSC,PhyscoNaut +2 (NTSC) v1.0,3ac9f9bcf7bbe646688d5ea94f62d066,Psychonauts p2 ntsc.etm | Psychonauts p2.etm
+variants,Psychonauts (NTSC p2).etm,4D4A0012,2,NTSC,PhyscoNaut +2 (NTSC) v1.0,8e67109c4dbab4b0289abc9b78ce029c,psychoNautsP2.etm | psycho[1].etm
+trainers,Aeon Flux.etm,4D4A0014,8,PAL,Aeon Flux (PAL) +8,f13984c99ed52aa8956c262644a0c708,Aeon Flux _8 (PAL).etm | Aeon Flux p8 pal.etm
+variants,Aeon Flux (NTSC p7).etm,4D4A0014,7,NTSC,Aeon Flux (USA) +7,8cb97dda3d8c7baf52d4fcaddf6580bb,Aeon Flux _9 (NTSC).etm | Aeon Flux p7 ntsc.etm | Aeon Flux p7.etm | Aeon Flux.etm | EVT-AEON.ETM
+trainers,Project Gotham Racing.etm,4D530003,7,NTSC,Project Gotham Racing +7,eccf06c3efc7acc224a016234fa91cc1,Project Gotham Racing [plus7].etm | Project Gotham Racing p7 ntsc.etm | Project Gotham Racing p7.etm | evt-ProjectGot.etm | evt-djny2 (4).etm | pgr.etm
+variants,Project Gotham Racing (PAL p2).etm,4D530003,2,PAL,Project Gotham Racing  (PAL) +2,fed630be9c14e24e0a028c2914d67058,PGR_PAL_plus2.ETM | Project Gotham Racing [plus2] (PAL).etm | Project Gotham Racing p2 pal.ETM
+trainers,Halo - Combat Evolved.etm,4D530004,1,,Halo 1 Developers Edition (v1.0),bef831a2c0a4f55da31c34673b1000a0,h1dev10.etm
+trainers,Night Caster - Defeat the Darkness.etm,4D530008,1,NTSC,Nightcaster +1 (USA) (v0.1),499c63aca95aaf59c7d6760863f49947,Night Caster p1 ntsc v0_1.etm | Night Caster p1 ntsc.etm | Nightcaster [plus1] (USA) (v0.1).etm | ncaster.etm | night caster p1.etm
+trainers,Sudeki.etm,4D53000A,5,NTSC,Sudeki +5 (NTSC) v1.2,03765281d89fc5005759c1aab3ba87f0,Sudeki [plus5] (NTSC) (v1.2).etm | Sudeki p5 ntsc v1_2.etm | Sudeki p5 ntsc.etm | Sudeki p5 rev2.etm | Sudeki p5.etm | Sudeki.etm
+variants,Sudeki (NTSC p5).etm,4D53000A,5,NTSC,Sudeki +5 (NTSC) v1.1,4196a126b131452f2e1cfd2b9a8d5d86,Sudeki [plus5] (NTSC) (v1.1).etm | Sudeki p5 rev1.etm | sudeki ntsc.etm
+variants,Sudeki (PAL p3).etm,4D53000A,3,PAL,Sudeki,39b9535ffedad5b0b89c16d478f35b0d,Sudeki [plus1] (PAL).etm | sudeki pal.etm
+variants,Sudeki (NTSC p2).etm,4D53000A,2,NTSC,sudeki ntsc +2,a9ad9bd66b4fc5aa949ac622abfea047,sudekintsc2.etm
+trainers,Kakuto Chojin.etm,4D53000C,2,NTSC,Kakuto Chojin +3 (USA/NTSC),089bc9f53396f559c66f14c2c13ab979,Kakuto Chojin [plus3] (NTSC-USA).etm | Kakuto Chojin p3 ntsc.etm | Kakuto Chojin p3.etm | kc.etm
+trainers,Fable.etm,4D53000D,7,NTSC,Fable +7 (NTSC),261ebace3f48757fb17705151309dace,FABLE.ETM | Fable [plus7] (NTSC).etm | Fable p7 ntsc.etm | fable p7.etm
+variants,Fable (NTSC p5).etm,4D53000D,5,NTSC,Fable +5 (NTSC),df091297f9b376f62fcddab7aaf73a84,Fable p5 multi.etm | evt-fable.etm
+trainers,Blood Wake.etm,4D530010,3,NTSC,Blood Wake +3 (USA/NTSC),1b016920c14e6c961be97136664b97c6,Blood Wake [plus3] (NTSC-USA).etm | Blood Wake p3 ntsc.etm | EVT-BLDW.ETM | blood wake p3.etm | blood wake.etm
+variants,Blood Wake (NTSC p2).etm,4D530010,2,NTSC,Blood Wake +2 (USA),11022b6a12918a44cbbe22301be262d3,Blood Wake [plus2] (USA).etm | Blood Wake p2.etm | BloodWakePlus2USA.ETM
+trainers,Blinx - The Time Sweeper.etm,4D530013,3,NTSC,BLiNX: The Time Sweeper (NTSC) +3,8b441f6da040f84eda81a482ecb62e16,EVT-BLNX.ETM
+trainers,Tao Feng - Fist of the Lotus.etm,4D530014,3,NTSC,Tao Fang +3 (NTSC),cf994c0234ae8a51425514ec3e7694ef,Tao Fang [plus3] (NTSC).etm | Tao Fang p3 ntsc.etm | Tao Fang p3.etm | taofang.etm
+trainers,MechAssault.etm,4D530017,4,NTSC,MechAssault +4 (USA/NTSC),ac438c804fcafdfc2b88ae90d5338420,Mech Assualt p4 ntsc.etm | MechAssault [plus4] (NTSC-USA).etm | MechAssault p4.etm | evt-mecha.etm | mech assualt p4.etm | mechassault 1.etm
+trainers,Brute Force.etm,4D53001E,4,NTSC,Brute Force +4 Trainer (NTSC) v1.3,415debc89dcf256b03d57f15ff798640,Brute Force [plus4] (NTSC).etm | Brute Force p4.etm | evt-BForce1[3].etm
+variants,Brute Force (PAL p4).etm,4D53001E,4,PAL,Brute Force +4 [pal],7522a5588297c47fe69969e155e51716,Brute Force [plus4] (PAL).etm | Brute Force p4 pal.etm | Brute.etm
+variants,Brute Force (NTSC p4).etm,4D53001E,4,NTSC,Brute Force +4 Trainer (NTSC) v1.4,c7b8eca2fa8947e6cd2094cf92ea557d,Brute Force p4 ntsc v1_4.etm | Brute Force p4 v1 4.etm | evt-BForce1[4].etm
+variants,Brute Force (NTSC p4) 2.etm,4D53001E,4,NTSC,Brute Force +5 Trainer (NTSC) V1,63121c86c19a3d3cdcd48db0b95d2c98,Brute Force p5 ntsc.etm
+trainers,Shenmue II.etm,4D530032,6,NTSC,Shenmue 2,3c1786ca08047010902d329cdfc8b068,Shenmue 2 [plus6].etm | Shenmue 2 p6 ntsc.ETM | Shenmue 2 p6.ETM | Shenmue2.ETM
+variants,Shenmue II (PAL p6).etm,4D530032,6,PAL,Shenmue II PAL,babfd6490c79a6f7de7bb61761334bb3,Shenmue 2 p6 pal.etm
+variants,Shenmue II (PAL p3).etm,4D530032,3,PAL,Shenmue II [Pal],cd9720b0532288b6378e60dbb479a33e,Shenmue 2 p3 pal.etm
+variants,Shenmue II (PAL-NTSC p2).etm,4D530032,2,PAL-NTSC,Shenmue II [NTSC][PAL?] [PRE-ALPHA][BETA][TEST],25a9849a5d4bbb96c8ea8c8d09a5b6e2,Shenmue 2 [plus1] (NTSC-PAL) (BETA).etm | Shenmue 2 p1.etm | shenmue 2.etm
+trainers,Amped 2.etm,4D530041,5,NTSC,Amped 2 +5          ,a4426964e4f1f66a40b880c605969005,AMPED2.ETM | Amped 2 [plus5].etm | Amped 2 _5 (NTSC).etm | Amped 2 p5.etm
+variants,Amped 2 (NTSC p5).etm,4D530041,5,NTSC,Amped 2 +5          ,b01d2452cea3f1541cd4248df5ec1ecc,Amped 2 p5 ntsc.etm
+trainers,Phantom Dust.etm,4D530046,4,JAP,Phantom Dust +4 (JAP NTSC),e624f4b6dfbbf7e578a0ff06b4c9631a,Phantom Dust [plus4] (NTSC-JAP).etm | Phantom Dust p4 jap ntsc.etm | Phantom Dust p4 ntsc jap.etm | Phantom Dust p4 ntscj.etm | evt-pdst.etm | phantom dust.etm
+variants,Phantom Dust (NTSC p4).etm,4D530046,4,NTSC,Phantom Dust +4,02e97483a3095a313ece6c21ae6c9eb6,Phantom Dust p4 usa ntsc.etm | Phantom Dust p4 usa.etm
+variants,Phantom Dust (p4).etm,4D530046,4,,Phantom Dust +4,05d426990327182335079428e8782fdc,PD.ETM
+trainers,Project Gotham Racing 2.etm,4D53004B,6,PAL,PGR 2 PAL +6,1bebd268d14748feebf735c525f4bf22,Project Gotham Racing 2 p6 PAL-Aus.etm | Project Gotham Racing 2 p6 pal aus.etm | Project Gotham Racing 2 p6 pal(aus).etm
+trainers,Conker - Live & Reloaded.etm,4D530051,2,NTSC,Conker: Live and Reloaded + 2 (NTSC),a0f32b442e29da0a4dacae1e1d230451,Conked2NTSC.ETM | Conker Live and Reloaded [plus2] (NTSC.etm | Conker Live and Reloaded p2 ntsc.ETM | Conker Live and Reloaded p2.ETM
+variants,Conker - Live & Reloaded (PAL p2).etm,4D530051,2,PAL,Conker: Live and Reloaded + 2 (PAL),66bfe55264055fcaae848d9af656fc2e,Conker Live and Reloaded [plus2] (PAL).etm | Conker Live and Reloaded p2 pal.etm | fx-clr.etm
+trainers,Grabbed by the Ghoulies.etm,4D530053,1,,Grabbed by the Ghoulies +1 V1.2,1913aa984e7ef9dc9b06a9b7eab30c94,Grabbed by the Ghoulies [plus1] (v1.2).etm | Grabbed by the Ghoulies p1 V1_2.etm | Grabbed by the Ghoulies p1.etm | GrabbedGhoulies p1.etm | GrabbedGhoulies.etm
+trainers,Project Zero.etm,4D530059,4,PAL,Projet Zero +4 (PAL) FR,9d302ac32fc094c89726deca6bb64768,Project Zero p4 pal.etm | Projet Zero [plus4] (PAL).etm | pz_pal.etm
+variants,Project Zero (PAL p4).etm,4D530059,4,PAL,PROJECT ZERO 1 PAL ESPAÑOL,be8632760558e4081c785cd1326d1a08,PROJECT ZERO 1 (HIMURO MANSION)PAL.ETM
+variants,Project Zero (PAL p4) 2.etm,4D530059,4,PAL,PROJECT ZERO 1 PAL ESPAÑOL,df07b16e0ae23465daedaf5e4698ed24,Project Zero p1 pal esp&aus.etm
+variants,Project Zero (p1).etm,4D530059,1,,Project Zero +1,2745155955999bd091e3c30e8627fdb0,ProjectZero.etm
+trainers,Links 2004.etm,4D53005D,1,NTSC,Links 2004 plus 1 ntsc,3101a427fc587faac85f50dbc62c5aad,Links 2004 plus 1 ntsc.ETM
+trainers,Voodoo Vince.etm,4D53005F,4,PAL,Voodoo Vince +4 PAL,b50a0e58e55a7fc480999a3f1566ecb2,Voodoo Vince [plus4] (PAL).etm | Voodoo Vince p4 pal.etm | evt-vvnc.etm | voodoo vince.etm
+trainers,Halo 2.etm,4D530064,13,PAL-NTSC,Halo 2 (NTSC/PAL) +13,1437f15c6e1c0eadea4739171e870b81,EVT-HLO2.ETM | Halo 2 [plus13] (NTSCPAL) (v1.5).etm | evt-hlo2rev5.etm | halo 2 p13.etm
+variants,Halo 2 (p13).etm,4D530064,13,,Halo 2 v1.1 (XBL) +13,bfe55cfc08afcdfe9c101dbe2a78eaa5,rp-halo2v11.etm
+variants,Halo 2 (PAL-NTSC p11).etm,4D530064,11,PAL-NTSC,Halo 2 (XBOX LIVE NTSC/PAL) +11,2dac2914b307309376676def9ef83b66,Halo 2 [plus11] (XBOX LIVE NTSC-PAL).etm | Halo 2 p11 live.etm | evt-hlo2_live_updated_ver.etm
+variants,Halo 2 (p4).etm,4D530064,4,,Halo 2 Developers Edition (v1.3),1d0bb2af20bb433f08029ca81adef4af,h2dev13.etm
+variants,Halo 2 (p2).etm,4D530064,2,,a_halo2+2,17bdb7cd49de6ce8489cb931ac791fce,AHALO22.ETM
+variants,Halo 2 (p2) 2.etm,4D530064,2,,Halo 2,18d8da473cbf29551fd36db668d55add,Halo 2 Camera Hack.ETM
+variants,Halo 2 (p2) 3.etm,4D530064,2,,Halo 2 Camera Hack (v1.1),7c46bd8fee47e860dff789d155efd4ec,h2cmrahck11.etm
+variants,Halo 2 (p1).etm,4D530064,1,,a_halo2,80c6d502dc96964af94714d2833af91c,AHALO2.ETM | Halo 2 p1.etm
+trainers,Blinx 2 - Masters of Time & Space ~ Bl.etm,4D530065,10,NTSC,Blinx 2 (USA) +10,8ad8a24d3a33695d9a04571a27bd1972,Blinx 2 [plus10] (USA).etm | Blinx 2 p10 ntsc.etm | Blinx 2 p10.etm | Blinx The Time Sweeper 2 p10 ntsc.etm | EVT-BLX2.ETM | blinx 2.etm
+trainers,Magatama.etm,4D530066,2,JAP,Magatama (JP) V1.2,2da41c08a03a3d052afe10ca5c4bb545,Magatama [plus3] (JP) (v1.2).etm | Magatama p2 Jap.etm | Magatama p2 ntsc jap.etm | Magattama.ETM | magatama.etm
+trainers,MechAssault 2 - Lone Wolf.etm,4D53006B,7,NTSC,Mech Assault 2 +7 (NTSC),ff39556a2188602a26815293d4df3cf1,Mech Assault 2 [plus7] (NTSC).etm | Mech Assualt 2 p7 ntsc.etm | Mech Assualt 2 p7.etm | evt-ma2.etm | mechassault 2.etm
+trainers,Jade Empire.etm,4D53006D,6,,Jade Empire +6,bd958d2cc9985847832304e9361a168d,Jade Empire +6 [Y2J].etm | Jade empire _6 [y2j].etm | Jade6.etm
+variants,Jade Empire (NTSC p6).etm,4D53006D,6,NTSC,Jade Empire +6,2190aef7e836cafbff0341a8d6475dab,Jade Empire p6 ntsc.etm | Jade Empire p6.etm | je.etm
+variants,Jade Empire (p6).etm,4D53006D,6,,Jade Empire +6,dedf5958f9035334cb36eb2e4e5128df,Jade Empire [plus6].etm
+variants,Jade Empire (p4).etm,4D53006D,4,,Jade Empire +3,a075fae19802a65a79baab68e13ca11e,Jade Empire [plus3].etm | JadeEmpire.ETM
+variants,Jade Empire (NTSC p3).etm,4D53006D,3,NTSC,Jade Empire NTSC +3 By DDKram,fac7558aac7647f646e7317e45b6451a,Jade empire ntsc _3 by ddkram.etm
+variants,Jade Empire (p2).etm,4D53006D,2,,Jade Empire +2 By DDKram,b48e1c8ad86dd5f65ee9244225e3672a,Jade Empire [plus2].etm | JadeEmpireByDDKram.ETM
+trainers,Forza Motorsport.etm,4D53006E,4,PAL,Forza Motorsport PAL +4,7c771ced52fc4281d2fb7a62a2332295,Forza Motor Sports p4 pal.etm | Forza Motorsport [plus4] (PAL).etm | forza.etm
+trainers,Fable - The Lost Chapters.etm,4D5300D1,7,NTSC,Fable: The Lost Chapters (USA) +7 (rev2),ab3735dfada3322be10ea2b87fd3314e,Fable - The Lost Chapters.etm | Fable Lost Chapters p7 ntsc.etm | Fable The Lost Chapters p7.etm | evt fable tlc p7.etm
+variants,Fable - The Lost Chapters (NTSC p7).etm,4D5300D1,7,NTSC,Fable: The Lost Chapters (USA) +7,f38489e3f62646efd8460b5e86ec7b0a,EVT-FTLC.ETM | Fable The Lost Chapters [plus7] (USA).etm
+trainers,PocketBike Racer.etm,4D5300D4,5,NTSC,BK: Pocketbike Racer (NTSC) +5,dac5c21bac04a9084920eabb55cb8d49,evt-bkpr.etm
+trainers,Arctic Thunder.etm,4D570002,4,NTSC,Arctic Thunder +4,2a105ae5d004e5ccef7c210d2fc74224,Arctic Thunder [plus4].etm | Arctic Thunder _4 (NTSC).etm | Arctic Thunder p4 ntsc.ETM | Arctic thunder p4.ETM | Arctiunder4.ETM
+trainers,SpyHunter.etm,4D570004,5,NTSC,SpyHunter (USA) +5,9d8bed0fc8ffa9d38eb62b7f9a2dd6d2,SpyHunter [plus5] (USA).etm | Spyhunter p5 ntsc.etm | Spyhunter p5.etm | evt-spyh.etm
+trainers,Area 51.etm,4D570005,5,NTSC,Area 51 (USA) +5,707c2966fcfe9d5149b68e6e7ed9c04a,Area 51 [plus5] (USA).etm | Area 51 _5 (NTSC).etm | Area 51 p5 2.etm | Area 51 p5 ntsc.etm | Area 51.etm | rp-a51u5.etm
+variants,Area 51 (NTSC p5).etm,4D570005,5,NTSC,Area 51 +5 NTSC,b511d22b70fca08800b10b89f8c0957d,Area 51 [plus5] (NTSC).etm | Area 51 p5 1.etm | Area51.ETM
+trainers,Defender.etm,4D570006,2,NTSC,Defender +2,2f25aadd60a5f14b8cf2f5c7c587ef53,Defender [plus2].etm | Defender p2 ntsc.ETM | Defender p2.ETM | Defender.ETM
+trainers,NFL Blitz 2003.etm,4D57000A,51,NTSC,NFL Blitz 2003 +51 (USA),8480b50948d180129e97949a7fc3f57d,BLITZ.ETM | NFL Blitz 2003 [plus51] (USA).etm | NFL Blitz 2003 p51 ntsc.etm
+trainers,Mortal Kombat - Deadly Alliance.etm,4D57000C,5,NTSC,Mortal Kombat +5,94e1cec70cf751db97d14ba4e45d9443,Mortal Kombat Deadly Alliance p5 ntsc.etm | Mortal Kombat [plus5].etm | Mortal Kombat p5 ntsc.etm | mk.etm | mortal kombat p5.etm
+variants,Mortal Kombat - Deadly Alliance (p1).etm,4D57000C,1,,mortal kombat da 1,649598b78188397b53fd79a5ee58b67f,mortabatda1.ETM
+trainers,Gauntlet - Dark Legacy.etm,4D57000E,4,NTSC,Gauntlet: Dark Legacy +4 (USA)(v0.1),b8a0d6dde3adfa19985a3be1641932bc,Gauntlet Dark Legacy [plus4] (USA)(v0..etm | Gauntlet Dark Legacy p4 ntsc v0_1.etm | Gauntlet Dark Legacy p4 ntsc.etm | gauntlet dark legacy p4.etm | gauntlet.etm
+trainers,NBA Ballers.etm,4D570010,5,NTSC,NBA Ballers +4 BETA 1,e81de175761eea6b011fcc1ec1912465,EVT-BALL.ETM | NBA Ballers [plus4] (BETA1).etm | NBA Ballers p4 BETA 1.etm | NBA Ballers p4 ntsc.etm
+trainers,Dr. Muto.etm,4D570011,16,NTSC,Dr. Muto +16,8a410fbf03f8b9a81320c2071c4dd029,DRMUTO.ETM | Dr Muto p16 ntsc.etm | Dr Muto p16.etm | Dr Muto.etm | Dr. Muto [plus16].etm
+trainers,FireBlade.etm,4D570012,1,NTSC,Fireblade + 1,41e69bf66d3d94b669a7cf57b20f9174,Fire blade p1.etm | Firebblade_Plus1.etm | Fireblade [plus1].etm | Fireblade p1 ntsc.etm | Fireblade p1.etm
+trainers,The Suffering.etm,4D570015,8,PAL,The Suffering + 8 XORED [PAL] ,bb09875d00b40ea7840b86a5bd7d0c36,Suffering p8 pal.etm | The Suffering [plus8] (PAL).etm | The Suffering p8 pal.etm | suffer.etm
+variants,The Suffering (NTSC p4).etm,4D570015,4,NTSC,The Suffering +3,ff3695da2c15cac856dfde4013aa3e44,Suffering p3 ntsc.etm | The Suffering [plus3].etm | The Suffering p3 ntsc.etm | The Suffering p3.etm | the suffering.etm | thesuff.etm
+variants,The Suffering (PAL p3).etm,4D570015,3,PAL,The Suffering (PAL) +3,1f2b2b7da8a720ae77e2046b02b91f2c,The Suffering [plus3] (PAL).etm | TheSungPAL3.etm
+variants,The Suffering (NTSC p2).etm,4D570015,2,NTSC,The Suffering NTSC +2,b0d0cb8431343093d2fe32200ac0f783,K-TheSufferingPlus2.ETM | The Suffering [plus2] (NTSC).etm | The Suffering p2.etm
+variants,The Suffering (p1).etm,4D570015,1,,The Suffering +1,b22f6e773ba9f15e3a9d847911605d75,The Suffering [plus1].etm | TheSuffering-plus1.etm
+trainers,Psi-Ops - The Mindgate Conspiracy.etm,4D570016,5,NTSC,Psi Ops +5 (NTSC),ea09876b1eafbaf9b4794fe223d4fea5,PSI OPS p5 ntsc.etm | PSI OPS p5.etm | Psi Ops [plus5] (NTSC).etm | Psi-Ops.etm | psi ops.etm | psiops.etm
+variants,Psi-Ops - The Mindgate Conspi (PAL p4).etm,4D570016,4,PAL,PSI OPS+4 [PAL],f5167e7809ec9d5c60e7be3efc43981d,PSI OPS [plus4] (PAL).etm | PSI OPS p4 PAL.etm | psi.etm
+trainers,Mortal Kombat - Deception.etm,4D570019,14,NTSC,MK Deceptions +14 (NTSC),0f6eb7bd682cdb60b961f209aeb5b083,Mortal Kombat Deception p14 ntsc.etm | Mortal Kombat Deceptions [plus14] (NTS.etm | Motal Kombat Deceptions [plus14] (NTSC.etm | evt-mkd.etm | mortal kompbat deceptions p14.etm
+variants,Mortal Kombat - Deception (NTSC p14).etm,4D570019,14,NTSC,MK Deceptions +14 (NTSC),ed9f155fd48367a52e758ba3577fa2b7,Mortal Kombat Deceptions p14 ntsc.etm | Mortal Kombat Deceptions p14.etm
+variants,Mortal Kombat - Deception (NTSC p7).etm,4D570019,7,NTSC,MK Deceptions +7 (NTSC),a21ec76e412a63a1b912a01cbdd0a5ee,Mortal Kombat Deceptions [plus7] (NTSC.etm | Mortal Kombat Deceptions p7.etm | mortal kombat deception.etm
+trainers,Gauntlet - Seven Sorrows.etm,4D570022,7,NTSC,Gauntlet: 7 Sorrows (USA) +7,3cf631f1e1d66aa097e2a9b5d31ea739,EVT-GA7S.ETM | Gauntlet Seven Sorrows p7 ntsc.etm | Gauntlet Seven Sorrows p7.etm
+trainers,Mortal Kombat - Deception (Europe).etm,4D570023,11,PAL,Mortal Kombat Deception + 11 Xored [PAL],e503164737bfc19d6142f23f92c3e352,Mortal Kombat Deception p11 pal.etm
+trainers,Narc.etm,4D570024,6,NTSC,Narc +6 (USA),0e7a806b0c3e32c8787c18338410c7e5,Narc [plus6] (USA).etm | Narc p6 ntsc.etm | Narc p6.etm | rp-narc6u.etm
+variants,Narc (NTSC p3).etm,4D570024,3,NTSC,NARC +3 (NTSC),130320403cf45cf4d2c1dbbce691ec8b,NARC [plus3] (NTSC).etm | NARC p3.etm | fx-narcp3us.ETM
+trainers,L.A. Rush.etm,4D570025,10,NTSC,LA Rush (USA) +10 (rev3),39432f3b725b25ce9581b4918a295778,LA Rush [plus10] (USA) (REV3).etm | LA Rush p10 ntsc.etm | LA Rush p10.etm | LARS-EVT.ETM | evt-lars.etm
+trainers,Blitz - The League.etm,4D570026,18,NTSC,Blitz: The League (USA) +18 (rev2),76bac01f7f08bfdc952a3a4bd04ac431,Blitz The League [plus18] (USA).etm | Blitz the League p18 ntsc.etm | Blitz the League p18.etm | EVT-BLTZ.ETM
+trainers,Mortal Kombat - Shaolin Monks.etm,4D570029,12,NTSC,Mortal Kombat:Shaolin Monks +12,2fdbe05213c8bd0c748a16fd4313a1d0,Mortal Kombat Shaolin Monks [plus12] (.etm | Mortal Kombat Shaolin Monks p12 ntsc.etm | Mortal Kombat Shaolin Monks p12 rev6.etm | Mortal Kombat Shaolin Monks.etm | xormksm_Rev6.etm
+variants,Mortal Kombat - Shaolin Monks (p12).etm,4D570029,12,,Mortal Kombat:Shaolin Monks +12,202de6a1fba12a617d63425095ab134f,Mortal Kombat Shaolin Monks [plus12].etm | mk4.etm
+variants,Mortal Kombat - Shaolin Monks (p11).etm,4D570029,11,,Mortal Kombat:Shaolin Monks +11,8002fe9a4f6887871600404c22e45d26,Mortal Kombat Shaolin Monks [plus11] (.etm | xormksm_Rev5.etm
+variants,Mortal Kombat - Shaolin Monks (p11) 2.etm,4D570029,11,,Mortal Kombat:Shaolin Monks +11,359f3900a1d0ca220610e57c0c5f4c00,xormksm_Rev4.etm
+variants,Mortal Kombat - Shaolin Monks (p11) 3.etm,4D570029,11,,Mortal Kombat:Shaolin Monks +11,502d5d407009ee1de496e0654c6deb90,xormksm_rev1.etm
+variants,Mortal Kombat - Shaolin Monks (p10).etm,4D570029,10,,Mortal Kombat:Shaolin Monks +10,3d6ad71a88cf31d8d57134e6db23e415,Mortal Kombat Shaolin Monks [plus10].etm | xormksm.etm
+trainers,The Suffering - Ties That Bind.etm,4D57002C,10,NTSC,The Suffering: Ties That Bind (USA) +10 (rev2),625d007f7a402fcb29ae1571508783e0,Suffering TTB p10 ntsc.etm | The Suffering Ties That Bind [plus10].etm | The Suffering Ties That Bind p10.etm | evt-tstt.etm
+variants,The Suffering - Ties That Bi (NTSC p4).etm,4D57002C,4,NTSC,The Suffering: Ties That Bind (USA) +4,bd854a537b754334251cc6982d9fe21f,The Suffering TTB p4 ntsc.etm | The Suffering TTB p4.etm | The Suffering Ties That Bind.etm
+trainers,NBA Ballers - Phenom.etm,4D57002E,8,NTSC,NBA Ballers: Phenom (NTSC) +8,58184471d95cdede78186e3e28c429ce,NBA Ballers Phenom p8 ntsc.etm | NBA Ballers Phenom p8.etm
+variants,NBA Ballers - Phenom (NTSC p8).etm,4D57002E,8,NTSC,NBA Ballers: Phenom (NTSC) +8,807c94e985622ec7a7846c1745f3d957,EVT-BALP.ETM
+trainers,Gauntlet - Seven Sorrows (Europe).etm,4D570033,7,PAL,Gauntlet Seven Sorrows + 7 Xored [PAL],a36664218f670259ffee5e33a41495b5,Gauntlet Seven Sorrows p7 Pal.etm
+trainers,Mortal Kombat - Armageddon.etm,4D570034,13,NTSC,Mortal Kombat : Armageddon (NTSC) +13,920de21fbd68db3c338b5c13c67d4cb2,evt-mkar.etm
+trainers,SpyHunter - Nowhere to Run.etm,4D570037,7,NTSC,Spy Hunter: Nowhere To Run (NTSC) +7,f8fb404a110bde9836cf85ba8cb49c7d,evt-sntr.etm
+trainers,Tom and Jerry in War of the Whiskers.etm,4E4B0001,3,NTSC,Tom and Jerry +3 (NTSC),b608e962b30d4803d0de97b5143521e7,Tom and Jerry [plus3] (NTSC).etm | Tom and Jerry p3 ntsc.etm | Tom and Jerry p3.etm | evt-tomjerry.etm
+trainers,Delta Force - Black Hawk Down.etm,4E4C0002,3,NTSC,Delta Force: Black Hawk Down (USA) +3,b8d2618a0fc02fb287c2c7cf8bca9d92,Delta Force Black Hawk Down [plus3] (U.etm | Delta Force Black Hawk Down p3 ntsc.etm | Delta Force Black Hawk Down p3.etm | EVT-BHD.ETM
+trainers,Soulcalibur II.etm,4E4D0003,7,NTSC,Soul Calibur II +7 (USA/NTSC),cd96b01d236c2f2195919d3c120dc9f5,Soul Calibur 2 - 1.etm | Soul Calibur 2 [plus7] (NTSC-USA).etm | Soul Calibur 2 p7 ntsc.etm | Soul Calibur 2 p7.etm | evt-sc2_usa_ntsc.etm
+variants,Soulcalibur II (PAL p7).etm,4E4D0003,7,PAL,Soul Calibur II +7 (PAL) v1.1,aa1d29cd4387d20f6ca6a0d4b19a1dc0,Soul Calibur 2 [plus7] (PAL) (v1.1).etm | Soul Calibur 2 p7 pal v1_1.etm | Soul Calibur 2 p7 pal.etm | evt-sc2_pal_v1.1.etm | evt-sc2_pal_v11.etm
+variants,Soulcalibur II (PAL p3).etm,4E4D0003,3,PAL,Soul Calibur 2 (PAL) +3,066feb4b5299f2823aa68bdfd3b8affd,SC2_PAL3.ETM | Soul Calibur 2 [plus3] (PAL).etm
+variants,Soulcalibur II (p2).etm,4E4D0003,2,,Soul Calibur 2 +2,d9dad73e75e0fd7d806a652d17fb92c3,Soul Calibur 2 [plus2].etm | sc2.etm | soul calibur 2.etm
+trainers,Dead to Rights (USA).etm,4E4D0005,5,NTSC,Dead to Rights +5 (USA),c0a5d9386a401694314e402d487fce7f,Dead to Rights [plus5] (USA).etm | Dead to Rights p5 ntsc.etm | Dead to Rights p5.etm | EVT-DTR5.ETM
+variants,Dead to Rights (USA) (NTSC p4).etm,4E4D0005,4,NTSC,Dead to Rights +4 (USA),7be297f7f0792d052a6bfee2c27f6640,Dead to Rights [plus4] (USA).etm | Dead to Rights p4.etm | dead to right.etm
+variants,Dead to Rights (USA) (NTSC p3).etm,4E4D0005,3,NTSC,Dead to Rights +3 (USA),8d9d8cc43dd39521446711f30fee89f6,Dead to Rights [plus3] (USA).etm | Dead to Rights p3.etm
+variants,Dead to Rights (USA) (NTSC p3) 2.etm,4E4D0005,3,NTSC,Dead to Rights +3 (USA),3e14f7bdb1ed177524a4b01b116252f1,MXT-DTR3.ETM
+variants,Dead to Rights (USA) (NTSC p2).etm,4E4D0005,2,NTSC,Dead to Rights +2 (USA),821648c1f7347cdbd85f6766c2ace6bf,DeadtoRights2USA.ETM
+variants,Dead to Rights (USA) (p1).etm,4E4D0005,1,,Dead to Rights +1,420dc38f3bd6f18ef52367b605bdbb08,Dead to Rights [plus1].etm | Dead2Rights-plus1.etm
+trainers,Pac-Man World 2.etm,4E4D0006,6,NTSC,Pacman World 2 +5 (NTSC) v0.01,4ddfa84c54945008b2fda51d10c0fea7,PW2.ETM | Pac Man World 2 p5 ntsc v0_01.etm | Pac Man World 2 p5 ntsc.etm | Pacman World 2 [plus5] (NTSC) (v0.01).etm | pac man world 2 p5.etm
+variants,Pac-Man World 2 (p2).etm,4E4D0006,2,,PacMan World 2,c11298035a52c7acb9f2bc8f84922a7d,PacMaWorld2.ETM | PacMan World 2 [plus2].etm
+variants,Pac-Man World 2 (p1).etm,4E4D0006,1,,Pac-Man World 2 +1,6e8945550a08d2d324ff9b2b4a062abd,PMW2.ETM | Pac-Man World 2 [plus1].etm
+trainers,Namco Museum.etm,4E4D0007,5,NTSC,Namco Museum +5,34e85fb8dbacf45027252605ec0fad46,Namco Museum [plus5].etm | Namco Museum p5 ntsc.etm | Namco Museum p5.etm | nm.etm
+trainers,Breakdown.etm,4E4D0009,4,NTSC,Breakdown (USA) +3,4ab9f8545e60d5688f1f02a9ac6082af,Breakdown [plus3] (USA).etm | Breakdown p3 ntsc.etm | Breakdown.etm | EVT-BDWN.ETM | break down.etm | breakdown p3.etm
+variants,Breakdown (JAP p4).etm,4E4D0009,4,JAP,Breakdown (JAP) +3,e25463659255f98ad6fb57c458f65c5f,Breakdown [plus3] (JAP).etm | Breakdown p3 jap.etm | Breakdown p3 ntsc jap.etm | evt-bdwnjap.etm
+variants,Breakdown (JAP p4) 2.etm,4E4D0009,4,JAP,Breakdown (JAP) +3,bd9c02451d730d8e66d9d3aeaecf0462,Breakdown p3 pal.etm
+trainers,kill.switch.etm,4E4D000B,4,NTSC,Kill Switch + 4 v1.1 (USA/NTSC),18ace8b421d827cb941b4ff44a88df0a,Kill Switch [plus4] (NTSC-USA) (v1.1).etm | Kill Switch p4 ntsc v1_1.ETM | Kill Switch p4 ntsc.etm | Kill_Switch_v1_1.ETM | kill switch p4.ETM | kill switch.etm
+variants,kill.switch (p3).etm,4E4D000B,3,,Kill Switch +3,c550994c9c3264abb8a6292cc0d7b6d4,KS.ETM | Kill Switch [plus3].etm
+trainers,Spawn - Armageddon.etm,4E4D000C,3,NTSC,spawn,b6bae5f49c6ef3317a491ccea4ed0395,Spawn [plus3].etm | Spawn p3 ntsc.etm | Spawn p3.etm | spawn.etm
+trainers,I-Ninja.etm,4E4D000F,6,NTSC,I-Ninja +6 (USA),c1ce26fd0d94d82074830d4ec7899884,I Ninja p6 ntsc.etm | I ninja p6.etm | I-Ninja [plus6] (USA).etm | i-ninja.etm | mxt-inin.etm
+trainers,SRS - Street Racing Syndicate.etm,4E4D0013,3,NTSC,Street Racing Syndicate (USA) +3,0ff2810e2220f3b083aedc1806de7b43,Street Racing Syndicate [plus3] (USA).etm | Street Racing Syndicate p3 ntsc.etm | evt-srs.etm | street racing syndicate p3.etm | street racing syndicate.etm
+trainers,Dead to Rights II.etm,4E4D0015,3,NTSC,Dead To Rights 2 +3,de544e0d625dd04cb87410151d623200,D2R2.ETM | Dead To Rights 2 [plus3].etm | Dead to Rights 2 p3 ntsc.etm | Dead to Rights 2 p3.etm
+variants,Dead to Rights II (NTSC p1).etm,4E4D0015,1,NTSC,DEAD to RIGHTS 2  +1 (NTSC),15e2d8e53417639f8b3b40d4e71061bd,Dead2Rights_2.etm
+trainers,Pac-Man World 3.etm,4E4D0017,4,NTSC,Pac-Man World 3 (USA) +4,43f9710d387fb2e5a0cef25de80dcc9e,Pac-Man World 3 p4.etm
+trainers,Curious George.etm,4E4D0019,4,NTSC,Curious George (USA) +4,dbc28f7ec425fac29aec78deef83d411,Curious George p4 ntsc.etm | Curious George p4.etm | EVT-CURG.ETM
+trainers,Xyanide.etm,50430001,18,NTSC,Xyanide(NTSC) +18,0c4703deb5cd7786f693f78effc64c30,Xyanide p18 ntsc.etm | Xyanide p18.etm
+trainers,Phantom Crash.etm,504C0001,4,NTSC,Phantom Crash +4 (USA/NTSC),73b30df15b88cbfde9a6db05ddb54659,Phantom Crash [plus4] (NTSC-USA).etm | Phantom Crash p4 ntsc.etm | Phantom Crash p4.etm | evt-phantc.etm | phantom crash.etm | phantom_crash.etm
+trainers,Kingdom Under Fire - The Crusaders.etm,504C0002,5,NTSC,Kingdom Under Fire The Crusader (USA) +5 v2,3f32d35952d042987d3bdd74f0c41c62,EVT-KUFR.ETM | Kingdom Under Fire The Crusaderp5.etm | Kingdom Under Fire p5 ntsc v2.etm | kingdom under fire the crusaders p5.etm
+variants,Kingdom Under Fire - The Cru (NTSC p5).etm,504C0002,5,NTSC,Kingdom Under Fire The Crusader (USA) +5,cf8748db148afa4d73f5ef79c2caf8ff,EVT-KUF.ETM | KUF.ETM | Kingdom Under Fire The Crusader [plus5.etm
+variants,Kingdom Under Fire - The C (NTSC p5) 2.etm,504C0002,5,NTSC,Kingdom Under Fire The Crusader (USA) +5 v2,6a5497900a9e26d8a42f3961a1fb2168,Kingdom Under Fire TC p5 ntsc.etm
+trainers,Kingdom Under Fire - The Crusaders (Eu.etm,504C0004,3,PAL,Kingdom Under Fire TC + 3 XORED [PAL],ea05e7067e11545d16269089ac813fc0,Kingdom Under Fire TC [plus3] (PAL).etm | Kingdom Under Fire TC p3 PAL.etm | kuftc.etm
+trainers,Kingdom Under Fire - Heroes.etm,504C0006,6,NTSC,Kingdom Under Fire: Heroes (USA) +6,b8f2d5e72c456d739346bed245b07afc,EVT-KUFH.ETM | Kingdom Under Fire Heroes [plus6] (USA.etm | Kingdom Under Fire Heroes p6 ntsc.etm | Kingdom Under Fire Heroes p6.etm | Kingdom Under Fire Heroes.etm
+trainers,Guilty Gear X2 Reload - The Midnight C.etm,53410002,4,NTSC,GuiltyGearX2#RELOAD +4 (USA/NTSC),0fd5928a12f8780fe313c1adc46d714b,Guilty Gear x2 Reload p4 ntsc.etm | Guilty GearX 2 [plus4] (NTSC-USA).etm | Guilty GearX2 reload p4 usa.etm | ggx2.etm
+variants,Guilty Gear X2 Reload - The M (JAP p4).etm,53410002,4,JAP,Guilty Gear XX # Reload +3 (JAP/NTSC),27b07d831136ef55cc418fedd8c1c26c,EVT-GGXX.ETM | Guilty Gear XX Reload [plus3] (NTSC-JA.etm | Guilty Gear XX Reload p3.etm
+variants,Guilty Gear X2 Reload - The M (JAP p3).etm,53410002,3,JAP,Guilty Gear XX # Reload +3 (JAP/NTSC),44bdce85a6f0858ada16d0b108ede31f,Guilty Gear x2 Reload p3 jap ntsc.etm | Guilty Gear x2 Reload p3 ntsc jap.etm | Guilty Gear x2 Reload p3 ntscj.etm | Guilty GearXX [plus3] (NTSC-JAP).etm | Guilty GearXX p3.etm | guilty gear xx reload.etm
+trainers,Iron Phoenix.etm,53410003,3,PAL-NTSC,Iron Phoenix (GLOBAL) +3,12793c11840c3e83e64fa7a3838fed11,Iron Phoenix p3 global.etm | Iron Phoenix p3.etm | evt-irnp.etm
+trainers,Conflict - Desert Storm.etm,53430001,3,PAL,Conflict Desert Storm +3 (PAL),902a6820204628383e86ba4208fe03f4,CDS_Pal.etm | Conflict Desert Storm [plus3] (PAL).etm | Conflict Desert Storm p3 pal.etm
+variants,Conflict - Desert Storm (p1).etm,53430001,1,,Conflict: Desert Storm,3633948bb581b23ba83a68e324f01e24,ConfltStorm.etm
+trainers,The Great Escape.etm,53430003,5,NTSC,The Great Escape (USA) +1,f4e9bea581fd75951686defa0f5d4536,Great Escape p5 ntsc.etm | The Great Escape [plus1] (USA).etm | The Great Escape p1.etm | The Great Escape p5 ntsc.etm | The Great Escape p5.etm | evt-tge.etm
+trainers,Conflict - Desert Storm II - Back to B.etm,53430006,5,NTSC,Conflict Desert Storm 2 Beta 1.0,58415e7b16aef58e75acfa1e82a584b1,CDS2B1.ETM | Conflict Desert Storm 2 [plus5].etm | Conflict Desert Storm 2 p5 beta 1_0.etm | Conflict Desert Storm 2 p5 ntsc.etm | conflict desert storm 2 p5.etm | conflict desert storm2.etm
+variants,Conflict - Desert Storm II (NTSC p3).etm,53430006,3,NTSC,Conflict Desert Storm II +3 (USA),f565ba22c030924912e0bf6d1a96b673,CDS2_USA.ETM | Conflict Desert Storm 2 [plus3] (USA).etm | Conflict Desert Storm 2 p3 ntsc.etm | Conflict Desert Storm 2 p3.etm
+variants,Conflict - Desert Storm II (PAL p3).etm,53430006,3,PAL,Conflict Desert Storm II +3 (PAL),030309d0c9b9acedfa030f9879e82501,CDS2_Pal.etm | Conflict Desert Storm 2 [plus3] (PAL).etm | Conflict Desert Storm 2 p3 pal.etm
+trainers,Conflict - Vietnam.etm,5343000A,5,NTSC,Conflict VieitNam + 4 Trainer Beta,c2a661c80a49c9c9b63edb8e188306cc,Conflict Vieitnam [plus4].etm | Conflict Vietnam p4 ntsc.etm | evt-CVietNam.etm
+variants,Conflict - Vietnam (PAL p3).etm,5343000A,3,PAL,Conflict Vietnam +3 (PAL),1c58383e161c0960b759a6d6ca7e20c6,Conflict Vietam p3 pal.etm | Conflict Vietnam [plus3] (PAL).etm | conflict vietnam pal.etm
+variants,Conflict - Vietnam (p3).etm,5343000A,3,,evt-conflict vietnam,09e624656cd99e336cc204760e0eb396,Conflict Vietnam [plus3].etm | evt-cietnam.ETM
+variants,Conflict - Vietnam (NTSC p3).etm,5343000A,3,NTSC,evt-conflict vietnam,b7dbb5a75ce00481357fb35bdfea58cd,Conflict Vietnam p3 ntsc.ETM | Conflict Vietnam p3.etm
+trainers,Conflict - Global Terror.etm,5343000C,4,PAL-NTSC,Conflict Global Storm +4 (NTSC/USA),e00584009468a8853c08725008e90cfc,Conflict Global Storm [plus4] (NTSC-US.etm | Conflict Global Storm p4 ntsc.etm | Conflict Global Storm p4.etm | Conflict Global Terror p4 ntsc.etm | evt-CGS(NTSC).etm | evt-CGS.etm
+variants,Conflict - Global Terror (PAL-NTSC p3).etm,5343000C,3,PAL-NTSC,Conflict Global Storm +3 BETA,f84339b9905904e15e4342edeb43d815,CGSplus3byDDKRAM.ETM | Conflict Global Storm [plus3] (BETA).etm | Conflict Global Storm p3.etm
+variants,Conflict - Global Terror (PAL-NTSC p2).etm,5343000C,2,PAL-NTSC,Conflict Global Storm +2 BETA,c5f5967bad9844aaf9a5bbadb31a33f9,Conflict Global Storm [plus2] (BETA).etm | ConflictGlobalStormDDKRAM.ETM
+trainers,Rogue Trooper.etm,5343000E,23,PAL,Rogue Trooper (PAL) +23,f4e1ffc8b23be893b920116dda390c31,EVT-RTRP.ETM | Rogue Trooper p23 pal.etm
+variants,Rogue Trooper (PAL p18).etm,5343000E,18,PAL,Rogue Trooper (PAL) +18,5cf1700bb56518ba0b642644b6b46c48,Rogue Trooper p18 pal.etm
+trainers,Constantine.etm,5343000F,6,,Constantine +10,383477de769d8e11ed7685320d551ebf,Constantine [plus10].etm | Constantine p10 multi.etm | Constantine.etm | evt-const.etm
+variants,Constantine (p5).etm,5343000F,5,,Constantine +?,c3c991ba232904569f3d83bc2ab9fff1,CONST2.ETM | Constantine [plus5].etm
+trainers,Total Overdose.etm,53430010,4,PAL,Total Overdose + 4 [PAL],c47ec9b5f34a3cd6195779ca5deb71ef,Total Overdose [plus4] (PAL).etm | Total Overdose p4 Pal.etm | totalod.etm
+trainers,Urban Chaos - Riot Response.etm,534300F7,7,PAL-NTSC,Urban Chaos (GLOBAL) +7,51e32638134b097d95720e5d1b223301,Urban Chaos RR p6 global.etm | Urban Chaos RR p6.etm
+variants,Urban Chaos - Riot Respo (PAL-NTSC p3).etm,534300F7,3,PAL-NTSC,Urban Chaos: Riot Response (GLOBAL) +3,28f1caf597ecc367e5a06987285a5cf6,EVT-UCRR.ETM
+trainers,Commandos - Strike Force.etm,534300F9,6,PAL,Commandos Strike Force + 6 Xored [PAL],eff241c90c3cc7555cb0fd3f665bfde3,Commandos Strk Frc p6 pal.etm
+trainers,Hitman - Blood Money.etm,534300FA,8,PAL-NTSC,Hitman Blood Money (GLOBAL) +8,e1ceb3d23e810aa4ff798be4e04c601e,EVT-HTBM.ETM | Hitman Blood Money p8 global.etm
+variants,Hitman - Blood Money (PAL p8).etm,534300FA,8,PAL,Hitman Blood Money (PAL) +8,381300d14106b48069356ae15fef8989,Hitman BM p8 pal fre-ger.etm
+variants,Hitman - Blood Money (PAL-NTSC p6).etm,534300FA,6,PAL-NTSC,Hitman Blood Money (GLOBAL) +6,ebd877eaface4759f2032101527d47b1,Hitman Blood Money p6 global.etm
+trainers,Just Cause.etm,534300FB,10,PAL,Just Cause (PAL) +10,4e812c5a6ebd7e8fdb9900fc0a7d1aba,evt-justcause.etm
+variants,Just Cause (PAL p5).etm,534300FB,5,PAL,Just Cause (PAL) +5,858f97843c1f6c7e3b4160461eecbca9,evt-justcause-pal.etm
+trainers,Lara Croft Tomb Raider - Legend.etm,534300FD,13,PAL-NTSC,Tomb Raider: Legend (GLOBAL) +13,44ad3bde8da0344d02636dc6d4f70588,EVT-TRL.ETM | Tomb Raider Legend p13 Global.etm | Tomb Raider Legend p13.etm
+variants,Lara Croft Tomb Raider (PAL-NTSC p12).etm,534300FD,12,PAL-NTSC,Tomb Raider: Legend (GLOBAL) +12,46ae1f5bcc4010c5c11ea93b886b9540,Tomb Raider Legend p12 global.etm | Tomb Raider Legend p12.etm
+variants,Lara Croft Tomb Raider - Lege (PAL p5).etm,534300FD,5,PAL,Tomb Raider: Legend (PAL) +5,03fcd4f89144890e244ce7cfa7a1d277,TombRaiderLegendP5.etm
+trainers,Reservoir Dogs.etm,534300FF,11,PAL,Reservoir Dogs (PAL) +11,90d5f46a1904c0abec9281b8d6207416,Reservoir Dogs p11 pal v1_1.etm
+variants,Reservoir Dogs (NTSC p11).etm,534300FF,11,NTSC,Reservoir Dogs (NTSC) +11,efeb347956b83293feab6b80946130c1,evt-rdon.etm
+variants,Reservoir Dogs (PAL p8).etm,534300FF,8,PAL,Reservoir Dogs (PAL) +8,57c8de448554139ee27f9f3b902c33c0,Reservoir Dogs p8 pal.etm
+variants,Reservoir Dogs (PAL p8) 2.etm,534300FF,8,PAL,Reservoir Dogs (PAL) +8,5db0dea50738b1b46d8630af042b92db,evt-reservoir-pal.etm
+trainers,Crazy Taxi 3 - High Roller.etm,53450004,2,NTSC,Crazy Taxi 3: High Roller +2 (USA),46e8613c7f7029c5fc68f999eb386714,Crazy Taxi 3 High Roller [plus2] (USA).etm | Crazy Taxi 3 p2 ntsc.ETM | Crazy Taxi 3 p2.ETM | CrazyTaxi3Plus2USA.ETM | crazy taxi 3.etm
+trainers,Panzer Dragoon Orta (USA).etm,53450007,1,NTSC,Panzer Dragoon Orta +1 (USA/NTSC v1.2),ae5ee7d58ae8fc8eae0ea23032267add,Panzer Dragon Orta p1 ntsc v1_2.ETM | Panzer Dragon Orta p1.ETM | Panzer Dragoon Orta [plus1] (NTSC-USA).etm | Panzer Dragoon Orta p1 ntsc.etm | evt-pdo12-USA-NTSC.ETM | evt-pdo12.ETM
+variants,Panzer Dragoon Orta (USA) (NTSC p1).etm,53450007,1,NTSC,Panzer Dragoon Orta +1 (USA),1dfd3ec939f08664ea6b754cc5cebfc8,Panzer Dragoon Orta [plus1] (USA).etm | Panzer Dragoon Orta p1.etm | mxt-pdo1.ETM
+variants,Panzer Dragoon Orta (USA) (PAL p1).etm,53450007,1,PAL,Panzer Dragoon Orta +1 (INDO v1.2),b5a93f9f7b10117d610e01b4c8fd4c99,Panzer Dragoon Orta [plus1] (v1.2).etm | Panzer Dragoon Orta p1 pal indo.etm | evt-pdo12-INDO.ETM
+trainers,The House of the Dead III.etm,53450008,4,PAL,House of the Dead 2/3 (PAL) +4,48992b7bf7eb4e0ca4a9df4b789ce82f,House of the Dead 2&3 p4 pal.etm | House of the Dead 2-3 [plus4] (PAL).etm | House of the Dead 2-3 p4 pal.etm | hotd.etm
+variants,The House of the Dead III (NTSC p2).etm,53450008,2,NTSC,House of the dead 2/3 +2,012354b4f5f6f3c68ec5ef5590797439,House Of The Dead 3.etm | House of the Dead 2-3 p2 ntsc.etm | House of the Dead 2-3 p2.etm | House of the dead 2-3 [plus2].etm | house of dead 2-3 p2.etm | houseod3.etm | the house of the dead 3.etm
+variants,The House of the Dead III (PAL p2).etm,53450008,2,PAL,House of the Dead 3 - PAL +2,91816bcc1bb28b0606a5da00bad11160,House of the Dead 3 [plus2] (PAL).etm | House3-PAL2.ETM
+trainers,JSRF - Jet Set Radio Future (USA).etm,5345000A,1,NTSC,JSRF +1 (ntsc) (USA) v0.01b,5adfeaea65efe74f1e3cff08ea452a0b,JSRFBOTH.ETM | Jet Set Radio Future [plus1] (NTSC-USA.etm | Jet Set Radio Future p1 ntsc v0_01b.etm | Jet Set Radio Future p1 ntsc.etm | jet set radio future p1.etm
+variants,JSRF - Jet Set Radio Future (USA) (p1).etm,5345000A,1,,Jet Set Radio Future +1,4176356d9a078890616b2c67567a1c37,JSRF.etm | Jet Set Radio Future [plus1].etm
+trainers,Headhunter - Redemption.etm,53450025,2,PAL,Headhunter Redemption (PAL),07a6d872c393152fe3fecb3d80360da6,Headhunter Redemption [plus3] (PAL).etm | evt-headh.etm | headhunter redemption.etm
+variants,Headhunter - Redemption (PAL p2).etm,53450025,2,PAL,Headhunter Redemption (PAL),becd2fc587ed28445291a279ea7964fe,Headhunter Redemption p3 pal.etm
+trainers,Spikeout - Battle Street.etm,53450029,4,,Spikeout - Battle Street +4 V1.2,020567200b201d99bec7557fe4aafbaa,Spikeout Battle Street [plus4] (v1.2).etm | Spikeout Battle Street p4 V1_2.etm | Spikeout Battle Street p4.etm | Spikeout.etm
+variants,Spikeout - Battle Street (p3).etm,53450029,3,,Spikeout Battle Street +3,201e8c282be5e0b5c9d95f37bea1bef1,Spikeout Battle Street p3.etm
+trainers,Sonic Heroes.etm,5345002B,4,NTSC,Sonic Heroes +3 (USA) (v0.1),ac7720e3773d80a4340693546e42546d,Sonic Heroes [plus3] (USA) (v0.1).etm | Sonic Heroes p3 ntsc v0_1.etm | Sonic Heroes p3 ntsc.etm | sonic heroes p3.etm | sonic.etm
+variants,Sonic Heroes (PAL p3).etm,5345002B,3,PAL,Sonic Heroes (PAL) +3,f1fadd1dfa565e552136ec10242d50d7,Sonic Heroes [plus3] (PAL).etm | Sonic Heroes p3 pal.etm | mxt_sonic.etm
+variants,Sonic Heroes (p1).etm,5345002B,1,,Tylers Sonic Hack,dc1ff67eadd81e363ef78be093fe02ec,TySonic.ETM
+trainers,ESPN NFL 2K5.etm,53450030,2,NTSC,ESPN NFL 2K5 +2,79e1026bb62af9635c2c17059bbfdb5a,ESPN NFL 2005 p2 ntsc.etm | ESPN NFL 2005 p2.etm | NFL 2005 [plus2].etm | nfl.etm
+variants,ESPN NFL 2K5 (NTSC p2).etm,53450030,2,NTSC,ESPN NFL 2k5 (USA) +2,be056f6c22f76d3e4907ac7f14af018e,ESPN NFL 2k5 [plus2] (USA).etm | EVT-E2K5.ETM
+trainers,ESPN NHL 2K5.etm,53450032,2,NTSC,ESPN NHL 2K5 +2,104f8c0a2681ee2085b54ea1907fcf3a,ESPN NHL 2005 [plus2].etm | ESPN NHL 2005 p2 ntsc.etm | ESPN NHL 2005 p2.etm | nhl.etm
+trainers,OutRun 2.etm,53450036,3,PAL,Outrun 2 +3 (PAL),0306ad9cc3fd84d958c1f89ddc8abf77,Outrun 2 [plus3] (PAL).etm | Outrun 2 p3 pal.etm | evt-or2.etm | outrun2.etm
+trainers,Major League Baseball 2K5.etm,53450037,2,NTSC,ESPN MLB 2K5 +2,998ab68c332a777a43e64b3dc1d02c86,ESPN MLB 2005 [plus2].etm | ESPN MLB 2005 p2 ntsc.etm | ESPN MLB 2005 p2.etm | mlb.etm
+trainers,Super Monkey Ball Deluxe.etm,53450038,2,NTSC,Super Monkey Ball DX +2,46db412dcc6a2b0934731fd17c9d99ad,Super Monkey Ball DX [plus2].etm | Super Monkey Ball Deluxe p2 ntsc.etm | Super Monkey Ball Deluxe p2.etm | smb.etm
+trainers,Sonic Mega Collection Plus.etm,5345003C,4,NTSC,Sonic Mega Collection + (USA) +4,1f3e99535ed00eaa2e8cdf5d0dc4194c,Sonic Mega Collection [plus4] (USA).etm | Sonic Mega Collection p4 ntsc.etm | Sonic Mega Collection p4.etm | evt-smcp.etm | sonic mega collection plus.etm
+trainers,Spartan - Total Warrior.etm,53450084,3,,spartan MULTI +3,a566fb677745fc7e20fe1eb7e9d2dbd7,SPARTAN.ETM | Spartan Total Warrior p3 multi.etm | Spartan p3.etm
+trainers,Shadow the Hedgehog.etm,53450086,11,NTSC,Shadow the Hedgehog (NTSC) +11,7eea2cb10345fc0f5b14cc88783748ff,EVT-STH.ETM | Shadow the Hedgehog p11 ntsc.etm | Shadow the Hedgehog p11.etm
+variants,Shadow the Hedgehog (NTSC p4).etm,53450086,4,NTSC,Shadow The Hedgehog (USA) +4,108b3c60446ef7a631b90d2cf7dbf454,Shadow the Hedgehog p4.etm | Shadow the Hedgehog.etm
+trainers,Sonic Riders.etm,53450087,8,PAL-NTSC,Sonic Riders (GLOBAL) +8,b2576a1166d6db5f7568f60c56119d6c,EVT-SRDR.ETM | Sonic Riders p8 multi.etm | Sonic Riders p8.etm
+variants,Sonic Riders (PAL-NTSC p6).etm,53450087,6,PAL-NTSC,Sonic Riders (GLOBAL) +6,1894d7dce71249d77f7421c6bbeb2247,Sonic Riders p6 global.etm | Sonic Riders p6.etm
+trainers,OutRun 2006 - Coast 2 Coast.etm,53450088,4,PAL-NTSC,OutRun 2006: Coast 2 Coast (GLOBAL) +4,3c9678d3bcb6283025dc84ed02b948fb,Outrun 2006 Coast 2 Coast p4 gobal.etm | Outrun 2006 Coast 2 Coast p4.etm | evt-outc2c.etm
+variants,OutRun 2006 - Coast 2 Co (PAL-NTSC p2).etm,53450088,2,PAL-NTSC,OutRun 2006: Coast 2 Coast (GLOBAL) +2,110ba3b2db6903a4a18bd54bdc420ee8,Outrun 2006 Coast 2 Coast p2 global.etm | Outrun 2006 Coast 2 Coast p2.etm
+trainers,Spartan - Total Warrior (USA).etm,5345008B,10,PAL-NTSC,Spartan: Total Warrior (GLOBAL) +8,5faf9e588ba528932756a9af43366750,Spartan Total Warrior p10 multi.etm | Spartan Total Warrior p10.etm
+trainers,SNK vs. Capcom - SVC Chaos.etm,534E0001,4,NTSC,SVC Chaos: SNK vs. Capcom +4 (USA/NTSC),686ee0ba46911ea6b3ac1a98bbef5e2e,SVC Chaos SNK vs Capcom p4 ntsc.etm | SVC Chaos SNK vs Capcom p4 usa.etm | SVC Chaos SNK vs. Capcom [plus4] (NTSC.etm | SVC Chaos SNK vs. Capcom p4.etm | evt-svcc.etm | svc chaos.etm
+trainers,Metal Slug 3 (USA-Japan).etm,534E0002,5,NTSC,Metal Slug 3 (USA/NTSC) +5,696726eabc2467b2208fcb216d72044a,Metal Slug 3 [plus5] (NTSC-USA).etm | Metal Slug 3 p5 ntsc.etm | Metal Slug 3 p5.etm | evt-ms3.etm | metal slug 3.etm
+trainers,The King of Fighters 2003.etm,534E0003,2,NTSC,King Of Fighters 2003 +2,f527ca41b0cb1c07c96d64bff2ceb20e,King of Fighters 2003 p2 ntsc.etm | King of Fighters 2003 p2.etm
+trainers,Samurai Shodown V.etm,534E0004,13,NTSC,Samurai ShoDown V (USA/NTSC) +13,44ef6739944e3625ea9ab084c382bd1c,EVT-SS5.ETM | Samurai ShoDown V p13.etm | Samurai Showdown 5 p13 ntsc.etm | Samuria Showdown 5 p13 ntsc.etm | Samuria Showdown 5 p13.etm
+trainers,Metal Slug 4.etm,534E0005,7,NTSC,Metal Slug 4 (USA) +7 (rev2),c2c66d04981098e556e5e2a51f2636e8,Metal Slug 4 [plus7] (USA) (REV2).etm | Metal Slug 4 p7 ntsc rev2.etm | Metal Slug 4 p7 ntsc.etm | Metal Slug 4 p7 rev2.etm | evt-msl4.etm
+variants,Metal Slug 4 (NTSC p7).etm,534E0005,7,NTSC,Metal Slug 4 (USA) +7 (rev3),858e07f3faee2c78d2b6f2248c8a4bfb,Metal Slug 4 p7 ntsc rev3.etm | Metal Slug 4 p7 rev3.etm
+variants,Metal Slug 4 (p5).etm,534E0005,5,,Metal Slug 4 +5,f014d65605e3516243162d0f6b9fc4ef,Metal Slug 4 [plus5].etm | ms4.etm
+trainers,The King of Fighters 2002.etm,534E0006,2,NTSC,King Of Fighters 2002 +2,25a2f3d2dbda17aeb54f5450505eea22,King of Fighters 2002 p2 ntsc.etm | King of Fighters 2002 p2.etm
+trainers,KOF - Maximum Impact - Maniax.etm,534E0007,8,NTSC,KOF: MIM (USA) +8 rev2,34bec4c676e7684f20b803ccea81ef07,EVT-KOFM.ETM | King Of Fighters MIM p8 ntsc.etm | King Of Fighters MIM p8.etm | King of Fighters Maximum Impact Maniax p8.etm | King of Fighters Maximum Impact Maniax.etm | XoredKingFightersMIM.etm
+variants,KOF - Maximum Impact - Maniax (JAP p8).etm,534E0007,8,JAP,KOF: MIM (JPN) +8 rev2,189e33aede2659c3313af315dd33a72a,King of Fighters MIM p8 Jap.etm | King of Fighters MIM p8 ntsc jap.etm | evt-kofm_jpn.etm
+variants,KOF - Maximum Impact - Maniax (p6).etm,534E0007,6,,King of Fighters: Maximum Impact-Maniax +6,7c9086760edd118aad68dd8c04f469f8,xorkofmi.etm
+trainers,Metal Slug 5.etm,534E0008,7,NTSC,Metal Slug 5 (USA) +7 (rev1),4077fe9b5da7d27fabda7d7af5357d3a,Metal Slug 5 [plus7] (USA) (REV1).etm | Metal Slug 5 p7 ntsc rev1.etm | Metal Slug 5 p7 ntsc.etm | Metal Slug 5 p7.etm | evt-msl5.etm
+trainers,The King of Fighters - Neowave.etm,534E000A,10,PAL-NTSC,THE KING OF FIGHTERS NEOWAVE (GLOBAL) +10,908fc6fcc0655d69bd515a15e451c5ab,EVT-KOFN.ETM | King of Fighters Neo Wave p10 global.etm | King of Fighters Neo Wave p10.etm
+trainers,Combat Elite - WWII Paratroopers.etm,53500001,7,NTSC,Elite Combat +7,2e1bb7a3c20384ac38e865ed53cfd15c,Combat Elite WW2 p7 ntsc.etm | Combat Elite WWII Paratroopers p7.etm | evt-combatelite7.etm
+variants,Combat Elite - WWII Paratroopers (p4).etm,53500001,4,,Combat Elite WWII PTroopers +4,11904e1e9d0227bd8765c24188d3b8b6,CELITE.ETM | Combat Elite WW2 p4.etm | Combat Elite p4.etm
+trainers,Dead or Alive 3.etm,54430001,9,NTSC,Dead or Alive 3 (NTSC) +9,4e6a8c4a854a606d6891628b0d07f14f,Dead or Alive 3 [plus9] (NTSC).etm | Dead or Alive 3 p9 ntsc.etm | dead or alive 3 p9.etm
+variants,Dead or Alive 3 (p1).etm,54430001,1,,Dead or Alive 3 +1,5663b8ff82bdb090d162dd08ee2cd93c,DOA3.ETM
+trainers,Ninja Gaiden.etm,54430003,6,NTSC,Ninja Gaiden + 5 Trainer Final,388c8388e61b06e51544913c11e022dd,Ninja Gaiden [plus5].etm | Ninja Gaiden p5 final ntsc.etm | Ninja Gaiden p5 ntsc.etm | Ninja Gaiden p5.etm | evt-NGaiden.etm
+variants,Ninja Gaiden (p6).etm,54430003,6,,Ninja Gaiden + 5 Trainer Revision 1.3,1ff55409aa3e88cd79f267e094c28898,Evt-ngr2.etm
+variants,Ninja Gaiden (NTSC p4).etm,54430003,4,NTSC,Ninja Gaiden +4 rev 1.0 (USA/NTSC),d05a077be61e2244568146d26ea06075,Ninja Gaiden [plus4] (NTSC-USA) (v1.0).etm | Ninja Gaiden p4.etm | ninja gaiden.etm
+variants,Ninja Gaiden (p4).etm,54430003,4,,Ninja Gaiden + 4 Hurricane PII Trainer,d76fdc6e4cd612c5cc5b052cf4794a60,Ninja Gaiden Hurricane Pack 2 [plus4].etm
+variants,Ninja Gaiden (p4) 2.etm,54430003,4,,Ninja Gaiden + 4 Hurricane Pack,fb1d1d1898b584f3792fcd9a1fdd42d8,NinjaHCP.ETM
+variants,Ninja Gaiden (NTSC p4) 2.etm,54430003,4,NTSC,Ninja Gaiden +4 rev 1.0 (USA/NTSC),d985ef161d60a62d6ee50469f4cfec0d,NinjaR1.etm
+variants,Ninja Gaiden (NTSC p4) 3.etm,54430003,4,NTSC,Ninja Gaiden +4 Beta (USA/NTSC),1ebcc51610c335f8f6258ec41b65cd96,NinjaGaiden_4Beta_ntsc.etm
+variants,Ninja Gaiden (NTSC p3).etm,54430003,3,NTSC,Ninja Gaiden +3 (NTSC),b01d2cde24b5dbba7fd92d1264f7723a,GAIDEN.ETM | Ninja Gaiden [plus3] (NTSC).etm | Ninja Gaiden p3.etm
+variants,Ninja Gaiden (PAL p2).etm,54430003,2,PAL,Ninja Gaiden +2 (PAL),8f8c4fbd7ea4497a311b79536bd78909,Ninja Gaiden [plus2] (PAL).etm | Ninja Gaiden p2 pal.ETM | NinjaGaidenPAL.ETM
+variants,Ninja Gaiden (p2).etm,54430003,2,,Ninja Gaiden +2 *TEST*,352df78e9a46ce62cfa0865a0adf11e5,NG_TEST.ETM
+variants,Ninja Gaiden (p1).etm,54430003,1,,Ninja Gaiden,e6a17a50bdf0e665f4c7b5bb2ddc7df1,Ninja Gaiden [plus2] (BETA).etm | NinjaGaiden.ETM
+trainers,Fatal Frame.etm,54430004,4,PAL-NTSC,Fatal Frame USA (+4),8e63a57baf19fbbb351bc33893c5749c,AK-FFrameUSAv2.ETM | Fatal Frame [plus4] (USA).etm | Fatal Frame p4 ntsc.ETM | Fatal Frame p4.ETM | fatal frame usa p4.ETM | fatal frame.etm
+variants,Fatal Frame (PAL p3).etm,54430004,3,PAL,Fatal Frame (+3),403133e03f3a74f15779b90e5d2922d5,Fatal Frame [plus3].etm | Fatal Frame p3.etm | FatalFrameP3.etm
+trainers,Dead or Alive 1 Ultimate.etm,54430006,5,NTSC,Dead or Alive: Ultimate +5 (USA/NTSC),30d1f2733cda320fd5421a1ec18fc6d3,Dead or Alive Ultimate [plus5] (NTSC-U.etm | Dead or Alive Ultimate p5 ntsc.etm | Dead or Alive Ultimate p5.etm | doa ultimate.etm
+variants,Dead or Alive 1 Ultimate (PAL p5).etm,54430006,5,PAL,DOA Ultimate +5,3ff5441089b8ea21702434be561eaf40,DOA2U.ETM | Dead Or Alive Ultimate [plus5].etm | Dead or Alive Ultimate p5 pal.etm
+variants,Dead or Alive 1 Ultimate (NTSC p4).etm,54430006,4,NTSC,Dead or Alive: Ultimate +4 (USA/NTSC),344e431d80eebb2a73e9ff4b4bcd18b6,EVT-DOAU.ETM
+variants,Dead or Alive 1 Ultimate (NTSC p2).etm,54430006,2,NTSC,DOAU 1/2 (USA) +2,fe276b31e933892b845d9620d0864388,Dead Or Alive Ultimate 1-2 [plus2] (US.etm | Dead or Alive Ultimate p2 ss&wire ntsc.etm | Dead or Alive Ultimate p2.etm | doa ultimate ss.etm
+variants,Dead or Alive 1 Ultimate (NTSC p2) 2.etm,54430006,2,NTSC,DOAU 1/2 (USA) +2,9614f233d4807414f195dacdd14b4a71,evt-doau2.etm
+trainers,Dead or Alive Xtreme Beach Volleyball.etm,54430007,10,PAL,DOA XtremeBeachVolleyBall (PAL) +10,6ae2fa81c938e11f846845008157470a,DOAXtlPAL10.ETM | Dead or Alive XBV p10 pal.etm | Dead or Alive Xtreme Beach Volleyball.etm
+variants,Dead or Alive Xtreme Beach V (NTSC p8).etm,54430007,8,NTSC,Dead or Alive:XBV +8,9dcea7b18e12bfcf02516a8fa6b0eebb,Dead or Alive XBV p8 ntsc.etm | Dead or Alive XBV p8.etm | Dead or Alive Xtreem Beach Volleyball.etm | doax.etm | mxt_doaxbv.etm
+variants,Dead or Alive Xtreme Beach Volley (p3).etm,54430007,3,,Dead or Alive:XBV +3,e6823c09cf98fb8883bb9da0746cb8ec,DOAXBV.ETM
+trainers,Fatal Frame II - Crimson Butterfly - D.etm,5443000A,6,JAP,Fatal Frame 2 v5(US/JP) - Powerliu,9d94a50b5ce3e325d284ba0056fd7224,Fatal Frame 2 [plus8] (US-JP) (v5).etm | Fatal Frame 2 p6 ntsc jap.etm | Fatal Frame 2 v5 p6 ntsc jap.etm | Fatal Frame 2 v5 p6.etm | FatalFrameII-v5.etm
+variants,Fatal Frame II - Crimson (PAL-NTSC p5).etm,5443000A,5,PAL-NTSC,Fatal Frame 2 (NTSC) +4,5a639fedfe54a24a177cb76fefac7497,Fatal Frame 2 [plus4] (NTSC).etm | Fatal Frame 2 p4 ntsc.etm | Fatal Frame 2 p4.etm | fatal frame 2.etm
+variants,Fatal Frame II - Crims (PAL-NTSC p5) 2.etm,5443000A,5,PAL-NTSC,Fatal Frame 2 (NTSC) +5,0bdd44a93831da6861f288a7d2278e85,Fatal Frame 2 p5 ntsc.etm
+variants,Fatal Frame II - Crimson Butt (PAL p4).etm,5443000A,4,PAL,PROJECT ZERO 2 DIRECTOR´S CUT (PAL MULTI),0361d865fafb51e5addbe2dcaec13dc3,Project Zero 2 DC p4 Pal.ETM | Project Zero 2 p4 Pal.etm
+variants,Fatal Frame II - Crimson (PAL-NTSC p3).etm,5443000A,3,PAL-NTSC,Fatal Frame 2 (NTSC) +3,d4bd62e972bca8ed900262dc478c43aa,Fatal Frame 2 [plus3] (NTSC).etm | Fatal Frame 2 p3.ETM | FatalFrame2.ETM
+trainers,Ninja Gaiden Black.etm,5443000D,13,NTSC,Ninja Gaiden Black +13 v1.3r1,a5f1c82c6ce759f9af98d1f3d9d0326a,Ninja Gaiden Black p13 ntsc.etm
+variants,Ninja Gaiden Black (p13).etm,5443000D,13,,Ninja Gaiden Black +13 v1.3 Beta#2,ad76f7c8e3036f1beb644fc8dd523c7b,Ninja Gaiden Black p13.etm
+variants,Ninja Gaiden Black (p13) 2.etm,5443000D,13,,Ninja Gaiden Black +13 v1.3 Beta#2,f267b0a021369c6035401db78412d00a,Ninja Gaiden Black.etm
+variants,Ninja Gaiden Black (p9).etm,5443000D,9,,Ninja Gaiden Black +9 v1.2,5bf480a2c4c8b8d852d3b7971a0a4a64,Ninja Gaiden Black [plus9] (v1.2).etm | evt-ngb1[2].etm
+variants,Ninja Gaiden Black (p9) 2.etm,5443000D,9,,Ninja Gaiden Black +9 v1.2r2,8af8105fd2deb9b682919609afcc38f0,evt-ngb1[2]r2.etm
+variants,Ninja Gaiden Black (p7).etm,5443000D,7,,Ninja Gaiden Black +7 v1.2,a658ed5f906c3bd477e62fc364f1754f,Ninja Gaiden Black [plus7] (v1.2).etm | evt-ngb1[1].etm
+variants,Ninja Gaiden Black (NTSC p6).etm,5443000D,6,NTSC,Ninja Gaiden Black: Items Maker (+6),8497169c568cbdb05fbdef27167c877a,Ninja Gaiden Black Item Maker p6 ntsc.etm | Ninja Gaiden Black Item Maker p6.etm
+variants,Ninja Gaiden Black (NTSC p4).etm,5443000D,4,NTSC,Ninja Gaiden Black +4 v1.0,49f53cfe4ea7621e59a4cab40738b58b,Ninja Gaiden Black [plus4] (v1.0).etm | Ninja Gaiden Black p4 ntsc v1.etm | Ninja Gaiden Black p4.etm | evt-ngb[1].etm
+trainers,Aquaman - Battle for Atlantis.etm,544D0003,2,NTSC,Aquaman: Battle for Atlantis +2,d43ea0315c9beb50ef66ad86376651e1,Aquaman Battle For Atlantis _2 (NTSC).etm | Aquaman Battle for Atlantis [plus2].etm | Aquaman Battle for Atlantis ntsc p2.etm | Aquaman Battle for Atlantis p2 ntsc.etm | Aquaman Battle for atlantis p2.etm | AquamanBfA-plus2.etm
+trainers,Knights of the Temple - Infernal Crusa.etm,544D0007,6,PAL,Knights of The Temple (PAL) +6,3e66c35e185d067259a002476b3e5bd5,EVT-TMPL.ETM | Kingdom Under Fire The Crusader [plus6.etm | Knights of The Temple [plus6] (PAL).etm | Knights of the Temple p6 pal.etm | knights of the temple p6.etm
+trainers,Conan.etm,544D0008,6,PAL,Conan (PAL) +5,022b9b4050dd2e46301f0cfa0b48e0b0,Conan [plus5] (PAL).etm | Conan p5 pal.etm | EVT-CONP.ETM | conan pal.etm
+trainers,Disney's The Haunted Mansion.etm,544D000D,2,NTSC,Haunted Mansion (NTSC) +2,23b92777247259784331f46c7fc2b559,Haunted Mansion [plus2] (NTSC).etm | Haunted Mansion p2 ntsc.etm | Haunted Mansion p2.etm | haunted mansion.etm | hauntedm.etm
+trainers,Star Trek - Shattered Universe.etm,544D0010,5,NTSC,Star Trek: Shattered Universe (NTSC) +5,8b40a067ef7f95e26f40d3f53683a469,EVT-TREK.ETM | Star Trek Shat Universe p5 ntsc.etm | Star Trek Shat Universe p5.etm
+trainers,Knights of the Temple II.etm,544D0013,9,PAL,Knights Of The Temple 2 +9 v1.r1,81ce093acf66d7bb31a34a3510d6feb4,Knights Of The Temple 2 P9.etm | Knights of the Temple 2 p9 pal.etm
+variants,Knights of the Temple II (NTSC p9).etm,544D0013,9,NTSC,Knights Of The Temple 2 +9 v1.r1,278b4d063d69829ab18703dcd8006d70,Knights of the Temple 2 p9 ntsc.etm
+trainers,Red Faction II.etm,54510005,3,NTSC,Red Faction II +3 (NTSC),6ab4cfb00f32547704ba8342f0bf8701,Red Faction 2 [plus3] (NTSC).etm | Red Faction 2 p3 ntsc.etm | Red Faction 2 p3.etm | red faction 2.etm | redfact.etm
+trainers,Yager.etm,54510006,3,PAL,Yager +3 (PAL),cfea1b56c8b76f57f25387d8da29255f,Yager [plus3] (PAL).etm | Yager p3 pal.etm | evt-yag3.etm | yager.etm
+variants,Yager (PAL p2).etm,54510006,2,PAL,Yager (PAL) +2,8557848a7e14c603bc51a255ea8d4241,Yager [plus2] (PAL).etm | evt-yag2.etm
+trainers,Evil Dead - A Fistful of Boomstick.etm,5451000B,4,,evildead,5da9157c6d3dcbaf05001015f2e0aafd,EVILDEAD.ETM | Evil Dead FFoB p4.etm | Evil Dead p4.etm | Evildead [plus4].etm
+trainers,Scooby-Doo! Mystery Mayhem.etm,5451000E,3,NTSC,Scooby Doo! Mystery Mayhem (USA) +2,633f1a264cbac962aa4abbc439f61262,EVT-SDOO.ETM | Scooby Doo Mystery Mahem p2 ntsc.etm | Scooby Doo! Mystery Mayhem [plus2] (US.etm | scooby doo mystery mahem p2.etm
+trainers,The Punisher.etm,54510018,15,NTSC,Punisher +24 (NTSC/USA),5071130c88aebc2444cec98fa0dbbc4c,Punisher [plus24] (NTSC-USA).etm | Punisher p24 ntsc.etm | Punisher p24.etm | The Punisher p24 ntsc.etm | The Punisher p24.etm | The Punisher.etm | evt-punish.etm
+variants,The Punisher (NTSC p11).etm,54510018,11,NTSC,Punisher +? (NTSC/USA),811c3b31c5dedf7445d81d2a8c60ebbb,Punisher [plus12] (NTSC-USA).etm | Punisher p12.etm | punish.etm
+variants,The Punisher (NTSC p9).etm,54510018,9,NTSC,Punisher +? (NTSC/USA),31b0557d16ac2551eadae7905e4eb8ca,PUNISHER.ETM
+trainers,Nickelodeon SpongeBob SquarePants - Ba.etm,5451001A,4,NTSC,Spongebob Squarepants: Battle for Bikini Bottom +4 (USA),87d41cc8d3f04a98189f5aa9dad98d40,MXT-SBBB.ETM | Sponge Bob BFBB p4 ntsc.etm | Sponge Bob BFBB p4.etm | Spongebob Squarepants Battle for Bikin.etm | sponge bob battle for bakini bottom p4.etm
+trainers,Disney-Pixar Finding Nemo.etm,5451001E,1,NTSC,Finding Nemo +4 (USA)(v0.1),3915b9a6a1f92e6a3236df50e4ddc753,Finding Nemo [plus4] (USA)(v0.1).etm | Finding Nemo p4 ntsc v0_1.etm | Finding Nemo p4 ntsc.etm | Finding Nemo p4.etm | finding nemo p1.etm | findnemo.etm
+trainers,Scooby-Doo! Night of 100 Frights.etm,5451001F,2,NTSC,Scooby-Doo!: Night of 100 Frights +2,23d9465df415f6bdcb27b668f7a02bae,Scooby Doo NO100F p2 ntsc.etm | Scooby Doo NO100F p2.etm | Scooby-Doo! Night of 100 Frights [plus.etm | scobydoo.etm
+trainers,Full Spectrum Warrior.etm,54510022,1,NTSC,Full Spectrum +2 (NTSC) v0.01,09fd7ef5b50f5fd48390ae1c9ec96d21,Full Spectrum Warrior p2 ntsc v0_01.etm | Full Spectrum Warrior p2 ntsc.etm | Full Spectrum [plus2] (NTSC) (v0.01).etm | fsammo.etm | full spectrum warrior p2.etm | full spectrum worrior.etm
+trainers,Sphinx and the Cursed Mummy.etm,54510023,7,NTSC,Sphinx and the Cursed Mummy +6 (USA) (v0.1),7adea82aabd929f80057d794bea382a4,SPHINX.ETM | Sphinx and TCM p6 ntsc v0_1.etm | Sphinx and TCM p6 ntsc.etm | Sphinx and TCM p6.etm | Sphinx and the Cursed Mummy [plus6] (U.etm | Sphinx and the Cursed Mummy p6.etm
+variants,Sphinx and the Cursed Mummy (p1).etm,54510023,1,,Sphynx +1,6f7b07077417d94e2a751c977f554ee3,SPHYNX.ETM | Sphynx [plus1].etm
+trainers,Evil Dead - Regeneration.etm,54510025,7,NTSC,Evil Dead: Regeneration (USA) +7,2553f0e2467aa0ccd04d697a79a354fb,Evil Dead Regeneration [plus7] (USA).etm | Evil Dead Regeneration p7 ntsc.etm | Evil Dead Regeneration p7.etm | Evil Dead Regeneration.etm
+variants,Evil Dead - Regeneration (NTSC p7).etm,54510025,7,NTSC,Evil Dead: Regeneration (USA) +7,cbb618dd73c6c3bd0c527afe77223fb1,EVT-EDRE.ETM
+variants,Evil Dead - Regeneration (NTSC p7) 2.etm,54510025,7,NTSC,Evil Dead: Regeneration (USA) +7,9cad7137d5142d9a4a786e9cf4eeca23,EvilDead2P7.etm
+trainers,Destroy All Humans!.etm,54510026,7,NTSC,Destroy All Humans +7,75840ee54be5ec96837e281fd4df6e68,Destroy All Humans [plus7].etm | Destroy All Humans p7 ntsc.etm | Destroy All Humans p7.etm | Xordah.etm
+variants,Destroy All Humans! (PAL p7).etm,54510026,7,PAL,Detroy All Humans + 7 Xored [PAL] ,55b8a3a2ea73b6cf4bf787762f1c6c89,DESTROY.ETM | Destroy All Humans p7 pal.etm
+variants,Destroy All Humans! (p3).etm,54510026,3,,Destroy All Humans! +3,aa39e590bc97c138973f29723cb519d8,Destroy All Humans [plus3].etm | DestroyAllHumans_p3.etm | DestryHmnsPS3.ETM
+variants,Destroy All Humans! (PAL-NTSC p3).etm,54510026,3,PAL-NTSC,Destroy All Humans +2 Pal/Ntsc,454e36fddc5a2d1ffe54862b842bd347,Destroy All Humans [plus2] (PAL-NTSC).etm | Destroy All Humans p2.etm
+variants,Destroy All Humans! (PAL-NTSC p2).etm,54510026,2,PAL-NTSC,Destroy All Humans +2 Pal/Ntsc,df4a1efd657dee91272a617e32712273,DahBispoo.ETM
+trainers,Nickelodeon SpongeBob SquarePants - Th.etm,54510027,8,NTSC,Spongebob The Movie (USA) +8,3a20537fef9368e5f63273d9b8051db4,Sponge Bob the Movie p8 ntsc.etm | Sponge Bob the Movie p8.etm | Spongebob The Movie [plus8] (USA).etm | evt-sbtm.etm | spongebob the movie.etm
+trainers,Disney-Pixar The Incredibles.etm,54510028,3,NTSC,The Incredibles (USA) +3,11a3a8cad700b5e5827795330846c97d,Incredibles p3 ntsc.etm | The Incredibles [plus3] (USA).etm | The Incredibles p3 ntsc.etm | evt-tinc.etm | the incredibles p3.etm | the incredibles.etm
+trainers,MotoGP - Ultimate Racing Technology 3.etm,54510088,5,NTSC,MotoGP: Ultimate Racing Technology 3 (USA) +5,407e7a001014e0ff17390b8645b1712a,MotoGP 3 URT p5 ntsc.etm | MotoGP URT 3 p3 ntsc.etm | MotoGP URT 3 p3.etm | MotoGP Ult Racing Tech 3 p5.etm | MotoGP Ultimate Racing Technology 3 [p.etm | evt-mgp3.etm
+trainers,Hot Wheels - Stunt Track Challenge.etm,54510089,5,,Hot Wheels Multi +5,7e10d913967256a8683b5fcecc8f6af6,Hot Wheels STC p5 multi.etm
+trainers,Nickelodeon Tak 2 - The Staff of Dream.etm,5451008B,4,NTSC,Tak 2 +5 (NTSC),65387013333bab15d2049c0fbd0e54ab,Tak 2 [plus5] (NTSC).etm | Tak 2 p5 ntsc.etm | Tak 2 p5.etm | evt-tak2.etm | tak 2.etm
+trainers,Juiced (USA-Europe).etm,545100EF,7,NTSC,Juiced +7,1e5c3096f91bb60cd5d50be1a0481789,Juiced [plus7].etm | Juiced p7 ntsc.etm | Juiced p7.etm | xorjuiced.etm
+variants,Juiced (USA-Europe) (p7).etm,545100EF,7,,Juiced,8912ab6481a0f302f3b53a824f2639d3,juiced.etm
+trainers,Disney-Pixar Cars.etm,545100F2,3,JAP,Cars (NTSC/JPN) +3,c2367e8645b6e11542f45090bf42aaaa,Cars p3 ntsc.etm | Cars p3.etm
+trainers,Nickelodeon Tak - The Great Juju Chall.etm,545100F4,4,NTSC,Tak: The Great Juju Challenge (USA) +4,d662d3762453f1cb205d49af5ecdebaf,Tak The Great Juju Challenge [plus4] (.etm | Tak The Great Juju Challenge p4 ntsc.etm | Tak The Great Juju Challenge p4.etm | evt-tgjc.etm
+trainers,Disney-Pixar The Incredibles - Rise of.etm,545100F6,4,NTSC,The Incredibles: Ride Of The Underminer (USA) +4,f387e1a3f0583be07b5b5f48028fe1f8,EVT-TIRU.ETM | Incredibles RotU p4 ntsc.etm | The Incredibles RotU p4 ntsc.etm | The Incredibles RotU p4.etm
+trainers,Scooby-Doo! Unmasked.etm,545100F7,4,NTSC,Scooby-Doo! Unmasked (USA) +4,1be5e47221c20aa0819f6e94da24e30d,Scooby Doo Unmasked p4 ntsc.etm | Scooby Doo Unmasked p4.etm | Scooby-Doo! Unmasked [plus4] (USA).etm | evt-scdu.etm
+trainers,Full Spectrum Warrior - Ten Hammers.etm,545100F8,3,NTSC,Full Spectrum Warrior: Ten Hammers (USA) +3,ea8a6fa6a5f0ddd34df087b90dca0cc4,Full Spectrum Warrior Ten Hammers p3 n.etm | Full Spectrum Warrior Ten Hammers p3.etm
+trainers,Destroy All Humans! 2.etm,54510106,6,PAL-NTSC,Destroy All Humans! 2 (GLOBAL) +6,c4a5cdc9dd288013798c6e0359f7b367,evt-dah2.etm
+variants,Destroy All Humans! 2 (PAL-NTSC p4).etm,54510106,4,PAL-NTSC,Destroy All Humans! 2 (GLOBAL) +4,3ea4ec16f3ca73e4f5893cea89420863,evt-dah21.etm
+trainers,RoboCop.etm,54530005,3,NTSC,Robocop (NTSC) +3,dc23faf7ec5997d79c3f3ae6b569378c,evt-rcop.etm
+variants,RoboCop (PAL p1).etm,54530005,1,PAL,ROBOCOP +1 (PAL),a5e47b7494a67b2317ca7a6639ed3263,Robocop [plus1] (PAL).etm | Robocop p1 pal.etm | RobocopPAL.etm
+trainers,4x4 Evo 2.etm,54540001,3,NTSC,4x4 EVO 2 +4 (NTSC) v0.01,5b37c87a317107c83b783a3c0f0f039b,4X4EVO2.ETM | 4x4 EVO 2 _4 (NTSC).etm | 4x4 evolution 2 p3.etm
+trainers,Max Payne.etm,54540003,1,PAL,Max Payne +1 (PAL),786502b2417f74cde3d7c06d7a95f5a5,Max Payne p1 pal.etm | MaxPayne_PAL.etm
+trainers,Serious Sam.etm,54540004,10,NTSC,   Serious Sam +9,90f14ffb73cb7390a76226649a2d4795,Serious Sam [plus9].etm | Serious Sam p9 ntsc.etm | Serious Sam p9.etm | evt-ssam.etm
+trainers,State of Emergency.etm,54540006,6,NTSC,State Of Emergency +6 (USA)(v0.1),c333f6421b8901c66f30f8768b8e92eb,State Of Emergency [plus6] (USA)(v0.1).etm | State of Emergency p6 ntsc v0_1.etm | State of Emergency p6 ntsc.etm | soe.etm | state of emergency p6.etm | state of emergency.etm
+trainers,Mafia.etm,54540009,1,NTSC,Mafia +1,ce69aef0bbf23ef8541d9da1fd862066,MAFIA.ETM | Mafia [plus1].etm | Mafia p1 ntsc.etm | Mafia p1.etm | Mafia-plus1.etm
+variants,Mafia (PAL p1).etm,54540009,1,PAL,Mafia +1 (GER),7a763f90a5a7b01ce39a3f7fd8413ccb,Mafia [plus1] (GER).etm | Mafia_GER.etm
+trainers,Vietcong - Purple Haze.etm,5454000A,8,NTSC,Vietcong: Purple Haze (USA) +8,cda451bacafa739def44092164999dc0,EVT-VCPH.ETM | Vietcong Purple Haze p8 ntsc.etm
+trainers,Max Payne 2 - The Fall of Max Payne.etm,5454000C,5,NTSC,Max Payne II +5 (USA/NTSC)(v1.0),e35ad59350be1562970dc85da3e60f3e,Max Payne 2 [plus5] (NTSC-USA)(v1.0).etm | Max Payne 2 p5 ntsc v1.etm | Max Payne 2 p5 ntsc.etm | Max Payne 2 p5.etm | evt-Mp2.etm
+variants,Max Payne 2 - The Fall of Ma (NTSC p1).etm,5454000C,1,NTSC,Max Payne +1 (USA)(v0.2),024e55a249353bd4fdab52123a236eca,Max Payne [plus1] (USA) (v0.2).etm | Max Payne p1 ntsc v0_2.etm | Max Payne p1 ntsc.etm | Max Payne p1 rev2.etm | max payne p1.etm | maxp2_v0[1].2.etm | maxp2_v0_1_.2.etm
+variants,Max Payne 2 - The Fall of (NTSC p1) 2.etm,5454000C,1,NTSC,Max Payne +1 (USA)(v0.1),f7fa581abb75327c014e890c3e4a8e4c,Max Payne [plus1] (USA) (v0.1).etm | Max Payne p1 rev1.etm | max payne 2.etm | maxp2.etm
+variants,Max Payne 2 - The Fall of Max (PAL p1).etm,5454000C,1,PAL,Max Payne 2 +1 (PAL),9f350decccc7f662722d45825f1a655b,Max Payne 2 p1 pal.etm | Max Payne [plus1] (PAL) (v0.1).etm | MaxPayne2_PAL.etm
+trainers,Serious Sam II.etm,5454000D,4,NTSC,Serious Sam 2 +4    ,c77ca8d58ba081df87c02f792ac4d55f,Serious Sam 2 [plus4].etm | Serious Sam 2 p4 ntsc.etm | Serious Sam 2 p4.etm | Serious Sam 2 p5 multi.etm | Serious Sam 2.etm | ssam2.etm
+trainers,Grand Theft Auto III.etm,5454000E,2,NTSC,Grand Theft Auto 3 +2 (USA/NTSC),9bf83e1aa824c368197149c8df6b82a5,Grand Theft Auto 3 [plus2] (NTSC-USA).etm | Grand Theft Auto 3 p2 ntsc.etm | Grand Theft Auto 3 p2.etm | evt-gta3a.etm | gta 3.etm
+trainers,Grand Theft Auto - Vice City.etm,5454000F,13,PAL,Grand Theft Auto: Vice City (PAL/GER) +13,d5994d6dc5fff46bf6dd3aa4d04a9738,Grand Theft Auto Vice City _13 PAL.etm | Grand Theft Auto Vice City p13 PAL.etm
+variants,Grand Theft Auto - Vice City (NTSC p4).etm,5454000F,4,NTSC,Vice City (NTSC) [+5],d8cedc52f0d0ac3acbce6bff8385a9f3,Grand Theft Auto Vice City [plus5] (NT.etm | Grand Theft Auto Vice City p5 ntsc.etm | Grand Theft Auto Vice City p5.etm | Vice_City_NTSC.ETM
+variants,Grand Theft Auto - Vice City (NTSC p1).etm,5454000F,1,NTSC,Grand Theft Auto: Vice City +1 (USA/NTSC),ccde3a5e1ff8822c400944e1458b2371,Grand Theft Auto Vice City [plus1] (NT.etm | Grand Theft Auto Vice City p1 ntsc.etm | Grand Theft Auto Vice City p1.etm | evt-gtavc.etm | gtavc.etm
+trainers,Close Combat - First to Fight - United.etm,54540012,4,NTSC,Close Combat: First to Fight USA +4,f24588595f275aad89e30643abb64b09,Close Combat First to Fight [plus4] (U.etm | Close Combat First to Fight p4 ntsc.etm | Close Combat First to Fight p4.etm | Closecom.etm
+trainers,Outlaw Golf 2.etm,54540017,6,NTSC,Outlaw Golf 2 +6 (NTSC),a0a2522c1f7e8770e3e0cd1dd27c18ff,Outlaw Golf 2 [plus6] (NTSC).etm | evt-olg2.etm
+variants,Outlaw Golf 2 (NTSC p6).etm,54540017,6,NTSC,Outlaw Golf 2 +6 (NTSC),27ac9515fef4aaa246e2623340e3d436,Outlaw Golf 2 p6 ntsc.etm
+trainers,Wings of War.etm,54540018,2,NTSC,Wings Of War +2 NTSC,b68000e3343e348ecee19cf04507a952,Wings of War p2 ntsc.etm | Wings of War p2.etm | evt-wow.etm
+variants,Wings of War (NTSC p2).etm,54540018,2,NTSC,Wings Of War +2 NTSC,bb52c08cd6451c33f45c973e41469276,Wings Of War [plus2] (NTSC).etm | wing of war.etm
+variants,Wings of War (PAL p2).etm,54540018,2,PAL,Wings of War +2 (PAL),a418eccde89e9251dd1db778444db33c,Wings of War [plus2] (PAL).etm | wowPAL.etm
+variants,Wings of War (PAL p2) 2.etm,54540018,2,PAL,Wings of War +2 (PAL),b18855de925b6522dc8e036e646b5468,Wings of War p2 pal.etm | evt-wowPAL.etm
+trainers,Manhunt.etm,54540019,5,NTSC,Manhunt (NTSC) +4,e08096e9954c43f12337a0fe2568e425,Manhunt [plus4] (NTSC).etm | Manhunt p4 ntsc.etm | Manhunt p4.etm | evt-manh.etm
+variants,Manhunt (PAL p5).etm,54540019,5,PAL,Manhunt (PAL) +4,8972980ca6109ccc6f388f67688651d1,Manhunt p4 pal.etm
+variants,Manhunt (PAL p4).etm,54540019,4,PAL,Manhunt (PAL) +3,84a8c89b7846668dd1b966cab589ec2d,Manhunt [plus3] (PAL).etm | Manhunt p3 pal.etm | manhunt.etm
+trainers,Red Dead Revolver.etm,5454001A,3,NTSC,Red Dead Revolver +3,77fa7a30c6aa459564b8f8fabd0c0e2e,Red Dead Revolver [plus3].etm | Red Dead Revolver p3 ntsc.etm | Red Dead Revolver p3.etm | rdr.etm
+variants,Red Dead Revolver (p3).etm,5454001A,3,,Red Dead Revolver +3,43f931b9158eada0c0db22eade3f2bd0,read dead revolver.etm
+trainers,Outlaw Tennis.etm,54540076,8,PAL,Outlaw Tennis + 8 xored [PAL],575f127bac9be553063eee7411aee3d2,Outlaw Tennis [plus8] (PAL).etm | Outlaw Tennis p8 Pal.etm | outten.etm
+trainers,Midnight Club 3 - DUB Edition Remix.etm,54540079,10,NTSC,Midnight Club 3: DUB edition REMIX (NTSC) +7,621dc75448bb59fa08c3c960f298903f,Midnight Club 3 Remix p7 ntsc.etm
+variants,Midnight Club 3 - DUB Editi (NTSC p10).etm,54540079,10,NTSC,Midnight Club 3: DUB edition REMIX (NTSC) +7,09100e072489246365a7dae464af229e,Midnight Club 3 remix p7.etm
+variants,Midnight Club 3 - DUB Ed (PAL-NTSC p6).etm,54540079,6,PAL-NTSC,Midnight Club 3: DUB edition NTSC/PAL +9,34a59681ad9475398dc4ebd99cbc6a8c,Midnight Club 3 DUB edition [plus9] (N.etm | Midnight Club 3 p9 multi.etm | Midnight Club 3 p9 ntsc pal.etm | Midnight Club 3 p9.etm | Xoredmncdub.etm | mncdub.etm
+trainers,The Guy Game.etm,5454007B,3,NTSC,The Guy Game +4 (NTSC),1d35438de85b613cdb48d20fd0111a78,Guy Game p4 ntsc.etm | The Guy Game [plus4] (NTSC).etm | The Guy Game p4 ntsc.etm | The Guy Game p4.etm | guy game p4.etm | guyg.etm | the guy game.etm
+trainers,Grand Theft Auto - San Andreas.etm,54540082,17,NTSC,GTA: San Andreas v2.5 +17,07cec6ff02204ec86b29ca7b26104666,Grand Theft Auto San Andreas p17 ntsc.etm | Grand Theft Auto San Andreas p17.etm | XoredSanAndreas25.etm
+variants,Grand Theft Auto - San Andreas (p17).etm,54540082,17,,GTA: San Andreas v2.5 +17,6bc21219c7cf4713223fc41bc3dc0367,Grand Theft Auto San Andreas [plus17].etm | xorgtasav25.etm
+variants,Grand Theft Auto - San Andreas (p16).etm,54540082,16,,GTA: San Andreas v2.3 +16,f896ed5da229804529374f7c0723ac4a,Grand Theft Auto San Andreas [plus16].etm | xorgtasav23.etm
+variants,Grand Theft Auto - San Andreas (p15).etm,54540082,15,,Grand Theft Auto: San Andreas +15,b267e62e5a6c3580e58d115fc56bde09,Grand Theft Auto San Andreas [plus15].etm | xorgtasav2.etm
+variants,Grand Theft Auto - San Andreas (p15) 2.etm,54540082,15,,Grand Theft Auto: San Andreas v2.1 +15,603c7b08e092ea99e000b0b791772399,xorgtasav21.etm
+variants,Grand Theft Auto - San Andreas (p10).etm,54540082,10,,Grand Theft Auto: San Andreas +10,4c364cb4f4fb04b792d3aaa02ed8c5b0,Grand Theft Auto San Andreas [plus10].etm | xorgtasa.etm
+variants,Grand Theft Auto - San Andreas (p9).etm,54540082,9,,Grand Theft Auto: San Andreas,10a82c5bfc6e8b8fe9676ff5352cc228,GTA-SA(1).etm
+variants,Grand Theft Auto - San Andreas (p6).etm,54540082,6,,Grand Theft Auto: San Andreas,956d1c7c7f30b57801a8453f70e81619,GTA-SA.etm | Grand Theft Auto San Andreas [plus7].etm
+trainers,Grand Theft Auto - San Andreas (Europe.etm,54540086,13,PAL,Grand Theft Auto: San Andreas v1.0 +13,c6c7cb733031d48c6e43c09a94449a4d,Grand Theft Auto San Andreas p13 pal.etm | xorgtasapal.etm
+variants,Grand Theft Auto - San Andreas ( (p13).etm,54540086,13,,Grand Theft Auto: San Andreas v1.0 +13,8619059b9f01a2fd14516f7fbadf2909,Grand Theft Auto San Andreas [plus13].etm
+trainers,World Poker Tour.etm,54540087,2,NTSC,World Poker Tour 2006 NTSC +2,9c4099da5f6fe98d42368ed3ac56ca61,EVT-WPT.ETM | World Poker Tour 2006 p2 ntsc.etm | World Poker Tour 2006 p2.etm
+trainers,Army Men - Major Malfunction.etm,54540088,7,PAL-NTSC,Army Men Major Malfunction (GLOBAL) +7,4128712bb8e2021e018afe06952d4912,Army Men Major Malf. p7.etm | EVT-AMMM.ETM
+trainers,Ford vs. Chevy.etm,54540089,6,NTSC,Ford Vs Chevy (USA) +6,09fea5fff3dfcaf09a4519cb6ca1ff74,Ford vs Chevy p6 ntsc.etm | Ford vs Chevy p6.etm
+trainers,NHL 2K6.etm,5454008D,2,NTSC,NHL 2K6 +2,fe57b8c24591c1f044fdeb960b1221fd,NHL 2006 [plus2].etm | NHL 2006 p2 ntsc.etm | NHL 2006 p2.etm | NHL 2K6.etm
+trainers,Sid Meier's Pirates!.etm,5454008F,11,NTSC,Sid Meiers Pirates! +11,557b519727a435dbecb0e1855e5f25c6,Sid Meiers Pirates p11 ntsc.etm | Sid Meiers Pirates p11.etm | Sid Meiers Pirates! [plus11].etm | xorsmpir.etm
+trainers,NBA 2K6.etm,54540090,3,,nba2K6,c2d96008660080bdfb35e93632075d01,nba 2k6 p3.ETM
+trainers,The Warriors.etm,5454009B,21,NTSC,The Warriors (USA) +21 (rev3),3f27660ee22073148a5ec2234d9fc608,The Warriors p21 ntsc.etm | The Warriors p21.etm | Warriors p21 ntsc.etm | evt-warr.etm
+variants,The Warriors (NTSC p17).etm,5454009B,17,NTSC,The Warriors (USA) +17 (rev2),d38d17b2eca2de21e308f35bcdec08a7,The Warriors [plus17] (USA).etm | The Warriors p17.etm
+trainers,The Da Vinci Code.etm,545400AB,4,PAL-NTSC,The Da Vinci Code (GLOBAL) +4,d50976e63347a86bda640072a06e2b9e,EVT-DAVN.ETM | The Da Vinci Code p4 ntsc.etm | The Da Vinci Code p4.etm
+trainers,Family Guy - Video Game!.etm,545400B0,5,PAL-NTSC,Family Guy (GLOBAL) +5,22383a2a00a14613e4e76469c2fe8c1b,evt-fguy.etm
+trainers,Tom Clancy's Ghost Recon 2.etm,55530005,4,NTSC,Ghost Recon 2 (USA) +4,76457ed7faa4e6fd9a1fc77672e89e17,EVT-GHR2.ETM | EVT_GHR2.ETM | Ghost Recon 2 p4 ntsc.etm | Ghost Recon 2.etm | Tom Clancys Ghost Recon 2 [plus4] (USA.etm | Tom Clancys Ghost Recon 2 p4.etm
+trainers,Far Cry Instincts (USA-Europe).etm,55530008,8,NTSC,Far Cry: Instincts (USA) +8 (rev3),bad99d9256c10e3dcce56a7f76c08747,FarCry Instincts p8 ntsc.etm | FarCry Instincts p8 rev3 ntsc.etm | FarCry Instincts p8 rev3.etm
+variants,Far Cry Instincts (USA-Europ (NTSC p8).etm,55530008,8,NTSC,Far Cry: Instincts (USA) +8,652eff01ef42dc1beae7a935f8bbacfc,Far Cry Instincts [plus8] (USA).etm | Far Cry Instincts p8.etm
+variants,Far Cry Instincts (USA-Eur (NTSC p8) 2.etm,55530008,8,NTSC,Far Cry: Instincts (USA) +8,ba393eb0f1bdd5ffc73c176ab70f9d4e,EVT-FCRY.ETM
+variants,Far Cry Instincts (USA-Eur (NTSC p8) 3.etm,55530008,8,NTSC,Far Cry: Instincts (USA) +8 (rev3),8bbb8eaf93ca1f13eee17980a3ee89d9,Far Cry Instincts.etm
+variants,Far Cry Instincts (USA-Eur (NTSC p8) 4.etm,55530008,8,NTSC,Far Cry: Instincts (USA) +8 (rev3),c033e0ecb853efee50f21b856407b8c5,FarCry8.etm
+trainers,XIII.etm,55530009,3,NTSC,XIII + 3,7185c460a519e30a19d5106667f81a5a,XIII [plus3].etm | XIII p3 ntsc.etm | XIII p3.etm | xiii.etm
+trainers,Beyond Good & Evil.etm,55530018,8,NTSC,Beyond Good and Evil +8 (USA),b73fd09dfb7bfae88f67b7568359951d,Beyond Good and Evil [plus8] (USA).etm | Beyond Good and Evil p8 ntsc.etm | Beyond Good and Evil.etm | beyond god and evil.etm | beyond good and evil p8.etm | mxt-bge.etm
+trainers,Tom Clancy's Splinter Cell - Pandora T.etm,55530019,6,PAL,Splinter Cell Pandora Tomorrow + 6 Xored [PAL],a2f13a5cedb473eafa31f8da49dec365,SCPT.ETM
+variants,Tom Clancy's Splinter Cell (PAL p6).etm,55530019,6,PAL,Splinter Cell Pandora Tomorrow + 6 Xored [PAL],9134a40431e62246fba9b871961efc66,Splinter Cell Pandora Tomorrow p6 pal.etm
+variants,Tom Clancy's Splinter Cell (NTSC p2).etm,55530019,2,NTSC,Splinter Cell: Pandora Tomorrow +2 (NTSC) BETA,a54c9c8c27c25e61cdc6e5a6be542def,Splinter Cell PT p2 ntsc BETA.etm | Splinter Cell PT p2.etm | Splinter Cell Pandora Tomorrow [plus2].etm | Splinter Cell Pandora Tomorrow p2 ntsc.etm | evt-scptBETA.etm | evt-scpt_NTSC_BETA2.etm
+variants,Tom Clancy's Splinter Cell (NTSC p1).etm,55530019,1,NTSC,Splinter Cell: Pandora Tomorrow +1 (NTSC) BETA,5273756a1d737817efa5ee30df81745a,Splinter Cell Pandora Tomorrow [plus1].etm | Splinter Cell Pandora Tomorrow p1.etm | evt-scpt_NTSC_BETA.etm
+trainers,Prince of Persia - The Sands of Time.etm,5553001D,12,NTSC,Prince Of Persia: Sands Of Time(NTSC) +12,e53c5c5abd0832bfc866f9401284f972,Prince of Persia SoT p12 ntsc.etm | Prince of Persia SoT p12.etm
+trainers,Crouching Tiger Hidden Dragon.etm,55530020,2,NTSC,Crouching Tiger Hidden Dragon (NTCS) +2,c3f3555b9c9260b04c4a629dacf2397e,Crouching Tiger Hidden Dragon [plus2].etm | Crouching Tiger Hidden Dragon p2 ntsc.etm | Crouching Tiger Hidden Dragon p2.etm | croutching tiger hidden dragon.etm | cthd.etm
+trainers,Rocky Legends.etm,55530034,3,NTSC,Rocky +3 (NTSC),c1cffce4b9de41f66ac90520a3921657,Rocky [plus3] (NTSC).etm | Rocky p3 ntsc.etm | Rocky p3.etm | rocky.etm
+variants,Rocky Legends (NTSC p1).etm,55530034,1,NTSC,Rocky Legends +1,064daf4ad79d3ab00cd8197d6999628d,Rocky Legends [plus1].etm | Rocky Legends p1 ntsc.etm | Rocky Legends p1.etm | RockyLegends.etm
+trainers,187 - Ride or Die.etm,55530036,9,NTSC,187 Ride Or Die (USA) +9,0fc7ee001205c91cf54caa8cb1ffd65a,187 Ride Or Die [plus9] (USA).etm | 187 Ride Or Die _9 (NTSC).etm | 187 Ride Or Die p9 ntsc.etm | 187 Ride Or Die p9.etm | EVT-187U.ETM
+trainers,Tom Clancy's Rainbow Six 3 - Black Arr.etm,55530037,4,NTSC,Rainbow 6: Black Arrow (USA) +4,0ec69af798bafd3d5df80d25ea67784b,EVT-R6BA.ETM
+variants,Tom Clancy's Rainbow Six 3 - Blac (p2).etm,55530037,2,,Rainbow Six 3 Black Arrow BETA,b881333f1433afed7be26757195041a2,Rainbow Six 3 Black Arrow [plus2] (BET.etm | Rainbow Six 3 Black Arrow p2 beta.etm | Rainbow Six 3 Black Arrow p2.etm | rainbow six 3 black arrow.etm
+variants,Tom Clancy's Rainbow Six 3 - Bl (p2) 2.etm,55530037,2,,Rainbow Six 3 Black Arrow BETA,00f81e5f34a464b45e51a5ebc353fbdd,RainbowSix3 BA BETA.ETM
+trainers,Splinter Cell Chaos Theory.etm,55530038,12,PAL-NTSC,Splinter Cell Chaos Theory (PAL/NTSC) +12,36ebe67223342912f44db45fc771f8f2,Splinter Cell CT p12 global.etm | Splinter Cell CT p12.etm
+variants,Splinter Cell Chaos Theory (NTSC p8).etm,55530038,8,NTSC,Splinter Cell CT + 8,34f722c2a55585258a535d2d8faca671,Splinter Cell CT p8 ntsc.etm | Splinter Cell CT p8.etm | Splinter Cell Caos Theroy [plus8].etm | Splinter Cell Chaos Theory p8 multi.etm | scct.etm
+variants,Splinter Cell Chaos Theory (NTSC p2).etm,55530038,2,NTSC,Splinter Cell Chaos Theory +2,c856f3f6db43c75250fb6c0c30bb8cf6,Splinter Cell CT p2.etm | Splinter Cell Chaos Theory p2 ntsc.etm
+trainers,Prince of Persia - Warrior Within.etm,5553003B,2,NTSC,Prince Of Persia 2 (USA) +2 rev1,5c326882f3d487ea290a41df1c5507cd,POP - Warrior Within.etm | Prince Of Persia 2 [plus2] (USA) (REV1.etm | Prince Of Persia 2 p2 rev1.etm | Prince of Persia WW p2 ntsc rev1.etm | Prince of Persia WW p2 ntsc.etm | prince of persia warrior within p2.etm
+variants,Prince of Persia - Warrior W (NTSC p2).etm,5553003B,2,NTSC,Prince Of Persia 2 (USA) +2,f2e295c01e30788b4c18c46aa6b68b8e,Prince Of Persia 2 [plus2] (USA).etm | Prince Of Persia 2 p2.etm | evt-pop2.etm | pop 2.etm
+trainers,Brothers in Arms - Road to Hill 30.etm,5553003C,3,NTSC,Brothers In Arms: Road to Hill 30 (USA) +3,9c890ea5f6846946f597ba16b9590ab1,Brothers In Arms Road to Hill 30 [plus.etm | Brothers In Arms Road to Hill 30 p3.etm | Brothers in Arms RTH30 p3 ntsc.etm | Brothers in Arms p3 ntsc.etm | EVT-BIA1.ETM
+trainers,Tom Clancy's Rainbow Six - Lockdown.etm,55530048,1,NTSC,Rainbow six: LockDown (USA) +1,2e9c207a62fbcbac2ac0c1b1e2f6a48b,Rainbow Six 3 Lockdown p1 ntsc.etm | Rainbow Six Lockdown p1 ntsc.etm | Rainbow Six Lockdown p1.etm | Rainbow six LockDown [plus1] (USA).etm | evt-r6ld.etm
+trainers,Monster 4x4 - World Circuit.etm,55530049,4,NTSC,Monster 4x4: World Circuit (NTSC) +4,27e2a6f3f23cac51824e59c7f50b0dd6,EVT-M4X4.ETM | Monster 4x4 World Circuit p4 ntsc.etm | Monster 4x4 World Circuit p4.etm
+trainers,Cold Fear.etm,5553004B,3,PAL,Cold Fear (AUS) +3,fdef53cc4002f6ad7449043ae0b8c659,Cold Fear [plus3] (AUS).etm | Cold Fear p3 aus.etm | Cold Fear p3 pal aus.etm | evt-cold2.etm
+variants,Cold Fear (NTSC p3).etm,5553004B,3,NTSC,Cold Fear +3 (NTSC),5128ec9607f94bda0cce8825c7ab532d,Cold Fear [plus3] (NTSC).etm | Cold Fear p3 ntsc.etm | Cold Fear p3.etm | fx-cfp3us.etm
+variants,Cold Fear (PAL p3).etm,5553004B,3,PAL,Cold Fear (PAL) +3,565f39964d96cf75e47d94bab47f9e75,Cold Fear [plus3] (PAL).etm | Cold Fear p3 pal.etm | EVT-COLD.ETM
+variants,Cold Fear (NTSC p1).etm,5553004B,1,NTSC,Cold Fear +1 (NTSC),53b1f3088bca76ed7203d64911e1cdb5,Cold Fear Plus1 (NTSC).etm | Cold Fear [plus1] (NTSC).etm | Cold Fear p1.etm | Cold Fear.etm
+variants,Cold Fear (PAL p1).etm,5553004B,1,PAL,Cold Fear [+1] [Pal],99e6774d1c383e6ab2361d0afd884944,ColdFear_plus1_pal.ETM
+trainers,Peter Jackson's King Kong - The Offici.etm,5553004C,5,NTSC,PJs: King Kong : TOGOTM (USA) +5,8df5553902ab59c052cd61c8951bfaab,KINGKONG.ETM | King Kong p5 multi.etm | King Kong p5 ntsc.etm | King Kong p5.etm | kingkong P5.etm
+variants,Peter Jackson's King Kong - T (PAL p1).etm,5553004C,1,PAL,King Kong + 1 Pal,db39890fd839dcb54b8dac139d04a1c7,KONG.ETM | King Kong p1 pal.etm
+trainers,Tom Clancy's Ghost Recon 2 - Summit St.etm,5553004D,4,NTSC,Ghost Recon 2: Summit Strike (USA) +4,686baf325b7ab49b20d7d6f55b973604,EVT-GR2S.ETM | Ghost Recon 2 - Summit Strike.etm | Ghost Recon 2 SS p4 ntsc.etm | Ghost Recon 2 SS p4.etm | Tom Clancys Ghost Recon 2 Summit Strik.etm | Tom Clancys Ghost Recon 2 Summit Strike p4.etm
+trainers,Tom Clancy's Ghost Recon - Advanced Wa.etm,55530054,6,NTSC,Ghost Recon: Advanced Warfighter (USA) +6,5b79a82f8711f0cc288c7ef63d6995ef,Ghost Recon AW p6 ntsc.etm | Ghost Recon AW p6.etm
+variants,Tom Clancy's Ghost Recon - A (NTSC p5).etm,55530054,5,NTSC,Ghost Recon: Advanced Warfighter (USA) +5,54b5c09aed34a422a67d3e796d4622df,EVT-GRAW.ETM | Ghost Recon AW p5 ntsc.etm | Ghost Recon AW p5.etm | Ghost Recon Adv Warfighter p5 ntsc.etm | GhostReconAW.etm
+variants,Tom Clancy's Ghost Recon - A (NTSC p3).etm,55530054,3,NTSC,Ghost Recon: Advanced Warfare (USA) +3,e543dca9daa8f492420c01a4f71a3f4b,Advanced Warfighter.etm
+trainers,AND 1 Streetball.etm,55530056,5,PAL-NTSC,And 1 StreetBall (GLOBAL) +5,d617486e98bca414792883696971c6ff,And 1 Streetball _5 (GLOBAL).etm | And 1 Streetball p5 global.etm
+trainers,Blazing Angels - Squadrons of WWII.etm,55530057,3,PAL-NTSC,Blazing Angels: SOWWII (GLOBAL) +3,c5d544a27b56a311588c043b47f930f1,Blazing Angels SoWWII p3 ntsc.etm | Blazing Angels Squadrons of WWII p3 nt.etm | Blazing Angels p3.etm
+trainers,Prince of Persia - The Two Thrones.etm,55530058,9,NTSC,Prince Of Persia: The Two Thrones (USA) +9,08b94503acc12f64e4f26a4967d4a0e5,Prince Of Persia The 2 Thrones p9.etm | Prince of Persia TT p9 ntsc.etm
+variants,Prince of Persia - The Two T (NTSC p9).etm,55530058,9,NTSC,Prince Of Persia: The Two Thrones (USA) +9,2d120dd9bffffb3e48fe5a7d07463c96,pp3_Patched.etm
+variants,Prince of Persia - The Two T (NTSC p6).etm,55530058,6,NTSC,Prince Of Persia: The Two Thrones (USA) +6,2bde25d0207855975b0b404b7f2ac14f,POP - The Two Thrones.etm | POP The Two Thrones p6.etm | Prince of Persia TT p6 ntsc.etm
+variants,Prince of Persia - The Two T (NTSC p4).etm,55530058,4,NTSC,Prince Of Persia: The Two Thrones (USA) +4,57451b18f21a2981ee42773bef1b74f0,EVT-POP3.ETM | PrinceOfPersia3.etm
+trainers,Brothers in Arms - Earned in Blood.etm,5553005A,3,NTSC,Brothers In Arms: Earned In Blood (USA) +3,51036f2ea901202b3c47ed99dea1c653,Brothers In Arms Earned In Blood [plus.etm | Brothers In Arms Earned In Blood p3.etm | Brothers in Arms EIB p3 ntsc.etm | EVT-BIA2.ETM
+trainers,Darkwatch (Europe).etm,5553005C,5,PAL,Darkwatch + 5 Xored [PAL],7a63682695e7e04e76b17e03d0ef7ed8,Darkwatch p5 pal.etm
+trainers,Tom Clancy's Splinter Cell - Double Ag.etm,5553005E,22,PAL-NTSC,Splinter Cell Double Agent (Global) +22,7b15e1cc6da1f308f88832b624033eaf,evt-scda.etm
+variants,Tom Clancy's Splinter C (PAL-NTSC p19).etm,5553005E,19,PAL-NTSC,Splinter Cell Double Agent (Global) +19,fe50d265c2b5c56533bafe118835e026,evt-scda11.etm
+trainers,Tom Clancy's Rainbow Six - Critical Ho.etm,5553005F,6,PAL-NTSC,Rainbow Six : Critical Hour (GLOBAL) +6,de6eaff031f5fe20b0a28651b7772f4f,EVT-R6CH.ETM | RS - Critical Hour p6.etm | Rainbow Six 3 Critical Hour p6 ntsc.etm | Rainbow Six CH p6 ntsc.etm | Rainbow Six CH p6.etm
+trainers,Far Cry Instincts - Evolution.etm,55530060,8,PAL-NTSC,Far Cry : Instincts Evolution (GLOBAL) +8,290eb94c8738940572155faf149492e7,Far Cry Instincts Evolution p8 ntsc.etm | Far Cry Instincts Evolution p8.etm
+variants,Far Cry Instincts - Evol (PAL-NTSC p8).etm,55530060,8,PAL-NTSC,Far Cry : Instincts Evolution (GLOBAL) +8,6469333398f4589ab8933e752e9db5f4,EVT-FCIE.ETM
+trainers,Muzzle Flash.etm,56430001,2,NTSC,Muzzle Flash (NTSC) +2,77cfe46bf250cad9fb5a9a32d76839d2,Muzzle Flash [plus2] (NTSC).etm | Muzzle Flash p2 ntsc.etm | Muzzle Flash p2.etm | muzzle flash.etm | muzzle.etm
+trainers,Crash Bandicoot - The Wrath of Cortex.etm,56550003,1,,Crash Bandicoot: tWoC +1,3d0c422dbb3e551e1c6fce397a71dfec,CrashBandicootTWOC-plus1.etm | crash bandicoot.etm
+trainers,Buffy the Vampire Slayer - Chaos Bleed.etm,56550005,6,NTSC,Buffy TVS: Chaos Bleeds (USA) +6,5e5ed89453265675c921f77d6a065d7f,Buffy Chaos Bleeds p6 ntsc.etm | Buffy Chaos Bleeds p6.etm | Buffy The Vampire Slayer CB p6.etm | EVT-BUF2.ETM
+variants,Buffy the Vampire Slayer - Ch (PAL p4).etm,56550005,4,PAL,Buffy 2 - Chaos Bleeds PAL +4,a3d5479a7b32ae419e16b48b4e3c6956,Buffy 2 Chaos Bleeds [plus4] (PAL).etm | Buffy 2 p4 pal.ETM | Buffy_CB_Pal.ETM
+variants,Buffy the Vampire Slayer - C (NTSC p1).etm,56550005,1,NTSC,Buffy 2: Chaos Bleeds +1,36a0377237c978467d6ed946bf0df2c1,BUFFY2.ETM | Buffy 2 Chaos Bleeds [plus1].etm | Buffy 2 p1 ntsc.etm | Buffy 2 p1.etm
+trainers,Hunter - The Reckoning.etm,56550007,3,NTSC,Hunter - The Reckoning,ff2e1ec89ba5b07d52a29f5d55195d95,Hunter The Reckoning p3 ntsc.etm | Hunter The Reckoning p3.etm | Hunter.etm
+trainers,Futurama (USA).etm,56550008,7,NTSC,Futurama (NTSc) +7,3f1f10f999f7931416f371a2e3b0e21b,Futurama p7 ntsc.etm | Futurama p7.etm
+variants,Futurama (USA) (NTSC p1).etm,56550008,1,NTSC,Futurama +1 (NTSC),9d1caf2bbb5b19b6930ab24f41c0469b,Futurama [plus1] (NTSC).etm | Futurama p1 ntsc.etm | Futurama p1.etm | fut.etm | futurama_ntsc.etm
+trainers,Metal Arms - Glitch in the System.etm,5655000A,5,PAL,Metal Arms GITS + 5 XORED [PAL] ,3d12d489e4508eb03d26fd77df024c43,Metal Arms GITS [plus5] (PAL).etm | Metal Arms GITS p5 pal.etm | magits.etm
+variants,Metal Arms - Glitch in the S (NTSC p4).etm,5655000A,4,NTSC,Metal Arms: GITS +4 (USA/NTSC),7c067c1ebd414925aeff50a76e8806a2,Metal Arms GITS [plus4] (NTSC-USA).etm | Metal Arms GITS p4 ntsc.etm | Metal Arms GITS p4.etm | evt-magits.etm | metal arms.etm
+trainers,The Thing.etm,5655000D,4,NTSC,The Thing + 4 Trainer V 1.1,17cc0aca027eafe2e24cf9e888e667a2,The Thing [plus4] (v1.1).etm | The Thing p4 ntsc v1_1.etm | The Thing p4.etm | Thing p4 ntsc.etm
+trainers,Battlestar Galactica.etm,5655000F,2,NTSC,Battlestar Galactica (USA) +2,61ffd42bde61faf48ca9a90337b9374a,Battle Star Galactica p2 ntsc.etm | Battlestar Galactica p2 ntsc.etm | Battlestar Galactica p2.etm
+trainers,Outlaw Golf.etm,56550010,7,NTSC,Outlaw Golf +6 (USA) (v0.2),39285182db0c058b500afc810b22b085,Outlaw Golf [plus6] (USA) (v0.2).etm | Outlaw Golf p6 ntsc v0_2.etm | Outlaw Golf p6 ntsc.etm | olgolf.etm | outlaw golf p6.etm
+variants,Outlaw Golf (p1).etm,56550010,1,,Outlaw Golf +1,9d705eaff12fd5d9866a8908a75e142d,Outlaw Golf [plus1].etm | Outlaw_Golf.ETM
+trainers,James Cameron's Dark Angel.etm,56550014,2,NTSC,Dark Angel +2,3769abcce04f8666cecd5dc7d41df968,Dark Angel [plus2].etm | Dark Angel p2 ntsc.etm | Dark Angel p2.etm
+variants,James Cameron's Dark Angel (p2).etm,56550014,2,,Dark Angel +2,581d46bc7d0482f6cd16bb5b62394c84,DarkAngel-plus2.etm
+trainers,SeaBlade.etm,56550017,4,NTSC,Seablade (NTSC) +4,b95dad4abfcdb0a121ceda87f901ea2c,EVT-SEAB.ETM | Seablade p4 ntsc.etm | Seablade p4.etm
+trainers,Men of Valor.etm,56550019,3,PAL-NTSC,Men of Valor +3 (NTSC/PAL),9fa4c1124e15832b793814be786ee5d3,Men Of Valor.etm | Men of Valor [plus3] (NTSC-PAL).etm | Men of Valor p3 multi.etm | Men of Valor p3 ntsc pal.etm | Men of Valor p3.etm | evt-mov.etm
+variants,Men of Valor (PAL-NTSC p1).etm,56550019,1,PAL-NTSC,Men of Valor (NTSC/PAL),ea807bdf6703dbb446612ea6fc96a37f,Men of Valor [plus1] (NTSC-PAL).etm | Men of Valor p1.etm | man of valor.etm
+trainers,Baldur's Gate - Dark Alliance.etm,5655001A,3,,baulders gate dark alliance,432de62ef0f6c505502107a3ddd927c8,Baldurs Gate - Dark Alliance 1.etm
+trainers,The Chronicles of Riddick - Escape fro.etm,56550026,4,NTSC,Chronicles of Riddick +3 NTSC,f4ec842eed1ce0e3649b2d0c391c44c7,Chronicles of Riddick EFBB p3 ntsc.etm | Chronicles of Riddick [plus3] (NTSC).etm | Chronicles of Riddick p3 ntsc.etm | Riddick.etm | chronicles of riddick p3.etm | chronicles of riddick.etm | evt-ridd.etm
+variants,The Chronicles of Riddick - E (PAL p4).etm,56550026,4,PAL,Chronicles of Riddick +3 PAL,8a93e6418dce433415aeb7183380a737,Chronicles of Riddick EFBB p3 pal.etm | Chronicles of Riddick [plus3] (PAL).etm | Chronicles of Riddick p3 pal.etm | chronicles of riddick pal p3.etm | evt-ridd_pal.etm
+trainers,Red Ninja - End of Honor.etm,56550027,2,NTSC,Red Ninja: End of Honor +2,89749b1ec0f9150a57b0e284cf892bca,Red Ninja p2 ntsc.etm | Red Ninja p2.etm
+trainers,Dr. Seuss' The Cat in the Hat.etm,56550028,2,NTSC,Cat In The Hat +2 (USA)(v0.1),d41e7d76eb3070574d94f0329cdf3c7e,CITH.ETM | Cat In The Hat [plus2] (USA).etm | Cat in the Hat p2 ntsc v0_1.etm | Cat in the Hat p2 ntsc.etm | cat in the hat p2.etm
+trainers,Van Helsing.etm,56550029,6,NTSC,Van Helsing (NTSC) +6,e38dcbbd6fdf4b24d1b3d2a588debdf5,Van Helsing [plus6] (NTSC).etm | Van Helsing p6 ntsc.etm | Van Helsing p6.etm | van helsing.etm | vanh.etm
+variants,Van Helsing (JAP p4).etm,56550029,4,JAP,Van Helsing (NTSC/JPN) +4,509e28b2b6927e067db39a3a533bb4e8,Van Helsing p4 ntsc.etm | Van Helsing p4.etm
+variants,Van Helsing (PAL p2).etm,56550029,2,PAL,Van Helsing + (PAL),3e09fe47d3d71ffdd4125fb553c6315f,Van Helsing [plus5] (PAL).etm | VanHelPAL.ETM
+trainers,Barbie Horse Adventures - Wild Horse R.etm,5655002A,2,NTSC,Barbie Horse +2 (USA)(v0.1),32ed61bca196941c6409086d7df00630,BARBI.ETM | Barbie Horse Adventure p2 ntsc v0_1.etm | Barbie Horse Adventure p2 ntsc.etm | Barbie Horse [plus2] (USA).etm | Barbie Horse p2.etm | barbie horse adventure p2.etm
+trainers,Hunter - The Reckoning - Redeemer.etm,5655002D,4,NTSC,Hunter - The Reckoning: Redeemer,e6bfa1a66972e240a03b3129144ec316,Hunter The Reckoning Redeemer [plus4].etm | Hunter the Reckoning Redeemer p4 ntsc.etm | Hunter2.etm | hunter the reckoning redeemer p4.etm
+variants,Hunter - The Reckoning - Redeemer (p2).etm,5655002D,2,,Hunter:Redeemer V0.2 +2,1f3712dd3a1217f00069e1dde73a8b2a,Hunter Redeemer [plus2] (v0.2).etm | redeemer02.etm
+variants,Hunter - The Reckoning - Redeemer (p1).etm,5655002D,1,,Hunter:Redeemer +1,15bf7eb4441546d8aee8836014d05e02,Hunter Redeemer [plus1].etm
+trainers,Fight Club.etm,5655002F,6,NTSC,Fight Club (USA) +6,1e797a64b96b82f2f9e6f0e6548d2743,Fight Club p6 ntsc.etm
+variants,Fight Club (NTSC p5).etm,5655002F,5,NTSC,Fight Club (USA) +5,189b01882cfab0601905b4304a0d354e,Fight Club [plus5] (USA).etm | Fight Club p5 ntsc.etm | Fight Club p5.etm | fight club.etm
+trainers,Predator - Concrete Jungle.etm,56550030,6,PAL-NTSC,Predator: Concrete Jungle (PAL) +3,3af655872914e2c302a308fece3a66fd,Predator Concrete Jungle [plus3] (PAL).etm | Predator Concrete Jungle.etm | PredatorP5.etm | evt-pcj5b pal ntsc.etm | evt-pcj5b.etm
+variants,Predator - Concrete Jungle (PAL p6).etm,56550030,6,PAL,Predator +6 ,4dfac19e9a602678765b72a9e43451d2,Predator Concrete Jungle p6 pal.etm | XORPRED.ETM
+variants,Predator - Concrete Jungle (PAL p4).etm,56550030,4,PAL,Predator: Concrete Jungle (PAL) +3,dde6b53938473988b7f7b0f496426016,pcj3b-evt.etm
+trainers,Leisure Suit Larry - Magna Cum Laude.etm,56550031,16,NTSC,LSL +16 NTSC v0.3,6194dd566d87929d8bd30fd984b9fc1a,LSL [plus16] (NTSC) (v0.30.etm | Leisure Suit Larry Magna Cum Laude [pl.etm | Leisure Suit Larry p16.etm | evt-lsl.etm
+variants,Leisure Suit Larry - Magna (NTSC p16).etm,56550031,16,NTSC,LSL +16 NTSC v0.3,7d788d0e71dc5de0078f91c756c0827d,LSL.ETM | Leisure Suit Larry CML p16 ntsc.etm | Leisure Suit Larry p16 ntsc v0_3.etm
+variants,Leisure Suit Larry - Magna Cum L (p15).etm,56550031,15,,LSL +15 (INTERNAL),b5c2622a20b1eb00bd676e3db05d064c,LSLI.ETM
+variants,Leisure Suit Larry - Magna Cu (PAL p2).etm,56550031,2,PAL,Leisure Suit Larry: mcl pal +2,f56a862e135c0c87b4478f9ab0f9aa1f,Leisuclpal2.etm | Leisure Suit Larry CML p2 pal.etm | Leisure Suit Larry p2 pal.etm
+trainers,Spyro - A Hero's Tail.etm,56550034,4,NTSC,Spyro a Heros Tail (USA) +4,93625769a8bf8874689d118e6c2d91fd,Spyro A Heros Tail p4 ntsc.etm | Spyro a Hero's Tail p4 ntsc rev3.etm | Spyro a Heros Tail p4.etm | evt-saht.etm
+variants,Spyro - A Hero's Tail (NTSC p4).etm,56550034,4,NTSC,Spyro a Heros Tail (USA) +4,6a4b21413dc8d9c7bbe05f2f8419ae0f,Spyro a Heros Tail [plus4] (USA).etm | spyro hero's tail.etm
+trainers,Crash Twinsanity.etm,56550036,1,NTSC,Crash Twinsanity +1,0dc892303822b6d1ada775260ffc3d38,CBT.ETM | Crash Twinsanity p1 ntsc.etm | Crash Twinsanity p1.etm
+trainers,Robots.etm,56550037,1,NTSC,Robots +1,ce3fae1c80467ecaa32b3777676079f6,Robots p1 ntsc.ETM | Robots p1.ETM
+trainers,The Incredible Hulk - Ultimate Destruc.etm,56550039,1,NTSC,The Incredible Hulk: Ultimate Destruction (NTSC) +1,d0e64b9ddeaca834794275d662db3d09,EVT-IHUD.ETM | Incredible Hulk UD p1 ntsc.etm | The Incredible Hulk UD p1 ntsc.etm | The Incredible Hulk UD p1.etm | The Incredible Hulk Ultimate Destructi.etm
+trainers,Scarface - The World Is Yours.etm,5655003F,14,PAL-NTSC,Scarface (GLOBAL) +14,b09d63e7da5bc38bb2dfc877520a9959,EVT-SCAR.ETM
+variants,Scarface - The World Is Yours (p2).etm,5655003F,2,,scarface,5fd3d7c12b9b189dcb801a20e5076728,SCARFACE.ETM
+trainers,50 Cent - Bulletproof.etm,56550042,5,NTSC,50 Cent: Bulletproof (USA) +4,a50df98c1f0ede22301a1a9a17be1d16,50 Cent - Bulletproof _5 (NTSC).etm | 50 Cent Bulletproof p5 ntsc.etm | 50 Cent Bulletproof p5.etm | 50 Cent Bulletproof.etm | EVT-50CT.ETM
+variants,50 Cent - Bulletproof (PAL p5).etm,56550042,5,PAL,50 Cent + 5 Xored [PAL],538840ef4b77313f9263f9d5cc953095,50 Cent Bulletproof p5 pal.etm | 50 Cent _5 (PAL).etm | 50 Cent p5 pal.etm
+variants,50 Cent - Bulletproof (NTSC p5).etm,56550042,5,NTSC,50 Cent: Bulletproof (USA) +4,364316e84901360e094f5b12bdbd26b4,50Cent Bulletproof 5.etm
+variants,50 Cent - Bulletproof (NTSC p3).etm,56550042,3,NTSC,50 Cent: Bulletproof (USA) +3,bc22647d1ffb29c62a081fb3c71cc946,50 Cent Bulletproof p3 ntsc.etm | 50 Cent Bulletproof p3.etm
+trainers,Eragon.etm,56550043,7,PAL-NTSC,Eragon (GLOBAL) +7,670ff5e07f2405e7fd112b45ae395ade,evt-ergn.etm
+trainers,The Legend of Spyro - A New Beginning.etm,5655004A,2,PAL-NTSC,The Legend of Spyro: A New Beginning (GLOBAL) +2,54508c848b295d878c6595f65b41697d,evt-tlos.etm
+trainers,Ice Age 2 - The Meltdown.etm,5655004B,6,PAL-NTSC,Ice Age 2 The Meltdown (GLOBAL) +6,d184d94b283ed411ec90dbad8f42a2c1,EVT-ICE2.ETM | Ice Age 2 The Meltdown p6 ntsc.etm | Ice Age 2 p6 ntsc.etm | Ice Age 2 p6.etm
+variants,Ice Age 2 - The Meltdown (PAL-NTSC p6).etm,5655004B,6,PAL-NTSC,Ice Age 2 The Meltdown (GLOBAL) +6,b5cc369a51632ffb6cc55778809fc686,IceAge2P6.etm
+trainers,Crash Bandicoot - The Wrath of Corte 2.etm,56560001,2,NTSC,Crash Bandicoot: tWoC +2,b75f3231124c5cbc043efd0213c2e370,CRASHBAN.ETM | Crash Bandicoot The Wrath Of The Corte.etm | Crash Bandicoot p2 ntsc.etm | Crash Bandicoot tWoC p2 ntsc.etm | crash bandicoot p2.etm
+trainers,Mace Griffin - Bounty Hunter.etm,56560011,1,PAL-NTSC,Mace Griffin Bounty Hunter (PAL)+1,c9373162cb866dc6b51f3b20a9964adc,Bount.etm | Bounty.etm | Mace Griffin Bounty Hunter [plus1] (PA.etm | Mace Griffin Bounty Hunter [plusl] (PA.etm | Mace Griffin Bounty Hunter p1 pal ntsc.etm | Mace Griffin Bounty Hunter p1 pal.etm
+trainers,Justice League Heroes.etm,57520001,8,PAL-NTSC,Justice League Heroes (GLOBAL) +8,9d67864abb8fe1b88685b308709ccee5,evt-julh.etm
+trainers,Metal Dungeon.etm,58490001,9,,Metal Dungeon,9dd7ade18ebb5851915ef7f26ad6fc78,Metal Dungeon p1.ETM
+trainers,Black Stone - Magic & Steel.etm,58490004,6,NTSC,Black Stone +6 (USA/NTSC),a648a0e4edda85ad04eca2e5f8279c2d,BSTONE.ETM | Black Stone [plus6] (NTSC-USA).etm | Black Stone p6.etm
+trainers,Judge Dredd - Dredd vs. Death.etm,58490007,1,NTSC,Dred Vs Death NTSC,d9b8ba10341b7f8b76b3509618d561a4,DRED.ETM | Dredd Vs Death p1 ntsc.etm | Dredd Vs Death p1.etm | Judge Dread Vs Death [plus8] (NTSC).etm | Judge Dread Vs Death p8.etm | Judge Dredd Dredd Vs Death p1 ntsc.etm
+trainers,Alien Hominid.etm,5A440004,7,PAL,Alien Hominid (PAL) +7,1322b47e92b86fe15a7be043d2b2cd8e,Alien Hominid _7 (PAL).etm | Alien Hominid p7 pal.etm | EVT-ALHO.ETM | evt-alho pal.etm

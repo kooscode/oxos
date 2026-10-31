@@ -41,7 +41,8 @@ OXOS is tested on one 1.4 console; reports from other revisions are welcome in t
   with the image and a launcher, which dashboards such as XBMC4Gamers list as the game itself.
   [Details](spec/oxos-internal/16-virtual-discs.md).
 - **FATX disks** keep working, including the F: and G: partitions made by XBPartitioner or FATXplorer.
-- **Trainers:** put .etm or .xbtf trainers in XBMC4Gamers' `system\trainers` folder, then pick a trainer and its
+- **Trainers:** put .etm or .xbtf trainers in XBMC4Gamers' `system\trainers` folder (a de-duplicated set of 505,
+  one per game, is in [`third_party/xbox-trainers`](third_party/xbox-trainers/README.md)), then pick a trainer and its
   cheats in the game's context menu (White button) before launching. OXOS starts every game with the same call as the
   stock kernel, which XBMC hooks to load the trainer; a unit test and a build check keep it that way.
   [Details](spec/oxos-internal/23-trainer-hook.md).

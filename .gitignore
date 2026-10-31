@@ -15,9 +15,11 @@ xboxkrnl.exe
 
 # Build output
 kernel/build*/
-# Fetched by the build, except Intel's microcode, which is kept in the repo (third_party/intel-ucode/README.md)
+# Fetched by the build, except Intel's microcode and the game trainers, which are kept in the repo
+# (third_party/intel-ucode/README.md, third_party/xbox-trainers/README.md)
 third_party/*
 !third_party/intel-ucode/
+!third_party/xbox-trainers/
 tests/*-test-title/bin/
 tests/*-test-title/*.obj
 tests/*-test-title/*.d

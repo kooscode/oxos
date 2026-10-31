@@ -62,3 +62,12 @@ The X-code table and the EEPROM key states come from [XboxDev/cromwell](https://
 
 The video encoder and NV2A memory pad calibration tables are functional hardware constants taken from retail BIOS
 images; see [`dmca-compliance.md`](dmca-compliance.md).
+
+## Game trainers (in this repository, not in the BIOS images)
+
+`third_party/xbox-trainers/` holds 998 game trainers (.etm) for XBMC4Gamers, from the Internet Archive's
+"Xbox Original ETM Trainers" collection (https://archive.org/details/ETMTrainers). They are de-duplicated and
+renamed, with their contents unmodified. They were written by members of the Xbox scene (each trainer names its authors) and
+carry no licence terms; they are not covered by OXOS's licence. An author who wants a trainer removed can open an
+issue. Details: `third_party/xbox-trainers/README.md`.
+
