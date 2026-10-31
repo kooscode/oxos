@@ -211,6 +211,22 @@ bios: $(BUILD)/bios.bin
 # A 256 KiB image (one bank, for 256 KiB flash chips and modchip banks), with the splash in the bank's spare space.
 bios-256k: $(BUILD)/bios-256k.bin
 
+# A release, in order, stopping at the first failure: every host unit test (tools/unit-tests.sh), the release
+# images (1 MB and 256 KB, no self-tests, no serial log), the dashboard test on them (make test-dash), and a check
+# that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also copies them to build/release/dist/ as
+# bios_vX.Y.Z.bin and bios_vX.Y.Z_256k.bin, with their SHA-256. SKIP_TESTS=1 skips the unit tests and the dashboard
+# test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
+release:
+	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
+	$(if $(filter 1,$(SKIP_TESTS)),@echo "release: SKIP_TESTS=1 (unit tests and test-dash skipped)",$(ROOT)/tools/unit-tests.sh)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/bios-256k.bin
+	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test-dash)
+	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios-256k.bin
+	$(if $(VERSION),mkdir -p $(RELEASE_BUILD)/dist && \
+	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
+	    cp $(RELEASE_BUILD)/bios-256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
+	    cd $(RELEASE_BUILD)/dist && sha256sum bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin)
+
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
 # kernel at every power-on and boots its own (a serial-log build) when no PC answers.
 NETBOOT_BUILD := build/netboot
@@ -538,4 +554,4 @@ run-stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios-256k netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean iso-launcher title-launcher ftp-server test-iso iso-disc run-iso
+.PHONY: all bios bios-256k release netboot mcpx-dump image-test run-image-test hdd-image test test-dash test-encoders test-mcpx test-relaunch test-fatal test-udf test-controller test-memory nxdk run run-xbe run-trace-xbe xbe-disc run-trace-basic run-trace-full print-trace-dump run-gdb run-stock clean iso-launcher title-launcher ftp-server test-iso iso-disc run-iso
