@@ -128,7 +128,13 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
     // directories stops at the first "\\" or at the first directory it must look up on disk, and the slower walk
     // that takes over drops one leading '\' of the rest; after that a doubled separator is invalid. Brute Force
     // opens its textures as "z:\splash_screen\\textures-splash_screen.tex".
+    // Also at the start: "<link to a volume, ending in '\'>\name", as an nxdk title's D: gives (its folder + "\").
     bool slow = false;
+    if (rest.Length >= 2 && rest.Buffer[0] == '\\' && rest.Buffer[1] == '\\') {
+        rest.Buffer++;
+        rest.Length--;
+        slow = true;
+    }
     for (;;) {
         FatxSplitElement(&rest, &element);
         if (!FatxIsValidName(&element)) {

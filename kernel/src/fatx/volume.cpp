@@ -351,6 +351,7 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
     dev->SectorSize = geometry.BytesPerSector;
     FATX_VOLUME *v = FatxVolume(dev);
     v->TargetDevice = v->MountTarget = TargetDevice;
+    ObfReferenceObject(TargetDevice); // released by the delete routine (FatxDeleteVolume), also when the mount fails
     v->FirstClusterNumber = 1;
     v->Alloc = &v->OwnAlloc;
     v->PartitionLength = partition.PartitionLength.QuadPart;
@@ -413,7 +414,6 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
         IoDeleteDevice(dev);
         return STATUS_UNRECOGNIZED_VOLUME;
     }
-    ObfReferenceObject(TargetDevice);
     dev->Flags &= ~DO_DEVICE_INITIALIZING;
     TargetDevice->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
