@@ -51,6 +51,8 @@ tools/oxos-isonator/oxos-isonator.py --info xiso/                 # what each im
   entries in case-insensitive name order, with no entry crossing a sector and 0xFF as padding. Files are written after
   the directories, each starting on a sector. File attributes are as on retail discs (0x80 files, 0x10 folders).
   Only the files themselves are stored, so an image built from a folder is the smallest XISO of that game.
+- **Folders read:** a folder whose `default.xbe` (any letter case) is the game itself is built as a game, even when
+  it holds `.iso` data files of its own; a folder with no `default.xbe`, or only a launcher, is a folder of images.
 - **Names:** XDVDFS names are 8-bit characters, up to 255 bytes. On FATX the folder and image names must be 42
   characters or fewer.
 - **The launcher template** must be a plain ISO launcher with no title image. A `default.xbe` already in a game folder
