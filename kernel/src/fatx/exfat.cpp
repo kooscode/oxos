@@ -654,29 +654,60 @@ static void ExInitFcb(FATX_FCB *f, ULONG Flags) {
     f->ReferenceCount = 1; // permanent
 }
 
-static ULONG ExBootChecksum(FATX_VOLUME *v, NTSTATUS *Status) {
+// A boot region (12 sectors at Base: the main one at 0, the backup at sector 12) whose boot sector is exFAT's and
+// whose checksum (sector 11) is right: its boot sector copied to Boot.
+static bool ExReadBootRegion(FATX_VOLUME *v, ULONG Base, PUCHAR Boot, NTSTATUS *Status) {
     ULONG sum = 0;
-    for (ULONG i = 0; i < 11 * 512; i++) {
+    for (ULONG i = 0; i < 12 * 512; i++) {
         PUCHAR data;
-        *Status = FatxMapBlock(v, i & ~(FATX_BLOCK_SIZE - 1), &data);
+        *Status = FatxMapBlock(v, (Base + i) & ~(FATX_BLOCK_SIZE - 1), &data);
         if (!NT_SUCCESS(*Status))
-            return 0;
-        if (i != 106 && i != 107 && i != 112)
-            sum = ((sum >> 1) | (sum << 31)) + data[i & (FATX_BLOCK_SIZE - 1)];
+            return false;
+        data += (Base + i) & (FATX_BLOCK_SIZE - 1);
+        if (i < 512)
+            Boot[i] = *data;
+        if (i < 11 * 512 && i != 106 && i != 107 && i != 112)
+            sum = ((sum >> 1) | (sum << 31)) + *data;
+        else if (i >= 11 * 512 && data[0] != (UCHAR)(sum >> ((i & 3) * 8)))
+            return false; // the checksum sector repeats the sum
     }
-    return sum;
+    return RtlCompareMemory(Boot + 3, "EXFAT   ", 8) == 8 && *(USHORT *)(Boot + 510) == 0xAA55;
 }
 
 // Read the boot sector, the root's bitmap and up-case entries, and count the free clusters (the lock is held).
 static NTSTATUS ExMountDisk(FATX_VOLUME *v) {
     EXFAT_DISK *x = v->Ex;
-    PUCHAR b;
-    NTSTATUS status = FatxMapBlock(v, 0, &b);
-    if (!NT_SUCCESS(status))
-        return status;
+    // The main boot region, else the backup: a kernel that takes a whole-disk exFAT drive for a FATX disk writes its
+    // refurbishment record into sector 3 (spec/oxos-internal/05 §2a).
+    UCHAR b[512];
+    NTSTATUS status;
+    if (!ExReadBootRegion(v, 0, b, &status)) {
+        if (!NT_SUCCESS(status))
+            return status;
+        XK_SERIAL("exfat: the main boot region is damaged; using the backup\n");
+        if (!ExReadBootRegion(v, 12 * 512, b, &status))
+            return NT_SUCCESS(status) ? STATUS_UNRECOGNIZED_VOLUME : status;
+        // Repair the main region from the backup, as fsck.exfat does, so a PC mounts the disk again. The backup is
+        // never written: an interrupted repair leaves a main region that fails its checksum and is repaired again.
+        for (ULONG sector = 0; sector < 12 && NT_SUCCESS(status); sector++) {
+            UCHAR copy[512];
+            PUCHAR data;
+            status = FatxMapBlock(v, (12 + sector) * 512, &data);
+            if (!NT_SUCCESS(status))
+                break;
+            RtlCopyMemory(copy, data, 512);
+            status = FatxMapBlock(v, sector * 512, &data);
+            if (!NT_SUCCESS(status))
+                break;
+            RtlCopyMemory(data, copy, 512);
+            status = FatxWriteBlockRange(v, sector * 512 & ~(FATX_BLOCK_SIZE - 1), sector * 512 & (FATX_BLOCK_SIZE - 1),
+                                         512);
+        }
+        XK_SERIAL("exfat: main boot region restored from the backup: %#lx\n", status);
+        status = STATUS_SUCCESS; // a failed repair still mounts from the backup
+    }
     UCHAR sectorShift = b[108], clusterShift = (UCHAR)(b[108] + b[109]);
-    if (RtlCompareMemory(b + 3, "EXFAT   ", 8) != 8 || sectorShift != 9 || clusterShift < 12 || clusterShift > 25 ||
-        *(USHORT *)(b + 510) != 0xAA55)
+    if (sectorShift != 9 || clusterShift < 12 || clusterShift > 25)
         return STATUS_UNRECOGNIZED_VOLUME;
     ULONG fatOffset = *(ULONG *)(b + 80), fatLength = *(ULONG *)(b + 84), heap = *(ULONG *)(b + 88);
     ULONG count = *(ULONG *)(b + 92), root = *(ULONG *)(b + 96), serial = *(ULONG *)(b + 100);
@@ -684,11 +715,6 @@ static NTSTATUS ExMountDisk(FATX_VOLUME *v) {
     UCHAR fats = b[110];
     if (!count || (fats != 1 && fats != 2) ||
         ((ULONGLONG)heap << 9) + ((ULONGLONG)count << clusterShift) > (ULONGLONG)v->PartitionLength)
-        return STATUS_UNRECOGNIZED_VOLUME;
-    PUCHAR check;
-    status = FatxMapBlock(v, 11 * 512 & ~(FATX_BLOCK_SIZE - 1), &check);
-    ULONG want = NT_SUCCESS(status) ? *(ULONG *)(check + (11 * 512 & (FATX_BLOCK_SIZE - 1))) : 0;
-    if (!NT_SUCCESS(status) || ExBootChecksum(v, &status) != want || !NT_SUCCESS(status))
         return STATUS_UNRECOGNIZED_VOLUME;
     x->ClusterShift = clusterShift;
     x->BytesPerCluster = 1u << clusterShift;
@@ -819,6 +845,7 @@ NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     FATX_VOLUME *v = FatxVolume(dev);
     v->TargetDevice = disk;
     v->MountTarget = Target;
+    ObfReferenceObject(Target); // released by the delete routine (FatxDeleteVolume), also when the mount fails
     v->Exfat = TRUE;
     v->FirstClusterNumber = 2;
     v->Ex = &ExfatDisk;
@@ -881,11 +908,11 @@ NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     }
     FatxReleaseVolume(v);
     if (!NT_SUCCESS(status)) {
+        XK_SERIAL("exfat: mounting folder %s failed: %#lx\n", Folder, status);
         FatxForgetVolume(v);
         IoDeleteDevice(dev);
         return STATUS_UNRECOGNIZED_VOLUME;
     }
-    ObfReferenceObject(Target);
     dev->Flags &= ~DO_DEVICE_INITIALIZING;
     Target->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;

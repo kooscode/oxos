@@ -36,6 +36,17 @@ Memory units come last (§9). Out of scope: changing what titles do.
   1. a retail or Cerbios-style FATX disk (stock spec 04 table, or `****PARTINFO****` in sector 0 / near the end,
      Cerbios spec 03 §2) → today's FATX path, unchanged;
   2. GPT (protective MBR) or MBR with an exFAT OXOS volume → the exFAT layout below;
+  2a. no partition table, exFAT on the whole disk (sector 0 says `EXFAT   `, as a PC formats a bare disk) → the
+     exFAT layout too, when the volume's FAT starts at sector 2048 or later (FatOffset, boot sector byte 80;
+     mkfs.exfat places it at 2048) and the volume fits the disk. Sectors 24 to FatOffset-1 are unused by exFAT
+     (after the two 12-sector boot regions), so the reserved-area copy (§4, sectors 1024–2047) lives there. With
+     an earlier FAT the disk is not used as an exFAT disk. Sector 3 of such a disk is in exFAT's main boot region
+     but is also where a kernel that takes the disk for a FATX disk (stock, Cerbios, an OXOS without rule 2a)
+     writes its refurbishment record (Partition0 offset 0x600), which breaks the main region's checksum. So the
+     volume is mounted from the backup boot region (sectors 12–23) when the main one fails its checksum; the disk
+     is then repaired by copying the backup's 12 sectors over the main region, as `fsck.exfat` does (the backup
+     itself is never written, so an interrupted repair is simply repeated at the next mount; a failed repair still
+     mounts from the backup);
   3. anything else → as today (fatal error for an unusable disk).
 - **Folders** at the root of the exFAT volume, created at boot when missing:
 

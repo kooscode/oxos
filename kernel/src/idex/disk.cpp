@@ -20,7 +20,8 @@ volatile USHORT IdexDiskSecurityWord; // IDENTIFY word 128, for diagnostics
 
 static PDEVICE_OBJECT IdexDiskPartitionTable[IDE_MAX_PARTITIONS];
 
-// exFAT layout (spec/oxos-internal/05-exfat-storage-spec.md): a GPT or MBR disk whose first data partition holds exFAT.
+// exFAT layout (spec/oxos-internal/05-exfat-storage-spec.md): a GPT or MBR disk whose first data partition holds exFAT,
+// or exFAT on the whole disk with its FAT at sector 2048 or later.
 // Partition1-6 are then folders of that volume (the file system mounts them through IdexDiskFolderOf), and
 // Partition0's retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at sectors 1024-2047,
 // before the partition. Kinds of disk device:
@@ -519,6 +520,18 @@ static void IdexDiskDetectLayout() {
         // The partition must start after the reserved-area copy, end inside the disk and hold exFAT.
         found = found && start >= 2048 && last < IdexDiskLengthInSectors &&
                 NT_SUCCESS(IdexDiskReadPhysical(start, sector, 512)) && RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8;
+        // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk): used when its FAT starts at
+        // sector 2048 or later, so the reserved-area copy (1024-2047) sits in the unused space after the two 12-sector
+        // boot regions. Boot sector: VolumeLength (sectors) at 72, FatOffset (sectors) at 80.
+        if (!found && sector && NT_SUCCESS(IdexDiskReadPhysical(0, sector, 512)) &&
+            RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8) {
+            ULONGLONG length = *(ULONGLONG *)(sector + 72);
+            ULONG fatOffset = *(PULONG)(sector + 80);
+            XK_SERIAL("disk: exFAT on the whole disk: %#llx sectors, FAT at sector %#lx\n", length, fatOffset);
+            start = 0;
+            last = length - 1;
+            found = fatOffset >= 2048 && length > fatOffset && length <= IdexDiskLengthInSectors;
+        }
         if (found && NT_SUCCESS(IdexDiskCreateDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9),
                                                      &IdexDiskExfatVolume, IDE_KIND_VOLUME)))
             IdexDiskExfatLayout = TRUE;
