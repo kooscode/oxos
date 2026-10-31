@@ -180,7 +180,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiSetStage(post_code::HalPhase0);
     KiBootStep("HAL phase 0");
     HalInitSystemPhase0(/*coldBoot=*/!quick);
-    HalpSetBootLed(0x5F); // alternating green / orange: the kernel is starting
+    HalpSetBootLed(0x0A); // fast green blink: the kernel is starting (steady green once the title is entered)
 
     for (int i = 0; i < 4; i++) // the boot loader's refresh records (boot/start.S at 0x23D8, boot/bl.cpp at 0x23D0)
         KiRefreshBootFix[i] = quick ? 0 : ((volatile ULONG *)0x800023D0)[i < 2 ? i + 2 : i - 2];

@@ -60,8 +60,8 @@ the new build.
 | Front LED | Meaning |
 |---|---|
 | solid orange | the 2BL is waiting for the link and asking the network (at most about 6 s) |
-| blinking orange | the 2BL is unpacking the kernel (downloaded, or its own) |
-| green / orange | the kernel is starting (spec/oxos-internal/03-debug-serial.md §6) |
+| slow green blink | the 2BL is unpacking the kernel (downloaded, or its own) |
+| fast green blink | the kernel is starting; steady green once the title runs (spec/oxos-internal/03-debug-serial.md §6) |
 
 - **The link:** the 2BL waits up to 4 s for the Ethernet link (auto-negotiation takes 2–3 s after power-on), then
   asks every 250 ms for 2 s. With no cable, or no answer, it boots from flash.

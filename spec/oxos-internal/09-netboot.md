@@ -81,7 +81,7 @@ All of it is below the 2BL (0x400000) or above the unpacked kernel. The kernel t
 
 ## 6. LED (spec/oxos-internal/03 §6)
 - 0xFF (solid orange) while netboot waits for the link and the network.
-- Then 0xAA (blinking orange) again for the unpacking.
+- Then 0x03 (slow green blink) again for the unpacking.
 
 ## Images larger than one bank (2026-10-23)
 A kernel whose packed stream does not fit in 256 KiB (a Microsoft-derived kernel used as a reference, about 0x3B000
