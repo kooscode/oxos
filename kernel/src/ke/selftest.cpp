@@ -90,7 +90,11 @@ static void NTAPI SleepThread(PVOID) {
     KiTestSleepMs = KeTickCount - start;
 }
 
+// Set by start-up once it has become the idle loop (KiReleaseBootSpinners).
+static KEVENT SpinGo;
+
 static void NTAPI SpinThread(PVOID counter) {
+    KeWaitForSingleObject(&SpinGo, Executive, KernelMode, FALSE, nullptr);
     for (;;)
         *(volatile ULONG *)counter = *(volatile ULONG *)counter + 1;
 }
@@ -475,9 +479,13 @@ static void NTAPI MmControllerThread(PVOID) {
                        !MmIsAddressValid((UCHAR *)self->StackLimit - 1) && MmIsAddressValid(self->StackLimit);
 
     XK_SERIAL("mm test 7: Thread churn through the real lifecycle:\n");
-    // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return.
-    ULONG baseline = MmAvailablePages;
-    for (int i = 0; i < 150; i++) {
+    // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return. The
+    // baseline is taken after one lifetime: the first thread's one-time costs (pool growth; other suites allocating
+    // meanwhile) are not a per-thread leak.
+    ULONG baseline = 0;
+    for (int i = -1; i < 150; i++) {
+        if (i == 0)
+            baseline = MmAvailablePages;
         HANDLE h;
         NTSTATUS created = PsCreateSystemThread(&h, nullptr, (PVOID)ShortThread, nullptr, FALSE);
         XK_SERIAL("mm churn %d: created %#lx, free pages %lu\n", i, created, MmAvailablePages);
@@ -487,7 +495,8 @@ static void NTAPI MmControllerThread(PVOID) {
             NtClose(h);
         }
     }
-    Sleep(5);
+    // Read at once: each thread's stack is freed by the switch away from it, before its waiter runs; a sleep here
+    // would let other suites' allocations into the count.
     KiTestMmThreadChurnPages = baseline - MmAvailablePages;
 
     XK_SERIAL("mm test 8: Virtual memory.\n");
@@ -764,9 +773,16 @@ static void KiStartThreadSelfTests() {
     KiCreateSystemThread(FpuThread, (PVOID)12345, 0, 8);
     KiCreateSystemThread(FpuThread, (PVOID)67890, 0, 8);
     KiCreateSystemThread(ControllerThread, nullptr, 0, 9);
+    // The two equal-priority spinners never block, so they wait until start-up has become the idle loop: running
+    // earlier, they kept the start-up thread (priority 0, at APC_LEVEL since 2026-10-27) from ever running again,
+    // and no title started.
+    KeInitializeEvent(&SpinGo, NotificationEvent, FALSE);
     KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinA, 0, 1);
     KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinB, 0, 1);
 }
+
+// Start-up is at DISPATCH_LEVEL and about to enter the idle loop.
+void KiReleaseBootSpinners() { KeSetEvent(&SpinGo, 0, FALSE); }
 
 void KiRunBootSelfTests() {
     KiStartThreadSelfTests();

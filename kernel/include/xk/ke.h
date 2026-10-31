@@ -470,6 +470,7 @@ XBAPI void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 
 // Self-tests run at boot (milestone checks read their counters over QMP).
 void KiRunBootSelfTests();
+void KiReleaseBootSpinners(); // start-up has become the idle loop (selftest.cpp)
 
 // List helpers (NT semantics).
 static inline void InitializeListHead(PLIST_ENTRY h) { h->Flink = h->Blink = h; }

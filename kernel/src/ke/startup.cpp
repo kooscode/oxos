@@ -253,6 +253,10 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 
     KfRaiseIrql(DISPATCH_LEVEL); // the idle loop runs at DISPATCH_LEVEL
     KiSetStage(post_code::Idle);
+#if XK_BOOT_SELFTEST
+    if (!quick)
+        KiReleaseBootSpinners();
+#endif
     KiIdleLoop();
 }
 
