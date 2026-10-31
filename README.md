@@ -165,18 +165,19 @@ sudo apt install libfuse2t64     # AppImages need FUSE 2 on Ubuntu 24.04
 git clone https://github.com/kooscode/oxos.git
 cd oxos
 ```
-Nothing else needs fetching by hand. On first use the build fetches into `third_party/`, each at a pinned version
+Nothing else needs fetching by hand. On first use the build fetches these into `third_party/`, each at a pinned version
 (so the first build needs internet access):
 - [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (its X-code table and EEPROM key states), by `make bios`;
 - the [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) hard-disk image (MIT-licensed, an open
   dashboard on a formatted drive), checked by SHA-256, by `make test` and `make run`: the default hard disk;
 - [nxdk](https://github.com/XboxDev/nxdk), by the controller test.
-- Intel's CPU microcode updates for the Xbox's Pentium III (`intel-ucode/06-08-06` and `06-08-0a` from
-  [Intel's microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files)), checked by
-  SHA-256, by every kernel build. The kernel carries the two platform-4 updates unmodified and loads one at start-up.
-  They are Intel's, under Intel's licence (`third_party/intel-ucode/license`): Copyright (c) 2018-2021 Intel
-  Corporation, all rights reserved; redistribution in binary form without modification is permitted; provided
-  "as is", without warranty.
+
+Intel's CPU microcode updates for the Xbox's Pentium III are not fetched: they are in the repo, unmodified, in
+`third_party/intel-ucode/` (from [Intel's microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files),
+checked by SHA-256 at every kernel build). The kernel carries the two platform-4 updates and loads one at start-up.
+They are Intel's, under Intel's licence, not OXOS's: Copyright (c) 2018-2021 Intel Corporation, all rights reserved;
+redistribution in binary form without modification is permitted; provided "as is", without warranty. The full
+notice is in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 **4. Optionally, add titles and your own files.**
 - Images of your own discs (XISO) go in `xiso/`.
