@@ -13,6 +13,10 @@ usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs 
    (--boot-entries, function names).
 2. The quick-reboot copy of .data (arch/entry.S, KI_DATA_COPY_SIZE = --data-copy): the initialised part of .data, as
    tools/mkbios.py stores it, must fit, or a quick reboot of a network-booted kernel would take another kernel's.
+3. The title-start call (spec/oxos-internal/23-trainer-hook.md): dashboards search 0x80010000-0x8003AF90 for the
+   first `call [0x00010128]` (or `call [0x80000010]`) to redirect it to a game trainer, and later search for
+   `call [0x8000000C]` to put it back. The image must hold exactly one title-start call, inside that range and
+   outside the boot-only sections, and none of the other two.
 """
 import argparse, os, re, struct, subprocess, sys
 
@@ -51,6 +55,49 @@ def data_init_size(exe):
     sys.exit(f"{exe}: no .data section")
 
 
+TITLE_SCAN_START, TITLE_SCAN_END = 0x80010000, 0x8003AF90
+TITLE_CALL = bytes.fromhex("ff1528010100")
+OTHER_CALLS = (bytes.fromhex("ff1510000080"), bytes.fromhex("ff150c000080"))
+
+
+def title_call_errors(exe):
+    pe = open(exe, "rb").read()
+    lfanew = struct.unpack_from("<I", pe, 0x3C)[0]
+    nsec, optsz = struct.unpack_from("<H", pe, lfanew + 6)[0], struct.unpack_from("<H", pe, lfanew + 20)[0]
+    base = struct.unpack_from("<I", pe, lfanew + 24 + 28)[0]
+    image = bytearray(pe[:struct.unpack_from("<I", pe, lfanew + 24 + 60)[0]])  # the headers, as loaded
+    boot = []
+    for i in range(nsec):
+        sh = lfanew + 24 + optsz + 40 * i
+        name = pe[sh:sh + 8].rstrip(b"\0").decode()
+        vsize, va, rawsize, raw = struct.unpack_from("<IIII", pe, sh + 8)
+        if len(image) < va + vsize:
+            image.extend(bytes(va + vsize - len(image)))
+        image[va:va + min(rawsize, vsize)] = pe[raw:raw + min(rawsize, vsize)]
+        if name in (".xka", ".xkb"):
+            boot.append((base + va, base + va + vsize))
+    window = bytes(image[:TITLE_SCAN_END - base + 5])
+
+    def found(pattern):
+        hits, i = [], window.find(pattern)
+        while i >= 0:
+            hits.append(base + i)
+            i = window.find(pattern, i + 1)
+        return hits
+
+    errors = []
+    calls = found(TITLE_CALL)
+    if len(calls) != 1:
+        errors.append(f"{len(calls)} title-start calls (FF 15 28 01 01 00) below {TITLE_SCAN_END:#x}: "
+                      f"{[hex(c) for c in calls]}, need exactly one (src/xe/loader.cpp XepTitleThread)")
+    elif any(lo <= calls[0] < hi for lo, hi in boot):
+        errors.append(f"the title-start call at {calls[0]:#x} is in a boot-only section")
+    for other in OTHER_CALLS:
+        if found(other):
+            errors.append(f"{other.hex(' ')} found at {[hex(c) for c in found(other)]}: dashboards would patch it")
+    return errors, calls
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
@@ -70,10 +117,12 @@ def main():
     if init > a.data_copy:
         errors.append(f"the initialised .data is {init:#x} bytes, more than the quick-reboot copy holds "
                       f"({a.data_copy:#x}, KI_DATA_COPY_SIZE in src/arch/entry.S)")
+    call_errors, calls = title_call_errors(a.exe)
+    errors += call_errors
     if errors:
         sys.exit("\n".join(errors))
     print(f"kernel layout: {count} boot-only symbols, none used by kept code; .data initialiser {init:#x} of "
-          f"{a.data_copy:#x} bytes")
+          f"{a.data_copy:#x} bytes; title-start call at {calls[0]:#x}")
 
 
 if __name__ == "__main__":
