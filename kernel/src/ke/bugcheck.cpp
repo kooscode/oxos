@@ -25,7 +25,12 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
 #endif
     cli();
     // CMOS first (needs no log; reported at the next boot): a release build otherwise halts without a trace.
-    KiSaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
+    // An unhandled exception (0x1E) is always raised from the dispatcher: record where it happened instead, the
+    // faulting instruction (P2) and, for an access violation, the address it touched (P4).
+    if (BugCheckCode == 0x1E)
+        KiSaveBugCheckLastWords(BugCheckCode, P4, P2);
+    else
+        KiSaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
     XK_SERIAL("*** bug check %#lx (%#lx, %#lx, %#lx, %#lx)\n", BugCheckCode, P1, P2, P3, P4);
 #if XK_TRACE_IMPORTS
     // Trace builds: the title's last kernel calls (ordinal, return value, caller, arguments), oldest first.

@@ -348,7 +348,8 @@ static void KiSaveLastWords(ULONG vector, ULONG eip) {
         HalpCmosWrite(0x7E, (UCHAR)(st >> 56));
     }
 }
-// Bug checks: 'B', the code (0x71), the first parameter (0x75) and the caller (0x79).
+// Bug checks: 'B', the code (0x71), the first parameter (0x75) and the caller (0x79); for 0x1E the access violation's
+// address (0x75) and the faulting eip (0x79).
 extern "C" void KiSaveBugCheckLastWords(ULONG Code, ULONG P1, ULONG Caller) {
     XkBootMarksOn = FALSE;
     HalpCmosWrite(0x70, 'B');
@@ -381,8 +382,12 @@ static void KiReportLastWords() {
         return;
     }
     if (HalpCmosRead(0x70) == 'B') {
-        XK_SERIAL("*** previous boot ended in bug check %#lx (%#lx), called from %08lx\n", KiCmosGet32(0x71),
-                  KiCmosGet32(0x75), KiCmosGet32(0x79));
+        if (KiCmosGet32(0x71) == 0x1E)
+            XK_SERIAL("*** previous boot ended in bug check 0x1e: unhandled exception at eip %08lx (an access "
+                      "violation's address: %08lx)\n", KiCmosGet32(0x79), KiCmosGet32(0x75));
+        else
+            XK_SERIAL("*** previous boot ended in bug check %#lx (%#lx), called from %08lx\n", KiCmosGet32(0x71),
+                      KiCmosGet32(0x75), KiCmosGet32(0x79));
         HalpCmosWrite(0x70, 0);
         XkBootMarksOn = TRUE;
         return;

@@ -33,7 +33,11 @@ Variables stay in the ordinary data sections, where the boot tests read them aft
 `HalpEndSplash` (each title start) calls `MmFreeBootPages` with the range of the tables in use (`AvTablesInUse`: the
 Focus's or the Xcalibur's when that encoder was found, else the Conexant's, which the display-mode code also falls
 back to when no encoder answers). It runs once: it frees every page from the first page that holds only
-discardable sections to the end of the image, except the pages overlapping that range. Each goes to the tail of its
+discardable sections to the end of the image, except the pages overlapping that range. It never frees a page below
+0x8003B000: titles read the kernel image up to a fixed address (XBMC4Gamers searches 0x80010000-0x8003AF90 byte by
+byte for an instruction of the stock kernel, which OXOS does not have), and a freed page there is an access violation
+in the title. On a Focus console a kernel whose boot-only data starts just below 0x8003A000 lost the page between
+the image and the Focus's tables, and XBMC4Gamers stopped right after starting (2026-10-31). Each goes to the tail of its
 free list, as a freed contiguous page (`MiFreeContiguousPage`), so the page database no longer maps it, and a bit in
 `MiBootPagesFreed` (`.persist`) records it.
 

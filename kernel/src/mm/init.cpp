@@ -539,6 +539,12 @@ void MmInitSystem(bool QuickReboot) {
             discardVa = *(ULONG *)(h + 12);
     }
     MiBootFirstPfn = (0x10000 + discardVa + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    // Titles read the kernel image up to a fixed address: XBMC4Gamers searches 0x80010000-0x8003AF90 byte by byte
+    // for an instruction of the stock kernel, so a freed page below its end is an access violation in the title
+    // (spec/oxos-internal/18 §3).
+    constexpr ULONG MI_TITLE_SCAN_END_PFN = 0x3B;
+    if (MiBootFirstPfn < MI_TITLE_SCAN_END_PFN)
+        MiBootFirstPfn = MI_TITLE_SCAN_END_PFN;
     MiBootEndPfn = imageEndPfn > MiBootFirstPfn ? imageEndPfn : MiBootFirstPfn;
     if (!QuickReboot)
         MiBootPagesFreed[0] = MiBootPagesFreed[1] = 0;
