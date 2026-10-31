@@ -52,16 +52,18 @@ register 0x08 is the sequence (bits 7–4 red, 3–0 green, one bit per quarter 
 
 | Stage | Pattern | Set by |
 |---|---|---|
-| the 2BL, after the SMC challenge | 0xAA, blinking orange | `kernel/boot/bl.cpp` |
+| the 2BL, after the SMC challenge | 0x03, slow green blink | `kernel/boot/bl.cpp` |
 | NETBOOT=1 2BL, waiting for the link and the network (spec/oxos-internal/09) | 0xFF, solid orange | `kernel/boot/bl.cpp` |
-| the kernel, from the end of HAL phase 0 to the title launch (cold and quick boots) | 0x5F, alternating green / orange | `KiSystemStartup` |
+| the kernel, from the end of HAL phase 0 to the title launch (cold and quick boots) | 0x0A, fast green blink | `KiSystemStartup` |
 | the title (dashboard or game) entered | 0x0F, solid green | the title launcher |
 | fatal error | 0xE1, red / green (the reference's) | `IdexFatalError` |
 
+- A normal boot only blinks green, then goes steady green: orange looked like a fault to users (2026-10-30; until then
+  the 2BL blinked orange, 0xAA, and the kernel alternated green / orange, 0x5F).
 - Flashing red / green is the console's error signal (the SMC's own and the reference's fatal error), so no boot stage
-  uses it.
-- A stage that never ends shows where a boot stops: the 2BL pattern means the kernel never started (inflate or entry),
-  green / orange that it stopped before the title launch (the serial log tells where).
+  uses it. Solid orange stays for the developers' netboot images.
+- A stage that never ends shows where a boot stops: the slow blink means the kernel never started (inflate or entry),
+  the fast blink that it stopped before the title launch (the serial log tells where).
 
 ## 7. Network log (removed 2026-10-28)
 From 2026-10-22 to 2026-10-28 `NETLOG=1` builds also sent the serial log as UDP broadcasts (port 5140), with a

@@ -366,8 +366,8 @@ extern "C" [[noreturn]] void BlMain() {
             BlPadCalibrate(top == 0x0FFFFFFF || upgraded128);
     }
     BlSetUpChipset();
-    // Boot status on the front LED (spec/oxos-internal/03-debug-serial.md §6): blinking orange while the 2BL runs.
-    BlSmcTransfer(false, 0x08, 0xAA);
+    // Boot status on the front LED (spec/oxos-internal/03-debug-serial.md §6): slow green blink while the 2BL runs.
+    BlSmcTransfer(false, 0x08, 0x03);
     BlSmcTransfer(false, 0x07, 1);
     BlPost(0x23);
     ULONG bank = BANK; // where the kernel and key block come from: this flash bank, or a network download
@@ -376,7 +376,7 @@ extern "C" [[noreturn]] void BlMain() {
     BlSmcTransfer(false, 0x07, 1);
     if (const UCHAR *download = netboot::Boot())
         bank = (ULONG)download;
-    BlSmcTransfer(false, 0x08, 0xAA);
+    BlSmcTransfer(false, 0x08, 0x03);
     BlSmcTransfer(false, 0x07, 1);
 #endif
     auto payload = (const volatile XK_BOOT_PAYLOAD *)(bank + (PAYLOAD - BANK));
