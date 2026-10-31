@@ -49,6 +49,9 @@ make            # build/selftest/xboxkrnl.exe + xboxkrnl.map (all build output: 
 make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
+make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images, make test-dash;
+                                # VERSION copies them to build/release/dist/bios_vX.Y.Z{,_256k}.bin with SHA-256
+                                # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
                                 # BIOS_BASE=its.bin BIOS_NAME=name (state xemu-state/<name>-<instance>)
