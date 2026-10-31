@@ -3,6 +3,7 @@
 #include <xk/ps.h>
 #include <xk/rtl.h>
 #include <xk/serial.h>
+#include <xk/title.h>
 
 XBAPI void NTAPI XcSHAInit(PUCHAR);
 XBAPI void NTAPI XcSHAUpdate(PUCHAR, const UCHAR *, ULONG);
@@ -637,7 +638,7 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
     XkBootMarksDone();
-    ((void(__cdecl *)())XbeField(0x128))();
+    XeCallTitleEntry(); // exactly `call [0x00010128]`, which trainer loaders hook (spec/oxos-internal/23)
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 

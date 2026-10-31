@@ -16,6 +16,7 @@ PC-formatted exFAT SSD (sound on).*
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
+- **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
 - **More memory for titles** than the stock kernel.
 - **Developer tools:** serial boot log, kernel call tracing, network boot, source-level debugging in xemu.
@@ -40,6 +41,10 @@ OXOS is tested on one 1.4 console; reports from other revisions are welcome in t
   with the image and a launcher, which dashboards such as XBMC4Gamers list as the game itself.
   [Details](spec/oxos-internal/16-virtual-discs.md).
 - **FATX disks** keep working, including the F: and G: partitions made by XBPartitioner or FATXplorer.
+- **Trainers:** put .etm or .xbtf trainers in XBMC4Gamers' `system\trainers` folder, then pick a trainer and its
+  cheats in the game's context menu (White button) before launching. OXOS starts every game with the same call as the
+  stock kernel, which XBMC hooks to load the trainer; a unit test and a build check keep it that way.
+  [Details](spec/oxos-internal/23-trainer-hook.md).
 
 OXOS includes no games: make the images from discs you own.
 
