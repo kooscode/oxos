@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include <xk/types.h>
+#include <xk/ke.h>
 
 extern "C" void HostLogWrite(const char *s, size_t n);
 XBAPI int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args);
@@ -17,6 +18,7 @@ void *KiIrqStubs[16];
 void KiIgnoreInterrupt() {}
 void KiDoubleFaultTask() {}
 void KiNmiTask() {}
+void KiTrap45() {} // debug service (int 2Dh): not raised in host tests
 }
 
 // hal/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
@@ -43,6 +45,13 @@ void KiSaveFaultTaskLastWords(ULONG, ULONG) {}
 
 // io/fsc.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
 ULONG *FscCachePte(ULONG) { return nullptr; }
+
+// arch/igr.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination); here it
+// is what it does for kernel callers.
+XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() { return KfRaiseIrql(DISPATCH_LEVEL); }
+
+// hal/splash.cpp: no splash copy in host tests (no page holds one).
+bool HalpIsSplashPage(ULONG) { return false; }
 
 // xe/nettitle.cpp: no network-delivered title in host tests (no page holds one).
 bool MiIsNetbootTitlePage(ULONG) { return false; }
