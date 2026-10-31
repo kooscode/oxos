@@ -40,7 +40,6 @@ tools/xbe-launcher/*.exe
 tools/xbe-launcher/*.pdb
 tools/iso-launcher/bin/
 tools/iso-launcher/*.obj
-tools/iso-launcher/splash_image.h
 tools/iso-launcher/*.d
 tools/iso-launcher/*.exe
 tools/iso-launcher/*.pdb

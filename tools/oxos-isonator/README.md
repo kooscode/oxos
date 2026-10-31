@@ -58,8 +58,7 @@ tools/oxos-isonator/oxos-isonator.py --info xiso/                 # what each im
 - **The launcher template** must be a plain ISO launcher with no title image. A `default.xbe` already in a game folder
   is replaced only when it is an OXOS ISO launcher (any build, so running the tool again updates the launchers), so a
   game's own `default.xbe` is never overwritten without `--force`.
-- **On start** the launcher mounts the image, shows the OXOS boot splash for a second (a quick fade in and out, as a
-  dashboard does when it starts a title), then starts the game. It shows text only when something is wrong (no
-  image, a failed mount).
+- **On start** the launcher mounts the image and starts the game without touching the screen. It shows text only
+  when something is wrong (no image, a failed mount).
 - Repackinator (Team Resurgent) does the same job for Cerbios with its own launcher. This tool is a separate
   implementation (OXOS is GPL-2.0, Repackinator GPL-3.0), and its launcher is the OXOS one.

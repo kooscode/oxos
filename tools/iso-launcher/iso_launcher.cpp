@@ -7,10 +7,10 @@
 //   - Without iso.txt: the image in the launcher's own folder, so a copy of the launcher next to an image starts it.
 // Images: XISO or a full disc dump (.iso), CCI (.cci), either one whole or split in two (name.1.iso + name.2.iso).
 //
-// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), the OXOS
-// splash shows for a second (as a dashboard fades out when it starts a title), then \Device\CdRom0\default.xbe is
-// launched through the launch data page and a quick reboot; the mount stays for the title's own reboots until the
-// console is switched off (or the disc tray is opened). The screen shows text only when something is wrong.
+// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then
+// \Device\CdRom0\default.xbe is launched through the launch data page and a quick reboot; the mount stays for the
+// title's own reboots until the console is switched off (or the disc tray is opened). The launcher leaves the screen
+// alone, so the title's video mode change is the only one; it sets a mode and shows text only when something is wrong.
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <hal/xbox.h>
@@ -18,9 +18,6 @@
 #include <xboxkrnl/xboxkrnl.h>
 
 #include "mount_iso.h"
-#include "splash_image.h" // generated from kernel/splash/splash.png by gen_splash.py
-
-#include "../../kernel/include/xk/inflate.h"
 
 #include <cstdio>
 #include <cstring>
@@ -186,49 +183,14 @@ void ListFolder(const char *folder) {
     NtClose(h);
 }
 
-// The heading above any message (the screen is otherwise left for the splash).
+// The first message: set a video mode (the launcher leaves the screen alone otherwise) and show the heading.
 void Heading() {
     static bool shown;
-    if (!shown)
+    if (!shown) {
+        XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
         debugPrint("OXOS ISO launcher\n\n");
+    }
     shown = true;
-}
-
-// The boot splash for about a second: a quick fade in, a hold and a fade out to black, one step per frame.
-void ShowSplash() {
-    static unsigned char index[SplashWidth * SplashHeight];
-    xk_inflate::Inflater s = {SplashPacked, SplashPackedSize, 0, 0, 0, index, sizeof(index), 0, false};
-    if (!xk_inflate::Inflate(s) || s.OutPos != s.OutSize)
-        return;
-    VIDEO_MODE mode = XVideoGetMode();
-    if (mode.width < SplashWidth || mode.height < SplashHeight || mode.bpp != 32)
-        return;
-    auto *fb = reinterpret_cast<volatile unsigned *>(XVideoGetFB());
-    auto draw = [&](unsigned level) { // 0 (black) to 256 (full)
-        unsigned colour[256];
-        for (int i = 0; i < 256; i++) {
-            unsigned c = SplashPalette[i];
-            colour[i] = (((c >> 16 & 0xFF) * level >> 8) << 16) | (((c >> 8 & 0xFF) * level >> 8) << 8) |
-                        ((c & 0xFF) * level >> 8);
-        }
-        const unsigned char *p = index;
-        for (int y = 0; y < SplashHeight; y++) {
-            volatile unsigned *row = fb + y * mode.width;
-            for (int x = 0; x < SplashWidth; x++)
-                row[x] = colour[*p++];
-        }
-    };
-    constexpr int fade = 12, hold = 36; // frames: 12 + 36 + 12 = one second at 60 Hz
-    for (int i = 1; i <= fade; i++) {
-        XVideoWaitForVBlank();
-        draw(256 * i / fade);
-    }
-    for (int i = 0; i < hold; i++)
-        XVideoWaitForVBlank();
-    for (int i = fade - 1; i >= 0; i--) {
-        XVideoWaitForVBlank();
-        draw(256 * i / fade);
-    }
 }
 
 // The title name from the image's default.xbe certificate (UTF-16, 40 characters), as ASCII.
@@ -280,8 +242,6 @@ void TitleName(char *out, std::size_t size) {
 } // namespace
 
 int main() {
-    XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-
     static char line[PATH], path[PATH], folder[PATH];
     std::size_t length = ReadLine("D:\\iso.txt", line, sizeof(line));
     if (length && (!std::strcmp(line, "none") || !std::strcmp(line, "NONE"))) {
@@ -344,7 +304,6 @@ int main() {
         Stay();
     }
 
-    ShowSplash();
     if (IsFile("\\Device\\CdRom0\\default.xbe"))
         StartDisc();
     char title[48];

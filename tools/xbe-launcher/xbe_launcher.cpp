@@ -1,6 +1,7 @@
 // XBE launcher (nxdk, open source). Reads D:\launch.txt (one path: a drive letter path such as
 // F:\apps\demo\default.xbe, or a \Device\... path) and launches that XBE through the launch data page and a quick
-// reboot, the way a dashboard does. If the file cannot be opened, it shows why and stays on screen.
+// reboot, the way a dashboard does. It leaves the screen alone (black after the kernel's splash), so the title starts
+// with no video mode change of its own; only when something is wrong does it set a mode, say why and stay there.
 #include <hal/debug.h>
 #include <hal/video.h>
 #include <hal/xbox.h>
@@ -40,6 +41,16 @@ NTSTATUS OpenStatus(const char *path) {
     return status;
 }
 
+// The first message: set a video mode (the launcher leaves the screen alone otherwise) and show the heading.
+void Heading() {
+    static bool shown;
+    if (!shown) {
+        XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
+        debugPrint("OXOS XBE launcher\n\n");
+    }
+    shown = true;
+}
+
 [[noreturn]] void Stay() {
     for (;;)
         Sleep(1000);
@@ -69,11 +80,9 @@ std::size_t ReadLaunchLine(char *text, std::size_t capacity) {
 } // namespace
 
 int main() {
-    XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-    debugPrint("OXOS XBE launcher\n\n");
-
     char start[300] = {};
     if (!ReadLaunchLine(start, sizeof(start))) {
+        Heading();
         debugPrint("D:\\launch.txt is missing or empty.\n");
         Stay();
     }
@@ -84,21 +93,21 @@ int main() {
     } else {
         const char *partition = start[1] == ':' ? PartitionOf(start[0]) : nullptr;
         if (!partition) {
+            Heading();
             debugPrint("Unknown drive in \"%s\" (C, E, F, G, X, Y, Z or a \\Device\\ path).\n", start);
             Stay();
         }
         std::snprintf(path, sizeof(path), "%s%s%s", partition, start[2] == '\\' ? "" : "\\", start + 2);
     }
 
-    debugPrint("%s\n= %s\n\n", start, path);
     NTSTATUS status = OpenStatus(path);
     if (!NT_SUCCESS(status)) {
-        debugPrint("Cannot open it: status 0x%08lx\n", static_cast<unsigned long>(status));
+        Heading();
+        debugPrint("%s\n= %s\n\nCannot open it: status 0x%08lx\n", start, path, static_cast<unsigned long>(status));
         Stay();
     }
-    debugPrint("Launching...\n");
-    Sleep(500);
     XLaunchXBE(path);
-    debugPrint("The launch failed.\n");
+    Heading();
+    debugPrint("%s\n= %s\n\nThe launch failed.\n", start, path);
     Stay();
 }
