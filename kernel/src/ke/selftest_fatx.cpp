@@ -11,6 +11,7 @@ volatile char KiTestFatxDirNames[64];
 // exFAT disk: a title-style format of X: (Partition3) through its volume handle empties the folder
 // (spec/oxos-internal/05-exfat-storage-spec.md §5); E: refuses it.
 volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk, KiTestExfatFormatSpc;
+volatile ULONG KiTestExfatCrossOk;
 extern volatile ULONG KiTestIdexDone;
 
 static void Sleep(LONG ms) {
@@ -41,6 +42,7 @@ static ULONG FreeClusters(HANDLE h) {
 }
 
 static void ExfatFormatTest(PUCHAR buf);
+static void ExfatCrossFolderTest(PUCHAR buf);
 
 static void NTAPI FatxControllerThread(PVOID) {
     while (!KiTestIdexDone)
@@ -213,8 +215,10 @@ static void NTAPI FatxControllerThread(PVOID) {
     // XkTest may have existed from a previous run on the same image: it and keep.bin hold 2 clusters.
     KiTestFatxFreeBalanced = FreeClusters(hv) + 2 == freeBefore || FreeClusters(hv) == freeBefore;
     NtClose(hv);
-    if (IdexDiskExfatLayout)
+    if (IdexDiskExfatLayout) {
         ExfatFormatTest(buf);
+        ExfatCrossFolderTest(buf);
+    }
     ExFreePool(buf);
     KiTestFatxDone = 1;
 }
@@ -291,6 +295,39 @@ static void ExfatFormatTest(PUCHAR buf) {
     KiTestExfatFormatOk = ok;
     // E: is not a cache partition: the header write is refused and nothing changes.
     KiTestExfatRefuseOk = FormatLikeATitle("\\Device\\Harddisk0\\Partition1", buf) == STATUS_ACCESS_DENIED;
+}
+
+// Allocations through two folder volumes in turn (a directory on E:, a file on Y:, a directory on E:), as a dashboard
+// writing its cache on E: while a downloader uses Z:. Every folder volume must see the other's allocation-bitmap
+// changes: with a cache copy each, E:'s second write put back its stale bitmap sector and cleared Y:'s cluster, which
+// was then given out again (2026-10-30, a 2 TB disk). The volume check after the run (tests/boot_test.py) finds a
+// cluster in use but not marked.
+static void ExfatCrossFolderTest(PUCHAR buf) {
+    HANDLE h;
+    IO_STATUS_BLOCK iosb;
+    // From a previous run on the same image: gone first, so each step allocates again.
+    static const PCSZ old[] = {"\\Device\\Harddisk0\\Partition1\\XkCross\\d1", "\\Device\\Harddisk0\\Partition1\\XkCross\\d0",
+                               "\\Device\\Harddisk0\\Partition1\\XkCross", "\\Device\\Harddisk0\\Partition4\\XkCross.bin"};
+    for (PCSZ path : old)
+        if (Open(&h, path, DELETE, FILE_OPEN, FILE_DELETE_ON_CLOSE) == 0)
+            NtClose(h);
+    bool ok = Open(&h, "\\Device\\Harddisk0\\Partition1\\XkCross", GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE) == 0;
+    if (ok)
+        NtClose(h);
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition1\\XkCross\\d0", GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE) == 0;
+    if (ok)
+        NtClose(h);
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition4\\XkCross.bin", GENERIC_WRITE, FILE_CREATE, 0) == 0;
+    if (ok) {
+        RtlFillMemory(buf, 0x1000, 0xC5);
+        LARGE_INTEGER zero = {};
+        ok = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &zero) == 0;
+        NtClose(h);
+    }
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition1\\XkCross\\d1", GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE) == 0;
+    if (ok)
+        NtClose(h);
+    KiTestExfatCrossOk = ok;
 }
 
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
