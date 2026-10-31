@@ -434,7 +434,11 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
         time.sleep(0.25)
     count = 9 + 16 + 3 + 16
     out = mon.hmp(f"x/{count}wx {base:#x}")  # one command: the relaunch test moves on after 8 s
-    words = [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:count]
+    try:
+        words = [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:count]
+    except (ValueError, IndexError):  # no title mapped there (it never started): every title check fails
+        words = []
+    words += [0] * (count - len(words))
 
     def text(ws):
         return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
