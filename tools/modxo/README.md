@@ -57,7 +57,8 @@ python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/s
 ```
 
 ## Notes
-- The console's Super I/O probe and COM1 work only while the logger holds DTR (stock Modxo behaviour).
+- The console's Super I/O probe and COM1 work only while the logger holds DTR (stock Modxo behaviour); without a
+  logger running, an OXOS console fails to boot (red/green FRAG).
 - 0xFE and 0xFC mark POST codes and status lines in the stream. Binary COM1 output (a kernel debugger's packets)
   can contain them; read such output from `--raw`.
 - A press is ignored while some kernels run (e.g. Microsoft's debug kernel). `on` / `off` retry once and report a

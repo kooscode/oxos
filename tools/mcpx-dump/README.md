@@ -21,7 +21,7 @@ Design: [spec/oxos-internal/12-mcpx-dump.md](../../spec/oxos-internal/12-mcpx-du
   - MCPX 1.0 needs a 4xxx retail BIOS.
   - Any size; the top 256 KiB is used. Nothing from Microsoft ships with OXOS.
 - A PC with Python 3, on the same network segment as the console. Use a cable or a switch, not a router in between.
-- The OXOS build tools (see the repository README), to build the payload once.
+- The OXOS build tools ([`kernel/README.md`](../../kernel/README.md), "Setting up"), to build the payload once.
 
 ## Steps
 1. Build the payload, an OXOS netboot image whose boot loader also sends the ROM:
