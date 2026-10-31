@@ -102,7 +102,11 @@ struct FATX_VOLUME {
     ULONG SerialNumber;
     FATX_FCB RootFcb;
     FATX_FCB VolumeFcb; // opens of the volume itself
-    FSCACHE_EXTENSION CacheExtension; // the volume's key in the file system cache
+    FSCACHE_EXTENSION CacheExtension; // a FATX partition's key in the file system cache
+    // The key its blocks are cached under: &CacheExtension on FATX; on exFAT one key for the whole disk, shared by
+    // every folder volume (C:, E:, X:, ...), so a block (the allocation bitmap, the FAT) has one cached copy. With
+    // a key each, a folder volume wrote back its stale copy of a bitmap sector over another's change.
+    FSCACHE_EXTENSION *Cache;
 };
 
 // Volume layer (fatx/volume.cpp). One lock serves all FATX volumes; blocks come from the file system cache

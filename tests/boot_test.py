@@ -396,6 +396,8 @@ def exfat_format_checks(mon, q):
         "X: reports a 750 MB FATX volume in the format's cluster size, only its root directory in use":
             spc == 128 and total == clusters and free == total - 1,
         "E: refuses a format through its volume handle": mon.read("KiTestExfatRefuseOk") == 1,
+        "allocations through E: and Y: in turn succeed (the volume check below finds lost bitmap bits)":
+            mon.read("KiTestExfatCrossOk") == 1,
     }
 
 

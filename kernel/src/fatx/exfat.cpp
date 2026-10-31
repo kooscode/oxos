@@ -15,6 +15,8 @@ struct EXFAT_DISK {
     FATX_FCB Root; // the volume's root directory (it has no entry set)
 };
 static EXFAT_DISK ExfatDisk;
+// The exFAT disk's one key in the file system cache, shared by all its folder volumes (fatx.h, FATX_VOLUME::Cache).
+static FSCACHE_EXTENSION ExfatDiskCache;
 
 constexpr UCHAR EX_END = 0x00, EX_BITMAP = 0x81, EX_UPCASE = 0x82, EX_FILE = 0x85, EX_STREAM = 0xC0,
                 EX_NAME = 0xC1;
@@ -855,6 +857,8 @@ NTSTATUS ExfatMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     v->ReportedLength = target.PartitionLength.QuadPart;
     v->SectorSize = 512;
     v->CacheExtension = {disk, volume.PartitionLength, 512};
+    ExfatDiskCache = v->CacheExtension;
+    v->Cache = &ExfatDiskCache;
     ExInitFcb(&v->RootFcb, FCB_DIRECTORY | FCB_ROOT);
     ExInitFcb(&v->VolumeFcb, FCB_VOLUME);
     v->RootFcb.Attributes = FILE_ATTRIBUTE_DIRECTORY;

@@ -40,7 +40,7 @@ NTSTATUS FatxMapBlock(FATX_VOLUME *v, LONGLONG Offset, PUCHAR *Data) {
             return STATUS_SUCCESS;
         }
     PVOID p;
-    NTSTATUS status = FscMapBuffer(&v->CacheExtension, block, TRUE, &p);
+    NTSTATUS status = FscMapBuffer(v->Cache, block, TRUE, &p);
     if (!NT_SUCCESS(status))
         return status;
     if (FatxHeldCount == FATX_MAX_HELD) {
@@ -67,11 +67,15 @@ void FatxInvalidateRange(FATX_VOLUME *v, LONGLONG Offset, ULONG Length) {
     for (ULONG i = 0; i < FatxHeldCount; i++) // held blocks of the range are not reused either
         if (FatxHeld[i].Volume == v && FatxHeld[i].Block + FATX_BLOCK_SIZE > Offset && FatxHeld[i].Block < Offset + Length)
             FatxHeld[i].Volume = nullptr;
-    FscInvalidateByteRange(&v->CacheExtension, Offset, Length);
+    FscInvalidateByteRange(v->Cache, Offset, Length);
 }
 
-// The volume is going away: its blocks must not match a later volume allocated at the same address.
-void FatxForgetVolume(FATX_VOLUME *v) { FscInvalidateDevice(&v->CacheExtension); }
+// The volume is going away: its blocks must not match a later volume allocated at the same address. An exFAT folder
+// volume's key is the disk's, which outlives it (and its blocks stay valid: every write goes through).
+void FatxForgetVolume(FATX_VOLUME *v) {
+    if (v->Cache == &v->CacheExtension)
+        FscInvalidateDevice(v->Cache);
+}
 
 // --- FAT
 
@@ -357,6 +361,7 @@ NTSTATUS FatxMountVolume(PDEVICE_OBJECT TargetDevice) {
     v->PartitionLength = partition.PartitionLength.QuadPart;
     v->SectorSize = geometry.BytesPerSector;
     v->CacheExtension = {TargetDevice, partition.PartitionLength, geometry.BytesPerSector};
+    v->Cache = &v->CacheExtension;
     FatxInitFcb(&v->RootFcb, FCB_DIRECTORY | FCB_ROOT);
     FatxInitFcb(&v->VolumeFcb, FCB_VOLUME);
     v->RootFcb.Attributes = FILE_ATTRIBUTE_DIRECTORY;

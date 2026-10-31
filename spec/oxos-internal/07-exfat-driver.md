@@ -98,7 +98,12 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
   Allocation prefers consecutive clusters; a NoFatChain file that cannot grow in place gets its FAT chain written
   and the flag cleared.
 - **Shared state:** all virtual partitions of an exFAT disk share one exFAT state (geometry, up-case table, free
-  count, allocation hint) and one block cache key (the exFAT partition), under the FATX layer's lock.
+  count, allocation hint) and one block cache key (the exFAT partition), under the FATX layer's lock. The one key
+  matters: with a key per folder volume (the code until 2026-10-30), each kept its own cached copy of the
+  allocation bitmap and FAT, and a volume writing back its stale copy of a bitmap sector cleared bits another
+  volume had set. Those clusters were later given out again: on a 2 TB disk, directories created on E: and Y:
+  were overwritten by thumbnail files XBMC4Gamers wrote while a downloader used Z:. `make test-exfat` covers it
+  (allocations through E: and Y: in turn, then a full volume check).
 
 ### 2.1 Volume handle (cache formatting, storage spec §5)
 - **Cluster size:** a folder partition shows the FATX cluster size of its last format (the header's sectors per
