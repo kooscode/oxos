@@ -496,7 +496,7 @@ $(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $
 	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
 iso-launcher: $(ISO_LAUNCHER_XBE)
 
-# Title launcher (tools/title-launcher, nxdk): lists F:\games and F:\titles (and game folders) and starts a disc image (mounted) or an XBE chosen with
+# Title launcher (tools/title-launcher, nxdk): lists F:\games, F:\titles (and game folders) and F:\Applications and starts a disc image (mounted) or an XBE chosen with
 # the controller. make title-launcher builds bin/default.xbe and title-launcher.iso.
 TITLE_LAUNCHER_DIR := $(ROOT)/tools/title-launcher
 TITLE_LAUNCHER_XBE := $(TITLE_LAUNCHER_DIR)/bin/default.xbe
