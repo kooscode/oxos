@@ -37,6 +37,25 @@ OXOS addition. Implemented 2026-10-22 (`HalpQuiesceBusMasters` in `kernel/src/ha
    1. log the PCI command register, PMC 0x200, PFIFO 0x2500 and 0x3220;
    2. PMC 0x200 bits 8 (PFIFO) and 12 (PGRAPH) cleared, then the original value written back, which resets both
       engines.
+   3. Frame-buffer tiles and Z compression off (added 2026-11-01): for each tile *i* (0-7) PFB 0x100240 + 16·*i*
+      (tile), + 4 (limit) and + 8 (pitch) ← 0 and PFB 0x100300 + 4·*i* (Z compression) ← 0; PFB 0x100324 (Z-compression
+      tag offset) ← 0.
+      - They power up holding junk. On the 1.4 console a cold boot reads 0x100300 = 0x100304 = 0x04000000 and
+        0x100324 = 0x10. The stock kernel's graphics device clears them before any title (spec/stock/22 §7), and
+        Direct3D titles set their own. OXOS has no boot animation, so nothing did.
+      - nxdk's pbkit (`pb_init`) copies the tile and Z-compression registers into the graphics engine as it finds
+        them, so they must hold sane values.
+      - **Not sufficient on its own (open).** Apps built with nxdk's pbkit (its samples, XBL Dashboard) still stop at
+        pbkit's GPU error screen on a cold boot on hardware: class 0x97 method 0x1D6C (semaphore offset) is rejected
+        with "FD invalid operation" in `pb_init`. xemu is not affected.
+      - What was measured:
+        - The same app works after a Direct3D title has run (quick reboots only).
+        - pbkit's own engine reset (PMC 0x200 bit 12 off and on) changes none of the 448 readable PGRAPH registers,
+          so the graphics engine keeps its power-on junk.
+        - Setting the engine's copies of the memory configuration (PGRAPH 0x4009A0-0x4009A8, RDI select 0xEA
+          0x00-0x0C) and every readable register that differs from the after-Direct3D state was not enough.
+      - The rest: the graphics engine's live context is power-on junk, which nxdk's pbkit saves over its own context
+        image. Spec 24 (HalpInitGraphicsEngine, right after this step) loads a default context at a cold boot.
 
 ## 3. Not covered
 - The APU's own engines are not reset: no register-level description is available. Its bus-master bit is

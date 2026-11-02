@@ -17,6 +17,8 @@ PC-formatted exFAT SSD (sound on).*
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
+- **nxdk homebrew:** apps that draw with nxdk's pbkit (its samples, XBL Dashboard) run from a cold boot: the kernel
+  brings the GPU up as a stock boot animation would ([details](spec/oxos-internal/24-graphics-engine-init.md)).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
 - **More memory for titles** than the stock kernel.
 - **Developer tools:** serial boot log, kernel call tracing, network boot, source-level debugging in xemu.
