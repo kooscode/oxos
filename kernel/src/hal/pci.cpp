@@ -150,6 +150,19 @@ static void HalpQuiesceBusMasters() {
               (enable & 0x100) ? *(volatile ULONG *)0xFD002500 : 0, (enable & 0x100) ? *(volatile ULONG *)0xFD003220 : 0);
     *pmc = enable & ~0x1100u;
     *pmc = enable;
+    // Frame-buffer tiles and Z compression off (spec/oxos-internal/10 §2 step 7.3). They power up holding junk (PFB
+    // 0x100300/0x100304 0x04000000, 0x100324 0x10 on the 1.4 console). On a stock console the kernel's graphics device
+    // clears them before any title (spec/stock/22 §7); OXOS has no boot animation, so it does it here. nxdk's pbkit
+    // copies them into the graphics engine as it finds them. This is one part of the graphics-engine state pbkit
+    // relies on; its apps still fail on a cold boot without the rest (open, spec 10 §2 step 7.3).
+    auto pfb = (volatile ULONG *)0xFD100000;
+    for (ULONG i = 0; i < 8; i++) {
+        pfb[(0x240 + 16 * i) / 4] = 0; // tile i: off, then its limit and pitch
+        pfb[(0x244 + 16 * i) / 4] = 0;
+        pfb[(0x248 + 16 * i) / 4] = 0;
+        pfb[(0x300 + 4 * i) / 4] = 0; // Z compression for tile i
+    }
+    pfb[0x324 / 4] = 0; // Z-compression tag offset
 }
 
 void HalpInitPci() {
@@ -250,6 +263,8 @@ void HalpInitPci() {
         c.Set8(0x3D, 1);
     });
     HalpPciWrite32(1, 0, 0x4C, 0x00000114);
+    // The graphics engine to a valid live context, before the splash or any title uses the GPU (spec 24).
+    HalpInitGraphicsEngine();
 #if XK_DEBUG_SERIAL
     static const UCHAR devs[] = {0, 1, 2, 3, 4, 5, 6, 9, 0x1E};
     for (UCHAR d : devs)

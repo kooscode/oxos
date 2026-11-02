@@ -32,6 +32,7 @@ void HalpInitRtc();
 void HalpInitRtcLate();
 void HalpInitPit();
 void HalpInitPci();
+void HalpInitGraphicsEngine(); // hal/gpu.cpp: cold boot, after the GPU reset
 void HalpInitAcpiPm();
 void HalpPulse();
 void HalpDetectHardware();
