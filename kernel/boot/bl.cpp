@@ -4,8 +4,8 @@
 //   - a page directory at 0xF000: 0-256 MB identity-mapped and again at 0x80000000 with 4 MB pages, entry 0x300
 //     mapping the directory itself, the NV2A registers (0xFD000000, 16 MB) uncached, the top 4 MB (flash);
 //   - CR4 = PSE | OSFXSR | OSXMMEXCPT, CR3 = 0xF000, CR0 = PG | WP | NE | ET | PE;
-//   - KernelEntry(arg0, keys) called with cdecl. arg0 = 'OXOS' marks our key block (spec/stock/01 §1): no EEPROM or
-//     certificate key, but the EEPROM HMAC states taken from XboxDev/cromwell at build time.
+//   - KernelEntry(arg0, keys) called with cdecl. arg0 = 'OXOS' marks our key block (spec/stock/01 §1): no EEPROM key
+//     but the EEPROM HMAC states taken from XboxDev/cromwell at build time, and the retail certificate key.
 #include <xk/inflate.h>
 
 using xk_inflate::Inflate;
