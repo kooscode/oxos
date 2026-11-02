@@ -1,5 +1,6 @@
 // Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles (and their game folders) and the
-// tools in F:\Tools (one folder each, e.g. F:\Tools\ftp\ftp.xbe), and starts the one chosen with the controller.
+// applications in F:\Applications (one folder each, e.g. F:\Applications\ftp\ftp.xbe; F:\Tools, the folder's old
+// name, is still read), and starts the one chosen with the controller.
 //   D-pad up / down: move (held: repeats), A: start the selected title.
 // Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files.
 // A disc image is mounted as the console's disc (tools/iso-launcher/mount_iso.h) and its default.xbe started; an
@@ -25,7 +26,11 @@ namespace {
 // The folders listed, on F: (exFAT partition 6); entries are kept as "folder\\file".
 constexpr const char *FolderDevice = "\\Device\\Harddisk0\\Partition6"; // F:
 constexpr const char *FolderShown = "F:";
-constexpr const char *Folders[] = {"games", "titles", "Tools"};
+constexpr const char *Folders[] = {"games", "titles", "Applications", "Tools"};
+// Listed after the games: entries of these folders.
+bool IsApplication(const std::string &entry) {
+    return entry.rfind("Applications\\", 0) == 0 || entry.rfind("Tools\\", 0) == 0;
+}
 // nxdk's text output (hal/debug.c) fits about 23 lines of 65 characters on 640x480 (16-pixel font, 25-pixel
 // margins) and clears the whole screen when text runs past the bottom: 3 header lines, the list, 2 message lines.
 constexpr int VisibleRows = 16, NameWidth = 60;
@@ -109,7 +114,8 @@ NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int 
     return STATUS_SUCCESS;
 }
 
-// The files in F:\games, F:\titles and F:\Tools that can be started, sorted by name (the tools come last); a
+// The files in F:\games, F:\titles and F:\Applications that can be started, sorted by name, the applications after
+// the games; a
 // failure only when none opens.
 NTSTATUS ReadList(std::vector<std::string> &list) {
     list.clear();
@@ -117,7 +123,10 @@ NTSTATUS ReadList(std::vector<std::string> &list) {
     for (const char *sub : Folders)
         if (NT_SUCCESS(ReadFolder(sub, list)))
             status = STATUS_SUCCESS;
-    std::sort(list.begin(), list.end(), LessNoCase);
+    std::sort(list.begin(), list.end(), [](const std::string &a, const std::string &b) {
+        bool appA = IsApplication(a), appB = IsApplication(b);
+        return appA != appB ? appB : LessNoCase(a, b);
+    });
     return status;
 }
 
@@ -165,7 +174,7 @@ constexpr unsigned char APressed = 0x30; // analog button: pressed above this
 
 void Draw(const std::vector<std::string> &list, int selected, int top, const char *message) {
     debugResetCursor();
-    debugPrint("%-*s\n", NameWidth + 2, "OXOS title launcher - F:\\games, F:\\titles, F:\\Tools");
+    debugPrint("%-*s\n", NameWidth + 2, "OXOS title launcher - F:\\games, F:\\titles, F:\\Applications");
     debugPrint("%-*s\n\n", NameWidth + 2, "D-pad: move    A: start");
     for (int row = 0; row < VisibleRows; row++) {
         if (list.empty() && row == 0) {
@@ -220,7 +229,7 @@ int main() {
     static char message[120];
     NTSTATUS status = ReadList(list);
     if (!NT_SUCCESS(status))
-        std::snprintf(message, sizeof(message), "None of F:\\games, F:\\titles, F:\\Tools opens: status 0x%08lx",
+        std::snprintf(message, sizeof(message), "None of F:\\games, F:\\titles, F:\\Applications opens: 0x%08lx",
                       static_cast<unsigned long>(status));
 
     int selected = 0, top = 0, held = 0;
