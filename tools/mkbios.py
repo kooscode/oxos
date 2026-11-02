@@ -228,10 +228,16 @@ def cromwell_key_states(cromwell_dir):
     return out
 
 
+# The certificate key every retail console's boot loader hands to the kernel (spec/stock/01 §1). The kernel's one use
+# for it: each title's save-signature, alternate-signature and System Link keys (spec/stock/05 §7), so saves and
+# System Link work with stock consoles. Carried for interoperability only (dmca-compliance.md §6, Legal Basis §1.1).
+CERTIFICATE_KEY = bytes.fromhex("5c0733ae0401f7e8ba7993fdcd2f1fe0")
+
+
 def key_block(states):
-    """Handed to KernelEntry with arg0 = 'OXOS': no EEPROM/certificate key (32 zero bytes), then 'OXBK', the state
-    count and the states (spec/stock/01 §1)."""
-    block = bytes(32) + struct.pack("<II", 0x4B42584F, len(states))
+    """Handed to KernelEntry with arg0 = 'OXOS': no EEPROM key (16 zero bytes), the certificate key, then 'OXBK',
+    the state count and the states (spec/stock/01 §1, §5)."""
+    block = bytes(16) + CERTIFICATE_KEY + struct.pack("<II", 0x4B42584F, len(states))
     for s in states:
         block += struct.pack("<10I", *s)
     return block

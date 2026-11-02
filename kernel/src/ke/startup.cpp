@@ -19,7 +19,7 @@ void KiInitializeDpcs();
 extern "C" UCHAR KiBootStack[];
 constexpr ULONG BOOT_STACK_SIZE = 0x3000;
 
-// Second boot key handed over by the 2BL (likely the certificate key; spec 01 §1).
+// The certificate key handed over by the 2BL (spec 01 §1): the per-title keys are derived from it (xe/loader.cpp).
 XK_PERSIST UCHAR KiCertKey[16];
 
 // Quick reboot (spec/stock/02 §1): flag, count, and the boot keys kept for the restart.

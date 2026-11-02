@@ -11,7 +11,11 @@ Evidence: entry `ev_…` from analyze_function 0x8005504c; startup
 ## 1. Entry contract — PE entry point (RVA 0x4504c)
 - Called by the 2BL as `cdecl entry(arg0, const uint8_t* keys)`; returns 0 (never in practice).
 - `keys[0..15]`  -> 16-byte **EEPROM key** (exported data, ordinal 321 `XboxEEPROMKey`).
-- `keys[16..31]` -> 16-byte second key stored immediately before `XboxHDKey` (likely the CERT key; inferred).
+- `keys[16..31]` -> 16-byte **certificate key**, stored immediately before `XboxHDKey`; the per-title LAN and
+  signature keys are derived from it (spec 05 §7). Its value is the same in every retail BIOS (4627 and 5838 2BLs):
+  `5C 07 33 AE 04 01 F7 E8 BA 79 93 FD CD 2F 1F E0`. Checked black-box (2026-11-01): the retail 4627 kernel in xemu
+  holds this value there, and its XboxSignatureKey/XboxLANKey/XboxAlternateSignatureKeys for a title with zero
+  certificate keys equal HMAC-SHA1(this key, 16 zero bytes), `6F2E8637 356CE21D AE7AD7D1 ED982002`.
 - Zero-fill **0x6000 bytes at VA 0x80400000**: this is exactly the size of the 2BL image
   (24576 bytes), so the kernel erases the boot loader from RAM. A compatible kernel should do the same.
 - Then jump to processor start-up (`KiSystemStartup`, inferred, 0x80055718). Never returns.
@@ -112,11 +116,12 @@ Bank 1 holds the splash instead (spec/oxos-internal/00-boot-splash.md). `make bi
   - inflates the kernel to 0x10000 (`xk/inflate.h`, shared with the PNG decoder);
   - builds the §4 page directory and sets CR4, CR3 and CR0 as in §4;
   - calls `KernelEntry('OXOS', keys)`.
-- **Key block:** 32 zero bytes (no EEPROM or certificate key), then 'OXBK', a count, and per EEPROM key
+- **Key block:** 16 zero bytes (no EEPROM key), the certificate key (§1), then 'OXBK', a count, and per EEPROM key
   version (Cromwell's versions 9-12) the SHA-1 states after the HMAC inner and outer pad blocks. These come from
   Cromwell's `drivers/ide/BootHddKey.c`. The kernel keeps them across quick reboots, and `ExInitEeprom` tries
-  each one until the security section authenticates (`ExpEepromKeySource` = 2 + its index). The certificate key
-  stays zero, so titles' LAN and signature keys differ from a stock console's.
+  each one until the security section authenticates (`ExpEepromKeySource` = 2 + its index). With the
+  retail certificate key, titles' LAN and signature keys are the same as on a stock console: saves are exchanged
+  with stock consoles and System Link works with them.
 
 ## Open questions
 - What the start-up routine's repeated writes of return addresses to 0x800395EC are for (likely a

@@ -157,10 +157,9 @@ read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox is not
 `make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0,
 and Intel's CPU microcode (unmodified, under Intel's licence; [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)).
 No Microsoft code. The one Microsoft-derived data in it is the video encoder and NV2A memory pad calibration tables,
-functional hardware constants ([`../dmca-compliance.md`](../dmca-compliance.md) §5). There is no certificate key:
-titles derive different save-signature and System Link keys than a stock console does, so saves made on a stock
-console do not verify under OXOS and System Link with stock consoles does not work; saves made under OXOS work among
-themselves.
+functional hardware constants ([`../dmca-compliance.md`](../dmca-compliance.md) §5), and the 16-byte retail
+certificate key, from which titles derive their save-signature and System Link keys: with it, saves move between
+OXOS and stock consoles and System Link works with them (interoperability only; `dmca-compliance.md` §6).
 
 `IMAGE=base` packs the kernel into your own Microsoft BIOS instead, for comparisons. Such an image contains
 Microsoft's 2BL and keys: do not distribute it.

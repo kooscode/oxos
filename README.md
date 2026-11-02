@@ -1,8 +1,9 @@
 # OXOS — an open Xbox kernel
 
 OXOS is an open-source replacement for the original Xbox's kernel and BIOS. It runs retail games and dashboards, in
-[xemu](https://xemu.app) and on a real console, from a **fully open BIOS image**: no Microsoft code, keys or
-boot-ROM dump is needed to build or run it.
+[xemu](https://xemu.app) and on a real console, from a **fully open BIOS image**: no Microsoft code or boot-ROM
+dump is needed to build or run it. The one key it carries, the retail certificate key, is there for interoperability:
+saves and System Link work with stock consoles.
 
 https://github.com/user-attachments/assets/bffc85c4-109c-4fdb-a597-2168cf89328b
 
@@ -17,6 +18,8 @@ PC-formatted exFAT SSD (sound on).*
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
+- **Saves and System Link with stock consoles:** titles get the same save-signature and System Link keys as on a
+  stock console, so saves move between them and System Link games play together.
 - **nxdk homebrew:** apps that draw with nxdk's pbkit (its samples, XBL Dashboard) run from a cold boot: the kernel
   brings the GPU up as a stock boot animation would ([details](spec/oxos-internal/24-graphics-engine-init.md)).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
@@ -75,7 +78,6 @@ can be debugged at source level in VS Code or gdb.
 
 ## Not yet
 - Console revisions other than 1.4 are untested; the 1.6 pad calibration is not implemented.
-- No certificate key: saves made on a stock console do not verify, and there is no System Link with stock consoles.
 - Debugging on a real console (a GDB stub over the serial port).
 
 ## Credits and license
