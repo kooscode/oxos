@@ -578,9 +578,11 @@ class Exfat:
 
         walk(self.dir_bytes(self.root_cluster, None, False), "/")
         marked = {c + 2 for c in range(self.count) if self.bitmap[c // 8] >> (c % 8) & 1}
+        # Full lists for repair tools; the problem text shows the counts and the first 8 of each.
+        self.unowned, self.unmarked = sorted(marked - set(owner)), sorted(set(owner) - marked)
         if marked != set(owner):
-            extra, missing = sorted(marked - set(owner))[:8], sorted(set(owner) - marked)[:8]
-            self.problems.append(f"bitmap: marked but unused {extra}, used but not marked {missing}")
+            self.problems.append(f"bitmap: marked but unused {len(self.unowned)} {self.unowned[:8]}, "
+                                 f"used but not marked {len(self.unmarked)} {self.unmarked[:8]}")
         return self.problems, files, self.count - len(marked)
 
 
