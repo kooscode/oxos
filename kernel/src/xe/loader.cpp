@@ -1,5 +1,6 @@
 // XBE loader and title launch (spec/stock/05 §2-4).
 #include <xk/io.h>
+#include <xk/patches.h>
 #include <xk/ps.h>
 #include <xk/rtl.h>
 #include <xk/serial.h>
@@ -77,6 +78,109 @@ static NTSTATUS XeOpenImage(HANDLE *h) {
                       FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
+// --- Title patches from C:\OXOS\title-patches.ini (spec/oxos-internal/25 §3): read once per title load, written into
+// each section whenever it is read from the image (at load for preloaded sections, later through XeLoadSection).
+
+static PUCHAR XepPatchRecords; // this title's records (XePatchParse), or null
+static ULONG XepPatchSize;
+
+static void XepLoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *Sections, ULONG Count) {
+    if (XepPatchRecords)
+        ExFreePool(XepPatchRecords), XepPatchRecords = nullptr, XepPatchSize = 0;
+    OBJECT_STRING name;
+    RtlInitAnsiString(&name, "\\Device\\Harddisk0\\Partition2\\OXOS\\title-patches.ini");
+    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE h;
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
+                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    if (!NT_SUCCESS(status))
+        return; // no file: no patches
+    ULONG info[6] = {}; // FILE_STANDARD_INFORMATION: EndOfFile at +8
+    status = NtQueryInformationFile(h, &iosb, info, sizeof(info), FileStandardInformation);
+    ULONG size = info[2];
+    if (NT_SUCCESS(status) && (info[3] || size > 0x100000))
+        status = STATUS_INSUFFICIENT_RESOURCES; // larger than 1 MB: not read
+    auto text = NT_SUCCESS(status) && size ? (char *)ExAllocatePoolWithTag(size, 'tPeX') : nullptr;
+    ULONG got = 0;
+    if (text)
+        status = XeReadFile(h, text, size, 0, &got);
+    NtClose(h);
+    if (!text || !NT_SUCCESS(status)) {
+        XK_SERIAL("patches: title-patches.ini not read: %#lx\n", status);
+        if (text)
+            ExFreePool(text);
+        return;
+    }
+    // A record is never more than twice its line ("patch=1:00" makes 12 bytes, "name=" 8).
+    ULONG room = 2 * got + 16;
+    auto out = (PUCHAR)ExAllocatePoolWithTag(room, 'rPeX');
+    XE_PATCH_COUNTS counts = {};
+    ULONG used = out ? XePatchParse(text, got, TitleId, Version, out, room, &counts) : 0;
+    ExFreePool(text);
+    XK_SERIAL("patches: title %08lx version %lu: %lu sections, %lu patches, %lu lines not understood\n", TitleId,
+              Version, counts.Sections, counts.Patches, counts.Errors);
+    if (!used) {
+        if (out)
+            ExFreePool(out);
+        return;
+    }
+    for (ULONG at = 0; at < used;) {
+        auto r = (XE_PATCH_RECORD *)(out + at);
+        at += XePatchRecordSize(r);
+        if (r->Kind == XE_PATCH_NAME) {
+            CHAR line[XE_PATCH_MAX_NAME + 1];
+            RtlCopyMemory(line, r + 1, r->Length);
+            line[r->Length] = 0;
+            XK_SERIAL("patches: %s\n", line);
+            continue;
+        }
+        // The patch, and the match bytes it is checked against, inside one section (so both are loaded when the
+        // patch is applied).
+        bool inside = false;
+        for (ULONG i = 0; i < Count && !inside; i++) {
+            ULONG va = Sections[i].VirtualAddress, size = Sections[i].VirtualSize;
+            inside = r->Address >= va && r->Address - va + XePatchSpan(r) <= size &&
+                     (!r->Check || (r->Check >= va && r->Check - va + r->OriginalLength <= size));
+        }
+        if (!inside) {
+            XK_SERIAL("patches: %#lx (%lu bytes) is not inside one section of the title%s: skipped\n", r->Address,
+                      XePatchSpan(r), r->Check ? " with its match bytes" : "");
+            r->Kind = 0xFFFF;
+        }
+    }
+    XepPatchRecords = out, XepPatchSize = used;
+}
+
+// A patch is written only where its current bytes are: so never into another build of the title, nor into a
+// launcher that carries the title's identity (spec/oxos-internal/25 §3.2).
+// The patches checked against a section's `match =` bytes go first: another patch of the section may change those
+// bytes (a section's first patch can sit at its match address).
+static void XepApplyPatches(const XBE_SECTION_HEADER *s) {
+    for (ULONG pass = 0; pass < 2; pass++) {
+        for (ULONG at = 0; at < XepPatchSize;) {
+            auto r = (XE_PATCH_RECORD *)(XepPatchRecords + at);
+            at += XePatchRecordSize(r);
+            if (r->Kind != XE_PATCH_BYTES || !r->Check != (pass == 1) || r->Address < s->VirtualAddress ||
+                r->Address - s->VirtualAddress + XePatchSpan(r) > s->VirtualSize)
+                continue;
+            auto target = (PUCHAR)r->Address;
+            auto check = (PUCHAR)(r->Check ? r->Check : r->Address);
+            // Already there first: a patch checked against another place must not be written twice (its match bytes
+            // may still be there when an earlier patch of the section has not changed them).
+            if (RtlCompareMemory(target, XePatchData(r), r->Length) == r->Length) {
+                XK_SERIAL("patches: %#lx: already there\n", r->Address);
+            } else if (RtlCompareMemory(check, XePatchOriginal(r), r->OriginalLength) == r->OriginalLength) {
+                RtlCopyMemory(target, XePatchData(r), r->Length);
+                XK_SERIAL("patches: %#lx: %u bytes written\n", r->Address, r->Length);
+            } else {
+                XK_SERIAL("patches: %#lx: the %s bytes differ: not written\n", r->Address,
+                          r->Check ? "match" : "current");
+            }
+        }
+    }
+}
+
 // --- Sections (refcounted; neighbouring sections share their head/tail pages)
 
 static NTSTATUS XepLoadSection(HANDLE file, XBE_SECTION_HEADER *s) {
@@ -104,6 +208,7 @@ static NTSTATUS XepLoadSection(HANDLE file, XBE_SECTION_HEADER *s) {
                 XeDigestMismatches = XeDigestMismatches + 1;
                 break;
             }
+        XepApplyPatches(s); // after the digest, which is of the image as it is on disc
     }
     if (!NT_SUCCESS(status)) {
         (*s->HeadSharedPageReferenceCount)--;
@@ -307,6 +412,8 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         }
     }
     auto sec = (XBE_SECTION_HEADER *)sections;
+    if (NT_SUCCESS(status))
+        XepLoadPatches(*(ULONG *)(cert + 8), *(ULONG *)(cert + 0xAC), sec, count);
     for (ULONG i = 0; NT_SUCCESS(status) && i < count; i++)
         if (sec[i].Flags & XBE_SECTION_PRELOAD) {
             XK_SERIAL("load: section %lu\n", i);

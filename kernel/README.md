@@ -193,6 +193,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/rtl/` | runtime library |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/splash.png` | the boot splash picture (640x480, 256 colours) |
+| `title-patches/title-patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title-patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos-internal/25`](../spec/oxos-internal/25-title-compatibility.md) §3 |
 | `build/` | all build output, one folder per kind of build (`selftest`, `release`, `debug`, `trace-basic`, `trace-full`, `trace-full-64mb`, `netboot`; see the Makefile's header); `make clean` removes it |
 | `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |

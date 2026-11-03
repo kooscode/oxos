@@ -423,6 +423,33 @@ def dvd_checks(mon):
     }
 
 
+TITLE_PATCHES = False  # set when the disk copy carries the test title's patch file
+
+
+def write_title_patches(hdd_copy, title, title_map):
+    """C:\\OXOS\\title-patches.ini for the test title (spec/oxos-internal/25 §3), on a FATX test disk."""
+    global TITLE_PATCHES
+    q = Qcow2(hdd_copy)
+    try:
+        w = FatxWriter(q, "C")
+    except Exception:  # not a FATX disk (exFAT): no patch file
+        return
+    xbe = open(title, "rb").read()
+    base, cert = struct.unpack_from("<I", xbe, 0x104)[0], struct.unpack_from("<I", xbe, 0x118)[0]
+    tid, version = struct.unpack_from("<I", xbe, cert - base + 8)[0], struct.unpack_from("<I", xbe, cert - base + 0xAC)[0]
+    syms = map_symbols(title_map)
+    text = (f"; boot_test.py\r\n[{tid:08X}]\r\nname = test title: patch A\r\n"
+            f"patch = {syms['_XkTitlePatchA']:X}: 11 11 11 11 > A0 A0 A0 A0\r\n"
+            f"patch = {syms['_XkTitlePatchC']:X}: 00 00 00 00 > C0 ; other original bytes: not written\r\n"
+            f"patch = FFF0: 00 > 90 ; below the image: skipped\r\n"
+            f"[{tid:08X}/{version + 1}]\r\npatch = {syms['_XkTitlePatchB']:X}: 22 22 22 22 > B0 B0 B0 B0\r\n")
+    w.makedirs("OXOS")
+    w.write_file("OXOS\\title-patches.ini", text.encode())
+    q.save(hdd_copy + ".new")
+    os.replace(hdd_copy + ".new", hdd_copy)
+    TITLE_PATCHES = True
+
+
 def title_checks(mon, title_map, relaunch=False, reboots=0):
     # reboots: quick reboots before the title's first run (the ISO launcher's launch)
     if not title_map:
@@ -483,6 +510,12 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
         }
     else:
         checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
+    if TITLE_PATCHES and not relaunch:  # after a relaunch the dashboard runs: the title's memory is gone
+        def word(sym):
+            return int(mon.hmp(f"x/1wx {syms[sym]:#x}").split(":")[1].split()[0], 16)
+        checks["title patches: written where the original bytes are, not for another version or other bytes"] = (
+            word("_XkTitlePatchA") == 0xA0A0A0A0 and word("_XkTitlePatchB") == 0x22222222 and
+            word("_XkTitlePatchC") == 0x33333333)
     return checks
 
 
@@ -880,6 +913,8 @@ def main():
             mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
     if a.hdd and not a.iso_launch:
         shutil.copyfile(a.hdd, hdd_copy)
+        if a.title and a.title_map and not a.dash:
+            write_title_patches(hdd_copy, a.title, a.title_map)
         if a.evox:  # an EvoX-style install: C:\evoxdash.xbe (here a copy of C:\xboxdash.xbe)
             q = Qcow2(hdd_copy)
             FatxWriter(q, "C").write_file("evoxdash.xbe", Fatx(q, "C").read_file("xboxdash.xbe"))

@@ -83,6 +83,11 @@ struct RESULTS {
     char SecondName[64];  // XeImageFileName of the second run
 };
 extern "C" volatile RESULTS XkTitleResults = {};
+// Title patches (spec/oxos-internal/25 §3): boot_test.py puts C:\OXOS\title-patches.ini on the test disk with a
+// patch for A (in a section for this title), one for B (in a section for another certificate version) and one for C
+// whose original bytes are not the ones there.
+extern "C" volatile unsigned int XkTitlePatchA = 0x11111111, XkTitlePatchB = 0x22222222,
+                                    XkTitlePatchC = 0x33333333;
 __attribute__((section(".extra"))) extern "C" const char XkExtraData[] = "data from a section loaded on demand";
 
 // --- Helpers (the title has no C library)
