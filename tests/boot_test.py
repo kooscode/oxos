@@ -398,6 +398,10 @@ def exfat_format_checks(mon, q):
         "E: refuses a format through its volume handle": mon.read("KiTestExfatRefuseOk") == 1,
         "allocations through E: and Y: in turn succeed (the volume check below finds lost bitmap bits)":
             mon.read("KiTestExfatCrossOk") == 1,
+        "a FAT chain is followed only as far as the file's length (stale tail ignored, 3 new clusters)":
+            mon.read("KiTestExfatStaleOk") == 1,
+        "an allocation size allocates nothing past the length (create and set-allocation)":
+            mon.read("KiTestExfatPreallocOk") == 1,
     }
 
 
@@ -818,6 +822,10 @@ def disk_checks(hdd_copy):
                 and sorted(x.name for x in listing) == ["keep.bin"],
             "exFAT volume consistent (checksums, chains, bitmap)": not problems,
             "X: folder empty after the format": v.listdir("/X") == [],
+            "E:\\XkStale.stale grown past its stale chain reads back": v.read_file("/E/XkStale.stale")
+                == bytes((i * 7 + i // 251) & 0xFF for i in range(3 * 16384 + 100)),
+            "E:\\XkPre.bin (allocation size 256 KB, 100 bytes written) reads back": v.read_file("/E/XkPre.bin")
+                == b"p" * 100,
         }
     e = Fatx(q, "E")
     names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
@@ -843,6 +851,7 @@ def main():
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
+    ap.add_argument("--keep-hdd", metavar="PATH", help="keep the disk copy after the run (as PATH), to inspect it")
     ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
     ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
                     help="boot the ISO launcher (tools/iso-launcher) with an image of --title on an exFAT disk")
@@ -934,7 +943,9 @@ def main():
         for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed
-    if os.path.exists(hdd_copy):
+    if os.path.exists(hdd_copy) and a.keep_hdd:
+        shutil.move(hdd_copy, a.keep_hdd)
+    elif os.path.exists(hdd_copy):
         os.remove(hdd_copy)  # 1 GB; logs are kept on failure, the disk copy is not
     print("RESULT:", "PASS" if ok else f"FAIL (logs in {work})")
     if ok:

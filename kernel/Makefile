@@ -290,7 +290,9 @@ EXFAT_STATE := $(ROOT)/xemu-state/oxos-xemu-exfat
 EXFAT_HDD   := $(EXFAT_STATE)/hdd.qcow2
 $(EXFAT_HDD): $(HDD_FETCH)
 	mkdir -p $(EXFAT_STATE)
-	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K
+	printf 'stale FAT tail test' > $(EXFAT_STATE)/stale.bin
+	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K \
+	    --add /E/XkStale.stale=$(EXFAT_STATE)/stale.bin
 test-exfat: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(EXFAT_HDD)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
 	    --hdd $(EXFAT_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map

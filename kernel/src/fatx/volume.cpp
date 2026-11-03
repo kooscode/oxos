@@ -163,9 +163,10 @@ NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, U
     return STATUS_SUCCESS;
 }
 
-NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First) {
+// Free a chain: at most Limit clusters (exFAT: the file's length decides where its chain ends).
+NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First, ULONG Limit) {
     ULONG c = First;
-    for (ULONG guard = 0; FatxIsValidCluster(v, c) && guard <= v->NumberOfClusters; guard++) {
+    for (ULONG guard = 0; FatxIsValidCluster(v, c) && guard <= v->NumberOfClusters && guard < Limit; guard++) {
         ULONG next;
         NTSTATUS status = FatxGetFatEntry(v, c, &next);
         if (!NT_SUCCESS(status))
@@ -200,11 +201,37 @@ NTSTATUS FatxChainLength(FATX_VOLUME *v, ULONG First, ULONG *Count, ULONG *Last)
     return STATUS_SUCCESS;
 }
 
+// exFAT: a file's or directory's allocation is its DataLength rounded up to clusters (ExAllocClusters); FAT entries
+// past it mean nothing (another file may own those clusters now), so a chain is never followed beyond it. Only the
+// root directory has no length: its chain ends at the end-of-chain mark, as on FATX.
+bool FatxChainIsBounded(FATX_VOLUME *v, const FATX_FCB *f) {
+    return v->Exfat && !(f->Flags & FCB_EXFAT_DISK_ROOT);
+}
+
+// The length of f's chain and its last cluster (Count = 0 for no allocation).
+NTSTATUS FatxFileChain(FATX_VOLUME *v, FATX_FCB *f, ULONG *Count, ULONG *Last) {
+    if (!f->FirstCluster) {
+        *Count = *Last = 0;
+        return STATUS_SUCCESS;
+    }
+    if (!FatxChainIsBounded(v, f))
+        return FatxChainLength(v, f->FirstCluster, Count, Last);
+    *Count = f->ExAllocClusters;
+    if (!*Count) { // a first cluster without a length: owns nothing
+        *Last = 0;
+        return STATUS_SUCCESS;
+    }
+    NTSTATUS status = FatxClusterAtIndex(v, f, *Count - 1, Last);
+    return status == STATUS_END_OF_FILE ? (NTSTATUS)0xC0000032 : status; // chain shorter than the length: corrupt
+}
+
 // Cluster number of the Index-th cluster of a file; STATUS_END_OF_FILE past the chain.
 NTSTATUS FatxClusterAtIndex(FATX_VOLUME *v, FATX_FCB *f, ULONG Index, ULONG *Cluster) {
-    if (f->ExFlags & EXFAT_NOFATCHAIN) { // consecutive clusters
+    if ((f->ExFlags & EXFAT_NOFATCHAIN) || FatxChainIsBounded(v, f)) {
         if (Index >= f->ExAllocClusters)
             return STATUS_END_OF_FILE;
+    }
+    if (f->ExFlags & EXFAT_NOFATCHAIN) { // consecutive clusters
         *Cluster = f->FirstCluster + Index;
         return STATUS_SUCCESS;
     }

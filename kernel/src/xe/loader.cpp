@@ -267,7 +267,10 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     }
     ExFreePool(head);
     XK_SERIAL("load: headers %#lx\n", status);
-    ULONG cert = XbeField(0x118), sections = XbeField(0x120), count = XbeField(0x11C);
+    // The header fields only once the headers are in memory: a file that failed the first-page checks reserved nothing.
+    bool loaded = NT_SUCCESS(status);
+    ULONG cert = loaded ? XbeField(0x118) : 0, sections = loaded ? XbeField(0x120) : 0,
+          count = loaded ? XbeField(0x11C) : 0;
     if (NT_SUCCESS(status) && (cert < XBE_BASE || cert + 0x1D0 > XBE_BASE + sizeOfHeaders || sections < XBE_BASE ||
                                sections + count * 0x38 > XBE_BASE + sizeOfHeaders || XbeField(0x15C)))
         status = STATUS_INVALID_IMAGE_FORMAT;
@@ -287,7 +290,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     // Media/region policy: XK_RETAIL_MEDIA_POLICY=1 enforces both like a retail kernel; the default behaves like a
     // modded BIOS (which patches the stock kernel to allow any media and region), so discs that cannot be
     // authenticated (backups, XISOs in emulators) still start. Authenticated discs are pinned either way.
-    ULONG region = XbeField(0x118) ? *(ULONG *)(cert + 0xA0) : 0;
+    ULONG region = NT_SUCCESS(status) ? *(ULONG *)(cert + 0xA0) : 0;
     if (NT_SUCCESS(status) && !(region & XeConsoleGameRegion) && XK_RETAIL_MEDIA_POLICY)
         status = STATUS_REGION_MISMATCH;
     if (NT_SUCCESS(status) && !Dashboard) {

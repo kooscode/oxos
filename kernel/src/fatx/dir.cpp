@@ -315,7 +315,7 @@ NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize) {
     }
     ULONG need = (ULONG)(((ULONGLONG)NewSize + v->BytesPerCluster - 1) >> v->ClusterShift);
     ULONG have = 0, last = 0;
-    NTSTATUS status = f->FirstCluster ? FatxChainLength(v, f->FirstCluster, &have, &last) : STATUS_SUCCESS;
+    NTSTATUS status = FatxFileChain(v, f, &have, &last);
     if (!NT_SUCCESS(status))
         return status;
     if (need > have) {
@@ -328,7 +328,7 @@ NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize) {
     } else if (need < have) {
         f->HintCluster = 0;
         if (need == 0) {
-            status = FatxFreeChain(v, f->FirstCluster);
+            status = FatxFreeChain(v, f->FirstCluster, have);
             f->FirstCluster = 0;
         } else {
             ULONG keep;
@@ -339,7 +339,7 @@ NTSTATUS FatxSetFileSize(FATX_VOLUME *v, FATX_FCB *f, ULONG NewSize) {
             if (NT_SUCCESS(status))
                 status = FatxSetFatEntry(v, keep, FATX_CLUSTER_LAST);
             if (NT_SUCCESS(status))
-                status = FatxFreeChain(v, next);
+                status = FatxFreeChain(v, next, have - need);
         }
         if (!NT_SUCCESS(status))
             return status;

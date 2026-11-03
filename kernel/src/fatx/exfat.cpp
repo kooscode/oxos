@@ -250,7 +250,7 @@ NTSTATUS ExfatFreeFile(FATX_VOLUME *v, FATX_FCB *f) {
     if (!f->FirstCluster)
         return STATUS_SUCCESS;
     if (!(f->ExFlags & EXFAT_NOFATCHAIN))
-        return FatxFreeChain(v, f->FirstCluster);
+        return FatxFreeChain(v, f->FirstCluster, f->ExAllocClusters);
     for (ULONG i = 0; i < f->ExAllocClusters; i++) {
         NTSTATUS status = ExfatMarkCluster(v, f->FirstCluster + i, false);
         if (!NT_SUCCESS(status))
@@ -268,7 +268,7 @@ NTSTATUS ExfatInitDirectory(FATX_VOLUME *v, ULONG *First) {
     if (NT_SUCCESS(status)) {
         status = ExZeroCluster(v, *First);
         if (!NT_SUCCESS(status)) {
-            FatxFreeChain(v, *First);
+            FatxFreeChain(v, *First, 1);
             *First = 0;
         }
     }
@@ -297,7 +297,7 @@ static NTSTATUS ExGrowDirectory(FATX_VOLUME *v, FATX_FCB *dir) {
     }
     if (!cluster) {
         ULONG count, last;
-        status = FatxChainLength(v, dir->FirstCluster, &count, &last);
+        status = FatxFileChain(v, dir, &count, &last);
         if (NT_SUCCESS(status))
             status = FatxAllocateClusters(v, last, 1, &cluster);
         if (!NT_SUCCESS(status))
@@ -474,12 +474,8 @@ static NTSTATUS ExAllocationOf(FATX_VOLUME *v, FATX_FCB *f, ULONG *Clusters) {
     *Clusters = 0;
     if (!f->FirstCluster)
         return STATUS_SUCCESS;
-    if (f->ExFlags & EXFAT_NOFATCHAIN) {
-        *Clusters = f->ExAllocClusters;
-        return STATUS_SUCCESS;
-    }
-    ULONG last;
-    return FatxChainLength(v, f->FirstCluster, Clusters, &last);
+    *Clusters = f->ExAllocClusters; // the length decides, also for a FAT chain (spec 07)
+    return STATUS_SUCCESS;
 }
 
 // Count (Delete = false) or delete (true) everything below dir; Used counts the clusters seen.
@@ -732,7 +728,7 @@ static NTSTATUS ExMountDisk(FATX_VOLUME *v) {
     v->DataByteOffset = x->HeapByteOffset;
     for (ULONG i = 0; i < 256; i++)
         x->Upcase[i] = (USHORT)i;
-    ExInitFcb(&x->Root, FCB_DIRECTORY | FCB_ROOT);
+    ExInitFcb(&x->Root, FCB_DIRECTORY | FCB_ROOT | FCB_EXFAT_DISK_ROOT);
     x->Root.Attributes = FILE_ATTRIBUTE_DIRECTORY;
     x->Root.FirstCluster = root;
     if (!FatxIsValidCluster(v, root))
@@ -772,6 +768,7 @@ static NTSTATUS ExMountDisk(FATX_VOLUME *v) {
         FATX_FCB table;
         ExInitFcb(&table, 0);
         table.FirstCluster = upcaseFirst;
+        table.ExAllocClusters = (ULONG)((upcaseLength + x->BytesPerCluster - 1) >> clusterShift); // its chain's length
         ULONG ch = 0;
         for (ULONG at = 0; at + 1 < upcaseLength && ch < 256; at += 2) {
             ULONG cluster;

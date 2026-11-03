@@ -12,6 +12,9 @@ volatile char KiTestFatxDirNames[64];
 // (spec/oxos-internal/05-exfat-storage-spec.md §5); E: refuses it.
 volatile ULONG KiTestExfatFormatOk, KiTestExfatFormatFree, KiTestExfatFormatTotal, KiTestExfatRefuseOk, KiTestExfatFormatSpc;
 volatile ULONG KiTestExfatCrossOk;
+// exFAT: a FAT chain is followed only as far as the file's length (E:\XkStale.stale has a stale tail past it), and
+// preallocation does not allocate (an entry set cannot hold clusters past its length).
+volatile ULONG KiTestExfatStaleOk, KiTestExfatPreallocOk;
 extern volatile ULONG KiTestIdexDone;
 
 static void Sleep(LONG ms) {
@@ -43,6 +46,7 @@ static ULONG FreeClusters(HANDLE h) {
 
 static void ExfatFormatTest(PUCHAR buf);
 static void ExfatCrossFolderTest(PUCHAR buf);
+static void ExfatLengthTest(PUCHAR buf);
 
 static void NTAPI FatxControllerThread(PVOID) {
     while (!KiTestIdexDone)
@@ -218,6 +222,7 @@ static void NTAPI FatxControllerThread(PVOID) {
     if (IdexDiskExfatLayout) {
         ExfatFormatTest(buf);
         ExfatCrossFolderTest(buf);
+        ExfatLengthTest(buf);
     }
     ExFreePool(buf);
     KiTestFatxDone = 1;
@@ -332,3 +337,53 @@ static void ExfatCrossFolderTest(PUCHAR buf) {
 
 PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
 void KiStartFatxSelfTests() { KiCreateSystemThread(FatxControllerThread, nullptr, 0, 9); }
+
+// E:\XkStale.stale: one cluster long, its FAT chain running two clusters further into clusters marked free. Growing it
+// must allocate new clusters (the stale ones may be handed to anybody), and E:\XkPre.bin, created with an allocation
+// size and written short, must hold no more clusters than its length. boot_test.py reads both back from the disk copy
+// and checks the volume (no cluster used but free, none marked but unowned).
+static void ExfatLengthTest(PUCHAR buf) {
+    HANDLE h, hv = nullptr;
+    IO_STATUS_BLOCK iosb;
+    const ULONG cluster = 16 * 1024, grown = 3 * cluster + 100;
+    bool ok = Open(&hv, "\\Device\\Harddisk0\\Partition1\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0;
+    ULONG before = ok ? FreeClusters(hv) : 0;
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition1\\XkStale.stale", GENERIC_READ | GENERIC_WRITE, FILE_OPEN,
+               FILE_NON_DIRECTORY_FILE) == 0;
+    if (ok) {
+        for (ULONG i = 0; i < grown; i++)
+            buf[i] = (UCHAR)(i * 7 + i / 251);
+        LARGE_INTEGER at = {};
+        ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, grown, &at)) && iosb.Information == grown;
+        // The file now spans 4 clusters: 3 more than before. A driver that follows the stale chain takes only 1.
+        ok &= FreeClusters(hv) + 3 == before;
+        RtlZeroMemory(buf + grown, grown);
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf + grown, grown, &at)) &&
+              iosb.Information == grown && RtlCompareMemory(buf, buf + grown, grown) == grown;
+        NtClose(h);
+    }
+    KiTestExfatStaleOk = ok;
+
+    // Created with a 256 KB allocation size, then 100 bytes written; an allocation-only change asks for 512 KB.
+    before = FreeClusters(hv);
+    OBJECT_STRING s;
+    RtlInitAnsiString(&s, "\\Device\\Harddisk0\\Partition1\\XkPre.bin");
+    OBJECT_ATTRIBUTES a = {nullptr, &s, OBJ_CASE_INSENSITIVE};
+    LARGE_INTEGER allocation;
+    allocation.QuadPart = 256 * 1024;
+    ok = NT_SUCCESS(NtCreateFile(&h, GENERIC_WRITE | SYNCHRONIZE, &a, &iosb, &allocation, 0, 0, FILE_OVERWRITE_IF,
+                                 FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT));
+    if (ok) {
+        ok = FreeClusters(hv) == before; // nothing allocated yet
+        RtlFillMemory(buf, 100, 'p');
+        ok &= NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, nullptr));
+        LARGE_INTEGER more;
+        more.QuadPart = 512 * 1024;
+        ok &= NT_SUCCESS(NtSetInformationFile(h, &iosb, &more, sizeof(more), FileAllocationInformation));
+        ok &= FreeClusters(hv) + 1 == before;
+        NtClose(h);
+    }
+    KiTestExfatPreallocOk = ok;
+    if (hv)
+        NtClose(hv);
+}
