@@ -4,7 +4,9 @@ a disk image from a tree of folders and files, and a reader that checks a volume
 Writer: Builder(size).add(path, data) ... .write(out.qcow2). The disk gets a protective MBR, a GPT with one
 basic-data partition from sector 2048 to the end, and an exFAT volume in it. Files are stored contiguously (NoFatChain)
 unless their name ends with ".frag", which are spread over every other cluster with a FAT chain (to exercise both
-kinds). The retail reserved area (Partition0 bytes 0-0x7FFFF: refurb record, cache database) is kept at sectors
+kinds). A file named "*.stale" (at most one cluster of data) gets a FAT chain that runs two clusters past its length
+into clusters the bitmap marks free, as an old OXOS preallocation looks after a PC's check freed the rest: FAT entries
+past a file's length mean nothing, and a driver must not follow them. The retail reserved area (Partition0 bytes 0-0x7FFFF: refurb record, cache database) is kept at sectors
 1024-2047, before the partition.
 
 Reader: Exfat(Qcow2(path)) finds the volume through the GPT (or an MBR), and .check() verifies the boot checksums,
@@ -260,6 +262,13 @@ class Builder:
                     layout(c)
             elif node.data:
                 frag = node.name.lower().endswith(".frag")
+                if node.name.lower().endswith(".stale"):
+                    assert len(node.data) <= cs
+                    run = alloc(3, True)
+                    chain(run)
+                    used.difference_update(run[1:])  # the stale tail: chained, but free in the bitmap
+                    node.clusters = run[:1]
+                    return
                 node.clusters = alloc((len(node.data) + cs - 1) // cs, frag)
                 if frag:
                     chain(node.clusters)
@@ -308,7 +317,8 @@ class Builder:
                 else:
                     size = len(c.data or b"")
                     first = c.clusters[0] if c.clusters else 0
-                    out += self._set(c, up, first, size, bool(c.clusters) and not c.name.lower().endswith(".frag"))
+                    chained = c.name.lower().endswith((".frag", ".stale"))
+                    out += self._set(c, up, first, size, bool(c.clusters) and not chained)
                     if c.data:
                         put(c.clusters, c.data)
             put(node.clusters, bytes(out))
@@ -433,24 +443,30 @@ class Exfat:
         if s0[510:512] != b"\x55\xAA":
             raise ValueError("no partition table")
         if s0[446 + 4] == 0xEE:
-            for lba in (1, self.disk.size // SECTOR - 1):
-                h = bytearray(self.disk.read(lba * SECTOR, 92))
-                if h[:8] != b"EFI PART":
-                    continue
-                crc = struct.unpack_from("<I", h, 16)[0]
-                struct.pack_into("<I", h, 16, 0)
-                if crc32(bytes(h)) != crc:
-                    self.problems.append(f"GPT header at {lba}: CRC")
-                    continue
-                elba, n, esize, ecrc = struct.unpack_from("<QIII", h, 72)
-                entries = self.disk.read(elba * SECTOR, n * esize)
-                if crc32(entries) != ecrc:
-                    self.problems.append(f"GPT entries at {elba}: CRC")
-                    continue
-                for i in range(n):
-                    e = entries[i * esize:(i + 1) * esize]
-                    if e[:16] == BASIC_DATA:
-                        return struct.unpack_from("<Q", e, 32)[0]
+            # As the kernel reads it: headers whose entry arrays check out, then (a damaged array, e.g. a refurb record
+            # written into sector 3) any whose basic-data partition starts with an exFAT boot sector.
+            for lenient in (False, True):
+                for lba in (1, self.disk.size // SECTOR - 1):
+                    h = bytearray(self.disk.read(lba * SECTOR, 92))
+                    if h[:8] != b"EFI PART":
+                        continue
+                    crc = struct.unpack_from("<I", h, 16)[0]
+                    struct.pack_into("<I", h, 16, 0)
+                    if crc32(bytes(h)) != crc:
+                        if not lenient:
+                            self.problems.append(f"GPT header at {lba}: CRC")
+                        continue
+                    elba, n, esize, ecrc = struct.unpack_from("<QIII", h, 72)
+                    entries = self.disk.read(elba * SECTOR, n * esize)
+                    if crc32(entries) != ecrc and not lenient:
+                        self.problems.append(f"GPT entries at {elba}: CRC")
+                        continue
+                    for i in range(n):
+                        e = entries[i * esize:(i + 1) * esize]
+                        if e[:16] == BASIC_DATA:
+                            first = struct.unpack_from("<Q", e, 32)[0]
+                            if not lenient or self.disk.read(first * SECTOR + 3, 8) == b"EXFAT   ":
+                                return first
             raise ValueError("no usable GPT basic-data partition")
         for i in range(4):
             t, first = s0[446 + 16 * i + 4], struct.unpack_from("<I", s0, 446 + 16 * i + 8)[0]

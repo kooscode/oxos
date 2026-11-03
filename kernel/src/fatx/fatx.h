@@ -39,7 +39,8 @@ struct FATX_ENTRY : FATX_DIRENT {
 };
 
 constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40,
-                FCB_DIRENT_DIRTY = 0x80;
+                FCB_DIRENT_DIRTY = 0x80,
+                FCB_EXFAT_DISK_ROOT = 0x100; // the exFAT root directory: no length, its FAT chain ends it
 
 struct FATX_FCB {
     LIST_ENTRY SiblingLink;
@@ -122,7 +123,9 @@ void FatxInvalidateRange(FATX_VOLUME *v, LONGLONG Offset, ULONG Length);
 NTSTATUS FatxGetFatEntry(FATX_VOLUME *v, ULONG Cluster, ULONG *Value);
 NTSTATUS FatxSetFatEntry(FATX_VOLUME *v, ULONG Cluster, ULONG Value);
 NTSTATUS FatxAllocateClusters(FATX_VOLUME *v, ULONG PreviousLast, ULONG Count, ULONG *First);
-NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First);
+NTSTATUS FatxFreeChain(FATX_VOLUME *v, ULONG First, ULONG Limit = ~0u);
+bool FatxChainIsBounded(FATX_VOLUME *v, const FATX_FCB *f);
+NTSTATUS FatxFileChain(FATX_VOLUME *v, FATX_FCB *f, ULONG *Count, ULONG *Last);
 NTSTATUS FatxClusterAtIndex(FATX_VOLUME *v, FATX_FCB *f, ULONG Index, ULONG *Cluster);
 NTSTATUS FatxChainLength(FATX_VOLUME *v, ULONG First, ULONG *Count, ULONG *Last);
 LONGLONG FatxClusterOffset(FATX_VOLUME *v, ULONG Cluster);

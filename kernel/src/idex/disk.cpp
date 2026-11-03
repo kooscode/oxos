@@ -32,6 +32,10 @@ struct IDE_DISK_DEVICE {
 };
 constexpr LONGLONG IDE_RESERVED_LENGTH = 0x80000, IDE_RESERVED_AT = 1024 * 512;
 BOOLEAN IdexDiskExfatLayout;
+// A disk with a PC partition table (GPT or an MBR with an exFAT/NTFS entry) on which no exFAT volume was found: it gets
+// no partitions and refuses writes, rather than being taken for a FATX disk whose fixed layout would write into it
+// (the refurb record in sector 3 lands in the GPT's entry array).
+BOOLEAN IdexDiskForeignLayout;
 PDEVICE_OBJECT IdexDiskExfatVolume; // the exFAT partition (not named)
 static PDEVICE_OBJECT IdexDiskPhysical; // the whole disk without remapping (not named), for reading the layout
 static KEVENT IdexDiskLayoutLock;
@@ -66,8 +70,11 @@ static NTSTATUS NTAPI IdexDiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PUCHAR buffer = (PUCHAR)Irp->UserBuffer + s->Parameters.Read.BufferOffset;
     UCHAR kind = IdexKind(DeviceObject);
     bool remap = IdexDiskExfatLayout && kind == IDE_KIND_PARTITION; // Partition0 on an exFAT disk: reserved area only
-    if (kind == IDE_KIND_FOLDER || (remap && offset + len > IDE_RESERVED_LENGTH)) {
-        Irp->IoStatus.Status = kind == IDE_KIND_FOLDER ? STATUS_INVALID_DEVICE_REQUEST : STATUS_INVALID_PARAMETER;
+    bool foreignWrite = IdexDiskForeignLayout && s->MajorFunction == IRP_MJ_WRITE;
+    if (kind == IDE_KIND_FOLDER || (remap && offset + len > IDE_RESERVED_LENGTH) || foreignWrite) {
+        Irp->IoStatus.Status = kind == IDE_KIND_FOLDER ? STATUS_INVALID_DEVICE_REQUEST
+                               : foreignWrite          ? (NTSTATUS)0xC00000A2 // STATUS_MEDIA_WRITE_PROTECTED
+                                                       : STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;
         NTSTATUS status = Irp->IoStatus.Status;
         IofCompleteRequest(Irp, 0);
@@ -408,14 +415,26 @@ static ULONG IdexCrc32(const UCHAR *p, ULONG n) {
     return ~crc;
 }
 
+// Layout reads: a failed read is tried twice more (10 ms apart), so one bad read at power-on cannot change the layout.
 static NTSTATUS IdexDiskReadPhysical(ULONGLONG Lba, PVOID Buffer, ULONG Length) {
     LARGE_INTEGER o;
-    o.QuadPart = (LONGLONG)(Lba << 9);
-    return IoSynchronousFsdRequest(IRP_MJ_READ, IdexDiskPhysical, Buffer, Length, &o);
+    NTSTATUS status = STATUS_SUCCESS;
+    for (ULONG attempt = 0; attempt < 3; attempt++) {
+        if (attempt) {
+            XK_SERIAL("disk: layout read of sector %llu failed (%#lx), retrying\n", Lba, status);
+            KeStallExecutionProcessor(10000);
+        }
+        o.QuadPart = (LONGLONG)(Lba << 9);
+        status = IoSynchronousFsdRequest(IRP_MJ_READ, IdexDiskPhysical, Buffer, Length, &o);
+        if (NT_SUCCESS(status))
+            break;
+    }
+    return status;
 }
 
-// The first basic-data partition of a GPT whose header (at Lba) and entry array check out.
-static bool IdexDiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last) {
+// The first basic-data partition of a GPT whose header (at Lba) and entry array check out. With Lenient, an entry array
+// that fails its CRC is used too (the caller then insists on an exFAT boot sector at the partition's start).
+static bool IdexDiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last, bool Lenient = false) {
     static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
                                         0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
     if (!NT_SUCCESS(IdexDiskReadPhysical(Lba, Sector, 512)) || RtlCompareMemory(Sector, "EFI PART", 8) != 8)
@@ -436,7 +455,7 @@ static bool IdexDiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULON
         return false;
     bool found = false;
     if (NT_SUCCESS(IdexDiskReadPhysical(entriesLba, entries, bytes)) &&
-        IdexCrc32(entries, count * entrySize) == entriesCrc)
+        (Lenient || IdexCrc32(entries, count * entrySize) == entriesCrc))
         for (ULONG i = 0; i < count && !found; i++) {
             PUCHAR e = entries + i * entrySize;
             if (RtlCompareMemory(e, basicData, 16) == 16) {
@@ -501,18 +520,26 @@ static void IdexDiskDetectLayout() {
     if (!IdexDiskLayoutKnown) {
         auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'tyLI');
         ULONGLONG start = 0, last = 0;
-        bool found = false;
-        if (sector && NT_SUCCESS(IdexDiskReadPhysical(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55) {
+        bool found = false, pcTable = false;
+        if (sector && NT_SUCCESS(IdexDiskReadPhysical(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55 &&
+            RtlCompareMemory(sector, "****PARTINFO****", 16) != 16) {
             if (sector[446 + 4] == 0xEE) { // protective MBR: GPT, the primary header, else the backup
-                found = IdexDiskReadGpt(1, sector, &start, &last) ||
-                        IdexDiskReadGpt(IdexDiskLengthInSectors - 1, sector, &start, &last);
+                pcTable = true;
+                const ULONGLONG headers[] = {1, IdexDiskLengthInSectors - 1};
+                for (ULONG pass = 0; pass < 2 && !found; pass++) // checked entry arrays first, then unchecked ones
+                    for (ULONGLONG lba : headers)
+                        if (!found && IdexDiskReadGpt(lba, sector, &start, &last, pass == 1)) {
+                            found = true;
+                            if (pass == 1)
+                                XK_SERIAL("disk: GPT entry array at header %llu fails its CRC; using it\n", lba);
+                        }
             } else {
                 for (ULONG i = 0; i < 4 && !found; i++) {
                     PUCHAR e = sector + 446 + 16 * i;
                     if (e[4] == 0x07 && *(PULONG)(e + 12)) {
                         start = *(PULONG)(e + 8);
                         last = start + *(PULONG)(e + 12) - 1;
-                        found = true;
+                        found = pcTable = true;
                     }
                 }
             }
@@ -535,7 +562,10 @@ static void IdexDiskDetectLayout() {
         if (found && NT_SUCCESS(IdexDiskCreateDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9),
                                                      &IdexDiskExfatVolume, IDE_KIND_VOLUME)))
             IdexDiskExfatLayout = TRUE;
-        if (!IdexDiskExfatLayout) { // FATX: the disk's table, else the default layout
+        if (!IdexDiskExfatLayout && pcTable) { // a PC disk without a usable exFAT volume: hands off
+            IdexDiskForeignLayout = TRUE;
+            XK_SERIAL("disk: PC partition table without a usable exFAT volume: no partitions, writes refused\n");
+        } else if (!IdexDiskExfatLayout) { // FATX: the disk's table, else the default layout
             if (!sector || !IdexDiskReadPartitionTable(sector))
                 IdexDiskDefaultPartitions();
             for ([[maybe_unused]] ULONG i = 1; i < 15; i++)
@@ -670,6 +700,25 @@ static void IdexDiskUnlock(const UCHAR *Password) {
 void IdexDiskCountPowerCycle() {
     if (XeConsoleGameRegion & 0x80000000)
         return;
+    // Only on a disk known to be ours: exFAT (the record goes to the reserved-area copy), or FATX with a FATX volume
+    // on C: or E:. A disk taken for FATX by mistake (its layout could not be read) keeps sector 3 untouched.
+    IdexDiskDetectLayout();
+    if (IdexDiskForeignLayout)
+        return;
+    if (!IdexDiskExfatLayout) {
+        auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'cpLI');
+        bool fatx = false;
+        for (ULONG n = 1; sector && n <= 2 && !fatx; n++)
+            fatx = IdexDiskPartitions[n].Length &&
+                   NT_SUCCESS(IdexDiskReadPhysical(IdexDiskPartitions[n].Start, sector, 512)) &&
+                   RtlCompareMemory(sector, "FATX", 4) == 4;
+        if (sector)
+            ExFreePool(sector);
+        if (!fatx) {
+            XK_SERIAL("disk: no FATX volume on C: or E:; power cycle not counted\n");
+            return;
+        }
+    }
     ULONG info[4];
     if (NT_SUCCESS(ExReadWriteRefurbInfo(info, sizeof(info), FALSE))) {
         info[1]++;

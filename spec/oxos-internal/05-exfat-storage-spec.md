@@ -26,7 +26,13 @@ Memory units come last (§9). Out of scope: changing what titles do.
      128 bytes = 32 sectors); entries hold the type GUID, a unique GUID, the first and last sector (64-bit),
      attributes and a UTF-16 name;
   4. if the primary header or its array fails a check, use the backup header (normally the last sector of the
-     disk) and its array; if both fail, the disk is not used as an OXOS disk.
+     disk) and its array;
+  5. if both arrays fail their CRC (2026-11-02), use a header that checks out with its array unchecked, provided
+     the basic-data partition it names starts with an exFAT boot sector (whose own checksum the mount checks). The
+     case seen: a kernel that took the disk for FATX wrote its refurbishment record into sector 3, inside the
+     primary array, and the tool that partitioned the disk had placed the backup array one sector after where its
+     header says. The serial log then says "GPT entry array at header N fails its CRC; using it". Otherwise the
+     disk is not used as an OXOS disk (rule 3 below).
   OXOS never rewrites the table; partitioning is done on a PC or by our host tool.
 - **Cost on the Xbox:** the table is read and checked once at boot (about 33 sectors and two CRC32 passes over
   16 KB). After that a partition is only a 64-bit starting sector added to each request; the kernel already carries
@@ -47,7 +53,15 @@ Memory units come last (§9). Out of scope: changing what titles do.
      is then repaired by copying the backup's 12 sectors over the main region, as `fsck.exfat` does (the backup
      itself is never written, so an interrupted repair is simply repeated at the next mount; a failed repair still
      mounts from the backup);
-  3. anything else → as today (fatal error for an unusable disk).
+  3. a PC partition table (a protective MBR, or an MBR entry of type 0x07) without a usable exFAT volume
+     (2026-11-02) → **no partitions, all writes refused** (STATUS_MEDIA_WRITE_PROTECTED): no dashboard is found,
+     so fatal error 14. Such a disk is never taken for a FATX disk: the FATX layout's fixed partitions and the
+     refurb record (sector 3) would write into the PC's data;
+  4. anything else → the FATX path (fatal error for an unusable disk).
+- **Layout reads at boot are retried** (three tries, 10 ms apart), so one failed read at power-on does not change
+  the layout. And the power-cycle count (the refurb record, written at each cold boot) is only written on an exFAT
+  disk (to the reserved-area copy) or on a FATX disk whose C: or E: starts with a FATX header: a disk whose layout
+  could not be read keeps sector 3 untouched.
 - **Folders** at the root of the exFAT volume, created at boot when missing:
 
   | Folder | Xbox device | Retail letter | Notes |

@@ -218,15 +218,16 @@ static NTSTATUS FatxCommonCreate(FATX_VOLUME *v, PIRP Irp, ULONG_PTR *Informatio
                 if (NT_SUCCESS(status))
                     status = FatxCreateDirent(v, parent, &element, attrs, first, &index);
                 if (!NT_SUCCESS(status) && first)
-                    FatxFreeChain(v, first);
+                    FatxFreeChain(v, first, 1); // the new directory's one cluster
                 if (NT_SUCCESS(status)) {
                     FATX_ENTRY pe;
                     status = FatxReadEntry(v, parent, index, &pe);
                     if (NT_SUCCESS(status) && !(f = FatxCreateFcb(parent, &pe, index)))
                         status = STATUS_INSUFFICIENT_RESOURCES;
                     created = true;
-                    if (NT_SUCCESS(status) && Irp->Overlay.AllocationSize.LowPart && !isDir) {
-                        // Preallocate; the file size stays 0.
+                    // Preallocate; the file size stays 0. Not on exFAT: an entry set cannot hold more clusters than
+                    // its length, and a PC's check would free the rest (spec 07 §3a); clusters come with the writes.
+                    if (NT_SUCCESS(status) && Irp->Overlay.AllocationSize.LowPart && !isDir && !v->Exfat) {
                         status = FatxSetFileSize(v, f, Irp->Overlay.AllocationSize.LowPart);
                         f->FileSize = 0;
                         FatxFlushFcb(v, f);
@@ -712,7 +713,8 @@ static NTSTATUS NTAPI FatxFsdSetInformation(PDEVICE_OBJECT DeviceObject, PIRP Ir
         else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||
                  size.LowPart < f->FileSize)
             status = FatxSetFileSize(v, f, size.LowPart);
-        else { // allocation only grows the chain
+        else if (v->Exfat) { // allocation only: exFAT cannot hold clusters past the length (spec 07 §3a)
+        } else { // allocation only grows the chain
             ULONG keep = f->FileSize;
             status = FatxSetFileSize(v, f, size.LowPart);
             f->FileSize = keep;

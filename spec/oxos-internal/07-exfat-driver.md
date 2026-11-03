@@ -97,6 +97,21 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
 - **Clusters:** the dispatcher numbers clusters as the format does; the layer maps a cluster to its byte offset.
   Allocation prefers consecutive clusters; a NoFatChain file that cannot grow in place gets its FAT chain written
   and the flag cleared.
+
+### 2.0a Allocation equals length (2026-11-02)
+- **A file's allocation is its DataLength rounded up to clusters**, also for a FAT chain: the driver follows a chain
+  only that far (`FatxFileChain`, `FatxClusterAtIndex`, and `FatxFreeChain` with a count). FAT entries past it
+  mean nothing: a PC's check frees those clusters and anybody may own them later. Only the root directory, which
+  has no length, ends at its end-of-chain mark (`FCB_EXFAT_DISK_ROOT`).
+- **No preallocation on exFAT:** an allocation size at create, or FileAllocationInformation above the file size,
+  allocates nothing (it succeeds); clusters come with the writes. On FATX both preallocate as the stock driver
+  does. An exFAT entry set cannot hold clusters past its length.
+- **Why:** until 2026-11-02 the driver preallocated (Z:\cache*.map files are created with an allocation size) and
+  wrote the entry with the shorter length, then trusted the FAT chain past it. A PC check (and our clean-up on
+  2026-11-01) freed those "unowned" clusters; later allocations gave them out, and freeing or extending the cache
+  file through its stale chain freed or took clusters of other files. On the 500 GB disk a game's new cache file
+  and a disc image on F: ended up sharing 1282 clusters. Files already on a disk with such tails are safe now:
+  the tail stays marked in the bitmap and is simply unused (a PC check reclaims it).
 - **Shared state:** all virtual partitions of an exFAT disk share one exFAT state (geometry, up-case table, free
   count, allocation hint) and one block cache key (the exFAT partition), under the FATX layer's lock. The one key
   matters: with a key per folder volume (the code until 2026-10-30), each kept its own cached copy of the
@@ -140,3 +155,7 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
   the checker on the disk afterwards. The kernel side includes a title-style format of X: (a file created first,
   then the header, table and root writes and a dismount, with 64 KB clusters as Halo 2 uses): X: must be empty
   afterwards and report 11 998 of 11 999 units of 64 KB free and the new serial, and E: must refuse the same format.
+  It also grows `E:\XkStale.stale`, which the image builder gives a FAT chain running two clusters past its length
+  into clusters free in the bitmap (the driver must allocate 3 new clusters, not reuse the stale ones), and creates
+  `E:\XkPre.bin` with a 256 KB allocation size (nothing may be allocated past its 100 bytes). The checker then
+  finds any cluster used but free, or marked but unowned.
