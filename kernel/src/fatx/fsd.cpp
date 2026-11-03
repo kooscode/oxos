@@ -1,5 +1,6 @@
 // FATX: IRP dispatch — create, cleanup/close, read/write, information, directory and volume queries (spec/stock/04b).
 #include "fatx.h"
+#include <xk/serial.h>
 
 static NTSTATUS FatxComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0) {
     Irp->IoStatus.Status = Status;
@@ -828,6 +829,46 @@ static NTSTATUS NTAPI FatxFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP 
 
 // --- Volume information
 
+// The folder D: names when a title runs from the hard disk, held open while the title runs (null for a disc or an
+// image). A title that asks the sector size of a path in it is told 2048, a DVD's, as some games require
+// (spec/oxos-internal/25 §2).
+static FATX_FCB *FatxTitleFolder;
+static HANDLE FatxTitleFolderHandle;
+
+void FatxRememberTitleFolder() {
+    if (FatxTitleFolderHandle) // the previous one (the boot self-tests call this before the title does)
+        NtClose(FatxTitleFolderHandle), FatxTitleFolderHandle = nullptr;
+    FatxTitleFolder = nullptr;
+    OBJECT_STRING name;
+    RtlInitAnsiString(&name, "\\??\\D:\\");
+    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE h;
+    if (!NT_SUCCESS(NtOpenFile(&h, 0x0001 /*FILE_LIST_DIRECTORY*/ | SYNCHRONIZE, &a, &iosb,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+        return;
+    PFILE_OBJECT fo;
+    if (NT_SUCCESS(ObReferenceObjectByHandle(h, &IoFileObjectType, (PVOID *)&fo))) {
+        if (fo->DeviceObject && fo->DeviceObject->DriverObject == &FatxDriverObject) {
+            FatxTitleFolder = (FATX_FCB *)fo->FsContext; // the open handle keeps it
+            XK_SERIAL("fatx: D: is a hard-disk folder: its sector size is reported as 2048\n");
+        }
+        ObfDereferenceObject(fo);
+    }
+    if (FatxTitleFolder)
+        FatxTitleFolderHandle = h; // kept open on purpose, for as long as the title runs
+    else
+        NtClose(h);
+}
+
+static bool FatxInTitleFolder(PFILE_OBJECT fo) {
+    for (auto f = fo ? (FATX_FCB *)fo->FsContext : nullptr; f && FatxTitleFolder; f = f->Parent)
+        if (f == FatxTitleFolder)
+            return true;
+    return false;
+}
+
 static NTSTATUS NTAPI FatxFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     FATX_VOLUME *v = FatxVolume(DeviceObject);
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
@@ -856,13 +897,16 @@ static NTSTATUS NTAPI FatxFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject,
             break;
         }
         auto p = (PULONG)out;
+        ULONG bps = v->SectorSize;
+        if (bps < 2048 && FatxInTitleFolder(s->FileObject) && spc * bps % 2048 == 0)
+            spc = spc * bps / 2048, bps = 2048; // same cluster size, in DVD sectors
         p[0] = total, p[1] = 0;
         p[2] = free, p[3] = 0;
         if (full) {
             p[4] = free, p[5] = 0;
-            p[6] = spc, p[7] = v->SectorSize;
+            p[6] = spc, p[7] = bps;
         } else {
-            p[4] = spc, p[5] = v->SectorSize;
+            p[4] = spc, p[5] = bps;
         }
         info = need;
         break;

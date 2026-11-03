@@ -4,7 +4,7 @@
 #include <xk/rtl.h>
 
 volatile ULONG KiTestDvdDeviceOk, KiTestDvdBigSum, KiTestDvdBigLength, KiTestDvdReadOk, KiTestDvdDirOk,
-    KiTestDvdErrorsOk, KiTestDvdRawOk, KiTestDvdDone;
+    KiTestDvdErrorsOk, KiTestDvdRawOk, KiTestDvdSortKeyOk, KiTestDvdDone;
 volatile char KiTestDvdDirNames[64];
 volatile NTSTATUS KiTestDvdStatus[8];
 extern volatile ULONG KiTestFatxDone;
@@ -145,6 +145,22 @@ static void NTAPI DvdControllerThread(PVOID) {
         off.QuadPart = 6;
         ok &= NtReadFile(h2, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 3 &&
               buf[0] == 'd' && buf[2] == 'd';
+        // The physical sort key as titles' libraries read it (spec/oxos-internal/25 §1): volume name "GDFX", then
+        // the start sector at FsContext + 0, which must be the file's sector (FileInternalInformation).
+        {
+            UCHAR attr[32];
+            ULONG internal[2] = {};
+            PFILE_OBJECT fo;
+            bool key = NtQueryVolumeInformationFile(h2, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
+                       *(PULONG)(attr + 8) == 4 && RtlCompareMemory(attr + 12, "GDFX", 4) == 4 &&
+                       NtQueryInformationFile(h2, &iosb, internal, sizeof(internal), FileInternalInformation) == 0 &&
+                       internal[0] && ObReferenceObjectByHandle(h2, &IoFileObjectType, (PVOID *)&fo) == 0;
+            if (key) {
+                key = *(PULONG)fo->FsContext == internal[0];
+                ObfDereferenceObject(fo);
+            }
+            KiTestDvdSortKeyOk = key;
+        }
         NtClose(h2);
         ok &= DvdOpen(&h2, "\\Device\\CdRom0\\media\\Sub\\deep.txt") == 0;
         NtClose(h2);

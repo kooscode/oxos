@@ -9,10 +9,11 @@ static const char XdvdfsMagic[] = "MICROSOFT*XBOX*MEDIA";
 constexpr ULONG FILE_OPENED = 1;
 constexpr NTSTATUS STATUS_MEDIA_WRITE_PROTECTED = (NTSTATUS)0xC00000A2;
 
+// Titles' XGetFilePhysicalSortKey reads the start sector at FsContext + 0 on a "GDFX" volume (spec/oxos-internal/25).
 struct XDVDFS_FCB {
+    ULONG StartSector; // file data, or the directory table
     LIST_ENTRY Link;
     LONG ReferenceCount;
-    ULONG StartSector; // file data, or the directory table
     ULONG Size;
     UCHAR Attributes;
     UCHAR NameLength;
@@ -20,6 +21,8 @@ struct XDVDFS_FCB {
     ULONG EntryOffset; // FileIndex: the entry's offset in its parent directory
     BOOLEAN Directory, Volume;
 };
+
+XK_OFFSET(XDVDFS_FCB, StartSector, 0);
 
 struct XDVDFS_CCB {
     ULONG NextIndex; // in-order position for directory enumeration
@@ -491,8 +494,9 @@ static NTSTATUS NTAPI XdvdfsFsdQueryVolume(PDEVICE_OBJECT DeviceObject, PIRP Irp
     case FileFsAttributeInformation:
         if (len < 18)
             return XdvdfsComplete(Irp, STATUS_INFO_LENGTH_MISMATCH);
-        out[0] = 0x80000, out[1] = 255, out[2] = 6; // FILE_READ_ONLY_VOLUME
-        RtlCopyMemory(out + 3, "XDVDFS", 6);
+        // The name titles' libraries expect for the disc's file system (XGetFilePhysicalSortKey).
+        out[0] = 0x80000, out[1] = 255, out[2] = 4; // FILE_READ_ONLY_VOLUME
+        RtlCopyMemory(out + 3, "GDFX", 4);
         return XdvdfsComplete(Irp, STATUS_SUCCESS, 18);
     case FileFsVolumeInformation:
         if (len < 18)

@@ -638,6 +638,8 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         IdexDiskCountPowerCycle();
     }
     XepChooseTitle();
+    void FatxRememberTitleFolder(); // fatx/fsd.cpp: D: on the hard disk reports DVD sectors
+    FatxRememberTitleFolder();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
     XkBootMarksDone();
