@@ -15,6 +15,7 @@ volatile ULONG KiTestExfatCrossOk;
 // exFAT: a FAT chain is followed only as far as the file's length (E:\XkStale.stale has a stale tail past it), and
 // preallocation does not allocate (an entry set cannot hold clusters past its length).
 volatile ULONG KiTestExfatStaleOk, KiTestExfatPreallocOk;
+volatile ULONG KiTestFatxTitleFolderOk;
 extern volatile ULONG KiTestIdexDone;
 
 static void Sleep(LONG ms) {
@@ -218,6 +219,35 @@ static void NTAPI FatxControllerThread(PVOID) {
     KiTestFatxVolumeOk = ok;
     // XkTest may have existed from a previous run on the same image: it and keep.bin hold 2 clusters.
     KiTestFatxFreeBalanced = FreeClusters(hv) + 2 == freeBefore || FreeClusters(hv) == freeBefore;
+    // D: as a hard-disk folder (spec/oxos-internal/25 §2): D:\ and a file in it report 2048-byte sectors with the
+    // same cluster size; the rest of the volume keeps its own. The link is removed again before the title starts.
+    {
+        void FatxRememberTitleFolder();
+        OBJECT_STRING link, target;
+        RtlInitAnsiString(&link, "\\??\\D:");
+        RtlInitAnsiString(&target, "\\Device\\Harddisk0\\Partition1\\XkTest");
+        ULONG bytes = size[4] * size[5], d[6] = {}, k[6] = {}, e[6] = {};
+        IoDeleteSymbolicLink(&link);
+        ok = IoCreateSymbolicLink(&link, &target) == 0;
+        FatxRememberTitleFolder();
+        HANDLE hd, hk;
+        if (ok && Open(&hd, "\\??\\D:\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
+            ok &= NtQueryVolumeInformationFile(hd, &iosb, d, 24, FileFsSizeInformation) == 0 && d[5] == 2048 &&
+                  d[4] * d[5] == bytes && d[0] == size[0];
+            NtClose(hd);
+        } else
+            ok = false;
+        if (ok && Open(&hk, "\\??\\D:\\keep.bin", GENERIC_READ, FILE_OPEN, 0) == 0) {
+            ok &= NtQueryVolumeInformationFile(hk, &iosb, k, 24, FileFsSizeInformation) == 0 && k[5] == 2048;
+            NtClose(hk);
+        } else
+            ok = false;
+        ok &= NtQueryVolumeInformationFile(hv, &iosb, e, 24, FileFsSizeInformation) == 0 && e[5] == size[5];
+        IoDeleteSymbolicLink(&link);
+        FatxRememberTitleFolder(); // D: gone: nothing is remembered
+        ok &= NtQueryVolumeInformationFile(hv, &iosb, e, 24, FileFsSizeInformation) == 0 && e[5] == size[5];
+        KiTestFatxTitleFolderOk = ok;
+    }
     NtClose(hv);
     if (IdexDiskExfatLayout) {
         ExfatFormatTest(buf);

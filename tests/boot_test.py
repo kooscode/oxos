@@ -373,6 +373,7 @@ def fatx_checks(mon, hdd):
         "create dir + 100 KB file, reopen and verify": mon.read("KiTestFatxWriteOk") == 1,
         "mask query, rename, delete, non-empty dir refused": mon.read("KiTestFatxRenameDeleteOk") == 1,
         "error statuses (not found, collision, dir/non-dir, names)": mon.read("KiTestFatxErrorsOk") == 1,
+        "D: as a hard-disk folder reports 2048-byte sectors, the volume its own": mon.read("KiTestFatxTitleFolderOk") == 1,
         "volume information (size, serial, FATX)": mon.read("KiTestFatxVolumeOk") == 1
             and mon.read("KiTestFatxTotalClusters") == clusters and mon.read("KiTestFatxSerial") == serial,
         "free clusters balanced": mon.read("KiTestFatxFreeBalanced") == 1,
@@ -416,6 +417,7 @@ def dvd_checks(mon):
         "XDVDFS: root enumeration in tree order": mon.read("KiTestDvdDirOk") == 1
             and read_string(mon, "KiTestDvdDirNames", 64) == names,
         "XDVDFS: write-protected media, lookup errors": mon.read("KiTestDvdErrorsOk") == 1,
+        "XDVDFS: physical sort key (GDFX name, start sector at FsContext)": mon.read("KiTestDvdSortKeyOk") == 1,
         "RAW: Partition0 volume reads, sector alignment, no names": mon.read("KiTestDvdRawOk") == 1,
         "DVD suite finished": mon.read("KiTestDvdDone") == 1,
     }

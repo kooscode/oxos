@@ -48,12 +48,14 @@ struct FATX_FCB {
     FATX_FCB *Parent;
     ULONG Flags;
     LONG ReferenceCount; // file objects not yet closed, plus open children
-    LONG CleanupCount;   // file objects not yet cleaned up
+    // Titles' XGetFilePhysicalSortKey reads the first cluster at FsContext + 0x1C on a "FATX" volume (and returns 0
+    // when bit 0 of the first byte is set: SiblingLink is a pointer, so it never is). spec/oxos-internal/25.
+    ULONG FirstCluster;
+    LONG CleanupCount; // file objects not yet cleaned up
     SHARE_ACCESS ShareAccess;
     UCHAR Attributes;
     UCHAR NameLength;
     CHAR Name[FATX_MAX_NAME];
-    ULONG FirstCluster;
     ULONG FileSize;
     ULONG DirentIndex; // position of the entry in the parent directory
     ULONG CreationTime, LastWriteTime, LastAccessTime;
@@ -62,6 +64,8 @@ struct FATX_FCB {
     ULONG ExAllocClusters, ExDirLength;
     ULONG FileSizeHigh; // exFAT: files of 4 GB or more (read-only: FATX sizes are 32-bit)
 };
+
+XK_OFFSET(FATX_FCB, FirstCluster, 0x1C);
 
 inline ULONGLONG FatxFileSize64(const FATX_FCB *f) { return (ULONGLONG)f->FileSizeHigh << 32 | f->FileSize; }
 
