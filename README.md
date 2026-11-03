@@ -20,7 +20,7 @@ PC-formatted exFAT SSD (sound on).*
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
 - **Saves and System Link with stock consoles:** titles get the same save-signature and System Link keys as on a
   stock console, so saves move between them and System Link games play together.
-- **nxdk homebrew:** apps that draw with nxdk's pbkit (its samples, XBL Dashboard) run from a cold boot: the kernel
+- **nxdk homebrew:** apps that draw with nxdk's pbkit run from a cold boot: the kernel
   brings the GPU up as a stock boot animation would ([details](spec/oxos-internal/24-graphics-engine-init.md)).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
 - **More memory for titles** than the stock kernel.
