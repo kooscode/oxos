@@ -149,3 +149,22 @@ state the overlay never finishes and the game hangs on a black screen (about one
 - **Checked:** the test title started from the dashboard several times. With the stop alone the buffer was once still in
   use at both title switches and the title hung; with the wait and the reset it started every time (the buffer was
   released within the wait on those runs).
+
+## 5. USB host controllers at a title switch
+Before the quick reboot that starts the next title, the kernel resets both OHCI host controllers (HcCommandStatus
+bit 0, HostControllerReset), so that neither keeps writing into memory the next title is given. A controller leaves
+that reset in the USBSUSPEND state (OHCI 1.0a §7.1.2), not USBRESET, the state it has after a cold boot.
+A title's USB library (XPP), started by XInitDevices, reads HcControl's functional state first: for USBRESET or
+USBOPERATIONAL it carries on at once; for USBSUSPEND (or USBRESUME) it sets USBRESUME and sleeps 20 ms
+(KeDelayExecutionThread). A test title builds its input object on first use, and records it only after the
+constructor, which calls XInitDevices, has returned. During the 20 ms sleep its loader thread (just woken by a disc
+read, priority 9 against the main thread's 8) asked for the input object as well and called XInitDevices again. The
+second set-up found `\Device\MU_0` taken (IoCreateDevice, STATUS_OBJECT_NAME_COLLISION), carried on with memory-unit
+devices it never created, and its USB interrupt code then read through a garbage device pointer (bug check 0x1E, an
+access violation at the start of the title, about 0.35 s in).
+- **Code:** `kernel/src/hal/smbus.cpp` `KiQuickRebootQuiesce` (and the same step in `kernel/src/hal/pci.cpp`
+  `HalpQuiesceBusMasters`): after the reset completes (bit 0 clear, within 10 µs), HcControl ← 0: USBRESET, every list
+  off. A title then finds the controllers as after a cold boot and starts its USB library without the sleep.
+- **Checked:** the Modxo console, the test title started directly over netboot and from the dashboard: before, it
+  stopped at start every time, and the trace showed both set-ups (`\Device\MU_0` created twice, by two threads); with
+  the change it starts and plays.
