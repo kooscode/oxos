@@ -33,17 +33,30 @@ parameters).
 
 ## Dispatch
 - **Walk the registration chain at FS:[0]:** {Next, Handler}, ending at 0xFFFFFFFF. Each handler is called cdecl
-  as (record, frame, context, &dispatcherContext).
+  as (record, frame, context, &dispatcherContext), **under a guard frame** (0x80022934): for the call, the
+  dispatcher links a registration {Next = FS:[0], guard handler 0x8002297E, the frame being handled} on top of the
+  chain, and unlinks the top registration afterwards (FS:[0] ← FS:[0]→Next).
+  - The **exception guard** answers ContinueSearch to an unwind (flags & 6) and NestedException to an exception,
+    with dispatcherContext = the guarded frame: an exception raised inside a handler finds it.
   - ContinueExecution resumes with the (possibly edited) context. A noncontinuable record →
     STATUS_NONCONTINUABLE_EXCEPTION.
-  - ContinueSearch moves on; NestedException marks the record nested.
+  - ContinueSearch moves on. NestedException sets EXCEPTION_NESTED_CALL (0x10) and remembers the highest
+    dispatcherContext frame; when the walk has called that frame's handler, the flag is cleared again.
   - anything else → STATUS_INVALID_DISPOSITION.
+  - Titles depend on the guard frame: a C++ runtime that unwinds from inside its handler (MSVC's nested-frame
+    unwind) saves FS:[0] before RtlUnwind and links it back on top afterwards, with Next = the unwind's target. The
+    saved registration is the dispatcher's guard; without one it is the target frame itself, which then points to
+    itself, and the next exception walks that loop for ever (a test title stuck on a loading screen,
+    spec/oxos-internal/25 §6).
 - **RtlRaiseException(record):** dispatch with the caller's context (Eip = return address); a continued
   exception returns to the caller. RtlRaiseStatus / ExRaiseStatus raise {status, NONCONTINUABLE};
   ExRaiseException = RtlRaiseException.
 - **RtlUnwind(targetFrame, targetIp, record, returnValue):**
   - call each handler above targetFrame with EXCEPTION_UNWINDING (plus EXIT_UNWIND when targetFrame is NULL),
-    unlinking it
+    unlinking it (FS:[0] ← frame→Next) after the call. Each call runs under an **unwind guard** (0x8002293C, guard
+    handler 0x800229A5): it answers ContinueSearch to an exception and CollidedUnwind to an unwind, with
+    dispatcherContext = the guarded frame; on CollidedUnwind (an unwind started inside an unwind handler has
+    already run the handlers up to there) the walk carries on from that frame.
   - then continue in the caller's frame at targetIp (or the return address) with Eax = returnValue. A NULL record
     gets STATUS_UNWIND.
 - **RtlCaptureContext:** the state at the caller's return point.
@@ -53,5 +66,6 @@ parameters).
 ## Implementation notes
 - A context with a different stack pointer is resumed by building {eax, ebx, eip, cs, eflags} below the target
   ESP and executing `iret` (ring 0, no stack switch).
-- Nested exception records and the dispatcher's own guard frame are simplified: exception depth is capped at 8
-  (bug check beyond).
+- Exception depth is capped at 8 (bug check beyond). The reference's stack-limit checks on each frame
+  (STATUS_BAD_STACK) and STATUS_INVALID_UNWIND_TARGET for a target below the top frame are not implemented: a
+  misaligned or low frame ends the walk.
