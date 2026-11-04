@@ -124,3 +124,22 @@ patch = ECD8B: > 90 90 90 90 90 90 90 90
 
 The records live in the kernel's pool while the title runs (a few bytes per patch). They are freed when the next
 title is loaded.
+
+## 4. The video overlay at a title switch
+A dashboard that plays video through the GPU's video overlay (PVIDEO) can leave it running when it starts a title:
+a buffer marked in use (NV2A 0x8700 bit 4), an overlay interrupt pending (0x8100), and the overlay's addresses
+never set. A test title's graphics set-up stops the overlay (0x8704 ← 1) and waits for 0x8700 to clear; in that
+state the overlay never finishes and the game hangs on a black screen (about one start in three from the dashboard).
+- **Code:** `kernel/src/hal/pci.cpp` `HalpIdleVideoOverlay`, called on a cold boot (HalpQuiesceBusMasters) and on the
+  quick reboot that starts the next title (HalInitSystemPhase0).
+- **What it does** when the overlay is switched on (PMC 0x200 bit 28): overlay interrupts off (0x8140 ← 0), both
+  buffers stopped (0x8704 ← 0x11), 0x8700 ← 0, pending interrupts acknowledged (0x8100 ← 0xFFFFFFFF). Writing 0x8700
+  does not clear an in-use bit; the stop does, at a vertical blank. The kernel waits up to 50 ms for that. A buffer
+  still marked in use after the wait is one the overlay never finishes: the overlay is then reset (PMC bit 28 off and
+  on), with 0x8088 / 0x808C (which the boot display sets, and which the reset would clear) saved and written back,
+  and its interrupts are turned off and acknowledged again.
+- **Log (serial build):** `pci: video overlay: buffer .. stop .. interrupt .. enable .. -> buffer .. interrupt ..`,
+  with `(reset: the buffer was not released)` when the reset was needed.
+- **Checked:** the test title started from the dashboard several times. With the stop alone the buffer was once still in
+  use at both title switches and the title hung; with the wait and the reset it started every time (the buffer was
+  released within the wait on those runs).

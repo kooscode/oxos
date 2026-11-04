@@ -25,9 +25,11 @@ static void HalpDisableLocalApic() {
 
 void HalInitSystemPhase0(bool coldBoot) {
     if (!coldBoot) {
-        // Quick reboot: only the interrupt controller is reprogrammed.
+        // Quick reboot: the interrupt controller is reprogrammed, and the video overlay the last title may have left
+        // running is stopped.
         HalpPulse();
         HalpInitPic();
+        HalpIdleVideoOverlay();
         return;
     }
 
