@@ -168,3 +168,19 @@ access violation at the start of the title, about 0.35 s in).
 - **Checked:** the Modxo console, the test title started directly over netboot and from the dashboard: before, it
   stopped at start every time, and the trace showed both set-ups (`\Device\MU_0` created twice, by two threads); with
   the change it starts and plays.
+
+## 6. C++ exceptions thrown from a catch block
+A test title throws a C++ exception (0xE06D7363) while it creates an online match, and a second one from inside the
+catch block of the first. The title's C++ runtime finds the first one's catch, unwinds to its frame from inside its
+handler (saving FS:[0] before RtlUnwind and linking it back on top after it, with Next = FS:[0]), then runs the
+catch. On the stock kernel the saved registration is the dispatcher's guard frame around the handler call
+(spec/stock/14, "Dispatch"). The kernel had no guard frame, so the saved registration was the title's own frame,
+which was then linked to itself: the second exception's dispatch called that frame's handler for ever, and the
+title stayed on its loading screen.
+- **Code:** `kernel/src/ke/except.cpp` `KiExecuteHandler` (handlers run under the exception guard or the unwind
+  guard), `RtlpDispatchException` (nested flag and frame), `KiUnwind` (collided unwind).
+- **Found with:** a serial log of each exception (code, address, thread, handler) and of the registration chain at
+  each dispatch and unwind (debug code, not kept): after the first unwind the chain read
+  `D0090C10 → D0090C90 → D0091528 → D0091528 → …`.
+- **Checked:** the Modxo console: before, the test title stopped on its loading screen at that point every time
+  (twice); with the guard frames it creates the match and carries on. 158 host unit tests pass.

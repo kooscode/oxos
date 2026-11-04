@@ -56,14 +56,58 @@ static EXCEPTION_REGISTRATION *&KiExceptionList() { return *(EXCEPTION_REGISTRAT
 static volatile ULONG KiDispatchDepth;
 volatile ULONG KiExceptionsDispatched; // diagnostics
 
+// A handler runs with a guard frame of the dispatcher on top of the chain (spec/stock/14, "Dispatch"): {Next, guard
+// handler, the frame whose handler runs}. An exception raised inside the handler meets the guard, which answers
+// NestedException (an unwind meeting it during dispatch passes on); an unwind started inside an unwind handler
+// meets the unwind guard, which answers CollidedUnwind. Both hand back the guarded frame. The guard is also the
+// frame a title's C++ runtime saves before it calls RtlUnwind from a handler and links back on top afterwards
+// (with Next = the unwind's target): without it, that runtime links the target frame to itself.
+struct EXCEPTION_GUARD {
+    EXCEPTION_REGISTRATION Registration;
+    EXCEPTION_REGISTRATION *Establisher;
+};
+
+static ULONG __cdecl KiExceptionGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
+    if (Record->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND))
+        return ExceptionContinueSearch;
+    *(EXCEPTION_REGISTRATION **)DispatcherContext = ((EXCEPTION_GUARD *)Frame)->Establisher;
+    return ExceptionNestedException;
+}
+
+static ULONG __cdecl KiUnwindGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
+    if (!(Record->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)))
+        return ExceptionContinueSearch;
+    *(EXCEPTION_REGISTRATION **)DispatcherContext = ((EXCEPTION_GUARD *)Frame)->Establisher;
+    return ExceptionCollidedUnwind;
+}
+
+// Call Frame's handler under a guard frame; the guard is unlinked again from the top of the chain afterwards.
+[[gnu::noinline]] static ULONG KiExecuteHandler(PEXCEPTION_RECORD Record, EXCEPTION_REGISTRATION *Frame,
+                                                PCONTEXT Context, PVOID DispatcherContext,
+                                                ULONG(__cdecl *Guard)(PEXCEPTION_RECORD, PVOID, PCONTEXT, PVOID)) {
+    volatile EXCEPTION_GUARD guard;
+    guard.Registration.Next = KiExceptionList();
+    guard.Registration.Handler = Guard;
+    guard.Establisher = Frame;
+    KiExceptionList() = (EXCEPTION_REGISTRATION *)&guard.Registration;
+    ULONG disposition = Frame->Handler(Record, Frame, Context, DispatcherContext);
+    KiExceptionList() = KiExceptionList()->Next;
+    return disposition;
+}
+
 // Walk the registration chain; TRUE when a handler asked to continue execution.
 static BOOLEAN RtlpDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
     KiExceptionsDispatched = KiExceptionsDispatched + 1;
+    EXCEPTION_REGISTRATION *nested = nullptr; // the highest frame whose handler was running when this one was raised
     for (EXCEPTION_REGISTRATION *r = KiExceptionList(); r && r != EXCEPTION_CHAIN_END; r = r->Next) {
         if (((ULONG)r & 3) || (ULONG)r < 0x10000)
             break; // corrupt chain
-        PVOID dispatcherContext = nullptr;
-        ULONG disposition = r->Handler(Record, r, Context, &dispatcherContext);
+        EXCEPTION_REGISTRATION *dispatcherContext = nullptr;
+        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, KiExceptionGuard);
+        if (r == nested) { // past the frames of the handler this exception was raised in
+            Record->ExceptionFlags &= ~EXCEPTION_NESTED_CALL;
+            nested = nullptr;
+        }
         if (disposition == ExceptionContinueExecution) {
             if (Record->ExceptionFlags & EXCEPTION_NONCONTINUABLE) {
                 EXCEPTION_RECORD nested = {STATUS_NONCONTINUABLE_EXCEPTION_, EXCEPTION_NONCONTINUABLE, Record,
@@ -75,6 +119,8 @@ static BOOLEAN RtlpDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context)
         }
         if (disposition == ExceptionNestedException) {
             Record->ExceptionFlags |= EXCEPTION_NESTED_CALL;
+            if (dispatcherContext > nested)
+                nested = dispatcherContext;
             continue;
         }
         if (disposition != ExceptionContinueSearch)
@@ -238,9 +284,11 @@ extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID
     while (r && r != EXCEPTION_CHAIN_END && r != TargetFrame) {
         if (((ULONG)r & 3) || (ULONG)r < 0x10000)
             break;
-        PVOID dispatcherContext = nullptr;
-        ULONG disposition = r->Handler(Record, r, Context, &dispatcherContext);
-        if (disposition != ExceptionContinueSearch && disposition != ExceptionCollidedUnwind)
+        EXCEPTION_REGISTRATION *dispatcherContext = nullptr;
+        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, KiUnwindGuard);
+        if (disposition == ExceptionCollidedUnwind)
+            r = dispatcherContext; // another unwind already ran the handlers up to there: carry on from its frame
+        else if (disposition != ExceptionContinueSearch)
             KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, STATUS_INVALID_DISPOSITION_, (ULONG)r->Handler, disposition,
                          Record->ExceptionCode);
         r = r->Next;
