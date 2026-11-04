@@ -64,6 +64,9 @@ SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # STATEDUMP=1: print the machine-state probe (tools/statedump) on the debug serial port at the end of start-up, for
 # comparing the set-up with a reference kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
+# REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots the
+# console the way the in-game reset does (HalpIgrReboot), so resets can be tested in a loop without a controller.
+REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
 SERIAL := 1
 endif
@@ -80,7 +83,7 @@ ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP)
+            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \

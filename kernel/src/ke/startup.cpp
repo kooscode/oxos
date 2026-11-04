@@ -117,6 +117,7 @@ extern "C" void XkBootMarksDone() {
 // clear lets RAM lose bits within seconds; it is set here before the kernel relies on memory. The boot loader's own
 // fixes (OXOS's start.S and 2BL, records at physical 0x23D8 and 0x23D0) and this one are logged once the serial port
 // is up (KiReportRefresh).
+XBAPI void NTAPI HalpIgrReboot();
 static ULONG KiRefreshFoundOff = 0xFFFFFFFF; // the value found when refresh was off at entry (0xFFFFFFFF: it was on)
 static ULONG KiRefreshBootFix[4];            // start.S's record ('RFS0', value), the 2BL's record ('RFEN', value)
 static ULONG KiGpuClockRecord[5]; // the 2BL's GPU clock record (boot/bl.cpp, physical 0x23E0)
@@ -253,6 +254,20 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         // The machine-state probe (tools/statedump, make STATEDUMP=1), where a reference dump is taken.
         struct P { static void Out(const char *Line) { XK_SERIAL("%s", Line); } };
         statedump::Dump(P::Out, "OXOS (end of start-up)");
+    }
+#endif
+#if XK_REBOOT_TEST
+    { // debug (make REBOOT_TEST=N): a reboot N seconds into every boot (also inside a title), through the in-game reset
+        struct R {
+            static void NTAPI Run(PVOID) {
+                LARGE_INTEGER t;
+                t.QuadPart = -10000000LL * XK_REBOOT_TEST;
+                KeDelayExecutionThread(KernelMode, FALSE, &t);
+                XK_SERIAL("reboot test: the in-game reset's reboot\n");
+                HalpIgrReboot();
+            }
+        };
+        KiCreateSystemThread(R::Run, nullptr, 0, 8);
     }
 #endif
     KiBootStep("title launcher");
