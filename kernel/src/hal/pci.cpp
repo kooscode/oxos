@@ -148,6 +148,7 @@ static void HalpQuiesceBusMasters() {
         mmio(bar + 8) = 1;             // HcCommandStatus: host controller reset (clears HCCA and the list pointers)
         for (int i = 0; i < 100 && (mmio(bar + 8) & 1); i++)
             KeStallExecutionProcessor(1);
+        mmio(bar + 4) = 0; // HcControl: back to USBRESET (the reset ends in USBSUSPEND; see KiQuickRebootQuiesce)
     }
     ULONG nic = HalpPciRead32(0, 4, 0x10) & ~0xFFFu;
     if (nic >= 0xFEC00000 && nic < 0xFF000000 && (HalpPciRead32(0, 4, 4) & 2)) {

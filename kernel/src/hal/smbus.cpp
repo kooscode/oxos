@@ -227,8 +227,18 @@ extern "C" void KiQuickRebootQuiesce() {
     outb(0x21, 0xFF); // mask both PICs
     outb(0xA1, 0xFF);
     outb(0xFF60, 0);  // IDE bus master off
-    *(volatile ULONG *)0xFED00008 = 1; // OHCI host controller resets (USB 0 and 1)
-    *(volatile ULONG *)0xFED08008 = 1;
+    // OHCI host controller resets (USB 0 and 1). A controller leaves its reset in USBSUSPEND, so put it back in
+    // USBRESET (HcControl 0), the state a title finds after a cold boot: a title's USB library that finds the
+    // controller suspended resumes it with a 20 ms sleep inside XInitDevices, and a title whose other thread asks
+    // for its input devices meanwhile initializes them twice (spec/oxos-internal/25 §5).
+    static const ULONG OHCI[] = {0xFED00000, 0xFED08000};
+    for (ULONG base : OHCI) {
+        auto hc = (volatile ULONG *)base;
+        hc[2] = 1; // HcCommandStatus: HostControllerReset (done within 10 us)
+        for (int i = 0; i < 10000 && (hc[2] & 1); i++) {
+        }
+        hc[1] = 0; // HcControl: USBRESET, every list off
+    }
     *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
     // NIC: transmitter off only. Resetting the whole NIC here (receiver, TxRxControl, rings: tried 2026-10-29) left it
     // in a state the next title's network start-up waited on forever (XBMC4Gamers started by EvoX's dashboard).
