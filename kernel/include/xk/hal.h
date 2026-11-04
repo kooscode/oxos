@@ -32,6 +32,7 @@ void HalpInitRtc();
 void HalpInitRtcLate();
 void HalpInitPit();
 void HalpInitPci();
+void HalpIdleVideoOverlay(); // the video overlay stopped (cold boot and quick reboot)
 void HalpInitGraphicsEngine(); // hal/gpu.cpp: cold boot, after the GPU reset
 void HalpInitAcpiPm();
 void HalpPulse();

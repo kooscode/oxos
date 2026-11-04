@@ -85,6 +85,41 @@ enum : ULONG {
 // audio and IDE DMA engines or the GPU's FIFO running, writing into RAM the kernel is about to reuse: corruption that
 // hangs the boot at varying places on hardware, never in xemu. Before anything here enables bus mastering: log the
 // state each device arrives in, turn bus mastering off and stop or reset each engine.
+// The video overlay (PVIDEO, PMC bit 28): stopped and idle, on every boot (cold, and the quick reboot that starts the
+// next title). A dashboard that played video through it can leave a buffer marked in use (0x8700) with an interrupt
+// pending and addresses it never cleared; the hardware then never finishes that buffer, and a title whose graphics
+// set-up stops the overlay and waits for 0x8700 to clear waits for ever. The overlay is stopped, and reset only when
+// the buffer is not released (a reset also clears 0x8088/0x808C, which the boot display sets: they are kept).
+void HalpIdleVideoOverlay() {
+    if (!(*(volatile ULONG *)0xFD000200 & 0x10000000))
+        return;
+    auto nv = [](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(0xFD000000 + offset); };
+    [[maybe_unused]] ULONG buffer = nv(0x8700), stop = nv(0x8704), intr = nv(0x8100), enable = nv(0x8140);
+    nv(0x8140) = 0;          // interrupts off
+    nv(0x8704) = 0x11;       // stop both buffers
+    nv(0x8700) = 0;          // no buffer in use
+    nv(0x8100) = 0xFFFFFFFF; // pending interrupts acknowledged
+    // The overlay finishes a stopped buffer at a vertical blank: up to 50 ms. A buffer still marked in use after that
+    // is one the overlay never finishes (its addresses were left unset): the overlay is reset (PMC bit 28 off and on),
+    // keeping 0x8088 / 0x808C, which the boot display sets (spec/oxos-internal/25 §4).
+    for (ULONG ms = 0; ms < 50 && (nv(0x8700) & 0x11); ms++)
+        KeStallExecutionProcessor(1000);
+    [[maybe_unused]] bool reset = false;
+    if (nv(0x8700) & 0x11) {
+        ULONG v8088 = nv(0x8088), v808c = nv(0x808C);
+        auto pmc = (volatile ULONG *)0xFD000200;
+        *pmc = *pmc & ~0x10000000u;
+        *pmc = *pmc | 0x10000000u;
+        nv(0x8088) = v8088;
+        nv(0x808C) = v808c;
+        nv(0x8140) = 0;
+        nv(0x8100) = 0xFFFFFFFF;
+        reset = true;
+    }
+    XK_SERIAL("pci: video overlay: buffer %lx stop %lx interrupt %lx enable %lx -> buffer %lx interrupt %lx%s\n", buffer,
+              stop, intr, enable, nv(0x8700), nv(0x8100), reset ? " (reset: the buffer was not released)" : "");
+}
+
 static void HalpQuiesceBusMasters() {
     constexpr ULONG DEVS[] = {2, 3, 4, 5, 6, 9};
     for (ULONG d : DEVS) {
@@ -150,6 +185,7 @@ static void HalpQuiesceBusMasters() {
               (enable & 0x100) ? *(volatile ULONG *)0xFD002500 : 0, (enable & 0x100) ? *(volatile ULONG *)0xFD003220 : 0);
     *pmc = enable & ~0x1100u;
     *pmc = enable;
+    HalpIdleVideoOverlay();
     // Frame-buffer tiles and Z compression off (spec/oxos-internal/10 §2 step 7.3). They power up holding junk (PFB
     // 0x100300/0x100304 0x04000000, 0x100324 0x10 on the 1.4 console). On a stock console the kernel's graphics device
     // clears them before any title (spec/stock/22 §7); OXOS has no boot animation, so it does it here. nxdk's pbkit
@@ -274,6 +310,11 @@ void HalpInitPci() {
     XK_SERIAL("pci: memory: host 0x84 %08lx, NV2A PFB 0x100200 %08lx 0x100204 %08lx, NVPLL %08lx, 0x68050C %08lx\n",
               HalpPciRead32(0, 0, 0x84), *(volatile ULONG *)0xFD100200, *(volatile ULONG *)0xFD100204,
               *(volatile ULONG *)0xFD680500, *(volatile ULONG *)0xFD68050C);
+    // The other clocks and the memory timing the X-codes set (debug: a boot with garbled textures).
+    XK_SERIAL("pci: clocks: MPLL %08lx VPLL %08lx host 0x6C %08lx; PFB 0x100210 %08lx 0x100220 %08lx 0x100224 %08lx "
+              "0x100228 %08lx\n", *(volatile ULONG *)0xFD680504, *(volatile ULONG *)0xFD680508, HalpPciRead32(0, 0, 0x6C),
+              *(volatile ULONG *)0xFD100210, *(volatile ULONG *)0xFD100220, *(volatile ULONG *)0xFD100224,
+              *(volatile ULONG *)0xFD100228);
 #endif
 }
 
