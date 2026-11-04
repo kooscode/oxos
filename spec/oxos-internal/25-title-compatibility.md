@@ -65,6 +65,12 @@ title can be fixed without a new kernel.
   at 0x20831B the library routine's `56 8D 45 08 50 FF 35 30 C7 34 00 83 CE FF` (the same routine of another title
   of that library version, with this game's import slot for IoFileObjectType, 0x34C730). The other three are not known
   and are blind patches under a `match =` line.
+- **OXOS fixes in the shipped file** (marked in it as not from Cerbios): the same title's Xbox Live sign-in picks a
+  security gateway at random from the list the service returns, `random % count`, with no check for an empty list
+  (0x213B46, `div ecx`): with no gateways returned it stops with a divide error (bug check 0x1E, 0xC0000094). The
+  patch at 0x213AD6 retargets the `jbe` that is taken only for a count of 0 (`76 4B` > `76 94`) to the routine's own
+  failure path (state 3, as when the lookup fails), so sign-in fails and the title carries on. Checked on the Modxo
+  console: the crash reproduced with the trace kernel, and with the patch written sign-in no longer stops the title.
 
 ### 3.1 The file
 `C:\OXOS\title-patches.ini`, read through `\Device\Harddisk0\Partition2`. On a FATX disk that is C:; on an exFAT disk it
