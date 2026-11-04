@@ -165,6 +165,80 @@ static void BlSetUpChipset() {
 // later (1.6) take Cerbios's EEPROM method, not implemented: the X-codes' values stay there too.
 static volatile ULONG &BlNv(ULONG Offset) { return *(volatile ULONG *)(0xFD000000 + Offset); }
 
+// The GPU core clock: NVPLL coefficients (NV2A 0x680500) and the PLL coefficient select (0x68050C). The X-codes write
+// 0x00011C01 (M 1, N 28, P 1: 233 MHz), then 0x000A0400. On some cold boots the 2BL finds other values:
+// - NVPLL 0x0006F3FF (0.25 MHz) with the select right: titles crawl, no vertical-blank interrupt;
+// - NVPLL 0x00012501 with the select 0x000A0000 (bit 10 clear): the core clock does not come from NVPLL, a write to
+//   NVPLL alone does not change it, and titles crawl too.
+// The 2BL writes both, in the X-codes' order, until they read back right (3 tries): at its start, before anything
+// uses the GPU, and again before the kernel. Record at physical 0x23E0 for the kernel's log: 'NVPL', NVPLL and the
+// select at 2BL start, NVPLL and the select before the kernel.
+constexpr ULONG NVPLL = 0x680500, NVPLL_XCODES = 0x00011C01, PLL_SELECT = 0x68050C, PLL_SELECT_XCODES = 0x000A0400;
+constexpr ULONG NVPLL_RECORD = 0x23E0, NVPLL_RECORD_MAGIC = 0x4C50564E;
+
+static void BlCheckGpuClock(ULONG Slot) {
+    auto record = (volatile ULONG *)NVPLL_RECORD;
+    record[Slot] = BlNv(NVPLL);
+    record[Slot + 1] = BlNv(PLL_SELECT);
+    for (ULONG tries = 0; tries < 3 && (BlNv(NVPLL) != NVPLL_XCODES || BlNv(PLL_SELECT) != PLL_SELECT_XCODES); tries++) {
+        BlNv(NVPLL) = NVPLL_XCODES; // read back: the X-codes' own writes did not hold on those boots
+        BlNv(PLL_SELECT) = PLL_SELECT_XCODES;
+    }
+}
+
+// X-code check (debug, spec/oxos-internal/26 §4): on some cold boots settings the X-codes write do not hold (the GPU
+// clock, DRAM refresh). When the 2BL starts, every register in this list (Cromwell's table, kernel/boot/xcodes.S: the
+// last value written, under a mask) is read back; the ones that differ go to a record at physical 0x2400 for the
+// kernel's log: 'XCHK', the count, then {address, value read} pairs; again before the kernel, at 0x2600. Addresses: 0x0Fxxxxxx = NV2A register (now at
+// 0xFD000000), 0x8xxxxxxx = PCI configuration address. Left out: the memory size (start.S decides it), the DRAM mode
+// commands, the strap and bridge registers the table changes with read-modify-write.
+struct BL_XCODE_VALUE {
+    ULONG Address, Value, Mask;
+};
+static const BL_XCODE_VALUE BlXcodeValues[] = {
+    {0x0F0010B0, 0x07633461, ~0u}, {0x0F0010B4, 0, ~0u},          {0x0F0010B8, 0xFFFF0000, ~0u},
+    {0x0F0010BC, 0x00005866, ~0u}, {0x0F0010C4, 0x0351C858, ~0u}, {0x0F0010C8, 0x30007D67, ~0u},
+    {0x0F0010CC, 0x66660000, ~0u}, {0x0F0010D4, 9, ~0u},          {0x0F0010D8, 0, ~0u},
+    {0x0F0010DC, 0xA0423635, ~0u}, {0x0F0010E8, 0x0C6558C6, ~0u}, {0x0F001210, 0x10, ~0u},
+    {0x0F001214, 0x09090909, ~0u}, {0x0F001218, 0x00010000, ~0u}, {0x0F001220, 0, ~0u},
+    {0x0F001228, 0, ~0u},          {0x0F00122C, 0xAAAAAAAA, ~0u}, {0x0F001230, 0xFFFFFFFF, ~0u},
+    {0x0F001234, 0xAAAAAAAA, ~0u}, {0x0F001238, 0xAAAAAAAA, ~0u}, {0x0F00123C, 0x8B8B8B8B, ~0u},
+    {0x0F001240, 0xFFFFFFFF, ~0u}, {0x0F001244, 0x8B8B8B8B, ~0u}, {0x0F001248, 0x8B8B8B8B, ~0u},
+    {0x0F00124C, 0xAA8BAA8B, ~0u}, {0x0F001250, 0x0000AA8B, ~0u}, {0x0F001264, 0, ~0u},
+    {0x0F100210, 0x80000000, 0x80000000}, {0x0F100228, 0x081205FF, ~0u}, {0x0F100328, 1, ~0u},
+    {0x0F10032C, 0xFFFFCFFF, ~0u}, {0x0F100330, 0x84848888, ~0u}, {0x0F100338, 0xDF, ~0u},
+    {0x0F100410, 0x11000016, ~0u}, {0x0F680500, 0x00011C01, ~0u}, {0x0F68050C, 0x000A0400, ~0u},
+    {0x80000340, 0xF0F0C0C0, ~0u}, {0x80000344, 0x00C00000, ~0u}, {0x8000035C, 0x04070000, ~0u},
+    {0x8000036C, 0x01230801, ~0u}, {0x80000804, 3, 0xFFFF},       {0x80000810, 0x8001, ~0u},
+    {0x8000084C, 0xFDDE, ~0u},     {0x80000884, 0x8001, ~0u},     {0x8000089C, 0x871CC707, ~0u},
+    {0x80000904, 1, 0xFFFF},       {0x80000914, 0xC001, ~0u},     {0x80000918, 0xC201, ~0u},
+    {0x8000F004, 7, 0xFFFF},       {0x8000F018, 0x00010100, 0xFFFFFF}, {0x8000F020, 0xFDF0FD00, ~0u},
+    {0x8000F024, 0xF7F0F000, ~0u}, {0x8000F04C, 1, ~0u},          {0x80010004, 7, 0xFFFF},
+    {0x80010010, 0xFD000000, ~0u}, {0x80010014, 0xF0000000, ~0u},
+};
+constexpr ULONG XCODE_RECORD = 0x2400, XCODE_RECORD_END = 0x2600, XCODE_RECORD_MAGIC = 0x4B484358, XCODE_RECORD_MAX = 60;
+
+static void BlCheckXcodeValues(ULONG Record) {
+    auto record = (volatile ULONG *)Record;
+    ULONG n = 0;
+    for (const auto &x : BlXcodeValues) {
+        ULONG v;
+        if (x.Address & 0x80000000) {
+            BlOut32(0xCF8, x.Address);
+            v = BlIn32(0xCFC);
+        } else {
+            v = BlNv(x.Address - 0x0F000000);
+        }
+        if ((v & x.Mask) != (x.Value & x.Mask) && n < XCODE_RECORD_MAX) {
+            record[2 + 2 * n] = x.Address;
+            record[3 + 2 * n] = v;
+            n++;
+        }
+    }
+    record[1] = n;
+    record[0] = XCODE_RECORD_MAGIC;
+}
+
 // The reference's TSC wait: end = start + Ticks (64-bit); stop when the high half passes the end's high half, or when
 // it is not below it and the low half has reached the end's low half.
 [[gnu::noinline]] static void BlTscWait(ULONG Ticks) {
@@ -222,6 +296,38 @@ static ULONG BlPadNibbles(ULONG Even, ULONG Odd) { // bytes Odd << 4 | Even, as 
     return v;
 }
 
+// Stores to NV2A registers that change the DRAM interface (drive, slew, delay, timing): from the first to the last of
+// them the CPU must not touch memory (spec/stock/21 §3.6a). Pairs is an {offset, value} array, all computed before.
+// In one asm block with interrupts off: wbinvd; a dry pass that runs the same loop and loads but stores nothing,
+// bringing its code and the array into the caches; the storing pass, which then runs from the caches only (no calls,
+// no stack).
+[[gnu::noinline]] static void BlWriteWindow(const ULONG *Pairs, ULONG Count) {
+    ULONG pass, index, value, offset;
+    __asm__ volatile("pushfl\n\t"
+                     "cli\n\t"
+                     "wbinvd\n\t"
+                     "xorl %[pass], %[pass]\n"
+                     "1:\n\t"
+                     "xorl %[index], %[index]\n"
+                     "2:\n\t"
+                     "movl 4(%[pairs],%[index],8), %[value]\n\t"
+                     "movl (%[pairs],%[index],8), %[offset]\n\t"
+                     "testl %[pass], %[pass]\n\t"
+                     "jz 3f\n\t"
+                     "movl %[value], (%[nv],%[offset])\n"
+                     "3:\n\t"
+                     "incl %[index]\n\t"
+                     "cmpl %[count], %[index]\n\t"
+                     "jb 2b\n\t"
+                     "incl %[pass]\n\t"
+                     "cmpl $2, %[pass]\n\t"
+                     "jb 1b\n\t"
+                     "popfl"
+                     : [pass] "=&r"(pass), [index] "=&r"(index), [value] "=&r"(value), [offset] "=&r"(offset)
+                     : [pairs] "r"(Pairs), [nv] "r"(0xFD000000u), [count] "m"(Count)
+                     : "memory", "cc");
+}
+
 // What the calibration measured and wrote, for the kernel's debug log (physical 0x2300, a free page at that point).
 struct BL_PAD_RESULT {
     ULONG Magic; // 'PADC' when the calibration ran, 'PADN' when the image has no table
@@ -261,41 +367,14 @@ struct BL_PAD_RESULT {
     ULONG val[9] = {BlPadNibbles(o[0], o[1]),   BlPadNibbles(o[2], o[3]),   BlPadNibbles(o[4], o[5]),
                     BlPadNibbles(o[6], o[7]),   BlPadNibbles(o[8], o[9]),   BlPadNibbles(o[10], o[11]),
                     BlPadNibbles(o[12], o[13]), BlPadNibbles(o[14], o[15]), v1214};
-    // The write window (spec/stock/21 §3.6a): the stores change the drive, slew and delay of the DRAM interface, so
-    // from the first to the last of them the CPU must not touch memory. Everything is computed first, into an
-    // {offset, value} array (a register whose value is 0 is not written; the reference then stores that 0 at NV2A
-    // offset 0 instead, its read-only identification register, which this keeps). Then, in one asm block with
-    // interrupts off: wbinvd; a dry pass that runs the same loop and loads but stores nothing, bringing its code
-    // and the array into the caches; the storing pass, which then runs from the caches only (no calls, no stack).
+    // The write window (BlWriteWindow). A register whose value is 0 is not written; the reference then stores that 0 at
+    // NV2A offset 0 instead, its read-only identification register, which this keeps.
     alignas(32) ULONG pairs[18];
     for (int i = 0; i < 9; i++) {
         pairs[2 * i] = val[i] ? reg[i] : 0;
         pairs[2 * i + 1] = val[i];
     }
-    ULONG pass, index, value, offset;
-    __asm__ volatile("pushfl\n\t"
-                     "cli\n\t"
-                     "wbinvd\n\t"
-                     "xorl %[pass], %[pass]\n"
-                     "1:\n\t"
-                     "xorl %[index], %[index]\n"
-                     "2:\n\t"
-                     "movl 4(%[pairs],%[index],8), %[value]\n\t"
-                     "movl (%[pairs],%[index],8), %[offset]\n\t"
-                     "testl %[pass], %[pass]\n\t"
-                     "jz 3f\n\t"
-                     "movl %[value], (%[nv],%[offset])\n"
-                     "3:\n\t"
-                     "incl %[index]\n\t"
-                     "cmpl $9, %[index]\n\t"
-                     "jb 2b\n\t"
-                     "incl %[pass]\n\t"
-                     "cmpl $2, %[pass]\n\t"
-                     "jb 1b\n\t"
-                     "popfl"
-                     : [pass] "=&r"(pass), [index] "=&r"(index), [value] "=&r"(value), [offset] "=&r"(offset)
-                     : [pairs] "r"(pairs), [nv] "r"(0xFD000000u)
-                     : "memory", "cc");
+    BlWriteWindow(pairs, 9);
     result->A = a;
     result->B = b;
     result->Strap = strap;
@@ -346,8 +425,34 @@ static void BlCopySplash(ULONG Bank) {
     record[2] = size;
 }
 
+// The GPU's memory interface settings (NV2A 0x10B0-0x10E8), as the X-codes write them, in their order. On some cold boots
+// some of them read other values when the 2BL starts, and the screen is then garbled: 0x10BC 0xFF885066 with every
+// line of text drawn as one glyph repeated to the screen edge, 0x10B0 / 0x10E8 with speckled textures
+// (spec/oxos-internal/26 §4). When any differs, the 2BL writes them all again, through the write window.
+static const ULONG BlMemoryInterface[] = {
+    0x10B0, 0x07633461, 0x10CC, 0x66660000, 0x10B8, 0xFFFF0000, 0x10D4, 9,          0x10B4, 0,          0x10BC, 0x5866,
+    0x10C4, 0x0351C858, 0x10C8, 0x30007D67, 0x10D8, 0,          0x10DC, 0xA0423635, 0x10E8, 0x0C6558C6,
+};
+constexpr ULONG MEMORY_INTERFACE_COUNT = sizeof(BlMemoryInterface) / 8;
+
+static void BlRestoreMemoryInterface() {
+    bool differ = false;
+    for (ULONG i = 0; i < MEMORY_INTERFACE_COUNT; i++)
+        differ |= BlNv(BlMemoryInterface[2 * i]) != BlMemoryInterface[2 * i + 1];
+    if (!differ)
+        return;
+    alignas(32) ULONG pairs[2 * MEMORY_INTERFACE_COUNT];
+    for (ULONG i = 0; i < 2 * MEMORY_INTERFACE_COUNT; i++)
+        pairs[i] = BlMemoryInterface[i];
+    BlWriteWindow(pairs, MEMORY_INTERFACE_COUNT);
+}
+
 extern "C" [[noreturn]] void BlMain() {
     BlPost(0x20);
+    BlCheckXcodeValues(XCODE_RECORD); // first: before the 2BL changes anything
+    BlRestoreMemoryInterface();
+    ((volatile ULONG *)NVPLL_RECORD)[0] = NVPLL_RECORD_MAGIC;
+    BlCheckGpuClock(1); // before the pad calibration, like the X-codes (the clock first, then the pads)
     // The reference 2BL's order (spec/stock/21 §2): device 1 register 0x80 byte 0 = 0x02 (a byte cycle), the SMC
     // challenge and SMC 0x01 = 0, device 1 register 0x8C = 0x40000000, the pad calibration, then the AGP/host steps.
     BlOut32(0xCF8, 0x80000000 | 1 << 11 | 0x80);
@@ -416,6 +521,8 @@ extern "C" [[noreturn]] void BlMain() {
     } else {
         ((volatile ULONG *)0x23D0)[0] = 0;
     }
+    BlCheckGpuClock(3);
+    BlCheckXcodeValues(XCODE_RECORD_END);
     BlPost(0x22);
     __asm__ volatile("fninit\n\t"
                      "movl %%cr4, %%eax\n\t"
