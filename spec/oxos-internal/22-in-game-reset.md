@@ -1,10 +1,10 @@
 # 22 — In-game reset (IGR)
 
 OXOS addition, implemented 2026-10-29. Code: `kernel/src/arch/igr.S` (`KeRaiseIrqlToDpcLevel`, `HalpIgrReturn`),
-`kernel/src/hal/igr.cpp` (`HalpIgrCheck`). Background: how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
+`kernel/src/hal/igr.cpp` (`HalpIgrCheck`, `HalpIgrReboot`). Background: how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
 
 Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title, reboots the console. The reboot is a
-cold one (`HalReturnToFirmware(HalRebootRoutine)`, the SMC reset), so:
+cold one, a power cycle through the SMC (§6), so:
 - a netbooted console asks the PC for its image again and starts what it serves (the title launcher);
 - a flashed console boots as from power-on (disc, else the dashboard, spec 19);
 - a mounted disc image (spec 16) is dropped.
@@ -48,8 +48,8 @@ BACK 0x20, BLACK 0x1000) is all set. That is Cerbios's IGRFULL default.
 Unlike Cerbios's IGRFULL, nothing is written to the SMC scratch register first: Cerbios writes 0x0C, and scratch bit
 0x08 makes the next cold boot start the dashboard (spec/stock/12, boot flag 0x80), not the netbooted title.
 
-`HalpIgrCheck` runs at the caller's IRQL after XInputGetState has lowered it again (passive for game threads), so the
-reboot goes through the SMC.
+`HalpIgrCheck` runs at the caller's IRQL after XInputGetState has lowered it again (passive for game threads). The
+reboot (§6) uses the polled SMBus, which works at any IRQL.
 
 ## 4. Limits
 - Only XDK titles: nxdk titles (the OXOS launchers, the FTP server) have their own USB code and are not covered.
@@ -62,3 +62,21 @@ reboot goes through the SMC.
 - xemu: Halo from its game folder: the hook line on serial, the main menu at 75 s (the return path works).
 - 1.4 console (Modxo, netboot): Halo from its folder; the combo pressed in game: `igr: LT RT BACK BLACK: reboot`,
   `HalReturnToFirmware(1)`, cold boot 2 s later, back to what netboot serves.
+
+## 6. The reboot: a power cycle (2026-11-04)
+`HalpIgrReboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08), retrying
+the SMBus write up to five times; if the console is still running two seconds later, `HalReturnToFirmware(1)`.
+- **Why not `HalReturnToFirmware(1)`** (until 2026-11-03): that is the reference reset, SMC 0x02 ← 1 and then port
+  0xCF9 ← 0x0E. Pressed while a test title was running, the next boot found 29 of the X-codes' GPU and memory
+  settings at their power-on values (the memory interface, the DRAM controller, pads, the GPU clock, DRAM refresh;
+  spec 26 §5): the RAM was sized as 128 MB with the wrong layout and the kernel stopped after the memory manager (the
+  front LED blinking green). From the dashboard the same reset worked 18 times out of 18, so it is the GPU being in use
+  when the reset comes. Port 0xCF9 alone does not reset this console at all (the kernel waits for ever).
+- A power cycle takes the GPU's power away, so the next boot is a cold boot like any other, which the 2BL's checks
+  cover (spec 26).
+- **Debug build option** `make REBOOT_TEST=N`: N seconds into every boot (also inside a title started by a quick
+  reboot) the kernel calls `HalpIgrReboot`, so the reboot can be tested in a loop without a controller.
+- **Tests (1.4 console, Modxo, netboot, REBOOT_TEST=30):** from the dashboard, 4 power cycles, each a cold boot back
+  into the dashboard about 3 s later; with a test title running (netbooted launcher, the reboot 30 s into the
+  game), 10 power cycles: every next boot a normal cold boot (64 MB, 0x11448000; 3-9 X-code settings differing at 2BL
+  start, the 2BL's usual cases), the test title loaded and running again each time.
