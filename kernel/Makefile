@@ -216,8 +216,9 @@ bios-256k: $(BUILD)/bios-256k.bin
 
 # A release, in order, stopping at the first failure: every host unit test (tools/unit-tests.sh), the release
 # images (1 MB and 256 KB, no self-tests, no serial log), the dashboard test on them (make test-dash), and a check
-# that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also copies them to build/release/dist/ as
-# bios_vX.Y.Z.bin and bios_vX.Y.Z_256k.bin, with their SHA-256. SKIP_TESTS=1 skips the unit tests and the dashboard
+# that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also packs the release file
+# build/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin and the title patches
+# (title-patches/title-patches.ini), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
 # test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
@@ -225,10 +226,13 @@ release:
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/bios-256k.bin
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test-dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios-256k.bin
-	$(if $(VERSION),mkdir -p $(RELEASE_BUILD)/dist && \
+	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
 	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
 	    cp $(RELEASE_BUILD)/bios-256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
-	    cd $(RELEASE_BUILD)/dist && sha256sum bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin)
+	    cp title-patches/title-patches.ini $(RELEASE_BUILD)/dist/title-patches.ini && \
+	    cd $(RELEASE_BUILD)/dist && \
+	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin title-patches.ini && \
+	    sha256sum oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin title-patches.ini)
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
 # kernel at every power-on and boots its own (a serial-log build) when no PC answers.
