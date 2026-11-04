@@ -119,6 +119,8 @@ extern "C" void XkBootMarksDone() {
 // is up (KiReportRefresh).
 static ULONG KiRefreshFoundOff = 0xFFFFFFFF; // the value found when refresh was off at entry (0xFFFFFFFF: it was on)
 static ULONG KiRefreshBootFix[4];            // start.S's record ('RFS0', value), the 2BL's record ('RFEN', value)
+static ULONG KiGpuClockRecord[5]; // the 2BL's GPU clock record (boot/bl.cpp, physical 0x23E0)
+static ULONG KiXcodeRecord[2][2 + 2 * 60]; // the 2BL's X-code checks (boot/bl.cpp BlCheckXcodeValues, 0x2400, 0x2600)
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     {
@@ -184,6 +186,11 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 
     for (int i = 0; i < 4; i++) // the boot loader's refresh records (boot/start.S at 0x23D8, boot/bl.cpp at 0x23D0)
         KiRefreshBootFix[i] = quick ? 0 : ((volatile ULONG *)0x800023D0)[i < 2 ? i + 2 : i - 2];
+    for (int i = 0; i < 5; i++) // boot/bl.cpp's GPU clock record at 0x23E0
+        KiGpuClockRecord[i] = quick ? 0 : ((volatile ULONG *)0x800023E0)[i];
+    for (ULONG r = 0; r < 2; r++)
+        for (ULONG i = 0; i < sizeof(KiXcodeRecord[0]) / 4; i++)
+            KiXcodeRecord[r][i] = quick ? 0 : ((volatile ULONG *)(0x80002400 + 0x200 * r))[i];
     for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
         KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
     HalpTakeSplashRecord(quick); // boot/bl.cpp's splash record at 0x2380, before the memory manager
@@ -291,6 +298,27 @@ static void KiReportRefresh() {
         XK_SERIAL("*** refresh: the 2BL found DRAM refresh off before the kernel (PFB 0x100210 %08lx) and set it\n", r[3]);
     if (KiRefreshFoundOff != 0xFFFFFFFF)
         XK_SERIAL("*** refresh: DRAM refresh was off at kernel entry (PFB 0x100210 %08lx); set\n", KiRefreshFoundOff);
+    // The GPU core clock (boot/bl.cpp BlCheckGpuClock): NVPLL and the PLL select as the X-codes write them, unless the
+    // 2BL had to put them back.
+    [[maybe_unused]] const ULONG *g = KiGpuClockRecord;
+    if (g[0] == 0x4C50564E) { // 'NVPL'
+        if (g[1] != 0x00011C01 || g[2] != 0x000A0400 || g[3] != 0x00011C01 || g[4] != 0x000A0400)
+            XK_SERIAL("*** gpu clock: NVPLL %08lx select %08lx at 2BL start, %08lx %08lx before the kernel; the 2BL set "
+                      "00011c01 000a0400\n", g[1], g[2], g[3], g[4]);
+        else
+            XK_SERIAL("gpu clock: NVPLL 00011c01 select 000a0400\n");
+    }
+    // The 2BL's checks of the X-codes' settings (at its start, and before the kernel): the registers that did not hold
+    // the value written.
+    for (ULONG r = 0; r < 2; r++) {
+        [[maybe_unused]] const ULONG *x = KiXcodeRecord[r];
+        [[maybe_unused]] const char *when = r ? "before the kernel" : "at 2BL start";
+        if (x[0] != 0x4B484358) // 'XCHK'
+            continue;
+        XK_SERIAL("xcodes: %lu settings differ %s\n", x[1], when);
+        for (ULONG i = 0; i < x[1] && i < 60; i++)
+            XK_SERIAL("xcodes: %s: %08lx reads %08lx\n", when, x[2 + 2 * i], x[3 + 2 * i]);
+    }
 }
 
 // NV2A memory pad registers (debug log): the X-codes set them; read at two points to see whether they change.
