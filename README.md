@@ -17,6 +17,7 @@ PC-formatted exFAT SSD (sound on).*
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
+- **Title compatibility patching:** per-Title fixes from an editable `title-patches.ini`, applied as the title loads.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
 - **Saves and System Link with stock consoles:** titles get the same save-signature and System Link keys as on a
   stock console, so saves move between them and System Link games play together.
@@ -28,13 +29,15 @@ PC-formatted exFAT SSD (sound on).*
 
 ## Try it
 **In xemu** (nothing to build, no Microsoft files):
-1. Install [xemu](https://xemu.app) and **[download the latest OXOS release](https://github.com/kooscode/oxos/releases/latest)**.
+1. Install [xemu](https://xemu.app) and **[download the latest OXOS release](https://github.com/kooscode/oxos/releases/latest)**
+   (`oxos_vX.Y.Z.zip`: the 1 MB and 256 KB BIOS images and `title-patches.ini`) and unzip it.
 2. In *Machine → Settings → System*, set *Flash (BIOS) File* to `bios_vX.Y.Z.bin` and leave *MCPX Boot ROM File*
    empty.
 3. Use the free [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk (`xbox_hdd.qcow2`) or your own
    Xbox disk image as the hard disk, and start the machine.
 
-**On a console:** flash `bios_vX.Y.Z_256k.bin` to a 256 KB modchip bank (or the 1 MB image to a 1 MB bank). So far
+**On a console:** flash `bios_vX.Y.Z_256k.bin` to a 256 KB modchip bank (or the 1 MB image to a 1 MB bank), and copy
+`title-patches.ini` to `C:\OXOS\title-patches.ini` for the per-title fixes. So far
 OXOS is tested on one 1.4 console; reports from other revisions are welcome in the
 [issues](https://github.com/kooscode/oxos/issues).
 

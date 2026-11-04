@@ -50,7 +50,7 @@ make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset 
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images, make test-dash;
-                                # VERSION copies them to build/release/dist/bios_vX.Y.Z{,_256k}.bin with SHA-256
+                                # VERSION packs build/release/dist/oxos_vX.Y.Z.zip (both images + title-patches.ini)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run-stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
@@ -230,9 +230,11 @@ the boot tests; console = checked on the 1.4 console.
 | 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test-memory`): more free memory than stock |
 | 25 | Dashboard choice: EvoX when installed, else the Xbox dashboard | oxos/19 | ✅ xemu (`test-dash`) |
 | 26 | DRAM refresh check before the kernel runs | oxos/20, oxos/21 | ✅ console: 0 bad boots in 56 (8 in 40 before) |
-| 27 | In-game reset: LT + RT + BACK + BLACK | oxos/22 | ✅ xemu, console |
+| 27 | In-game reset: LT + RT + BACK + BLACK, a power cycle through the SMC | oxos/22 | ✅ xemu, console |
 | 28 | Large FATX disks: F:/G: from a PARTINFO table, else Cerbios's layout | cerbios/03 | ✅ console: 2 TB XBPartitioner disk |
 | 29 | exFAT on a whole disk (no partition table); main boot region repaired from the backup | oxos/05 §2a | ✅ xemu; console: 2 TB drive |
+| 30 | Title compatibility: physical sort key, D: sector size, title patches from `C:\OXOS\title-patches.ini`, video overlay stopped at each title switch | oxos/25 | ✅ unit tests, xemu (`test`); console |
+| 31 | GPU start-up settings (clock, memory interface) checked and restored by the 2BL | oxos/26 | ✅ console: every cold boot's dashboard drawn correctly |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
