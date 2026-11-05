@@ -5,7 +5,8 @@
 //   /F/games     F:\games (\Device\Harddisk0\Partition6\games)
 //
 // Commands: USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE
-// REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot) and SITE POWEROFF.
+// REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF and
+// SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does).
 // RNTO moves a file or folder to another folder of the same drive. Passive data ports are lwIP's 49152-65535.
 // The address (DHCP, else 192.168.1.223) is on the screen and, with a SERIAL=1 kernel, on the debug serial port.
 // BACK on any controller reboots the console (as SITE REBOOT).
@@ -19,6 +20,7 @@
 
 #include <hal/debug.h>
 #include <hal/video.h>
+#include <hal/xbox.h>
 #include <usbh_lib.h>
 #include <xid_driver.h>
 #include <lwip/sockets.h>
@@ -565,6 +567,40 @@ struct Session {
         }
     }
 
+    // SITE LAUNCH: an XBE, or a folder whose default.xbe is started (an ISO's folder holds the ISO launcher as
+    // default.xbe). The title starts through the launch data page and a quick reboot, as a dashboard starts it;
+    // the reply goes out first, since the connection ends with the server.
+    void Launch(const std::string &arg) {
+        Parts p;
+        if (arg.empty() || !Path(arg, p) || p.empty()) {
+            Reply(501, "SITE LAUNCH /F/path/default.xbe (or a folder holding a default.xbe)");
+            return;
+        }
+        Info info = Stat(p);
+        if (info.exists && info.directory) {
+            p.push_back("default.xbe");
+            info = Stat(p);
+        }
+        std::string name = p.back();
+        for (char &c : name)
+            if (c >= 'a' && c <= 'z')
+                c &= ~0x20;
+        if (!info.exists || info.directory) {
+            Reply(550, "%s: no such XBE", FtpPath(p).c_str());
+            return;
+        }
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".XBE") != 0) {
+            Reply(550, "%s is not an XBE", FtpPath(p).c_str());
+            return;
+        }
+        std::string path = NtPath(p);
+        Reply(200, "Launching %s", FtpPath(p).c_str());
+        Log("%s: launch %s", peer, FtpPath(p).c_str());
+        Sleep(300); // let the reply reach the client
+        XLaunchXBE(path.c_str());
+        Log("launch FAILED: %s", path.c_str()); // only returns on failure; the reply has gone out
+    }
+
     void Command(const std::string &line) {
         std::size_t sp = line.find(' ');
         std::string verb = line.substr(0, sp), arg = sp == std::string::npos ? "" : line.substr(sp + 1);
@@ -705,10 +741,13 @@ struct Session {
         } else if (verb == "ABOR")
             Reply(226, "Nothing to abort");
         else if (verb == "SITE") {
-            std::string what = arg;
+            std::size_t gap = arg.find(' ');
+            std::string what = arg.substr(0, gap), rest = gap == std::string::npos ? "" : arg.substr(gap + 1);
             for (char &c : what)
                 c &= ~0x20;
-            if (what == "REBOOT") {
+            if (what == "LAUNCH")
+                Launch(rest);
+            else if (what == "REBOOT") {
                 Reply(200, "Rebooting");
                 Log("%s: reboot", peer);
                 HalReturnToFirmware(HalRebootRoutine);
@@ -717,7 +756,7 @@ struct Session {
                 Log("%s: power off", peer);
                 HalInitiateShutdown();
             } else {
-                Reply(504, "SITE REBOOT or SITE POWEROFF");
+                Reply(504, "SITE LAUNCH PATH, SITE REBOOT or SITE POWEROFF");
             }
         } else
             Reply(502, "%s not implemented", verb.c_str());

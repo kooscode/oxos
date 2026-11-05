@@ -31,6 +31,11 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   4 GB or split them (`tools/oxos-isonator --split`), or copy big images with the disk on a PC.
 - **SITE REBOOT** restarts the console (cold); **SITE POWEROFF** turns it off. In a client:
   `curl ftp://ADDR/ -Q 'SITE POWEROFF'`.
+- **SITE LAUNCH PATH** starts a title, as a dashboard does (launch data page and a quick reboot), so a title can be
+  copied over and started without touching the console. PATH is an `.xbe`, or a folder whose `default.xbe` is
+  started (an ISO's folder holding the ISO launcher as `default.xbe` starts the ISO); absolute, or relative to
+  the current folder. The server answers `200 Launching ...` and then stops, with the title:
+  `curl ftp://ADDR/ -Q 'SITE LAUNCH /F/Applications/demo'`.
 - **BACK** on any controller restarts the console as SITE REBOOT does (a netbooted console then starts what the PC
   serves, e.g. the title launcher).
 - **Network:** DHCP; with no answer in 10 s the fixed address 192.168.1.223/24. Passive data ports are 49152-65535
