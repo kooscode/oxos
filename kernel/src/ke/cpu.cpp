@@ -82,7 +82,15 @@ void InitFaultTss(KTSS &tss, void (*entry)(), UCHAR *stack) {
 // was in CMOS (reported at the next boot), so a fault cascade does not just stop the console without a trace.
 extern "C" void KiSaveFaultTaskLastWords(ULONG vector, ULONG eip);
 
-extern "C" void KiFaultTaskReport(ULONG Kind) { KiSaveFaultTaskLastWords(Kind, KiTss.Eip); }
+// After the task's POST code (0xDF or 0xD2), the interrupted eip (4 bytes, low first) and esp (bytes 1-3) go to port
+// 0x80 too: a POST display or the Modxo's bus log then shows where it stopped on every build, not only a serial one.
+extern "C" void KiFaultTaskReport(ULONG Kind) {
+    KiSaveFaultTaskLastWords(Kind, KiTss.Eip);
+    for (int i = 0; i < 4; i++)
+        post((UCHAR)(KiTss.Eip >> (8 * i)));
+    for (int i = 1; i < 4; i++)
+        post((UCHAR)(KiTss.Esp >> (8 * i)));
+}
 
 extern "C" void KiDoubleFaultTask();
 extern "C" void KiNmiTask();

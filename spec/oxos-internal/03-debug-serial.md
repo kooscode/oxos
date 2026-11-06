@@ -65,6 +65,11 @@ register 0x08 is the sequence (bits 7–4 red, 3–0 green, one bit per quarter 
 - A stage that never ends shows where a boot stops: the slow blink means the kernel never started (inflate or entry),
   the fast blink that it stopped before the title launch (the serial log tells where).
 
+### 6a. A double fault or NMI on the POST port (every build, 2026-11-06)
+The double-fault and NMI tasks write 0xDF or 0xD2 to port 0x80, then the interrupted eip (4 bytes, low byte first) and
+bytes 1-3 of its esp. A POST display or the Modxo's bus log (its last eight I/O writes) then shows where a release
+kernel stopped, which otherwise leaves only the CMOS record that a serial build prints at the next boot.
+
 ## 7. Network log (removed 2026-10-28)
 From 2026-10-22 to 2026-10-28 `NETLOG=1` builds also sent the serial log as UDP broadcasts (port 5140), with a
 heartbeat thread, an on-screen copy over the splash, a log file on E: once a title took the NIC, and hardware-breakpoint
