@@ -244,6 +244,8 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 ## Known deviations (tracked)
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Only 64 MB RAM is supported, like the 4627 kernel.
+- `HalReturnToFirmware` resets through the SMC alone and writes port 0xCF9 only if the console is still running two
+  seconds later; the reference writes 0xCF9 at once (`../spec/oxos-internal/22-in-game-reset.md` §7).
 - IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used
   and the SMBus is polled.
 - exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster

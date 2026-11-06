@@ -80,3 +80,13 @@ the SMBus write up to five times; if the console is still running two seconds la
   into the dashboard about 3 s later; with a test title running (netbooted launcher, the reboot 30 s into the
   game), 10 power cycles: every next boot a normal cold boot (64 MB, 0x11448000; 3-9 X-code settings differing at 2BL
   start, the 2BL's usual cases), the test title loaded and running again each time.
+
+## 7. Ordinary reboots: the SMC's reset alone (2026-11-06)
+`HalReturnToFirmware(1)` and the other non-quick routines ask the SMC to reset the console (register 0x02 ← 1, polled,
+up to five tries, at any IRQL), wait up to two seconds, and only then write port 0xCF9 ← 0x0E. The reference writes
+0xCF9 right after the SMC request (and skips the SMC at DISPATCH_LEVEL and above). The chipset then restarts and runs
+the X-codes at once, while the SMC's reset arrives later over the SMBus.
+- **Measured** (FTP server's `SITE REBOOT` in a loop): with the reference order 4 of 40 warm reboots lost every X-code
+  setting; with the SMC alone 1 of 38. That one reset came within 0.1 s of the request, so the remaining cause was the
+  GPU leaving reset late. The X-codes now wait for it (spec 27); with both, 30 of 30 and the 100-boot run of spec 27
+  §3.
