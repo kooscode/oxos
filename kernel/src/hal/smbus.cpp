@@ -270,8 +270,15 @@ XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     if (Routine != 2) {
         if (Routine == 4)
             HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, 2);
-        if (KeGetCurrentIrql() < DISPATCH_LEVEL)
-            HalWriteSMBusValue(SMC_ADDRESS, SMC_RESET, FALSE, 1);
+        // OXOS: the SMC's reset alone, and port 0xCF9 only if the SMC has not reset the console within two seconds. The
+        // reference writes 0xCF9 right after the SMC request: the chipset then restarts and runs the X-codes at once,
+        // and the SMC's reset, which arrives later over the SMBus, can undo their GPU and memory set-up (1 warm reboot
+        // in 10 on the 1.4 test console: every X-code setting at its power-on value, the next boot stopped;
+        // spec/oxos-internal/22 §7). The SMBus is polled, so the request works at any IRQL.
+        for (int i = 0; i < 5 && !NT_SUCCESS(HalWriteSMBusValue(SMC_ADDRESS, SMC_RESET, FALSE, 1)); i++) {
+        }
+        for (ULONG ms = 0; ms < 2000; ms++)
+            KeStallExecutionProcessor(1000);
         outb(0xCF9, 0x0E); // full reset through the reset control register
         for (;;)
             ;
