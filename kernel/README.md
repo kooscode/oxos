@@ -173,12 +173,14 @@ Microsoft's 2BL and keys: do not distribute it.
 - **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and
   EEPROM key handling of [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs
   Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without any Microsoft key; without a boot ROM
-  (xemu), our reset code runs the same X-codes. The hard disk unlocks with Cromwell's EEPROM key states.
+  (xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back checks to their memory set-up
+  writes, which some consoles' GPU ignores (spec/oxos-internal/27). The hard disk unlocks with Cromwell's EEPROM key
+  states.
 
 ## Layout
 | path | contents |
 |---|---|
-| `boot/` | the open image's X-code wrapper (Cromwell's table), reset code and 2BL (spec 01 §5) |
+| `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5) |
 | `src/arch/` | entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as) |
 | `src/ke/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads, scheduler, waits, bug checks; the boot self-tests (`selftest*.cpp`, self-test build only) |
 | `src/hal/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, AV (video modes), network PHY, boot splash, debug serial port (spec/oxos-internal/03-debug-serial.md) |

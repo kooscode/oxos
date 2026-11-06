@@ -121,6 +121,7 @@ XBAPI void NTAPI HalpIgrReboot();
 static ULONG KiRefreshFoundOff = 0xFFFFFFFF; // the value found when refresh was off at entry (0xFFFFFFFF: it was on)
 static ULONG KiRefreshBootFix[4];            // start.S's record ('RFS0', value), the 2BL's record ('RFEN', value)
 static ULONG KiGpuClockRecord[5]; // the 2BL's GPU clock record (boot/bl.cpp, physical 0x23E0)
+static ULONG KiXcodeEntryRecord[9]; // boot/start.S's snapshot right after the X-codes (serial builds, physical 0x2340)
 static ULONG KiXcodeRecord[2][2 + 2 * 60]; // the 2BL's X-code checks (boot/bl.cpp BlCheckXcodeValues, 0x2400, 0x2600)
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
@@ -187,6 +188,10 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 
     for (int i = 0; i < 4; i++) // the boot loader's refresh records (boot/start.S at 0x23D8, boot/bl.cpp at 0x23D0)
         KiRefreshBootFix[i] = quick ? 0 : ((volatile ULONG *)0x800023D0)[i < 2 ? i + 2 : i - 2];
+    for (int i = 0; i < 9; i++) // boot/start.S's X-code snapshot at 0x2340 (serial builds)
+        KiXcodeEntryRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002340)[i];
+    if (!quick)
+        ((volatile ULONG *)0x80002340)[0] = 0; // a later boot loader without the snapshot leaves no stale record
     for (int i = 0; i < 5; i++) // boot/bl.cpp's GPU clock record at 0x23E0
         KiGpuClockRecord[i] = quick ? 0 : ((volatile ULONG *)0x800023E0)[i];
     for (ULONG r = 0; r < 2; r++)
@@ -323,6 +328,12 @@ static void KiReportRefresh() {
         else
             XK_SERIAL("gpu clock: NVPLL 00011c01 select 000a0400\n");
     }
+    // boot/start.S's snapshot of the settings that get lost on some cold boots, taken before any OXOS code ran
+    // (spec/oxos-internal/27 §4).
+    [[maybe_unused]] const ULONG *e = KiXcodeEntryRecord;
+    if (e[0] == 0x53304358) // 'XC0S'
+        XK_SERIAL("xcodes at entry: 10b0 %08lx 10bc %08lx 10e8 %08lx nvpll %08lx select %08lx refresh %08lx 100200 %08lx "
+                  "100204 %08lx\n", e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]);
     // The 2BL's checks of the X-codes' settings (at its start, and before the kernel): the registers that did not hold
     // the value written.
     for (ULONG r = 0; r < 2; r++) {

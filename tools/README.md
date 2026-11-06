@@ -34,6 +34,7 @@ give the details), and nxdk console apps (built with `make -C kernel <name>`).
 | Tool | What it does |
 |---|---|
 | `mkbios.py` | Packs the kernel into a 1 MB BIOS image: our 2BL, reset code and Cromwell's X-codes (`--open`, the default build), or into your own BIOS's layout (`--base`). Compresses the kernel with `lzx.py` and adds the boot splash: a 640x480 256-colour PNG as it is, any other picture converted with Pillow (`--save-splash` keeps the converted PNG). |
+| `harden_xcodes.py` | Adds write checks to the X-code program in the built X-code bank: waits for the GPU to take its first write, and reads back and repeats each memory set-up write once, moving every jump to its original target ([spec 27](../spec/oxos-internal/27-xcode-write-checks.md)). |
 | `lzx.py` | The LZX compressor (and a small decoder for self-checks) for the kernel stream the 2BL unpacks at boot. |
 | `gen_def.py` | Generates the kernel's export `.def` file from `kernel/exports.tsv`: every function and variable at its ordinal (variables as data exports); the two debugger-only rows are kept in the table but not exported. |
 | `gen_av_tables.py` | Writes the video encoder tables (`kernel/src/hal/av_modes.inc`) from the encoder specs `spec/stock/18-conexant-encoder.md`, `19-focus-encoder.md` and `20-xcalibur-encoder.md` (their register maps), with the NV2A timing of each SD row derived from the encoder's own settings (`spec/oxos-internal/02-display-modes.md` §1). `--out FILE` writes the tables; `--check FILE` fails if FILE is stale. |
