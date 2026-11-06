@@ -696,20 +696,27 @@ static void IdexCdRomReset() {
 // Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
 // 4 IDENTIFY PACKET). Called at the channel's IRQL. A drive that answers but is not ready yet (a DVD drive still
 // starting up when the boot is fast) is reset and tried again, for about 30 s in all (the reference's busy wait).
-[[maybe_unused]] static ULONG IdexCdRomStart() {
+// Waits for device 1 to be ready for its first command: 0, or why there is no drive (1 nothing on the bus, 2 still
+// busy after 30 s). Runs at the caller's IRQL (OXOS: the reference waits raised), so the boot splash and jingle keep
+// running while a drive starts up; it only reads the alternate status. Its limits follow the clock, as other threads
+// take the processor meanwhile.
+static ULONG IdexCdRomWaitReady() {
     outb(IDE_DRIVE, 0xB0);
     KeStallExecutionProcessor(1);
     UCHAR st = inb(IDE_ALT_STATUS);
     if (st == 0xFF || st == 0x7F) // nothing drives the bus for device 1 (floating, or only the host's pull-down on DD7)
         return 1;
-    ULONG tries = 0;
-    while (!IdexWaitForStatus(IDE_STATUS_BSY, 0, 50000))
-        if (++tries == 600)
+    const ULONGLONG start = KeQueryInterruptTime();
+    auto elapsedMs = [&] { return (ULONG)((KeQueryInterruptTime() - start) / 10000); };
+    while (inb(IDE_ALT_STATUS) & IDE_STATUS_BSY) {
+        if (elapsedMs() >= 30000)
             return 2;
+        KeStallExecutionProcessor(10);
+    }
     // A drive still starting up (a fast boot: the DVD drive spins up for seconds after power-on) reads back a
     // status without DRDY, or a floating pattern (0x3F / 0x7F / 0xFF): wait up to 10 s for it to be ready before
     // the first command, instead of failing the transfer-mode command and taking the no-drive path.
-    for (ULONG ms = 0; ms < 10000; ms += 10) {
+    for (const ULONG ready = elapsedMs(); elapsedMs() - ready < 10000;) {
         UCHAR s = inb(IDE_ALT_STATUS);
         if (s == 0) // nothing answers (device 0 reads back 0 for an absent device 1)
             break;
@@ -717,6 +724,13 @@ static void IdexCdRomReset() {
             break;
         KeStallExecutionProcessor(10000);
     }
+    return 0;
+}
+
+// The drive's IDENTIFY, tried three times (at the IDE interrupt's IRQL): 0, or the step that failed.
+static ULONG IdexCdRomStart() {
+    outb(IDE_DRIVE, 0xB0);
+    KeStallExecutionProcessor(1);
     ULONG step = 0;
     for (int attempt = 0; attempt < 3; attempt++) {
         step = IdexCdRomIdentify();
@@ -735,8 +749,9 @@ static void IdexCdRomReset() {
 // \Device\CdRom0, because every title's start-up links D: to it, but the device acts as an empty drive: reads and
 // drive commands fail with STATUS_NO_MEDIA_IN_DEVICE without touching the bus, so the dashboard starts.
 void IdexCdRomInit() {
+    ULONG reason = IdexCdRomWaitReady();
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
-    IdexCdRomAbsentReason = IdexCdRomStart();
+    IdexCdRomAbsentReason = reason ? reason : IdexCdRomStart();
     if (IdexCdRomAbsentReason) {
         // The disk again. A busy device ignores the device-select register, so device 1 was reset (and waited for)
         // above; wait for the disk to be idle too before the next request (bounded).

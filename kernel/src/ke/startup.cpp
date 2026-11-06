@@ -240,14 +240,16 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     AvInit();
     if (!quick)
         HalpSmcInitColdBoot();
+    // The splash (and its jingle) before the IDE set-up: a hard disk or DVD drive can take seconds to spin up after
+    // power-on, and the drive waits run at this thread's IRQL, so the splash shows meanwhile (spec/oxos-internal/00).
+    if (!quick)
+        HalpStartSplash();
+    XK_SERIAL("boot: splash started\n");
     KiBootStep("IDE");
     IdexChannelInit();
     XK_SERIAL("boot: IDE done\n");
     HalpSmcStartEvents();
     XK_SERIAL("boot: SMC events started\n");
-    if (!quick)
-        HalpStartSplash();
-    XK_SERIAL("boot: splash started\n");
 
 #if XK_BOOT_SELFTEST
     if (!quick)

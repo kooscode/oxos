@@ -729,24 +729,31 @@ void IdexDiskCountPowerCycle() {
 volatile UCHAR IdexDiskLastStatus; // diagnostics: the disk's status register when its start-up wait ended
 
 void IdexDiskInit() {
-    KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     outb(IDE_DRIVE, 0xA0);
-    // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviation: a disk that is
-    // no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as XboxDev/cromwell
-    // does; some drives and SATA bridges only set DRDY once they have seen a command. Only a disk still busy after
-    // 30 s is fatal error 7.
-    for (ULONG tries = 0;; tries++) {
-        if (IdexWaitForStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 50000))
-            break;
+    // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviations:
+    // - a disk that is no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as
+    //   XboxDev/cromwell does; some drives and SATA bridges only set DRDY once they have seen a command. Only a disk
+    //   still busy after 30 s is fatal error 7;
+    // - the wait runs at the caller's IRQL (the reference raises first), so the boot splash and jingle keep running
+    //   while a hard disk spins up; it only reads the alternate status, and the interrupt handler only acknowledges
+    //   an interrupt nobody expects. Its limits follow the clock, as other threads take the processor meanwhile.
+    const ULONGLONG start = KeQueryInterruptTime();
+    for (;;) {
         UCHAR st = inb(IDE_ALT_STATUS);
-        if (!(st & IDE_STATUS_BSY) && tries >= 20)
+        if ((st & (IDE_STATUS_BSY | IDE_STATUS_DRDY)) == IDE_STATUS_DRDY)
             break;
-        if (tries == 600) {
+        ULONG ms = (ULONG)((KeQueryInterruptTime() - start) / 10000);
+        if (!(st & IDE_STATUS_BSY) && ms >= 1000)
+            break;
+        if (ms >= 30000) {
             IdexDiskLastStatus = st;
             XK_SERIAL("disk: not ready after 30 s, status %#x\n", st);
             IdexFatalError(7);
         }
+        KeStallExecutionProcessor(10);
     }
+    XK_SERIAL("disk: ready after %lu ms\n", (ULONG)((KeQueryInterruptTime() - start) / 10000));
+    KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     IdexDiskLastStatus = inb(IDE_ALT_STATUS);
     if (!IdexDiskCommand(0xEF, 0x03, 0x0C) || !IdexDiskCommand(0xEF, 0x03, 0x42)) // PIO 4, UDMA 2
         IdexFatalError((IdexDiskLastStatus = inb(IDE_ALT_STATUS), 9));

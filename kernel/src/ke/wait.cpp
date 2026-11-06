@@ -228,6 +228,14 @@ XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason
         PLARGE_INTEGER remaining = timeout.present ? timeout.Remaining() : nullptr;
         if (remaining && remaining->QuadPart == 0)
             return KiFinishWait(t, STATUS_TIMEOUT);
+        // The boot thread is the idle thread until start-up ends and may not block (KiSwapThread): it polls instead.
+        // Every other thread has a higher priority, so the one holding the object (the splash thread's SMBus or
+        // EEPROM lock during the drive set-up) runs meanwhile, once the IRQL is down.
+        if (t == Prcb.IdleThread && t->WaitIrql < DISPATCH_LEVEL) {
+            KiUnlockDispatcherDatabase(t->WaitIrql);
+            KeStallExecutionProcessor(10);
+            continue;
+        }
 
         KWAIT_BLOCK wb;
         wb.Thread = t;
