@@ -22,6 +22,27 @@ _start:
     // starts zeroed as a Microsoft BIOS leaves it (titles' USB library keeps its state there).
     movl %eax, 0
     movl %eax, 4
+#if XK_XCODE_ENTRY_SNAPSHOT
+    // Debug (spec/oxos-internal/27 §4): the X-code settings that get lost on some cold boots, read before anything else
+    // runs, kept in MMX registers until the memory is sized, then stored at physical 0x2340 for the kernel's log.
+    movl 0xFD0010B0, %eax
+    movd %eax, %mm0
+    movl 0xFD0010BC, %eax
+    movd %eax, %mm1
+    movl 0xFD0010E8, %eax
+    movd %eax, %mm2
+    movl 0xFD680500, %eax
+    movd %eax, %mm3
+    movl 0xFD68050C, %eax
+    movd %eax, %mm4
+    movl 0xFD100210, %eax
+    movd %eax, %mm5
+    movl 0xFD100200, %eax
+    movd %eax, %mm6
+    movl 0xFD100204, %eax
+    movd %eax, %mm7
+    xorl %eax, %eax
+#endif
 #if XK_MCPX_DUMP
     // MCPX ROM dumper (spec/oxos-internal/12-mcpx-dump.md): entered through the TEA (MCPX 1.1) or RC4 (1.0) attack
     // instead of the overflow trick, the boot ROM is still mapped over the top 512 bytes: copy them to RAM 0x2000 and
@@ -147,6 +168,18 @@ _start:
     andl $0x9FFFFFFF, %eax
     movl %eax, %cr0
 
+#if XK_XCODE_ENTRY_SNAPSHOT
+    movl $0x53304358, 0x2340                // 'XC0S'
+    movd %mm0, 0x2344
+    movd %mm1, 0x2348
+    movd %mm2, 0x234C
+    movd %mm3, 0x2350
+    movd %mm4, 0x2354
+    movd %mm5, 0x2358
+    movd %mm6, 0x235C
+    movd %mm7, 0x2360
+    emms
+#endif
 4:
     movl $0x003FFFF0, %esp
     // Copy the C part (.text/.rodata/.data) to RAM and clear its .bss.

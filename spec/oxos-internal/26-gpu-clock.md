@@ -79,6 +79,7 @@ rewrites them), 0x1228 (left by the calibration's measurement), and at 2BL start
 0x100328, 0x100338 on some boots, with no visible fault.
 
 ## 4. Open
-- Why X-code settings do not hold on some cold boots (the GPU clock, the memory interface, DRAM refresh in spec 20),
-  on this console with this boot chain; with Cerbios on the same console no slow or garbled boot was ever seen.
+- Why X-code settings do not hold on some cold boots (the GPU clock, the memory interface, DRAM refresh in spec 20):
+  the NV2A ignores the writes during the X-codes (measured 2026-11-06, spec 27); the X-codes now check and repeat the
+  memory set-up writes. The GPU clock is still repaired here only.
 - A 1.6 console (Xcalibur) uses the same X-code values; not checked on one.

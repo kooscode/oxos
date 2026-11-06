@@ -172,7 +172,7 @@ OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
-              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) \
+              $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) -DXK_XCODE_ENTRY_SNAPSHOT=$(SERIAL) \
               -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 BOOT := $(BUILD)/boot
 
@@ -193,10 +193,12 @@ $(BUILD)/ucode.inc: $(UCODE_FILES) $(UCODE_DIR)/SHA256SUMS $(ROOT)/tools/mkucode
 $(BUILD)/ke/cpu.obj: $(BUILD)/ucode.inc
 $(BUILD)/ke/cpu.obj: CXXFLAGS += -I$(BUILD)
 
-$(BOOT)/xcodes.bin: boot/xcodes.S boot/padcal_table.inc $(CROMWELL_DIR)/boot_rom/Xcodes.h
+# Cromwell's X-codes, then write checks on the memory set-up (tools/harden_xcodes.py, spec/oxos-internal/27).
+$(BOOT)/xcodes.bin: boot/xcodes.S boot/padcal_table.inc $(CROMWELL_DIR)/boot_rom/Xcodes.h $(ROOT)/tools/harden_xcodes.py
 	@mkdir -p $(dir $@)
 	$(CC) $(BOOT_FLAGS) -I$(CROMWELL_DIR)/boot_rom -Iboot -c $< -o $(BOOT)/xcodes.o
-	$(OBJCOPY) -O binary -j .xcodes $(BOOT)/xcodes.o $@
+	$(OBJCOPY) -O binary -j .xcodes $(BOOT)/xcodes.o $(BOOT)/xcodes-cromwell.bin
+	python3 -I $(ROOT)/tools/harden_xcodes.py $(BOOT)/xcodes-cromwell.bin $@
 
 $(BOOT)/reset.bin: boot/reset.S
 	@mkdir -p $(dir $@)
