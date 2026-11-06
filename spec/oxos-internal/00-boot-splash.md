@@ -43,6 +43,10 @@ the animation's memory is in stock spec 17 §6). OXOS shows a picture during col
 - When there is no valid header or decoding fails, the drawn emblem and caption are shown instead.
   `HalpSplashSource` (1 = drawn, 2 = the image) and `HalpSplashStatus` (0 = shown; 0x100 no copy from the 2BL, 0x101
   no header, 0x102 bad header, 0x103 out of memory, 1–10 decoder step) record what happened.
+- It starts before the IDE set-up (since 2026-11-06; until then after it): a hard disk or DVD drive can take seconds
+  to spin up after power-on, and the screen stayed dark meanwhile. The drives' ready waits run at the boot thread's
+  IRQL (the reference raises to the IDE interrupt's first) and follow the clock, so the splash and jingle threads run
+  during them; the boot thread, which may not block, polls a lock the splash thread holds (SMBus, EEPROM) instead.
 - It fades in while boot continues, with the boot jingle (spec/oxos-internal/17-boot-jingle.md): the fade follows
   the clock from the jingle's start, a frame about every 40 ms, and reaches full intensity as the jingle's build-up
   lands on its final chord (`jingle::ClimaxMs`, 2.6 s; `HalpSplashFullMs` records when it did). It stays until
