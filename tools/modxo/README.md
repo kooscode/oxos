@@ -19,6 +19,10 @@ These scripts are the PC side.
 - Power button: GPIO 28 (`OXOS_POWER_PIN`) → 1 kΩ → base of an NPN transistor (e.g. 2N2222). Emitter to Xbox ground,
   collector to the power switch's signal side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the
   SERIRQ module unregistered.
+- **1.6 console:** it has no LPC header, so the LPC lines are wired to the board (a rebuilt header). LFRAME goes to
+  the Pico's LFRAME pin (GPIO 5 on the RP2040-Tiny), not to ground. Use two ground
+  wires and keep every wire short: with long wires the LPC cycles were corrupted and the console showed FRAG (red and
+  green), even with Cerbios.
 - The BIOS goes into Modxo's flash bank as its own .uf2: `flashbin_to_uf2.py` from Modxo's `tools/` (default base
   0x10040000).
 - Python 3 with pyserial (`pip install pyserial`).

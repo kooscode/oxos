@@ -38,6 +38,10 @@ Optional extras:
   (`make nxdk` fetches one into `../third_party/nxdk`).
 - **256 KB flash chips:** `make bios_256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the
   1 MB image is the same image.
+- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=build/release_1_6 SELFTEST=0`). The image
+  then carries OXOS's own 1.6 X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings read
+  from the EEPROM) instead of Cromwell's, and the 2BL calibrates the memory pads from the EEPROM
+  ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md), [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
 - **Your own boot splash:** `make bios SPLASH=my-logo.svg` turns an SVG into the animated vector splash (mark the
   parts to fade from and to with `data-oxos-phase="start"` / `"end"`; preview with `tools/vsplash`). The default is
   `splash/oxos_splash.svg`.
@@ -47,11 +51,13 @@ Optional extras:
 ## Build and test
 ```
 make            # build/selftest/xboxkrnl.exe + xboxkrnl.map (all build output: build/<kind>/, see the Makefile)
-make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5)
+make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
+                # MCPX16=1: the 1.6 console's image (our own 1.6 X-codes)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
-make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images, make test_dash;
-                                # VERSION packs build/release/dist/oxos_vX.Y.Z.zip (both images + title_patches.ini)
+make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
+                                # 256 KB image, make test_dash; VERSION packs build/release/dist/oxos_vX.Y.Z.zip
+                                # (the three images + title_patches.ini)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
@@ -257,6 +263,8 @@ the boot tests; console = checked on the 1.4 console.
 | 29 | exFAT on a whole disk (no partition table); main boot region repaired from the backup | oxos/05 §2a | ✅ xemu; console: 2 TB drive |
 | 30 | Title compatibility: physical sort key, D: sector size, title patches from `C:\OXOS\title_patches.ini`, video overlay stopped at each title switch | oxos/25 | ✅ unit tests, xemu (`test`); console |
 | 31 | GPU start-up settings (clock, memory interface) checked and restored by the 2BL | oxos/26 | ✅ console: every cold boot's dashboard drawn correctly |
+| 32 | The 1.6 console: its own X-codes (memory set-up with EEPROM settings), EEPROM pad calibration, its own image | stock/24, oxos/28 | ✅ console (1.6): dashboard, games |
+| 33 | Overlapped hard-disk transfers report STATUS_PENDING as the reference does; RtlNtStatusToDosError as the reference | stock/04b, stock/13 | ✅ unit tests, xemu, console (1.6): a game that streams with overlapped reads |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

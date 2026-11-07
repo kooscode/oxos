@@ -14,6 +14,8 @@ ROOT      := ..
 OUT       := build
 BUILD     := $(OUT)/selftest
 RELEASE_BUILD := $(OUT)/release
+# The 1.6 console's release image (MCPX16=1: its own X-codes, spec/oxos_internal/28).
+RELEASE16_BUILD := $(OUT)/release_1_6
 DEBUG_BUILD   := $(OUT)/debug
 TRACE_BASIC_BUILD := $(OUT)/trace_basic
 # IMAGE=open (default) needs no Microsoft files. IMAGE=base instead packs the kernel into your own MCPX 1.0 BIOS
@@ -230,15 +232,19 @@ release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
 	$(if $(filter 1,$(SKIP_TESTS)),@echo "release: SKIP_TESTS=1 (unit tests and test_dash skipped)",$(ROOT)/tools/unit_tests.sh)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/bios_256k.bin
+	$(MAKE) BUILD=$(RELEASE16_BUILD) SELFTEST=0 MCPX16=1 $(RELEASE16_BUILD)/bios_256k.bin
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
 	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
 	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
 	    cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
+	    cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_1.6_v$(VERSION)_256k.bin && \
 	    cp title_patches/title_patches.ini $(RELEASE_BUILD)/dist/title_patches.ini && \
 	    cd $(RELEASE_BUILD)/dist && \
-	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin title_patches.ini && \
-	    sha256sum oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin title_patches.ini)
+	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
+	        title_patches.ini && \
+	    sha256sum oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
+	        title_patches.ini)
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
 # kernel at every power-on and boots its own (a serial-log build) when no PC answers.
