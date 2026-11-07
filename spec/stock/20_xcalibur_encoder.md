@@ -22,6 +22,13 @@ transfer size is:
 are read from 0xC009, low byte first. The rest (lock, retries, completion event) is as in stock spec 12.
 All Xcalibur accesses use the 4-byte form.
 
+## 1a. Boot time (5838 BIOS and kernel)
+- Detection: no bus probe. The kernel takes the Xcalibur when byte 0x78 of the flash image is 0x90 (XboxHardwareInfo
+  flags 0x10 and 0x400; spec 17 §1.2, spec 24 §6.1).
+- Nothing reaches the Xcalibur before the boot animation's first `AvSetDisplayMode`: the 5838 X-codes, the FBL and the
+  2BL send it nothing, and the kernel has no reset, power-up or probe step. The first accesses are step 0 of §3
+  (registers 4 and 0); an AV-pack event before that writes register 4 ← 0x0F. Details: spec 24 §6.3.
+
 ## 2. Tables and the register writer
 The Xcalibur uses three tables of the AV blob (spec 17 §1a.2): the per-mode table (42 columns, register row + 38
 mode rows), the value pool and the dword list; plus four row maps and two flicker-filter sets in the kernel (§6.1, §6.3).

@@ -291,6 +291,15 @@ default UC enabled, 0–64 MB WB, 0xFFF80000 512 KB WP, **0x80000000 16 KB write
 0x0007010600070106 between two `wbinvd`s, CR4 \|= 0x610, page directory at 0xF000 as spec 01 §4, CR0 \|= 0x80010020,
 and performs the NV2A pad calibration (§4).
 
+## 10. The 1.6 console (5838 kernel)
+Checked 2026-11-07 (spec 24 §6): every read of XboxHardwareInfo, the NV2A boot ID, PCI 0:1:0 0x08, the strap and the
+flash byte 0x78. The kernel's only 1.6-specific behaviour is the Xcalibur encoder: flags 0x10 | 0x400 from flash byte
+0x78 = 0x90 (0x80054921), the encoder address 0xE0 and its tables (0x800315D4), the AV-pack event writes
+(0x80014899, 0x80014960, 0x80014B6A) and 4-byte SMBus transfers to 0xE0-0xE7 (0x80014743). HAL phase 0 (§2.1),
+MmInitSystem (§2.2), the PCI set-up (§3.1) and the SMC traffic are the same on every console. The NIC PHY test
+(McpRevision == 0xA1, 0x8002DC80) and the vector-0x31 set-up (flags & 9, 0x8001984F) are not 1.6 tests. On a 1.6 the
+retail flags are 0x450 (0x40 because the 1.6 X-codes clear strap bits 25-28).
+
 ## Open questions
 1. Origin of PBUS 0x1240 = 0x8B8B8B8B and IA32_DEBUGCTL = 1 in the reference run: neither is written by the
    kernel; dump both at kernel entry under each chain.

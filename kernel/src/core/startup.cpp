@@ -112,6 +112,9 @@ static ULONG KiRefreshBootFix[4];            // start.S's record ('RFS0', value)
 static ULONG KiGpuClockRecord[5];
 static ULONG KiXcodeEntryRecord[9];
 static ULONG KiXcodeRecord[2][2 + 2 * 60];
+#if XK_DEBUG_SERIAL
+static ULONG KiXcodeSnapshot[2 + 2 * 40]; // the 2BL's snapshot of the memory set-up (serial builds, physical 0x2800)
+#endif
 
 extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     {
@@ -187,6 +190,12 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         for (ULONG i = 0; i < sizeof(KiXcodeRecord[0]) / 4; i++)
             KiXcodeRecord[r][i] = quick ? 0 : ((volatile ULONG *)(0x80002400 + 0x200 * r))[i];
     }
+#if XK_DEBUG_SERIAL
+    for (ULONG i = 0; i < sizeof(KiXcodeSnapshot) / 4; i++) // boot/bl.cpp BlSnapshotRegisters (serial builds)
+        KiXcodeSnapshot[i] = quick ? 0 : ((volatile ULONG *)0x80002800)[i];
+    if (!quick)
+        ((volatile ULONG *)0x80002800)[0] = 0;
+#endif
     for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
         KiPadRecord[i] = quick ? 0 : ((volatile ULONG *)0x80002300)[i];
     HalpTakeSplashRecord(quick); // boot/bl.cpp's splash record at 0x2380, before the memory manager
@@ -329,6 +338,19 @@ static void KiReportRefresh() {
         XK_SERIAL("xcodes at entry: 10b0 %08lx 10bc %08lx 10e8 %08lx nvpll %08lx select %08lx refresh %08lx "
                   "100200 %08lx 100204 %08lx\n", e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]);
     }
+    // The 2BL's snapshot of the memory set-up the X-codes left, and EEPROM 0xC0-0xC3 (spec/oxos_internal/28 §4 G0):
+    // NV2A offsets, PCI configuration addresses (bit 31) and EEPROM words (0xEE0000nn), four per line.
+#if XK_DEBUG_SERIAL
+    const ULONG *m = KiXcodeSnapshot;
+    if (m[0] == 0x53363158) { // 'X16S'
+        for (ULONG i = 0; i < m[1] && i < 40; i += 4) {
+            XK_SERIAL("xcode snapshot:");
+            for (ULONG j = i; j < i + 4 && j < m[1]; j++)
+                XK_SERIAL(" %lx=%08lx", m[2 + 2 * j], m[3 + 2 * j]);
+            XK_SERIAL("\n");
+        }
+    }
+#endif
     // The 2BL's checks of the X-codes' settings (at its start, and before the kernel): the registers that did not hold
     // the value written.
     for (ULONG r = 0; r < 2; r++) {
@@ -351,13 +373,15 @@ static void KiReportNvPads([[maybe_unused]] const char *When) {
     // The 2BL's pad calibration record (boot/bl.cpp BL_PAD_RESULT, physical 0x2300), printed once.
     static bool shown;
     [[maybe_unused]] auto r = KiPadRecord;
-    if (!shown && (r[0] == 0x43444150 || r[0] == 0x4E444150)) {
+    // 'PADC' the table method, 'PADE' the EEPROM method (1.6), 'PADN' none.
+    if (!shown && (r[0] == 0x43444150 || r[0] == 0x45444150 || r[0] == 0x4E444150)) {
         shown = true;
         if (r[0] == 0x4E444150) {
-            XK_SERIAL("nv pads: the 2BL did not calibrate (no table in this image)\n");
+            XK_SERIAL("nv pads: the 2BL did not calibrate (no table in this image, or no EEPROM answer)\n");
         } else {
-            XK_SERIAL("nv pads: 2BL calibration A %#lx B %#lx strap %08lx -> %08lx %08lx %08lx %08lx %08lx %08lx %08lx "
-                      "%08lx %08lx\n", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]);
+            XK_SERIAL("nv pads: 2BL calibration (%s) A %#lx B %#lx strap %08lx -> %08lx %08lx %08lx %08lx %08lx %08lx "
+                      "%08lx %08lx %08lx\n", r[0] == 0x45444150 ? "EEPROM rows" : "table", r[1], r[2], r[3], r[4],
+                      r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]);
         }
     }
 }

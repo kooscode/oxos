@@ -48,6 +48,9 @@ Execution order. "Byte" = an 8-bit cycle at 0xCFC; every other PCI access is a 3
   (0x80xx) (Complex 4627 2BL) (5838 2BL) (Cerbios).
 - No 2BL step writes NV2A 0x100200 / 0x100204 or the CRTC start 0x600800; those are left as the X-codes set them
   (the X-codes write 0x100200 and 0x100204) (Complex 4627 2BL) (5838 2BL).
+- 1.6 (5838 2BL, re-checked 2026-11-07): the sequence above holds without change. Step 12 is the 5838 2BL's **only**
+  hardware-revision test; it reads no NV2A revision, strap, top of memory or PCI ID, and writes no memory-interface,
+  PFB, PLL or MTRR register beyond its CPU set-up (spec 24 §5.2-5.3).
 
 ### 2.1 Device 1 register 0x8C
 - The only write is step 5: the whole register becomes 0x40000000 (bit 30 set, all others cleared).
@@ -92,7 +95,8 @@ the same order as the 4627 routine run in a CPU emulator, over 3000 random measu
   1 flash 0xFFF80000 512 KB WP; paging on with NV2A mapped uncached (PDE 0xFB). The X-codes have already set the
   memory clock and written the placeholder pad values (Cromwell-equivalent: 0x1214 0x48480848 or 0x09090909, 0x122C
   0x88888888 or 0xAAAAAAAA, 0x1230 0xFFFFFFFF, 0x1234/0x1238 0xAAAAAAAA, 0x123C/0x1244/0x1248 0x8B8B8B8B, 0x1240
-  0xFFFFFFFF).
+  0xFFFFFFFF). 5838 (1.6): 0x1214 and 0x122C from EEPROM bytes 0xC0 and 0xC1 (each byte repeated in all four bytes),
+  the others as Cromwell (spec 24 §2.6, §3.3).
 
 ### 3.2 Wait loop (4627 0x400919, 5838 0x40095F)
 `wait(n)`: rdtsc → (lo, hi); end_lo = lo + n, end_hi = hi + carry. Loop: rdtsc; stop if hi > end_hi; otherwise
@@ -179,11 +183,37 @@ Requirements for OXOS (kernel/boot/bl.cpp BlPadCalibrate and any later re-calibr
   behaviour, but on the 1.4 console it did not change the rate of single-bit RAM changes (§3.8).
 
 ### 3.7 5838 row source (NV2A ≥ D3; 1.6)
+- The 5838 2BL uses this source **unconditionally**: it has no table method and no revision test (5838 2BL 0x400A5F;
+  spec 24 §5.2). "NV2A ≥ D3" is how Cerbios chooses between its two methods.
 - 25 SMBus word reads of the EEPROM (slave 0xA8), commands 0xC4, 0xC6, ..., 0xF4 (50 bytes, 0xC4-0xF5).
 - Row r (r = 0..4) from EEPROM bytes 0xC4 + 10r .. 0xCD + 10r: each of the first nine bytes gives two nibbles (high
   nibble first) for row bytes 0x00-0x11; the tenth byte is row byte 0x12. Only the breakpoints come from the flash
   table (5838: header 0x7C = 0xDC0). No strap test.
 - Cerbios takes this path when NV2A PMC 0 low byte ≥ 0xD3 (and a PCI condition holds), the table path otherwise.
+- The rest is the 5838 variant of §3.4-3.6: the measurement in four groups (A, B, A, B; the steadier group of each
+  pair kept), the signed division in the lowest segment, the weight clamped to 1.0 above the top breakpoint, all nine
+  registers written (no zero store); breakpoints from the 5838 header (Cerbios's table bytes 0x0C-0x17, the same
+  bytes as 5838's own header at 0xDC0).
+- SMBus word read (5838 0x400430): host address 0xA9, command, status cleared by writing back what it reads, control
+  0x0B (start, word); then wait while status bit 3 (busy) is set; bit 1 (collision) starts again, bit 5 or bit 2
+  fails, bit 4 gives the word at 0xC006. Waiting for a done bit instead of for busy to clear hangs on the 1.6 console.
+- Cerbios 3.1.0 (0x90F40) reads the EEPROM and measures the same way, but its arithmetic is not the 5838 one: in an
+  emulator it matches neither the 5838 nor the 4627 arithmetic when a reading falls outside the breakpoints. OXOS
+  follows the 5838 2BL, the retail loader of the 1.6 console.
+- OXOS (kernel/boot/bl.cpp BlPadCalibrateFromEeprom) makes the same NV2A writes as the 5838 routine 0x400A5F run in an
+  emulator with a random EEPROM, over 2000 cases (tools/padcal_check.py 5838). On the 1.6 console it reads all 25
+  words and calibrates (POST 0x32); the console's RAM is still not reliable, see spec/oxos_internal/28.
+- **Write window (5838):** the same structure as §3.6a. The interpolated nibbles are computed first, then `wbinvd` (5838 2BL
+  0x400E57), then the nine values are built into the {offset, value} array (0x400E59-0x400F46), then the store loop 0x400F61-0x400F82 runs twice: an outer
+  counter 0..1, the store done only when it is 1 (a dry pass first). Requirement for OXOS: as §3.6a.
+- **Other users of the pad registers on a 1.6** (checked 2026-11-07, spec 24): the 5838 X-codes write placeholder
+  values before the DRAM is initialised (0x1214 ← EEPROM 0xC0 repeated, 0x122C ← EEPROM 0xC1 repeated, 0x1230/0x1240
+  0xFFFFFFFF, 0x1234/0x1238 0xAAAAAAAA, 0x123C/0x1244/0x1248 0x8B8B8B8B; 0x1248 also serves as a scratch register for the
+  EEPROM bytes before that), and 0x124C 0xAA8BAA8B, 0x1250 0x00005474 after it. The X-codes do **not** measure (no read
+  of 0x121C; 0x1220 and 0x1228 are only set to 0). The kernel never writes 0x1200-0x1264 (spec 23 §4). So on a 1.6
+  the EEPROM method in the 2BL is the only calibration; 0x124C and 0x1250 keep the X-codes' values.
+- The EEPROM bytes the 1.6 uses for memory: **0xC0-0xC3** (X-codes, byte reads: 0x1214, 0x122C, 0x10B8, strap bits
+  18/19; spec 24 §3) and **0xC4-0xF5** (2BL, word reads: the five rows).
 
 ### 3.7a Cerbios 3.1.0 on NV2A < D3 (consoles 1.0-1.5): the complete sequence (what OXOS implements)
 From Cerbios's bootloader (plaintext at flash 0x3CDD8, loaded at 0x90000, entry 0x90208; main routine 0x90738).
@@ -330,5 +360,6 @@ OXOS builds it from kernel/boot/padcal_table.inc.
 - Meaning of header 0x6C, 0x70, 0x74, 0x78 fields and of their differences.
 - Meaning of PCI 0:0:3 0x6C bit 24 (halt path).
 - Purpose of the Cerbios pre-check that skips steps 7-12.
-- Whether the EEPROM bytes 0xC4-0xF5 used by 5838 exist on pre-1.6 consoles.
+- Whether the EEPROM bytes 0xC0-0xF5 used by 5838 exist on pre-1.6 consoles.
+- The 1.6 X-code program, its EEPROM parameters and memory test: spec 24.
 - Whether byte-wide cycles at 0xCFD-0xCFF behave on hardware; the retail kernel uses them, which suggests they do.

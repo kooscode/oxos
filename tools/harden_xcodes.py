@@ -4,7 +4,7 @@
 On the 1.4 test console the GPU ignores some of the X-codes' writes (spec/oxos_internal/27): the first ones when it
 leaves reset after the MCPX has started the X-codes (on some warm reboots all of them), and single writes on cold
 boots. The memory interface and DRAM controller settings have to hold before the X-codes initialise the DRAM, so:
-- after the first write to NV2A 0x10B0 (the 1.0-1.5 value only): until it reads back the value written, write it
+- after the first write to NV2A 0x10B0 (the 1.0-1.5 or the 1.6 value): until it reads back the value written, write it
   again. While the GPU is not taking writes it reads its power-on value (0x76086673), or, when the GPU does not
   claim its registers yet, whatever the LPC bus returns (the writes then show up on the modchip's bus). xemu reads
   0x10B0 as 0: a 0 together with xemu's GPU id (PMC 0x0 = 0x02A000A3) also ends the wait. The usual single retry
@@ -17,8 +17,9 @@ is moved to its original target. The rest of the bank (header, pad calibration t
 usage: harden_xcodes.py IN.bin OUT.bin"""
 import struct, sys
 
-START, LIMIT = 0x80, 0xC90       # program start; the pad calibration table (header 0x7C) on 1.0-1.5
-WAIT_REGISTER, WAIT_VALUE = 0x0F0010B0, 0x07633461
+START = 0x80                     # program start; it must end before the pad calibration table (header 0x7C)
+WAIT_REGISTER = 0x0F0010B0
+WAIT_VALUES = (0x07633461, 0x01000010)  # the first 0x10B0 write: 1.0-1.5 (Cromwell), 1.6 (boot/xcodes_1_6.inc)
 XEMU_ID_REGISTER, XEMU_ID = 0x0F000000, 0x02A000A3   # PMC boot id; xemu reads 0x10B0 as 0
 CHECKED = {
     0x0F0010B0: ~0, 0x0F0010B4: ~0, 0x0F0010B8: ~0, 0x0F0010BC: ~0, 0x0F0010C4: ~0, 0x0F0010C8: ~0,
@@ -30,6 +31,7 @@ PEEK, POKE, AND_OR, IFGOTO, GOTO, END = 0x02, 0x03, 0x06, 0x08, 0x09, 0xEE
 
 
 def harden(bank):
+    limit = struct.unpack_from("<I", bank, 0x7C)[0]
     ops, off = [], START
     while True:
         op, a, v = struct.unpack_from("<BII", bank, off)
@@ -38,8 +40,8 @@ def harden(bank):
         if op == END:
             break
     old_end = off
-    if any(bank[old_end:LIMIT]):
-        sys.exit(f"harden_xcodes: bytes {old_end:#x}-{LIMIT:#x} after the program are not free")
+    if any(bank[old_end:limit]):
+        sys.exit(f"harden_xcodes: bytes {old_end:#x}-{limit:#x} after the program are not free")
     for i, o in enumerate(ops):
         if o[0] in (IFGOTO, GOTO):
             rel = o[2] - (1 << 32) if o[2] & 0x80000000 else o[2]
@@ -51,7 +53,7 @@ def harden(bank):
         new.append(ops[i])
         if op != POKE or a not in CHECKED:
             continue
-        if a == WAIT_REGISTER and v == WAIT_VALUE and not waited:
+        if a == WAIT_REGISTER and v in WAIT_VALUES and not waited:
             waited = True
             # held: on to the single retry below; 0 with xemu's GPU id: xemu, also on; anything else: write again
             w = len(new) - 1
@@ -66,8 +68,8 @@ def harden(bank):
         new += [[IFGOTO, v & mask, 9, None], [GOTO, 0, 9, None], [POKE, a, v, None]]
     out = bytearray(bank)
     end = START + 9 * len(new)
-    if end > LIMIT:
-        sys.exit(f"harden_xcodes: the program would end at {end:#x}, past {LIMIT:#x}")
+    if end > limit:
+        sys.exit(f"harden_xcodes: the program would end at {end:#x}, past the table at {limit:#x}")
     for j, (op, a, v, target) in enumerate(new):
         if target:
             kind, t = target

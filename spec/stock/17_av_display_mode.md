@@ -29,6 +29,9 @@ Detection (cold boot, `XboxHardwareInfo`, spec 02 §5) uses a byte of the BIOS i
   - otherwise, port 0x80CE bit 5 set → Flags |= 0x30 (Focus, as in 4627).
 - (4627 only tests the byte for == 0x80 and has no 0x400 case.)
 
+No other test and no bus probe decide the encoder; nothing is sent to the Xcalibur before the first
+`AvSetDisplayMode` (spec 20 §1a, spec 24 §6.3).
+
 The encoder address is chosen at every boot (cold and quick, in the table loader 0x800315D4):
 **Flags 0x20 → Focus 0xD4; else Flags 0x400 → Xcalibur 0xE0; else Conexant 0x8A**. Titles read
 `XboxHardwareInfo`, so on a 1.6 console Flags bit 0x400 must be set and bit 0x20 clear.

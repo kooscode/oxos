@@ -60,7 +60,9 @@ physical 0x2340 ('XC0S' and the eight values). The kernel prints `xcodes at entr
 ## 5. Open
 - Whether other modchips or consoles show the same lost writes. Only the Modxo 1.4 console was measured. Cerbios was
   never seen to fail on this console, but it was not measured the same way.
-- The 1.6 console's X-codes (MCPXREVD5) get the retries but not the wait: its 0x10B0 value differs and its power-on
-  value was not measured.
+- The 1.6 console's program (boot/xcodes_1_6.inc, 2026-11-07) gets the retries and the wait, on its own 0x10B0
+  value 0x01000010; the end of the program comes from header 0x7C (0xECB on the 1.6). The 1.6's power-on value of
+  0x10B0 was not measured: if it already equals 0x01000010, the wait ends at once. The writes the 1.6 program makes
+  from EEPROM bytes (strap, 0x10B8, 0x122C, 0x1214) are not checked.
 - The wait has no limit (the X-codes have no counter). A GPU that never takes the write keeps the boot there; on the
   test console it always took it within the wait.

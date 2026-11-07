@@ -198,7 +198,7 @@ $(BUILD)/core/processor.obj: $(BUILD)/ucode.inc
 $(BUILD)/core/processor.obj: CXXFLAGS += -I$(BUILD)
 
 # Cromwell's X-codes, then write checks on the memory set-up (tools/harden_xcodes.py, spec/oxos_internal/27).
-$(BOOT)/xcodes.bin: boot/xcodes.S boot/padcal_table.inc $(CROMWELL_DIR)/boot_rom/Xcodes.h $(ROOT)/tools/harden_xcodes.py
+$(BOOT)/xcodes.bin: boot/xcodes.S boot/xcodes_1_6.inc boot/padcal_table.inc $(CROMWELL_DIR)/boot_rom/Xcodes.h $(ROOT)/tools/harden_xcodes.py
 	@mkdir -p $(dir $@)
 	$(CC) $(BOOT_FLAGS) -I$(CROMWELL_DIR)/boot_rom -Iboot -c $< -o $(BOOT)/xcodes.o
 	$(OBJCOPY) -O binary -j .xcodes $(BOOT)/xcodes.o $(BOOT)/xcodes_cromwell.bin
