@@ -1,4 +1,4 @@
-// The boot jingle (spec/oxos-internal/17-boot-jingle.md): an original six-second cue for a cello section, bass and
+// The boot jingle (spec/oxos-internal/17-boot-jingle.md): an original 4-second cue for a cello section, bass and
 // drums, synthesized at 48 kHz in integer arithmetic. The instruments come in one after another: a swoosh builds, a
 // cello joins, the section and the bass climb in power chords, and last the drums drive a crescendo into the final
 // chord. It ends on a two-note coin chime. The instruments:
@@ -24,7 +24,10 @@ using i32 = int;
 using i64 = long long;
 
 constexpr u32 MS = RATE / 1000;
-constexpr u32 LENGTH_MS = 5900, FADE_MS = 1200; // the last FADE_MS fade out
+// The climax (FINALE, 2.6 s) and then 1.4 s of the chord lingering, as a film logo's sound does: full for 0.2 s,
+// then the last FADE_MS fade out (a curve between linear and squared: it keeps its body, then eases out), the
+// reverb ringing on under it. The splash holds its end picture until the end (kernel/src/hal/splash.cpp).
+constexpr u32 LENGTH_MS = 4000, FADE_MS = 1200;
 
 // --- Basics
 
@@ -419,6 +422,7 @@ struct State {
 unsigned StateSize() { return (sizeof(State) + 3) & ~3u; }
 unsigned Frames() { return LENGTH_MS * MS; }
 unsigned ClimaxMs() { return FINALE; }
+unsigned LengthMs() { return LENGTH_MS; }
 void Mute(State *s, unsigned mask) { s->mute = mask; }
 
 void Init(State *s) {
@@ -515,14 +519,14 @@ void Render(State *s, short *out, unsigned frames) {
             wl = wr = 0;
         l += Q16(wl, 26000);
         r += Q16(wr, 26000);
-        // Master: level, a soft limit, and a fade over the last FADE_MS (squared: it eases out).
+        // Master: level, a soft limit, and a fade over the last FADE_MS.
         l = SoftClip(Q16(l, 21000));
         r = SoftClip(Q16(r, 21000));
         if (s->t >= total) {
             l = r = 0;
         } else if (s->t >= fadeFrom) {
-            i32 g = i32(((total - s->t) << 16) / (FADE_MS * MS));
-            g = Q16(g, g);
+            i32 g = i32((i64(total - s->t) << 16) / (FADE_MS * MS)); // 64-bit: a fade over 1.37 s overflows 32
+            g = (g + Q16(g, g)) / 2; // between linear and squared
             l = Q16(l, g);
             r = Q16(r, g);
         }

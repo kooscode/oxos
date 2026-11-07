@@ -38,7 +38,7 @@ KERNEL_SOURCES := \
     src/ps/thread.cpp \
     src/rtl/memory.cpp src/rtl/runtime.cpp src/rtl/sprintf.cpp src/rtl/status.cpp src/rtl/string.cpp \
     src/rtl/sync.cpp src/rtl/time.cpp \
-    src/hal/pic_timer.cpp src/xe/patchfile.cpp
+    src/hal/pic_timer.cpp src/hal/vsplash.cpp src/xe/patchfile.cpp
 KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/include $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS)

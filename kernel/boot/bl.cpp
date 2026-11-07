@@ -25,7 +25,7 @@ struct XK_BOOT_PAYLOAD {
 constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + 0x6000, PAYLOAD_MAGIC = 0x504B584F, BOOT_MAGIC = 0x534F584F;
 constexpr ULONG KERNEL_PHYS = 0x10000, PAGE_DIRECTORY = 0xF000;
 // The boot splash, copied into RAM for the kernel (spec/oxos-internal/00-boot-splash.md): "XKSPLASH" header (20 bytes)
-// + PNG, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the pad
+// + vector scene, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the pad
 // calibration record at 0x2300). The kernel decodes it from RAM: decoding it straight from flash, byte by byte over
 // LPC while the kernel runs, coincided with bits of RAM changing on a Modxo console (2026-10-28).
 constexpr ULONG SPLASH_RAM = 0x00C00000, SPLASH_RAM_MAX = 0x40000, SPLASH_RECORD = 0x2380, SPLASH_RECORD_MAGIC = 0x5053584F;
@@ -387,7 +387,8 @@ struct BL_PAD_RESULT {
 #include "netboot.h"
 #endif
 
-// A splash blob ("XKSPLASH", version 1, PNG length; Room bytes available): its whole size, 0 if there is none.
+// A splash blob ("XKSPLASH", version 2: a vector scene; length; Room bytes available): its whole size, 0 if there is
+// none.
 static ULONG BlSplashSize(const volatile UCHAR *Blob, ULONG Room) {
     static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
     if (Room < SPLASH_HEADER)
@@ -396,7 +397,7 @@ static ULONG BlSplashSize(const volatile UCHAR *Blob, ULONG Room) {
         if (Blob[i] != (UCHAR)magic[i])
             return 0;
     ULONG version = *(const volatile ULONG *)(Blob + 8), length = *(const volatile ULONG *)(Blob + 12);
-    return version == 1 && length <= Room - SPLASH_HEADER ? SPLASH_HEADER + length : 0;
+    return version == 2 && length <= Room - SPLASH_HEADER ? SPLASH_HEADER + length : 0;
 }
 
 // Copy the splash to SPLASH_RAM: flash bank 1 (a 1 MiB image), else the copy that the payload of Bank points to

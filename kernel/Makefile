@@ -35,10 +35,8 @@ XDASH_HDD     := $(XDASH_DIR)/xemu-dashboard.qcow2
 HDD_IMAGE ?= $(XDASH_HDD)
 # The fetch, as a prerequisite of the targets that boot from the default disk (nothing when HDD_IMAGE is another).
 HDD_FETCH  = $(filter $(XDASH_HDD),$(HDD_IMAGE))
-# Boot splash: a 640x480 256-colour PNG is used as it is; any other picture (SPLASH=my-picture.jpg) is converted
-# with Pillow, reduced to 256 colours with SPLASH_QUANT (octree or median).
-SPLASH    ?= splash/splash.png
-SPLASH_QUANT ?= octree
+# Boot splash: an SVG, drawn and animated at boot (tools/svg_splash.py, spec/oxos-internal/00-boot-splash.md).
+SPLASH    ?= splash/oxos-splash.svg
 SELFTEST  ?= 1
 RETAIL_MEDIA_POLICY ?= 0
 TRACE_IMPORTS ?= 0
@@ -100,7 +98,7 @@ OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj)
 all: $(BUILD)/xboxkrnl.exe
 
 # Boot-only code (spec/oxos-internal/18-boot-memory.md): these files may call one another's boot-only functions.
-BOOT_OBJS := splash.obj,png.obj,jingle.obj,bootsound.obj
+BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj
 # ... and the boot-only functions kept code calls during a cold boot, before the pages are freed.
 BOOT_ENTRIES := HalpStartSplash
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
@@ -110,8 +108,8 @@ KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-
 # the virtual-disc decompressor (it runs for every sector a title reads from a CCI) and the boot-only code (the splash
 # and the jingle have to keep up with the clock; their pages are freed before the title starts, so their size costs
 # nothing then).
-FAST_SRCS  := src/xc/crypto.cpp src/rtl/memory.cpp src/vd/%.cpp src/hal/png.cpp src/hal/splash.cpp src/hal/jingle.cpp \
-              src/hal/bootsound.cpp
+FAST_SRCS  := src/xc/crypto.cpp src/rtl/memory.cpp src/vd/%.cpp src/hal/splash.cpp src/hal/jingle.cpp \
+              src/hal/bootsound.cpp src/hal/vsplash.cpp
 ifneq ($(DEBUG),1)
 $(patsubst src/%.cpp,$(BUILD)/%.obj,$(FAST_SRCS)): FILE_OPT := -O2
 endif
@@ -247,7 +245,7 @@ MCPX_DUMP_BUILD := build/mcpx-dump
 mcpx-dump:
 	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios-256k.bin
 
-SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH) --splash-quantize $(SPLASH_QUANT))
+SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 ifeq ($(IMAGE),base)
 $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH))
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
