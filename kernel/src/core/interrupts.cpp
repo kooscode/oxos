@@ -7,6 +7,8 @@
 #include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hardware.h>
+#include <xk/io.h>
+#include <xk/memory.h>
 
 constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 
@@ -92,6 +94,72 @@ XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
     restore_flags(flags);
 }
 
+#if XK_DEBUG_SERIAL
+// Hang dump (serial builds): when the sampler finds the idle thread three times in a row (15 s with nothing to run
+// at every sample), every thread's state, what it waits on, and the first return addresses into the title's image
+// found on its stack, so a title that waits for ever names its call site and the object.
+static void KiDumpThreads() {
+    PLIST_ENTRY head = &KiSystemProcess.ThreadListHead;
+    ULONG count = 0;
+    for (PLIST_ENTRY e = head->Flink; e != head && count < 64; e = e->Flink, count++) {
+        PKTHREAD t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
+        XK_SERIAL("hang: thread %p state %u reason %u priority %d wait status %08lx alertable %u\n", t,
+                  (unsigned)t->State, (unsigned)t->WaitReason, (int)t->Priority, (ULONG)t->WaitStatus,
+                  (unsigned)t->Alertable);
+        if (t->State == Waiting) {
+            PKWAIT_BLOCK first = t->WaitBlockList, b = first;
+            for (ULONG i = 0; b && i < 8; i++) {
+                auto object = (DISPATCHER_HEADER *)b->Object;
+                XK_SERIAL("hang:   waits on %p type %u signal %ld (wait type %d)\n", object,
+                          object ? (unsigned)object->Type : 0u, object ? (long)object->SignalState : 0L,
+                          (int)b->WaitType);
+                b = b->NextWaitBlock;
+                if (b == first)
+                    break;
+            }
+        }
+        // The thread's I/O requests that have not completed: operation, the device and driver now holding it.
+        PLIST_ENTRY irps = &((PETHREAD)t)->IrpList;
+        ULONG n = 0;
+        for (PLIST_ENTRY i = irps->Flink; i && i != irps && n < 8; i = i->Flink, n++) {
+            PIRP irp = CONTAINING_RECORD(i, IRP, ThreadListEntry);
+            PFILE_OBJECT file = irp->Tail.Overlay.OriginalFileObject;
+            PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(irp);
+            PDEVICE_OBJECT device = stack->DeviceObject;
+            XK_SERIAL("hang:   irp %p location %d major %u device %p type %u dispatch %p file %p (device %p event "
+                      "%p) length %lx offset %lx:%08lx status %08lx\n", irp, (int)irp->CurrentLocation,
+                      (unsigned)stack->MajorFunction, device, device ? (unsigned)device->DeviceType : 0u,
+                      device && device->DriverObject ? (PVOID)device->DriverObject->MajorFunction[stack->MajorFunction]
+                                                     : nullptr,
+                      file, file ? file->DeviceObject : nullptr, file ? (PVOID)&file->Event : nullptr,
+                      stack->Parameters.Read.Length, (ULONG)(stack->Parameters.Read.ByteOffset.QuadPart >> 32),
+                      (ULONG)stack->Parameters.Read.ByteOffset.QuadPart, (ULONG)irp->IoStatus.Status);
+        }
+        auto sp = (PULONG)t->KernelStack, top = (PULONG)t->StackBase;
+        if (sp < (PULONG)t->StackLimit || sp >= top)
+            continue;
+        ULONG found = 0;
+        XK_SERIAL("hang:   title return addresses:");
+        // Only values that follow a call instruction in a mapped page: call rel32 (E8), call [abs] (FF 15), or a
+        // register / memory call (FF /2, 2 to 7 bytes long).
+        for (; sp < top && found < 24; sp++) {
+            ULONG r = *sp;
+            if (r < 0x11000 || r >= 0x800000 || !MmIsAddressValid((PVOID)(r - 7)) || !MmIsAddressValid((PVOID)r))
+                continue;
+            auto c = (const UCHAR *)r;
+            bool call = c[-5] == 0xE8 || (c[-6] == 0xFF && c[-5] == 0x15);
+            for (int size = 2; !call && size <= 7; size++)
+                call = c[-size] == 0xFF && ((c[-size + 1] >> 3) & 7) == 2;
+            if (call) {
+                XK_SERIAL(" %08lx", r);
+                found++;
+            }
+        }
+        XK_SERIAL("\n");
+    }
+}
+#endif
+
 // Called from the IRQ entry stubs with interrupts disabled.
 extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (HalpIsSpuriousIrq(irq))
@@ -105,6 +173,10 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (irq == 0 && KeTickCount % 5000 == 0) {
         XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9],
                   (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
+        static ULONG idleSamples;
+        idleSamples = KiPcr.PrcbData.CurrentThread == &KiIdleThread ? idleSamples + 1 : 0;
+        if (idleSamples == 3 || idleSamples == 12)
+            KiDumpThreads();
     }
 #endif
     KIRQL old = KiPcr.Irql;

@@ -337,6 +337,12 @@ TEST(RtlRuntime, StatusToDosError) {
     EXPECT_EQ(RtlNtStatusToDosError(STATUS_SUCCESS), 0u);
     EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xC0000034), 2u) << "file not found";
     EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xC000003A), 3u) << "path not found";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0x00000103), 997u) << "STATUS_PENDING is ERROR_IO_PENDING";
     EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xC0000022), 5u) << "access denied";
-    EXPECT_EQ(RtlNtStatusToDosError(STATUS_TIMEOUT), 258u) << "a success code: WAIT_TIMEOUT";
+    EXPECT_EQ(RtlNtStatusToDosError(STATUS_TIMEOUT), 317u) << "not in the table: ERROR_MR_MID_NOT_FOUND";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0x8007001F), 31u) << "Win32 warning form: the low word";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xC007001F), 317u) << "0xC007 is not special";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xC0010005), 5u) << "facility 0xC001: the low word";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xD0000034), 2u) << "0xD... looked up as 0xC...";
+    EXPECT_EQ(RtlNtStatusToDosError((NTSTATUS)0xE0000001), 0xE0000001u) << "customer code unchanged";
 }

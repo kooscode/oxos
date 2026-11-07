@@ -2,6 +2,7 @@
 #include <xk/io.h>
 #include <xk/core.h>
 #include <xk/runtime.h>
+#include <xk/serial.h>
 
 // Carried through the object manager from IoCreateFile to IopParseDevice.
 struct OPEN_PACKET {
@@ -324,17 +325,32 @@ XBAPI NTSTATUS NTAPI IoCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
     return op.FinalStatus;
 }
 
+// Debug (serial builds): opens that fail, with the name, so a title's error screen names the file it missed.
+static NTSTATUS IopLogFailedOpen(NTSTATUS Status, POBJECT_ATTRIBUTES ObjectAttributes, ULONG Disposition,
+                                 ULONG Options) {
+#if XK_DEBUG_SERIAL
+    if (!NT_SUCCESS(Status) && ObjectAttributes && ObjectAttributes->ObjectName) {
+        POBJECT_STRING name = ObjectAttributes->ObjectName;
+        XK_SERIAL("io: open %.*s (disposition %lu, options %08lx) failed %08lx\n", (int)name->Length, name->Buffer,
+                  Disposition, Options, (ULONG)Status);
+    }
+#endif
+    return Status;
+}
+
 XBAPI NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
                                   PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER AllocationSize, ULONG FileAttributes,
                                   ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions) {
-    return IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize, FileAttributes,
-                        ShareAccess, CreateDisposition, CreateOptions, 0);
+    NTSTATUS status = IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize,
+                                   FileAttributes, ShareAccess, CreateDisposition, CreateOptions, 0);
+    return IopLogFailedOpen(status, ObjectAttributes, CreateDisposition, CreateOptions);
 }
 
 XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
                                 PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions) {
-    return IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, nullptr, 0, ShareAccess,
-                        FILE_OPEN, OpenOptions, 0);
+    NTSTATUS status = IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, nullptr, 0,
+                                   ShareAccess, FILE_OPEN, OpenOptions, 0);
+    return IopLogFailedOpen(status, ObjectAttributes, FILE_OPEN, OpenOptions);
 }
 
 // --- Common service plumbing (spec/stock/11 §5)
@@ -453,13 +469,24 @@ static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE Ap
     irp->SegmentArray = Segments;
     if (!Segments && (r.Device->Flags & DO_DIRECT_IO) && Length)
         IopLockUserBuffer(irp, Length);
+    // Non-cached: files opened without intermediate buffering, and every scatter/gather transfer (spec/stock/04b).
     irp->Flags |= (write ? IRP_WRITE_OPERATION : IRP_READ_OPERATION) |
-                  ((r.File->Flags & FO_NO_INTERMEDIATE_BUFFERING) ? IRP_NOCACHE : 0);
+                  (((r.File->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Segments) ? IRP_NOCACHE : 0);
     PIO_STACK_LOCATION stack = IoGetNextIrpStackLocation(irp);
     stack->Parameters.Read.Length = Length;
     stack->Parameters.Read.BufferOffset = 0;
     stack->Parameters.Read.ByteOffset = offset;
+#if XK_DEBUG_SERIAL
+    PDEVICE_OBJECT device = r.Device;
+    status = IopSynchronousServiceTail(&r, irp);
+    if (!NT_SUCCESS(status) && status != STATUS_END_OF_FILE) {
+        XK_SERIAL("io: %s of %lx bytes at %lx on device type %u failed %08lx\n", write ? "write" : "read", Length,
+                  offset.LowPart, (unsigned)device->DeviceType, (ULONG)status);
+    }
+    return status;
+#else
     return IopSynchronousServiceTail(&r, irp);
+#endif
 }
 
 XBAPI NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,

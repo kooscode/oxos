@@ -44,3 +44,25 @@ RtlRip), `ev_14f9dcdb…` (RTC read/write). Generic NT runtime functions follow 
   become '?'.
 - **RtlSprintf family:** MS C runtime format syntax (flags, width, precision, h/l/ll/I64/w sizes, %d %i %u %x %X
   %o %c %C %s %S %Z %p %n). The *nprintf functions return −1 without a terminator when truncated.
+- **RtlNtStatusToDosError(status)** (4627 0x80023653; 5838 0x800238b3, same code and byte-identical tables). Checks
+  in this order:
+  1. customer bit (0x20000000) set → return the status unchanged;
+  2. high word 0x8007 (HRESULT_FROM_WIN32 warning form) → return the low word. Only 0x8007xxxx: 0xC007xxxx is not
+     special (it goes through the table and ends at step 5);
+  3. top nibble 0xD (error with the facility-NT bit 0x10000000) → clear bits 0x30000000, so it is looked up as 0xC…;
+  4. table lookup (below); a hit returns the table value;
+  5. a miss: high word 0xC001 → the low word; otherwise ERROR_MR_MID_NOT_FOUND (317, 0x13D).
+  - Table: a run table of 8-byte entries {first status (DWORD), run length (WORD), entry size in words (WORD: 1 = WORD
+    values, 2 = DWORD values)} (4627 0x80011F88, 5838 0x80011F80), sorted ascending, 101 runs and a sentinel run
+    starting at 0xFFFFFFFF; the scan is bounded at 0x67 entries. The values are one array of 16-bit words (4627
+    0x80011988, 5838 0x80011980; 764 words), the runs' values stored back to back. The lookup walks runs while the
+    status is not below the next run's first status, adding each skipped run's length × entry size to the word
+    offset; at the first run whose successor starts above the status it hits if status − first < run length
+    (word offset += entry size × that difference) and misses otherwise. DWORD entries exist (runs at 0x80000001,
+    0xC000000D, 0xC000002A, 0xC0000039, 0xC000022A); 0x80000001 maps to itself.
+  - Key results: STATUS_SUCCESS → 0; STATUS_PENDING 0x103 → ERROR_IO_PENDING 997; STATUS_TIMEOUT 0x102 → 317 (not in
+    the table); other small success codes such as 1, 0x101, 0x104 → 317; 0x105 → 234; 0x10C → 1022;
+    0x80000005 → 234; 0x80000006 → 18; 0x8007001F → 31; 0xC007001F → 317; 0xC0010005 → 5; 0xD0000034 → 2 (as
+    0xC0000034); STATUS_END_OF_FILE → 38; STATUS_INVALID_PARAMETER → 87; STATUS_INSUFFICIENT_RESOURCES → 1450;
+    STATUS_INVALID_DEVICE_REQUEST → 1; STATUS_DISK_FULL → 112; STATUS_FILE_CLOSED → 6; STATUS_VOLUME_DISMOUNTED → 21;
+    STATUS_FILE_CORRUPT_ERROR → 1392; STATUS_CANCELLED → 995.

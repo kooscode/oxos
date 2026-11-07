@@ -407,6 +407,41 @@ static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool w
     return STATUS_SUCCESS;
 }
 
+#if XK_DEBUG_SERIAL
+// Debug (serial builds): a title that reads the same thing again and again. The last 8 reads are kept; when a read
+// repeats the one before it exactly, they are printed once, then the repeat count at each power of two.
+struct HDDFS_READ_LOG {
+    HDDFS_FCB *Fcb;
+    ULONGLONG Offset;
+    ULONG Length, Done;
+    NTSTATUS Status;
+};
+static HDDFS_READ_LOG HDDFSReadLog[8];
+static ULONG HDDFSReadCount, HDDFSRepeats;
+
+static void HDDFSLogRead(HDDFS_FCB *f, ULONGLONG offset, ULONG length, NTSTATUS status, ULONG done) {
+    HDDFS_READ_LOG &last = HDDFSReadLog[(HDDFSReadCount - 1) & 7];
+    if (HDDFSReadCount && last.Fcb == f && last.Offset == offset && last.Length == length) {
+        HDDFSRepeats++;
+        if (HDDFSRepeats == 1) {
+            for (ULONG i = HDDFSReadCount > 8 ? HDDFSReadCount - 8 : 0; i < HDDFSReadCount; i++) {
+                HDDFS_READ_LOG &r = HDDFSReadLog[i & 7];
+                XK_SERIAL("hddfs: read %.*s size %lx offset %lx length %lx -> %08lx, %lx bytes\n",
+                          (int)r.Fcb->NameLength, r.Fcb->Name, r.Fcb->FileSize, (ULONG)r.Offset, r.Length,
+                          (ULONG)r.Status, r.Done);
+            }
+        }
+        if (!(HDDFSRepeats & (HDDFSRepeats - 1))) {
+            XK_SERIAL("hddfs: the same read %lu times (%.*s offset %lx -> %08lx, %lx bytes)\n", HDDFSRepeats + 1,
+                      (int)f->NameLength, f->Name, (ULONG)offset, (ULONG)status, done);
+        }
+        return;
+    }
+    HDDFSRepeats = 0;
+    HDDFSReadLog[HDDFSReadCount++ & 7] = {f, offset, length, done, status};
+}
+#endif
+
 static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
@@ -435,6 +470,14 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
     if (write && f->FileSizeHigh) // a read-only file of 4 GB or more
         return HDDFSComplete(Irp, STATUS_ACCESS_DENIED);
+    // The reference pends exactly one kind of transfer (spec/stock/04b, asynchronous completion): a non-cached one
+    // on an asynchronous file object (no FO_SYNCHRONOUS_IO) that reaches the disk: length above 0, sector-aligned,
+    // a read starting inside the file, a write that does not extend it. It decides before the transfer, so the
+    // caller gets STATUS_PENDING whatever the disk then reports, and the result arrives in its I/O status block.
+    // Titles depend on it (an overlapped streaming loop that only advances on a pending read; XMV playback). Ours
+    // transfers synchronously, then completes the request as a pended one.
+    bool asyncNoCache = !(fo->Flags & FO_SYNCHRONOUS_IO) && (Irp->Flags & IRP_NOCACHE) && length && !unaligned;
+    bool pend = false;
     HDDFSAcquireVolume(v);
     NTSTATUS status = STATUS_SUCCESS;
     ULONG done = 0;
@@ -442,6 +485,7 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         if (offset.HighPart == -1 && offset.LowPart == 0xFFFFFFFF) // FILE_WRITE_TO_END_OF_FILE
             offset.QuadPart = f->FileSize;
         ULONGLONG end = (ULONGLONG)offset.QuadPart + length;
+        pend = asyncNoCache && !offset.HighPart && end <= f->FileSize;
         if (offset.HighPart || end > 0xFFFFFFFFull)
             status = (NTSTATUS)0xC000007F; // beyond the 4 GB FATX limit: STATUS_DISK_FULL
         else if (length && end > f->FileSize)
@@ -463,6 +507,7 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         } else {
             ULONGLONG left = size - (ULONGLONG)offset.QuadPart;
             done = left < length ? (ULONG)left : length;
+            pend = asyncNoCache;
             status = HDDFSTransferIrp(v, f, Irp, false, (ULONGLONG)offset.QuadPart, buffer, done);
             if (!NT_SUCCESS(status))
                 done = 0;
@@ -470,7 +515,16 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     }
     if (NT_SUCCESS(status) && (fo->Flags & FO_SYNCHRONOUS_IO))
         fo->CurrentByteOffset.QuadPart = offset.QuadPart + done;
+#if XK_DEBUG_SERIAL
+    if (!write)
+        HDDFSLogRead(f, (ULONGLONG)offset.QuadPart, length, status, done);
+#endif
     HDDFSReleaseVolume(v);
+    if (pend) {
+        IoMarkIrpPending(Irp);
+        HDDFSComplete(Irp, status, done);
+        return STATUS_PENDING;
+    }
     return HDDFSComplete(Irp, status, done);
 }
 
