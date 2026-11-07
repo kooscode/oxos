@@ -39,3 +39,9 @@ FREEZE / NOBOOT), which found the layout-dependent boot freeze that only showed 
 The boot freezes on the 1.4 console were found and fixed this way, along with the CPU set-up, interrupt start-up and
 NV2A pad calibration (specs 13–15), and the DRAM refresh loss behind rare crashes on warm boots (spec 20). So was the
 first retail title on real hardware: Halo 2 from an XISO on an exFAT SSD, and later Brute Force the same way.
+
+The 1.6 console was brought up on the same rig in one session: the board moved to a 1.6 (wiring notes in
+[`tools/modxo/README.md`](../tools/modxo/README.md)), the retail 1.6 boot path was reverse engineered into a spec, and
+OXOS's own 1.6 X-codes were written from it and checked register by register against the retail set-up on the
+console ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md)). A game that then hung on its first screen
+was traced the same way, from a thread dump on the serial log to two kernel fixes in overlapped disk reads.

@@ -10,8 +10,11 @@ https://github.com/user-attachments/assets/cc898ea8-d569-4c9a-b313-9798c5ed72c6
 *Vector Based OXOS Boot Animation*
 
 ## Highlights
+- **Xbox 1.6 support:** the 1.6 console (Xcalibur encoder, MCPX revision D5) boots OXOS to the dashboard and runs
+  games, from its own image (**`bios_1.6_vX.Y.Z_256k.bin`**) with OXOS's own 1.6 memory set-up and EEPROM pad
+  calibration ([details](spec/oxos_internal/28_1_6_console.md)).
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca_compliance.md)).
-- **Open BIOS:** our own boot code from the first instruction; 1 MB and 256 KB images.
+- **Open BIOS:** our own boot code from the first instruction; 1 MB and 256 KB images, and a 256 KB image for the 1.6.
 - **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
@@ -28,16 +31,29 @@ https://github.com/user-attachments/assets/cc898ea8-d569-4c9a-b313-9798c5ed72c6
 ## Try it
 **In xemu** (nothing to build, no Microsoft files):
 1. Install [xemu](https://xemu.app) and **[download the latest OXOS release](https://github.com/kooscode/oxos/releases/latest)**
-   (`oxos_vX.Y.Z.zip`: the 1 MB and 256 KB BIOS images and `title_patches.ini`) and unzip it.
+   (`oxos_vX.Y.Z.zip`: the BIOS images and `title_patches.ini`) and unzip it.
 2. In *Machine → Settings → System*, set *Flash (BIOS) File* to `bios_vX.Y.Z.bin` and leave *MCPX Boot ROM File*
    empty.
 3. Use the free [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk (`xbox_hdd.qcow2`) or your own
    Xbox disk image as the hard disk, and start the machine.
 
-**On a console:** flash `bios_vX.Y.Z_256k.bin` to a 256 KB modchip bank (or the 1 MB image to a 1 MB bank), and copy
-`title_patches.ini` to `C:\OXOS\title_patches.ini` for the per-title fixes. So far
-OXOS is tested on one 1.4 console; reports from other revisions are welcome in the
-[issues](https://github.com/kooscode/oxos/issues).
+**On a console:** flash the image for your console's revision to a modchip bank, and copy `title_patches.ini` to
+`C:\OXOS\title_patches.ini` for the per-title fixes.
+
+> **Xbox 1.6 hardware: use the `bios_1.6_…` image.** A 1.6 console sets up its memory differently, and the other
+> images do not set it up correctly (it fails to boot or crashes). The `bios_1.6_…` image is only for the 1.6.
+
+| Console | Image |
+|---|---|
+| 1.0 – 1.4 | `bios_vX.Y.Z_256k.bin` for a 256 KB bank (or `bios_vX.Y.Z.bin` for a 1 MB bank) |
+| **1.6** | `bios_1.6_vX.Y.Z_256k.bin` for a 256 KB bank |
+
+**1.6 with a Modxo (or any LPC rebuild):** keep the LPC wires short and use two grounds. Long wires corrupted the LPC
+cycles on the test console and it showed FRAG (flashing red and green) even with other BIOSes
+([wiring notes](tools/modxo/README.md#hardware)).
+
+So far OXOS is tested on a 1.4 console, a second MCPX 1.1 console and a 1.6 console; reports from other revisions are
+welcome in the [issues](https://github.com/kooscode/oxos/issues).
 
 ## Games and disks
 - **exFAT disk:** format the disk as exFAT on a PC, as one partition or the whole disk. The Xbox drives are folders
@@ -83,7 +99,7 @@ The kernel's sources, grouped by what the code does (details in [`kernel/README.
 
 ```
 kernel/
-  boot/            the open image's reset code, X-code wrapper and 2BL
+  boot/            the open image's reset code, X-codes (Cromwell's for 1.0-1.5, OXOS's own for the 1.6) and 2BL
   include/xk/      every header: one per source folder (core.h, storage.h, ...) and a few for one part (hddfs.h, ...)
   src/
     arch/          assembly: entry, interrupt stubs, context switch, exceptions, quick reboot
@@ -104,12 +120,14 @@ kernel/
 ```
 
 ## Not yet
-- Console revisions other than 1.4 are untested; the 1.6 pad calibration is not implemented.
+- One image for every revision: the 1.6 still needs its own image (a run-time 1.6 check in the X-codes is planned).
+- Revisions 1.0 – 1.3 and 1.5 are untested.
 - Debugging on a real console (a GDB stub over the serial port).
 
 ## Credits and license
 OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses:
-- [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0): the X-code table and EEPROM key states.
+- [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0): the X-code table (and the layout of the 1.6
+  console's own) and EEPROM key states.
 - Intel's CPU microcode for the Pentium III, unmodified under Intel's licence ([`third_party/intel_ucode`](third_party/intel_ucode)).
 - [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) (MIT): the default disk for the tests.
 - [nxdk](https://github.com/XboxDev/nxdk): the console apps and test titles.
