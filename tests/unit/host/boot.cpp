@@ -6,15 +6,10 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
-#include <xk/hal.h>
-#include <xk/ke.h>
-#include <xk/mm.h>
-#include <xk/ob.h>
-
-extern "C" unsigned char KiBootStack[];
-void KiInitializeDpcs();
-PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
-void ExInitializePool();
+#include <xk/hardware.h>
+#include <xk/core.h>
+#include <xk/memory.h>
+#include <xk/objects.h>
 
 namespace host {
 std::string CurrentTestName;
@@ -35,7 +30,8 @@ static void Make2blState() {
     pd[0x3FF] = 0xFFC00000 | 0xE3;
 
     uint8_t *image = Phys(0x10000);
-    image[0] = 'M', image[1] = 'Z';
+    image[0] = 'M';
+    image[1] = 'Z';
     *(uint32_t *)(image + 0x3C) = 0x80;
     uint8_t *nt = image + 0x80;
     memcpy(nt, "PE\0\0", 4);
@@ -71,7 +67,7 @@ int BootAndRun(int (*body)(void *), void *context) {
     MmInitSystem(false);
     KiInitializeDpcs();
     KiInitializeTimers();
-    KiInitializeScheduler(KiBootStack + 0x3000, KiBootStack);
+    KiInitializeScheduler(KiBootStack + KI_BOOT_STACK_SIZE, KiBootStack);
     ObInitSystem();
     HalEnableSystemInterrupt(0, Latched); // the clock
     static RunArgs args;

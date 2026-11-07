@@ -15,7 +15,7 @@ These scripts are the PC side.
 - An RP2040 Modxo board on the LPC header, flashed with Modxo built from the **`oxos-debug` branch** of
   [kooscode/modxo](https://github.com/kooscode/modxo). The module is `modxo_modules/oxos_debug`; its README has the
   stream format. Build as Modxo (`cmake` for your board, then `ninja`), and flash the firmware .uf2 with
-  `flash-uf2.sh`.
+  `flash_uf2.sh`.
 - Power button: GPIO 28 (`OXOS_POWER_PIN`) → 1 kΩ → base of an NPN transistor (e.g. 2N2222). Emitter to Xbox ground,
   collector to the power switch's signal side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the
   SERIRQ module unregistered.
@@ -38,7 +38,7 @@ python3 tools/modxo/console.py log --out console.txt
 | `console.py power` | press the power button once (a toggle) |
 | `console.py cycle [--off S]` | off, wait S seconds (default 8), on |
 | `bootrun.py --log FILE [--runs N] ...` | boot N times and classify each boot: PASS / FREEZE / NOBOOT (see `--help`) |
-| `flash-uf2.sh FILE.uf2 [PORT]` | flash a firmware or BIOS .uf2 over USB |
+| `flash_uf2.sh FILE.uf2 [PORT]` | flash a firmware or BIOS .uf2 over USB |
 
 Log lines:
 
@@ -53,7 +53,7 @@ Flash an OXOS netboot image once (`make -C kernel netboot`; see `tools/netboot/R
 
 ```sh
 python3 tools/netboot/netboot.py serve.bin --to 192.168.1.255 &       # serve.bin: a symlink to the image
-python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/serial/bios-256k.bin --serve serve.bin
+python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/serial/bios_256k.bin --serve serve.bin
 ```
 
 ## Notes
@@ -66,6 +66,6 @@ python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/s
 
 ## Troubleshooting
 - **`state` says `no pico`, and `lsusb` shows `2e8a:0003 Raspberry Pi RP2 Boot`:** the Pico is in its USB
-  bootloader (BOOTSEL), with its flash intact. Copy the firmware .uf2 to the RPI-RP2 drive (or run `flash-uf2.sh
+  bootloader (BOOTSEL), with its flash intact. Copy the firmware .uf2 to the RPI-RP2 drive (or run `flash_uf2.sh
   FIRMWARE.uf2`), and it restarts. The BIOS bank is not touched.
 - **`no logger answers`:** start `console.py log` first. Only one logger can own the port.

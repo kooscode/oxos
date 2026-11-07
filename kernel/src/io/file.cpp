@@ -1,12 +1,7 @@
 // I/O manager: opening files, file objects, Nt file services, completion ports (spec/stock/11 §4-6).
 #include <xk/io.h>
-#include <xk/ps.h>
-#include <xk/rtl.h>
-
-void IopQueueThreadIrp(PIRP Irp);
-void IopLockUserBuffer(PIRP Irp, ULONG Length);
-void IopCompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject);
-void IopDereferenceDevice(PDEVICE_OBJECT DeviceObject);
+#include <xk/core.h>
+#include <xk/runtime.h>
 
 // Carried through the object manager from IoCreateFile to IopParseDevice.
 struct OPEN_PACKET {
@@ -65,6 +60,9 @@ static NTSTATUS IopMountDevice(PDEVICE_OBJECT dev, bool allowRaw) {
     return status;
 }
 
+// --- Access rights
+
+// The generic rights (GENERIC_READ, _WRITE, _EXECUTE, _ALL) mapped to the file object's specific rights.
 static ACCESS_MASK IopMapGenericAccess(ACCESS_MASK a) {
     if (a & GENERIC_READ)
         a |= 0x120089; // FILE_GENERIC_READ
@@ -442,7 +440,8 @@ static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE Ap
     status = IopBeginRequest(FileHandle, Event, &r);
     if (!NT_SUCCESS(status))
         return status;
-    if (r.Synchronous && (!haveOffset || (offset.HighPart == -1 && offset.LowPart == FILE_USE_FILE_POINTER_POSITION_LOW)))
+    if (r.Synchronous &&
+        (!haveOffset || (offset.HighPart == -1 && offset.LowPart == FILE_USE_FILE_POINTER_POSITION_LOW)))
         offset = r.File->CurrentByteOffset;
     bool writeToEnd = write && offset.HighPart == -1 && offset.LowPart == 0xFFFFFFFF;
     if (offset.HighPart < 0 && !writeToEnd)
@@ -559,9 +558,11 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_A
 // --- Information classes (minimum lengths from the reference tables; 0 = not supported)
 
 static const UCHAR IopQueryOperationLength[FileMaximumInformation] = {
-    0, 0, 0, 0, 40, 24, 8, 4, 0, 8, 0, 0, 0, 0, 8, 0, 4, 4, 104, 0, 0, 8, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0};
+    0, 0, 0, 0, 40, 24, 8, 4, 0, 8, 0, 0, 0, 0, 8, 0, 4, 4, 104, 0, 0, 8, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 8,
+    0};
 static const UCHAR IopSetOperationLength[FileMaximumInformation] = {
-    0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 16, 16, 0, 1, 8, 0, 4, 0, 0, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 16, 0, 0, 0, 0, 0};
+    0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 16, 16, 0, 1, 8, 0, 4, 0, 0, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 16, 0, 0, 0, 0,
+    0};
 static bool IopSetNeedsWriteAccess(ULONG c) {
     return c == FileAllocationInformation || c == FileEndOfFileInformation || c == FileMoveClusterInformation;
 }
@@ -686,8 +687,10 @@ XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK Io
             (mode & 0x30) == 0x30)
             return done(STATUS_INVALID_PARAMETER);
         f->Flags = (UCHAR)((f->Flags & ~FO_SEQUENTIAL_ONLY) | ((mode & FILE_SEQUENTIAL_ONLY) ? FO_SEQUENTIAL_ONLY : 0));
-        if (r.Synchronous)
-            f->Flags = (UCHAR)((f->Flags & ~FO_ALERTABLE_IO) | ((mode & FILE_SYNCHRONOUS_IO_ALERT) ? FO_ALERTABLE_IO : 0));
+        if (r.Synchronous) {
+            f->Flags = (UCHAR)((f->Flags & ~FO_ALERTABLE_IO) |
+                               ((mode & FILE_SYNCHRONOUS_IO_ALERT) ? FO_ALERTABLE_IO : 0));
+        }
         return done(STATUS_SUCCESS);
     }
     if (c == FileCompletionInformation) {
@@ -936,7 +939,6 @@ XBAPI NTSTATUS NTAPI NtQueryIoCompletion(HANDLE IoCompletionHandle, IO_COMPLETIO
 }
 
 // Converts the I/O status to a Win32 error for XAPI completion routines (ordinal 232).
-XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status);
 XBAPI void NTAPI NtUserIoApcDispatcher(PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG Reserved) {
     ULONG error = 0, bytes = 0;
     if (((ULONG)IoStatusBlock->Status & 0xC0000000) == 0xC0000000)

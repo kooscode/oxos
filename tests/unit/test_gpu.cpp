@@ -1,10 +1,10 @@
-// The graphics engine's default channel context (spec/oxos-internal/24): the table HalpInitGraphicsEngine loads at a
+// The graphics engine's default channel context (spec/oxos_internal/24): the table HalpInitGraphicsEngine loads at a
 // cold boot so that titles which create their own graphics device start from a valid engine.
 #include "kernel_test.h"
 
 #include <map>
 
-#include <xk/gpu.h>
+#include <xk/graphics.h>
 
 namespace {
 std::map<unsigned, unsigned> DefaultImage() {
@@ -51,7 +51,8 @@ TEST(Gpu, DefaultContextKeyValues) {
     EXPECT_EQ(image[gpu::GR_CTX_4DWORDS], 0x002FE000u);
     EXPECT_EQ(image[gpu::GR_CTX_20DWORDS + 0x2C], 0x001C527Cu);
     // The part before the 3D context is the engine's own state: nothing to preset there but the first dword.
-    for (auto [offset, value] : image)
+    for (auto [offset, value] : image) {
         if (offset != 0)
             EXPECT_GE(offset, gpu::GR_CTX_3D) << std::hex << offset;
+    }
 }

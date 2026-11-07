@@ -1,18 +1,11 @@
 // I/O manager: device objects, symbolic links, StartIo queueing, share access (spec/stock/11 §2).
 #include <xk/io.h>
-#include <xk/rtl.h>
-
-NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
-                              POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
-                              PVOID *Object);
-NTSTATUS NTAPI IopParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
-                            POBJECT_STRING RemainingName, PVOID Context, PVOID *Object);
-void NTAPI IopCloseFileObject(PVOID Object, ULONG SystemHandleCount);
-void NTAPI IopDeleteFileObject(PVOID Object);
-void NTAPI IopDeleteIoCompletion(PVOID Object);
+#include <xk/runtime.h>
+#include <xk/filesystems.h>
 
 static KEVENT IopDeviceDefaultObject; // devices are not waitable: waits complete at once
 
+// The I/O manager's object types (their routines are in io/file.cpp and below).
 OBJECT_TYPE IoDeviceObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, IopParseDevice,
                                   &IopDeviceDefaultObject, 'iveD'};
 OBJECT_TYPE IoFileObjectType = {ExAllocatePoolWithTag, ExFreePool, IopCloseFileObject, IopDeleteFileObject,
@@ -20,15 +13,14 @@ OBJECT_TYPE IoFileObjectType = {ExAllocatePoolWithTag, ExFreePool, IopCloseFileO
 OBJECT_TYPE IoCompletionObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, IopDeleteIoCompletion, nullptr,
                                       (PVOID)0, 'pmoC'};
 
-IO_FILE_SYSTEM IopFileSystems;
+IO_FILE_SYSTEM IopFileSystems; // the mount routines, filled in by the file systems (filesystems/mount.cpp)
 
-void FatxInitialize();
-void FscInitialize();
+// --- Devices and symbolic links
 
 void IoInitSystem() {
     KeInitializeEvent(&IopDeviceDefaultObject, NotificationEvent, TRUE);
     FscInitialize();
-    FatxInitialize();
+    HDDFSInitialize();
 }
 
 static bool IopIsMountableDeviceType(ULONG type) {
@@ -171,7 +163,9 @@ static void IopRequestStartNextPacket(PDEVICE_OBJECT dev, bool byKey, ULONG key)
     KfLowerIrql(old);
 }
 
-XBAPI void NTAPI IoStartNextPacket(PDEVICE_OBJECT DeviceObject) { IopRequestStartNextPacket(DeviceObject, false, 0); }
+XBAPI void NTAPI IoStartNextPacket(PDEVICE_OBJECT DeviceObject) {
+    IopRequestStartNextPacket(DeviceObject, false, 0);
+}
 
 XBAPI void NTAPI IoStartNextPacketByKey(PDEVICE_OBJECT DeviceObject, ULONG Key) {
     IopRequestStartNextPacket(DeviceObject, true, Key);
@@ -243,18 +237,22 @@ XBAPI void NTAPI IoRemoveShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS Shar
     s->SharedDelete -= f->SharedDelete;
 }
 
+// --- Dismounting (spec/stock/11 §2)
+
 // Dismount the file system mounted on DeviceObject (spec/stock/11 §2): the volume driver detaches it; the volume device
 // is released when its last reference goes.
 XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     PDEVICE_OBJECT vol = DeviceObject->MountedOrSelfDevice;
     NTSTATUS status = STATUS_SUCCESS;
-    if (!vol)
+    if (!vol) {
         status = (NTSTATUS)0xC000026E; // STATUS_VOLUME_DISMOUNTED
-    else if (!vol->DriverObject->DriverDismountVolume)
-        status = STATUS_INVALID_DEVICE_REQUEST, vol = nullptr;
-    else
+    } else if (!vol->DriverObject->DriverDismountVolume) {
+        status = STATUS_INVALID_DEVICE_REQUEST;
+        vol = nullptr;
+    } else {
         vol->ReferenceCount++;
+    }
     KfLowerIrql(old);
     if (vol) {
         status = vol->DriverObject->DriverDismountVolume(vol);

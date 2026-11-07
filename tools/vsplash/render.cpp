@@ -1,8 +1,8 @@
 // Draws a vector splash scene (tools/svg_splash.py) with the kernel's renderer and writes the start picture, the end
 // picture and the half-way point of the cross-fade as PPM files; with --frames, every frame of the boot animation
-// instead (OUT-0000.ppm ...: 25 per second, as kernel/src/hal/splash.cpp shows them, to 8 s), for a preview video
-// (the jingle starts 2 s in): ffmpeg -framerate 25 -i OUT-%04d.ppm -itsoffset 2 -i jingle.wav ... (tools/jingle)
-#include "../../kernel/src/hal/vsplash.h"
+// instead (OUT-0000.ppm ...: 25 per second, as kernel/src/bootscreen/splash.cpp shows them, to 8 s), for a preview
+// video (the jingle starts 2 s in): ffmpeg -framerate 25 -i OUT-%04d.ppm -itsoffset 2 -i jingle.wav ... (tools/jingle)
+#include <xk/vsplash.h>
 
 #include <cstdio>
 #include <string>
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     }
     std::string out = argv[2];
     if (frames) {
-        // The splash thread's timeline (kernel/src/hal/splash.cpp): 0.5 s from black to the start picture, which
+        // The splash thread's timeline (kernel/src/bootscreen/splash.cpp): 0.5 s from black to the start picture, which
         // stays until 1 s; the jingle starts and the picture cross-fades (smoothstep) to the end picture, there at the
         // jingle's climax 2.6 s later; held 1.4 s, as the jingle's chord dies away; then black (the title).
         const unsigned introMs = 500, logoMs = 1000, climaxMs = 2600, holdMs = 1400;

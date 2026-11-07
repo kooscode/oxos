@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Converts an SVG into the vector boot splash's scene (spec/oxos-internal/00-boot-splash.md §1.1), which the kernel
-draws at boot (kernel/src/hal/vsplash.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
+"""Converts an SVG into the vector boot splash's scene (spec/oxos_internal/00_boot_splash.md §1.1), which the kernel
+draws at boot (kernel/src/bootscreen/vsplash.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
 
     svg_splash.py IN.svg OUT.bin      write the scene (without the "XKSPLASH" header)
 
@@ -239,6 +239,7 @@ def opacity(text, default=1.0):
     return max(0.0, min(1.0, float(text[:-1]) / 100 if text.endswith("%") else float(text)))
 
 
+# --- The converter: SVG elements, in document order, to the scene
 class Converter:
     def __init__(self, root):
         self.root = root
@@ -343,7 +344,9 @@ class Converter:
 
     # Shapes of one element: (local contours [(points, closed)], local bbox)
     def shape(self, el, tag):
-        a = lambda name, default="0": float(el.get(name, default))
+        def a(name, default="0"):  # a numeric attribute
+            return float(el.get(name, default))
+
         if tag == "rect":
             if el.get("rx") or el.get("ry"):
                 raise SplashError("rounded rectangles are not supported")
@@ -477,6 +480,7 @@ class Converter:
         return bytes(out)
 
 
+# --- Entry points: convert() for mkbios.py, main() for the command line
 def convert(path):
     """The scene for an SVG file (bytes)."""
     try:

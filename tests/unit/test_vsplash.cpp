@@ -1,19 +1,25 @@
-// The vector boot splash's renderer (kernel/src/hal/vsplash.cpp; scene format spec/oxos-internal/00-boot-splash.md
-// §1.1): anti-aliased fills, fill rules, phases, gradients, the glow filter, and the checks that keep a bad scene from
-// being drawn.
+// The vector boot splash's renderer (kernel/src/bootscreen/vsplash.cpp; scene format
+// spec/oxos_internal/00_boot_splash.md §1.1): anti-aliased fills, fill rules, phases, gradients, the glow filter, and
+// the checks that keep a bad scene from being drawn.
 #include "kernel_test.h"
 
 #include <cstdint>
 #include <vector>
 
-#include "../../kernel/src/hal/vsplash.h"
+#include <xk/vsplash.h>
 
 namespace {
 
 using Bytes = std::vector<uint8_t>;
 
-void U8(Bytes &b, unsigned v) { b.push_back(uint8_t(v)); }
-void U16(Bytes &b, unsigned v) { U8(b, v & 0xFF), U8(b, v >> 8 & 0xFF); }
+void U8(Bytes &b, unsigned v) {
+    b.push_back(uint8_t(v));
+}
+
+void U16(Bytes &b, unsigned v) {
+    U8(b, v & 0xFF), U8(b, v >> 8 & 0xFF);
+}
+
 void I32(Bytes &b, int v) {
     for (int i = 0; i < 4; i++)
         U8(b, unsigned(v) >> (8 * i) & 0xFF);
@@ -68,7 +74,9 @@ std::vector<unsigned> Render(const Bytes &scene, vsplash::Phase phase) {
     return out;
 }
 
-unsigned At(const std::vector<unsigned> &px, int x, int y) { return px[y * vsplash::W + x]; }
+unsigned At(const std::vector<unsigned> &px, int x, int y) {
+    return px[y * vsplash::W + x];
+}
 
 } // namespace
 
@@ -173,6 +181,7 @@ TEST(VectorSplash, CheckRejectsBadScenes) {
     s = Scene(paints, 1, farAway, 1);
     EXPECT_NE(vsplash::Check(s.data(), unsigned(s.size()), &scratch), 0u) << "coordinates out of range";
     Bytes badClip = good;
-    badClip[4] = 0x81, badClip[5] = 0x02; // x1 = 641
+    badClip[4] = 0x81;
+    badClip[5] = 0x02; // x1 = 641
     EXPECT_NE(vsplash::Check(badClip.data(), unsigned(badClip.size()), &scratch), 0u);
 }

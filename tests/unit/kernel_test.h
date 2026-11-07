@@ -3,22 +3,17 @@
 #include <gtest/gtest.h>
 
 #include "host.h"
-#include <xk/hal.h>
-#include <xk/ke.h>
-#include <xk/mm.h>
+#include <functional>
+#include <xk/arch.h>
+#include <xk/hardware.h>
+#include <xk/core.h>
+#include <xk/memory.h>
+#include <xk/objects.h>
 
 // The page database (PTE array of the 0x80000000 map) as physical memory, independent of the kernel's mappings.
-inline uint32_t PfnEntry(uint32_t pfn) { return ((uint32_t *)host::Phys(0x3FF0000))[pfn]; }
-
-// The kernel's free-page region (kernel/src/mm/init.cpp).
-struct MMPFNFREE {
-    USHORT PackedPfnFlink, PackedPfnBlink;
-};
-struct MMPFNREGION {
-    MMPFNFREE FreePagesByColor[32];
-    ULONG AvailablePages;
-};
-extern MMPFNREGION MmRetailPfnRegion;
+inline uint32_t PfnEntry(uint32_t pfn) {
+    return ((uint32_t *)host::Phys(0x3FF0000))[pfn];
+}
 
 // Walk every colour list from the physical page database: no loops, entries free and of their colour, back links
 // consistent, and the count matching MmAvailablePages. Returns a description of the first problem, or "".
@@ -40,10 +35,6 @@ std::string CheckPfnDatabase();
             HostRestoreFlags(0x200);                                                                                  \
         }                                                                                                             \
     } while (0)
-extern "C" void HostRestoreFlags(unsigned long Flags);
-
-#include <functional>
-#include <xk/ob.h>
 
 // A kernel thread running `fn` (any priority 0-31); Join waits for it to terminate and drops the reference.
 PKTHREAD Spawn(std::function<void()> fn, LONG priority = 8);
@@ -54,6 +45,7 @@ inline LARGE_INTEGER RelativeMs(LONGLONG ms) {
     t.QuadPart = -10000LL * ms;
     return t;
 }
+
 inline void SleepMs(LONGLONG ms) {
     LARGE_INTEGER t = RelativeMs(ms);
     KeDelayExecutionThread(KernelMode, FALSE, &t);

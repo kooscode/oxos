@@ -1,19 +1,20 @@
 // Executive pool: block format, sizes, lookaside lists, splitting, merging, page release, and the page hand-over
 // race.
 #include "kernel_test.h"
+#include <xk/memory.h>
 
 #include <map>
 #include <random>
 #include <vector>
-
-extern volatile ULONG ExpPoolPages, ExpPoolLargePages, ExpPoolBlocks;
 
 namespace {
 struct PoolHeader {
     UCHAR PreviousSize, PoolIndex, PoolType, BlockSize;
     ULONG PoolTag;
 };
-PoolHeader *Header(void *p) { return (PoolHeader *)p - 1; }
+PoolHeader *Header(void *p) {
+    return (PoolHeader *)p - 1;
+}
 } // namespace
 
 TEST(Pool, SmallBlocksCarryTheReferenceHeader) {
@@ -215,6 +216,7 @@ void NTAPI RaceDpcRoutine(PKDPC, PVOID, PVOID, PVOID) {
     RaceBlock = ExAllocatePool(0xFD8);
     RaceDpcRuns = RaceDpcRuns + 1;
 }
+
 BOOLEAN NTAPI RaceIsr(PKINTERRUPT, PVOID) {
     KeInsertQueueDpc(&RaceDpc, nullptr, nullptr);
     return TRUE;

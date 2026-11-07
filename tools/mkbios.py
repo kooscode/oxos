@@ -20,7 +20,7 @@ Boot splash (optional): the second 256 KiB bank of a 1 MiB image (flash offset 0
   "XKSPLASH", u32 version 2, u32 length, u32 CRC-32, then the vector scene tools/svg_splash.py makes from an SVG.
   The open image also keeps a copy in each boot bank when it fits (see build_open), for 256 KiB images.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
-valid and falls back to its drawn emblem otherwise (spec/oxos-internal/00-boot-splash.md).
+valid and falls back to its drawn emblem otherwise (spec/oxos_internal/00_boot_splash.md).
 
 LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
 stream); its own decoder checks the result before the image is written.
@@ -38,6 +38,7 @@ FRAME = 0x8000
 XBOX_SUBSYSTEM = 14
 
 
+# --- Building blocks: RC4, the flattened kernel, the LZX stream, the 2BL patch, the splash bank
 def rc4(key, data):
     s = list(range(256)); j = 0
     for i in range(256):
@@ -130,7 +131,7 @@ def splash_bank(path):
     """The splash bank contents for an SVG: the vector scene (version 2, tools/svg_splash.py), which the kernel draws
     and animates at boot."""
     if not path.lower().endswith(".svg"):
-        sys.exit(f"splash {path}: the boot splash is an SVG (spec/oxos-internal/00-boot-splash.md)")
+        sys.exit(f"splash {path}: the boot splash is an SVG (spec/oxos_internal/00_boot_splash.md)")
     import svg_splash
     try:
         scene = svg_splash.convert(path)
@@ -178,7 +179,7 @@ def cromwell_key_states(cromwell_dir):
 
 # The certificate key every retail console's boot loader hands to the kernel (spec/stock/01 §1). The kernel's one use
 # for it: each title's save-signature, alternate-signature and System Link keys (spec/stock/05 §7), so saves and
-# System Link work with stock consoles. Carried for interoperability only (dmca-compliance.md §6, Legal Basis §1.1).
+# System Link work with stock consoles. Carried for interoperability only (dmca_compliance.md §6, Legal Basis §1.1).
 CERTIFICATE_KEY = bytes.fromhex("5c0733ae0401f7e8ba7993fdcd2f1fe0")
 
 
@@ -248,6 +249,7 @@ def build_open(a):
           f"{kstart:#x}, {len(keys) // 4 - 10} key-state words, free {free:#x}{splash}")
 
 
+# --- Command line
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base")

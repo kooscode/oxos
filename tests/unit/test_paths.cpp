@@ -7,9 +7,6 @@
 
 #define Prcb (KiPcr.PrcbData)
 
-extern KPROCESS KiSystemProcess;
-extern volatile ULONG MiCommitFailures;
-
 // --- Scheduler
 
 TEST(Sched, AHigherPriorityThreadDisplacesTheStandbyThread) {
@@ -100,8 +97,12 @@ TEST(WaitPaths, SetWithWaitTrueHandsTheDispatcherToTheNextWait) {
 
 namespace {
 std::atomic<int> HeldApcRan;
-void NTAPI HeldKernel(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {}
-void NTAPI HeldNormal(PVOID, PVOID, PVOID) { HeldApcRan++; }
+void NTAPI HeldKernel(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+    // Nothing at kernel level: the test watches the normal routine.
+}
+void NTAPI HeldNormal(PVOID, PVOID, PVOID) {
+    HeldApcRan++;
+}
 } // namespace
 
 TEST(WaitPaths, ANormalApcHeldByACriticalRegionWaitsForItsEnd) {
@@ -201,11 +202,13 @@ NTSTATUS Alloc(ULONG *base, ULONG size, ULONG type, ULONG protect) {
     *base = (ULONG)b;
     return st;
 }
+
 NTSTATUS Release(ULONG base, ULONG size) {
     PVOID b = (PVOID)base;
     SIZE_T s = size;
     return NtFreeVirtualMemory(&b, &s, MEM_RELEASE);
 }
+
 ULONG Protect(ULONG va) {
     MEMORY_BASIC_INFORMATION m;
     NtQueryVirtualMemory((PVOID)va, &m);

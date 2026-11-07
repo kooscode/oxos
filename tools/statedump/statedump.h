@@ -14,23 +14,57 @@ typedef unsigned short u16;
 typedef unsigned char u8;
 typedef void (*Out)(const char *line);
 
-static inline void outl_(u16 p, u32 v) { __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(p)); }
-static inline u32 inl_(u16 p) { u32 v; __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(p)); return v; }
-static inline u8 inb_(u16 p) { u8 v; __asm__ volatile("inb %1, %0" : "=a"(v) : "Nd"(p)); return v; }
-static inline u64 rdmsr_(u32 m) { u32 lo, hi; __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(m)); return (u64)hi << 32 | lo; }
-static inline void cpuid_(u32 leaf, u32 r[4]) { __asm__ volatile("cpuid" : "=a"(r[0]), "=b"(r[1]), "=c"(r[2]), "=d"(r[3]) : "a"(leaf), "c"(0)); }
+static inline void outl_(u16 p, u32 v) {
+    __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(p));
+}
+
+static inline u32 inl_(u16 p) {
+    u32 v;
+    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(p));
+    return v;
+}
+
+static inline u8 inb_(u16 p) {
+    u8 v;
+    __asm__ volatile("inb %1, %0" : "=a"(v) : "Nd"(p));
+    return v;
+}
+
+static inline u64 rdmsr_(u32 m) {
+    u32 lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(m));
+    return (u64)hi << 32 | lo;
+}
+
+static inline void cpuid_(u32 leaf, u32 r[4]) {
+    __asm__ volatile("cpuid" : "=a"(r[0]), "=b"(r[1]), "=c"(r[2]), "=d"(r[3]) : "a"(leaf), "c"(0));
+}
 
 // A tiny line builder: text and hex only.
 struct Line {
     char b[240];
     int n = 0;
-    Line &s(const char *t) { while (*t && n < 236) b[n++] = *t++; return *this; }
-    Line &x(u32 v, int digits = 8) {
-        for (int i = digits - 1; i >= 0 && n < 236; i--) b[n++] = "0123456789abcdef"[(v >> (4 * i)) & 15];
+    Line &s(const char *t) {
+        while (*t && n < 236)
+            b[n++] = *t++;
         return *this;
     }
-    Line &sp() { if (n < 236) b[n++] = ' '; return *this; }
-    void put(Out out) { b[n++] = '\n'; b[n] = 0; out(b); n = 0; }
+    Line &x(u32 v, int digits = 8) {
+        for (int i = digits - 1; i >= 0 && n < 236; i--)
+            b[n++] = "0123456789abcdef"[(v >> (4 * i)) & 15];
+        return *this;
+    }
+    Line &sp() {
+        if (n < 236)
+            b[n++] = ' ';
+        return *this;
+    }
+    void put(Out out) {
+        b[n++] = '\n';
+        b[n] = 0;
+        out(b);
+        n = 0;
+    }
 };
 
 static void Cpu(Out out) {
@@ -136,13 +170,14 @@ static void Gpu(Out out) {
     static const struct { const char *name; u32 from, to; } blocks[] = {
         {"pmc", 0x000000, 0x000400}, {"pbus", 0x001000, 0x002000}, {"pfb", 0x100000, 0x101000},
         {"pextdev", 0x101000, 0x101100}, {"pcrtc", 0x600000, 0x601000}, {"pramdac", 0x680000, 0x681000}};
-    for (auto &b : blocks)
+    for (auto &b : blocks) {
         for (u32 o = b.from; o < b.to; o += 0x20) {
             l.s("sd nv ").s(b.name).sp().x(o, 6);
             for (u32 k = o; k < o + 0x20; k += 4)
                 l.sp().x(r(k));
             l.put(out);
         }
+    }
 }
 
 static void Io(Out out) {

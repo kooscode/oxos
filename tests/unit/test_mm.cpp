@@ -5,8 +5,6 @@
 #include <set>
 #include <vector>
 
-extern volatile ULONG MiPteDoubleFrees, MiRelocations;
-
 namespace {
 
 // Every test leaves the page database consistent.
@@ -20,7 +18,9 @@ protected:
     void TearDown() override { EXPECT_EQ(CheckPfnDatabase(), "") << host::TakeLog(); }
 };
 
-uint32_t &Pte(ULONG va) { return *(uint32_t *)MiGetPteAddress(va); }
+uint32_t &Pte(ULONG va) {
+    return *(uint32_t *)MiGetPteAddress(va);
+}
 
 } // namespace
 
@@ -172,9 +172,10 @@ TEST_F(Mm, ContiguousRequestsMoveUnlockedPagesAndKeepTheirContents) {
     auto c = MmAllocateContiguousMemoryEx(want * 4096, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     ASSERT_NE(c, nullptr);
     // Every system page still reads its pattern through its own virtual address.
-    for (size_t i = 0; i < pages.size(); i++)
+    for (size_t i = 0; i < pages.size(); i++) {
         for (int w = 0; w < 1024; w += 255)
             ASSERT_EQ(pages[i][w], (uint32_t)i * 0x10001 + w) << "page " << i << " word " << w;
+    }
     // The contiguous block is really contiguous and ours.
     ULONG pfn = MmGetPhysicalAddress(c) >> 12;
     for (ULONG i = 0; i < want; i++)
@@ -348,6 +349,7 @@ NTSTATUS Allocate(ULONG *base, ULONG size, ULONG type, ULONG protect) {
     *base = (ULONG)b;
     return st;
 }
+
 NTSTATUS Free(ULONG base, ULONG size, ULONG type) {
     PVOID b = (PVOID)base;
     SIZE_T s = size;

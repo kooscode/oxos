@@ -1,46 +1,14 @@
 // More of the kernel core: alerts, boosts and priorities, time keeping, FPU state, process-level thread APIs, the
 // RTC, and the rarer memory-manager entry points.
 #include "kernel_test.h"
+#include <xk/core.h>
+#include <xk/memory.h>
+#include <xk/objects.h>
 
 #include <atomic>
 #include <vector>
 
 #define Prcb (KiPcr.PrcbData)
-
-extern "C" void KiThreadReturned();
-void KiPerfCounterOverflow();
-void KiNpxNotAvailableForTest();
-extern "C" void KiNpxNotAvailable();
-struct HAL_TIME_FIELDS {
-    SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;
-};
-void HalpQueryRealTimeClock(HAL_TIME_FIELDS *t);
-void HalpSetRealTimeClock(const HAL_TIME_FIELDS *t);
-bool HalpCmosSignatureValid();
-void HalpWriteCmosSignature();
-UCHAR HalpCmosRead(UCHAR reg);
-void HalpCmosWrite(UCHAR reg, UCHAR v);
-void HalpInitRtc();
-XBAPI BOOLEAN NTAPI RtlTimeFieldsToTime(HAL_TIME_FIELDS *TimeFields, PLARGE_INTEGER Time);
-XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER PreviousTime);
-XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
-XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency();
-XBAPI void NTAPI KeSetEventBoostPriority(PKEVENT Event, PKTHREAD *Thread);
-struct KFLOATING_SAVE_ {
-    UCHAR Flags, Irql, Reserved[6];
-    PVOID Buffer;
-    ULONG Reserved2[2];
-    PKTHREAD Thread;
-};
-XBAPI NTSTATUS NTAPI KeSaveFloatingPointState(KFLOATING_SAVE_ *FloatSave);
-XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState(KFLOATING_SAVE_ *FloatSave);
-struct PS_STATISTICS {
-    ULONG Length, ThreadCount, HandleCount;
-};
-XBAPI NTSTATUS NTAPI PsQueryStatistics(PS_STATISTICS *ProcessStatistics);
-NTSTATUS MiCommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize);
-extern volatile ULONG MiPteListDamaged;
-extern KPROCESS KiSystemProcess;
 
 // --- Alerts and boosts
 
@@ -169,7 +137,7 @@ TEST(Time, StallReturns) {
 
 TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
     HalpInitRtc();
-    HAL_TIME_FIELDS f = {2026, 10, 23, 13, 45, 30, 0, 5};
+    TIME_FIELDS f = {2026, 10, 23, 13, 45, 30, 0, 5};
     LARGE_INTEGER t;
     ASSERT_TRUE(RtlTimeFieldsToTime(&f, &t));
     LARGE_INTEGER previous;
@@ -178,7 +146,7 @@ TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
     KeQuerySystemTime(&now);
     EXPECT_EQ(now.QuadPart, t.QuadPart);
     EXPECT_TRUE(HalpCmosSignatureValid());
-    HAL_TIME_FIELDS r = {};
+    TIME_FIELDS r = {};
     HalpQueryRealTimeClock(&r);
     EXPECT_EQ(r.Year, 2026);
     EXPECT_EQ(r.Month, 10);
@@ -231,9 +199,15 @@ TEST(Fpu, DeviceNotAvailableSwitchesTheOwner) {
 
 namespace {
 std::atomic<int> Notified;
-void NTAPI Notify(PVOID, HANDLE, BOOLEAN create) { Notified += create ? 1 : 100; }
+void NTAPI Notify(PVOID, HANDLE, BOOLEAN create) {
+    Notified += create ? 1 : 100;
+}
+
 std::atomic<int> UserApcs;
-void NTAPI UserApc(PVOID a, PVOID b, PVOID c) { UserApcs += (int)(ULONG)a + (int)(ULONG)b + (int)(ULONG)c; }
+void NTAPI UserApc(PVOID a, PVOID b, PVOID c) {
+    UserApcs += (int)(ULONG)a + (int)(ULONG)b + (int)(ULONG)c;
+}
+
 std::atomic<bool> HandleThreadStop;
 void NTAPI HandleThread(PVOID) {
     while (!HandleThreadStop) {
@@ -280,7 +254,9 @@ TEST(Ps, CreateSuspendResumeQueueApcAndStatistics) {
     EXPECT_NE(PsQueryStatistics(&bad), STATUS_SUCCESS);
 }
 
-TEST(Ps, ASystemRoutineThatReturnsIsABugCheck) { EXPECT_BUGCHECK(0x0E, KiThreadReturned()); }
+TEST(Ps, ASystemRoutineThatReturnsIsABugCheck) {
+    EXPECT_BUGCHECK(0x0E, KiThreadReturned());
+}
 
 // --- Memory manager leftovers
 

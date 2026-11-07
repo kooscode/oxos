@@ -24,7 +24,8 @@ std::string CheckPfnDatabase() {
                 return msg;
             }
             if ((USHORT)(e >> 16) != prev) {
-                snprintf(msg, sizeof(msg), "colour %u: pfn %#x back link %04x, expected %04x", color, pfn, e >> 16, prev);
+                snprintf(msg, sizeof(msg), "colour %u: pfn %#x back link %04x, expected %04x", color, pfn, e >> 16,
+                         prev);
                 return msg;
             }
             prev = packed;

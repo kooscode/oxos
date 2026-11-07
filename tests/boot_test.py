@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Boot a BIOS image in xemu and check milestone conditions through the QMP monitor.
 
-The kernel's boot self-tests (kernel/src/ke/selftest.cpp) leave results in globals that are
+The kernel's boot self-tests (kernel/selftest/selftest.cpp) leave results in globals that are
 located through the linker map and read with HMP `x`.
 
 usage: boot_test.py --bios build/selftest/bios.bin --map build/selftest/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
@@ -13,7 +13,7 @@ import hmac, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, ti
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2
 import exfat  # noqa: E402
-from fatx import Fatx, FatxWriter  # noqa: E402
+from fatx import FATX, FATXWriter  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
@@ -226,7 +226,7 @@ def run_checks(mon, hdd=None, title_map=None):
 
 
 def is_exfat_disk(q):
-    """A GPT disk (protective MBR): the exFAT layout (spec/oxos-internal/05-exfat-storage-spec.md)."""
+    """A GPT disk (protective MBR): the exFAT layout (spec/oxos_internal/05_exfat_storage_spec.md)."""
     s0 = q.read(0, 512)
     return s0[510:512] == b"\x55\xAA" and s0[446 + 4] == 0xEE
 
@@ -280,7 +280,7 @@ def idex_exfat_checks(mon, q):
     nothing beyond it; the folder partitions have no sectors of their own."""
     reserved = q.read(1024 * 512, 16)
     return {
-        "exFAT layout detected (GPT, exFAT partition)": mon.read("IdexDiskExfatLayout") & 0xFF == 1,
+        "exFAT layout detected (GPT, exFAT partition)": mon.read("IdexDiskEXFATLayout") & 0xFF == 1,
         "Partition0 sector 0 = the reserved-area copy at sector 1024": [
             mon.read_offset("KiTestIdexPartitionSig", 4 * w) for w in range(4)] == list(struct.unpack("<4I", reserved)),
         "Partition0 refuses access past the reserved area; folder partitions refuse raw reads":
@@ -291,8 +291,8 @@ def idex_exfat_checks(mon, q):
     }
 
 
-# 48-bit addressing (spec/oxos-internal/04-lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
-# limit, as (first LBA, sector count, tag); kernel/src/ke/selftest_idex.cpp has the same list.
+# 48-bit addressing (spec/oxos_internal/04_lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
+# limit, as (first LBA, sector count, tag); kernel/selftest/disk.cpp has the same list.
 def lba48_writes(sectors):
     return [(0x0FFFFFFE, 1, 1), (0x0FFFFFFF, 1, 2), (0x10000000, 1, 3), (0x10000001, 1, 4), (0x0FFFFF80, 512, 5),
             (0x0FFFFE00, 256, 6), (0x20000000, 256, 7), (sectors - 8, 8, 8)]
@@ -352,12 +352,12 @@ def fatx_checks(mon, hdd):
         return {"HDD image attached": False}
     q = Qcow2(hdd)
     if is_exfat_disk(q):
-        v = exfat.Exfat(q)
+        v = exfat.EXFAT(q)
         dash = v.read_file("/C/xboxdash.xbe")
         names = "".join(x.name + "|" for x in v.listdir("/E"))
         clusters, serial = min(v.count * v.cs, 2 << 40) // 0x4000, v.serial
     else:
-        c, e = Fatx(q, "C"), Fatx(q, "E")
+        c, e = FATX(q, "C"), FATX(q, "E")
         dash = c.read_file("xboxdash.xbe")
         names = "".join(n + "|" for n, *_ in e.listdir())
         clusters, serial = e.clusters, e.serial
@@ -365,44 +365,44 @@ def fatx_checks(mon, hdd):
     for b in dash:
         s = (s * 31 + b) & 0xFFFFFFFF
     return {
-        "C:\\xboxdash.xbe read in odd pieces matches the image": mon.read("KiTestFatxReadOk") == 1
-            and mon.read("KiTestFatxReadLength") == len(dash) and mon.read("KiTestFatxReadSum") == s,
-        "file information (standard, network open, name, mode)": mon.read("KiTestFatxInfoOk") == 1,
-        "E:\\ enumeration matches the image": mon.read("KiTestFatxDirOk") == 1
-            and read_string(mon, "KiTestFatxDirNames", 64) == names[:62],
-        "create dir + 100 KB file, reopen and verify": mon.read("KiTestFatxWriteOk") == 1,
-        "mask query, rename, delete, non-empty dir refused": mon.read("KiTestFatxRenameDeleteOk") == 1,
-        "error statuses (not found, collision, dir/non-dir, names)": mon.read("KiTestFatxErrorsOk") == 1,
-        "D: as a hard-disk folder reports 2048-byte sectors, the volume its own": mon.read("KiTestFatxTitleFolderOk") == 1,
-        "volume information (size, serial, FATX)": mon.read("KiTestFatxVolumeOk") == 1
-            and mon.read("KiTestFatxTotalClusters") == clusters and mon.read("KiTestFatxSerial") == serial,
-        "free clusters balanced": mon.read("KiTestFatxFreeBalanced") == 1,
-        "FATX suite finished": mon.read("KiTestFatxDone") == 1,
+        "C:\\xboxdash.xbe read in odd pieces matches the image": mon.read("KiTestFATXReadOk") == 1
+            and mon.read("KiTestFATXReadLength") == len(dash) and mon.read("KiTestFATXReadSum") == s,
+        "file information (standard, network open, name, mode)": mon.read("KiTestFATXInfoOk") == 1,
+        "E:\\ enumeration matches the image": mon.read("KiTestFATXDirOk") == 1
+            and read_string(mon, "KiTestFATXDirNames", 64) == names[:62],
+        "create dir + 100 KB file, reopen and verify": mon.read("KiTestFATXWriteOk") == 1,
+        "mask query, rename, delete, non-empty dir refused": mon.read("KiTestFATXRenameDeleteOk") == 1,
+        "error statuses (not found, collision, dir/non-dir, names)": mon.read("KiTestFATXErrorsOk") == 1,
+        "D: as a hard-disk folder reports 2048-byte sectors, the volume its own": mon.read("KiTestFATXTitleFolderOk") == 1,
+        "volume information (size, serial, FATX)": mon.read("KiTestFATXVolumeOk") == 1
+            and mon.read("KiTestFATXTotalClusters") == clusters and mon.read("KiTestFATXSerial") == serial,
+        "free clusters balanced": mon.read("KiTestFATXFreeBalanced") == 1,
+        "FATX suite finished": mon.read("KiTestFATXDone") == 1,
         **exfat_format_checks(mon, q)}
 
 
 def exfat_format_checks(mon, q):
-    """exFAT disk: a title-style format of X: empties the folder; E: refuses it (05-exfat-storage-spec.md §5)."""
+    """exFAT disk: a title-style format of X: empties the folder; E: refuses it (05_exfat_storage_spec.md §5)."""
     if not is_exfat_disk(q):
         return {}
-    total, free = mon.read("KiTestExfatFormatTotal"), mon.read("KiTestExfatFormatFree")
-    spc = mon.read("KiTestExfatFormatSpc")
+    total, free = mon.read("KiTestEXFATFormatTotal"), mon.read("KiTestEXFATFormatFree")
+    spc = mon.read("KiTestEXFATFormatSpc")
     print(f"  (X: after the format: {free} of {total} units of {spc * 512 // 1024} KB free)")
     # A FATX volume of 750 MB with the 64 KB clusters the format chose: 4 KB header, table rounded to 4 KB.
     length, cluster = 0x2EE00000, 0x10000
     fat = ((length // cluster + 1) * 2 + 0xFFF) & ~0xFFF
     clusters = (length - 0x1000 - fat) // cluster
     return {
-        "X: formatted through its volume handle: folder emptied, header serial shown": mon.read("KiTestExfatFormatOk") == 1,
+        "X: formatted through its volume handle: folder emptied, header serial shown": mon.read("KiTestEXFATFormatOk") == 1,
         "X: reports a 750 MB FATX volume in the format's cluster size, only its root directory in use":
             spc == 128 and total == clusters and free == total - 1,
-        "E: refuses a format through its volume handle": mon.read("KiTestExfatRefuseOk") == 1,
+        "E: refuses a format through its volume handle": mon.read("KiTestEXFATRefuseOk") == 1,
         "allocations through E: and Y: in turn succeed (the volume check below finds lost bitmap bits)":
-            mon.read("KiTestExfatCrossOk") == 1,
+            mon.read("KiTestEXFATCrossOk") == 1,
         "a FAT chain is followed only as far as the file's length (stale tail ignored, 3 new clusters)":
-            mon.read("KiTestExfatStaleOk") == 1,
+            mon.read("KiTestEXFATStaleOk") == 1,
         "an allocation size allocates nothing past the length (create and set-allocation)":
-            mon.read("KiTestExfatPreallocOk") == 1,
+            mon.read("KiTestEXFATPreallocOk") == 1,
     }
 
 
@@ -427,11 +427,11 @@ TITLE_PATCHES = False  # set when the disk copy carries the test title's patch f
 
 
 def write_title_patches(hdd_copy, title, title_map):
-    """C:\\OXOS\\title-patches.ini for the test title (spec/oxos-internal/25 §3), on a FATX test disk."""
+    """C:\\OXOS\\title_patches.ini for the test title (spec/oxos_internal/25 §3), on a FATX test disk."""
     global TITLE_PATCHES
     q = Qcow2(hdd_copy)
     try:
-        w = FatxWriter(q, "C")
+        w = FATXWriter(q, "C")
     except Exception:  # not a FATX disk (exFAT): no patch file
         return
     xbe = open(title, "rb").read()
@@ -444,7 +444,7 @@ def write_title_patches(hdd_copy, title, title_map):
             f"patch = FFF0: 00 > 90 ; below the image: skipped\r\n"
             f"[{tid:08X}/{version + 1}]\r\npatch = {syms['_XkTitlePatchB']:X}: 22 22 22 22 > B0 B0 B0 B0\r\n")
     w.makedirs("OXOS")
-    w.write_file("OXOS\\title-patches.ini", text.encode())
+    w.write_file("OXOS\\title_patches.ini", text.encode())
     q.save(hdd_copy + ".new")
     os.replace(hdd_copy + ".new", hdd_copy)
     TITLE_PATCHES = True
@@ -519,7 +519,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
     return checks
 
 
-# --- Disc images (spec/oxos-internal/16-virtual-discs.md): the ISO launcher on the disc mounts an image of the kernel
+# --- Disc images (spec/oxos_internal/16_virtual_discs.md): the ISO launcher on the disc mounts an image of the kernel
 # test title (with relaunch.txt) from F:\titles on an exFAT disk; the title then runs from the image, relaunches
 # itself (the mount survives the quick reboots) and ends in the dashboard.
 ISO_KINDS = ("plain", "split", "cci", "splitcci", "large")
@@ -568,7 +568,7 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
             else:
                 b.add(dest, part.read_chain(cl, sz), attrs=attr)
     for letter in ("C", "E"):
-        copy(fatx.Fatx(src, letter), letter)
+        copy(fatx.FATX(src, letter), letter)
     folder = f"/F/titles/{name}" if a.iso_kind == "cci" else "/F/titles"
     for n, data in files.items():
         b.add(f"{folder}/{n}", data)
@@ -583,6 +583,7 @@ def iso_checks(mon, a):
     return checks
 
 
+# --- Checks of the other test phases (read from the running console over QMP, or from the serial log and the disk)
 def rtl_checks(mon):
     for _ in range(80):
         if mon.read("KiTestRtlDone"):
@@ -649,7 +650,7 @@ def dash_checks(mon, jingle_pcm=None, evox=False):
     t0 = mon.read("KeTickCount")
     time.sleep(0.5)
     ticking = mon.read("KeTickCount") > t0
-    # Boot-only memory (spec/oxos-internal/18): pages freed, and the page database (the PTEs at 0x83FF0000) no longer
+    # Boot-only memory (spec/oxos_internal/18): pages freed, and the page database (the PTEs at 0x83FF0000) no longer
     # maps the splash's code; the tables of xemu's encoder (a Conexant) stay mapped.
     boot_freed = bin(mon.read("MiBootPagesFreed")).count("1") + bin(mon.read_offset("MiBootPagesFreed", 4)).count("1")
     def mapped(name):
@@ -690,6 +691,103 @@ def dash_checks(mon, jingle_pcm=None, evox=False):
     }, "M5e": launch_reason_checks(mon)}
 
 
+def fatal_checks(mon):
+    for _ in range(240):  # the disk wait times out first
+        if mon.read("IdexFatalErrorCode"):
+            break
+        time.sleep(0.25)
+    time.sleep(2)
+    code, fb = mon.read("IdexFatalErrorCode"), mon.read("XkFatalErrorFrameBuffer")
+    lit = 0
+    for y in range(185, 295, 8):  # the two digit cells (x 250-390)
+        out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
+        lit += len(re.findall(r"0xffffffff", out))
+    print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit samples)")
+    return {"M5f": {
+        "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
+        "error code drawn on screen": fb != 0 and lit > 20
+            and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
+    }}, code
+
+
+def udf_checks(mon):
+    for _ in range(160):
+        if mon.read("KiTestDvdDone"):
+            break
+        time.sleep(0.25)
+    vob, ifo = mkudf.TREE["VIDEO_TS"]["VTS_01_1.VOB"], mkudf.TREE["VIDEO_TS"]["VIDEO_TS.IFO"]
+    names = "".join(mkudf.plain(n) + "|" for n in mkudf.TREE)
+    print(f"  (UDF mount: stage {mon.read('UdfMountStage')}, status {mon.read('UdfMountStatus'):#x}; "
+          f"names {read_string(mon, 'KiTestUdfDirNames', 64)!r})")
+    return {"M8": {
+        "UDF mounted on \\Device\\CdRom0 (volume attributes, offset read)": mon.read("KiTestUdfVolumeOk") == 1,
+        "UDF: 300 KB file in two long_ad extents": mon.read("KiTestUdfVobLength") == len(vob)
+            and mon.read("KiTestUdfVobSum") == mkxiso.checksum(vob),
+        "UDF: short_ad file, case-insensitive path": mon.read("KiTestUdfIfoSum") == mkxiso.checksum(ifo),
+        "UDF: data embedded in the File Entry": mon.read("KiTestUdfSmallOk") == 1,
+        "UDF: 16-bit OSTA CS0 file name": mon.read("KiTestUdfWideOk") == 1,
+        "UDF: root enumeration in on-disc order": mon.read("KiTestUdfDirOk") == 1
+            and read_string(mon, "KiTestUdfDirNames", 64) == names,
+        "UDF: read-only media and lookup errors": mon.read("KiTestUdfErrorsOk") == 1,
+    }}
+
+
+def serial_checks(path):
+    """Debug serial port (spec/oxos_internal/03_debug_serial.md): the boot banner, the start-up steps and the title load reach the SuperIO."""
+    text = open(path, "rb").read().decode("latin1") if os.path.exists(path) else ""
+    print(f"  (serial log: {len(text)} bytes, {text.count(chr(10))} lines)")
+    return {
+        "boot banner (cold boot)": "OXOS kernel (" in text and "): cold boot" in text,
+        "start-up steps in order": all(f"boot: {s}" in text for s in ("processor", "memory manager", "IDE", "title launcher"))
+            and text.index("boot: processor") < text.index("boot: title launcher"),
+        "lines end in CR LF": "\r\n" in text and "\n" not in text.replace("\r\n", ""),
+        "title load reported": "load \\Device\\CdRom0\\default.xbe: 0" in text,
+    }
+
+
+def launch_reason_checks(mon):
+    reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
+    page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
+        if ldp else None
+    print(f"  (cold-boot launch reason {reason:#x}, LaunchDataPage {ldp:#x} {page})")
+    return {
+        "no disc + launch reason: dashboard gets LDP {type 1, reason 3, code = reason} (or none if 0)":
+            page == [1, 3, reason] if reason else ldp == 0,
+        "the launch page sits below the kernel (spec/stock/05 §5)": ldp == 0 or ldp < 0x80010000,
+    }
+
+
+def disk_checks(hdd_copy):
+    """After xemu exits: what the kernel wrote must read back with an independent FATX (or exFAT) reader."""
+    q = Qcow2(hdd_copy)
+    if is_exfat_disk(q):
+        v = exfat.EXFAT(q)
+        problems, _, _ = v.check()
+        if problems:
+            print("  (exFAT checker: " + "; ".join(problems[:6]) + ")")
+        listing = v.listdir("/E/XkTest")
+        return {
+            "E:\\XkTest\\keep.bin readable by the host exFAT reader": v.read_file("/E/XkTest/keep.bin")
+                == b"open xbox kernel fatx test",
+            "deleted/renamed entries gone, directory consistent": listing is not None
+                and sorted(x.name for x in listing) == ["keep.bin"],
+            "exFAT volume consistent (checksums, chains, bitmap)": not problems,
+            "X: folder empty after the format": v.listdir("/X") == [],
+            "E:\\XkStale.stale grown past its stale chain reads back": v.read_file("/E/XkStale.stale")
+                == bytes((i * 7 + i // 251) & 0xFF for i in range(3 * 16384 + 100)),
+            "E:\\XkPre.bin (allocation size 256 KB, 100 bytes written) reads back": v.read_file("/E/XkPre.bin")
+                == b"p" * 100,
+        }
+    e = FATX(q, "E")
+    names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
+    return {
+        "E:\\XkTest\\keep.bin readable by an independent FATX reader": e.read_file("XkTest\\keep.bin")
+            == b"open xbox kernel fatx test",
+        "deleted/renamed entries gone, directory consistent": names == ["keep.bin"],
+    }
+
+
+# --- Video encoders (make test_encoders)
 ENCODERS = {"conexant": (0x8A, 0, 0), "focus": (0xD4, 0x20, 1), "xcalibur": (0xE0, 0x400, 2)}
 
 
@@ -775,102 +873,7 @@ def encoder_checks(mon, name, self_test=False):
     return checks
 
 
-def fatal_checks(mon):
-    for _ in range(240):  # the disk wait times out first
-        if mon.read("IdexFatalErrorCode"):
-            break
-        time.sleep(0.25)
-    time.sleep(2)
-    code, fb = mon.read("IdexFatalErrorCode"), mon.read("XkFatalErrorFrameBuffer")
-    lit = 0
-    for y in range(185, 295, 8):  # the two digit cells (x 250-390)
-        out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
-        lit += len(re.findall(r"0xffffffff", out))
-    print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit samples)")
-    return {"M5f": {
-        "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
-        "error code drawn on screen": fb != 0 and lit > 20
-            and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
-    }}, code
-
-
-def udf_checks(mon):
-    for _ in range(160):
-        if mon.read("KiTestDvdDone"):
-            break
-        time.sleep(0.25)
-    vob, ifo = mkudf.TREE["VIDEO_TS"]["VTS_01_1.VOB"], mkudf.TREE["VIDEO_TS"]["VIDEO_TS.IFO"]
-    names = "".join(mkudf.plain(n) + "|" for n in mkudf.TREE)
-    print(f"  (UDF mount: stage {mon.read('UdfMountStage')}, status {mon.read('UdfMountStatus'):#x}; "
-          f"names {read_string(mon, 'KiTestUdfDirNames', 64)!r})")
-    return {"M8": {
-        "UDF mounted on \\Device\\CdRom0 (volume attributes, offset read)": mon.read("KiTestUdfVolumeOk") == 1,
-        "UDF: 300 KB file in two long_ad extents": mon.read("KiTestUdfVobLength") == len(vob)
-            and mon.read("KiTestUdfVobSum") == mkxiso.checksum(vob),
-        "UDF: short_ad file, case-insensitive path": mon.read("KiTestUdfIfoSum") == mkxiso.checksum(ifo),
-        "UDF: data embedded in the File Entry": mon.read("KiTestUdfSmallOk") == 1,
-        "UDF: 16-bit OSTA CS0 file name": mon.read("KiTestUdfWideOk") == 1,
-        "UDF: root enumeration in on-disc order": mon.read("KiTestUdfDirOk") == 1
-            and read_string(mon, "KiTestUdfDirNames", 64) == names,
-        "UDF: read-only media and lookup errors": mon.read("KiTestUdfErrorsOk") == 1,
-    }}
-
-
-def serial_checks(path):
-    """Debug serial port (spec/oxos-internal/03-debug-serial.md): the boot banner, the start-up steps and the title load reach the SuperIO."""
-    text = open(path, "rb").read().decode("latin1") if os.path.exists(path) else ""
-    print(f"  (serial log: {len(text)} bytes, {text.count(chr(10))} lines)")
-    return {
-        "boot banner (cold boot)": "OXOS kernel (" in text and "): cold boot" in text,
-        "start-up steps in order": all(f"boot: {s}" in text for s in ("processor", "memory manager", "IDE", "title launcher"))
-            and text.index("boot: processor") < text.index("boot: title launcher"),
-        "lines end in CR LF": "\r\n" in text and "\n" not in text.replace("\r\n", ""),
-        "title load reported": "load \\Device\\CdRom0\\default.xbe: 0" in text,
-    }
-
-
-def launch_reason_checks(mon):
-    reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
-    page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
-        if ldp else None
-    print(f"  (cold-boot launch reason {reason:#x}, LaunchDataPage {ldp:#x} {page})")
-    return {
-        "no disc + launch reason: dashboard gets LDP {type 1, reason 3, code = reason} (or none if 0)":
-            page == [1, 3, reason] if reason else ldp == 0,
-        "the launch page sits below the kernel (spec/stock/05 §5)": ldp == 0 or ldp < 0x80010000,
-    }
-
-
-def disk_checks(hdd_copy):
-    """After xemu exits: what the kernel wrote must read back with an independent FATX (or exFAT) reader."""
-    q = Qcow2(hdd_copy)
-    if is_exfat_disk(q):
-        v = exfat.Exfat(q)
-        problems, _, _ = v.check()
-        if problems:
-            print("  (exFAT checker: " + "; ".join(problems[:6]) + ")")
-        listing = v.listdir("/E/XkTest")
-        return {
-            "E:\\XkTest\\keep.bin readable by the host exFAT reader": v.read_file("/E/XkTest/keep.bin")
-                == b"open xbox kernel fatx test",
-            "deleted/renamed entries gone, directory consistent": listing is not None
-                and sorted(x.name for x in listing) == ["keep.bin"],
-            "exFAT volume consistent (checksums, chains, bitmap)": not problems,
-            "X: folder empty after the format": v.listdir("/X") == [],
-            "E:\\XkStale.stale grown past its stale chain reads back": v.read_file("/E/XkStale.stale")
-                == bytes((i * 7 + i // 251) & 0xFF for i in range(3 * 16384 + 100)),
-            "E:\\XkPre.bin (allocation size 256 KB, 100 bytes written) reads back": v.read_file("/E/XkPre.bin")
-                == b"p" * 100,
-        }
-    e = Fatx(q, "E")
-    names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
-    return {
-        "E:\\XkTest\\keep.bin readable by an independent FATX reader": e.read_file("XkTest\\keep.bin")
-            == b"open xbox kernel fatx test",
-        "deleted/renamed entries gone, directory consistent": names == ["keep.bin"],
-    }
-
-
+# --- Command line
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bios", required=True)
@@ -882,14 +885,14 @@ def main():
     ap.add_argument("--udf", action="store_true", help="attach a UDF test disc (tests/mkudf.py) and check UDF")
     ap.add_argument("--fatal", action="store_true", help="boot without a hard disk: check the fatal-error report")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
-    ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel-test-title), placed on the disc as default.xbe")
+    ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     ap.add_argument("--keep-hdd", metavar="PATH", help="keep the disk copy after the run (as PATH), to inspect it")
     ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
     ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
-                    help="boot the ISO launcher (tools/iso-launcher) with an image of --title on an exFAT disk")
+                    help="boot the ISO launcher (tools/iso_launcher) with an image of --title on an exFAT disk")
     ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
     ap.add_argument("--evox", action="store_true", help="--dash: put C:\\evoxdash.xbe on the disk copy and check that "
                     "the kernel starts it instead of C:\\xboxdash.xbe")
@@ -917,7 +920,7 @@ def main():
             write_title_patches(hdd_copy, a.title, a.title_map)
         if a.evox:  # an EvoX-style install: C:\evoxdash.xbe (here a copy of C:\xboxdash.xbe)
             q = Qcow2(hdd_copy)
-            FatxWriter(q, "C").write_file("evoxdash.xbe", Fatx(q, "C").read_file("xboxdash.xbe"))
+            FATXWriter(q, "C").write_file("evoxdash.xbe", FATX(q, "C").read_file("xboxdash.xbe"))
             q.save(hdd_copy + ".new")
             os.replace(hdd_copy + ".new", hdd_copy)
     open(cfg, "w").write(

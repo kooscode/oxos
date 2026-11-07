@@ -1,4 +1,4 @@
-// Title patch file parser (spec/oxos-internal/25 §3, kernel/src/xe/patchfile.cpp).
+// Title patch file parser (spec/oxos_internal/25 §3, kernel/src/titles/patchfile.cpp).
 #include "kernel_test.h"
 
 #include <cstdio>
@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include <xk/patches.h>
+#include <xk/title_patches.h>
 
 namespace {
 struct Rec {
@@ -180,11 +180,11 @@ TEST(Patches, NoNewlineAtTheEnd) {
     EXPECT_EQ(r[0].Data, B({0x90}));
 }
 
-// The file shipped in kernel/title-patches parses without a single bad line, checks 4 bytes or more, and never has
+// The file shipped in kernel/title_patches parses without a single bad line, checks 4 bytes or more, and never has
 // fewer new bytes than original ones (shorter NEW is allowed, but not used there, for readability; longer only where
 // the rest of the original is not known).
 TEST(Patches, ShippedFileParses) {
-    std::string path = XK_KERNEL_DIR "/title-patches/title-patches.ini";
+    std::string path = XK_KERNEL_DIR "/title_patches/title_patches.ini";
     FILE *f = fopen(path.c_str(), "rb");
     ASSERT_NE(f, nullptr) << path;
     std::string text;
@@ -200,13 +200,16 @@ TEST(Patches, ShippedFileParses) {
     for (ULONG title : {0x4D4A000Cu, 0x56550013u, 0x4541038Bu, 0x4D530031u, 0x56550041u, 0x48450001u, 0x53430007u,
                         0x56550039u, 0x45410042u, 0x434D0050u}) {
         XE_PATCH_COUNTS t;
-        for (auto &p : Parse(text, title, 1, &t, 1 << 16))
+        for (auto &p : Parse(text, title, 1, &t, 1 << 16)) {
             if (p.Kind == XE_PATCH_BYTES) {
                 EXPECT_GE(p.Original.size(), 4u) << std::hex << title << " " << p.Address << ": check 4 bytes or more";
-                if (!p.Check) // a patch checked against its section's match line has no bytes of its own
-                    EXPECT_GE(p.Data.size(), p.Original.size()) << std::hex << title << " " << p.Address
-                                                                << ": the shipped file spells out every byte on both sides";
+                if (!p.Check) { // a patch checked against its section's match line has no bytes of its own
+                    EXPECT_GE(p.Data.size(), p.Original.size())
+                        << std::hex << title << " " << p.Address
+                        << ": the shipped file spells out every byte on both sides";
+                }
             }
+        }
         EXPECT_GT(t.Patches, 0u) << std::hex << title;
     }
 }

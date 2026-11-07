@@ -1,4 +1,4 @@
-// Kernel entry from the 2BL (spec/stock/01-boot.md §1):
+// Kernel entry from the 2BL (spec/stock/01_boot.md §1):
 //   cdecl KernelEntry(arg0, const UCHAR *keys)  -- keys = 16-byte EEPROM key + 16-byte cert key; arg0 = 'OXOS'
 //   from the open image's 2BL, whose key block continues with EEPROM-key HMAC states (spec/stock/01 §5).
 // The 2BL's stack lives in memory we are about to wipe, so switch to our own stack first.

@@ -17,15 +17,15 @@ Display:
 - --aspect forces xemu's aspect ratio instead (auto, native, 4x3, 16x9);
 - --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier
   (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
-Debugging: --serial prints the debug serial port (spec/oxos-internal/03-debug-serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by
+Debugging: --serial prints the debug serial port (spec/oxos_internal/03_debug_serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by
 tools/trace.py); --memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds).
 --trace-map MAP (an import-trace build's xboxkrnl.map) dumps the title's last kernel calls when the kernel reports a
 crash on the serial port (a line starting with "***", needs --serial) and when xemu is closed: the last 30 here, all
-of them in DIR/calls-<time>-<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load).
+of them in DIR/calls_<time>_<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load).
 xemu quits at once when its window is closed, so run.py also copies the record every second while the title runs
 (without pausing it) and saves the latest copy as the exit dump when xemu is gone.
 --gdb PORT starts xemu's GDB server on localhost:PORT, paused at power-on until a debugger continues it (see
-tools/debug-app.py).
+tools/debug_app.py).
 """
 import argparse, json, os, shutil, signal, socket, struct, subprocess, sys, tempfile, threading, time
 
@@ -35,8 +35,8 @@ SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", 
 ap = argparse.ArgumentParser()
 ap.add_argument("bios")
 ap.add_argument("--iso", help="disc image (XISO) for the DVD drive")
-ap.add_argument("--hdd", default=os.path.join(root, "third_party/xemu-dashboard/xemu-dashboard.qcow2"),
-                help="hard-disk image (default: the xemu-dashboard disk; `make -C kernel hdd-image` fetches it)")
+ap.add_argument("--hdd", default=os.path.join(root, "third_party/xemu_dashboard/xemu_dashboard.qcow2"),
+                help="hard-disk image (default: the xemu-dashboard disk; `make -C kernel hdd_image` fetches it)")
 ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump (needed only for a Microsoft BIOS)")
 ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
 ap.add_argument("--state", help="directory for a persistent HDD copy and EEPROM")
@@ -180,7 +180,7 @@ class CallDumper:
                 print(f"\n[{reason}: no kernel calls since the dump above ({self.dumped[1]})]", flush=True)
                 return
             os.makedirs(self.out, exist_ok=True)
-            base = os.path.join(self.out, f"calls-{time.strftime('%Y%m%d-%H%M%S')}-{reason}")
+            base = os.path.join(self.out, f"calls_{time.strftime('%Y%m%d_%H%M%S')}_{reason}")
             self.trace.save(base + ".bin", count, data)
             full = self.trace.report(count, data, self.table, last=0, show_all=True)
             open(base + ".txt", "w").write("\n".join(full) + "\n")
@@ -280,6 +280,7 @@ def set_video_flags(bits, what):
 # Stopped with a signal (kill, closing the terminal): close xemu too and clean up, instead of leaving it running.
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))
 signal.signal(signal.SIGHUP, lambda *_: sys.exit(1))
+
 p = dumper = watcher = None
 try:
     if a.hd and not a.avpack:

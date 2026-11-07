@@ -7,7 +7,7 @@
             "label": "oxos: start debug kernel",
             "type": "shell",
             "command": "python3",
-            "args": ["-I", "${workspaceFolder}/tools/debug-app.py", "--port", "1234", "--iso=${input:disc}"],
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "--port", "1234", "--iso=${input:disc}"],
             "isBackground": true,
             "problemMatcher": {
                 "owner": "oxos",
@@ -21,7 +21,7 @@
             "label": "oxos: stop debug kernel",
             "type": "shell",
             "command": "python3",
-            "args": ["-I", "${workspaceFolder}/tools/debug-app.py", "--stop"],
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "--stop"],
             "problemMatcher": []
         }
     ],

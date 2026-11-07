@@ -7,7 +7,7 @@ usage: padcal_check.py REF REF_LOADER REF_BIOS OUR_BL_ELF OUR_IMAGE [CASES]
   REF         cerbios: REF_LOADER = Cerbios's bootloader (runs at 0x90000; table routine 0x9103C(base, flag))
               4627:    REF_LOADER = the decrypted Complex 4627 2BL (0x400000; routine 0x400980(base), flag 0 only)
   REF_BIOS    the reference BIOS image (its table)
-  OUR_BL_ELF  build/X/boot/bl.elf;  OUR_IMAGE  the matching open image (bios-256k.bin; its table is built in)
+  OUR_BL_ELF  build/X/boot/bl.elf;  OUR_IMAGE  the matching open image (bios_256k.bin; its table is built in)
 """
 import random, struct, subprocess, sys, tempfile
 from unicorn import Uc, UC_ARCH_X86, UC_MODE_32, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE

@@ -1,4 +1,4 @@
-// Network boot in the 2BL (NETBOOT=1 images; spec/oxos-internal/09-netboot.md; PC side: tools/netboot/netboot.py).
+// Network boot in the 2BL (NETBOOT=1 images; spec/oxos_internal/09_netboot.md; PC side: tools/netboot/netboot.py).
 // Included by bl.cpp after its PCI / port helpers. Before the kernel in flash is unpacked, the 2BL brings up the NIC,
 // asks the network for a boot image (UDP broadcasts to port 5141) and, if a PC answers, downloads a 256 KiB open image
 // into RAM and boots the kernel and key block from it instead. No answer, no link, or a bad download: the flash image
@@ -17,8 +17,10 @@ constexpr ULONG RX_BUFFERS = 0x00301000, TX_BUFFERS = 0x00320000;
 constexpr ULONG IMAGE = 0x00800000;                   // the downloaded bank
 constexpr ULONG RX_COUNT = 32, BUFFER = 2048, BANK_SIZE = 0x40000, CHUNK = 1024;
 // A download is one bank or more (a kernel too large for one bank, a netbooted title's files after it), at most
-// 4 MiB: 0x800000-0xBFFFFF, free RAM while the 2BL runs (the kernel keeps a title's pages: xe/nettitle.cpp).
+// 4 MiB: 0x800000-0xBFFFFF, free RAM while the 2BL runs (the kernel keeps a title's pages: titles/nettitle.cpp).
 constexpr ULONG MAX_IMAGE = 0x400000;
+
+// The protocol (tools/netboot/netboot.py): its UDP port, the packet magic and the operations.
 constexpr unsigned short PORT = 5141;
 constexpr ULONG MAGIC = 0x424E584F;                   // 'OXNB'
 enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5, OP_MCPX = 6 };
@@ -50,18 +52,37 @@ struct Message {
     ULONG Session, Offset, Length; // OP_OFFER: Offset = CRC-32 of the image, Length = its size
 };
 
-static volatile ULONG &Nv(ULONG offset) { return *(volatile ULONG *)(NIC + offset); }
-static Desc *Rx() { return (Desc *)RING; }
-static Desc *Tx() { return (Desc *)RING + RX_COUNT; }
+static volatile ULONG &Nv(ULONG offset) {
+    return *(volatile ULONG *)(NIC + offset);
+}
+
+static Desc *Rx() {
+    return (Desc *)RING;
+}
+
+static Desc *Tx() {
+    return (Desc *)RING + RX_COUNT;
+}
 
 // --- Time: the MCPX ACPI PM timer (I/O 0x8008, 3.375 MHz), as the kernel's KeStallExecutionProcessor.
-static ULONG Now() { return BlIn32(0x8008); }
-static ULONG Ticks(ULONG us) { return us * 27 / 8; }
-static bool Before(ULONG start, ULONG us) { return Now() - start < Ticks(us); }
-static void Stall(ULONG us) {
-    for (ULONG t = Now(); Before(t, us);)
-        ;
+static ULONG Now() {
+    return BlIn32(0x8008);
 }
+
+static ULONG Ticks(ULONG us) {
+    return us * 27 / 8;
+}
+
+static bool Before(ULONG start, ULONG us) {
+    return Now() - start < Ticks(us);
+}
+
+static void Stall(ULONG us) {
+    for (ULONG t = Now(); Before(t, us);) {
+        // Spin until us microseconds have passed.
+    }
+}
+
 static bool TimerRuns() {
     ULONG t = Now();
     for (int i = 0; i < 1000; i++) // about 1 ms of port cycles
@@ -69,13 +90,15 @@ static bool TimerRuns() {
     return Now() != t;
 }
 
-// --- PHY 1 over MII (as kernel/src/hal/phy.cpp).
+// --- PHY 1 over MII (as kernel/src/hardware/ethernet.cpp).
 static bool MiiWait() {
-    for (ULONG t = Now(); Before(t, 10000);)
+    for (ULONG t = Now(); Before(t, 10000);) {
         if (!(Nv(NvMiiControl) & 0x8000))
             return true;
+    }
     return false;
 }
+
 static ULONG MiiRead(ULONG reg) {
     MiiWait();
     Nv(NvMiiControl) = reg | 0x20;
@@ -84,8 +107,11 @@ static ULONG MiiRead(ULONG reg) {
 }
 
 // --- Frames.
-static ULONG TxNext;
-static unsigned short IpId;
+static const UCHAR Mac[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31}; // locally administered
+static const UCHAR SourceIp[4] = {XK_NETBOOT_IP};                 // make NETBOOT_IP=
+static ULONG TxNext;        // the next transmit descriptor (of 2)
+static unsigned short IpId; // the IP identification of the next packet
+static ULONG RxHead;        // the next receive descriptor to look at
 
 static unsigned short IpChecksum(const UCHAR *p, ULONG n) {
     ULONG sum = 0;
@@ -96,34 +122,41 @@ static unsigned short IpChecksum(const UCHAR *p, ULONG n) {
     return (unsigned short)~sum;
 }
 
-static const UCHAR Mac[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31}; // locally administered
-static const UCHAR SourceIp[4] = {XK_NETBOOT_IP};                 // make NETBOOT_IP=
-
 // One UDP broadcast from SourceIp:5141 to 255.255.255.255:5141.
 static void Send(const Message &m, const void *data, ULONG length) {
     Desc &d = Tx()[TxNext & 1];
-    for (ULONG t = Now(); (d.Flags & TX_VALID) && Before(t, 20000);)
-        ;
+    for (ULONG t = Now(); (d.Flags & TX_VALID) && Before(t, 20000);) {
+        // Wait for the controller to finish with this descriptor, at most 20 ms.
+    }
     if (d.Flags & TX_VALID)
         return;
     UCHAR *f = (UCHAR *)(TX_BUFFERS + (TxNext & 1) * BUFFER);
     memset(f, 0xFF, 6);
     memcpy(f + 6, Mac, 6);
-    f[12] = 0x08, f[13] = 0x00;
+    f[12] = 0x08;
+    f[13] = 0x00;
     UCHAR *h = f + 14;
     ULONG udp = 8 + sizeof(m) + length, ip = 20 + udp;
     memset(h, 0, 28);
     h[0] = 0x45;
-    h[2] = (UCHAR)(ip >> 8), h[3] = (UCHAR)ip;
-    h[4] = (UCHAR)(IpId >> 8), h[5] = (UCHAR)IpId;
+    h[2] = (UCHAR)(ip >> 8);
+    h[3] = (UCHAR)ip;
+    h[4] = (UCHAR)(IpId >> 8);
+    h[5] = (UCHAR)IpId;
     IpId++;
-    h[8] = 64, h[9] = 17;
+    h[8] = 64;
+    h[9] = 17;
     memcpy(h + 12, SourceIp, 4);
     memset(h + 16, 0xFF, 4);
     unsigned short c = IpChecksum(h, 20);
-    h[10] = (UCHAR)(c >> 8), h[11] = (UCHAR)c;
-    h[20] = PORT >> 8, h[21] = PORT & 0xFF, h[22] = PORT >> 8, h[23] = PORT & 0xFF;
-    h[24] = (UCHAR)(udp >> 8), h[25] = (UCHAR)udp; // checksum 0: none
+    h[10] = (UCHAR)(c >> 8);
+    h[11] = (UCHAR)c;
+    h[20] = PORT >> 8;
+    h[21] = PORT & 0xFF;
+    h[22] = PORT >> 8;
+    h[23] = PORT & 0xFF;
+    h[24] = (UCHAR)(udp >> 8);
+    h[25] = (UCHAR)udp; // checksum 0: none
     memcpy(h + 28, &m, sizeof(m));
     if (length)
         memcpy(h + 28 + sizeof(m), data, length);
@@ -138,8 +171,6 @@ static void Send(const Message &m, const void *data, ULONG length) {
     (void)Nv(NvTxRxControl);
     TxNext++;
 }
-
-static ULONG RxHead;
 
 // The next netboot message for Session (any op), or nullptr; Data points at what follows the header.
 static const Message *Receive(ULONG Session, const UCHAR **Data) {
@@ -206,8 +237,9 @@ static bool Start() {
     Nv(NvTxRxControl) = 0;
     (void)Nv(NvTxRxControl);
     Nv(NvTxRxControl) = TXRX_GET;
-    for (ULONG t = Now(); !(Nv(NvSetup5) & 1u << 31) && Before(t, 50000);)
-        ;
+    for (ULONG t = Now(); !(Nv(NvSetup5) & 1u << 31) && Before(t, 50000);) {
+        // Wait for the transmit/receive engine to start (bit 31), at most 50 ms.
+    }
     Nv(NvSetup4) = 0;
     // The link: auto-negotiation finishes about 2-3 s after power-on.
     Nv(NvMiiSpeed) = (1u << 8) | 5;
@@ -289,13 +321,14 @@ static const UCHAR *Fetch() {
     const ULONG session = Now() ^ 0x4F584E42;
 #if XK_MCPX_DUMP
     // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs
-    // (tools/mcpx-dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
-    if (*(volatile ULONG *)0x2200 == 0x5850434D)
+    // (tools/mcpx_dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
+    if (*(volatile ULONG *)0x2200 == 0x5850434D) {
         for (int i = 0; i < 3; i++) {
             const Message dump = {MAGIC, OP_MCPX, 1, 0, session, 0, 512};
             Send(dump, (const void *)0x2000, 512);
             Stall(100000);
         }
+    }
 #endif
     Message m = {MAGIC, OP_HELLO, 1, 0, session, 0, 0};
     const UCHAR *data;
@@ -303,8 +336,9 @@ static const UCHAR *Fetch() {
     // 1. Ask, every 250 ms for 2 s.
     for (int i = 0; i < 8 && !r; i++) {
         Send(m, Mac, sizeof(Mac));
-        for (ULONG t = Now(); Before(t, 250000) && !(r = Receive(session, &data));)
-            ;
+        for (ULONG t = Now(); Before(t, 250000) && !(r = Receive(session, &data));) {
+            // Poll for the PC's answer, at most 250 ms.
+        }
         if (r && r->Op != OP_OFFER)
             r = nullptr;
     }
@@ -334,8 +368,9 @@ static const UCHAR *Fetch() {
     bool good = Crc32(image, size) == crc && payload->Magic == PAYLOAD_MAGIC;
     m = {MAGIC, OP_BOOT, 1, 0, session, good ? 0u : 1u, 0};
     Send(m, nullptr, 0);
-    for (ULONG t = Now(); (Tx()[(TxNext - 1) & 1].Flags & TX_VALID) && Before(t, 20000);)
-        ;
+    for (ULONG t = Now(); (Tx()[(TxNext - 1) & 1].Flags & TX_VALID) && Before(t, 20000);) {
+        // Wait for the last packet to go out, at most 20 ms.
+    }
     return good ? image : nullptr;
 }
 

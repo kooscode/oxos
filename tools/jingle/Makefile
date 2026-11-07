@@ -3,9 +3,9 @@ CXX ?= g++
 # The kernel's synthesizer uses no floating point (the console build has no x87/SSE).
 CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra
 
-bin/jingle: render.cpp ../../kernel/src/hal/jingle.cpp ../../kernel/src/hal/jingle.h
+bin/jingle: render.cpp ../../kernel/src/bootscreen/jingle.cpp ../../kernel/include/xk/jingle.h
 	@mkdir -p bin
-	$(CXX) $(CXXFLAGS) -o $@ render.cpp ../../kernel/src/hal/jingle.cpp
+	$(CXX) $(CXXFLAGS) -I../../kernel/include -o $@ render.cpp ../../kernel/src/bootscreen/jingle.cpp
 
 clean:
 	rm -rf bin

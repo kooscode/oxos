@@ -1,16 +1,16 @@
 # Core runtime unit tests
 
 GoogleTest tests for the kernel's core runtime (memory manager, dispatcher, object manager, executive objects, RTL),
-built from the kernel's own sources as a 32-bit Linux program. How it works: `spec/oxos-internal/11-host-unit-tests.md`.
+built from the kernel's own sources as a 32-bit Linux program. How it works: `spec/oxos_internal/11_host_unit_tests.md`.
 
 ## Run
 
-    tools/unit-tests.sh                          # build and run every test
-    tools/unit-tests.sh -- --gtest_filter='Pool.*'
-    tools/unit-tests.sh --coverage               # + llvm-cov report: tests/unit/build-cov/coverage.txt, coverage-html/
-    OXOS_TEST_LOG=1 tools/unit-tests.sh          # also print the kernel log (XK_SERIAL) as it happens
-    OXOS_STRESS_SECONDS=120 tools/unit-tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
-    OXOS_KERNEL_OPT=-O2 tools/unit-tests.sh      # kernel sources at the console build's optimisation
+    tools/unit_tests.sh                          # build and run every test
+    tools/unit_tests.sh -- --gtest_filter='Pool.*'
+    tools/unit_tests.sh --coverage               # + llvm-cov report: tests/unit/build_cov/coverage.txt, coverage_html/
+    OXOS_TEST_LOG=1 tools/unit_tests.sh          # also print the kernel log (XK_SERIAL) as it happens
+    OXOS_STRESS_SECONDS=120 tools/unit_tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
+    OXOS_KERNEL_OPT=-O2 tools/unit_tests.sh      # kernel sources at the console build's optimisation
 
 Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`, make)
 or Docker: without the toolchain the script builds the image from `Dockerfile` here and runs inside it. The build is
@@ -22,7 +22,7 @@ script passes them); it compiles GoogleTest from those sources itself.
 | File | |
 |---|---|
 | `host/hostcpu.cpp` | fake CPU (privileged instructions, interrupt flag, interrupts, time, devices) and MMU |
-| `host/host_asm.S` | context switch and thread start-up (ELF versions of `kernel/src/arch/swap.S`) |
+| `host/host_asm.S` | context switch and thread start-up (ELF versions of `kernel/src/arch/context_switch.S`) |
 | `host/boot.cpp` | the 2BL's state, kernel start-up, GoogleTest on a kernel thread |
 | `host/stubs.cpp` | the few symbols outside the files under test |
 | `host/checks.cpp` | page-database checker, thread spawn/join helpers |

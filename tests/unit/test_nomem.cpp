@@ -1,20 +1,9 @@
 // Out of memory: every allocating entry point fails cleanly (a status or nullptr, nothing leaked, nothing half
 // built), and works again once memory is back.
 #include "kernel_test.h"
+#include <xk/objects.h>
 
 #include <vector>
-
-extern volatile ULONG ExpPoolBlocks;
-struct KFLOATING_SAVE_ {
-    UCHAR Flags, Irql, Reserved[6];
-    PVOID Buffer;
-    ULONG Reserved2[2];
-    PKTHREAD Thread;
-};
-XBAPI NTSTATUS NTAPI KeSaveFloatingPointState(KFLOATING_SAVE_ *FloatSave);
-XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI NtCreateTimer(PHANDLE TimerHandle, POBJECT_ATTRIBUTES ObjectAttributes, TIMER_TYPE TimerType);
 
 namespace {
 constexpr NTSTATUS NO_RESOURCES = (NTSTATUS)0xC000009A;
@@ -29,10 +18,12 @@ struct Exhaust {
     explicit Exhaust(ULONG leave = 0, bool drainPool = true) {
         while (MmAvailablePages > leave)
             pages.push_back(MiAllocatePage(MmSystemMemoryUsage, nullptr, false));
-        if (drainPool)
-            for (ULONG units = 127; units >= 1; units--)
+        if (drainPool) {
+            for (ULONG units = 127; units >= 1; units--) {
                 while (void *p = ExAllocatePool(units * 32 - 8))
                     blocks.push_back(p);
+            }
+        }
     }
     ~Exhaust() {
         for (ULONG p : pages)

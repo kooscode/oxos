@@ -41,7 +41,9 @@ static int PhysFd = -1, DevFd = -1;
 static uint8_t *PhysView;
 constexpr uint32_t DEV_BASE = 0xFD000000, DEV_SIZE = 0x01000000; // the GPU register window (zeros, writable)
 
-uint8_t *Phys(uint32_t pa) { return PhysView + pa; }
+uint8_t *Phys(uint32_t pa) {
+    return PhysView + pa;
+}
 
 // --- Kernel address windows reserved for the fake MMU.
 struct Window {
@@ -55,15 +57,18 @@ static const Window Windows[] = {
     {0xD0000000, 0xD8000000}, // system PTE range, its first 128 MB (committed from the bottom up)
     {DEV_BASE, DEV_BASE + DEV_SIZE},
 };
-static bool InWindow(uint32_t va) {
-    for (auto &w : Windows)
-        if (va >= w.start && va < w.end)
-            return true;
-    return false;
-}
 
 // Pages currently mapped (a TLB entry exists): one bit per 4 KB page.
 static uint32_t Mapped[1u << 15];
+
+static bool InWindow(uint32_t va) {
+    for (auto &w : Windows) {
+        if (va >= w.start && va < w.end)
+            return true;
+    }
+    return false;
+}
+
 static void Unmap(uint32_t page) {
     mmap((void *)page, 4096, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     Mapped[page >> 17] &= ~(1u << ((page >> 12) & 31));
@@ -71,11 +76,12 @@ static void Unmap(uint32_t page) {
 
 void FlushTlb() {
     TlbFlushes = TlbFlushes + 1;
-    for (uint32_t w = 0; w < (1u << 15); w++)
+    for (uint32_t w = 0; w < (1u << 15); w++) {
         while (Mapped[w]) {
             uint32_t bit = __builtin_ctz(Mapped[w]);
             Unmap((w << 17) | (bit << 12));
         }
+    }
 }
 
 // Walk the kernel's page tables (physical, from CR3). Returns false for a not-present translation.
@@ -133,7 +139,9 @@ volatile uint64_t IdleTicksThisTest;
 static uint8_t Elcr[2];
 static uint32_t HostBridge84 = 0x07FFFFFF;
 
-uint64_t NowMs() { return NowNs / 1000000; }
+uint64_t NowMs() {
+    return NowNs / 1000000;
+}
 
 static uint32_t PortIn(uint16_t port, int size) {
     switch (port) {
@@ -191,18 +199,21 @@ static struct {
     uint64_t value;
 } Msrs[64];
 static uint64_t ReadMsr(uint32_t msr) {
-    for (auto &m : Msrs)
+    for (auto &m : Msrs) {
         if (m.msr == msr && msr)
             return m.value;
+    }
     return 0;
 }
+
 static void WriteMsr(uint32_t msr, uint64_t v) {
-    for (auto &m : Msrs)
+    for (auto &m : Msrs) {
         if (m.msr == msr || !m.msr) {
             m.msr = msr;
             m.value = v;
             return;
         }
+    }
 }
 
 // --- Interrupts.
@@ -217,9 +228,13 @@ static bool Deliverable(unsigned *irq) {
     return true;
 }
 
-bool InterruptsEnabled() { return HostIf & 0x200; }
+bool InterruptsEnabled() {
+    return HostIf & 0x200;
+}
 
-void RaiseIrq(unsigned irq) { __atomic_or_fetch(&PendingIrqs, 1u << irq, __ATOMIC_SEQ_CST); }
+void RaiseIrq(unsigned irq) {
+    __atomic_or_fetch(&PendingIrqs, 1u << irq, __ATOMIC_SEQ_CST);
+}
 
 // Called with the fake IF on, in normal (non-signal) context on the interrupted stack.
 extern "C" void HostDeliverInterrupts() {
@@ -239,7 +254,9 @@ static void Tick() {
     RaiseIrq(0);
 }
 
-void SkipTime(uint64_t ms) { NowNs = NowNs + ms * 1000000; }
+void SkipTime(uint64_t ms) {
+    NowNs = NowNs + ms * 1000000;
+}
 
 void AdvanceTime(uint32_t ms) {
     for (uint32_t i = 0; i < ms; i++) {
@@ -259,6 +276,7 @@ extern "C" void HostLogWrite(const char *s, size_t n) {
     if (getenv("OXOS_TEST_LOG"))
         fwrite(s, 1, n, stderr);
 }
+
 const char *TakeLog() {
     static char copy[sizeof(Log)];
     memcpy(copy, Log, LogLength);
@@ -307,8 +325,12 @@ static int Modrm(ucontext_t *uc, const uint8_t *p, uint32_t *ea) {
     return len;
 }
 
+// The test program's code segment, from the linker's symbols.
 extern "C" char __executable_start[], etext[];
-static bool InText(uint32_t a) { return a >= (uint32_t)(uintptr_t)__executable_start && a < (uint32_t)(uintptr_t)etext; }
+
+static bool InText(uint32_t a) {
+    return a >= (uint32_t)(uintptr_t)__executable_start && a < (uint32_t)(uintptr_t)etext;
+}
 
 // A stack word for the report: through the fake MMU for kernel windows, directly elsewhere.
 static bool ReadWord(uint32_t a, uint32_t *v) {
@@ -327,7 +349,6 @@ static bool ReadWord(uint32_t a, uint32_t *v) {
     return false;
 }
 
-extern std::string CurrentTestName;
 [[noreturn]] static void Die(ucontext_t *uc, const char *what, uint32_t addr) {
     char msg[512];
     if (!CurrentTestName.empty()) {
@@ -492,7 +513,8 @@ static void OnFault(int sig, siginfo_t *si, void *ctx) {
             return;
         KernelFaultAddress = addr;
         Cr2 = addr;
-        Die(uc, write ? "kernel page fault (write to an unmapped or read-only page)" : "kernel page fault (read)", addr);
+        Die(uc, write ? "kernel page fault (write to an unmapped or read-only page)" : "kernel page fault (read)",
+            addr);
     }
     auto eip = (uint32_t)uc->uc_mcontext.gregs[REG_EIP];
     if (!InText(eip))
@@ -575,11 +597,12 @@ __attribute__((constructor(101))) static void HostInit() {
 
 } // namespace host
 
-// --- Bug checks (kernel/src/ke/bugcheck.cpp calls this first in host builds).
+// --- Bug checks (kernel/src/core/bugcheck.cpp calls this first in host builds).
 namespace host {
 jmp_buf *BugCheckCatcher;
 volatile uint32_t LastBugCheck[5];
 }
+
 extern "C" void HostBugCheck(unsigned long code, unsigned long p1, unsigned long p2, unsigned long p3,
                              unsigned long p4) {
     host::LastBugCheck[0] = code, host::LastBugCheck[1] = p1, host::LastBugCheck[2] = p2;
@@ -598,6 +621,7 @@ extern "C" unsigned long HostSaveFlagsCli() {
     HostIf = 0;
     return f;
 }
+
 extern "C" void HostRestoreFlags(unsigned long f) {
     HostIf = f & 0x200;
     if (HostIf)
