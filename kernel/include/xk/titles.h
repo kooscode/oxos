@@ -15,6 +15,7 @@ void XeStartTitleLauncher(); // the end of start-up: load and enter the first ti
 // disc or dashboard, and its pages kept from the memory manager until then.
 extern "C" void XeReadNetbootTitle();
 bool XeLaunchNetbootTitle();
+NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard); // load an XBE (titles/loader.cpp); the caller enters it
 bool MiIsNetbootTitlePage(ULONG pfn);
 
 // The import tracer (titles/trace.cpp, TRACE_IMPORTS builds): its ring of calls, read by the bug check report.

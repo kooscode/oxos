@@ -208,7 +208,6 @@ void IdexChannelInit() {
     ch->PhysicalRegionDescriptorTablePhysical = MmGetPhysicalAddress(IdexPrdTable);
     IdexDiskInit();
     IdexCdRomInit();
-    void VdInitialize(); // storage/virtual_disc.cpp: disc images (the control device)
     VdInitialize();
 }
 

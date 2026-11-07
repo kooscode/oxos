@@ -396,8 +396,8 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     ULONG region = NT_SUCCESS(status) ? *(ULONG *)(cert + 0xA0) : 0;
     if (NT_SUCCESS(status) && !(region & XeConsoleGameRegion) && XK_RETAIL_MEDIA_POLICY)
         status = STATUS_REGION_MISMATCH;
+    ULONG media = 0; // 1 = the hard disk (XepMediaFlags); only checked for titles
     if (NT_SUCCESS(status) && !Dashboard) {
-        ULONG media;
         status = XepMediaFlags(h, &media);
         if (NT_SUCCESS(status) && !(*(ULONG *)(cert + 0x9C) & media) && XK_RETAIL_MEDIA_POLICY)
             status = STATUS_MEDIA_MISMATCH;
@@ -419,8 +419,10 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         }
     }
     XK_SERIAL("load: sections %#lx\n", status);
-    // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard).
-    if (NT_SUCCESS(status) && HalpSmcArmEvents(Dashboard) && !Dashboard)
+    // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard), as the
+    // reference does (spec/stock/05 §4.16). A title on the hard disk still starts: a console without a DVD drive
+    // reports an eject at every boot.
+    if (NT_SUCCESS(status) && HalpSmcArmEvents(Dashboard) && !Dashboard && media != 1)
         status = (NTSTATUS)0xC000003A;
     XK_SERIAL("load: SMC events armed\n");
     // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
@@ -590,8 +592,10 @@ static bool XepPlainDashboardError(NTSTATUS s) {
 static void XepLaunchTitle(ULONG Reason) {
     NTSTATUS status;
     auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
-    if (!Reason && ldp && (ldp->Flags & 1)) // already tried once: do not loop
-        XepFreeLaunchDataPage(), ldp = nullptr;
+    if (!Reason && ldp && (ldp->Flags & 1)) { // already tried once: do not loop
+        XepFreeLaunchDataPage();
+        ldp = nullptr;
+    }
     if (!Reason && ldp) {
         // A. A title asked for another title.
         ldp->Flags |= 1;
@@ -703,6 +707,12 @@ static void XepChooseTitle() {
     XeLaunchReason = XepCheckFirstBoot();
     if (XeLaunchReason)
         return XepLaunchTitle(XeLaunchReason);
+    // A title delivered by netboot runs instead of the dashboard the boot flags would choose
+    // (spec/oxos_internal/09_netboot.md §7).
+    if (XeLaunchNetbootTitle()) {
+        XeTitleLaunched = 1;
+        return;
+    }
     XeTitleLaunched = 2;
     if (HalpBootFlags & 0x80)
         return XepLaunchDashboardWithReason(5, 0);
@@ -721,7 +731,6 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
 #endif
-    void VdRestoreMounts(); // storage/virtual_disc.cpp: disc images mounted before a quick reboot
     VdRestoreMounts();
     if (!KiQuickRebootFlag) {
         if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)

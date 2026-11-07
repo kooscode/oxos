@@ -17,6 +17,7 @@ typedef long long LONGLONG, *PLONGLONG;
 #endif
 typedef void VOID, *PVOID;
 typedef PVOID HANDLE, *PHANDLE;
+typedef const char *PCSZ;
 typedef ULONG ULONG_PTR, SIZE_T, *PSIZE_T;
 typedef ULONG PHYSICAL_ADDRESS;
 
