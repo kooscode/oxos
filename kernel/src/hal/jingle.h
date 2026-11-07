@@ -12,6 +12,7 @@ struct State;
 unsigned StateSize();                 // bytes of working memory State needs (4-byte aligned)
 unsigned Frames();                    // the jingle's length in frames
 unsigned ClimaxMs();                  // when the build-up lands on the final chord (the splash is fully faded in)
+unsigned LengthMs();                  // the whole jingle, the final chord's linger included
 void Init(State *s);                  // before the first Render
 void Mute(State *s, unsigned mask);  // host tool: leave instruments out (bit 1 cello and bass, 2 drums, 3 reverb)
 void Render(State *s, short *out, unsigned frames); // the next frames, interleaved left/right

@@ -1,6 +1,6 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a
-// 640x480 32 bpp picture: the PNG that tools/mkbios.py stores in flash bank 1 (spec/oxos-internal/00-boot-splash.md), or, without one, a
-// drawn emblem and caption. The title launcher waits for it, turns the screen off and frees its memory before the title
+// 640x480 32 bpp picture from the vector scene that tools/mkbios.py stores in flash (spec/oxos-internal/00-boot-splash.md),
+// drawn twice (the start and the end of a cross-fade), or, without one, a drawn emblem and caption. The title launcher waits for it, turns the screen off and frees its memory before the title
 // starts; the title turns the screen on with its first frame.
 #include <xk/serial.h>
 #include <xk/ke.h>
@@ -9,6 +9,7 @@
 #include <xk/rtl.h>
 
 #include "jingle.h"
+#include "vsplash.h"
 
 // The splash runs only during a cold boot: its code is boot-only (freed before the first title starts, spec/oxos-internal/
 // 18-boot-memory.md), except HalpEndSplash, which every title start calls.
@@ -21,27 +22,28 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
 XBAPI UCHAR HalBootSMCVideoMode;
 
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
-// The fade-in follows the clock from the jingle's start and reaches full intensity as the jingle's build-up lands on
-// its final chord (jingle::ClimaxMs), a frame about every 40 ms; the picture then stays up until the title shows its
-// own frame.
+// The timeline, from the screen coming on (spec/oxos-internal/00 §2): a short fade from black to the start picture
+// (the metal logo; the emblem has only the one picture), which stays until SPLASH_LOGO_MS;
+// then the jingle starts and the picture cross-fades to the end picture (the green X and its glow), reaching it as the
+// jingle's build-up lands on its final chord (jingle::ClimaxMs after its start); the end picture then stays for
+// until the jingle's final chord has died away (jingle::LengthMs), before the first title starts. A frame about
+// every 40 ms while anything changes.
 constexpr ULONG SPLASH_FRAME_MS = 40;
-// How long the splash stays, from the start of the fade, before the first title (dashboard or game) starts: a cold
-// boot shows it for a few seconds, as the retail boot animation, also when the title is ready sooner.
-constexpr ULONG SPLASH_SHOWN_MS = 5500;
+constexpr ULONG SPLASH_INTRO_MS = 500;  // the fade from black
+constexpr ULONG SPLASH_LOGO_MS = 1000;  // the start picture alone (the fade included), before the jingle
 
 static KEVENT HalpSplashDone;
 static PKTHREAD HalpSplashThreadObject; // waited for before the title starts, so its stack is freed by then
 static ULONG *HalpSplashScreen, *HalpSplashImage;
+static ULONG *HalpSplashStart; // a vector splash's start picture (the image is its end picture); else none
 volatile ULONG HalpSplashFrames; // frames shown (boot tests)
 volatile ULONG HalpSplashFadeMs, HalpSplashFullMs; // the fade's planned length, and when full intensity was drawn
-volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = flash image (boot tests)
-volatile ULONG HalpSplashStatus; // flash image: 0 = shown, else why not (header 0x100+, HalpDecodePng step 1-9)
+volatile ULONG HalpSplashSource; // 1 = drawn emblem, 2 = the vector scene from flash (boot tests)
+volatile ULONG HalpSplashStatus; // the scene: 0 = drawn, else why not (header 0x100+, 0x200 + vsplash::Check's step)
 
-ULONG HalpPngScratchSize(ULONG Width, ULONG Height);
-ULONG HalpDecodePng(const UCHAR *Png, ULONG Size, ULONG *Pixels, ULONG Width, ULONG Height, UCHAR *Scratch);
-
-// "XKSPLASH", version 1, PNG length, CRC-32 (checked by the PNG's own Adler-32 instead), PNG: tools/mkbios.py puts it
-// in flash bank 1 of a 1 MiB image, else in the boot bank; the 2BL copies it into RAM for the kernel.
+// "XKSPLASH", version 2 (1 was a PNG, no longer supported), length, CRC-32 (the scene's own checks are used instead),
+// then the scene: tools/mkbios.py puts it in flash bank 1 of a 1 MiB image, else in the boot bank; the 2BL
+// copies it into RAM for the kernel.
 constexpr ULONG SPLASH_HEADER = 20;
 
 // 5x7 glyphs, one byte per row (bit 4 = leftmost column), for the caption's letters.
@@ -49,11 +51,9 @@ static const struct {
     char C;
     UCHAR Rows[7];
 } HalpGlyphs[] = {
-    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}}, {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
-    {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}}, {'N', {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}},
-    {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}}, {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
-    {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}}, {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
-    {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
+    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
+    {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
+    {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}},
 };
 
 static void HalpDrawText(ULONG *img, const char *text, ULONG y, ULONG scale, ULONG color) {
@@ -76,47 +76,58 @@ static void HalpDrawText(ULONG *img, const char *text, ULONG y, ULONG scale, ULO
 
 static LONG HalpAbs(LONG v) { return v < 0 ? -v : v; }
 
-// The emblem: a ring and two crossed bars, green, with a soft edge (coverage from a distance in pixels).
+// The emblem, as the logo's X: two crossed bars in green, lighter towards the top, with a soft edge (coverage from
+// the distance in pixels), and a glow around them.
 static void HalpDrawEmblem(ULONG *img) {
-    const LONG cx = SPLASH_W / 2, cy = 200, outer = 110, inner = 96, bar = 15;
-    for (LONG y = cy - outer - 2; y <= cy + outer + 2; y++)
-        for (LONG x = cx - outer - 2; x <= cx + outer + 2; x++) {
-            LONG dx = x - cx, dy = y - cy, d2 = dx * dx + dy * dy;
-            // Ring: inside [inner, outer]; bars: |dx - dy| or |dx + dy| below bar*sqrt(2), within the ring.
-            LONG ring = d2 <= outer * outer && d2 >= inner * inner ? 255 : 0;
-            LONG cross = 0;
-            if (d2 < (inner - 10) * (inner - 10)) {
-                LONG a = HalpAbs(dx - dy), b = HalpAbs(dx + dy), m = a < b ? a : b; // distance * sqrt(2)
-                LONG edge = bar * 141 / 100;
-                cross = m <= edge ? 255 : m <= edge + 3 ? 255 - (m - edge) * 80 : 0;
-            }
-            LONG v = ring > cross ? ring : cross;
-            if (!v)
+    const LONG cx = SPLASH_W / 2, cy = 200, half = 80, bar = 15, glow = 24;
+    for (LONG y = cy - half - glow; y <= cy + half + glow; y++)
+        for (LONG x = cx - half - glow; x <= cx + half + glow; x++) {
+            LONG dx = x - cx, dy = y - cy;
+            LONG a = HalpAbs(dx - dy), b = HalpAbs(dx + dy), m = a < b ? a : b; // distance from a bar x sqrt(2)
+            LONG along = HalpAbs(dx) > HalpAbs(dy) ? HalpAbs(dx) : HalpAbs(dy); // how far out along it
+            LONG edge = bar * 141 / 100, d = (m - edge) * 100 / 141;
+            LONG out = along - half > d ? along - half : d; // distance outside the X, pixels
+            LONG v = out <= 0 ? 255 : out <= 2 ? 255 - out * 100 : 0;
+            LONG g = out < glow ? (glow - out) * 70 / glow : 0; // the glow
+            if (!v && !g)
                 continue;
-            LONG shade = 140 + (cy + outer - y) * 115 / (2 * outer); // lighter towards the top
-            img[y * SPLASH_W + x] = (ULONG)((v * shade / 255 * 0x40 / 0xFF) << 16 | (v * shade / 255) << 8 |
-                                            (v * shade / 255 * 0x30 / 0xFF));
+            LONG shade = 150 + (cy + half - y) * 105 / (2 * half); // lighter towards the top
+            LONG green = v * shade / 255 + g * (255 - v) / 255;
+            img[y * SPLASH_W + x] = (ULONG)((green * 0x8B / 0xFF) << 16 | green << 8 | (green * 0x1F / 0xFF));
         }
 }
 
-// Decode the splash at Splash (Room bytes available after it); 0 = shown.
+// A vector scene: the end picture into img, the start picture into HalpSplashStart (when there is memory for it; else
+// only the end picture is faded in). 0 = drawn.
+static ULONG HalpDrawVectorSplash(const UCHAR *Scene, ULONG Size, ULONG *img) {
+    unsigned scratchSize;
+    if (unsigned step = vsplash::Check(Scene, Size, &scratchSize))
+        return 0x200 + step;
+    auto scratch = MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
+    if (!scratch)
+        return 0x103;
+    vsplash::Render(Scene, Size, vsplash::END, (unsigned *)img, scratch);
+    HalpSplashStart = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
+    if (HalpSplashStart)
+        vsplash::Render(Scene, Size, vsplash::START, (unsigned *)HalpSplashStart, scratch);
+    MmFreeContiguousMemory(scratch);
+    HalpSplashSource = 2;
+    return 0;
+}
+
+// Draw the splash at Splash (Room bytes available after it); 0 = drawn.
 static ULONG HalpDecodeSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
     static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
     for (int i = 0; i < 8; i++)
         if (Splash[i] != (UCHAR)magic[i])
             return 0x101; // no splash here
-    ULONG length = *(const ULONG *)(Splash + 12);
-    if (*(const ULONG *)(Splash + 8) != 1 || Room < SPLASH_HEADER || length > Room - SPLASH_HEADER)
+    ULONG version = *(const ULONG *)(Splash + 8), length = *(const ULONG *)(Splash + 12);
+    if (version != 2 || Room < SPLASH_HEADER || length > Room - SPLASH_HEADER)
         return 0x102;
-    ULONG scratchSize = HalpPngScratchSize(SPLASH_W, SPLASH_H);
-    auto scratch = (UCHAR *)MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
-    ULONG status = scratch ? HalpDecodePng(Splash + SPLASH_HEADER, length, img, SPLASH_W, SPLASH_H, scratch) : 0x103;
-    if (scratch)
-        MmFreeContiguousMemory(scratch);
-    return status;
+    return HalpDrawVectorSplash(Splash + SPLASH_HEADER, length, img);
 }
 
-// The 2BL's copy of the splash (boot/bl.cpp BlCopySplash): decoded from RAM, then its pages are freed. Without one (an
+// The 2BL's copy of the splash (boot/bl.cpp BlCopySplash): drawn from RAM, then its pages are freed. Without one (an
 // older 2BL, or no splash in the image) the emblem is drawn; the kernel does not read the flash itself.
 extern ULONG HalpSplashRamPhys, HalpSplashRamSize;
 static ULONG HalpLoadSplash(ULONG *img) {
@@ -143,12 +154,10 @@ static void NTAPI HalpSplashThread(PVOID) {
     RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
     HalpSplashStatus = HalpLoadSplash(HalpSplashImage);
     XK_SERIAL("splash: image status %#lx\n", HalpSplashStatus);
-    if (!HalpSplashStatus) {
-        HalpSplashSource = 2;
-    } else {
+    if (HalpSplashStatus) { // no scene: the emblem and the name
         RtlZeroMemory(HalpSplashImage, SPLASH_PITCH * SPLASH_H);
         HalpDrawEmblem(HalpSplashImage);
-        HalpDrawText(HalpSplashImage, "OPEN XBOX KERNEL", 350, 3, 0xE0E0E0);
+        HalpDrawText(HalpSplashImage, "OXOS", 330, 6, 0xA8B4A0);
         HalpSplashSource = 1;
     }
     // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
@@ -170,36 +179,61 @@ static void NTAPI HalpSplashThread(PVOID) {
             XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
         }
     }
-    HalpBootSoundGo(); // the jingle starts with the fade-in
-    const ULONG fadeMs = jingle::ClimaxMs();
-    const ULONGLONG start = KeQueryInterruptTime(); // 100 ns units
-    auto elapsedMs = [&] { return (ULONG)((KeQueryInterruptTime() - start) / 10000); };
-    HalpSplashFadeMs = fadeMs;
-    for (;;) {
-        ULONG ms = elapsedMs(), level = ms >= fadeMs ? 256 : ms * 256 / fadeMs; // intensity, 256 = full
+    const ULONG climaxMs = jingle::ClimaxMs();
+    const ULONG *from = HalpSplashStart ? HalpSplashStart : HalpSplashImage; // the start picture
+    HalpSplashFadeMs = climaxMs;
+    const ULONG endMs = jingle::LengthMs(); // the end picture stays until the jingle has died away
+    XK_SERIAL("splash: logo for %lu ms, then the jingle and a cross-fade of %lu ms, held to %lu ms\n", SPLASH_LOGO_MS,
+              climaxMs, endMs);
+    auto sleepMs = [](ULONG ms) {
+        LARGE_INTEGER t;
+        t.QuadPart = -10000LL * ms;
+        KeDelayExecutionThread(KernelMode, FALSE, &t);
+    };
+    // Draws the mix of the start and end pictures (mix 0-256) at brightness level (0-256).
+    auto draw = [&](ULONG level, ULONG mix) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
-            ULONG p = HalpSplashImage[i];
-            if (!p)
+            ULONG p = HalpSplashImage[i], q = from[i];
+            if (!p && !q)
                 continue;
-            ULONG r = (p >> 16 & 0xFF) * level >> 8, g = (p >> 8 & 0xFF) * level >> 8, b = (p & 0xFF) * level >> 8;
-            HalpSplashScreen[i] = r << 16 | g << 8 | b;
+            ULONG out = 0;
+            for (ULONG sh = 0; sh < 24; sh += 8) {
+                ULONG c = ((q >> sh & 0xFF) * (256 - mix) + (p >> sh & 0xFF) * mix) >> 8;
+                out |= (c * level >> 8) << sh;
+            }
+            HalpSplashScreen[i] = out;
         }
         HalpSplashFrames = HalpSplashFrames + 1;
-        if (level == 256) {
+    };
+    // 1. The fade from black to the start picture, which then stays until SPLASH_LOGO_MS.
+    const ULONGLONG shown = KeQueryInterruptTime(); // 100 ns units
+    auto sinceMs = [](ULONGLONG from100ns) { return (ULONG)((KeQueryInterruptTime() - from100ns) / 10000); };
+    for (ULONG ms; (ms = sinceMs(shown)) < SPLASH_INTRO_MS;) {
+        draw(ms * 256 / SPLASH_INTRO_MS, 0);
+        sleepMs(SPLASH_INTRO_MS - ms < SPLASH_FRAME_MS ? SPLASH_INTRO_MS - ms : SPLASH_FRAME_MS);
+    }
+    draw(256, 0);
+    if (ULONG ms = sinceMs(shown); ms < SPLASH_LOGO_MS)
+        sleepMs(SPLASH_LOGO_MS - ms);
+    // 2. The jingle, and the cross-fade to the end picture (smoothstep: eases in and out), there at the climax.
+    HalpBootSoundGo();
+    const ULONGLONG jingleStart = KeQueryInterruptTime();
+    XK_SERIAL("splash: jingle started\n");
+    for (;;) {
+        ULONG ms = sinceMs(jingleStart);
+        if (ms >= climaxMs) {
+            draw(256, 256);
             HalpSplashFullMs = ms;
             break;
         }
-        // The next frame in 40 ms, or at the full-intensity time if that comes first.
-        LARGE_INTEGER t;
-        t.QuadPart = -10000LL * (fadeMs - ms < SPLASH_FRAME_MS ? fadeMs - ms : SPLASH_FRAME_MS);
-        KeDelayExecutionThread(KernelMode, FALSE, &t);
+        ULONG u = ms * 256 / climaxMs;
+        draw(256, u * u * (768 - 2 * u) / 65536);
+        sleepMs(climaxMs - ms < SPLASH_FRAME_MS ? climaxMs - ms : SPLASH_FRAME_MS);
     }
     XK_SERIAL("splash: faded in\n");
-    if (ULONG ms = elapsedMs(); ms < SPLASH_SHOWN_MS) {
-        LARGE_INTEGER t;
-        t.QuadPart = -10000LL * (SPLASH_SHOWN_MS - ms);
-        KeDelayExecutionThread(KernelMode, FALSE, &t);
-    }
+    // 3. The end picture, held.
+    if (ULONG ms = sinceMs(jingleStart); ms < endMs)
+        sleepMs(endMs - ms);
     XK_SERIAL("splash: shown\n");
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
@@ -258,9 +292,11 @@ void HalpEndSplash() {
     // out of (and, freed below, may reuse it), which garbled the last splash frame on screen. A title's display-mode
     // change leaves the screen off too and turns it on itself (option 9 with 0, spec/stock/22).
     AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
+    if (HalpSplashStart)
+        MmFreeContiguousMemory(HalpSplashStart);
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
-    HalpSplashScreen = HalpSplashImage = nullptr;
+    HalpSplashScreen = HalpSplashImage = HalpSplashStart = nullptr;
     HalpFreeBootPages(); // the splash and the jingle have ended: their code goes
 }
 

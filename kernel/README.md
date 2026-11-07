@@ -38,8 +38,9 @@ Optional extras:
   (`make nxdk` fetches one into `../third_party/nxdk`).
 - **256 KB flash chips:** `make bios-256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the
   1 MB image is the same image.
-- **Your own boot splash:** `make bios SPLASH=my-picture.jpg` converts any picture with Pillow
-  (`sudo apt install python3-pil`); the committed `splash/splash.png` needs nothing.
+- **Your own boot splash:** `make bios SPLASH=my-logo.svg` turns an SVG into the animated vector splash (mark the
+  parts to fade from and to with `data-oxos-phase="start"` / `"end"`; preview with `tools/vsplash`). The default is
+  `splash/oxos-splash.svg`.
 - **Comparing with the original:** your own BIOS dump in `xbox-files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or
   `MCPX_ROM=...` to boot OXOS through the real ROM as a console does) for `make run-stock` and `make test-mcpx`.
 
@@ -194,7 +195,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/xe/` | the title (XBE) loader and launcher; the kernel call tracer (`trace.cpp`, trace builds only) |
 | `src/rtl/` | runtime library |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
-| `splash/splash.png` | the boot splash picture (640x480, 256 colours) |
+| `splash/oxos-splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
 | `title-patches/title-patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title-patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos-internal/25`](../spec/oxos-internal/25-title-compatibility.md) §3 |
 | `build/` | all build output, one folder per kind of build (`selftest`, `release`, `debug`, `trace-basic`, `trace-full`, `trace-full-64mb`, `netboot`; see the Makefile's header); `make clean` removes it |
 | `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
@@ -213,7 +214,7 @@ the boot tests; console = checked on the 1.4 console.
 | 5 | Remaining exports: runtime, SEH, Xc crypto, dismount/cache control, quick reboot and launch data, launch policy, fatal errors | 02 §6, 05, 13–16 | ✅ xemu (`test-relaunch`, `test-fatal`) |
 | 6 | Real-hardware readiness: ATA unlock, SMC events, `XboxHardwareInfo`, performance counter, scatter/gather I/O | 02 §5, 04, 06 §7, 12 | ✅ xemu |
 | 8 | UDF (DVD-video discs) | 04d | ✅ xemu (`test-udf`) |
-| – | Boot splash (`splash/splash.png`, in each boot bank's spare space too) | oxos/00 | ✅ xemu, console |
+| – | Boot splash (`splash/oxos-splash.svg`, a vector scene drawn and cross-faded at boot; in each boot bank's spare space too) | oxos/00 | ✅ xemu, console |
 | 9 | Retail discs: DVD authentication, media/region policy, memory layout titles assume | 04 §3a | ✅ xemu: Halo loads |
 | 10 | Volume dismount for utility-drive formatting; kernel call tracer | oxos/01 | ✅ xemu: Halo's menu |
 | 11 | XDVDFS tail reads, one shared file cache, release builds without test code | 04c | ✅ xemu: Halo 2's title screen |

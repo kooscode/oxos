@@ -2,9 +2,9 @@
 """Pack a kernel PE into an MCPX 1.0 BIOS image, reusing the base image's init tables and 2BL.
 
 usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
-                 [--flat-kernel OUT.exe] [--splash IMAGE]
+                 [--flat-kernel OUT.exe] [--splash SVG]
        mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel xboxkrnl.exe
-                 --out bios.bin [--flat-kernel OUT.exe] [--splash IMAGE] [--size 256K|1M]
+                 --out bios.bin [--flat-kernel OUT.exe] [--splash SVG] [--size 256K|1M]
 
 The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/stock/01 §5), see build_open().
 
@@ -17,7 +17,7 @@ The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and
 fields 0x28..0x37 describe the .data copy used by quick reboot (spec/stock/02 §1).
 
 Boot splash (optional): the second 256 KiB bank of a 1 MiB image (flash offset 0x40000, 0xFFF40000) holds
-  "XKSPLASH", u32 version 1, u32 length, u32 CRC-32, then a 640x480 256-colour palette PNG with one IDAT chunk.
+  "XKSPLASH", u32 version 2, u32 length, u32 CRC-32, then the vector scene tools/svg_splash.py makes from an SVG.
   The open image also keeps a copy in each boot bank when it fits (see build_open), for 256 KiB images.
 The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
 valid and falls back to its drawn emblem otherwise (spec/oxos-internal/00-boot-splash.md).
@@ -25,7 +25,7 @@ valid and falls back to its drawn emblem otherwise (spec/oxos-internal/00-boot-s
 LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
 stream); its own decoder checks the result before the image is written.
 """
-import argparse, hashlib, io, os, struct, sys, zlib
+import argparse, hashlib, os, struct, sys, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lzx  # noqa: E402
@@ -126,71 +126,19 @@ SPLASH_BANK, SPLASH_W, SPLASH_H = 1, 640, 480
 SPLASH_BLACK = 6  # pixels no brighter than this become black: background noise costs bytes, not quality
 
 
-def png_chunks(png):
-    """(kind, data) for each chunk of a PNG file."""
-    if png[:8] != b"\x89PNG\r\n\x1a\n":
-        return None
-    chunks, o = [], 8
-    while o + 8 <= len(png):
-        n, kind = struct.unpack_from(">I4s", png, o)
-        chunks.append((kind, png[o + 8:o + 8 + n]))
-        o += 12 + n
-    return chunks
-
-
-def splash_png(chunks):
-    """The splash PNG the kernel decodes: signature, IHDR, PLTE, one IDAT with the whole zlib stream, IEND (the
-    decoder wants one IDAT); None unless chunks are a 640x480 8-bit palette image, not interlaced."""
-    ihdr = next((d for k, d in chunks if k == b"IHDR"), b"")
-    if len(ihdr) != 13 or struct.unpack(">IIBBBBB", ihdr) != (SPLASH_W, SPLASH_H, 8, 3, 0, 0, 0):
-        return None
-    out = [(k, d) for k, d in chunks if k in (b"IHDR", b"PLTE")]
-    out += [(b"IDAT", b"".join(d for k, d in chunks if k == b"IDAT")), (b"IEND", b"")]
-    return b"\x89PNG\r\n\x1a\n" + b"".join(struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
-                                          for k, d in out)
-
-
-def convert_splash(path, quantize):
-    """Any image Pillow reads, as a 640x480 palette PNG: scaled to fit keeping its aspect ratio (black bars), its
-    near-black noise cleared and reduced to 256 colours without dithering. `quantize`: "octree" (smallest; suits
-    textured art) or "median" (median cut: larger, but no banding in smooth gradients)."""
+def splash_bank(path):
+    """The splash bank contents for an SVG: the vector scene (version 2, tools/svg_splash.py), which the kernel draws
+    and animates at boot."""
+    if not path.lower().endswith(".svg"):
+        sys.exit(f"splash {path}: the boot splash is an SVG (spec/oxos-internal/00-boot-splash.md)")
+    import svg_splash
     try:
-        from PIL import Image
-    except ImportError:
-        sys.exit(f"{path} is not a 640x480 256-colour PNG: converting it needs Pillow (sudo apt install "
-                 "python3-pil). The converted image can be saved with --save-splash and used without Pillow.")
-    im = Image.open(path)
-    if im.mode != "P" or im.size != (SPLASH_W, SPLASH_H):
-        im = im.convert("RGB")
-        if im.size != (SPLASH_W, SPLASH_H):
-            scale = min(SPLASH_W / im.width, SPLASH_H / im.height)
-            w, h = round(im.width * scale), round(im.height * scale)
-            canvas = Image.new("RGB", (SPLASH_W, SPLASH_H))
-            canvas.paste(im.resize((w, h), Image.LANCZOS), ((SPLASH_W - w) // 2, (SPLASH_H - h) // 2))
-            im = canvas
-        px = bytearray(im.tobytes())
-        for i in range(0, len(px), 3):
-            if max(px[i], px[i + 1], px[i + 2]) <= SPLASH_BLACK:
-                px[i] = px[i + 1] = px[i + 2] = 0
-        im = Image.frombytes("RGB", im.size, bytes(px))
-        method = {"octree": Image.Quantize.FASTOCTREE, "median": Image.Quantize.MEDIANCUT}[quantize]
-        im = im.quantize(256, method=method, dither=Image.Dither.NONE)
-    buf = io.BytesIO()
-    im.save(buf, "PNG", optimize=True)
-    return splash_png(png_chunks(buf.getvalue()))
-
-
-def splash_bank(path, quantize="octree", save=None):
-    """The splash bank contents for an image file. A 640x480 256-colour PNG (such as kernel/splash/splash.png, or
-    one written by --save-splash) is used as it is, without Pillow; anything else is converted with Pillow."""
-    raw = open(path, "rb").read()
-    chunks = png_chunks(raw)
-    png = (splash_png(chunks) if chunks else None) or convert_splash(path, quantize)
-    if save:
-        open(save, "wb").write(png)
-    blob = b"XKSPLASH" + struct.pack("<III", 1, len(png), zlib.crc32(png)) + png
+        scene = svg_splash.convert(path)
+    except svg_splash.SplashError as e:
+        sys.exit(f"splash {path}: {e}")
+    blob = b"XKSPLASH" + struct.pack("<III", 2, len(scene), zlib.crc32(scene)) + scene
     if len(blob) > BANK:
-        sys.exit(f"splash image too large: {len(blob):#x} bytes after compression, {BANK:#x} available")
+        sys.exit(f"splash scene too large: {len(blob):#x} bytes, {BANK:#x} available")
     return blob + b"\xff" * (BANK - len(blob)), len(blob)
 
 
@@ -200,7 +148,7 @@ def splash_bank(path, quantize="octree", save=None):
 #   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size,
 #                           splash offset, splash size} (splash 0, 0 when there is none in the bank)
 #   0x06040 key block (below), then the kernel as a raw deflate stream
-#   ...     a copy of the splash ("XKSPLASH" header + PNG) when it fits in the space left, so a 256 KiB image (one
+#   ...     a copy of the splash ("XKSPLASH" header + vector scene) when it fits in the space left, so a 256 KiB image (one
 #           bank: --size 256K, or the first 256 KiB of a 1 MiB image) shows it too
 #   ...     the kernel's .data initializer (quick reboot), ending at 0x3FE00
 #   0x3FE00 our reset code (kernel/boot/reset.S) for running without an MCPX boot ROM
@@ -274,7 +222,7 @@ def build_open(a):
     splash, splash_full, free = "", None, dstart - kstart - len(packed)
     struct.pack_into("<II", bank, OPEN_PAYLOAD + 24, 0, 0)
     if a.splash:
-        splash_full, size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
+        splash_full, size = splash_bank(a.splash)
         sstart = (dstart - size) & ~0xF
         if sstart >= kstart + len(packed):  # a copy in the boot bank's free space, below the .data initializer
             bank[sstart:sstart + size] = splash_full[:size]
@@ -312,11 +260,9 @@ def main():
     ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
-    ap.add_argument("--splash", help="boot splash image: flash bank 1 of a 1 MiB image, and (open image) a copy in "
+    ap.add_argument("--splash", help="boot splash SVG: flash bank 1 of a 1 MiB image, and (open image) a copy in "
                     "each boot bank when it fits")
     ap.add_argument("--size", choices=("256K", "1M"), default="1M", help="open image size (default 1M)")
-    ap.add_argument("--splash-quantize", choices=("octree", "median"), default="octree")
-    ap.add_argument("--save-splash", metavar="PNG", help="also write the splash as converted (usable without Pillow)")
     a = ap.parse_args()
     if a.open:
         if not (a.xcodes and a.loader and a.reset and a.cromwell):
@@ -363,7 +309,7 @@ def main():
     splash = ""
     if a.splash:
         if len(banks) > SPLASH_BANK + 1:
-            banks[SPLASH_BANK], size = splash_bank(a.splash, a.splash_quantize, a.save_splash)
+            banks[SPLASH_BANK], size = splash_bank(a.splash)
             splash = f"; splash in bank {SPLASH_BANK} ({size:#x} bytes)"
         else:
             print(f"warning: {len(raw):#x}-byte image has no spare bank for the splash; not included")

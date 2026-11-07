@@ -5,14 +5,17 @@ music for cellos, bass and drums, as the retail boot animation comes with its so
 (the synthesizer and the score), `kernel/src/hal/bootsound.cpp` (the player); host side `tools/jingle`.
 
 ## 1. The music
-5.9 seconds, timed to the splash: it starts with the fade-in, which reaches full intensity at the climax. One lead-in
+4 seconds (5.9 until 2026-11-06), timed to the splash: it starts after the logo has shown for 1 s, with the
+cross-fade to the green X, which lands on the climax; the chord then lingers for 1.4 s while the splash holds the
+green X (`jingle::LengthMs`). The whole boot screen is 5 s. One lead-in
 and one climax in D, with no beat:
 1. The lead-in, 0–2.6 s: a swoosh (noise through a band-pass rising from 250 Hz to 7 kHz) rises the whole way, and
    cellos swell in under it one after another, each fading in over 1.7 s: the low D at 0.15 s, its fifth at 0.72 s,
    its octave at 1.23 s.
 2. The climax at 2.6 s (`jingle::ClimaxMs`): the cello section (root, fifth and octave, and the D above) and the bass
    an octave below on one D chord, with a single taiko, kick and crash, holding to the end.
-3. The last 1.2 s fade out on a squared curve, so the chord eases out.
+3. The linger, as a film logo's sound: the chord stays full for 0.2 s after the climax, then fades out over 1.2 s on a
+   curve halfway between linear and squared (it keeps its body, then eases out), with the reverb ringing on under it.
 
 The notes are written for OXOS. Nothing is taken from another piece or from the retail boot sound.
 
@@ -35,14 +38,15 @@ The mix goes through a soft limiter and fades over its last 1.2 s. Peaks are abo
 
 ## 3. Playing it
 The MCPX AC'97 controller's memory-mapped registers (PCI BAR2, 0xFEC00000) are used directly. The APU is not.
-1. `HalpStartSplash` starts the player thread at priority 7, below the splash thread. So the splash's PNG decode
+1. `HalpStartSplash` starts the player thread at priority 7, below the splash thread. So drawing the splash
    is not slowed down, and the picture comes up as soon as it would without the jingle.
 2. The thread allocates the sample buffer (32 buffers of 0.225 s, the controller's limit of 32 descriptors, write-combined, below 16 MB as the splash) and its
    state. It cold-resets the codec (global control 0x12C bit 1, then waits for codec-ready, global status 0x130
    bit 8) and unmutes the master and PCM volumes only if they are muted. Then it resets the PCM-out (0x110) and
    S/PDIF-out (0x170) channels.
 3. Both channels get the same descriptor list, with every descriptor valid from the start, over a zeroed buffer.
-   The thread synthesizes in 50 ms slices until the splash's fade-in begins (`HalpBootSoundGo`), then starts both
+   The thread synthesizes in 50 ms slices until the splash starts the jingle (`HalpBootSoundGo`, 2 s after the
+   picture comes on), then starts both
    channels. From then on it runs at priority 9, keeping at least 0.6 s of sound ready ahead of the controller and
    sleeping when it is further ahead. On the console, synthesis finishes about 5.3 s after it starts, sharing the
    CPU with the splash; in xemu it takes about 0.35 s.

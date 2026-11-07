@@ -113,7 +113,7 @@ Bank 1 holds the splash instead (spec/oxos-internal/00-boot-splash.md). `make bi
     Added 2026-10-21 after the first hardware run (a 1.4 console) ended that way;
   - loads its own GDT, sets the MTRRs as in §4 and enables the caches;
   - copies its C part to 0x400000;
-  - inflates the kernel to 0x10000 (`xk/inflate.h`, shared with the PNG decoder);
+  - inflates the kernel to 0x10000 (`xk/inflate.h`);
   - builds the §4 page directory and sets CR4, CR3 and CR0 as in §4;
   - calls `KernelEntry('OXOS', keys)`.
 - **Key block:** 16 zero bytes (no EEPROM key), the certificate key (§1), then 'OXBK', a count, and per EEPROM key

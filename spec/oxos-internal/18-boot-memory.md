@@ -3,7 +3,7 @@
 OXOS addition, implemented 2026-10-27. Titles get the memory the kernel does not use, and the kernel image stays
 resident, so its size comes straight out of what a title has (spec/stock/09 §7). The stock 4627 kernel keeps 45 image
 pages once it has freed its INIT section. OXOS had grown to 69 (the encoder tables, exFAT, UDF, virtual discs, the
-splash's PNG decoder, the jingle), and Half-Life 2 started 25 pages behind the stock kernel. Code: `kernel/Makefile`,
+splash's PNG decoder (now its vector renderer), the jingle), and Half-Life 2 started 25 pages behind the stock kernel. Code: `kernel/Makefile`,
 `kernel/src/mm/init.cpp` (`MmFreeBootPages`), `tools/check_kernel_layout.py`.
 
 ## 1. Built for size
@@ -15,7 +15,7 @@ pages are freed anyway). Debug builds (`DEBUG=1`) keep `-Og`.
 ## 2. Boot-only sections
 Code and data used only during a cold boot go in two sections of their own, which the kernel frees before the first
 title starts:
-- `.xkb`, code: the splash (`src/hal/splash.cpp`, except `HalpEndSplash`, which every title start calls), its PNG decoder and inflater (`src/hal/png.cpp`), the jingle's synthesizer and
+- `.xkb`, code: the splash (`src/hal/splash.cpp`, except `HalpEndSplash`, which every title start calls), its vector renderer (`src/hal/vsplash.cpp`), the jingle's synthesizer and
   player (`src/hal/jingle.cpp`, `src/hal/bootsound.cpp`). The files say `#pragma code_seg(".xkb")`.
 - `.xka`, read-only data, in this order (COFF grouped sections, sorted by the name after `$`):
   `$c0`/`$c1` the Conexant's tables, `$f0`/`$f1` the Focus's, `$x0`/`$x1` the Xcalibur's, `$x9` the end marker

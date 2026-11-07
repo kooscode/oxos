@@ -11,18 +11,17 @@ https://github.com/user-attachments/assets/bffc85c4-109c-4fdb-a597-2168cf89328b
 PC-formatted exFAT SSD (sound on).*
 
 ## Highlights
-- **Complete kernel:** every function and variable of the retail 4627 kernel, written in C++20 from behavioural
-  specifications ([clean-room](dmca-compliance.md)).
+- **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca-compliance.md)).
 - **Open BIOS:** our own boot code from the first instruction; 1 MB and 256 KB images.
+- **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
-- **Title compatibility patching:** per-Title fixes from an editable `title-patches.ini`, applied as the title loads.
+- **Title compatibility patching:** per-Title patches applied from `title-patches.ini`.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
 - **Saves and System Link with stock consoles:** titles get the same save-signature and System Link keys as on a
   stock console, so saves move between them and System Link games play together.
-- **nxdk homebrew:** apps that draw with nxdk's pbkit run from a cold boot: the kernel
-  brings the GPU up as a stock boot animation would ([details](spec/oxos-internal/24-graphics-engine-init.md)).
+- **nxdk homebrew:** Fully supports nxdk's pbkit homebrew ([details](spec/oxos-internal/24-graphics-engine-init.md)).
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
 - **More memory for titles** than the stock kernel.
 - **Developer tools:** serial boot log, kernel call tracing, network boot, source-level debugging in xemu.
