@@ -5,10 +5,9 @@ OXOS is an open-source replacement for the original Xbox's kernel and BIOS. It r
 dump is needed to build or run it. The one key it carries, the retail certificate key, is there for interoperability:
 saves and System Link work with stock consoles.
 
-https://github.com/user-attachments/assets/bffc85c4-109c-4fdb-a597-2168cf89328b
+https://github.com/user-attachments/assets/cc898ea8-d569-4c9a-b313-9798c5ed72c6
 
-*A real 1.4 Xbox powering on with OXOS: the OXOS splash and boot jingle, then Brute Force from a disc image on a
-PC-formatted exFAT SSD (sound on).*
+*Vector Based OXOS Boot Animation*
 
 ## Highlights
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca-compliance.md)).
