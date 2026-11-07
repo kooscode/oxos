@@ -95,7 +95,9 @@ TEST(Dpc, AfterARemovedDpcTheNextOneStillRequestsItsInterrupt) {
 namespace {
 volatile int TimerDpcs;
 KDPC TimerDpc;
-void NTAPI CountDpc(PKDPC, PVOID, PVOID, PVOID) { TimerDpcs = TimerDpcs + 1; }
+void NTAPI CountDpc(PKDPC, PVOID, PVOID, PVOID) {
+    TimerDpcs = TimerDpcs + 1;
+}
 } // namespace
 
 TEST(Timer, RelativeTimerSignalsAndQueuesItsDpcWhenDue) {
@@ -241,11 +243,12 @@ TEST(Wait, NotificationEventReleasesEveryWaiterAndStaysSignalled) {
     KeInitializeEvent(&e, NotificationEvent, FALSE);
     std::atomic<int> woke{0};
     std::vector<PKTHREAD> ts;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++) {
         ts.push_back(Spawn([&] {
             KeWaitForSingleObject(&e, Executive, KernelMode, FALSE, nullptr);
             woke++;
         }));
+    }
     SleepMs(1);
     EXPECT_EQ(woke, 0);
     EXPECT_EQ(KeSetEvent(&e, 0, FALSE), 0) << "previous state";
@@ -262,11 +265,12 @@ TEST(Wait, SynchronizationEventReleasesOneWaiterAtATime) {
     KeInitializeEvent(&e, SynchronizationEvent, FALSE);
     std::atomic<int> woke{0};
     std::vector<PKTHREAD> ts;
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++) {
         ts.push_back(Spawn([&] {
             KeWaitForSingleObject(&e, Executive, KernelMode, FALSE, nullptr);
             woke++;
         }));
+    }
     SleepMs(1);
     KeSetEvent(&e, 0, FALSE);
     SleepMs(1);
@@ -421,6 +425,7 @@ void NTAPI ApcKernel(PKAPC, PKNORMAL_ROUTINE *, PVOID *ctx, PVOID *, PVOID *) {
     ApcLog.push_back("kernel:" + std::string(*ctx ? (const char *)*ctx : "special") + "@" +
                      std::to_string(KeGetCurrentIrql()));
 }
+
 void NTAPI ApcNormal(PVOID ctx, PVOID, PVOID) {
     ApcLog.push_back("normal:" + std::string((const char *)ctx) + "@" + std::to_string(KeGetCurrentIrql()));
 }
@@ -577,6 +582,7 @@ BOOLEAN NTAPI CountingIsr(PKINTERRUPT, PVOID) {
     IsrIrql = KeGetCurrentIrql();
     return TRUE;
 }
+
 BOOLEAN NTAPI SyncRoutine(PVOID ctx) {
     *(KIRQL *)ctx = KeGetCurrentIrql();
     return TRUE;

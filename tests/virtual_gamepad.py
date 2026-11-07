@@ -4,6 +4,7 @@ xemu (SDL) sees it as an ordinary USB pad (045e:028e) and maps it onto an emulat
 """
 import fcntl, os, struct, time
 
+# Linux input events: event types, then the pad's buttons (key codes) and axes.
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 BUTTONS = {"A": 0x130, "B": 0x131, "X": 0x133, "Y": 0x134, "LB": 0x136, "RB": 0x137, "BACK": 0x13A,
            "START": 0x13B, "GUIDE": 0x13C, "LS": 0x13D, "RS": 0x13E}
@@ -11,6 +12,8 @@ BUTTONS = {"A": 0x130, "B": 0x131, "X": 0x133, "Y": 0x134, "LB": 0x136, "RB": 0x
 AXES = {"LX": (0x00, -32768, 32767), "LY": (0x01, -32768, 32767), "LT": (0x02, 0, 255),
         "RX": (0x03, -32768, 32767), "RY": (0x04, -32768, 32767), "RT": (0x05, 0, 255),
         "HATX": (0x10, -1, 1), "HATY": (0x11, -1, 1)}
+
+# uinput ioctls and the device's USB identity.
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT = 0x40045564, 0x40045565, 0x40045567
 UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
 VPAD_VENDOR, VPAD_PRODUCT = 0x045E, 0x028E  # an Xbox 360 pad: SDL maps it without a mapping string

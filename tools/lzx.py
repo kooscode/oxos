@@ -27,6 +27,8 @@ for _slot in range(51):
     EXTRA_BITS.append(_extra)
     POSITION_BASE.append(_base)
     _base += 1 << _extra
+
+# Slots in use for the window size, and the main tree: literals, then 8 length headers per slot.
 NUM_POSITION_SLOTS = {15: 30, 16: 32, 17: 34, 18: 36, 19: 38, 20: 42, 21: 50}[WINDOW_BITS]
 MAIN_TREE_SIZE = NUM_CHARS + NUM_POSITION_SLOTS * 8
 

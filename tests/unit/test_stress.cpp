@@ -8,8 +8,6 @@
 #include <cstdlib>
 #include <ctime>
 
-extern volatile ULONG ExpPoolBlocks;
-
 namespace {
 std::atomic<bool> Stop;
 std::atomic<unsigned long> Rounds, Errors, ShortThreads;
@@ -18,16 +16,19 @@ uint32_t Next(uint32_t &x) {
     x = x * 1664525 + 1013904223;
     return x >> 8;
 }
+
 void Fill(uint32_t *p, size_t words, uint32_t seed) {
     for (size_t i = 0; i < words; i++)
         p[i] = seed ^ (uint32_t)(i * 0x9E3779B9u);
 }
+
 bool Check(const uint32_t *p, size_t words, uint32_t seed) {
-    for (size_t i = 0; i < words; i++)
+    for (size_t i = 0; i < words; i++) {
         if (p[i] != (seed ^ (uint32_t)(i * 0x9E3779B9u))) {
             Errors++;
             return false;
         }
+    }
     return true;
 }
 
@@ -36,7 +37,7 @@ void Load(unsigned id, unsigned loads) {
     void *blocks[64] = {};
     size_t sizes[64] = {};
     while (!Stop) {
-        if (loads & 1)
+        if (loads & 1) {
             for (int k = 0; k < 64; k++) {
                 unsigned i = Next(x) % 64;
                 if (blocks[i]) {
@@ -48,6 +49,7 @@ void Load(unsigned id, unsigned loads) {
                 if (blocks[i])
                     Fill((uint32_t *)blocks[i], sizes[i] / 4, (uint32_t)(uintptr_t)blocks[i]);
             }
+        }
         if (loads & 2) {
             ULONG bytes = (1 + Next(x) % 16) * PAGE_SIZE;
             if (auto s = (uint32_t *)MmAllocateSystemMemory(bytes, PAGE_READWRITE)) {
@@ -70,9 +72,10 @@ void Load(unsigned id, unsigned loads) {
             SleepMs(Next(x) % 3);
         Rounds++;
     }
-    for (void *b : blocks)
+    for (void *b : blocks) {
         if (b)
             ExFreePool(b);
+    }
 }
 
 void RunStress(unsigned loads, const char *what) {
@@ -110,8 +113,22 @@ void RunStress(unsigned loads, const char *what) {
 }
 } // namespace
 
-TEST(Stress, PoolUnderAsyncInterrupts) { RunStress(1, "pool"); }
-TEST(Stress, SystemMemoryUnderAsyncInterrupts) { RunStress(2, "system memory"); }
-TEST(Stress, ContiguousMemoryUnderAsyncInterrupts) { RunStress(4, "contiguous memory"); }
-TEST(Stress, ThreadsUnderAsyncInterrupts) { RunStress(8, "threads"); }
-TEST(Stress, EverythingUnderAsyncInterrupts) { RunStress(15, "everything"); }
+TEST(Stress, PoolUnderAsyncInterrupts) {
+    RunStress(1, "pool");
+}
+
+TEST(Stress, SystemMemoryUnderAsyncInterrupts) {
+    RunStress(2, "system memory");
+}
+
+TEST(Stress, ContiguousMemoryUnderAsyncInterrupts) {
+    RunStress(4, "contiguous memory");
+}
+
+TEST(Stress, ThreadsUnderAsyncInterrupts) {
+    RunStress(8, "threads");
+}
+
+TEST(Stress, EverythingUnderAsyncInterrupts) {
+    RunStress(15, "everything");
+}

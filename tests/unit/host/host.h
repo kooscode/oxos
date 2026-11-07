@@ -1,7 +1,9 @@
 // Host unit-test harness API (tests/unit/README.md): the fake CPU, MMU and devices the kernel's core sources run on.
 #pragma once
 #include <csetjmp>
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace host {
 
@@ -50,4 +52,10 @@ const char *TakeLog();
 // returns its result. The main thread becomes the idle thread.
 int BootAndRun(int (*body)(void *), void *context);
 
+// The running test's name, for the message of a fatal kernel error (set in boot.cpp).
+extern std::string CurrentTestName;
+
 } // namespace host
+
+// Where the kernel's debug output goes (hostcpu.cpp): the log TakeLog returns.
+extern "C" void HostLogWrite(const char *s, size_t n);

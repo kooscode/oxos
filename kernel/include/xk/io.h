@@ -1,6 +1,6 @@
 // I/O manager (spec/stock/11).
 #pragma once
-#include <xk/ob.h>
+#include <xk/objects.h>
 
 typedef ULONG ACCESS_MASK;
 
@@ -38,7 +38,8 @@ typedef struct _DRIVER_OBJECT {
 } DRIVER_OBJECT, *PDRIVER_OBJECT;
 XK_SIZE(DRIVER_OBJECT, 0x44);
 
-constexpr ULONG DO_RAW_MOUNT_ONLY = 1, DO_EXCLUSIVE = 2, DO_DIRECT_IO = 4, DO_DEVICE_HAS_NAME = 8, DO_DEVICE_INITIALIZING = 0x10;
+constexpr ULONG DO_RAW_MOUNT_ONLY = 1, DO_EXCLUSIVE = 2, DO_DIRECT_IO = 4, DO_DEVICE_HAS_NAME = 8,
+                DO_DEVICE_INITIALIZING = 0x10;
 constexpr UCHAR DO_STARTIO_BUSY = 1, DO_STARTIO_REQUESTED = 2, DO_STARTIO_REQUESTED_BYKEY = 4;
 constexpr UCHAR FILE_DEVICE_CD_ROM = 2, FILE_DEVICE_DISK = 7, FILE_DEVICE_UNKNOWN = 0x22,
                 FILE_DEVICE_MEMORY_UNIT = 0x3A, FILE_DEVICE_MEDIA_BOARD = 0x3B;
@@ -261,14 +262,24 @@ XK_OFFSET(IRP, Tail.Overlay.CurrentStackLocation, 0x5C);
 XK_OFFSET(IRP, Tail.Overlay.OriginalFileObject, 0x60);
 XK_SIZE(IRP, 0x68);
 
-static inline PIO_STACK_LOCATION IoGetCurrentIrpStackLocation(PIRP Irp) { return Irp->Tail.Overlay.CurrentStackLocation; }
-static inline PIO_STACK_LOCATION IoGetNextIrpStackLocation(PIRP Irp) { return Irp->Tail.Overlay.CurrentStackLocation - 1; }
-static inline void IoMarkIrpPending(PIRP Irp) { IoGetCurrentIrpStackLocation(Irp)->Control |= SL_PENDING_RETURNED; }
+static inline PIO_STACK_LOCATION IoGetCurrentIrpStackLocation(PIRP Irp) {
+    return Irp->Tail.Overlay.CurrentStackLocation;
+}
+
+static inline PIO_STACK_LOCATION IoGetNextIrpStackLocation(PIRP Irp) {
+    return Irp->Tail.Overlay.CurrentStackLocation - 1;
+}
+
+static inline void IoMarkIrpPending(PIRP Irp) {
+    IoGetCurrentIrpStackLocation(Irp)->Control |= SL_PENDING_RETURNED;
+}
+
 static inline void IoCopyCurrentIrpStackLocationToNext(PIRP Irp) {
     PIO_STACK_LOCATION cur = IoGetCurrentIrpStackLocation(Irp), next = cur - 1;
     __builtin_memcpy(next, cur, __builtin_offsetof(IO_STACK_LOCATION, CompletionRoutine));
     next->Control = 0;
 }
+
 static inline void IoSetCompletionRoutine(PIRP Irp, PIO_COMPLETION_ROUTINE Routine, PVOID Context, bool Success,
                                           bool Error, bool Cancel) {
     PIO_STACK_LOCATION next = IoGetNextIrpStackLocation(Irp);
@@ -294,6 +305,8 @@ constexpr ULONG FILE_OPEN_FOR_BACKUP_INTENT = 0x4000;
 // SL_OPEN_TARGET_DIRECTORY 4).
 constexpr ULONG IO_FORCE_ACCESS_CHECK = 1, IO_OPEN_TARGET_DIRECTORY = 4, IO_NO_PARAMETER_CHECKING = 0x100,
                 IO_CHECK_CREATE_PARAMETERS = 0x200;
+
+// A read or write at this byte offset {LOW, HIGH} uses the file's current position.
 constexpr ULONG FILE_USE_FILE_POINTER_POSITION_HIGH = 0xFFFFFFFF, FILE_USE_FILE_POINTER_POSITION_LOW = 0xFFFFFFFE;
 
 constexpr NTSTATUS STATUS_PENDING = 0x103, STATUS_INVALID_INFO_CLASS = (NTSTATUS)0xC0000003,
@@ -418,7 +431,7 @@ XBAPI NTSTATUS NTAPI NtRemoveIoCompletion(HANDLE IoCompletionHandle, PVOID *KeyC
                                           PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER Timeout);
 XBAPI void NTAPI NtUserIoApcDispatcher(PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG Reserved);
 
-// File-system registration for mounting (internal; FATX/XDVDFS/RAW arrive in milestone 3c).
+// The file systems the I/O manager tries when it mounts a volume (internal).
 typedef NTSTATUS (*IO_MOUNT_ROUTINE)(PDEVICE_OBJECT TargetDevice);
 struct IO_FILE_SYSTEM {
     IO_MOUNT_ROUTINE Disk;  // FATX
@@ -428,4 +441,26 @@ struct IO_FILE_SYSTEM {
 extern IO_FILE_SYSTEM IopFileSystems;
 
 void IoInitSystem();
-void FsInitSystem(); // registers the file systems with the mount path
+
+// Inside the I/O manager (io/device.cpp, io/file.cpp, io/io_requests.cpp).
+void IopDereferenceDevice(PDEVICE_OBJECT DeviceObject);
+XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject);
+XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName);
+void NTAPI IopCloseFileObject(PVOID Object, ULONG SystemHandleCount);
+void NTAPI IopDeleteFileObject(PVOID Object);
+void NTAPI IopDeleteIoCompletion(PVOID Object);
+void IopQueueThreadIrp(PIRP Irp);
+void IopLockUserBuffer(PIRP Irp, ULONG Length);
+void IopCompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject);
+// The parse routines of the device and file object types (io/file.cpp); the IDE disk driver's devices use the first.
+NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
+                              POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
+                              PVOID *Object);
+NTSTATUS NTAPI IopParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
+                            POBJECT_STRING RemainingName, PVOID Context, PVOID *Object);
+XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
+                                       PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
+                                       ULONG Length, PLARGE_INTEGER ByteOffset);
+XBAPI NTSTATUS NTAPI NtWriteFileGather(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
+                                       PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
+                                       ULONG Length, PLARGE_INTEGER ByteOffset);

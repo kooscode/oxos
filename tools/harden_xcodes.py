@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Add write checks to the X-code program of a built X-code bank (boot/xcodes.S -> xcodes.bin), relocating jumps.
 
-On the 1.4 test console the GPU ignores some of the X-codes' writes (spec/oxos-internal/27): the first ones when it
+On the 1.4 test console the GPU ignores some of the X-codes' writes (spec/oxos_internal/27): the first ones when it
 leaves reset after the MCPX has started the X-codes (on some warm reboots all of them), and single writes on cold
 boots. The memory interface and DRAM controller settings have to hold before the X-codes initialise the DRAM, so:
 - after the first write to NV2A 0x10B0 (the 1.0-1.5 value only): until it reads back the value written, write it

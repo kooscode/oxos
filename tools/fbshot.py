@@ -11,7 +11,7 @@ root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 bios, out = sys.argv[1], sys.argv[2]
 work = tempfile.mkdtemp(prefix="xk-shot-")
 sock = os.path.join(work, "qmp.sock")
-shutil.copyfile(f"{root}/third_party/xemu-dashboard/xemu-dashboard.qcow2", f"{work}/hdd.qcow2")  # make -C kernel hdd-image
+shutil.copyfile(f"{root}/third_party/xemu_dashboard/xemu_dashboard.qcow2", f"{work}/hdd.qcow2")  # make -C kernel hdd_image
 open(f"{work}/xemu.toml", "w").write("[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
     f"bootrom_path = '{os.environ.get('MCPX_ROM', '')}'\nflashrom_path = '{bios}'\n"
     f"eeprom_path = '{work}/eeprom.bin'\nhdd_path = '{work}/hdd.qcow2'\n")
@@ -28,9 +28,20 @@ try:
     f.write(json.dumps({"execute": "pmemsave", "arguments": {"val": start, "size": pitch * h, "filename": dump}}) + "\n"); f.flush()
     print(f.readline().strip())
     data = open(dump, "rb").read()
-    raw = b"".join(b"\0" + b"".join(bytes((data[y*pitch+4*x+2], data[y*pitch+4*x+1], data[y*pitch+4*x])) for x in range(w)) for y in range(h))
-    def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    # PNG scanlines: filter byte 0, then RGB for each pixel (the surface is BGRX).
+    raw = bytearray()
+    for y in range(h):
+        raw += b"\0"
+        for x in range(w):
+            p = y * pitch + 4 * x
+            raw += bytes((data[p + 2], data[p + 1], data[p]))
+
+    def chunk(kind, payload):
+        crc = zlib.crc32(kind + payload) & 0xffffffff
+        return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)  # 8-bit RGB
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(bytes(raw))) + chunk(b"IEND", b"")
     open(out, "wb").write(png)
     print("fb at", hex(start), "->", out)
 finally:

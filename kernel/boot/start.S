@@ -23,7 +23,7 @@ _start:
     movl %eax, 0
     movl %eax, 4
 #if XK_XCODE_ENTRY_SNAPSHOT
-    // Debug (spec/oxos-internal/27 §4): the X-code settings that get lost on some cold boots, read before anything else
+    // Debug (spec/oxos_internal/27 §4): the X-code settings that get lost on some cold boots, read before anything else
     // runs, kept in MMX registers until the memory is sized, then stored at physical 0x2340 for the kernel's log.
     movl 0xFD0010B0, %eax
     movd %eax, %mm0
@@ -44,7 +44,7 @@ _start:
     xorl %eax, %eax
 #endif
 #if XK_MCPX_DUMP
-    // MCPX ROM dumper (spec/oxos-internal/12-mcpx-dump.md): entered through the TEA (MCPX 1.1) or RC4 (1.0) attack
+    // MCPX ROM dumper (spec/oxos_internal/12_mcpx_dump.md): entered through the TEA (MCPX 1.1) or RC4 (1.0) attack
     // instead of the overflow trick, the boot ROM is still mapped over the top 512 bytes: copy them to RAM 0x2000 and
     // mark the copy ('MCPX' at 0x2200) for the netboot code, which sends it once the link is up.
     movl $0xFFFFFE00, %esi
@@ -98,14 +98,8 @@ _start:
     movl $0x00070106, %eax
     movl $0x00070106, %edx
     wrmsr
-    // The DRAM set-up as the retail X-codes finish it (spec/stock/22 §6.3), still with the caches off so that every
-    // access reaches the memory, and before anything is stored in RAM (0x100204 sets the DRAM geometry, so it cannot
-    // change under live data). The X-codes (XboxDev/cromwell's) leave the larger chips' set-up (PFB 0x100200
-    // 0x03070103, 0x100204 0x11448000, host 0x84 128 MB). For each of 8 byte lanes (four at 0x00555548 + 16n, four
-    // at 0x04555548 + 16n) write the address and the address + 32 MB: a lane where the second write leaves the first
-    // alone has the larger chips (ebx); one that does not keep a value is faulty (ebp, not used further).
-    // DRAM refresh (spec/oxos-internal/20): every reference X-code table enables it (PFB 0x100210 = 0x80000000) and then
-    // reprograms the memory clock, and nothing in a reference boot chain checks it again. On a warm 1.4 console it
+    // DRAM refresh (spec/oxos_internal/20): every reference X-code table enables it (PFB 0x100210 = 0x80000000) and
+    // then reprograms the memory clock, and nothing in a reference boot chain checks it again. On a warm 1.4 console it
     // was found off here in about one cold boot in five, and the unrefreshed cells lost bits within seconds. Before
     // anything is stored in RAM: if bit 31 is clear, set it as the X-codes do, and leave a record for the kernel's log
     // (physical 0x23D8: 'RFS0', then the value found).
@@ -117,6 +111,12 @@ _start:
     movl $0x80000000, 0xFD100210
     movl $0x30534652, 0x23D8
 14:
+    // The DRAM set-up as the retail X-codes finish it (spec/stock/22 §6.3), still with the caches off so that every
+    // access reaches the memory, and before anything is stored in RAM (0x100204 sets the DRAM geometry, so it cannot
+    // change under live data). The X-codes (XboxDev/cromwell's) leave the larger chips' set-up (PFB 0x100200
+    // 0x03070103, 0x100204 0x11448000, host 0x84 128 MB). For each of 8 byte lanes (four at 0x00555548 + 16n, four
+    // at 0x04555548 + 16n) write the address and the address + 32 MB: a lane where the second write leaves the first
+    // alone has the larger chips (ebx); one that does not keep a value is faulty (ebp, not used further).
     cmpl $0x11448000, 0xFD100204            // X-codes that sized the memory themselves: keep their set-up
     jne 13f
     xorl %ebx, %ebx

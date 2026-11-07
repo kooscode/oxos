@@ -22,14 +22,16 @@ struct XK_BOOT_PAYLOAD {
     ULONG SplashOffset, SplashSize;   // the boot splash copy in this bank (0, 0 if none; read by the kernel)
 };
 
+// The boot splash, copied into RAM for the kernel (spec/oxos_internal/00_boot_splash.md): "XKSPLASH" header (20 bytes)
+// + vector scene, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the
+// pad calibration record at 0x2300). The kernel decodes it from RAM: decoding it straight from flash, byte by byte over
+// LPC while the kernel runs, coincided with bits of RAM changing on a Modxo console (2026-10-28).
+constexpr ULONG SPLASH_RAM = 0x00C00000, SPLASH_RAM_MAX = 0x40000, SPLASH_RECORD = 0x2380,
+                SPLASH_RECORD_MAGIC = 0x5053584F;
+constexpr ULONG SPLASH_BANK1 = 0xFFF40000, SPLASH_HEADER = 20;
+
 constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + 0x6000, PAYLOAD_MAGIC = 0x504B584F, BOOT_MAGIC = 0x534F584F;
 constexpr ULONG KERNEL_PHYS = 0x10000, PAGE_DIRECTORY = 0xF000;
-// The boot splash, copied into RAM for the kernel (spec/oxos-internal/00-boot-splash.md): "XKSPLASH" header (20 bytes)
-// + vector scene, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the pad
-// calibration record at 0x2300). The kernel decodes it from RAM: decoding it straight from flash, byte by byte over
-// LPC while the kernel runs, coincided with bits of RAM changing on a Modxo console (2026-10-28).
-constexpr ULONG SPLASH_RAM = 0x00C00000, SPLASH_RAM_MAX = 0x40000, SPLASH_RECORD = 0x2380, SPLASH_RECORD_MAGIC = 0x5053584F;
-constexpr ULONG SPLASH_BANK1 = 0xFFF40000, SPLASH_HEADER = 20;
 
 static UCHAR BlKeys[1024];
 
@@ -45,7 +47,10 @@ extern "C" void *memset(void *d, int c, unsigned n) {
     return d;
 }
 
-static void BlPost(UCHAR code) { __asm__ volatile("outb %0, $0x80" ::"a"(code)); }
+// --- Helpers
+static void BlPost(UCHAR code) {
+    __asm__ volatile("outb %0, $0x80" ::"a"(code));
+}
 
 [[noreturn]] static void BlFail(UCHAR code) {
     BlPost(code);
@@ -53,30 +58,76 @@ static void BlPost(UCHAR code) { __asm__ volatile("outb %0, $0x80" ::"a"(code));
         __asm__ volatile("cli; hlt");
 }
 
-// --- SMC start-up challenge (spec/stock/01 §5). On a console the SMC (SMBus slave 0x20) holds four challenge bytes in
-// registers 0x1C-0x1F at power-on and expects the boot loader to answer in registers 0x20 and 0x21 within a few
-// seconds; without an answer it resets the console and flashes the LED red and green. The retail 2BL answers it, so
-// ours must. Answer and SMBus sequence as in XboxDev/cromwell's boot_rom/2bPicResponseAction.c (GPL-2.0).
-static inline void BlOut8(unsigned short port, UCHAR v) { __asm__ volatile("outb %0, %1" ::"a"(v), "Nd"(port)); }
-static inline void BlOut16(unsigned short port, unsigned short v) { __asm__ volatile("outw %0, %1" ::"a"(v), "Nd"(port)); }
+// Port I/O.
+static inline void BlOut8(unsigned short port, UCHAR v) {
+    __asm__ volatile("outb %0, %1" ::"a"(v), "Nd"(port));
+}
+
+static inline void BlOut16(unsigned short port, unsigned short v) {
+    __asm__ volatile("outw %0, %1" ::"a"(v), "Nd"(port));
+}
+
 static inline UCHAR BlIn8(unsigned short port) {
     UCHAR v;
     __asm__ volatile("inb %1, %0" : "=a"(v) : "Nd"(port));
     return v;
 }
+
 static inline unsigned short BlIn16(unsigned short port) {
     unsigned short v;
     __asm__ volatile("inw %1, %0" : "=a"(v) : "Nd"(port));
     return v;
 }
 
+static inline void BlOut32(unsigned short port, ULONG v) {
+    __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(port));
+}
+
+static inline ULONG BlIn32(unsigned short port) {
+    ULONG v;
+    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(port));
+    return v;
+}
+
+// PCI configuration space (mechanism 1, bus 0).
+static ULONG BlPciRead(ULONG Device, ULONG Register) {
+    BlOut32(0xCF8, 0x80000000 | Device << 11 | Register);
+    return BlIn32(0xCFC);
+}
+
+static void BlPciWrite(ULONG Device, ULONG Register, ULONG Value) {
+    BlOut32(0xCF8, 0x80000000 | Device << 11 | Register);
+    BlOut32(0xCFC, Value);
+}
+
+// An NV2A register (the GPU's registers at 0xFD000000).
+static volatile ULONG &BlNv(ULONG Offset) {
+    return *(volatile ULONG *)(0xFD000000 + Offset);
+}
+
+// The reference's TSC wait: end = start + Ticks (64-bit); stop when the high half passes the end's high half, or when
+// it is not below it and the low half has reached the end's low half.
+[[gnu::noinline]] static void BlTscWait(ULONG Ticks) {
+    ULONG lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    ULONG endLo = lo + Ticks, endHi = hi + (endLo < lo ? 1 : 0);
+    do
+        __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    while (!(hi > endHi) && lo < endLo);
+}
+
+// --- SMC start-up challenge (spec/stock/01 §5). On a console the SMC (SMBus slave 0x20) holds four challenge bytes in
+// registers 0x1C-0x1F at power-on and expects the boot loader to answer in registers 0x20 and 0x21 within a few
+// seconds; without an answer it resets the console and flashes the LED red and green. The retail 2BL answers it, so
+// ours must. Answer and SMBus sequence as in XboxDev/cromwell's boot_rom/2bPicResponseAction.c (GPL-2.0).
 constexpr unsigned short SMB = 0xC000; // MCPX SMBus host: status, control +2, address +4, data +6, command +8
 
 // One SMBus byte transfer with the SMC; returns the byte read (Read), 0 for a write, -1 on failure. Bounded, so a
 // console without an answering SMC (or an emulator) still boots.
 static int BlSmcTransfer(bool Read, UCHAR Register, UCHAR Value) {
-    for (ULONG spin = 0; (BlIn16(SMB) & 0x0800) && spin < 1000000; spin++) // another master is using the bus
-        ;
+    for (ULONG spin = 0; (BlIn16(SMB) & 0x0800) && spin < 1000000; spin++) {
+        // Wait while another master is using the bus (bounded).
+    }
     for (int retry = 0; retry < 400; retry++) {
         BlOut8(SMB + 4, Read ? 0x21 : 0x20);
         BlOut8(SMB + 8, Register);
@@ -95,9 +146,10 @@ static int BlSmcTransfer(bool Read, UCHAR Register, UCHAR Value) {
 
 static void BlAnswerSmcChallenge() {
     int c[4];
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         if ((c[i] = BlSmcTransfer(true, (UCHAR)(0x1C + i), 0)) < 0)
             return;
+    }
     UCHAR b1 = 0x33, b2 = 0xED;
     UCHAR b3 = (UCHAR)((c[0] << 2) ^ (c[1] + 0x39) ^ (c[2] >> 2) ^ (c[3] + 0x63));
     UCHAR b4 = (UCHAR)((c[0] + 0x0B) ^ (c[1] >> 2) ^ (c[2] + 0x1B));
@@ -114,20 +166,6 @@ static void BlAnswerSmcChallenge() {
 // (boot_rom/2bBootStartBios.c, GPL-2.0): the X-codes leave the NV2A's second memory configuration register, the
 // AGP bridge and the top of memory unset. Without them the GPU reads RAM with the wrong layout (a screen of banded
 // noise on hardware); xemu ignores these registers.
-static inline void BlOut32(unsigned short port, ULONG v) { __asm__ volatile("outl %0, %1" ::"a"(v), "Nd"(port)); }
-static inline ULONG BlIn32(unsigned short port) {
-    ULONG v;
-    __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(port));
-    return v;
-}
-static ULONG BlPciRead(ULONG Device, ULONG Register) {
-    BlOut32(0xCF8, 0x80000000 | Device << 11 | Register);
-    return BlIn32(0xCFC);
-}
-static void BlPciWrite(ULONG Device, ULONG Register, ULONG Value) {
-    BlOut32(0xCF8, 0x80000000 | Device << 11 | Register);
-    BlOut32(0xCFC, Value);
-}
 
 // The memory size is decided before this (boot/start.S, the retail X-codes' probe, spec 22 §6.3). An earlier OXOS probe
 // that wrote 0x100204 = 0x11338000 on a 1.4 console stopped it in the memory manager (2026-10-22): that row is for
@@ -149,21 +187,13 @@ static void BlSetUpChipset() {
     BlOut32(0xCF8, 0x80000000 | 1 << 11 | 0x08);
     if (BlIn8(0xCFC) >= 0xD1)
         BlPciWrite(1, 0xC8, 0x8F00);
-    // Not written here, as in the retail 2BLs (spec/stock/21 §2, spec/stock/22 §6.3): the NV2A memory configuration
-    // PFB 0x100200 / 0x100204 and the host bridge's top of memory 0x84. The memory-size probe sets them (boot/start.S;
-    // a retail 64 MB console: 0x03070003, 0x11448000, 64 MB); overwriting them with cromwell's 128 MB values (as earlier
+    // Not written here, as in the retail 2BLs (spec/stock/21 §2, spec/stock/22 §6.3): the NV2A memory configuration PFB
+    // 0x100200 / 0x100204 and the host bridge's top of memory 0x84. The memory-size probe sets them (boot/start.S; a
+    // retail 64 MB console: 0x03070003, 0x11448000, 64 MB); overwriting them with cromwell's 128 MB values (as earlier
     // OXOS images did) gave the GPU the wrong memory layout: a scrambled picture on 1.4 and 1.x consoles.
 }
 
-// --- NV2A memory pad calibration (spec/stock/21 §3.7a): the drive/slew/delay compensation of the memory pads,
-// measured and set before the kernel is decompressed, exactly as Cerbios does it on NV2A revisions below D3
-// (consoles 1.0-1.5): Cerbios's row-set selection, the reference 4627 measurement and arithmetic (all 32-bit,
-// including the clamp of 1/2^20 above the top breakpoint and the zero store described below). The table, in
-// Cerbios's layout, is the one the flash header's 0x7C points at (through the 16 MB flash window): breakpoints
-// at bytes 2-11, row sets at +0x18, +0x77 and +0xD6 (boot/padcal_table.inc, placed by boot/xcodes.S). A table
-// whose breakpoints do not increase (the reference would divide by zero) leaves the X-codes' values. NV2A D3 and
-// later (1.6) take Cerbios's EEPROM method, not implemented: the X-codes' values stay there too.
-static volatile ULONG &BlNv(ULONG Offset) { return *(volatile ULONG *)(0xFD000000 + Offset); }
+// --- The GPU core clock
 
 // The GPU core clock: NVPLL coefficients (NV2A 0x680500) and the PLL coefficient select (0x68050C). The X-codes write
 // 0x00011C01 (M 1, N 28, P 1: 233 MHz), then 0x000A0400. On some cold boots the 2BL finds other values:
@@ -180,18 +210,22 @@ static void BlCheckGpuClock(ULONG Slot) {
     auto record = (volatile ULONG *)NVPLL_RECORD;
     record[Slot] = BlNv(NVPLL);
     record[Slot + 1] = BlNv(PLL_SELECT);
-    for (ULONG tries = 0; tries < 3 && (BlNv(NVPLL) != NVPLL_XCODES || BlNv(PLL_SELECT) != PLL_SELECT_XCODES); tries++) {
+    for (ULONG tries = 0; tries < 3 &&
+         (BlNv(NVPLL) != NVPLL_XCODES || BlNv(PLL_SELECT) != PLL_SELECT_XCODES); tries++) {
         BlNv(NVPLL) = NVPLL_XCODES; // read back: the X-codes' own writes did not hold on those boots
         BlNv(PLL_SELECT) = PLL_SELECT_XCODES;
     }
 }
 
-// X-code check (debug, spec/oxos-internal/26 §4): on some cold boots settings the X-codes write do not hold (the GPU
+// --- X-code checks (debug)
+
+// X-code check (debug, spec/oxos_internal/26 §4): on some cold boots settings the X-codes write do not hold (the GPU
 // clock, DRAM refresh). When the 2BL starts, every register in this list (Cromwell's table, kernel/boot/xcodes.S: the
 // last value written, under a mask) is read back; the ones that differ go to a record at physical 0x2400 for the
-// kernel's log: 'XCHK', the count, then {address, value read} pairs; again before the kernel, at 0x2600. Addresses: 0x0Fxxxxxx = NV2A register (now at
-// 0xFD000000), 0x8xxxxxxx = PCI configuration address. Left out: the memory size (start.S decides it), the DRAM mode
-// commands, the strap and bridge registers the table changes with read-modify-write.
+// kernel's log: 'XCHK', the count, then {address, value read} pairs; again before the kernel, at 0x2600. Addresses:
+// 0x0Fxxxxxx = NV2A register (now at 0xFD000000), 0x8xxxxxxx = PCI configuration address. Left out: the memory size
+// (start.S decides it), the DRAM mode commands, the strap and bridge registers the table changes with
+// read-modify-write.
 struct BL_XCODE_VALUE {
     ULONG Address, Value, Mask;
 };
@@ -216,7 +250,8 @@ static const BL_XCODE_VALUE BlXcodeValues[] = {
     {0x8000F024, 0xF7F0F000, ~0u}, {0x8000F04C, 1, ~0u},          {0x80010004, 7, 0xFFFF},
     {0x80010010, 0xFD000000, ~0u}, {0x80010014, 0xF0000000, ~0u},
 };
-constexpr ULONG XCODE_RECORD = 0x2400, XCODE_RECORD_END = 0x2600, XCODE_RECORD_MAGIC = 0x4B484358, XCODE_RECORD_MAX = 60;
+constexpr ULONG XCODE_RECORD = 0x2400, XCODE_RECORD_END = 0x2600, XCODE_RECORD_MAGIC = 0x4B484358,
+                XCODE_RECORD_MAX = 60;
 
 static void BlCheckXcodeValues(ULONG Record) {
     auto record = (volatile ULONG *)Record;
@@ -239,16 +274,14 @@ static void BlCheckXcodeValues(ULONG Record) {
     record[0] = XCODE_RECORD_MAGIC;
 }
 
-// The reference's TSC wait: end = start + Ticks (64-bit); stop when the high half passes the end's high half, or when
-// it is not below it and the low half has reached the end's low half.
-[[gnu::noinline]] static void BlTscWait(ULONG Ticks) {
-    ULONG lo, hi;
-    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    ULONG endLo = lo + Ticks, endHi = hi + (endLo < lo ? 1 : 0);
-    do
-        __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    while (!(hi > endHi) && lo < endLo);
-}
+// --- NV2A memory pad calibration (spec/stock/21 §3.7a): the drive/slew/delay compensation of the memory pads,
+// measured and set before the kernel is decompressed, exactly as Cerbios does it on NV2A revisions below D3
+// (consoles 1.0-1.5): Cerbios's row-set selection, the reference 4627 measurement and arithmetic (all 32-bit,
+// including the clamp of 1/2^20 above the top breakpoint and the zero store described below). The table, in
+// Cerbios's layout, is the one the flash header's 0x7C points at (through the 16 MB flash window): breakpoints
+// at bytes 2-11, row sets at +0x18, +0x77 and +0xD6 (boot/padcal_table.inc, placed by boot/xcodes.S). A table
+// whose breakpoints do not increase (the reference would divide by zero) leaves the X-codes' values. NV2A D3 and
+// later (1.6) take Cerbios's EEPROM method, not implemented: the X-codes' values stay there too.
 
 // Four readings of 0x121C, selector First..First+3 in 0x1228, each after a 10 000-tick wait; their average.
 static ULONG BlPadMeasure(ULONG First) {
@@ -261,7 +294,9 @@ static ULONG BlPadMeasure(ULONG First) {
     return sum >> 2;
 }
 
-static ULONG BlPadRound(ULONG x) { return (x + 0x80000) >> 20 & 0xF; }
+static ULONG BlPadRound(ULONG x) {
+    return (x + 0x80000) >> 20 & 0xF;
+}
 
 // The row pair and weight for a measurement M against breakpoints B[0], B[2], B[4], B[6], B[8] (every other byte):
 // Hi is weighted by F, Lo by 0x100000 - F.
@@ -273,18 +308,22 @@ static void BlPadSelect(ULONG M, const volatile UCHAR *B, const volatile UCHAR *
         f = ((M - b0) << 20) / (b1 - b0);
         if (f & 0x80000000)
             f = 0;
-        *Hi = row[3], *Lo = row[4];
+        *Hi = row[3];
+        *Lo = row[4];
     } else if (M >= b3) { // the highest: a weight above 1.0 becomes 1/2^20
         f = ((M - b3) << 20) / (b4 - b3);
         if (f > 0x100000)
             f = 1;
-        *Hi = row[0], *Lo = row[1];
+        *Hi = row[0];
+        *Lo = row[1];
     } else if (M < b2) {
         f = ((M - b1) << 20) / (b2 - b1);
-        *Hi = row[2], *Lo = row[3];
+        *Hi = row[2];
+        *Lo = row[3];
     } else {
         f = ((M - b2) << 20) / (b3 - b2);
-        *Hi = row[1], *Lo = row[2];
+        *Hi = row[1];
+        *Lo = row[2];
     }
     *F = f;
 }
@@ -338,9 +377,10 @@ struct BL_PAD_RESULT {
     auto result = (volatile BL_PAD_RESULT *)0x2300;
     auto table = (const volatile UCHAR *)(*(volatile ULONG *)0xFF00007C - 0x1000000);
     result->Magic = 0x4E444150; // 'PADN'
-    for (int i = 2; i < 10; i++) // a missing table (all zero) would divide by zero below
+    for (int i = 2; i < 10; i++) { // a missing table (all zero) would divide by zero below
         if (table[i] >= table[i + 2])
             return;
+    }
     ULONG strap = BlNv(0x101000);
     auto set = table + (Upgraded ? 0xD6 : (strap & 0xC0000) ? 0x18 : 0x77);
     BlNv(0x1220) = 0x000F0F0F;
@@ -383,9 +423,13 @@ struct BL_PAD_RESULT {
     result->Magic = 0x43444150; // 'PADC'
 }
 
+// --- Network boot (NETBOOT=1 images): built on the port, PCI and timing helpers above.
+
 #if XK_NETBOOT
 #include "netboot.h"
 #endif
+
+// --- The boot splash's copy for the kernel
 
 // A splash blob ("XKSPLASH", version 2: a vector scene; length; Room bytes available): its whole size, 0 if there is
 // none.
@@ -393,9 +437,10 @@ static ULONG BlSplashSize(const volatile UCHAR *Blob, ULONG Room) {
     static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
     if (Room < SPLASH_HEADER)
         return 0;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++) {
         if (Blob[i] != (UCHAR)magic[i])
             return 0;
+    }
     ULONG version = *(const volatile ULONG *)(Blob + 8), length = *(const volatile ULONG *)(Blob + 12);
     return version == 2 && length <= Room - SPLASH_HEADER ? SPLASH_HEADER + length : 0;
 }
@@ -426,10 +471,12 @@ static void BlCopySplash(ULONG Bank) {
     record[2] = size;
 }
 
-// The GPU's memory interface settings (NV2A 0x10B0-0x10E8), as the X-codes write them, in their order. On some cold boots
-// some of them read other values when the 2BL starts, and the screen is then garbled: 0x10BC 0xFF885066 with every
-// line of text drawn as one glyph repeated to the screen edge, 0x10B0 / 0x10E8 with speckled textures
-// (spec/oxos-internal/26 §4). When any differs, the 2BL writes them all again, through the write window.
+// --- The GPU's memory interface settings
+
+// The GPU's memory interface settings (NV2A 0x10B0-0x10E8), as the X-codes write them, in their order. On some cold
+// boots some of them read other values when the 2BL starts, and the screen is then garbled: 0x10BC 0xFF885066 with
+// every line of text drawn as one glyph repeated to the screen edge, 0x10B0 / 0x10E8 with speckled textures
+// (spec/oxos_internal/26 §4). When any differs, the 2BL writes them all again, through the write window.
 static const ULONG BlMemoryInterface[] = {
     0x10B0, 0x07633461, 0x10CC, 0x66660000, 0x10B8, 0xFFFF0000, 0x10D4, 9,          0x10B4, 0,          0x10BC, 0x5866,
     0x10C4, 0x0351C858, 0x10C8, 0x30007D67, 0x10D8, 0,          0x10DC, 0xA0423635, 0x10E8, 0x0C6558C6,
@@ -447,6 +494,8 @@ static void BlRestoreMemoryInterface() {
         pairs[i] = BlMemoryInterface[i];
     BlWriteWindow(pairs, MEMORY_INTERFACE_COUNT);
 }
+
+// --- The 2BL's main line (from boot/start.S): checks and repairs, the chipset, the kernel's payload, then the kernel
 
 extern "C" [[noreturn]] void BlMain() {
     BlPost(0x20);
@@ -472,13 +521,13 @@ extern "C" [[noreturn]] void BlMain() {
             BlPadCalibrate(top == 0x0FFFFFFF || upgraded128);
     }
     BlSetUpChipset();
-    // Boot status on the front LED (spec/oxos-internal/03-debug-serial.md §6): slow green blink while the 2BL runs.
+    // Boot status on the front LED (spec/oxos_internal/03_debug_serial.md §6): slow green blink while the 2BL runs.
     BlSmcTransfer(false, 0x08, 0x03);
     BlSmcTransfer(false, 0x07, 1);
     BlPost(0x23);
     ULONG bank = BANK; // where the kernel and key block come from: this flash bank, or a network download
 #if XK_NETBOOT
-    BlSmcTransfer(false, 0x08, 0xFF); // solid orange while it asks the network (spec/oxos-internal/09-netboot.md)
+    BlSmcTransfer(false, 0x08, 0xFF); // solid orange while it asks the network (spec/oxos_internal/09_netboot.md)
     BlSmcTransfer(false, 0x07, 1);
     if (const UCHAR *download = netboot::Boot())
         bank = (ULONG)download;
@@ -512,7 +561,7 @@ extern "C" [[noreturn]] void BlMain() {
     auto image = (const UCHAR *)KERNEL_PHYS;
     ULONG nt = *(const ULONG *)(image + 0x3C);
     ULONG entry = *(const ULONG *)(image + nt + 0x34) + *(const ULONG *)(image + nt + 0x28); // ImageBase + entry RVA
-    // DRAM refresh must be on when the kernel starts (spec/oxos-internal/20). boot/start.S makes sure of it after the
+    // DRAM refresh must be on when the kernel starts (spec/oxos_internal/20). boot/start.S makes sure of it after the
     // X-codes; checked again here, after everything the 2BL does, with its own record (physical 0x23D0: 'RFEN', then
     // the value found).
     if (!(BlNv(0x100210) & 0x80000000)) {

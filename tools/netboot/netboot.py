@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Serve OXOS kernels to a console over the network (README.md in this folder; spec/oxos-internal/09-netboot.md).
+"""Serve OXOS kernels to a console over the network (README.md in this folder; spec/oxos_internal/09_netboot.md).
 
-Flash a netboot image once (make -C kernel netboot -> kernel/build/netboot/bios-256k.bin or bios.bin). At every
+Flash a netboot image once (make -C kernel netboot -> kernel/build/netboot/bios_256k.bin or bios.bin). At every
 power-on its 2BL asks the network for a boot image; this tool answers with IMAGE, any OXOS open image (a 256 KiB
-bios-256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose kernel stream runs past
+bios_256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose kernel stream runs past
 the first bank is sent whole). The console boots the kernel inside it, or its own
 kernel from flash when nobody answers. IMAGE is read again at every request, so rebuilding it between power-ons is
 enough: each boot gets the newest build.
@@ -24,11 +24,11 @@ HEADER = struct.Struct("<IBBHIII")  # magic, op, version, reserved, session, off
 PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only used for frames injected into xemu
 
 
-TITLE_AT = 0x5FE0  # 'OXTI' + package offset + package size: a title's files after the image (kernel: xe/nettitle.cpp)
+TITLE_AT = 0x5FE0  # 'OXTI' + package offset + package size: a title's files after the image (kernel: titles/nettitle.cpp)
 
 
 def title_package(folder, name):
-    """A title's files as the kernel installs them (spec/oxos-internal/09-netboot.md §7): the folder's files, with
+    """A title's files as the kernel installs them (spec/oxos_internal/09_netboot.md §7): the folder's files, with
     default.xbe stored as NAME.xbe. Header {'OXTP', version 1, count, name[16]}, then per file {name[64], offset,
     size} (from the package's start), then the files, each 16-byte aligned; padded to a multiple of 1 KiB."""
     if not name or len(name) > 15 or any(c in name for c in "\\/:"):
@@ -113,7 +113,7 @@ class Log:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("image", help="OXOS open image to serve (bios-256k.bin or bios.bin), read again for every boot")
+    ap.add_argument("image", help="OXOS open image to serve (bios_256k.bin or bios.bin), read again for every boot")
     ap.add_argument("--xemu", type=int, metavar="PORT", help="an xemu console (tools/run.py --net-udp PORT)")
     ap.add_argument("--to", default="255.255.255.255",
                     help="address the replies go to (default the broadcast address; use the LAN's broadcast address, "

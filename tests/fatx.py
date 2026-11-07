@@ -1,5 +1,5 @@
 """FATX reader over a Qcow2 image, for checking the kernel's file system results in tests, and a small writer
-(FatxWriter: create directories, write files, copy a host folder) for preparing disk images; the changes go
+(FATXWriter: create directories, write files, copy a host folder) for preparing disk images; the changes go
 through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/stock/04b for the format).
 
 usage: fatx.py IMAGE                                   list each partition's root
@@ -11,7 +11,7 @@ PARTITIONS = {"E": (0x55F400, 0x1312D6000), "C": (0x465400, 0x1F400000), "X": (0
               "Y": (0x177400, 0x2EE00000), "Z": (0x2EE400, 0x2EE00000)}
 
 
-class Fatx:
+class FATX:
     def __init__(self, disk, letter):
         lba, self.length = PARTITIONS[letter]
         self.disk, self.base = disk, lba * 512
@@ -82,8 +82,8 @@ def fatx_time(t=None):
     return date << 16 | lt.tm_sec // 2 | lt.tm_min << 5 | lt.tm_hour << 11
 
 
-class FatxWriter(Fatx):
-    """Fatx with directory and file creation. The disk must support write() (Qcow2)."""
+class FATXWriter(FATX):
+    """FATX with directory and file creation. The disk must support write() (Qcow2)."""
 
     def __init__(self, disk, letter):
         super().__init__(disk, letter)
@@ -207,14 +207,14 @@ if __name__ == "__main__":
         for spec in adds:
             target, host = spec.split("=", 1)
             letter, path = target[0].upper(), target[2:].lstrip("\\")
-            w = writers.setdefault(letter, FatxWriter(d, letter))
+            w = writers.setdefault(letter, FATXWriter(d, letter))
             w.copy_in(host, path)
             print(f"{host} -> {letter}:\\{path}")
         d.save(out)
         print(f"saved {out}")
         sys.exit(0)
     for letter in "CEXYZ":
-        f = Fatx(d, letter)
+        f = FATX(d, letter)
         print(letter, "cluster", f.cluster, "clusters", f.clusters, "entry", f.esize, "root", f.root)
         for e in f.listdir()[:12]:
             print("   ", e)

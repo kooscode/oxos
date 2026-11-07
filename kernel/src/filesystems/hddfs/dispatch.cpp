@@ -1,0 +1,1007 @@
+// FATX: IRP dispatch — create, cleanup/close, read/write, information, directory and volume queries (spec/stock/04b).
+#include <xk/hddfs.h>
+#include <xk/serial.h>
+
+static NTSTATUS HDDFSComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0) {
+    Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = Information;
+    IofCompleteRequest(Irp, 0);
+    return Status;
+}
+
+static HDDFS_FCB *HDDFSFcbOf(PFILE_OBJECT f) {
+    return (HDDFS_FCB *)f->FsContext;
+}
+
+// Access allowed by the attributes (spec/stock/04b): rights FATX has no use for, and the volume-label, device and
+// "normal" attribute bits, are refused; a read-only file or directory refuses write rights once it exists (a new
+// one is created with the attribute and any access: titles extract read-only files and write them), and
+// delete-on-close always.
+static NTSTATUS HDDFSCheckAttributes(ACCESS_MASK access, ULONG options, UCHAR attributes, bool creating) {
+    if ((attributes & 0xC8) || (access & 0xFEE0FE00))
+        return STATUS_ACCESS_DENIED;
+    if (attributes & FILE_ATTRIBUTE_READONLY) {
+        if (!creating && (access & 0xFEE0FE46)) // write data, append, write EA, and the bits above
+            return STATUS_ACCESS_DENIED;
+        if (options & FILE_DELETE_ON_CLOSE)
+            return (NTSTATUS)0xC0000121; // STATUS_CANNOT_DELETE
+    }
+    return STATUS_SUCCESS;
+}
+
+static void HDDFSSplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
+    if (rest->Length && rest->Buffer[0] == '\\') {
+        rest->Buffer++;
+        rest->Length--;
+    }
+    USHORT n = 0;
+    while (n < rest->Length && rest->Buffer[n] != '\\')
+        n++;
+    *element = {n, n, rest->Buffer};
+    rest->Buffer += n;
+    rest->Length = (USHORT)(rest->Length - n);
+}
+
+// Opens hold one FCB reference (dropped at CLOSE) and one cleanup count (dropped at CLEANUP).
+static NTSTATUS HDDFSOpenFcb(HDDFS_VOLUME *v, PIO_STACK_LOCATION s, HDDFS_FCB *f, PFILE_OBJECT fo) {
+    ACCESS_MASK access = s->Parameters.Create.DesiredAccess;
+    ULONG share = s->Parameters.Create.ShareAccess;
+    NTSTATUS status = f->CleanupCount ? IoCheckShareAccess(access, share, fo, &f->ShareAccess, TRUE)
+                                      : (IoSetShareAccess(access, share, fo, &f->ShareAccess), STATUS_SUCCESS);
+    if (!NT_SUCCESS(status))
+        return status;
+    auto ccb = (HDDFS_CCB *)ExAllocatePoolWithTag(sizeof(HDDFS_CCB), 'cxtF');
+    if (!ccb) {
+        IoRemoveShareAccess(fo, &f->ShareAccess);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(ccb, sizeof(*ccb));
+    f->ReferenceCount++;
+    f->CleanupCount++;
+    fo->FsContext = f;
+    fo->FsContext2 = ccb;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Information) {
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT fo = s->FileObject;
+    ULONG options = s->Parameters.Create.Options & 0xFFFFFF, disposition = s->Parameters.Create.Options >> 24;
+    UCHAR attributes = (UCHAR)(s->Parameters.Create.FileAttributes & 0x37) & ~FILE_ATTRIBUTE_DIRECTORY;
+    OBJECT_STRING rest = *s->Parameters.Create.RemainingName;
+    bool openTarget = s->Flags & 4; // SL_OPEN_TARGET_DIRECTORY (rename)
+
+    if (v->Dismounted)
+        return (NTSTATUS)0xC000026E; // STATUS_VOLUME_DISMOUNTED
+    if (options & 0x2000)
+        return (NTSTATUS)0xC0000002; // FILE_OPEN_BY_FILE_ID: STATUS_NOT_IMPLEMENTED
+    if (Irp->Overlay.AllocationSize.HighPart)
+        return STATUS_INVALID_PARAMETER;
+
+    HDDFS_FCB *dir;
+    PFILE_OBJECT related = fo->RelatedFileObject;
+    if (related) {
+        dir = HDDFSFcbOf(related);
+        if (!dir || !(dir->Flags & FCB_DIRECTORY))
+            return STATUS_INVALID_PARAMETER;
+        if (dir->Flags & FCB_DELETE_PENDING)
+            return (NTSTATUS)0xC0000056; // STATUS_DELETE_PENDING
+        if (rest.Length && rest.Buffer[0] == '\\')
+            return STATUS_OBJECT_NAME_INVALID;
+    } else {
+        if (!rest.Length) { // the volume itself
+            if (disposition != FILE_OPEN && disposition != FILE_OPEN_IF)
+                return STATUS_ACCESS_DENIED;
+            if (options & FILE_DIRECTORY_FILE)
+                return (NTSTATUS)0xC0000103; // STATUS_NOT_A_DIRECTORY
+            if (options & FILE_DELETE_ON_CLOSE)
+                return (NTSTATUS)0xC0000121; // STATUS_CANNOT_DELETE
+            NTSTATUS status = HDDFSOpenFcb(v, s, &v->VolumeFcb, fo);
+            *Information = FILE_OPENED;
+            return status;
+        }
+        if (rest.Buffer[0] != '\\')
+            return STATUS_OBJECT_NAME_INVALID;
+        dir = &v->RootFcb;
+    }
+    if (rest.Length > FATX_MAX_PATH)
+        return STATUS_OBJECT_NAME_INVALID;
+    bool trailingSlash = rest.Length > 1 && rest.Buffer[rest.Length - 1] == '\\';
+    if (trailingSlash)
+        rest.Length--;
+
+    // Opening the root directory ("\") or the related directory itself (empty name).
+    if (!rest.Length || (rest.Length == 1 && rest.Buffer[0] == '\\' && !related)) {
+        if (openTarget)
+            return STATUS_INVALID_PARAMETER;
+        if (disposition != FILE_OPEN && disposition != FILE_OPEN_IF)
+            return STATUS_OBJECT_NAME_COLLISION;
+        if (options & FILE_NON_DIRECTORY_FILE)
+            return (NTSTATUS)0xC00000BA; // STATUS_FILE_IS_A_DIRECTORY
+        *Information = FILE_OPENED;
+        return HDDFSOpenFcb(v, s, dir, fo);
+    }
+
+    // Walk to the parent of the final element, creating FCBs for the directories on the way.
+    HDDFS_FCB *parent = dir;
+    parent->ReferenceCount++; // held while walking
+    OBJECT_STRING element;
+    NTSTATUS status = STATUS_SUCCESS;
+    // A doubled separator ("dir\\name") is accepted once, as the reference does: its walk through already-open
+    // directories stops at the first "\\" or at the first directory it must look up on disk, and the slower walk
+    // that takes over drops one leading '\' of the rest; after that a doubled separator is invalid. Brute Force
+    // opens its textures as "z:\splash_screen\\textures-splash_screen.tex".
+    // Also at the start: "<link to a volume, ending in '\'>\name", as an nxdk title's D: gives (its folder + "\").
+    bool slow = false;
+    if (rest.Length >= 2 && rest.Buffer[0] == '\\' && rest.Buffer[1] == '\\') {
+        rest.Buffer++;
+        rest.Length--;
+        slow = true;
+    }
+    for (;;) {
+        HDDFSSplitElement(&rest, &element);
+        if (!HDDFSIsValidName(&element)) {
+            status = STATUS_OBJECT_NAME_INVALID;
+            break;
+        }
+        if (rest.Length >= 2 && rest.Buffer[1] == '\\') {
+            if (slow) {
+                status = STATUS_OBJECT_NAME_INVALID;
+                break;
+            }
+            rest.Buffer++;
+            rest.Length--;
+            slow = true;
+        }
+        if (!rest.Length)
+            break;
+        HDDFS_FCB *child = HDDFSFindOpenFcb(parent, element.Buffer, element.Length);
+        if (!child) {
+            slow = true;
+            HDDFS_ENTRY e;
+            ULONG index;
+            status = HDDFSLookup(v, parent, &element, &e, &index);
+            if (status == STATUS_OBJECT_NAME_NOT_FOUND)
+                status = STATUS_OBJECT_PATH_NOT_FOUND;
+            if (NT_SUCCESS(status) && !(e.FileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                status = STATUS_OBJECT_PATH_NOT_FOUND;
+            if (NT_SUCCESS(status) && !(child = HDDFSCreateFcb(parent, &e, index)))
+                status = STATUS_INSUFFICIENT_RESOURCES;
+            if (!NT_SUCCESS(status))
+                break;
+        } else if (!(child->Flags & FCB_DIRECTORY)) {
+            status = STATUS_OBJECT_PATH_NOT_FOUND;
+            break;
+        }
+        child->ReferenceCount++;
+        HDDFSDereferenceFcb(parent);
+        parent = child;
+    }
+    if (!NT_SUCCESS(status)) {
+        HDDFSDereferenceFcb(parent);
+        return status;
+    }
+
+    if (openTarget) {
+        // Rename target: open the parent directory; Information says whether the final name exists.
+        HDDFS_ENTRY e;
+        ULONG index;
+        NTSTATUS look = HDDFSLookup(v, parent, &element, &e, &index);
+        status = HDDFSOpenFcb(v, s, parent, fo);
+        *Information = NT_SUCCESS(look) ? FILE_OPENED /*FILE_EXISTS*/ : FILE_CREATED /*FILE_DOES_NOT_EXIST*/;
+        HDDFSDereferenceFcb(parent);
+        return status;
+    }
+
+    ACCESS_MASK access = s->Parameters.Create.DesiredAccess;
+    HDDFS_FCB *f = HDDFSFindOpenFcb(parent, element.Buffer, element.Length);
+    bool created = false;
+    if (f && (f->Flags & FCB_DELETE_PENDING)) {
+        HDDFSDereferenceFcb(parent);
+        return (NTSTATUS)0xC0000056; // STATUS_DELETE_PENDING
+    }
+    if (!f) {
+        HDDFS_ENTRY e;
+        ULONG index;
+        status = HDDFSLookup(v, parent, &element, &e, &index);
+        if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
+            if (parent->Flags & FCB_DELETE_PENDING) {
+                status = (NTSTATUS)0xC0000056;
+            } else if (disposition == FILE_OPEN || disposition == FILE_OVERWRITE) {
+                status = STATUS_OBJECT_NAME_NOT_FOUND;
+            } else if (trailingSlash && (options & FILE_NON_DIRECTORY_FILE)) {
+                status = STATUS_OBJECT_NAME_INVALID;
+            } else {
+                bool isDir = options & FILE_DIRECTORY_FILE;
+                UCHAR attrs = (UCHAR)(attributes | (isDir ? FILE_ATTRIBUTE_DIRECTORY : 0));
+                status = HDDFSCheckAttributes(access, options, attrs, true);
+                ULONG first = 0;
+                if (NT_SUCCESS(status) && isDir) // a new directory gets one cluster of end markers
+                    status = HDDFSInitDirectory(v, &first);
+                if (NT_SUCCESS(status))
+                    status = HDDFSCreateDirent(v, parent, &element, attrs, first, &index);
+                if (!NT_SUCCESS(status) && first)
+                    HDDFSFreeChain(v, first, 1); // the new directory's one cluster
+                if (NT_SUCCESS(status)) {
+                    HDDFS_ENTRY pe;
+                    status = HDDFSReadEntry(v, parent, index, &pe);
+                    if (NT_SUCCESS(status) && !(f = HDDFSCreateFcb(parent, &pe, index)))
+                        status = STATUS_INSUFFICIENT_RESOURCES;
+                    created = true;
+                    // Preallocate; the file size stays 0. Not on exFAT: an entry set cannot hold more clusters than
+                    // its length, and a PC's check would free the rest (spec 07 §3a); clusters come with the writes.
+                    if (NT_SUCCESS(status) && Irp->Overlay.AllocationSize.LowPart && !isDir && !v->IsEXFAT) {
+                        status = HDDFSSetFileSize(v, f, Irp->Overlay.AllocationSize.LowPart);
+                        f->FileSize = 0;
+                        HDDFSFlushFcb(v, f);
+                    }
+                }
+            }
+        } else if (NT_SUCCESS(status) && !(f = HDDFSCreateFcb(parent, &e, index))) {
+            status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+        if (!NT_SUCCESS(status)) {
+            HDDFSDereferenceFcb(parent);
+            return status;
+        }
+    }
+
+    if (!created) {
+        if (!(f->Flags & FCB_DIRECTORY)) {
+            if (disposition == FILE_CREATE)
+                status = STATUS_OBJECT_NAME_COLLISION;
+            else if (trailingSlash || (options & FILE_DIRECTORY_FILE))
+                status = (NTSTATUS)0xC0000103; // STATUS_NOT_A_DIRECTORY
+        } else if (disposition != FILE_OPEN && disposition != FILE_OPEN_IF) {
+            status = STATUS_OBJECT_NAME_COLLISION;
+        } else if (options & FILE_NON_DIRECTORY_FILE) {
+            status = (NTSTATUS)0xC00000BA; // STATUS_FILE_IS_A_DIRECTORY
+        }
+        if (NT_SUCCESS(status))
+            status = HDDFSCheckAttributes(access, options, f->Attributes, false);
+        // exFAT files of 4 GB or more (disc images) are read-only: FATX sizes, writes and allocation are 32-bit.
+        // Delete access stays allowed: moving, renaming and deleting rewrite only directory entries (the set keeps
+        // the 64-bit size) and free clusters by count.
+        if (NT_SUCCESS(status) && f->FileSizeHigh &&
+            ((access & (0x2 | 0x4 | 0x10000000 | 0x40000000)) || // write, append, all, generic write
+             disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE || disposition == FILE_OVERWRITE_IF))
+            status = STATUS_ACCESS_DENIED;
+    }
+    ULONG info = created ? FILE_CREATED : FILE_OPENED;
+    if (NT_SUCCESS(status))
+        status = HDDFSOpenFcb(v, s, f, fo);
+    if (NT_SUCCESS(status) && !created &&
+        (disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE || disposition == FILE_OVERWRITE_IF)) {
+        f->Attributes = (UCHAR)(attributes | FILE_ATTRIBUTE_ARCHIVE);
+        f->LastWriteTime = HDDFSCurrentTimestamp();
+        status = HDDFSSetFileSize(v, f, 0);
+        if (NT_SUCCESS(status)) {
+            info = disposition == FILE_SUPERSEDE ? FILE_SUPERSEDED : FILE_OVERWRITTEN;
+        } else {
+            IoRemoveShareAccess(fo, &f->ShareAccess);
+            f->CleanupCount--;
+            f->ReferenceCount--;
+            ExFreePool(fo->FsContext2);
+            fo->FsContext = fo->FsContext2 = nullptr;
+        }
+    }
+    if (NT_SUCCESS(status) && (options & FILE_DELETE_ON_CLOSE) && !(f->Flags & FCB_DIRECTORY))
+        f->Flags |= FCB_DELETE_PENDING;
+    if (!NT_SUCCESS(status) && f && f->ReferenceCount == 0) {
+        f->ReferenceCount++; // drop an FCB nobody uses
+        HDDFSDereferenceFcb(f);
+    }
+    HDDFSDereferenceFcb(parent);
+    *Information = info;
+    return status;
+}
+
+static NTSTATUS NTAPI HDDFSFsdCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    HDDFSAcquireVolume(v);
+    ULONG_PTR info = 0;
+    NTSTATUS status = HDDFSCommonCreate(v, Irp, &info);
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status, NT_SUCCESS(status) ? info : 0);
+}
+
+static NTSTATUS NTAPI HDDFSFsdCleanup(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PFILE_OBJECT fo = IoGetCurrentIrpStackLocation(Irp)->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    NTSTATUS status = STATUS_SUCCESS;
+    if (f) {
+        HDDFSAcquireVolume(v);
+        IoRemoveShareAccess(fo, &f->ShareAccess);
+        if (--f->CleanupCount == 0 && (f->Flags & FCB_DELETE_PENDING) && !(f->Flags & (FCB_ROOT | FCB_VOLUME)))
+            status = HDDFSDeleteDirent(v, f);
+        else if (f->Flags & FCB_DIRENT_DIRTY)
+            status = HDDFSFlushFcb(v, f);
+        HDDFSReleaseVolume(v);
+    }
+    return HDDFSComplete(Irp, status);
+}
+
+static NTSTATUS NTAPI HDDFSFsdClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PFILE_OBJECT fo = IoGetCurrentIrpStackLocation(Irp)->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    if (f) {
+        HDDFSAcquireVolume(v);
+        if (fo->FsContext2)
+            ExFreePool(fo->FsContext2);
+        fo->FsContext = fo->FsContext2 = nullptr;
+        HDDFSDereferenceFcb(f);
+        HDDFSReleaseVolume(v);
+    }
+    return HDDFSComplete(Irp, STATUS_SUCCESS);
+}
+
+// --- Read / write
+
+static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer,
+                              ULONG length) {
+    while (length) {
+        ULONG within = (ULONG)offset & (v->BytesPerCluster - 1), cluster;
+        NTSTATUS status = HDDFSClusterAtIndex(v, f, (ULONG)(offset >> v->ClusterShift), &cluster);
+        if (!NT_SUCCESS(status))
+            return status == STATUS_END_OF_FILE ? (NTSTATUS)0xC0000032 : status;
+        // Extend the run over physically consecutive clusters.
+        ULONG run = v->BytesPerCluster - within, c = cluster;
+        while (run < length) {
+            ULONG next;
+            status = HDDFSNextCluster(v, f, c, &next);
+            if (!NT_SUCCESS(status) || next != c + 1)
+                break;
+            c = next;
+            run += v->BytesPerCluster;
+        }
+        if (run > length)
+            run = length;
+        LONGLONG disk = HDDFSClusterOffset(v, cluster) + within;
+        ULONG mask = v->SectorSize - 1;
+        if (!(disk & mask) && !(run & mask) && !((ULONG)buffer & 3)) {
+            if (write)
+                HDDFSInvalidateRange(v, disk, run);
+            status = HDDFSDeviceIo(v, write ? IRP_MJ_WRITE : IRP_MJ_READ, disk, buffer, run);
+        } else {
+            // Partial sectors go through the block cache.
+            run = run < HDDFS_BLOCK_SIZE - (ULONG)(disk & (HDDFS_BLOCK_SIZE - 1))
+                      ? run
+                      : HDDFS_BLOCK_SIZE - (ULONG)(disk & (HDDFS_BLOCK_SIZE - 1));
+            LONGLONG block = disk & ~(LONGLONG)(HDDFS_BLOCK_SIZE - 1);
+            ULONG start = (ULONG)(disk - block);
+            PUCHAR data;
+            status = HDDFSMapBlock(v, block, &data);
+            if (NT_SUCCESS(status)) {
+                if (write) {
+                    RtlCopyMemory(data + start, buffer, run);
+                    status = HDDFSWriteBlockRange(v, block, start, run);
+                } else {
+                    RtlCopyMemory(buffer, data + start, run);
+                }
+            }
+        }
+        if (!NT_SUCCESS(status))
+            return status;
+        offset += run;
+        buffer += run;
+        length -= run;
+    }
+    return STATUS_SUCCESS;
+}
+
+// Scatter/gather: one page-sized piece of the transfer per segment element (spec/stock/11 §5).
+static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool write, ULONGLONG offset,
+                                 PUCHAR buffer, ULONG length) {
+    if (!Irp->SegmentArray)
+        return HDDFSTransfer(v, f, write, offset, buffer, length);
+    for (ULONG i = 0; length; i++) {
+        ULONG run = length < PAGE_SIZE ? length : PAGE_SIZE;
+        NTSTATUS status = HDDFSTransfer(v, f, write, offset, (PUCHAR)Irp->SegmentArray[i].Buffer, run);
+        if (!NT_SUCCESS(status))
+            return status;
+        offset += run;
+        length -= run;
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT fo = s->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    bool write = s->MajorFunction == IRP_MJ_WRITE;
+    ULONG length = s->Parameters.Read.Length;
+    LARGE_INTEGER offset = s->Parameters.Read.ByteOffset;
+    PUCHAR buffer = (PUCHAR)Irp->UserBuffer;
+    if (!f || (f->Flags & FCB_DIRECTORY))
+        return HDDFSComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
+    if (f->Flags & FCB_VOLUME) {
+        // Raw access to the partition through a volume handle: pass down unchanged (exFAT: a folder partition has
+        // no sectors of its own, see EXFATVolumeTransfer).
+        if (v->IsEXFAT)
+            return EXFATVolumeTransfer(v, Irp);
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        return IofCallDriver(v->TargetDevice, Irp);
+    }
+    // Non-cached and scatter/gather transfers must be sector-aligned (offset and requested length). For reads the
+    // reference checks this only after the end-of-file test: a read at the end of a file whose size is not whole
+    // sectors reports STATUS_END_OF_FILE, not an invalid parameter (the stock dashboard reads files that way).
+    bool unaligned = ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Irp->SegmentArray) &&
+                     ((offset.LowPart | length) & (v->SectorSize - 1));
+    if (write && unaligned)
+        return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
+    if (write && f->FileSizeHigh) // a read-only file of 4 GB or more
+        return HDDFSComplete(Irp, STATUS_ACCESS_DENIED);
+    HDDFSAcquireVolume(v);
+    NTSTATUS status = STATUS_SUCCESS;
+    ULONG done = 0;
+    if (write) {
+        if (offset.HighPart == -1 && offset.LowPart == 0xFFFFFFFF) // FILE_WRITE_TO_END_OF_FILE
+            offset.QuadPart = f->FileSize;
+        ULONGLONG end = (ULONGLONG)offset.QuadPart + length;
+        if (offset.HighPart || end > 0xFFFFFFFFull)
+            status = (NTSTATUS)0xC000007F; // beyond the 4 GB FATX limit: STATUS_DISK_FULL
+        else if (length && end > f->FileSize)
+            status = HDDFSSetFileSize(v, f, (ULONG)end);
+        if (NT_SUCCESS(status) && length)
+            status = HDDFSTransferIrp(v, f, Irp, true, offset.LowPart, buffer, length);
+        if (NT_SUCCESS(status)) {
+            done = length;
+            f->LastWriteTime = HDDFSCurrentTimestamp();
+            f->Attributes |= FILE_ATTRIBUTE_ARCHIVE;
+            f->Flags |= FCB_DIRENT_DIRTY;
+        }
+    } else {
+        ULONGLONG size = HDDFSFileSize64(f);
+        if (offset.QuadPart < 0 || (ULONGLONG)offset.QuadPart >= size) {
+            status = length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
+        } else if (unaligned) {
+            status = STATUS_INVALID_PARAMETER;
+        } else {
+            ULONGLONG left = size - (ULONGLONG)offset.QuadPart;
+            done = left < length ? (ULONG)left : length;
+            status = HDDFSTransferIrp(v, f, Irp, false, (ULONGLONG)offset.QuadPart, buffer, done);
+            if (!NT_SUCCESS(status))
+                done = 0;
+        }
+    }
+    if (NT_SUCCESS(status) && (fo->Flags & FO_SYNCHRONOUS_IO))
+        fo->CurrentByteOffset.QuadPart = offset.QuadPart + done;
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status, done);
+}
+
+// --- Information
+
+static void HDDFSFillTimes(HDDFS_FCB *f, PLARGE_INTEGER times /*creation, access, write, change*/) {
+    HDDFSTimestampToTime(f->CreationTime, &times[0]);
+    HDDFSTimestampToTime(f->LastAccessTime, &times[1]);
+    HDDFSTimestampToTime(f->LastWriteTime, &times[2]);
+    times[3] = times[2];
+}
+
+static ULONG HDDFSAttributesOut(UCHAR a) {
+    return a ? a : FILE_ATTRIBUTE_NORMAL;
+}
+
+static ULONGLONG HDDFSAllocationSize(HDDFS_VOLUME *v, HDDFS_FCB *f) {
+    if (f->Flags & FCB_DIRECTORY)
+        return 0;
+    return (HDDFSFileSize64(f) + v->BytesPerCluster - 1) & ~(ULONGLONG)(v->BytesPerCluster - 1);
+}
+
+static ULONG HDDFSFullName(HDDFS_FCB *f, PCHAR out, ULONG max) {
+    if (f->Flags & FCB_ROOT) {
+        if (max)
+            out[0] = '\\';
+        return 1;
+    }
+    ULONG n = HDDFSFullName(f->Parent, out, max);
+    if (f->Parent->Flags & FCB_ROOT)
+        n = 0;
+    if (n < max)
+        out[n] = '\\';
+    n++;
+    for (ULONG i = 0; i < f->NameLength; i++, n++) {
+        if (n < max)
+            out[n] = f->Name[i];
+    }
+    return n;
+}
+
+static NTSTATUS NTAPI HDDFSFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT fo = s->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    ULONG len = s->Parameters.QueryFile.Length;
+    auto out = (PUCHAR)Irp->UserBuffer;
+    if (!f || (f->Flags & FCB_VOLUME))
+        return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
+    HDDFSAcquireVolume(v);
+    NTSTATUS status = STATUS_SUCCESS;
+    ULONG info = 0;
+    LARGE_INTEGER times[4];
+    HDDFSFillTimes(f, times);
+    switch (s->Parameters.QueryFile.FileInformationClass) {
+    case FileBasicInformation:
+        RtlCopyMemory(out, times, 32);
+        *(PULONG)(out + 32) = HDDFSAttributesOut(f->Attributes);
+        info = 40;
+        break;
+    case FileStandardInformation: {
+        auto p = (PULONG)out;
+        *(ULONGLONG *)p = HDDFSAllocationSize(v, f);
+        p[2] = f->FileSize;
+        p[3] = f->FileSizeHigh;
+        p[4] = 1;
+        out[20] = (f->Flags & FCB_DELETE_PENDING) != 0;
+        out[21] = (f->Flags & FCB_DIRECTORY) != 0;
+        info = 24;
+        break;
+    }
+    case FileInternalInformation:
+        ((PULONG)out)[0] = f->FirstCluster;
+        ((PULONG)out)[1] = 0;
+        info = 8;
+        break;
+    case FileEaInformation:
+        *(PULONG)out = 0;
+        info = 4;
+        break;
+    case FilePositionInformation:
+        *(PLARGE_INTEGER)out = fo->CurrentByteOffset;
+        info = 8;
+        break;
+    case FileNameInformation: {
+        ULONG n = HDDFSFullName(f, (PCHAR)out + 4, len - 4);
+        *(PULONG)out = n;
+        info = 4 + (n < len - 4 ? n : len - 4);
+        if (n > len - 4)
+            status = (NTSTATUS)0x80000005; // STATUS_BUFFER_OVERFLOW
+        break;
+    }
+    case FileNetworkOpenInformation: {
+        RtlCopyMemory(out, times, 32);
+        auto p = (PULONG)(out + 32);
+        *(ULONGLONG *)p = HDDFSAllocationSize(v, f);
+        p[2] = f->FileSize;
+        p[3] = f->FileSizeHigh;
+        p[4] = HDDFSAttributesOut(f->Attributes);
+        p[5] = 0;
+        info = 56;
+        break;
+    }
+    case FileAllInformation: {
+        // Basic, Standard, Internal, Ea, Access, Position, Mode, Alignment, Name.
+        RtlZeroMemory(out, 0x68);
+        RtlCopyMemory(out, times, 32);
+        *(PULONG)(out + 32) = HDDFSAttributesOut(f->Attributes);
+        *(ULONGLONG *)(out + 40) = HDDFSAllocationSize(v, f);
+        *(PULONG)(out + 48) = f->FileSize;
+        *(PULONG)(out + 52) = f->FileSizeHigh;
+        *(PULONG)(out + 56) = 1;
+        out[60] = (f->Flags & FCB_DELETE_PENDING) != 0;
+        out[61] = (f->Flags & FCB_DIRECTORY) != 0;
+        *(PULONG)(out + 64) = f->FirstCluster;
+        *(PLARGE_INTEGER)(out + 80) = fo->CurrentByteOffset;
+        ULONG room = len - 0x64;
+        ULONG n = HDDFSFullName(f, (PCHAR)out + 0x64, room);
+        *(PULONG)(out + 0x60) = n;
+        info = 0x64 + (n < room ? n : room);
+        if (n > room)
+            status = (NTSTATUS)0x80000005;
+        break;
+    }
+    default:
+        status = STATUS_INVALID_PARAMETER;
+    }
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status, info);
+}
+
+static NTSTATUS HDDFSRename(HDDFS_VOLUME *v, HDDFS_FCB *f, PFILE_OBJECT target, PUCHAR in) {
+    // FILE_RENAME_INFORMATION: {BOOLEAN ReplaceIfExists; HANDLE RootDirectory; OBJECT_STRING FileName}
+    BOOLEAN replace = in[0];
+    auto name = (POBJECT_STRING)(in + 8);
+    OBJECT_STRING rest = *name, element;
+    // The I/O manager resolved the target directory when one is given (RootDirectory or an absolute name).
+    HDDFS_FCB *dir = target ? HDDFSFcbOf(target) : f->Parent;
+    while (rest.Length) // final element of the new name
+        HDDFSSplitElement(&rest, &element);
+    if (!dir || !HDDFSIsValidName(&element) || (f->Flags & FCB_ROOT))
+        return STATUS_OBJECT_NAME_INVALID;
+    for (HDDFS_FCB *p = dir; p; p = p->Parent) {
+        if (p == f)
+            return STATUS_INVALID_PARAMETER; // into its own subtree
+    }
+    if (f->Flags & FCB_DIRECTORY && !IsListEmpty(&f->ChildList))
+        return STATUS_ACCESS_DENIED; // open children
+    HDDFS_ENTRY existing;
+    ULONG index = ~0u; // set by HDDFSLookup only when the name exists
+    NTSTATUS status = HDDFSLookup(v, dir, &element, &existing, &index);
+    bool same = NT_SUCCESS(status) && dir == f->Parent && index == f->DirentIndex;
+    if (NT_SUCCESS(status) && !same) {
+        if (!replace || (existing.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            HDDFSFindOpenFcb(dir, element.Buffer, element.Length))
+            return STATUS_OBJECT_NAME_COLLISION;
+        HDDFS_FCB tmp = {};
+        tmp.Parent = dir;
+        tmp.DirentIndex = index;
+        tmp.FirstCluster = existing.FirstCluster;
+        tmp.EXFATFlags = existing.EXFATFlags;
+        tmp.EXFATEntries = existing.EXFATEntries;
+        tmp.EXFATAllocClusters = existing.EXFATAllocClusters;
+        status = HDDFSDeleteDirent(v, &tmp);
+        if (!NT_SUCCESS(status))
+            return status;
+    } else if (status != STATUS_OBJECT_NAME_NOT_FOUND && !NT_SUCCESS(status)) {
+        return status;
+    }
+    if (same || dir == f->Parent) {
+        f->NameLength = (UCHAR)element.Length;
+        RtlCopyMemory(f->Name, element.Buffer, element.Length);
+        return HDDFSFlushFcb(v, f);
+    }
+    // Move: new entry in the target directory, then drop the old one (the clusters move with it).
+    status = HDDFSCreateDirent(v, dir, &element, f->Attributes, f->FirstCluster, &index);
+    if (!NT_SUCCESS(status))
+        return status;
+    status = HDDFSRemoveDirent(v, f);
+    RemoveEntryList(&f->SiblingLink);
+    HDDFS_FCB *oldParent = f->Parent;
+    InsertTailList(&dir->ChildList, &f->SiblingLink);
+    dir->ReferenceCount++;
+    f->Parent = dir;
+    f->DirentIndex = index;
+    f->NameLength = (UCHAR)element.Length;
+    RtlCopyMemory(f->Name, element.Buffer, element.Length);
+    HDDFSDereferenceFcb(oldParent);
+    if (NT_SUCCESS(status))
+        status = HDDFSFlushFcb(v, f);
+    return status;
+}
+
+static NTSTATUS NTAPI HDDFSFsdSetInformation(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT fo = s->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    auto in = (PUCHAR)Irp->UserBuffer;
+    if (!f || (f->Flags & FCB_VOLUME))
+        return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
+    HDDFSAcquireVolume(v);
+    NTSTATUS status = STATUS_SUCCESS;
+    switch (s->Parameters.SetFile.FileInformationClass) {
+    case FileBasicInformation: {
+        auto t = (PLARGE_INTEGER)in;
+        if (t[0].QuadPart)
+            f->CreationTime = HDDFSTimeToTimestamp(&t[0]);
+        if (t[1].QuadPart)
+            f->LastAccessTime = HDDFSTimeToTimestamp(&t[1]);
+        if (t[2].QuadPart)
+            f->LastWriteTime = HDDFSTimeToTimestamp(&t[2]);
+        ULONG a = *(PULONG)(in + 32);
+        if (a) {
+            a &= 0x27; // READONLY HIDDEN SYSTEM ARCHIVE
+            f->Attributes = (UCHAR)(a | (f->Flags & FCB_DIRECTORY ? FILE_ATTRIBUTE_DIRECTORY : 0));
+        }
+        status = HDDFSFlushFcb(v, f);
+        break;
+    }
+    case FileDispositionInformation:
+        if (!*in) {
+            f->Flags &= ~FCB_DELETE_PENDING;
+        } else if (f->Flags & FCB_ROOT) {
+            status = (NTSTATUS)0xC0000121; // STATUS_CANNOT_DELETE
+        } else if (f->Attributes & FILE_ATTRIBUTE_READONLY) {
+            status = (NTSTATUS)0xC0000121;
+        } else if (f->Flags & FCB_DIRECTORY) {
+            status = HDDFSIsDirectoryEmpty(v, f);
+            if (NT_SUCCESS(status))
+                f->Flags |= FCB_DELETE_PENDING;
+        } else {
+            f->Flags |= FCB_DELETE_PENDING;
+        }
+        break;
+    case FilePositionInformation:
+        fo->CurrentByteOffset = *(PLARGE_INTEGER)in;
+        break;
+    case FileEndOfFileInformation:
+    case FileAllocationInformation: {
+        LARGE_INTEGER size = *(PLARGE_INTEGER)in;
+        if (f->Flags & FCB_DIRECTORY) {
+            status = STATUS_INVALID_PARAMETER;
+        } else if (f->FileSizeHigh) { // a read-only file of 4 GB or more
+            status = STATUS_ACCESS_DENIED;
+        } else if (size.HighPart) {
+            status = (NTSTATUS)0xC000007F;
+        } else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||
+                   size.LowPart < f->FileSize) {
+            status = HDDFSSetFileSize(v, f, size.LowPart);
+        } else if (v->IsEXFAT) { // allocation only: exFAT cannot hold clusters past the length (spec 07 §3a)
+        } else { // allocation only grows the chain
+            ULONG keep = f->FileSize;
+            status = HDDFSSetFileSize(v, f, size.LowPart);
+            f->FileSize = keep;
+            HDDFSFlushFcb(v, f);
+        }
+        break;
+    }
+    case FileRenameInformation:
+        status = HDDFSRename(v, f, s->Parameters.SetFile.FileObject, in);
+        break;
+    default:
+        status = STATUS_INVALID_PARAMETER;
+    }
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status);
+}
+
+// --- Directory enumeration (IRP_MJ_DIRECTORY_CONTROL / IRP_MN_QUERY_DIRECTORY)
+
+static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT fo = s->FileObject;
+    HDDFS_FCB *f = HDDFSFcbOf(fo);
+    auto ccb = (HDDFS_CCB *)fo->FsContext2;
+    if (s->MinorFunction != 1 || !f || !(f->Flags & FCB_DIRECTORY))
+        return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
+    FILE_INFORMATION_CLASS cls = s->Parameters.QueryDirectory.FileInformationClass;
+    ULONG fixed = cls == FileNamesInformation ? 12 : cls == FileDirectoryInformation ? 0x40 : 0;
+    if (!fixed)
+        return HDDFSComplete(Irp, STATUS_INVALID_INFO_CLASS);
+    HDDFSAcquireVolume(v);
+    bool first = !ccb->HaveMask;
+    POBJECT_STRING mask = s->Parameters.QueryDirectory.FileName;
+    if (first || (s->Flags & SL_RESTART_SCAN)) {
+        ccb->NextIndex = 0;
+        if ((mask && mask->Length) || first) {
+            ccb->HaveMask = TRUE;
+            ccb->MaskLength = 1;
+            ccb->Mask[0] = '*';
+            if (mask && mask->Length && mask->Length <= FATX_MAX_NAME + 2) {
+                ccb->MaskLength = (UCHAR)mask->Length;
+                RtlCopyMemory(ccb->Mask, mask->Buffer, mask->Length);
+            }
+        }
+        first = true;
+    }
+    auto out = (PUCHAR)Irp->UserBuffer;
+    ULONG len = s->Parameters.QueryDirectory.Length, used = 0, lastEntry = 0;
+    bool single = s->Flags & SL_RETURN_SINGLE_ENTRY, any = false;
+    NTSTATUS status = STATUS_SUCCESS;
+    for (;;) {
+        HDDFS_ENTRY entry, *e = &entry;
+        NTSTATUS st = HDDFSNextEntry(v, f, &ccb->NextIndex, e);
+        if (st == STATUS_END_OF_FILE)
+            break;
+        if (!NT_SUCCESS(st)) {
+            status = st;
+            break;
+        }
+        if (!HDDFSWildcardMatch(ccb->Mask, ccb->MaskLength, e->FileName, e->FileNameLength)) {
+            ccb->NextIndex++;
+            continue;
+        }
+        ULONG offset = (used + 7) & ~7u, need = fixed + e->FileNameLength;
+        if (offset + fixed > len) {
+            if (!any)
+                status = STATUS_BUFFER_TOO_SMALL_IO;
+            break;
+        }
+        if (any && offset + need > len)
+            break;
+        PUCHAR p = out + offset;
+        RtlZeroMemory(p, fixed);
+        ULONG nameLen = e->FileNameLength, room = len - offset - fixed;
+        if (cls == FileDirectoryInformation) {
+            *(PULONG)(p + 4) = ccb->NextIndex;
+            HDDFSTimestampToTime(e->CreationTime, (PLARGE_INTEGER)(p + 8));
+            HDDFSTimestampToTime(e->LastAccessTime, (PLARGE_INTEGER)(p + 0x10));
+            HDDFSTimestampToTime(e->LastWriteTime, (PLARGE_INTEGER)(p + 0x18));
+            *(PLARGE_INTEGER)(p + 0x20) = *(PLARGE_INTEGER)(p + 0x18);
+            bool isDir = e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+            ULONGLONG size = isDir ? 0 : (ULONGLONG)e->FileSizeHigh << 32 | e->FileSize;
+            *(ULONGLONG *)(p + 0x28) = size;
+            *(ULONGLONG *)(p + 0x30) = (size + v->BytesPerCluster - 1) & ~(ULONGLONG)(v->BytesPerCluster - 1);
+            *(PULONG)(p + 0x38) = HDDFSAttributesOut(e->FileAttributes);
+            *(PULONG)(p + 0x3C) = nameLen;
+        } else {
+            *(PULONG)(p + 4) = ccb->NextIndex;
+            *(PULONG)(p + 8) = nameLen;
+        }
+        if (any)
+            *(PULONG)(out + lastEntry) = offset - lastEntry;
+        RtlCopyMemory(p + fixed, e->FileName, nameLen < room ? nameLen : room);
+        lastEntry = offset;
+        used = offset + fixed + (nameLen < room ? nameLen : room);
+        any = true;
+        ccb->NextIndex++;
+        if (nameLen > room) {
+            status = (NTSTATUS)0x80000005; // STATUS_BUFFER_OVERFLOW
+            break;
+        }
+        if (single)
+            break;
+    }
+    if (NT_SUCCESS(status) && !any)
+        status = first ? (NTSTATUS)0xC000000F /*STATUS_NO_SUCH_FILE*/ : (NTSTATUS)0x80000006 /*NO_MORE_FILES*/;
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status, any ? used : 0);
+}
+
+// --- Volume information
+
+// The folder D: names when a title runs from the hard disk, held open while the title runs (null for a disc or an
+// image). A title that asks the sector size of a path in it is told 2048, a DVD's, as some games require
+// (spec/oxos_internal/25 §2).
+static HDDFS_FCB *HDDFSTitleFolder;
+static HANDLE HDDFSTitleFolderHandle;
+
+void HDDFSRememberTitleFolder() {
+    if (HDDFSTitleFolderHandle) // the previous one (the boot self-tests call this before the title does)
+        NtClose(HDDFSTitleFolderHandle), HDDFSTitleFolderHandle = nullptr;
+    HDDFSTitleFolder = nullptr;
+    OBJECT_STRING name;
+    RtlInitAnsiString(&name, "\\??\\D:\\");
+    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE h;
+    if (!NT_SUCCESS(NtOpenFile(&h, 0x0001 /*FILE_LIST_DIRECTORY*/ | SYNCHRONIZE, &a, &iosb,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+        return;
+    PFILE_OBJECT fo;
+    if (NT_SUCCESS(ObReferenceObjectByHandle(h, &IoFileObjectType, (PVOID *)&fo))) {
+        if (fo->DeviceObject && fo->DeviceObject->DriverObject == &HDDFSDriverObject) {
+            HDDFSTitleFolder = (HDDFS_FCB *)fo->FsContext; // the open handle keeps it
+            XK_SERIAL("fatx: D: is a hard-disk folder: its sector size is reported as 2048\n");
+        }
+        ObfDereferenceObject(fo);
+    }
+    if (HDDFSTitleFolder)
+        HDDFSTitleFolderHandle = h; // kept open on purpose, for as long as the title runs
+    else
+        NtClose(h);
+}
+
+static bool HDDFSInTitleFolder(PFILE_OBJECT fo) {
+    for (auto f = fo ? (HDDFS_FCB *)fo->FsContext : nullptr; f && HDDFSTitleFolder; f = f->Parent) {
+        if (f == HDDFSTitleFolder)
+            return true;
+    }
+    return false;
+}
+
+static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
+    auto out = (PUCHAR)Irp->UserBuffer;
+    ULONG len = s->Parameters.QueryVolume.Length, info = 0;
+    NTSTATUS status = STATUS_SUCCESS;
+    HDDFSAcquireVolume(v);
+    ULONG spc, total, free;
+    HDDFSVolumeSize(v, &total, &free, &spc);
+    switch (s->Parameters.QueryVolume.FsInformationClass) {
+    case FileFsVolumeInformation: // {CreationTime, SerialNumber, LabelLength, SupportsObjects, Label[]}
+        if (len < 18) {
+            status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+        }
+        RtlZeroMemory(out, 18);
+        *(PULONG)(out + 8) = v->SerialNumber;
+        info = 18;
+        break;
+    case FileFsSizeInformation: // {Total, Available, SectorsPerAllocationUnit, BytesPerSector}
+    case FileFsFullSizeInformation: {
+        bool full = s->Parameters.QueryVolume.FsInformationClass == FileFsFullSizeInformation;
+        ULONG need = full ? 32 : 24;
+        if (len < need) {
+            status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+        }
+        auto p = (PULONG)out;
+        ULONG bps = v->SectorSize;
+        if (bps < 2048 && HDDFSInTitleFolder(s->FileObject) && spc * bps % 2048 == 0) {
+            spc = spc * bps / 2048;
+            bps = 2048; // same cluster size, in DVD sectors
+        }
+        p[0] = total;
+        p[1] = 0;
+        p[2] = free;
+        p[3] = 0;
+        if (full) {
+            p[4] = free;
+            p[5] = 0;
+            p[6] = spc;
+            p[7] = bps;
+        } else {
+            p[4] = spc;
+            p[5] = bps;
+        }
+        info = need;
+        break;
+    }
+    case FileFsDeviceInformation: // {DeviceType, Characteristics}
+        if (len < 8) {
+            status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+        }
+        ((PULONG)out)[0] = FILE_DEVICE_DISK;
+        ((PULONG)out)[1] = 0;
+        info = 8;
+        break;
+    case FileFsAttributeInformation: // {Attributes, MaxComponentNameLength, NameLength, Name[]}
+        if (len < 12) {
+            status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+        }
+        ((PULONG)out)[0] = 2; // FILE_CASE_PRESERVED_NAMES
+        ((PULONG)out)[1] = FATX_MAX_NAME;
+        ((PULONG)out)[2] = 4;
+        info = 12;
+        if (len >= 16) {
+            RtlCopyMemory(out + 12, "FATX", 4);
+            info = 16;
+        } else {
+            status = (NTSTATUS)0x80000005;
+        }
+        break;
+    default:
+        status = STATUS_INVALID_PARAMETER;
+    }
+    HDDFSReleaseVolume(v);
+    return HDDFSComplete(Irp, status, info);
+}
+
+// --- Flush, device and file-system control, dismount, and the driver object
+static NTSTATUS NTAPI HDDFSFsdFlushOrDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    // Flushing: the cache is write-through, so only the drive cache is left: pass down. Device controls on a
+    // volume handle go to the partition.
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    return IofCallDriver(HDDFSVolume(DeviceObject)->MountTarget, Irp);
+}
+
+static NTSTATUS NTAPI HDDFSDismountVolume(PDEVICE_OBJECT DeviceObject);
+
+// FSCTL_DISMOUNT_VOLUME (used by the utility-drive format: XAPI rewrites the FATX metadata through the volume handle,
+// then dismounts so the next open mounts the new file system). The reference also accepts 0x9411C / 0x98120.
+static NTSTATUS NTAPI HDDFSFsdFileSystemControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+    if (IoGetCurrentIrpStackLocation(Irp)->Parameters.FileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
+        return HDDFSComplete(Irp, HDDFSDismountVolume(DeviceObject));
+    return HDDFSComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
+}
+
+// Dismount: new opens remount; the volume device goes away with its last file object.
+static NTSTATUS NTAPI HDDFSDismountVolume(PDEVICE_OBJECT DeviceObject) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    HDDFSAcquireVolume(v);
+    v->Dismounted = TRUE;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (v->MountTarget->MountedOrSelfDevice == DeviceObject)
+        v->MountTarget->MountedOrSelfDevice = nullptr;
+    KfLowerIrql(old);
+    HDDFSReleaseVolume(v);
+    IoDeleteDevice(DeviceObject);
+    return STATUS_SUCCESS;
+}
+
+static void NTAPI HDDFSDeleteVolume(PDEVICE_OBJECT DeviceObject) {
+    HDDFS_VOLUME *v = HDDFSVolume(DeviceObject);
+    HDDFSForgetVolume(v);
+    ObfDereferenceObject(v->MountTarget);
+}
+
+DRIVER_OBJECT HDDFSDriverObject = {
+    nullptr,
+    HDDFSDeleteVolume,
+    HDDFSDismountVolume,
+    {HDDFSFsdCreate, HDDFSFsdClose, HDDFSFsdReadWrite, HDDFSFsdReadWrite, HDDFSFsdQueryInformation,
+     HDDFSFsdSetInformation, HDDFSFsdFlushOrDeviceControl, HDDFSFsdQueryVolumeInformation,
+     HDDFSFsdDirectoryControl, HDDFSFsdFileSystemControl, HDDFSFsdFlushOrDeviceControl, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, HDDFSFsdCleanup}};

@@ -1,6 +1,6 @@
-// Renders the boot jingle (kernel/src/hal/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints its
+// Renders the boot jingle (kernel/src/bootscreen/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints its
 // peak and loudness per half second: make -C tools/jingle, then tools/jingle/bin/jingle OUT.wav
-#include "../../kernel/src/hal/jingle.h"
+#include <xk/jingle.h>
 
 #include <chrono>
 #include <cmath>
@@ -50,7 +50,8 @@ int main(int argc, char **argv) {
             sum += double(pcm[i]) * pcm[i];
         }
         std::printf("  %4.1f s  peak %6.1f dBFS  rms %6.1f dBFS\n", double(at) / jingle::RATE,
-                    20 * std::log10(std::max(peak, 1) / 32768.0), 10 * std::log10(std::max(sum / n, 1.0) / (32768.0 * 32768.0)));
+                    20 * std::log10(std::max(peak, 1) / 32768.0),
+                    10 * std::log10(std::max(sum / n, 1.0) / (32768.0 * 32768.0)));
     }
     return 0;
 }

@@ -4,7 +4,7 @@
 usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs A.obj,B.obj --boot-entries F,G
                               --data-copy SIZE OBJECTS...
 
-1. Boot-only memory (spec/oxos-internal/18-boot-memory.md): the boot-only sections (.xka data, .xkb code) are
+1. Boot-only memory (spec/oxos_internal/18_boot_memory.md): the boot-only sections (.xka data, .xkb code) are
    freed before the first title starts, so kept code must not use them. The linker keeps one copy of an inline
    function or a shared constant that several objects define, and that copy can be the one a boot-only file put in
    .xkb. So every global symbol the map places in a boot-only section must be absent from every other object,
@@ -13,7 +13,7 @@ usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs 
    (--boot-entries, function names).
 2. The quick-reboot copy of .data (arch/entry.S, KI_DATA_COPY_SIZE = --data-copy): the initialised part of .data, as
    tools/mkbios.py stores it, must fit, or a quick reboot of a network-booted kernel would take another kernel's.
-3. The title-start call (spec/oxos-internal/23-trainer-hook.md): dashboards search 0x80010000-0x8003AF90 for the
+3. The title-start call (spec/oxos_internal/23_trainer_hook.md): dashboards search 0x80010000-0x8003AF90 for the
    first `call [0x00010128]` (or `call [0x80000010]`) to redirect it to a game trainer, and later search for
    `call [0x8000000C]` to put it back. The image must hold exactly one title-start call, inside that range and
    outside the boot-only sections, and none of the other two.
@@ -89,7 +89,7 @@ def title_call_errors(exe):
     calls = found(TITLE_CALL)
     if len(calls) != 1:
         errors.append(f"{len(calls)} title-start calls (FF 15 28 01 01 00) below {TITLE_SCAN_END:#x}: "
-                      f"{[hex(c) for c in calls]}, need exactly one (src/xe/loader.cpp XepTitleThread)")
+                      f"{[hex(c) for c in calls]}, need exactly one (src/titles/loader.cpp XepTitleThread)")
     elif any(lo <= calls[0] < hi for lo, hi in boot):
         errors.append(f"the title-start call at {calls[0]:#x} is in a boot-only section")
     for other in OTHER_CALLS:

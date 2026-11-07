@@ -1,94 +1,14 @@
 // Run-time library: memory, strings and conversions, formatting, time, critical sections and read/write locks,
 // interlocked operations, integer conversions.
 #include "kernel_test.h"
+#include <xk/objects.h>
 
 #include <atomic>
 #include <cstdio>
 #include <string>
 #include <vector>
 
-#include <xk/rtl.h>
-
-XBAPI int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
-XBAPI int __cdecl RtlSprintf(char *Buffer, const char *Format, ...);
-XBAPI CHAR NTAPI RtlLowerChar(CHAR Character);
-XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                         BOOLEAN CaseInSensitive);
-XBAPI BOOLEAN NTAPI RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                          BOOLEAN CaseInSensitive);
-XBAPI void NTAPI RtlCopyString(PANSI_STRING DestinationString, const ANSI_STRING *SourceString);
-XBAPI void NTAPI RtlUpperString(PANSI_STRING DestinationString, const ANSI_STRING *SourceString);
-XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlUnicodeStringToAnsiString(PANSI_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString);
-XBAPI void NTAPI RtlFreeAnsiString(PANSI_STRING AnsiString);
-XBAPI void NTAPI RtlFreeUnicodeString(PUNICODE_STRING UnicodeString);
-XBAPI NTSTATUS NTAPI RtlAppendStringToString(PSTRING Destination, const STRING *Source);
-XBAPI NTSTATUS NTAPI RtlAppendUnicodeToString(PUNICODE_STRING Destination, PCWSTR Source);
-XBAPI BOOLEAN NTAPI RtlCreateUnicodeString(PUNICODE_STRING DestinationString, PCWSTR SourceString);
-XBAPI WCHAR NTAPI RtlUpcaseUnicodeChar(WCHAR SourceCharacter);
-XBAPI WCHAR NTAPI RtlDowncaseUnicodeChar(WCHAR SourceCharacter);
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                            BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesInUnicodeString,
-                                            PULONG BytesInUnicodeString, const CHAR *MultiByteString,
-                                            ULONG BytesInMultiByteString);
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                            PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
-                                            ULONG BytesInUnicodeString);
-XBAPI NTSTATUS NTAPI RtlCharToInteger(PCSZ String, ULONG Base, PULONG Value);
-XBAPI NTSTATUS NTAPI RtlIntegerToChar(ULONG Value, ULONG Base, LONG OutputLength, PCHAR String);
-XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status);
-XBAPI SIZE_T NTAPI RtlCompareMemoryUlong(PVOID Source, SIZE_T Length, ULONG Pattern);
-XBAPI void NTAPI RtlFillMemoryUlong(PVOID Destination, SIZE_T Length, ULONG Pattern);
-XBAPI LARGE_INTEGER NTAPI RtlExtendedIntegerMultiply(LARGE_INTEGER Multiplicand, LONG Multiplier);
-XBAPI LARGE_INTEGER NTAPI RtlExtendedLargeIntegerDivide(LARGE_INTEGER Dividend, ULONG Divisor, PULONG Remainder);
-XBAPI LONG FASTCALL InterlockedIncrement(volatile LONG *Addend);
-XBAPI LONG FASTCALL InterlockedDecrement(volatile LONG *Addend);
-XBAPI LONG FASTCALL InterlockedExchange(volatile LONG *Target, LONG Value);
-XBAPI LONG FASTCALL InterlockedExchangeAdd(volatile LONG *Addend, LONG Value);
-XBAPI LONG FASTCALL InterlockedCompareExchange(volatile LONG *Destination, LONG Exchange, LONG Comparand);
-XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange,
-                                                       PLONGLONG Comparand);
-XBAPI ULONG FASTCALL RtlUlongByteSwap(ULONG Source);
-XBAPI USHORT FASTCALL RtlUshortByteSwap(USHORT Source);
-
-typedef struct _SINGLE_LIST_ENTRY {
-    struct _SINGLE_LIST_ENTRY *Next;
-} SINGLE_LIST_ENTRY, *PSINGLE_LIST_ENTRY;
-typedef union _SLIST_HEADER {
-    ULONGLONG Alignment;
-    struct {
-        SINGLE_LIST_ENTRY Next;
-        USHORT Depth, Sequence;
-    };
-} SLIST_HEADER, *PSLIST_HEADER;
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER ListHead, PSINGLE_LIST_ENTRY ListEntry);
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER ListHead);
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead);
-
-typedef struct _RTL_CRITICAL_SECTION {
-    DISPATCHER_HEADER Synchronization;
-    LONG LockCount, RecursionCount;
-    PKTHREAD OwningThread;
-} RTL_CRITICAL_SECTION, *PRTL_CRITICAL_SECTION;
-XBAPI void NTAPI RtlInitializeCriticalSection(PRTL_CRITICAL_SECTION CriticalSection);
-XBAPI void NTAPI RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection);
-XBAPI void NTAPI RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSection);
-XBAPI BOOLEAN NTAPI RtlTryEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection);
-XBAPI void NTAPI RtlEnterCriticalSectionAndRegion(PRTL_CRITICAL_SECTION CriticalSection);
-XBAPI void NTAPI RtlLeaveCriticalSectionAndRegion(PRTL_CRITICAL_SECTION CriticalSection);
-typedef struct _ERWLOCK {
-    LONG LockCount;
-    ULONG WritersWaitingCount, ReadersWaitingCount, ReadersEntryCount;
-    KEVENT WriterEvent;
-    KSEMAPHORE ReaderSemaphore;
-} ERWLOCK, *PERWLOCK;
-XBAPI void NTAPI ExInitializeReadWriteLock(PERWLOCK ReadWriteLock);
-XBAPI void NTAPI ExAcquireReadWriteLockExclusive(PERWLOCK ReadWriteLock);
-XBAPI void NTAPI ExAcquireReadWriteLockShared(PERWLOCK ReadWriteLock);
-XBAPI void NTAPI ExReleaseReadWriteLock(PERWLOCK ReadWriteLock);
+#include <xk/runtime.h>
 
 // --- Memory
 

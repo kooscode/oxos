@@ -1,4 +1,4 @@
-"""exFAT on GPT disks for the tests (spec/oxos-internal/07-exfat-driver.md, 05-exfat-storage-spec.md): a writer that builds
+"""exFAT on GPT disks for the tests (spec/oxos_internal/07_exfat_driver.md, 05_exfat_storage_spec.md): a writer that builds
 a disk image from a tree of folders and files, and a reader that checks a volume completely.
 
 Writer: Builder(size).add(path, data) ... .write(out.qcow2). The disk gets a protective MBR, a GPT with one
@@ -9,7 +9,7 @@ into clusters the bitmap marks free, as an old OXOS preallocation looks after a 
 past a file's length mean nothing, and a driver must not follow them. The retail reserved area (Partition0 bytes 0-0x7FFFF: refurb record, cache database) is kept at sectors
 1024-2047, before the partition.
 
-Reader: Exfat(Qcow2(path)) finds the volume through the GPT (or an MBR), and .check() verifies the boot checksums,
+Reader: EXFAT(Qcow2(path)) finds the volume through the GPT (or an MBR), and .check() verifies the boot checksums,
 the up-case table checksum, every entry set's checksum and name hash, FAT chains, that no cluster is used twice,
 and that the allocation bitmap marks exactly the clusters in use.
 
@@ -396,7 +396,7 @@ class Entry:
         return bool(self.attrs & 0x10)
 
 
-class Exfat:
+class EXFAT:
     def __init__(self, disk, lba=None):
         self.disk = disk
         self.problems = []
@@ -620,7 +620,7 @@ def from_fatx(src, out, size, cluster, extra=(), whole_disk=False):
                 b.add(dest, part.read_chain(cl, sz), attrs=attr)
 
     for letter in ("C", "E"):
-        copy(fatx.Fatx(disk, letter), letter)
+        copy(fatx.FATX(disk, letter), letter)
     for dest, host in extra:  # --add /F/apps/demo=HOST: a host file or folder copied in
         if os.path.isdir(host):
             b.add_tree(dest, host, lazy=raw)
@@ -641,7 +641,7 @@ if __name__ == "__main__":
                   whole_disk=whole)
         print(f"{a[2]}: written")
     elif a[:1] == ["--check"]:
-        v = Exfat(Qcow2(a[1]))
+        v = EXFAT(Qcow2(a[1]))
         problems, files, free = v.check()
         print(f"{len(files)} files and folders, {free} free clusters of {v.count} ({v.cs // 1024} KB)")
         for p in problems:
@@ -653,13 +653,13 @@ if __name__ == "__main__":
         if len(path) > 1 and path[1] == ":":
             path = "/" + path[0].upper() + path[2:]
         try:
-            v = Exfat(Qcow2(a[1]))
+            v = EXFAT(Qcow2(a[1]))
         except Exception:
             sys.exit(2)
         e = v.lookup(path)
         sys.exit(0 if e is not None and e != "root" and not e.is_dir else 1)
     elif a[:1] == ["--ls"]:
-        v = Exfat(Qcow2(a[1]))
+        v = EXFAT(Qcow2(a[1]))
         for e in v.listdir(a[2] if len(a) > 2 else "/") or []:
             print(f"{'d' if e.is_dir else '-'} {e.size:>12} {e.name}")
     else:

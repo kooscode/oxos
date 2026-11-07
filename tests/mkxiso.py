@@ -162,7 +162,7 @@ def checksum(data):
 
 if __name__ == "__main__":
     # mkxiso.py OUT.iso                                the test image above
-    # mkxiso.py OUT.iso --add NAME=FILE --text NAME=TEXT ...   an image of just those files (e.g. make run-xbe)
+    # mkxiso.py OUT.iso --add NAME=FILE --text NAME=TEXT ...   an image of just those files (e.g. make run_xbe)
     import sys
     args = sys.argv[2:]
     if not args:

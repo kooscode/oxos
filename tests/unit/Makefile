@@ -2,7 +2,7 @@
 # 32-bit Linux program; privileged instructions fault and are emulated by the harness (host/hostcpu.cpp), and a
 # fake MMU maps the kernel's virtual addresses onto a 64 MB "physical RAM" the way a TLB would.
 #
-#   make                      build $(BUILD)/oxos_unit_tests (tools/unit-tests.sh builds and runs it)
+#   make                      build $(BUILD)/oxos_unit_tests (tools/unit_tests.sh builds and runs it)
 #   make COVERAGE=1           kernel sources instrumented for llvm-cov (own build directory)
 #   make KERNEL_OPT=-O2       kernel sources at the console build's optimisation (own build directory)
 #   make clean                remove this configuration's build directory
@@ -30,15 +30,14 @@ COVFLAGS := $(if $(filter 1,$(COVERAGE)),-fprofile-instr-generate -fcoverage-map
 
 # The core runtime under test: the kernel's own sources, unchanged apart from XK_HOST_TEST hooks.
 KERNEL_SOURCES := \
-    src/ke/apc.cpp src/ke/bugcheck.cpp src/ke/clock.cpp src/ke/cpu.cpp src/ke/dpc.cpp src/ke/event.cpp \
-    src/ke/irql.cpp src/ke/npx.cpp src/ke/queue.cpp src/ke/sched.cpp src/ke/thread.cpp src/ke/timer.cpp \
-    src/ke/wait.cpp \
-    src/mm/init.cpp src/mm/memory.cpp src/mm/pool.cpp src/mm/virtual.cpp \
-    src/ob/object.cpp src/ex/objects.cpp \
-    src/ps/thread.cpp \
-    src/rtl/memory.cpp src/rtl/runtime.cpp src/rtl/sprintf.cpp src/rtl/status.cpp src/rtl/string.cpp \
-    src/rtl/sync.cpp src/rtl/time.cpp \
-    src/hal/pic_timer.cpp src/hal/vsplash.cpp src/xe/patchfile.cpp
+    src/core/async_calls.cpp src/core/bugcheck.cpp src/core/clock.cpp src/core/processor.cpp src/core/deferred_calls.cpp src/core/event.cpp \
+    src/core/interrupts.cpp src/core/float_state.cpp src/core/queue.cpp src/core/scheduler.cpp src/core/system_threads.cpp \
+    src/core/thread.cpp src/core/timer.cpp src/core/wait.cpp \
+    src/memory/init.cpp src/memory/memory.cpp src/memory/pool.cpp src/memory/virtual.cpp \
+    src/objects/object_manager.cpp src/objects/handle_objects.cpp \
+    src/runtime/memory.cpp src/runtime/runtime.cpp src/runtime/sprintf.cpp src/runtime/status.cpp \
+    src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
+    src/hardware/interrupts_timers.cpp src/bootscreen/vsplash.cpp src/titles/patchfile.cpp
 KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/include $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS)

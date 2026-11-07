@@ -1,5 +1,5 @@
 // mkcci: convert an Xbox disc image (.iso, XISO or full dump) to CCI, the LZ4-compressed format OXOS and Cerbios
-// mount (spec/cerbios/07 §4, spec/oxos-internal/16-virtual-discs.md).
+// mount (spec/cerbios/07 §4, spec/oxos_internal/16_virtual_discs.md).
 //
 //   mkcci IN.iso OUT [--split] [--no-verify]
 //
@@ -75,16 +75,18 @@ bool Lz4Decode(const std::uint8_t *src, std::size_t len, std::uint8_t *dst, std:
     while (ip < len) {
         std::uint8_t token = src[ip++];
         std::size_t n = token >> 4;
-        if (n == 15)
+        if (n == 15) {
             for (std::uint8_t b = 255; b == 255;) {
                 if (ip >= len)
                     return false;
                 n += b = src[ip++];
             }
+        }
         if (n > len - ip || n > cap - op)
             return false;
         std::memcpy(dst + op, src + ip, n);
-        ip += n, op += n;
+        ip += n;
+        op += n;
         if (ip == len)
             break;
         if (len - ip < 2)
@@ -92,12 +94,13 @@ bool Lz4Decode(const std::uint8_t *src, std::size_t len, std::uint8_t *dst, std:
         std::size_t distance = src[ip] | std::size_t(src[ip + 1]) << 8;
         ip += 2;
         n = (token & 15) + 4;
-        if ((token & 15) == 15)
+        if ((token & 15) == 15) {
             for (std::uint8_t b = 255; b == 255;) {
                 if (ip >= len)
                     return false;
                 n += b = src[ip++];
             }
+        }
         if (!distance || distance > op || n > cap - op)
             return false;
         for (std::size_t k = 0; k < n; k++, op++)
@@ -106,6 +109,9 @@ bool Lz4Decode(const std::uint8_t *src, std::size_t len, std::uint8_t *dst, std:
     return op == cap;
 }
 
+// --- CCI files: an open file, the header, stored blocks, one part, and the check
+
+// An open output or input file, closed when it goes out of scope.
 struct File {
     std::FILE *f = nullptr;
     explicit File(const std::string &path, const char *mode) : f(std::fopen(path.c_str(), mode)) {}
@@ -191,9 +197,10 @@ std::uint64_t WritePart(std::FILE *in, std::uint64_t first, std::uint64_t count,
         done += k;
         if (k < want)
             break;
-        if (done % (512 * 64) == 0)
+        if (done % (512 * 64) == 0) {
             std::fprintf(stderr, "\r  %s: %llu / %llu MB", path.c_str(), (unsigned long long)(done >> 9),
                          (unsigned long long)(count >> 9));
+        }
     }
     index.push_back(std::uint32_t(at >> 2));
     std::fwrite(index.data(), 4, index.size(), out.f);
@@ -261,7 +268,8 @@ int main(int argc, char **argv) {
             names.emplace_back(argv[i]);
     }
     if (names.size() != 2) {
-        std::fprintf(stderr, "usage: mkcci IN.iso OUT [--split] [--no-verify]  (writes OUT.cci or OUT.1.cci + OUT.2.cci)\n");
+        std::fprintf(stderr,
+                     "usage: mkcci IN.iso OUT [--split] [--no-verify]  (writes OUT.cci or OUT.1.cci + OUT.2.cci)\n");
         return 2;
     }
     File in(names[0], "rb");

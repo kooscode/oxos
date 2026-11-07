@@ -4,7 +4,7 @@ Most of the kernel was built and tested in xemu. Real consoles are then tested w
 on a real Xbox in about a minute, with no chip to flash and nobody at the console. An AI coding agent (Claude Code)
 drives it from the PC: it builds, boots, watches the console and powers it off.
 
-![The hardware-in-the-loop rig: an RP2040 Modxo on the LPC header of a 1.4 Xbox](hwitl-rig.jpg)
+![The hardware-in-the-loop rig: an RP2040 Modxo on the LPC header of a 1.4 Xbox](hwitl_rig.jpg)
 
 *An RP2040-Zero running [Modxo](https://github.com/Shalx/Modxo) on a perfboard, wired to the console's LPC header
 (the ribbon cable) and to its power switch (the white wire). The Pico presses the button through a 2N2222: GPIO →
@@ -33,7 +33,7 @@ screen). The serial log and the frames are matched by their timestamps.
 Build (`make -C kernel BUILD=... SERIAL=1`) → `netboot.py` serves it → `console.py on` → read the serial log, POST
 codes and capture frames → `console.py off`. `bootrun.py` repeats a boot N times and classifies each one (PASS /
 FREEZE / NOBOOT), which found the layout-dependent boot freeze that only showed on hardware
-([`spec/oxos-internal/13-flash-mapping.md`](../spec/oxos-internal/13-flash-mapping.md)).
+([`spec/oxos_internal/13_flash_mapping.md`](../spec/oxos_internal/13_flash_mapping.md)).
 
 ## Results so far
 The boot freezes on the 1.4 console were found and fixed this way, along with the CPU set-up, interrupt start-up and

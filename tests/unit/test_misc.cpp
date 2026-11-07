@@ -1,69 +1,14 @@
 // The remaining entry points: Nt query calls, timer APCs, path links through a parse procedure, link deletion, and
 // the rarer run-time helpers.
 #include "kernel_test.h"
+#include <xk/hardware.h>
+#include <xk/core.h>
+#include <xk/objects.h>
 
 #include <atomic>
 #include <string>
 
-#include <xk/rtl.h>
-
-NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
-XBAPI NTSTATUS NTAPI NtCreateTimer(PHANDLE TimerHandle, POBJECT_ATTRIBUTES ObjectAttributes, TIMER_TYPE TimerType);
-typedef void(NTAPI *PTIMER_APC_ROUTINE)(PVOID TimerContext, ULONG TimerLowValue, LONG TimerHighValue);
-XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PTIMER_APC_ROUTINE TimerApcRoutine,
-                                  KPROCESSOR_MODE ApcMode, PVOID TimerContext, BOOLEAN WakeTimer, LONG Period,
-                                  PBOOLEAN PreviousState);
-struct EVENT_BASIC_INFORMATION {
-    EVENT_TYPE EventType;
-    LONG EventState;
-};
-struct MUTANT_BASIC_INFORMATION {
-    LONG CurrentCount;
-    BOOLEAN OwnedByCaller, AbandonedState;
-};
-struct SEMAPHORE_BASIC_INFORMATION {
-    LONG CurrentCount, MaximumCount;
-};
-struct TIMER_BASIC_INFORMATION {
-    LARGE_INTEGER RemainingTime;
-    BOOLEAN TimerState;
-};
-XBAPI NTSTATUS NTAPI NtQueryEvent(HANDLE EventHandle, EVENT_BASIC_INFORMATION *EventInformation);
-XBAPI NTSTATUS NTAPI NtQueryMutant(HANDLE MutantHandle, MUTANT_BASIC_INFORMATION *MutantInformation);
-XBAPI NTSTATUS NTAPI NtQuerySemaphore(HANDLE SemaphoreHandle, SEMAPHORE_BASIC_INFORMATION *SemaphoreInformation);
-XBAPI NTSTATUS NTAPI NtQueryTimer(HANDLE TimerHandle, TIMER_BASIC_INFORMATION *TimerInformation);
-XBAPI NTSTATUS NTAPI NtReleaseMutant(HANDLE MutantHandle, PLONG PreviousCount);
-
-XBAPI LARGE_INTEGER NTAPI ExInterlockedAddLargeInteger(PLARGE_INTEGER Addend, LARGE_INTEGER Increment, PVOID Lock);
-XBAPI void FASTCALL ExInterlockedAddLargeStatistic(PLARGE_INTEGER Addend, ULONG Increment);
-XBAPI PLIST_ENTRY FASTCALL ExfInterlockedInsertHeadList(PLIST_ENTRY ListHead, PLIST_ENTRY ListEntry);
-XBAPI PLIST_ENTRY FASTCALL ExfInterlockedInsertTailList(PLIST_ENTRY ListHead, PLIST_ENTRY ListEntry);
-XBAPI PLIST_ENTRY FASTCALL ExfInterlockedRemoveHeadList(PLIST_ENTRY ListHead);
-XBAPI LARGE_INTEGER NTAPI RtlExtendedMagicDivide(LARGE_INTEGER Dividend, LARGE_INTEGER MagicDivisor, CCHAR ShiftCount);
-struct GENERIC_MAPPING {
-    ULONG GenericRead, GenericWrite, GenericExecute, GenericAll;
-};
-XBAPI void NTAPI RtlMapGenericMask(PULONG AccessMask, const GENERIC_MAPPING *GenericMapping);
-XBAPI void NTAPI READ_PORT_BUFFER_UCHAR(PUCHAR Port, PUCHAR Buffer, ULONG Count);
-XBAPI void NTAPI READ_PORT_BUFFER_USHORT(PUSHORT Port, PUSHORT Buffer, ULONG Count);
-XBAPI void NTAPI READ_PORT_BUFFER_ULONG(PULONG Port, PULONG Buffer, ULONG Count);
-XBAPI void NTAPI WRITE_PORT_BUFFER_UCHAR(PUCHAR Port, PUCHAR Buffer, ULONG Count);
-XBAPI void NTAPI WRITE_PORT_BUFFER_USHORT(PUSHORT Port, PUSHORT Buffer, ULONG Count);
-XBAPI void NTAPI WRITE_PORT_BUFFER_ULONG(PULONG Port, PULONG Buffer, ULONG Count);
-XBAPI void NTAPI RtlCopyUnicodeString(PUNICODE_STRING Destination, const UNICODE_STRING *Source);
-XBAPI void NTAPI RtlFreeUnicodeString(PUNICODE_STRING UnicodeString);
-XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                              BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeSize(PULONG BytesInUnicodeString, const CHAR *, ULONG BytesInMultiByteString);
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *, ULONG BytesInUnicodeString);
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                                  PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
-                                                  ULONG BytesInUnicodeString);
-XBAPI NTSTATUS NTAPI RtlUnicodeStringToInteger(const UNICODE_STRING *String, ULONG Base, PULONG Value);
-XBAPI NTSTATUS NTAPI RtlIntegerToUnicodeString(ULONG Value, ULONG Base, PUNICODE_STRING String);
-XBAPI PKDEVICE_QUEUE_ENTRY NTAPI KeRemoveByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, ULONG SortKey);
-void HalpInitRtcLate();
-void KiInitializeSystemTime();
+#include <xk/runtime.h>
 
 TEST(Query, EventMutantSemaphoreTimer) {
     HANDLE e, m, s, t;
@@ -133,6 +78,7 @@ NTSTATUS NTAPI RecordingParse(PVOID, POBJECT_TYPE, ULONG, POBJECT_STRING, POBJEC
     *Object = ParseResult;
     return STATUS_SUCCESS;
 }
+
 OBJECT_TYPE ParsingType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, RecordingParse, nullptr, 'sraP'};
 } // namespace
 

@@ -1,30 +1,49 @@
-// What the core sources reference outside the files under test: boot-time data from entry.S / isr.S, the serial
-// log, and the HAL and executive pieces the tests do not cover. Each stub is the smallest correct behaviour.
+// What the core sources reference outside the files under test: boot-time data from entry.S / interrupt_stubs.S, the
+// serial log, and the HAL and executive pieces the tests do not cover. Each stub is the smallest correct behaviour.
+#include "host.h"
+
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
 
+#include <xk/core.h>
+#include <xk/runtime.h>
 #include <xk/types.h>
-#include <xk/ke.h>
+#include <xk/bootscreen.h>
 
-extern "C" void HostLogWrite(const char *s, size_t n);
-XBAPI int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args);
-
-// entry.S / isr.S
+// entry.S / interrupt_stubs.S
 extern "C" {
-alignas(16) unsigned char KiBootStack[0x3000];
+alignas(16) unsigned char KiBootStack[KI_BOOT_STACK_SIZE];
 void *KiTrapStubs[32];
 void *KiIrqStubs[16];
-void KiIgnoreInterrupt() {}
-void KiDoubleFaultTask() {}
-void KiNmiTask() {}
-void KiTrap45() {} // debug service (int 2Dh): not raised in host tests
+void KiIgnoreInterrupt() {
+    // The harness raises only the interrupts it models.
 }
 
-// hal/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
+void KiDoubleFaultTask() {
+    // No task switches on the host.
+}
+
+void KiNmiTask() {
+    // No task switches on the host.
+}
+
+void KiTrap45() {
+    // Debug service (int 2Dh): not raised in host tests.
+}
+}
+
+// hardware/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
 volatile BOOLEAN HalpSerialPresent = TRUE;
-void HalpSerialInit() {}
-void HalpSerialWrite(const char *Text, ULONG Length) { HostLogWrite(Text, Length); }
+
+void HalpSerialInit() {
+    // Nothing to set up: HalpSerialWrite hands the text to the harness.
+}
+
+void HalpSerialWrite(const char *Text, ULONG Length) {
+    HostLogWrite(Text, Length);
+}
+
 void XkSerialPrint(const char *Format, ...) {
     char line[256];
     va_list ap;
@@ -34,24 +53,44 @@ void XkSerialPrint(const char *Format, ...) {
     HostLogWrite(line, n < 0 ? 0 : n >= (int)sizeof(line) ? sizeof(line) - 1 : (size_t)n);
 }
 
-// ke/startup.cpp: the start-up marks and last words (CMOS records) are not under test here.
+// core/startup.cpp: the start-up marks and last words (CMOS records) are not under test here.
 extern "C" {
 volatile BOOLEAN XkBootMarksOn;
-void XkBootMark(const char *) {}
-void XkBootMarkWatchdog(ULONG, UCHAR) {}
-void KiSaveBugCheckLastWords(ULONG, ULONG, ULONG) {}
-void KiSaveFaultTaskLastWords(ULONG, ULONG) {}
+
+void XkBootMark(const char *) {
+    // Not under test.
 }
 
-// io/fsc.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
-ULONG *FscCachePte(ULONG) { return nullptr; }
+void XkBootMarkWatchdog(ULONG, UCHAR) {
+    // Not under test.
+}
 
-// arch/igr.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination); here it
-// is what it does for kernel callers.
-XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() { return KfRaiseIrql(DISPATCH_LEVEL); }
+void KiSaveBugCheckLastWords(ULONG, ULONG, ULONG) {
+    // Not under test.
+}
 
-// hal/splash.cpp: no splash copy in host tests (no page holds one).
-bool HalpIsSplashPage(ULONG) { return false; }
+void KiSaveFaultTaskLastWords(ULONG, ULONG) {
+    // Not under test.
+}
+}
 
-// xe/nettitle.cpp: no network-delivered title in host tests (no page holds one).
-bool MiIsNetbootTitlePage(ULONG) { return false; }
+// filesystems/cache.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
+ULONG *FscCachePte(ULONG) {
+    return nullptr;
+}
+
+// arch/in_game_reset.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination);
+// here it is what it does for kernel callers.
+XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
+    return KfRaiseIrql(DISPATCH_LEVEL);
+}
+
+// bootscreen/splash.cpp: no splash copy in host tests (no page holds one).
+bool HalpIsSplashPage(ULONG) {
+    return false;
+}
+
+// titles/nettitle.cpp: no network-delivered title in host tests (no page holds one).
+bool MiIsNetbootTitlePage(ULONG) {
+    return false;
+}

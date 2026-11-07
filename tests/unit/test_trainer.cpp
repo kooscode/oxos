@@ -1,4 +1,4 @@
-// Game-trainer support (spec/oxos-internal/23-trainer-hook.md): the title-start call has the exact bytes dashboards
+// Game-trainer support (spec/oxos_internal/23_trainer_hook.md): the title-start call has the exact bytes dashboards
 // search for, their patch round-trips on it, and the low memory their trainer stub uses stays the dashboard's.
 // The kernel image itself is checked at link time too (tools/check_kernel_layout.py, check 3).
 #include "kernel_test.h"
@@ -6,9 +6,9 @@
 #include <algorithm>
 #include <cstring>
 
-#include <xk/title.h>
+#include <xk/title_call.h>
 
-// Compiled from the same header as the kernel's title thread (src/xe/loader.cpp). Never called.
+// Compiled from the same header as the kernel's title thread (src/titles/loader.cpp). Never called.
 __attribute__((noinline, used)) static void TitleStartForTest() {
     XeCallTitleEntry();
 }
@@ -53,9 +53,13 @@ TEST(Trainer, PageZeroIsMappedPersistentAndNeverAllocated) {
     EXPECT_EQ(pte & ~0xFFFu, 0u);
     auto slots = (volatile ULONG *)0x8000000C;
     ULONG saved[3] = {slots[0], slots[1], slots[2]};
-    slots[0] = 0x80123000, slots[1] = 0x11111111, slots[2] = 0x22222222;
+    slots[0] = 0x80123000;
+    slots[1] = 0x11111111;
+    slots[2] = 0x22222222;
     EXPECT_EQ(((uint32_t *)host::Phys(0))[3], 0x80123000u);
     EXPECT_EQ(((uint32_t *)host::Phys(0))[5], 0x22222222u);
-    slots[0] = saved[0], slots[1] = saved[1], slots[2] = saved[2];
+    slots[0] = saved[0];
+    slots[1] = saved[1];
+    slots[2] = saved[2];
     EXPECT_EQ(MmAllocateContiguousMemoryEx(4096, 0, 0xFFF, 0, PAGE_READWRITE), nullptr);
 }

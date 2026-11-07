@@ -2,10 +2,10 @@
 """Controller input test: boot a BIOS with the controller test title's disc, press every input of a virtual gamepad and check
 which Xbox controller input the title receives for each.
 
-The title (tests/controller-test-title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this
+The title (tests/controller_test_title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this
 script finds it in a RAM dump (QMP pmemsave) and then reads it through its virtual address after each press.
 
-usage: controller_test.py --bios BIOS --iso controller-test-title.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
+usage: controller_test.py --bios BIOS --iso controller_test_title.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
 """
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 

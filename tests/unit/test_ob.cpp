@@ -1,25 +1,12 @@
 // Object manager and executive objects: names, directories, handles, references, links, and the Nt object calls.
 #include "kernel_test.h"
+#include <xk/objects.h>
 
 #include <atomic>
 #include <string>
 #include <vector>
 
-extern volatile ULONG ExpPoolBlocks;
-NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
-XBAPI NTSTATUS NTAPI NtOpenDirectoryObject(PHANDLE DirectoryHandle, POBJECT_ATTRIBUTES ObjectAttributes);
-XBAPI NTSTATUS NTAPI NtClearEvent(HANDLE EventHandle);
-XBAPI NTSTATUS NTAPI NtPulseEvent(HANDLE EventHandle, PLONG PreviousState);
-XBAPI NTSTATUS NTAPI NtReleaseMutant(HANDLE MutantHandle, PLONG PreviousCount);
-XBAPI NTSTATUS NTAPI NtCreateTimer(PHANDLE TimerHandle, POBJECT_ATTRIBUTES ObjectAttributes, TIMER_TYPE TimerType);
 typedef void(NTAPI *PTIMER_APC_ROUTINE)(PVOID TimerContext, ULONG TimerLowValue, LONG TimerHighValue);
-XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PTIMER_APC_ROUTINE TimerApcRoutine,
-                                  KPROCESSOR_MODE ApcMode, PVOID TimerContext, BOOLEAN WakeTimer, LONG Period,
-                                  PBOOLEAN PreviousState);
-XBAPI NTSTATUS NTAPI NtCancelTimer(HANDLE TimerHandle, PBOOLEAN CurrentState);
-XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDLE WaitHandle, KPROCESSOR_MODE WaitMode,
-                                                      BOOLEAN Alertable, PLARGE_INTEGER Timeout);
-XBAPI NTSTATUS NTAPI NtYieldExecution();
 
 namespace {
 constexpr NTSTATUS NAME_COLLISION = (NTSTATUS)0xC0000035, NAME_NOT_FOUND = (NTSTATUS)0xC0000034,
