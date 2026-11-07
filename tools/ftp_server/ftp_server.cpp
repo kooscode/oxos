@@ -36,6 +36,10 @@ extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 
 namespace {
 
+// The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every
+// build, so a client can tell which build answers; raise the version (1.0) when the server's behaviour changes.
+constexpr char ServerName[] = "OXOS FTP server 1.0 (built " __DATE__ " " __TIME__ ")";
+
 constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
@@ -773,7 +777,7 @@ struct Session {
     }
 
     void Run() {
-        Reply(220, "OXOS FTP server");
+        Reply(220, "%s", ServerName);
         std::string line;
         while (ReadLine(line)) {
             if (line.empty())
@@ -849,7 +853,7 @@ DWORD WINAPI PadThread(LPVOID) {
 int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     InitializeCriticalSection(&PrintLock);
-    debugPrint("OXOS FTP server    (BACK: reboot)\n\n");
+    debugPrint("%s    (BACK: reboot)\n\n", ServerName);
     if (HANDLE pad = CreateThread(nullptr, 16 * 1024, PadThread, nullptr, 0, nullptr))
         CloseHandle(pad);
 
