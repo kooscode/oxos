@@ -3,7 +3,6 @@
 #include <xk/core.h>
 #include <xk/memory.h>
 
-typedef const char *PCSZ;
 typedef WCHAR *PWSTR;
 typedef const WCHAR *PCWSTR;
 

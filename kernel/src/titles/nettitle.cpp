@@ -133,7 +133,6 @@ bool XeLaunchNetbootTitle() {
     RtlInitAnsiString(&target, dir);
     bool linked = NT_SUCCESS(IoCreateSymbolicLink(&link, &target));
     RtlSnprintf(path, sizeof(path), "%s\\%s.xbe", dir, title);
-    NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard);
     status = XeLoadImage(path, FALSE);
     XK_SERIAL("netboot title: launch %s: %#lx\n", path, status);
     if (NT_SUCCESS(status))

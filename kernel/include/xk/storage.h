@@ -133,6 +133,9 @@ bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG lengt
 void IdexDiskCountPowerCycle();
 [[noreturn]] void IdexFatalError(ULONG Code); // the fatal error screen (core/fatal.cpp)
 
-// The virtual disc driver's hooks in the DVD driver (virtual_disc.cpp).
+// The virtual disc driver's hooks in the DVD driver (virtual_disc.cpp), and its restart: the disc images mounted
+// before a quick reboot are mounted again (the title launcher calls it).
 bool VdServeCdRom(PIRP Irp, NTSTATUS *Status);
 bool VdDvdImageMounted();
+void VdRestoreMounts();
+void VdInitialize(); // start-up: the virtual disc control device (the IDE start-up calls it)
