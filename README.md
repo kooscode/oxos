@@ -15,7 +15,8 @@ https://github.com/user-attachments/assets/cc898ea8-d569-4c9a-b313-9798c5ed72c6
   calibration ([details](spec/oxos_internal/28_1_6_console.md)).
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca_compliance.md)).
 - **Open BIOS:** our own boot code from the first instruction; 1 MB and 256 KB images, and a 256 KB image for the 1.6.
-- **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
+- **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!), with the
+  OXOS version and the video encoder the kernel found in the corner, e.g. [v0.3.16/XCALIBUR].
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **In-game reset:** LT + RT + BACK + BLACK.
