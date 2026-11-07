@@ -5,7 +5,8 @@
 // devices, then end with Cromwell's "overflow trick": they write `mov eax, 0xFFFC1000; jmp eax` to RAM address 0
 // and exit. The MCPX boot ROM then fails its check of the (absent) Microsoft 2BL, hides itself, and the CPU runs on
 // from address 0 into our 2BL at bank offset 0x1000. The header values below are also Cromwell's
-// (boot_rom/2bBootStartup.S); MCPXREVD5 selects the values for the 1.6 console's MCPX.
+// (boot_rom/2bBootStartup.S); MCPXREVD5 selects the values for the 1.6 console's MCPX and OXOS's own 1.6 program,
+// boot/xcodes_1_6.inc (spec/stock/24).
 //
 // X-code encoding (9 bytes each): opcode, operand 1, operand 2. Jump offsets are relative to the next X-code.
 
@@ -65,15 +66,20 @@
     .long 0x00000c90
 #else
     .long 0x16ce0090
-    .long 0x00000dc0
+    .long 0x00000ecb
 #endif
     .org 0x80
+#ifndef MCPXREVD5
 #include "Xcodes.h"
+#else
+#include "xcodes_1_6.inc"
+#endif
     // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.7a).
+    // On the 1.6 it follows a longer program (with its write checks), so it fills the end of the bank: 0xECB-0xFFF.
 #ifndef MCPXREVD5
     .org 0xc90
 #else
-    .org 0xdc0
+    .org 0xecb
 #endif
 #include "padcal_table.inc"
     .org 0x1000
