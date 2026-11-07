@@ -1,14 +1,18 @@
-// NTSTATUS -> Win32 error translation (documented NT mapping; common codes only for now).
+// NTSTATUS -> Win32 error translation (spec/stock/13: the reference's algorithm; the table holds common codes only).
 #include <xk/runtime.h>
 #include <xk/types.h>
 
 struct RTL_STATUS_MAP {
     ULONG Status;
-    USHORT Error;
+    ULONG Error;
 };
 
 static const RTL_STATUS_MAP RtlpStatusTable[] = {
+    {0x00000000, 0},    // STATUS_SUCCESS
     {0x00000103, 997},  // STATUS_PENDING -> ERROR_IO_PENDING
+    {0x00000105, 234},  // STATUS_MORE_ENTRIES -> ERROR_MORE_DATA
+    {0x0000010C, 1022}, // STATUS_NOTIFY_ENUM_DIR -> ERROR_NOTIFY_ENUM_DIR
+    {0x80000001, 0x80000001}, // STATUS_GUARD_PAGE_VIOLATION maps to itself
     {0x80000005, 234},  // STATUS_BUFFER_OVERFLOW -> ERROR_MORE_DATA
     {0x80000006, 18},   // STATUS_NO_MORE_FILES
     {0x8000001A, 259},  // STATUS_NO_MORE_ENTRIES -> ERROR_NO_MORE_ITEMS
@@ -48,21 +52,31 @@ static const RTL_STATUS_MAP RtlpStatusTable[] = {
     {0xC00000BA, 5},    // STATUS_FILE_IS_A_DIRECTORY -> ERROR_ACCESS_DENIED
     {0xC00000BB, 50},   // STATUS_NOT_SUPPORTED
     {0xC0000101, 145},  // STATUS_DIRECTORY_NOT_EMPTY -> ERROR_DIR_NOT_EMPTY
+    {0xC0000102, 1392}, // STATUS_FILE_CORRUPT_ERROR -> ERROR_FILE_CORRUPT
     {0xC0000103, 267},  // STATUS_NOT_A_DIRECTORY -> ERROR_DIRECTORY
     {0xC0000120, 995},  // STATUS_CANCELLED -> ERROR_OPERATION_ABORTED
+    {0xC0000128, 6},    // STATUS_FILE_CLOSED -> ERROR_INVALID_HANDLE
     {0xC000014F, 1005}, // STATUS_UNRECOGNIZED_VOLUME
     {0xC0000185, 1117}, // STATUS_IO_DEVICE_ERROR
+    {0xC000026E, 21},   // STATUS_VOLUME_DISMOUNTED -> ERROR_NOT_READY
 };
 
 XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status) {
+    // The reference's order (spec/stock/13): customer codes unchanged, Win32 warnings (0x8007xxxx) to their low word,
+    // 0xD... looked up as 0xC..., the table, then facility 0xC001 to its low word, else ERROR_MR_MID_NOT_FOUND. Small
+    // success codes that the table does not list (STATUS_TIMEOUT among them) also end there.
     ULONG s = (ULONG)Status;
-    if (s < 0x00010000)
-        return s; // success codes and raw Win32 errors pass through
-    if ((s & 0xFFFF0000) == 0x80070000 || (s & 0xFFFF0000) == 0xC0070000)
-        return s & 0xFFFF; // FACILITY_WIN32
+    if (s & 0x20000000)
+        return s;
+    if ((s >> 16) == 0x8007)
+        return s & 0xFFFF;
+    if ((s >> 28) == 0xD)
+        s &= ~0x30000000u;
     for (const auto &m : RtlpStatusTable) {
         if (m.Status == s)
             return m.Error;
     }
+    if ((s >> 16) == 0xC001)
+        return s & 0xFFFF;
     return 317; // ERROR_MR_MID_NOT_FOUND
 }
