@@ -75,7 +75,33 @@ can be debugged at source level in VS Code or gdb.
 | [`kernel/`](kernel/README.md) | setting up, building, testing and debugging; source layout, milestones, known deviations |
 | [`spec/`](spec/README.md) | the behavioural specifications the kernel is written from |
 | [`tools/`](tools/README.md) | host tools (BIOS packing, xemu runs, tracing, netboot, Modxo rig) and console apps (ISO launcher, title launcher, FTP server, oxos_isonator) |
-| [`tests/`](tests/README.md) | the boot tests and test titles |
+| [`tests/`](tests/README.md) | the boot tests, the host unit tests and the test titles |
+| [`docs/`](docs/) | the [C++ style guide](docs/cpp_style.md) and the [hardware-in-the-loop rig](docs/hwitl.md) |
+| `third_party/` | what OXOS uses from others: Intel's CPU microcode and the trainer pack (in the repo); nxdk, XboxDev/cromwell and the xemu-dashboard disk (fetched by the build) |
+
+The kernel's sources, grouped by what the code does (details in [`kernel/README.md`](kernel/README.md#layout)):
+
+```
+kernel/
+  boot/            the open image's reset code, X-code wrapper and 2BL
+  include/xk/      every header: one per source folder (core.h, storage.h, ...) and a few for one part (hddfs.h, ...)
+  src/
+    arch/          assembly: entry, interrupt stubs, context switch, exceptions, quick reboot
+    core/          processor, start-up, IRQL, DPCs, APCs, threads, scheduler, waits, timers, bug checks
+    memory/        page tables, pool, title virtual memory
+    objects/       object manager, and the events, mutants, semaphores and timers behind handles
+    io/            I/O manager: devices, IRPs, files
+    hardware/      chipset, SMBus/SMC, EEPROM, video encoder, network PHY, GPU set-up, in-game reset, serial port
+    bootscreen/    the boot splash and jingle (boot-only code, freed before the first title)
+    storage/       IDE channel, hard disk and its partition layout, DVD drive, virtual discs
+    filesystems/   hddfs/ (FATX and exFAT), XDVDFS, UDF, RAW, the file-system cache, mount routing
+    crypto/        SHA-1, HMAC, RC4, DES, RSA
+    titles/        XBE loader and launcher, netboot titles, title patches, the call tracer
+    runtime/       strings, sprintf, interlocked operations, critical sections, time
+  selftest/        the boot self-tests (self-test build only)
+  splash/          the boot logo (SVG)
+  title_patches/   the per-title patch file
+```
 
 ## Not yet
 - Console revisions other than 1.4 are untested; the 1.6 pad calibration is not implemented.

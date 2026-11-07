@@ -182,6 +182,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | path | contents |
 |---|---|
 | `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5) |
+| `include/xk/` | every header: one per source folder (`core.h`, `memory.h`, `storage.h`, ...) for what other folders use, a few named for one part (`hddfs.h`, `disk.h`, `jingle.h`, `vsplash.h`, `selftest.h`), and the shared types (`types.h`) |
 | `src/arch/` | assembly: entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as) |
 | `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks and fatal boot errors |
 | `src/memory/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
