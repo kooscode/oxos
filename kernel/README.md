@@ -57,7 +57,7 @@ make test       # boot bios.bin in xemu; check every milestone's boot self-tests
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
                                 # 256 KB image, make test_dash; VERSION packs build/release/dist/oxos_vX.Y.Z.zip
-                                # (the three images + title_patches.ini)
+                                # (the three images + title_patches.ini); the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:

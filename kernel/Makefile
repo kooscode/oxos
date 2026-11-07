@@ -85,6 +85,11 @@ CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exce
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
+# The version on the boot splash (bootscreen/splash.cpp): vX.Y.Z when built for a release (make release VERSION=X.Y.Z),
+# else DEV. It is a generated header, rewritten only when the text changes, so a new version rebuilds what uses it.
+XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
+XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
+CXXFLAGS += -I$(BUILD)/generated
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /SECTION:.xka,D /SECTION:.xkb,D \
@@ -122,6 +127,13 @@ endif
 $(BUILD)/%.obj: src/%.cpp $(wildcard include/xk/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+
+$(XK_VERSION_HEADER): FORCE
+	@mkdir -p $(dir $@)
+	@echo '#define XK_VERSION_TEXT "$(XK_VERSION_TEXT)"' | cmp -s - $@ || \
+	    echo '#define XK_VERSION_TEXT "$(XK_VERSION_TEXT)"' > $@
+$(BUILD)/bootscreen/splash.obj: $(XK_VERSION_HEADER)
+FORCE:
 
 # The boot self-tests (SELFTEST=1 only).
 $(BUILD)/selftest/%.obj: selftest/%.cpp $(wildcard include/xk/*.h)
