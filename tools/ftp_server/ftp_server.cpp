@@ -853,7 +853,7 @@ DWORD WINAPI PadThread(LPVOID) {
 int main() {
     XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
     InitializeCriticalSection(&PrintLock);
-    debugPrint("%s    (BACK: reboot)\n\n", ServerName);
+    debugPrint("%s\n(BACK: reboot)\n\n", ServerName);
     if (HANDLE pad = CreateThread(nullptr, 16 * 1024, PadThread, nullptr, 0, nullptr))
         CloseHandle(pad);
 
