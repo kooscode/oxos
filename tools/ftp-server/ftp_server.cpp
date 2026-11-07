@@ -8,7 +8,7 @@
 // REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF and
 // SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does).
 // RNTO moves a file or folder to another folder of the same drive. Passive data ports are lwIP's 49152-65535.
-// The address (DHCP, else 192.168.1.223) is on the screen and, with a SERIAL=1 kernel, on the debug serial port.
+// The address (DHCP, else 192.168.1.222 after 30 s) is on the screen and, with a SERIAL=1 kernel, on the debug serial port.
 // BACK on any controller reboots the console (as SITE REBOOT).
 // The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
 #include <cstdarg>
@@ -41,7 +41,10 @@ constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
 constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
-constexpr ULONG FallbackIp = 0xDF01A8C0; // 192.168.1.223, little-endian as nxdk wants it
+// 192.168.1.222, little-endian as nxdk wants it: the address the netboot BIOS uses for this console, so free on a
+// network set up for it (.223 was in use on the test network).
+constexpr ULONG FallbackIp = 0xDE01A8C0;
+constexpr ULONG DhcpWaitMs = 30000; // nxdk waits 10 s; after a title switch the link can take longer to come back
 
 // --- Output: the screen and the debug serial port -----------------------------------------------------------------
 
@@ -845,7 +848,14 @@ int main() {
     dhcp.ipv4_mode = NX_NET_DHCP;
     dhcp.ipv6_mode = NX_NET_DHCP;
     int r = nxNetInit(&dhcp);
-    if (r == -2) { // no DHCP answer in 10 s: a fixed address
+    if (r == -2) { // no DHCP answer in nxdk's 10 s: DHCP keeps running, so wait for it a little longer
+        Log("waiting for DHCP...");
+        for (ULONG waited = 10000; waited < DhcpWaitMs && !dhcp_supplied_address(g_pnetif); waited += 250)
+            Sleep(250);
+        if (dhcp_supplied_address(g_pnetif))
+            r = 0;
+    }
+    if (r == -2) { // still no DHCP answer: a fixed address
         netifapi_dhcp_stop(g_pnetif);
         ip4_addr_t ip, mask, gateway;
         ip.addr = FallbackIp;

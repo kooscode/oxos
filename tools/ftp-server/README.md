@@ -38,7 +38,8 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   `curl ftp://ADDR/ -Q 'SITE LAUNCH /F/Applications/demo'`.
 - **BACK** on any controller restarts the console as SITE REBOOT does (a netbooted console then starts what the PC
   serves, e.g. the title launcher).
-- **Network:** DHCP; with no answer in 10 s the fixed address 192.168.1.223/24. Passive data ports are 49152-65535
+- **Network:** DHCP; with no answer in 30 s the fixed address 192.168.1.222/24 (the netboot BIOS's address for the
+  console). Passive data ports are 49152-65535
   (open them in a firewall between the PC and the console). Writes go straight to the disk, so the console can be
   switched off as soon as a transfer has finished.
 - **xemu:** `tools/run.py BIOS --iso tools/ftp-server/ftp-server.iso --net-forward 2121:21`, then active mode with
