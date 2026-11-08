@@ -66,7 +66,7 @@ Press **X** on a controller while the boot logo and jingle play, or on the "No D
 shows a web address. Open it in any browser on the same network to:
 - browse the drives;
 - upload single files or whole folders (a complete dashboard in one go, about 11 MB/s);
-- create folders, and delete files and empty folders;
+- create folders, rename files and folders, and delete files and empty folders;
 - launch any `.xbe`.
 
 It is built into the kernel and its memory is freed when a title starts, so games lose nothing. There is no log-in:

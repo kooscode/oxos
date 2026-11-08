@@ -806,6 +806,20 @@ def upload_checks(mon, port, xbe):
     _, listing = request("GET", "/api/list?path=%2FE")
     made = any(e["name"] == "new folder" and e["dir"] for e in json.loads(listing))
     checks[f"a folder created (201: {status}), not twice (409: {again})"] = status == 201 and again == 409 and made
+    request("PUT", "/api/file?path=%2FE%2Fnew%20folder%2Fa.txt", b"a")
+    request("PUT", "/api/file?path=%2FE%2Fnew%20folder%2Fb.txt", b"b")
+    status, _ = request("POST", "/api/rename?path=%2FE%2Fnew%20folder%2Fa.txt&name=c.txt")
+    taken, _ = request("POST", "/api/rename?path=%2FE%2Fnew%20folder%2Fb.txt&name=c.txt")
+    _, listing = request("GET", "/api/list?path=%2FE%2Fnew%20folder")
+    names = sorted(e["name"] for e in json.loads(listing))
+    checks[f"a file renamed ({status}), not onto a name in use (409: {taken}): {names}"] = \
+        status == 200 and taken == 409 and names == ["b.txt", "c.txt"]
+    status, _ = request("POST", "/api/rename?path=%2FE%2Fnew%20folder&name=renamed%20folder")
+    _, listing = request("GET", "/api/list?path=%2FE%2Frenamed%20folder")
+    moved = sorted(e["name"] for e in json.loads(listing)) == ["b.txt", "c.txt"]
+    checks[f"a folder renamed, its files with it ({status})"] = status == 200 and moved
+    status, _ = request("POST", "/api/rename?path=%2FE&name=Q")
+    checks[f"a drive is not renamed (403: {status})"] = status == 403
     if xbe:
         data = open(xbe, "rb").read()
         status, _ = request("PUT", "/api/file?path=%2FE%2Fapp%2Fdefault.xbe", data)
