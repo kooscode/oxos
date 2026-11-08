@@ -741,7 +741,7 @@ def blank_disk_fatal_checks(mon, reason, seconds):
 
 def upload_checks(mon, port, xbe):
     """The upload server (spec/oxos_internal/31) on a freshly formatted disk with no dashboard: the page, the drives,
-    an upload read back through a listing, and a launch."""
+    an upload read back through a listing, deleting a file and an empty folder, creating a folder, and a launch."""
     import http.client, json
     def request(method, path, body=None, timeout=30):
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
@@ -759,7 +759,7 @@ def upload_checks(mon, port, xbe):
         except OSError:
             pass
         time.sleep(0.5)
-    checks = {"the page is served": bool(page) and b"OXOS upload" in page}
+    checks = {"the page is served": bool(page) and b"OXOS File Manager" in page}
     if not checks["the page is served"]:
         return {"upload server": checks}
     status, drives = request("GET", "/api/list?path=%2F")
@@ -771,8 +771,27 @@ def upload_checks(mon, port, xbe):
     status, listing = request("GET", "/api/list?path=%2FE%2Fupload%20test")
     entries = json.loads(listing) if status == 200 else []
     checks["it is listed with its size"] = any(e["name"] == "data.bin" and e["size"] == len(blob) for e in entries)
+    status, empty = request("GET", "/api/list?path=%2FC")  # a fresh disk: C: is an empty folder
+    checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
     status, _ = request("GET", "/api/list?path=%2FE%2F..")
     checks["'..' in a path is refused (400)"] = status == 400
+    status, _ = request("PUT", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin", b"x" * 1000)
+    status_full, _ = request("DELETE", "/api/file?path=%2FE%2Fdelete%20test")
+    checks[f"a folder with a file in it is not deleted (409: {status_full})"] = status == 201 and status_full == 409
+    status, _ = request("DELETE", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin")
+    _, listing = request("GET", "/api/list?path=%2FE%2Fdelete%20test")
+    checks[f"a file deleted ({status}, then {listing[:20]!r})"] = status == 200 and json.loads(listing) == []
+    status, _ = request("DELETE", "/api/file?path=%2FE%2Fdelete%20test")
+    _, listing = request("GET", "/api/list?path=%2FE")
+    gone = not any(e["name"] == "delete test" for e in json.loads(listing))
+    checks[f"the empty folder deleted ({status})"] = status == 200 and gone
+    status, _ = request("DELETE", "/api/file?path=%2FE")
+    checks[f"a drive is not deleted (403: {status})"] = status == 403
+    status, _ = request("PUT", "/api/folder?path=%2FE%2Fnew%20folder")
+    again, _ = request("PUT", "/api/folder?path=%2FE%2Fnew%20folder")
+    _, listing = request("GET", "/api/list?path=%2FE")
+    made = any(e["name"] == "new folder" and e["dir"] for e in json.loads(listing))
+    checks[f"a folder created (201: {status}), not twice (409: {again})"] = status == 201 and again == 409 and made
     if xbe:
         data = open(xbe, "rb").read()
         status, _ = request("PUT", "/api/file?path=%2FE%2Fapp%2Fdefault.xbe", data)

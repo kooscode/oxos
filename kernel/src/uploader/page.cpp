@@ -1,5 +1,7 @@
 // The upload server's page (spec/oxos_internal/31_upload_server.md §4): the drives and the current folder, uploads of
-// files and whole folders (one PUT per file, with its path inside the folder), and a Launch button for each .xbe.
+// files and whole folders (one PUT per file, with its path inside the folder), a Launch button for each .xbe, and a
+// Delete button for each file and folder (a folder only when it is empty: the server refuses the others), and a
+// Create Folder button in the ".." row.
 // Boot-only data.
 #include <xk/uploader.h>
 
@@ -8,34 +10,43 @@
 
 static const char UploadpPage[] = R"PAGE(<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OXOS upload</title>
+<title>OXOS File Manager</title>
 <style>
 body{font:15px system-ui,sans-serif;margin:0;background:#111;color:#ddd}
 header{background:#1b1b1b;padding:12px 16px;border-bottom:1px solid #333}
 h1{font-size:18px;margin:0;color:#8f6}
 main{padding:8px 16px;max-width:900px}
-button{background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;padding:5px 10px;cursor:pointer}
+button{background:#2a2a2a;color:#8f6;border:1px solid #5a3;border-radius:4px;padding:5px 10px;cursor:pointer}
 button:hover{border-color:#8f6}
-.launch{border-color:#5a3;color:#8f6}
-.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
-#path{font-family:monospace;color:#fff}
+.top{display:grid;grid-template-columns:max-content 1fr;gap:10px 12px;align-items:center;margin:8px 0}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.label{font-weight:bold}
+#path{font-family:monospace;color:#8f6}
+hr{border:0;border-top:1px solid #333;margin:12px 0}
+.hint{color:#999;margin:8px 0}
 #msg{margin:8px 0;color:#fd6;min-height:1.2em}
 table{width:100%;border-collapse:collapse}
 td{padding:5px 6px;border-bottom:1px solid #262626}
 td.size{text-align:right;color:#999;width:110px}
-a{color:#8cf;cursor:pointer}
+td button{margin-right:6px}
+a{color:#5b3;cursor:pointer}
+.file{color:#bdb}
 </style></head><body>
-<header><h1>OXOS upload</h1></header>
+<header><h1>OXOS File Manager</h1></header>
 <main>
-<div class="bar" id="drives"></div>
-<div class="bar">Folder: <span id="path"></span></div>
-<div class="bar">
-<button onclick="$('files').click()">Upload files</button>
-<button onclick="$('folder').click()">Upload a folder</button>
+<div class="top">
+<span class="label">Select Drive:</span><div class="bar" id="drives"></div>
+<span class="label">Click to upload:</span><div class="bar">
+<button onclick="$('files').click()">Single File</button>
+<button onclick="$('folder').click()">Entire Folder</button>
 <input type="file" id="files" multiple hidden onchange="upload(this.files)">
 <input type="file" id="folder" webkitdirectory hidden onchange="upload(this.files)">
 </div>
+<span class="label">Current Path:</span><span id="path"></span>
+</div>
 <div id="msg"></div>
+<hr>
+<div class="hint">[ Click links below to navigate and Click "Launch" to run XBE ]</div>
 <table id="list"></table>
 </main>
 <script>
@@ -59,16 +70,22 @@ async function list(path) {
   table.innerHTML = '';
   if (path !== '/') {
     const up = path.lastIndexOf('/') > 0 ? path.slice(0, path.lastIndexOf('/')) : '/';
-    row(table, '..', true, 0, () => list(up), null);
+    row(table, '..', true, 0, () => list(up), null, null);
+    const b = document.createElement('button');
+    b.textContent = 'Create Folder';
+    b.onclick = createFolder;
+    table.rows[0].cells[2].append(b);
   }
   for (const e of entries) {
     const full = join(path, e.name);
     row(table, e.name, e.dir, e.size, e.dir ? () => list(full) : null,
-        !e.dir && /\.xbe$/i.test(e.name) ? full : null);
+        !e.dir && /\.xbe$/i.test(e.name) ? full : null, path === '/' ? null : full);
   }
 }
 
-function row(table, name, dir, bytes, open, xbe) {
+// One entry: its name (a link for a folder), its size, a Delete button (not for "..", not for a drive) and, for an
+// .xbe, a Launch button.
+function row(table, name, dir, bytes, open, xbe, full) {
   const tr = table.insertRow(), cell = tr.insertCell(), sizeCell = tr.insertCell(), action = tr.insertCell();
   if (open) {
     const link = document.createElement('a');
@@ -76,13 +93,19 @@ function row(table, name, dir, bytes, open, xbe) {
     link.onclick = open;
     cell.append(link);
   } else {
+    cell.className = 'file';
     cell.textContent = name;
   }
   sizeCell.className = 'size';
   sizeCell.textContent = dir ? '' : size(bytes);
+  if (full) {
+    const b = document.createElement('button');
+    b.textContent = 'Delete';
+    b.onclick = () => remove(full, dir);
+    action.append(b);
+  }
   if (xbe) {
     const b = document.createElement('button');
-    b.className = 'launch';
     b.textContent = 'Launch';
     b.onclick = () => launch(xbe);
     action.append(b);
@@ -107,11 +130,27 @@ async function upload(fileList) {
   list(cwd);
 }
 
+async function createFolder() {
+  const name = prompt('New folder in ' + cwd + ':');
+  if (!name) return;
+  if (/[\/\\:*?"<>|]/.test(name) || name === '.' || name === '..') { say('Not a folder name: ' + name); return; }
+  const r = await fetch('/api/folder?path=' + q(join(cwd, name)), {method: 'PUT'});
+  say(r.ok ? 'Created ' + join(cwd, name) : 'Create folder failed: ' + await r.text());
+  if (r.ok) list(cwd);
+}
+
+async function remove(path, dir) {
+  if (!confirm('Delete ' + path + (dir ? '/' : '') + '?')) return;
+  const r = await fetch('/api/file?path=' + q(path), {method: 'DELETE'});
+  say(r.ok ? 'Deleted ' + path : 'Delete failed: ' + await r.text());
+  if (r.ok) list(cwd);
+}
+
 async function launch(path) {
   say('Launching ' + path + ' ...');
   const r = await fetch('/api/launch?path=' + q(path), {method: 'POST'});
-  say(r.ok ? 'Launching ' + path + ': the console is starting it.' : 'Launch failed: ' + await r.text());
-}
+  say(r.ok ? 'Launching ' + path + ': [ Starting XBE ]' : '[ Launch failed: ' + await r.text() + ' ]' );
+  }
 
 for (const d of ['C', 'E', 'F', 'G', 'X', 'Y', 'Z']) {
   const b = document.createElement('button');
