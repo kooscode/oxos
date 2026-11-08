@@ -1,6 +1,6 @@
 # OXOS demo [ Click the play button ]
 
-https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
+https://github.com/user-attachments/assets/0d9c2398-bac9-4bf0-87d3-0522cee564b5
 
 *From Blank Disk to XB Live Dashboard in seconds!!*
 
