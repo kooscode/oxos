@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 - **Xbox 1.0 -> 1.6 support:** Now supports all console revisions (Conexant/Focus/Xcalibur encoders).
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca_compliance.md)).
 - **Open BIOS:** our own boot code from the first instruction; 
-- **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
+- **Vector-based boot animation:** the OXOS vector based animation at boot, freeing up kernel space.
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **Auto Format blank/Unsupported disk:** OXOS formats a new or unsupported disk as exFAT itself.
