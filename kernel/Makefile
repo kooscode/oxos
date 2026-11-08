@@ -86,7 +86,8 @@ CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exce
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
 # The version on the boot splash and the error screens (bootscreen/text.cpp): vX.Y.Z when built for a release (make release VERSION=X.Y.Z),
-# else DEV. It is a generated header, rewritten only when the text changes, so a new version rebuilds what uses it.
+# else DEV (and XK_RELEASE_VERSION 1 or 0: a development build's disk-format countdown is short). It is a generated
+# header, rewritten only when the text changes, so a new version rebuilds what uses it.
 XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
@@ -131,9 +132,10 @@ $(BUILD)/%.obj: src/%.cpp $(wildcard include/xk/*.h)
 
 $(XK_VERSION_HEADER): FORCE
 	@mkdir -p $(dir $@)
-	@echo '#define XK_VERSION_TEXT "$(XK_VERSION_TEXT)"' | cmp -s - $@ || \
-	    echo '#define XK_VERSION_TEXT "$(XK_VERSION_TEXT)"' > $@
-$(BUILD)/bootscreen/text.obj: $(XK_VERSION_HEADER)
+	@printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' "$(XK_VERSION_TEXT)" \
+	    "$(if $(VERSION),1,0)" | cmp -s - $@ || printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' \
+	    "$(XK_VERSION_TEXT)" "$(if $(VERSION),1,0)" > $@
+$(BUILD)/bootscreen/text.obj $(BUILD)/storage/disk_layout.obj: $(XK_VERSION_HEADER)
 FORCE:
 
 # The boot self-tests (SELFTEST=1 only).
@@ -374,6 +376,17 @@ test_fatal:
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --fatal --boot-wait 2
 
+# Formatting at boot (spec/oxos_internal/30 §4): a new blank 16 GB disk (5 s countdown: not a release build), a
+# blank one with the partition delete's marker asking for 0 s, and a PC disk (MBR, NTFS; 5 s); each is formatted,
+# then 13.
+FORMAT_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
+    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --blank-hdd 16 --boot-wait 2
+test_format:
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	$(FORMAT_TEST)
+	$(FORMAT_TEST) --blank-marker 0
+	$(FORMAT_TEST) --foreign
+
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test_udf: $(BUILD)/bios.bin $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
@@ -587,4 +600,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_fatal test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_fatal test_format test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso

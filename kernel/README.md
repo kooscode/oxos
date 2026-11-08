@@ -266,6 +266,7 @@ the boot tests; console = checked on the 1.4 console.
 | 32 | The 1.6 console: its own X-codes (memory set-up with EEPROM settings), EEPROM pad calibration, its own image | stock/24, oxos/28 | ✅ console (1.6): dashboard, games |
 | 33 | Overlapped hard-disk transfers report STATUS_PENDING as the reference does; RtlNtStatusToDosError as the reference | stock/04b, stock/13 | ✅ unit tests, xemu, console (1.6): a game that streams with overlapped reads |
 | 34 | Error screens: fatal errors with a title, what to try and details; a bug check screen with its code and parameters; one font for every OXOS screen | stock/05, oxos/29 | ✅ unit tests, xemu (`test_fatal`, bug check over the splash and the dashboard) |
+| 35 | Formatting the hard disk as exFAT and deleting all partitions: OXOS exports 400/401 (FTP `SITE FORMAT-EXFAT`, `SITE DELETE-ALL-PARTITIONS`); a blank disk is formatted at boot | oxos/30 | ✅ unit tests (fsck.exfat), xemu (`test_format`), console (debug kit) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

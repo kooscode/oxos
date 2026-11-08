@@ -645,5 +645,8 @@ struct XK_FATAL_HELP {
     const char *const *Lines;
 };
 const XK_FATAL_HELP *XkFatalHelp(ULONG Code);
+// The countdown before a blank or foreign disk is formatted (storage/disk_layout.cpp): Title and What (what the disk
+// holds) with Seconds left, redrawn with each call; Title null takes the screen down.
+void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds);
 // The bug check screen, drawn into the frame buffer on screen (KeBugCheckEx, interrupts off).
 void XkShowBugCheck(ULONG Code, const ULONG_PTR *Parameters);

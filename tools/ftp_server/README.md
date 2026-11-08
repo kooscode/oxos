@@ -23,7 +23,7 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
 
 ## What it does
 - **Commands:** USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR
-  APPE REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT. Transfers are always binary. Up to 8 clients at once.
+  APPE REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE (below). Transfers are always binary. Up to 8 clients at once.
 - **Moving:** RNTO to a path in another folder moves the file or folder there (same drive only; the kernel opens the
   target folder as the reference kernel does). Moving between drives is refused; copy and delete instead.
 - **Big images:** on exFAT, files of 4 GB or more are readable, can be moved, renamed and deleted, but not written
@@ -36,6 +36,15 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   started (an ISO's folder holding the ISO launcher as `default.xbe` starts the ISO); absolute, or relative to
   the current folder. The server answers `200 Launching ...` and then stops, with the title:
   `curl ftp://ADDR/ -Q 'SITE LAUNCH /F/Applications/demo'`.
+- **SITE FORMAT-EXFAT YES** (OXOS only) turns the hard disk into one exFAT volume with the folders C E F X Y Z OXOS,
+  erasing everything on it (FATX, NTFS, anything). The server keeps its own XBE and starts again from the new disk, so
+  you can start copying right away: `curl ftp://ADDR/ -Q 'SITE FORMAT-EXFAT YES'`. Without `YES` it only says what
+  it would do. ([`spec/oxos_internal/30`](../../spec/oxos_internal/30_disk_format.md))
+- **SITE DELETE-ALL-PARTITIONS YES [SECONDS]** (OXOS only) deletes every partition and reboots; OXOS finds a blank
+  disk at the next boot and formats it as exFAT itself, after a countdown of SECONDS (default 0: at once). With
+  netboot, the server is installed and started again.
+- The screen shows every command as it arrives, what it did (listed, sent, stored, moved, deleted, ...), and every
+  refused or failed command with its reply.
 - **BACK** on any controller restarts the console as SITE REBOOT does (a netbooted console then starts what the PC
   serves, e.g. the title launcher).
 - **Network:** DHCP; with no answer in 30 s the fixed address 192.168.1.222/24 (the netboot BIOS's address for the

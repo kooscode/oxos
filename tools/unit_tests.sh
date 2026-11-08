@@ -37,7 +37,9 @@ inner() {
 if [ "${OXOS_UNIT_INNER:-}" = 1 ] || { [ -d /usr/src/googletest ] && echo 'int main(){}' | clang++ -m32 -x c++ - -o /dev/null 2>/dev/null; }; then
     inner "$@"
 fi
-docker image inspect oxos-unit-tests >/dev/null 2>&1 || docker build -t oxos-unit-tests "$ROOT/tests/unit"
+# The image is tagged with its Dockerfile's hash, so a changed Dockerfile builds a new one.
+IMAGE=oxos-unit-tests:$(sha256sum "$ROOT/tests/unit/Dockerfile" | cut -c1-12)
+docker image inspect "$IMAGE" >/dev/null 2>&1 || docker build -t "$IMAGE" "$ROOT/tests/unit"
 exec docker run --rm -u "$(id -u):$(id -g)" -e OXOS_UNIT_INNER=1 -e OXOS_TEST_LOG="${OXOS_TEST_LOG:-}" -e OXOS_STRESS_SECONDS="${OXOS_STRESS_SECONDS:-}" -e OXOS_KERNEL_OPT="${OXOS_KERNEL_OPT:-}" \
-    -v "$ROOT:$ROOT" -w "$ROOT" oxos-unit-tests sh tools/unit_tests.sh \
+    -v "$ROOT:$ROOT" -w "$ROOT" "$IMAGE" sh tools/unit_tests.sh \
     $( [ "$COVERAGE" = ON ] && echo --coverage || true ) -- "$@"

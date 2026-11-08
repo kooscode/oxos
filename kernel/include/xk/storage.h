@@ -102,6 +102,10 @@ XBAPI ULONGLONG IdexDiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos_int
 XBAPI BOOLEAN IdexDiskLba48;             // the drive supports 48-bit addressing
 XBAPI STRING HalDiskModelNumber, HalDiskSerialNumber;
 XBAPI BOOLEAN IdexDiskSecurityUnlocked;
+// OXOS's own exports (storage/disk_layout.cpp, spec/oxos_internal/30_disk_format.md): format the hard disk as exFAT
+// (keeping one file), and delete all partitions.
+XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath);
+XBAPI NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds);
 extern volatile UCHAR IdexDiskLastStatus; // the disk's status register at its last start-up step (diagnostics)
 XBAPI ULONG HalDiskCachePartitionCount;
 

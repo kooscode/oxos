@@ -5,11 +5,15 @@
 //   /F/games     F:\games (\Device\Harddisk0\Partition6\games)
 //
 // Commands: USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE
-// REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF and
-// SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does).
+// REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF,
+// SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does), and on OXOS
+// SITE FORMAT-EXFAT YES (the hard disk becomes one exFAT volume; the server keeps itself on it and restarts from it)
+// and SITE DELETE-ALL-PARTITIONS YES [SECONDS] (the next boot finds a blank disk and formats it as exFAT after a
+// countdown of SECONDS, default 0).
 // RNTO moves a file or folder to another folder of the same drive. Passive data ports are lwIP's 49152-65535.
 // The address (DHCP, else 192.168.1.222 after 30 s) is on the screen and, with a SERIAL=1 kernel, on the debug serial
 // port.
+// The screen (and the debug serial port) shows every command as it arrives and what it did.
 // BACK on any controller reboots the console (as SITE REBOOT).
 // The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
 #include <cstdarg>
@@ -37,8 +41,9 @@ extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 namespace {
 
 // The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every
-// build, so a client can tell which build answers; raise the version (1.0) when the server's behaviour changes.
-constexpr char ServerName[] = "OXOS FTP server 1.0 (built " __DATE__ " " __TIME__ ")";
+// build, so a client can tell which build answers. The version is MAJOR.MINOR.PATCH: raise it when the server's
+// behaviour changes.
+constexpr char ServerName[] = "OXOS FTP server 0.1.1 (built " __DATE__ " " __TIME__ ")";
 
 constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
@@ -48,6 +53,37 @@ constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
 // network set up for it (.223 was in use on the test network).
 constexpr ULONG FallbackIp = 0xDE01A8C0;
 constexpr ULONG DhcpWaitMs = 30000; // nxdk waits 10 s; after a title switch the link can take longer to come back
+
+// Upper-cases ASCII letters only (FTP verbs and SITE commands; '-' and digits stay as they are).
+void ToUpper(std::string &s) {
+    for (char &c : s) {
+        if (c >= 'a' && c <= 'z')
+            c = (char)(c - 0x20);
+    }
+}
+
+// --- OXOS's own kernel exports (spec/oxos_internal/30_disk_format.md), found by ordinal in the running kernel's
+// export table, so the server still runs on other kernels (they have no such ordinals)
+
+constexpr ULONG OrdinalFormatDisk = 400, OrdinalDeleteAllPartitions = 401;
+typedef NTSTATUS(NTAPI *FormatDiskRoutine)(PCSTR KeepPath);
+typedef NTSTATUS(NTAPI *DeleteAllPartitionsRoutine)(ULONG CountdownSeconds);
+
+void *KernelExport(ULONG ordinal) {
+    auto base = (const UCHAR *)0x80010000;
+    if (!MmIsAddressValid((PVOID)base) || *(const USHORT *)base != 0x5A4D) // "MZ"
+        return nullptr;
+    const UCHAR *pe = base + *(const ULONG *)(base + 0x3C);
+    ULONG directory = *(const ULONG *)(pe + 24 + 96); // the optional header's export directory
+    if (!directory)
+        return nullptr;
+    const UCHAR *e = base + directory;
+    ULONG first = *(const ULONG *)(e + 16), count = *(const ULONG *)(e + 20);
+    if (ordinal < first || ordinal - first >= count)
+        return nullptr;
+    ULONG rva = ((const ULONG *)(base + *(const ULONG *)(e + 28)))[ordinal - first];
+    return rva ? (void *)(base + rva) : nullptr;
+}
 
 // --- Output: the screen and the debug serial port -----------------------------------------------------------------
 
@@ -305,6 +341,7 @@ struct Session {
     char *buffer;
     std::string pending;       // received control bytes not yet a line
     char peer[20];
+    std::string lastCommand;   // the command being answered (for the screen log of failures)
 
     void Reply(int code, const char *format, ...) {
         char line[512];
@@ -315,6 +352,8 @@ struct Session {
         va_end(ap);
         if (n > (int)sizeof(line) - 3)
             n = sizeof(line) - 3;
+        if (code >= 400) // every refusal and failure on the screen too, with the command it answers
+            Log("%s: %s -> %.*s", peer, lastCommand.c_str(), n, line);
         line[n++] = '\r';
         line[n++] = '\n';
         SendAll(control, line, n);
@@ -463,8 +502,10 @@ struct Session {
         }
         bool ok = SendAll(data, out.data(), (int)out.size());
         lwip_close(data);
-        if (ok)
+        if (ok) {
+            Log("%s listed %u entries", peer, (unsigned)list.size());
             Reply(226, "%u entries", (unsigned)list.size());
+        }
         else
             Reply(426, "Connection lost");
     }
@@ -505,8 +546,10 @@ struct Session {
         }
         NtClose(h);
         lwip_close(data);
-        if (ok)
+        if (ok) {
+            Log("%s sent %s (%lld bytes)", peer, FtpPath(p).c_str(), (long long)offset.QuadPart);
             Reply(226, "Done");
+        }
         else
             Reply(426, "Transfer failed");
     }
@@ -594,10 +637,7 @@ struct Session {
             info = Stat(p);
         }
         std::string name = p.back();
-        for (char &c : name) {
-            if (c >= 'a' && c <= 'z')
-                c &= ~0x20;
-        }
+        ToUpper(name);
         if (!info.exists || info.directory) {
             Reply(550, "%s: no such XBE", FtpPath(p).c_str());
             return;
@@ -614,11 +654,77 @@ struct Session {
         Log("launch FAILED: %s", path.c_str()); // only returns on failure; the reply has gone out
     }
 
+    // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z OXOS and keeps
+    // this server's XBE at the same place, then the server starts again from the new disk (a title launch, so the
+    // kernel mounts the new layout). Without YES it only says what it would do.
+    void FormatDisk(const std::string &arg) {
+        auto format = (FormatDiskRoutine)KernelExport(OrdinalFormatDisk);
+        if (!format) {
+            Log("%s: format: this kernel has no OXOSFormatDisk", peer);
+            Reply(502, "This kernel cannot format the disk (it needs OXOS)");
+            return;
+        }
+        if (arg != "YES" && arg != "yes") {
+            Log("%s: format not confirmed (send SITE FORMAT-EXFAT YES)", peer);
+            Reply(200, "SITE FORMAT-EXFAT YES erases the whole hard disk and makes it one exFAT volume");
+            return;
+        }
+        // The running XBE (XeImageFileName, not terminated), kept when it is on the hard disk.
+        std::string self(XeImageFileName->Buffer, XeImageFileName->Length);
+        const std::string disk = "\\Device\\Harddisk0\\";
+        bool keep = self.compare(0, disk.size(), disk) == 0;
+        Log("%s: format the hard disk as exFAT (keeping %s)", peer, keep ? self.c_str() : "nothing");
+        NTSTATUS status = format(keep ? self.c_str() : nullptr);
+        if (!NT_SUCCESS(status)) {
+            Log("format FAILED: %08lx", (unsigned long)status);
+            Reply(550, "Format failed: %s (%08lx)", StatusText(status), (unsigned long)status);
+            return;
+        }
+        Log("formatted as exFAT; %s", keep ? "restarting the server from the new disk" : "rebooting");
+        Reply(200, "Formatted as exFAT; %s", keep ? "the server restarts from the new disk" : "rebooting");
+        Sleep(300); // let the reply reach the client
+        if (keep)
+            XLaunchXBE(self.c_str());
+        HalReturnToFirmware(HalRebootRoutine);
+    }
+
+    // SITE DELETE-ALL-PARTITIONS YES [SECONDS]: the kernel clears every partition table and header, then the console
+    // reboots; OXOS finds a blank disk at the next boot and formats it as exFAT after SECONDS (default 0: at once)
+    // of countdown. Without YES it only says what it would do.
+    void DeleteAllPartitions(const std::string &arg) {
+        auto remove = (DeleteAllPartitionsRoutine)KernelExport(OrdinalDeleteAllPartitions);
+        if (!remove) {
+            Log("%s: delete partitions: this kernel has no OXOSDeleteAllPartitions", peer);
+            Reply(502, "This kernel cannot delete partitions (it needs OXOS)");
+            return;
+        }
+        std::size_t gap = arg.find(' ');
+        std::string confirm = arg.substr(0, gap);
+        ULONG seconds = gap == std::string::npos ? 0 : (ULONG)std::strtoul(arg.c_str() + gap + 1, nullptr, 10);
+        if (confirm != "YES" && confirm != "yes") {
+            Log("%s: partition delete not confirmed (send SITE DELETE-ALL-PARTITIONS YES)", peer);
+            Reply(200, "SITE DELETE-ALL-PARTITIONS YES deletes every partition; OXOS formats the blank disk at boot");
+            return;
+        }
+        Log("%s: delete all partitions (the next boot formats after %lu s)", peer, seconds);
+        NTSTATUS status = remove(seconds);
+        if (!NT_SUCCESS(status)) {
+            Log("delete all partitions FAILED: %08lx", (unsigned long)status);
+            Reply(550, "Deleting the partitions failed: %s (%08lx)", StatusText(status), (unsigned long)status);
+            return;
+        }
+        Log("all partitions deleted; rebooting");
+        Reply(200, "All partitions deleted; rebooting");
+        Sleep(300);
+        HalReturnToFirmware(HalRebootRoutine);
+    }
+
     void Command(const std::string &line) {
+        lastCommand = line.compare(0, 5, "PASS ") == 0 ? "PASS" : line; // never a password on the screen
+        Log("%s: %s", peer, lastCommand.c_str()); // every command on the screen as it arrives
         std::size_t sp = line.find(' ');
         std::string verb = line.substr(0, sp), arg = sp == std::string::npos ? "" : line.substr(sp + 1);
-        for (char &c : verb)
-            c &= ~0x20;
+        ToUpper(verb);
         Parts p;
         if (verb != "RNTO")
             haveFrom = verb == "RNFR" ? haveFrom : false;
@@ -756,8 +862,7 @@ struct Session {
         } else if (verb == "SITE") {
             std::size_t gap = arg.find(' ');
             std::string what = arg.substr(0, gap), rest = gap == std::string::npos ? "" : arg.substr(gap + 1);
-            for (char &c : what)
-                c &= ~0x20;
+            ToUpper(what);
             if (what == "LAUNCH") {
                 Launch(rest);
             } else if (what == "REBOOT") {
@@ -768,8 +873,13 @@ struct Session {
                 Reply(200, "Powering off");
                 Log("%s: power off", peer);
                 HalInitiateShutdown();
+            } else if (what == "FORMAT-EXFAT") {
+                FormatDisk(rest);
+            } else if (what == "DELETE-ALL-PARTITIONS") {
+                DeleteAllPartitions(rest);
             } else {
-                Reply(504, "SITE LAUNCH PATH, SITE REBOOT or SITE POWEROFF");
+                Log("%s: unknown SITE command", peer);
+                Reply(504, "SITE LAUNCH PATH, REBOOT, POWEROFF, FORMAT-EXFAT or DELETE-ALL-PARTITIONS");
             }
         } else {
             Reply(502, "%s not implemented", verb.c_str());
@@ -783,8 +893,7 @@ struct Session {
             if (line.empty())
                 continue;
             std::string verb = line.substr(0, 4);
-            for (char &c : verb)
-                c &= ~0x20;
+            ToUpper(verb);
             if (verb == "QUIT") {
                 Reply(221, "Bye");
                 break;

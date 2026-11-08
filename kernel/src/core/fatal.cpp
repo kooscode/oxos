@@ -155,6 +155,66 @@ static void XkpShowCode(ULONG Code) {
     XkFatalErrorFrameBuffer = phys;
 }
 
+// --- The countdown before the kernel formats a blank or foreign disk (spec/oxos_internal/30 §4)
+
+static ULONG *XkpCountdownScreen; // the countdown's frame buffer while it is shown
+
+static void XkpClear(ULONG *fb, ULONG x, ULONG y, ULONG w, ULONG h) {
+    for (ULONG j = y; j < y + h; j++)
+        RtlZeroMemory(fb + j * XKP_W + x, w * 4);
+}
+
+// The line with the seconds (line 5 of the text) and the seconds in large digits.
+constexpr ULONG XKP_COUNTDOWN_LINE = 244 + 4 * XKP_LINE;
+
+static void XkpDrawSeconds(ULONG *fb, ULONG Seconds) {
+    XkpClear(fb, 250, 72, 140, 110);
+    XkpDrawDigit(fb, 330, 72, Seconds % 10);
+    XkpDrawDigit(fb, 250, 72, Seconds / 10 % 10);
+    XkpClear(fb, XKP_LEFT, XKP_COUNTDOWN_LINE, XKP_W - 2 * XKP_LEFT, 16);
+    char line[XK_FATAL_LINE + 1];
+    RtlSnprintf(line, sizeof(line), "In %lu s OXOS erases it and formats it as", Seconds);
+    XkDrawText(fb, XKP_W, XKP_LEFT, XKP_COUNTDOWN_LINE, line, 2, XKP_WHITE);
+}
+
+void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
+    auto regs = (PVOID)0xFD000000;
+    if (!Title) { // the countdown is over: screen off (the format and the boot go on), memory back
+        if (XkpCountdownScreen) {
+            AvSendTVEncoderOption(regs, 9, 1, nullptr);
+            MmFreeContiguousMemory(XkpCountdownScreen);
+            XkpCountdownScreen = nullptr;
+        }
+        return;
+    }
+    if (HalBootSMCVideoMode == 7)
+        return;
+    if (XkpCountdownScreen) {
+        XkpDrawSeconds(XkpCountdownScreen, Seconds);
+        return;
+    }
+    const ULONG pitch = XKP_W * 4;
+    auto fb = (ULONG *)MmAllocateContiguousMemoryEx(pitch * XKP_H, 0, 0x3FFFFFF, 0x1000,
+                                                    PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (!fb)
+        return;
+    XkpStartScreen(fb);
+    XkpTitle(fb, 204, Title);
+    char lines[8][XK_FATAL_LINE + 1] = {};
+    XkpDiskLine(lines[0], sizeof(lines[0]));
+    RtlSnprintf(lines[1], sizeof(lines[1]), "Size: %lu GB", (ULONG)(IdexDiskLengthInSectors / 1953125));
+    RtlSnprintf(lines[2], sizeof(lines[2]), "Holds: %s", What);
+    RtlSnprintf(lines[5], sizeof(lines[5]), "exFAT, with the folders C E F X Y Z OXOS.");
+    RtlSnprintf(lines[7], sizeof(lines[7]), "- Turn the console off now to keep the disk.");
+    for (ULONG i = 0; i < 8; i++)
+        XkDrawText(fb, XKP_W, XKP_LEFT, 244 + i * XKP_LINE, lines[i], 2, i < 3 ? XKP_TEXT : XKP_WHITE);
+    XkpDrawSeconds(fb, Seconds);
+    ULONG phys = MmGetPhysicalAddress(fb);
+    AvSetDisplayMode(regs, 0, AvBootModeWord(), 0x1E, pitch, phys);
+    AvSendTVEncoderOption(regs, 9, 0, nullptr);
+    XkpCountdownScreen = fb;
+}
+
 // The running title's ID from its XBE header at 0x10000 (certificate address at +0x118, title ID at +8); 0 if none.
 static ULONG XkpTitleId() {
     auto header = (const ULONG *)0x10000;
