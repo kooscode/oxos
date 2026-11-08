@@ -46,6 +46,8 @@ HTTP/1.1, one request per connection (`Connection: close`). Paths use the FTP se
 | `GET /` | the page (§4) |
 | `GET /api/list?path=/E/Apps` | the folder's entries as JSON: `[{"name":"default.xbe","dir":false,"size":123}, ...]` |
 | `PUT /api/file?path=/E/Apps/x/default.xbe` | the request body becomes that file; missing folders on the way are created; `201` |
+| `PUT /api/folder?path=/E/Apps/new` | creates that folder (and missing folders on the way); `201`; one that exists: `409` |
+| `DELETE /api/file?path=/E/Apps/old.bin` | deletes that file, or that folder when it is empty (`NtDeleteFile`); `200`. A folder with anything in it: `409`, nothing deleted (nothing is deleted recursively). A drive (`/E`): `403` |
 | `POST /api/launch?path=/E/Apps/x/default.xbe` | `200`, then the server stops and the kernel starts that XBE as a title |
 
 Paths are percent-decoded; `..`, empty parts and characters FATX does not allow are refused (`400`). A file
@@ -53,8 +55,9 @@ system error answers `500` with the NT status. Uploads stream: the body goes to 
 writes; `Expect: 100-continue` (curl's large uploads) is answered. `GET /api/list?path=/` lists the drives that open.
 
 ## 4. The page
-One HTML page with a small script, served from the kernel image: the current folder (drive buttons, a path, the
-folder's entries; folders open, an `.xbe` has a Launch button), "Upload files" (several at once) and "Upload a
+One HTML page with a small script, served from the kernel image, titled "OXOS File Manager": the current folder (drive buttons, a path, the
+folder's entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has a
+Delete button, which asks first; the `..` row has Create Folder, which asks for the name), "Upload files" (several at once) and "Upload a
 folder" (the browser sends every file with its path inside the folder: a whole dashboard in one go). Files go one
 at a time with `PUT` and a progress line.
 
@@ -88,7 +91,9 @@ starts.
 ## 8. Checks
 - `make test_upload` (xemu, NAT network with a forwarded port): a blank disk is formatted at once (marker 0), no
   dashboard, the server starts; the page, the drive list, a 300 KB upload into a new folder listed with its size and
-  read back byte for byte from the disk image afterwards, `..` refused, the FTP server's XBE uploaded and launched
+  read back byte for byte from the disk image afterwards, `..` refused, a folder with a file in it not deleted
+  (`409`), the file then the empty folder deleted, a drive not deleted (`403`), a folder created (`201`) and not
+  created twice (`409`), the FTP server's XBE uploaded and launched
   (the kernel runs it from `E:\app`).
 - `make test_format`: the three blank or foreign disks end in the upload server (no link in those runs), the
   boot-only pages kept.

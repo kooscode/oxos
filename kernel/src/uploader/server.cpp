@@ -1,5 +1,6 @@
 // The upload server (spec/oxos_internal/31_upload_server.md §3): HTTP/1.1 on the kernel's network stack, one request
-// per connection: the page, folder listings, uploads written to the disk as they arrive, and launching an XBE.
+// per connection: the page, folder listings, uploads written to the disk as they arrive, creating a folder, deleting
+// a file or an empty folder, and launching an XBE.
 // Boot-only.
 //
 // Each connection's request moves through phases: its head (request line and headers), then an upload's body, then
@@ -19,7 +20,9 @@
 #pragma const_seg(".xka$y")
 
 constexpr ULONG HEAD_SIZE = 4096, CHUNK_SIZE = 0x20000, JSON_SIZE = 0x8000, PATH_SIZE = 260, STATUS_SIZE = 64;
-constexpr NTSTATUS STATUS_NO_MORE_FILES_ = (NTSTATUS)0x80000006;
+constexpr NTSTATUS STATUS_NO_MORE_FILES_ = (NTSTATUS)0x80000006, STATUS_NO_SUCH_FILE_ = (NTSTATUS)0xC000000F,
+                   STATUS_DIRECTORY_NOT_EMPTY_ = (NTSTATUS)0xC0000101,
+                   STATUS_OBJECT_NAME_COLLISION_ = (NTSTATUS)0xC0000035;
 
 enum UPLOADP_PHASE : ULONG {
     UploadpIdle,      // no request
@@ -224,7 +227,8 @@ static NTSTATUS UploadpMakeFolders(char *NtPath) {
 
 static void UploadpReply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const char *Body, ULONG Length) {
     const char *reason = Code == 200 ? "OK" : Code == 201 ? "Created" : Code == 400 ? "Bad Request"
-                         : Code == 404 ? "Not Found" : Code == 405 ? "Method Not Allowed"
+                         : Code == 403 ? "Forbidden" : Code == 404 ? "Not Found" : Code == 405 ? "Method Not Allowed"
+                         : Code == 409 ? "Conflict"
                          : Code == 411 ? "Length Required" : Code == 431 ? "Request Header Fields Too Large"
                                                                          : "Internal Server Error";
     r->HeaderLength = (ULONG)RtlSnprintf(r->Header, sizeof(r->Header),
@@ -292,6 +296,8 @@ static void UploadpList(UPLOADP_REQUEST *r) {
             IO_STATUS_BLOCK iosb;
             status = NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
                                           FileDirectoryInformation, nullptr, first);
+            if (first && status == STATUS_NO_SUCH_FILE_) // an empty folder: NT's answer to the first query
+                status = STATUS_NO_MORE_FILES_;
             if (!NT_SUCCESS(status))
                 break;
             // FILE_DIRECTORY_INFORMATION: next entry at 0, size at 0x28, attributes at 0x38, name length at 0x3C,
@@ -309,6 +315,46 @@ static void UploadpList(UPLOADP_REQUEST *r) {
     }
     r->Json[n++] = ']';
     UploadpReply(r, 200, "application/json", r->Json, n);
+}
+
+// --- Creating a folder
+
+// Creates the folder at the request's path, and the folders on the way to it; one that exists already: 409.
+static void UploadpCreateFolder(UPLOADP_REQUEST *r) {
+    NTSTATUS status = UploadpMakeFolders(r->NtPath);
+    HANDLE h = nullptr;
+    if (NT_SUCCESS(status))
+        status = UploadpOpen(r->NtPath, GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE, &h);
+    if (!NT_SUCCESS(status)) {
+        UploadpStatusPath("New folder failed:", r->Path);
+        if (status == STATUS_OBJECT_NAME_COLLISION_)
+            return UploadpText(r, 409, "%s: already exists", r->Path);
+        return UploadpText(r, 500, "%s: cannot create it (%08lx)", r->Path, status);
+    }
+    NtClose(h);
+    UploadpStatusPath("New folder", r->Path);
+    UploadpText(r, 201, "Created %s", r->Path);
+}
+
+// --- Deleting
+
+// Deletes the file or empty folder at the request's path. A drive's own folder is refused, and a folder with
+// anything in it is left as it is (409): the page deletes nothing recursively.
+static void UploadpDelete(UPLOADP_REQUEST *r) {
+    if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
+        return UploadpText(r, 403, "%s: a drive cannot be deleted", r->Path);
+    ANSI_STRING name;
+    RtlInitAnsiString(&name, r->NtPath);
+    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    NTSTATUS status = NtDeleteFile(&a);
+    if (!NT_SUCCESS(status)) {
+        UploadpStatusPath("Delete failed:", r->Path);
+        if (status == STATUS_DIRECTORY_NOT_EMPTY_)
+            return UploadpText(r, 409, "%s: the folder is not empty", r->Path);
+        return UploadpText(r, 500, "%s: delete failed (%08lx)", r->Path, status);
+    }
+    UploadpStatusPath("Deleted", r->Path);
+    UploadpText(r, 200, "Deleted %s", r->Path);
 }
 
 // --- Uploads
@@ -387,17 +433,18 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         target++;
     while (*target == ' ')
         target++;
-    bool get = UploadpIs(r->Head, "GET "), put = UploadpIs(r->Head, "PUT "), post = UploadpIs(r->Head, "POST ");
+    bool get = UploadpIs(r->Head, "GET "), put = UploadpIs(r->Head, "PUT "), post = UploadpIs(r->Head, "POST "),
+         remove = UploadpIs(r->Head, "DELETE ");
     if (get && (UploadpIs(target, "/ ") || UploadpIs(target, "/index.html"))) {
         ULONG length;
         const char *page = UploadPage(&length);
         return UploadpReply(r, 200, "text/html; charset=utf-8", page, length);
     }
     bool list = UploadpIs(target, "/api/list?"), file = UploadpIs(target, "/api/file?"),
-         launch = UploadpIs(target, "/api/launch?");
-    if (!list && !file && !launch)
+         folder = UploadpIs(target, "/api/folder?"), launch = UploadpIs(target, "/api/launch?");
+    if (!list && !file && !folder && !launch)
         return UploadpText(r, 404, "No such page");
-    if ((list && !get) || (file && !put) || (launch && !post))
+    if ((list && !get) || (file && !put && !remove) || (folder && !put) || (launch && !post))
         return UploadpText(r, 405, "Wrong method");
     if (!UploadpQueryPath(target, r->Path, sizeof(r->Path)))
         return UploadpText(r, 400, "Bad path");
@@ -406,6 +453,10 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         return UploadpText(r, 400, "Bad path");
     if (list)
         return UploadpList(r);
+    if (folder)
+        return UploadpCreateFolder(r);
+    if (remove)
+        return UploadpDelete(r);
     if (launch) {
         UploadpStatusPath("Launching", r->Path);
         r->Launch = true;
