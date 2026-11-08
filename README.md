@@ -7,7 +7,7 @@ saves and System Link work with stock consoles.
 
 https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 
-*Vector Based OXOS Boot Animation*
+*From Blank Disk to XB Live Dashboard in seconds!!*
 
 ## Highlights
 - **Xbox 1.0 -> 1.6 support:** Now supports all console revisions (Conexant/Focus/Xcalibur encoders).
