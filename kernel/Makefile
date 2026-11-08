@@ -351,7 +351,7 @@ test_dash: $(HDD_FETCH)
 	# ... and with EvoX installed (C:\evoxdash.xbe): it is the dashboard started (spec/oxos_internal/19).
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --evox
-	# ... and with no dashboard on C: but one in E:\XBLDashboard: it is started from there (spec/oxos_internal/19).
+	# ... and with C:\xboxdash.xbe moved to C:\Dashboard\default.xbe: it is started from there (spec/oxos_internal/19).
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
 

@@ -40,7 +40,7 @@ code's title and lines.
 | 7 | HDD Timeout | the disk is still busy after 30 s | disk model, status |
 | 8 | HDD IDENTIFY Failed | IDENTIFY, or the commands after an unlock, fail | disk model, status |
 | 9 | No HDD Detected | SET FEATURES gets no answer, or the disk is under 8 GB (0xEE8AB0 sectors) | disk model and size when it answered, else status |
-| 13–19 | No Dashboard Found | none of `C:\evoxdash.xbe`, `E:\evoxdash.xbe`, `C:\xboxdash.xbe`, `E:\XBLDashboard\default.xbe` loads (14–19: 13 + the launch data's dashboard reason); the help lists those paths and "[ Press X to launch Web File Manager ]"; on a cold boot X then opens the File Manager (spec/oxos_internal/32 §1) | the reason for 14–19 |
+| 13–19 | No Dashboard Found | none of `C:\evoxdash.xbe`, `E:\evoxdash.xbe`, `C:\xboxdash.xbe`, `C:\Dashboard\default.xbe` loads (14–19: 13 + the launch data's dashboard reason); the help lists those paths and "[ Press X to launch Web File Manager ]"; on a cold boot X then opens the File Manager (spec/oxos_internal/32 §1) | the reason for 14–19 |
 | 20 | No Dashboard Found (Disc Inserted) | the same, with an authenticated game disc in the drive | |
 | 21 | Previous Boot Failed | a cold boot after `HalReturnToFirmware(4)` (fatal error reboot by a title or the dashboard; SMC scratch bit 1, cleared at every boot) | |
 | other | Fatal Error | anything else (e.g. 0x10E5F, the DVD device could not be created) | the full code |
