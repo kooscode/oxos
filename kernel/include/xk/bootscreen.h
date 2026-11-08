@@ -14,6 +14,7 @@ void HalpStartSplash();
 void HalpTakeSplashRecord(bool QuickReboot);
 bool HalpIsSplashPage(ULONG pfn);
 void HalpEndSplash();
+void HalpStopBootSound(); // resident: the sound controller stopped at once (a fatal error on the idle thread)
 
 // Text (text.cpp, resident: the fatal error and bug check screens draw with it after the boot-only code is freed):
 // the OXOS 5x8 font, printable ASCII; a glyph is 5 x 8 pixels of Scale x Scale, 6 * Scale apart. Pitch is in pixels
