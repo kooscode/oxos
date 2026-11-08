@@ -7,8 +7,9 @@ the dashboard, spec/stock/05), it tries these in order and starts the first that
 1. `C:\evoxdash.xbe` (`\Device\Harddisk0\Partition2\evoxdash.xbe`): EvoX installed on C:, where its installer puts it.
 2. `E:\evoxdash.xbe` (`\Device\Harddisk0\Partition1\evoxdash.xbe`): EvoX installed on E:.
 3. `C:\xboxdash.xbe`: the Xbox dashboard, as the stock kernel starts.
-4. `E:\XBLDashboard\default.xbe` (`\Device\Harddisk0\Partition1\XBLDashboard\default.xbe`): a dashboard kept in
-   E:\XBLDashboard (added 2026-11-08), when none of the above is there.
+4. `C:\Dashboard\default.xbe` (`\Device\Harddisk0\Partition2\Dashboard\default.xbe`): where the XBL Dashboard
+   installs its loader, when none of the above is there. (Added 2026-11-08 as `E:\XBLDashboard\default.xbe`; moved
+   to `C:\Dashboard` the same day, where the installer puts it.)
 
 A missing file fails at its open, before anything is loaded, so the next is tried. When none loads, the kernel
 behaves as before: a fatal error on a cold boot (spec/stock/05), a return to the firmware otherwise. The dashboard
@@ -16,5 +17,5 @@ gets the same launch data page (reason and code) whichever it is.
 
 Tests: `make test_dash` boots the xemu dashboard disk three times: as it is (no EvoX: `XeImageFileName` is
 C:\xboxdash.xbe), and with a copy of its dashboard added as C:\evoxdash.xbe (`boot_test.py --dash --evox`:
-`XeImageFileName` is C:\evoxdash.xbe), and with C:\xboxdash.xbe moved to E:\XBLDashboard\default.xbe
+`XeImageFileName` is C:\evoxdash.xbe), and with C:\xboxdash.xbe moved to C:\Dashboard\default.xbe
 (`--dash --xbl`: started from there).

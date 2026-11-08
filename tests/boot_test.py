@@ -669,11 +669,11 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     raw = b"".join(struct.pack("<I", int(w, 16)) for w in re.findall(r"0x([0-9a-f]{8})",
                    mon.hmp(f"x/16wx {ptr:#x}").split(":", 1)[1]))
     dash = raw.split(b"\0")[0].decode("latin-1")
-    want = ("\\Device\\Harddisk0\\Partition1\\XBLDashboard\\default.xbe" if xbl else
+    want = ("\\Device\\Harddisk0\\Partition2\\Dashboard\\default.xbe" if xbl else
             "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if evox else "xboxdash.xbe"))
     return {"M4b-2": {
         f"dashboard launched without a disc: {dash} "
-        f"({'EvoX first' if evox else 'only E:\\XBLDashboard' if xbl else 'no EvoX: the Xbox dashboard'})":
+        f"({'EvoX first' if evox else 'only C:\\Dashboard' if xbl else 'no EvoX: the Xbox dashboard'})":
             mon.read("XeTitleLaunched") == 2 and mon.read("XeLastLoadStatus") == 0 and dash == want,
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
@@ -1043,7 +1043,7 @@ def main():
     ap.add_argument("--iso-launch", metavar="LAUNCHER_XBE",
                     help="boot the ISO launcher (tools/iso_launcher) with an image of --title on an exFAT disk")
     ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
-    ap.add_argument("--xbl", action="store_true", help="--dash: move C:\\xboxdash.xbe to E:\\XBLDashboard\\default.xbe on "
+    ap.add_argument("--xbl", action="store_true", help="--dash: move C:\\xboxdash.xbe to C:\\Dashboard\\default.xbe on "
                     "the disk copy and check that the kernel starts it from there")
     ap.add_argument("--evox", action="store_true", help="--dash: put C:\\evoxdash.xbe on the disk copy and check that "
                     "the kernel starts it instead of C:\\xboxdash.xbe")
@@ -1084,12 +1084,13 @@ def main():
         shutil.copyfile(a.hdd, hdd_copy)
         if a.title and a.title_map and not a.dash:
             write_title_patches(hdd_copy, a.title, a.title_map)
-        if a.xbl:  # no dashboard on C:, one in E:\XBLDashboard (spec/oxos_internal/19)
+        if a.xbl:  # C:\xboxdash.xbe moved to C:\Dashboard\default.xbe, the XBL Dashboard's loader (spec/oxos_internal/19)
             q = Qcow2(hdd_copy)
-            e = FATXWriter(q, "E")
-            e.mkdir("XBLDashboard")
-            e.write_file("XBLDashboard\\default.xbe", FATX(q, "C").read_file("xboxdash.xbe"))
-            FATXWriter(q, "C").delete_entry("xboxdash.xbe")
+            dash = FATX(q, "C").read_file("xboxdash.xbe")
+            c = FATXWriter(q, "C")
+            c.mkdir("Dashboard")
+            c.write_file("Dashboard\\default.xbe", dash)
+            c.delete_entry("xboxdash.xbe")
             q.save(hdd_copy + ".new")
             os.replace(hdd_copy + ".new", hdd_copy)
         if a.evox:  # an EvoX-style install: C:\evoxdash.xbe (here a copy of C:\xboxdash.xbe)

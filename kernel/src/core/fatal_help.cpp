@@ -45,7 +45,7 @@ static const char *const XkpHelpNoDashboard[] = {
     "  C:\\evoxdash.xbe",
     "  E:\\evoxdash.xbe",
     "  C:\\xboxdash.xbe",
-    "  E:\\XBLDashboard\\default.xbe",
+    "  C:\\Dashboard\\default.xbe",
     "",
     "[ Press  X  to launch Web File Manager ]", // the X drawn as the button (XkDrawText)
     nullptr,
