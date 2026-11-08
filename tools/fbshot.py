@@ -33,8 +33,8 @@ try:
     for y in range(h):
         raw += b"\0"
         for x in range(w):
-            p = y * pitch + 4 * x
-            raw += bytes((data[p + 2], data[p + 1], data[p]))
+            at = y * pitch + 4 * x
+            raw += bytes((data[at + 2], data[at + 1], data[at]))
 
     def chunk(kind, payload):
         crc = zlib.crc32(kind + payload) & 0xffffffff

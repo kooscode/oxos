@@ -265,6 +265,7 @@ the boot tests; console = checked on the 1.4 console.
 | 31 | GPU start-up settings (clock, memory interface) checked and restored by the 2BL | oxos/26 | ✅ console: every cold boot's dashboard drawn correctly |
 | 32 | The 1.6 console: its own X-codes (memory set-up with EEPROM settings), EEPROM pad calibration, its own image | stock/24, oxos/28 | ✅ console (1.6): dashboard, games |
 | 33 | Overlapped hard-disk transfers report STATUS_PENDING as the reference does; RtlNtStatusToDosError as the reference | stock/04b, stock/13 | ✅ unit tests, xemu, console (1.6): a game that streams with overlapped reads |
+| 34 | Error screens: fatal errors with a title, what to try and details; a bug check screen with its code and parameters; one font for every OXOS screen | stock/05, oxos/29 | ✅ unit tests, xemu (`test_fatal`, bug check over the splash and the dashboard) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
