@@ -16,20 +16,17 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 - **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
 - **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions.
-- **From a blank disk to a dashboard, no PC tools:** OXOS formats a new or unsupported disk as exFAT itself (after
-  a countdown that says what is on it), and with no dashboard it serves a web page: upload a dashboard (whole folders
-  at once) from any browser and launch it. ([format](spec/oxos_internal/30_disk_format.md),
-  [upload](spec/oxos_internal/31_upload_server.md))
-- **Error screens that explain themselves:** a title, what happened and what to try, instead of a bare number; a
-  kernel crash shows its code and parameters for a bug report.
+- **Auto Format blank/Unsupported disk:** OXOS formats a new or unsupported disk as exFAT itself.
+- **Web Server Uploads and Launch:** Empty Disk or missing dashboard, Kernel starts web server for file uploads and XBE Launching
+- **Error screens that explain themselves:** See exactly what happened and what to try, instead of a bare number
+- **Kernel Crash Info:** Kernel crash shows its code and parameters for a bug report.
 - **In-game reset:** LT + RT + BACK + BLACK.
 - **Title compatibility patching:** per-Title patches applied from `title_patches.ini`.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
 - **Saves and System Link with stock consoles:** titles get the same save-signature and System Link keys as on a
   stock console, so saves move between them and System Link games play together.
-- **nxdk homebrew:** Fully supports nxdk's pbkit homebrew ([details](spec/oxos_internal/24_graphics_engine_init.md)).
+- **nxdk homebrew:** Fully supports latest nxdk's homebrew !
 - **TV output on every revision:** Conexant, Focus and Xcalibur encoders, composite to 1080i.
-- **More memory for titles** than the stock kernel.
 - **Developer tools:** serial boot log, kernel call tracing, network boot, source-level debugging in xemu.
 
 ## Try it
