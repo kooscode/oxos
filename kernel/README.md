@@ -3,8 +3,9 @@
 A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with
 retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code,
 machine code, disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables are the one
-data taken from Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Targets console revisions 1.0–1.5; on
-1.6 the Xcalibur video encoder is driven, the rest of 1.6 is untested. It builds on Linux with clang + lld-link.
+data taken from Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6:
+tested with all three video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its
+own X-codes: `MCPX16=1`). It builds on Linux with clang + lld-link.
 
 ## Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the

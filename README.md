@@ -15,7 +15,13 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 - **Open BIOS:** our own boot code from the first instruction; 
 - **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
 - **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
-- **Big disks:** exFAT (format it on any PC, no size limits) and LBA48; FATX disks with extra F:/G: partitions.
+- **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions.
+- **From a blank disk to a dashboard, no PC tools:** OXOS formats a new or unsupported disk as exFAT itself (after
+  a countdown that says what is on it), and with no dashboard it serves a web page: upload a dashboard (whole folders
+  at once) from any browser and launch it. ([format](spec/oxos_internal/30_disk_format.md),
+  [upload](spec/oxos_internal/31_upload_server.md))
+- **Error screens that explain themselves:** a title, what happened and what to try, instead of a bare number; a
+  kernel crash shows its code and parameters for a bug report.
 - **In-game reset:** LT + RT + BACK + BLACK.
 - **Title compatibility patching:** per-Title patches applied from `title_patches.ini`.
 - **Game trainers:** XBMC4Gamers trainers (.etm, .xbtf) load and run as on a modded stock BIOS.
@@ -50,8 +56,9 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 cycles on the test console and it showed FRAG (flashing red and green) even with other BIOSes
 ([wiring notes](tools/modxo/README.md#hardware)).
 
-So far OXOS is tested on a 1.4 console, a second MCPX 1.1 console and a 1.6 console; reports from other revisions are
-welcome in the [issues](https://github.com/kooscode/oxos/issues).
+So far OXOS is tested on a 1.4 console (Focus), a second MCPX 1.1 console, a 1.6 console (Xcalibur) and a Conexant
+debug kit (MCPX X2, 128 MB): all three video encoders. Reports from other revisions are welcome in the
+[issues](https://github.com/kooscode/oxos/issues).
 
 ## Games and disks
 - **exFAT disk:** format the disk as exFAT on a PC, as one partition or the whole disk, or on the console: the OXOS
@@ -109,11 +116,13 @@ kernel/
     objects/       object manager, and the events, mutants, semaphores and timers behind handles
     io/            I/O manager: devices, IRPs, files
     hardware/      chipset, SMBus/SMC, EEPROM, video encoder, network PHY, GPU set-up, in-game reset, serial port
-    bootscreen/    the boot splash and jingle (boot-only code, freed before the first title)
-    storage/       IDE channel, hard disk and its partition layout, DVD drive, virtual discs
+    bootscreen/    the boot splash and jingle, the text of OXOS's screens
+    storage/       IDE channel, hard disk, its partition layout and formatting, DVD drive, virtual discs
     filesystems/   hddfs/ (FATX and exFAT), XDVDFS, UDF, RAW, the file-system cache, mount routing
     crypto/        SHA-1, HMAC, RC4, DES, RSA
     titles/        XBE loader and launcher, netboot titles, title patches, the call tracer
+    network/       the network card, IPv4, DHCP and TCP (boot-only, for the upload server)
+    uploader/      the upload server: the web page that uploads a dashboard when none is found
     runtime/       strings, sprintf, interlocked operations, critical sections, time
   selftest/        the boot self-tests (self-test build only)
   splash/          the boot logo (SVG)
@@ -122,7 +131,8 @@ kernel/
 
 ## Not yet
 - One image for every revision: the 1.6 still needs its own image (a run-time 1.6 check in the X-codes is planned).
-- Revisions 1.0 – 1.3 and 1.5 are untested.
+- Retail 1.0 – 1.3 and 1.5 consoles are untested (their Conexant encoder runs on the debug kit; the 1.5's Focus on the
+  1.4).
 - Debugging on a real console (a GDB stub over the serial port).
 
 ## Credits and license
