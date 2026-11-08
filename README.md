@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/cc898ea8-d569-4c9a-b313-9798c5ed72c6
 *Vector Based OXOS Boot Animation*
 
 ## Highlights
-- **Xbox 1.6 support:** Now supprts 1.0 -> 1.6 consoles (Conexant/Focus/Xcalibur encoders).
+- **Xbox 1.0 -> 1.6 support:** Now supports all console revisions (Conexant/Focus/Xcalibur encoders).
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca_compliance.md)).
 - **Open BIOS:** our own boot code from the first instruction; 
 - **Vector-based boot animation:** the OXOS vector based animation at boot (250% more free kernel space!)
