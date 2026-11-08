@@ -4,7 +4,7 @@ OXOS is an open-source replacement for the original Xbox's kernel and BIOS. It r
 [xemu](https://xemu.app) and on real consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump is
 needed to build or run it.
 
-[![The OXOS boot screen: click to play the video](docs/oxos_video_preview.jpg)](https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c)
+[![The OXOS boot screen: click to play the video](docs/oxos_video_preview.jpg)](docs/demo_video.md)
 
 *From Blank Disk to XB Live Dashboard in seconds!! (click to play)*
 
