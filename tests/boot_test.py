@@ -711,6 +711,7 @@ def fatal_checks(mon):
         "error code drawn on screen": fb != 0 and lit > 20
             and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
         "the error's title drawn under it": text > 20,
+        f"the boot sound stopped ({mon.read('XkFatalSoundStopped')})": mon.read("XkFatalSoundStopped") in (1, 2),
     }}, code
 
 
@@ -727,8 +728,15 @@ def blank_disk_fatal_checks(mon, reason, seconds):
     code = mon.read("IdexFatalErrorCode")
     got = (mon.read("IdexDiskCountdownSeconds"), mon.read("IdexDiskCountdownReason"))
     print(f"  (fatal error {code}, countdown {got[0]} s, reason {got[1]})")
+    for _ in range(60):  # with the splash still running, the error waits for it and the jingle (up to a few seconds)
+        stopped = mon.read("XkFatalSoundStopped")
+        if stopped:
+            break
+        time.sleep(0.25)
     checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
-              "formatted, then no dashboard: fatal error 13": code == 13}
+              "formatted, then no dashboard: fatal error 13": code == 13,
+              # the jingle must not keep looping under the error screen (1: stopped at once, 2: ended with the splash)
+              f"the boot sound stopped ({stopped})": stopped in (1, 2)}
     if seconds:
         checks["the countdown screen was shown"] = shown != 0
     return {"blank disk": checks}

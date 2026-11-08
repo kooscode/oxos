@@ -251,3 +251,14 @@ void HalpEndBootSound() {
         BootSoundThreadObject = nullptr;
     }
 }
+
+// Resident: a fatal error on the idle thread (core/fatal.cpp) stops the sound at once, as the jingle's thread no longer
+// runs to finish it; left running, the controller replays its buffers in a loop.
+#pragma code_seg()
+
+void HalpStopBootSound() {
+    if (Ac97) {
+        Ac97[PCM_OUT + CR] = 0;
+        Ac97[SPDIF_OUT + CR] = 0;
+    }
+}

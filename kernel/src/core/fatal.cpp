@@ -11,6 +11,8 @@
 
 volatile ULONG IdexFatalErrorCode;      // the last reported code (read by the boot tests)
 volatile ULONG XkFatalErrorFrameBuffer; // the error screen's physical address (read by the boot tests)
+// How the error stopped the boot sound: 1 at once (the idle thread), 2 with the splash (read by the boot tests).
+volatile ULONG XkFatalSoundStopped;
 
 // --- The error history in the EEPROM
 
@@ -204,8 +206,8 @@ void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
     XkpDiskLine(lines[0], sizeof(lines[0]));
     RtlSnprintf(lines[1], sizeof(lines[1]), "Size: %lu GB", (ULONG)(IdexDiskLengthInSectors / 1953125));
     RtlSnprintf(lines[2], sizeof(lines[2]), "Holds: %s", What);
-    RtlSnprintf(lines[5], sizeof(lines[5]), "exFAT, with the folders C E F X Y Z OXOS.");
-    RtlSnprintf(lines[7], sizeof(lines[7]), "- Turn the console off now to keep the disk.");
+    RtlSnprintf(lines[5], sizeof(lines[5]), "exFAT, with all required folders.");
+    RtlSnprintf(lines[7], sizeof(lines[7]), "  !! TURN OFF POWER TO SKIP FORMATTING !!");
     for (ULONG i = 0; i < 8; i++)
         XkDrawText(fb, XKP_W, XKP_LEFT, 244 + i * XKP_LINE, lines[i], 2, i < 3 ? XKP_TEXT : XKP_WHITE);
     XkpDrawSeconds(fb, Seconds);
@@ -283,7 +285,24 @@ void XkShowBugCheck(ULONG Code, const ULONG_PTR *Parameters) {
     RtlZeroMemory(KiCertKey, sizeof(KiCertKey));
     RtlZeroMemory(KiPersistedBootKeys + 16, 16);
     XkpRecordError(Code);
+    // The sound must stop: left running, the sound controller replays the jingle's last buffers in a loop. On the boot
+    // thread, which is the idle thread during start-up (the disk's errors, a title launch from it), nothing else runs
+    // once it halts and it must never wait: the controller is stopped at once. Any other thread lets the splash and the
+    // jingle finish, as before a title starts (HalpEndSplash), and then blocks rather than spins.
+    bool idle = KeGetCurrentThread() == KiPcr.Prcb->IdleThread;
+    if (idle)
+        HalpStopBootSound();
+    else
+        HalpEndSplash();
+    XkFatalSoundStopped = idle ? 1 : 2;
     XkpShowCode(Code);
-    for (;;) // possibly on the boot thread: halt, but keep the clock and DPCs running
-        __asm__ volatile("sti; hlt");
+    for (;;) {
+        if (idle) { // halt, but keep the clock and DPCs running
+            __asm__ volatile("sti; hlt");
+        } else {
+            LARGE_INTEGER forever;
+            forever.QuadPart = -36000000000LL; // an hour at a time
+            KeDelayExecutionThread(KernelMode, FALSE, &forever);
+        }
+    }
 }
