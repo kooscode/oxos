@@ -11,7 +11,8 @@ and draws a screen that says what happened and what to try.
 - One font for every OXOS screen: `text.cpp`, the OXOS 5x8 font (drawn for OXOS), printable ASCII 0x20–0x7E, one
   byte per row. Rows 0–6 hold capitals and digits (row 6 is the baseline), row 7 descenders. A glyph is drawn as
   `Scale x Scale` squares, glyphs `6 * Scale` apart (`XkDrawText`, `XkTextWidth`).
-- The boot splash's caption and its `[v0.3.16/CONEXANT]` label use the same code (`XkVersionLabel`).
+- The boot splash's caption and its `[ Hold X for File Manager - v0.4.2/CONEXANT ]` label use the same code
+  (`XkVersionLabel`).
 - `text.cpp` is resident (not boot-only, not `-O2`): fatal errors 13, 20 and 21 and bug checks come after the
   boot-only pages are freed (spec/oxos_internal/18).
 
@@ -26,7 +27,10 @@ and draws a screen that says what happened and what to try.
 | what happened and what to try | y 244, x 48, 20 px apart | scale 2, light grey |
 | details | 8 px below | scale 2, grey |
 
-Lines are at most 45 characters (`XK_FATAL_LINE`, 45 x 12 px fits between 48 px margins); at most six help lines so
+An `X` with two spaces on each side in any text (`Press  X  to`) is drawn as the controller's X button: a bold blue
+X in a blue ring (`XkDrawText`; the splash's label uses it too).
+
+Lines are at most 45 characters (`XK_FATAL_LINE`, 45 x 12 px fits between 48 px margins); at most seven help lines so
 the details stay inside the part of the picture a TV shows. A unit test (`tests/unit/test_fatal.cpp`) checks every
 code's title and lines.
 
@@ -36,7 +40,7 @@ code's title and lines.
 | 7 | HDD Timeout | the disk is still busy after 30 s | disk model, status |
 | 8 | HDD IDENTIFY Failed | IDENTIFY, or the commands after an unlock, fail | disk model, status |
 | 9 | No HDD Detected | SET FEATURES gets no answer, or the disk is under 8 GB (0xEE8AB0 sectors) | disk model and size when it answered, else status |
-| 13–19 | No Dashboard Found (on a cold boot: the upload server's screen instead, spec/oxos_internal/31) | none of `C:\evoxdash.xbe`, `E:\evoxdash.xbe`, `C:\xboxdash.xbe`, `E:\XBLDashboard\default.xbe` loads (14–19: 13 + the launch data's dashboard reason) | the reason for 14–19 |
+| 13–19 | No Dashboard Found | none of `C:\evoxdash.xbe`, `E:\evoxdash.xbe`, `C:\xboxdash.xbe`, `E:\XBLDashboard\default.xbe` loads (14–19: 13 + the launch data's dashboard reason); the help lists those paths and "[ Press X to launch Web File Manager ]"; on a cold boot X then opens the File Manager (spec/oxos_internal/32 §1) | the reason for 14–19 |
 | 20 | No Dashboard Found (Disc Inserted) | the same, with an authenticated game disc in the drive | |
 | 21 | Previous Boot Failed | a cold boot after `HalReturnToFirmware(4)` (fatal error reboot by a title or the dashboard; SMC scratch bit 1, cleared at every boot) | |
 | other | Fatal Error | anything else (e.g. 0x10E5F, the DVD device could not be created) | the full code |

@@ -648,10 +648,13 @@ const XK_FATAL_HELP *XkFatalHelp(ULONG Code);
 // The countdown before a blank or foreign disk is formatted (storage/disk_layout.cpp): Title and What (what the disk
 // holds) with Seconds left, redrawn with each call; Title null takes the screen down.
 void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds);
-// The upload server's screen (uploader/server.cpp, spec/oxos_internal/31 §5): "No Dashboard Found" (Code 13-20) with
-// the server's Address (null or "" while it has none) and a Status line, redrawn with each call; closed before the
-// title it launches starts.
-void XkShowUploadScreen(ULONG Code, const char *Address, const char *Status);
-void XkCloseUploadScreen();
+// The OXOS File Manager's screen (uploader/server.cpp, spec/oxos_internal/32 §5; boot-only): the server's Address
+// (null or "" while it has none) and a Status line, redrawn with each call; closed before the title it launches starts.
+void XkShowFileManagerScreen(const char *Address, const char *Status);
+void XkCloseFileManagerScreen();
+// No Dashboard Found (13-20) on a cold boot (core/fatal.cpp, spec/oxos_internal/32 §1; boot-only): the fatal error's
+// screen, LED and history, keeping the boot-only pages and the keys, until X is pressed; then it returns, the
+// screen closed, for the File Manager.
+void XkNoDashboardError(ULONG Code);
 // The bug check screen, drawn into the frame buffer on screen (KeBugCheckEx, interrupts off).
 void XkShowBugCheck(ULONG Code, const ULONG_PTR *Parameters);

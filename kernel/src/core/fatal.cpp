@@ -8,6 +8,7 @@
 #include <xk/titles.h>
 #include <xk/storage.h>
 #include <xk/bootscreen.h>
+#include <xk/gamepad.h>
 
 volatile ULONG IdexFatalErrorCode;      // the last reported code (read by the boot tests)
 volatile ULONG XkFatalErrorFrameBuffer; // the error screen's physical address (read by the boot tests)
@@ -44,15 +45,16 @@ static void XkpRecordError(ULONG Code) {
 // what to try and the details, or (bug checks) the bug check code and its parameters. Left edge and line spacing:
 constexpr ULONG XKP_W = 640, XKP_H = 480, XKP_LEFT = 48, XKP_LINE = 20;
 constexpr ULONG XKP_WHITE = 0xFFFFFF, XKP_TEXT = 0xC8C8C8, XKP_GREY = 0x808080;
+constexpr ULONG XKP_DIGIT = 0xFFFFFFFF; // the large digits' white (the boot tests look for this value)
 
 // Seven-segment digits, our own layout: bit 0 top, 1 upper right, 2 lower right, 3 bottom, 4 lower left,
 // 5 upper left, 6 middle.
 static const UCHAR XkpSegments[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
 
-static void XkpFill(ULONG *fb, ULONG x, ULONG y, ULONG w, ULONG h) {
+static void XkpFill(ULONG *fb, ULONG x, ULONG y, ULONG w, ULONG h, ULONG color) {
     for (ULONG j = y; j < y + h; j++) {
         for (ULONG i = x; i < x + w; i++)
-            fb[j * XKP_W + i] = 0xFFFFFFFF;
+            fb[j * XKP_W + i] = color;
     }
 }
 
@@ -60,19 +62,19 @@ static void XkpDrawDigit(ULONG *fb, ULONG x, ULONG y, ULONG digit) {
     const ULONG w = 60, h = 110, t = 12, half = (h - t) / 2;
     UCHAR s = XkpSegments[digit % 10];
     if (s & 0x01)
-        XkpFill(fb, x, y, w, t);
+        XkpFill(fb, x, y, w, t, XKP_DIGIT);
     if (s & 0x02)
-        XkpFill(fb, x + w - t, y, t, half + t);
+        XkpFill(fb, x + w - t, y, t, half + t, XKP_DIGIT);
     if (s & 0x04)
-        XkpFill(fb, x + w - t, y + half, t, half + t);
+        XkpFill(fb, x + w - t, y + half, t, half + t, XKP_DIGIT);
     if (s & 0x08)
-        XkpFill(fb, x, y + h - t, w, t);
+        XkpFill(fb, x, y + h - t, w, t, XKP_DIGIT);
     if (s & 0x10)
-        XkpFill(fb, x, y + half, t, half + t);
+        XkpFill(fb, x, y + half, t, half + t, XKP_DIGIT);
     if (s & 0x20)
-        XkpFill(fb, x, y, t, half + t);
+        XkpFill(fb, x, y, t, half + t, XKP_DIGIT);
     if (s & 0x40)
-        XkpFill(fb, x, y + half, w, t);
+        XkpFill(fb, x, y + half, w, t, XKP_DIGIT);
 }
 
 static void XkpCentred(ULONG *fb, ULONG y, const char *text, ULONG scale, ULONG color) {
@@ -141,7 +143,7 @@ static void XkpDrawFatal(ULONG *fb, ULONG Code) {
 }
 
 // --- Opening and closing a screen: the fatal error's, and those that stay up while the kernel works (the format
-// countdown, the upload server: drawn once, then only the parts that change; taken down before the boot goes on).
+// countdown, the File Manager: drawn once, then only the parts that change; taken down before the boot goes on).
 
 static void XkpClear(ULONG *fb, ULONG x, ULONG y, ULONG w, ULONG h) {
     for (ULONG j = y; j < y + h; j++)
@@ -174,13 +176,14 @@ static void XkpCloseScreen(ULONG **fb) {
 }
 
 // The fatal error screen (only with an AV pack connected), in its own frame buffer.
-static void XkpShowCode(ULONG Code) {
+static ULONG *XkpShowCode(ULONG Code) {
     ULONG *fb = XkpOpenScreen();
     if (!fb)
-        return;
+        return nullptr;
     XkpDrawFatal(fb, Code);
     XkpShowScreen(fb);
     XkFatalErrorFrameBuffer = MmGetPhysicalAddress(fb);
+    return fb;
 }
 
 // --- The countdown before the kernel formats a blank or foreign disk (spec/oxos_internal/30 §4)
@@ -222,45 +225,79 @@ void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
     XkpCountdownScreen = fb;
 }
 
-// --- The upload server's screen (spec/oxos_internal/31 §5): "No Dashboard Found" with the server's address
+// --- The OXOS File Manager's screen (spec/oxos_internal/32 §5): a folder, the title and the server's address.
+// Boot-only: the server (uploader/server.cpp) draws it before the first title starts.
 
-static ULONG *XkpUploadScreen; // its frame buffer while it is shown
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
 
-// The lines that change: the address (line 1) and the status (line 6).
-constexpr ULONG XKP_ADDRESS_LINE = 244 + XKP_LINE, XKP_STATUS_LINE = 244 + 6 * XKP_LINE;
+static ULONG *XkpFileManagerScreen; // its frame buffer while it is shown
 
-static void XkpDrawUploadState(ULONG *fb, const char *Address, const char *Status) {
-    char line[XK_FATAL_LINE + 1];
-    XkpClear(fb, XKP_LEFT, XKP_ADDRESS_LINE, XKP_W - 2 * XKP_LEFT, 16);
-    if (Address && Address[0])
-        RtlSnprintf(line, sizeof(line), "  http://%s/", Address);
-    else
-        RtlSnprintf(line, sizeof(line), "  (no network address yet)");
-    XkDrawText(fb, XKP_W, XKP_LEFT, XKP_ADDRESS_LINE, line, 2, XKP_WHITE);
-    XkpClear(fb, XKP_LEFT, XKP_STATUS_LINE, XKP_W - 2 * XKP_LEFT, 16);
-    RtlSnprintf(line, sizeof(line), "%s", Status ? Status : "");
-    XkDrawText(fb, XKP_W, XKP_LEFT, XKP_STATUS_LINE, line, 2, XKP_GREY);
+constexpr ULONG XKP_GREEN = 0x88FF66, XKP_DARK_GREEN = 0x55BB33;
+// The lines that change: the address (large) and the status.
+constexpr ULONG XKP_ADDRESS_LINE = 272, XKP_STATUS_LINE = 380;
+
+// A folder in the place of an error's digits, with an arrow up on it: uploads.
+static void XkpDrawFolder(ULONG *fb) {
+    XkpFill(fb, 250, 76, 60, 16, XKP_DARK_GREEN);  // the tab
+    XkpFill(fb, 250, 90, 140, 92, XKP_DARK_GREEN); // the back
+    XkpFill(fb, 250, 104, 140, 78, XKP_GREEN);     // the front
+    XkpFill(fb, 314, 128, 12, 40, 0);              // the arrow's shaft
+    for (ULONG row = 0; row < 18; row++)           // its head
+        XkpFill(fb, 320 - row - 1, 112 + row, 2 * row + 2, 1, 0);
 }
 
-void XkShowUploadScreen(ULONG Code, const char *Address, const char *Status) {
-    if (XkpUploadScreen)
-        return XkpDrawUploadState(XkpUploadScreen, Address, Status);
+static void XkpDrawFileManagerState(ULONG *fb, const char *Address, const char *Status) {
+    char line[XK_FATAL_LINE + 1];
+    XkpClear(fb, 0, XKP_ADDRESS_LINE, XKP_W, 24);
+    if (Address && Address[0])
+        RtlSnprintf(line, sizeof(line), "http://%s/", Address);
+    else
+        RtlSnprintf(line, sizeof(line), "(no network address yet)");
+    XkpCentred(fb, XKP_ADDRESS_LINE, line, 3, XKP_GREEN);
+    XkpClear(fb, 0, XKP_STATUS_LINE, XKP_W, 16);
+    XkpCentred(fb, XKP_STATUS_LINE, Status ? Status : "", 2, XKP_GREY);
+}
+
+void XkShowFileManagerScreen(const char *Address, const char *Status) {
+    if (XkpFileManagerScreen)
+        return XkpDrawFileManagerState(XkpFileManagerScreen, Address, Status);
     ULONG *fb = XkpOpenScreen();
     if (!fb)
         return;
-    XkpDrawDigit(fb, 330, 72, Code % 10);
-    XkpDrawDigit(fb, 250, 72, Code / 10 % 10);
-    XkpTitle(fb, 204, XkFatalHelp(Code)->Title);
-    XkDrawText(fb, XKP_W, XKP_LEFT, 244, "Upload one from a browser on this network:", 2, XKP_TEXT);
-    XkDrawText(fb, XKP_W, XKP_LEFT, 244 + 3 * XKP_LINE, "[ You can upload files and launch any XBE ]", 2, XKP_TEXT);
-    XkpDrawUploadState(fb, Address, Status);
+    XkpDrawFolder(fb);
+    XkpCentred(fb, 204, "OXOS File Manager", 3, XKP_GREEN);
+    XkpCentred(fb, 244, "Open this address in a browser:", 2, XKP_TEXT);
+    XkpCentred(fb, 316, "[ Upload files, manage folders, launch XBEs ]", 2, XKP_TEXT);
+    XkpCentred(fb, 430, "Launch an XBE, or turn the console off.", 2, XKP_GREY);
+    XkpDrawFileManagerState(fb, Address, Status);
     XkpShowScreen(fb);
-    XkpUploadScreen = fb;
+    XkpFileManagerScreen = fb;
 }
 
-void XkCloseUploadScreen() {
-    XkpCloseScreen(&XkpUploadScreen);
+void XkCloseFileManagerScreen() {
+    XkpCloseScreen(&XkpFileManagerScreen);
 }
+
+// --- No Dashboard Found on a cold boot (spec/oxos_internal/32 §1): the fatal error's screen until X is pressed
+
+void XkNoDashboardError(ULONG Code) {
+    XK_SERIAL("*** fatal error %lu: X opens the File Manager\n", Code);
+    IdexFatalErrorCode = Code;
+    HalWriteSMBusValue(0x20, 0x08, FALSE, 0xE1); // LED sequence, then LED mode "custom", as IdexFatalError
+    HalWriteSMBusValue(0x20, 0x07, FALSE, 1);
+    XkpRecordError(Code);
+    HalpStopSplash(); // the jingle has ended; the boot-only pages stay (the USB and the File Manager run from them)
+    XkFatalSoundStopped = 2;
+    ULONG *fb = XkpShowCode(Code);
+    GamepadWaitForX();
+    IdexFatalErrorCode = 0;
+    XkpCloseScreen(&fb);
+    HalpSetBootLed(0x0F);
+}
+
+#pragma code_seg()
+#pragma const_seg()
 
 // The running title's ID from its XBE header at 0x10000 (certificate address at +0x118, title ID at +8); 0 if none.
 static ULONG XkpTitleId() {

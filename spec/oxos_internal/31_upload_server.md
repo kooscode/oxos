@@ -5,16 +5,14 @@ Status: implemented 2026-11-08. Code: `kernel/src/network/` (the network card an
 bring-up, shared with the 2BL's netboot), `kernel/src/titles/loader.cpp` (when it runs), `kernel/src/core/fatal.cpp`
 (its screen).
 
-A console without a dashboard, such as one whose disk OXOS has just formatted (spec/oxos_internal/30), gets one
-without a PC tool: the kernel serves a web page on the local network, and any browser uploads files and folders to
-the disk and launches an XBE.
+The OXOS File Manager: the kernel serves a web page on the local network, and any browser uploads files and folders
+to the disk, creates and deletes folders and files, and launches an XBE. A console without a dashboard, such as one
+whose disk OXOS has just formatted (spec/oxos_internal/30), gets one without a PC tool.
 
 ## 1. When it runs
-Where the kernel would stop with "No Dashboard Found" (13–20, spec/oxos_internal/29) on a cold boot: no title to
-start, and none of the dashboards of spec/oxos_internal/19 loads. Instead of that fatal error it shows the upload
-screen (§5) and serves until an XBE is launched. When the network card does not start (no PCI device), the fatal
-error comes as before. A quick reboot into the dashboard with none on the disk reboots cold, as before (the server
-runs from code freed when the first title started, §6).
+On a cold boot with X pressed during the boot splash or on the "No Dashboard Found" screen
+(spec/oxos_internal/32), until an XBE is launched. When the network card does not start (no PCI device), the title is chosen as usual. Until 2026-11-08 it
+also ran by itself where the kernel would stop with "No Dashboard Found"; that screen now waits for X.
 
 ## 2. The network
 - **The card:** the MCPX's NVIDIA Ethernet controller, polled (no interrupts), with the same bring-up as the 2BL's
@@ -62,17 +60,8 @@ folder" (the browser sends every file with its path inside the folder: a whole d
 at a time with `PUT` and a progress line.
 
 ## 5. The screen
-The fatal error screen's layout (spec/oxos_internal/29 §2), not a fatal error (no LED sequence, no EEPROM error
-history): the code in large digits as before, "No Dashboard Found", and
-
-```
-Upload one from a browser on this network:
-  http://192.168.1.91/
-
-[ You can upload files and launch any XBE ]
-
-<status: waiting for the network / an address / the last upload or launch>
-```
+The OXOS File Manager's screen: spec/oxos_internal/32 §5. Its status line shows the network's state, then the last
+upload, create, delete or launch.
 
 ## 6. Memory
 The network stack, the server and its page are boot-only (spec/oxos_internal/18; about 15 KB of code and data): they

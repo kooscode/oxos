@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 - **Complete kernel:** Every function and variable of the retail kernel, written [clean-room](dmca_compliance.md).
 - **Open Source BIOS:** Original code from first instruction at boot to launching and running any XBOX Title.
 - **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions keep working.
-- **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; use the
+- **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; press the X button for the
   [OXOS File Manager](#oxos-file-manager) to upload files and launch XBEs from any browser.
 - **Games from disc images:** of your own discs (XISO, full dumps, CCI).
 - **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
@@ -43,16 +43,27 @@ revisions are welcome in the [issues](https://github.com/kooscode/oxos/issues). 
 wires short ([wiring notes](tools/modxo/README.md#hardware)).
 
 ## OXOS File Manager
-<table><tr>
-<td width="50%"><img width="100%" src="docs/oxos_no_dashboard.jpg" alt="The Xbox screen with no dashboard: the File Manager's address"></td>
-<td width="50%"><img width="100%" src="docs/oxos_file_manager.jpg" alt="The OXOS File Manager in a browser"></td>
-</tr><tr>
-<td align="center"><em>On the Xbox</em></td>
-<td align="center"><em>In the browser</em></td>
-</tr></table>
+<table>
+<tr>
+<td width="50%"><img width="100%" src="docs/oxos_format_drive.png" alt="Blank Hard Disk Found: a countdown before OXOS formats the disk as exFAT"></td>
+<td width="50%"><img width="100%" src="docs/oxos_no_dashboard.png" alt="No Dashboard Found: the dashboards tried, and Press X to launch Web File Manager"></td>
+</tr>
+<tr>
+<td align="center"><em>1. A blank disk is formatted as exFAT</em></td>
+<td align="center"><em>2. No dashboard yet: press X</em></td>
+</tr>
+<tr>
+<td width="50%"><img width="100%" src="docs/oxos_file_manager_xbox.png" alt="The OXOS File Manager screen on the Xbox, with its web address"></td>
+<td width="50%"><img width="100%" src="docs/oxos_file_manager_browser.jpg" alt="The OXOS File Manager in a browser"></td>
+</tr>
+<tr>
+<td align="center"><em>3. The File Manager on the Xbox</em></td>
+<td align="center"><em>4. The File Manager in the browser</em></td>
+</tr>
+</table>
 
-When the console has no dashboard (a new disk, for example), OXOS shows a web address on the screen. Open it in any
-browser on the same network to:
+Press **X** on a controller while the boot logo and jingle play, or on the "No Dashboard Found" screen: OXOS
+shows a web address. Open it in any browser on the same network to:
 - browse the drives;
 - upload single files or whole folders (a complete dashboard in one go, about 11 MB/s);
 - create folders, and delete files and empty folders;
@@ -60,7 +71,7 @@ browser on the same network to:
 
 It is built into the kernel and its memory is freed when a title starts, so games lose nothing. There is no log-in:
 anyone on the local network can use it while it is on screen.
-[Details](spec/oxos_internal/31_upload_server.md).
+[Details](spec/oxos_internal/32_file_manager_button.md).
 
 ## Games and disks
 - **exFAT:** format the disk as exFAT on a PC, or let OXOS do it: a blank or non-Xbox disk is formatted at boot after

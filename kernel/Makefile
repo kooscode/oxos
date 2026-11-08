@@ -111,8 +111,12 @@ all: $(BUILD)/xboxkrnl.exe
 
 # Boot-only code (spec/oxos_internal/18_boot_memory.md): these files may call one another's boot-only functions.
 BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj,nic.obj,ip.obj,tcp.obj,server.obj,page.obj
-# ... and the boot-only functions kept code calls during a cold boot, before the pages are freed.
-BOOT_ENTRIES := HalpStartSplash,UploadServe,UploadStop
+BOOT_OBJS := $(BOOT_OBJS),usb_host.obj,pads.obj
+# ... and the boot-only functions kept code calls during a cold boot, before the pages are freed, or that a kept file
+# defines for the boot-only code (the File Manager's screen, in core/fatal.cpp with the other screens).
+BOOT_ENTRIES := HalpStartSplash,HalpWaitForSplash,UploadServe,UploadStop
+BOOT_ENTRIES := $(BOOT_ENTRIES),XkShowFileManagerScreen,XkCloseFileManagerScreen,XkNoDashboardError
+BOOT_ENTRIES := $(BOOT_ENTRIES),GamepadWaitForX
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 
@@ -391,6 +395,7 @@ test_format:
 	$(FORMAT_TEST)
 	$(FORMAT_TEST) --blank-marker 0
 	$(FORMAT_TEST) --foreign
+	$(FORMAT_TEST) --blank-marker 0 --x-at-error
 
 # The upload server (spec/oxos_internal/31): a blank disk formatted at once, no dashboard on it, so the kernel serves
 # the upload page; the test uploads a file and the FTP server's XBE through xemu's NAT network and launches it.

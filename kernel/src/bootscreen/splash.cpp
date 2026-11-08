@@ -11,6 +11,7 @@
 #include <xk/runtime.h>
 #include <xk/hardware.h>
 
+#include <xk/gamepad.h>
 #include <xk/jingle.h>
 #include <xk/vsplash.h>
 
@@ -50,20 +51,21 @@ static void HalpDrawText(ULONG *img, const char *text, ULONG y, ULONG scale, ULO
     XkDrawText(img, SPLASH_W, (SPLASH_W - XkTextWidth(text, scale)) / 2, y, text, scale, color);
 }
 
-// The OXOS version and the video encoder (XkVersionLabel), small and grey in the bottom right corner, inside the part
-// of the picture a TV shows: [v0.3.16/CONEXANT].
-static void HalpDrawEncoderLabel(ULONG *img) {
-    char label[48];
-    label[0] = '[';
-    XkVersionLabel(label + 1, sizeof(label) - 2);
-    ULONG n = 1;
+// The hint for the File Manager and the OXOS version and video encoder (XkVersionLabel), small and grey, centred at the
+// bottom, inside the part of the picture a TV shows: [ Hold (X) for File Manager - v0.4.2/CONEXANT ].
+static void HalpDrawSplashLabel(ULONG *img) {
+    static const char hint[] = "[ Hold  X  for File Manager - "; // the X drawn as the button (XkDrawText)
+    char label[64];
+    RtlCopyMemory(label, hint, sizeof(hint));
+    ULONG n = sizeof(hint) - 1;
+    XkVersionLabel(label + n, sizeof(label) - n - 3);
     while (label[n])
         n++;
-    label[n] = ']';
-    label[n + 1] = 0;
+    label[n] = ' ';
+    label[n + 1] = ']';
+    label[n + 2] = 0;
     constexpr ULONG scale = 2, margin = 40;
-    ULONG width = XkTextWidth(label, scale);
-    XkDrawText(img, SPLASH_W, SPLASH_W - margin - width, SPLASH_H - margin - 7 * scale, label, scale, 0x707070);
+    HalpDrawText(img, label, SPLASH_H - margin - 7 * scale, scale, 0x707070);
 }
 
 static LONG HalpAbs(LONG v) {
@@ -148,9 +150,9 @@ static void NTAPI HalpSplashThread(PVOID) {
         HalpDrawText(HalpSplashImage, "OXOS", 330, 6, 0xA8B4A0);
         HalpSplashSource = 1;
     }
-    HalpDrawEncoderLabel(HalpSplashImage);
+    HalpDrawSplashLabel(HalpSplashImage);
     if (HalpSplashStart)
-        HalpDrawEncoderLabel(HalpSplashStart);
+        HalpDrawSplashLabel(HalpSplashStart);
     // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
     AvPrepareBootDisplay();
     AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, SPLASH_PITCH,
@@ -177,10 +179,16 @@ static void NTAPI HalpSplashThread(PVOID) {
     const ULONG endMs = jingle::LengthMs(); // the end picture stays until the jingle has died away
     XK_SERIAL("splash: logo for %lu ms, then the jingle and a cross-fade of %lu ms, held to %lu ms\n", SPLASH_LOGO_MS,
               climaxMs, endMs);
+    // Sleeps, reading the controllers about every 10 ms meanwhile (spec/oxos_internal/32 §2).
     auto sleepMs = [](ULONG ms) {
-        LARGE_INTEGER t;
-        t.QuadPart = -10000LL * ms;
-        KeDelayExecutionThread(KernelMode, FALSE, &t);
+        for (ULONG left = ms; left;) {
+            GamepadWatchPoll();
+            ULONG step = left < 10 ? left : 10;
+            LARGE_INTEGER t;
+            t.QuadPart = -10000LL * step;
+            KeDelayExecutionThread(KernelMode, FALSE, &t);
+            left -= step;
+        }
     };
     // Draws the mix of the start and end pictures (mix 0-256) at brightness level (0-256).
     auto draw = [&](ULONG level, ULONG mix) {
@@ -205,6 +213,9 @@ static void NTAPI HalpSplashThread(PVOID) {
         sleepMs(SPLASH_INTRO_MS - ms < SPLASH_FRAME_MS ? SPLASH_INTRO_MS - ms : SPLASH_FRAME_MS);
     }
     draw(256, 0);
+    // The controllers are set up while the start picture stands still (it blocks for a few hundred milliseconds),
+    // then read until the jingle ends: X opens the File Manager (spec/oxos_internal/32).
+    GamepadWatchStart();
     if (ULONG ms = sinceMs(shown); ms < SPLASH_LOGO_MS)
         sleepMs(SPLASH_LOGO_MS - ms);
     // 2. The jingle, and the cross-fade to the end picture (smoothstep: eases in and out), there at the climax.
@@ -227,6 +238,7 @@ static void NTAPI HalpSplashThread(PVOID) {
     if (ULONG ms = sinceMs(jingleStart); ms < endMs)
         sleepMs(endMs - ms);
     XK_SERIAL("splash: shown\n");
+    GamepadWatchStop();
     KeSetEvent(&HalpSplashDone, 0, FALSE);
 }
 
@@ -250,6 +262,10 @@ void HalpStartSplash() {
     KeResetEvent(&HalpSplashDone);
     HalpStartBootSound(); // synthesizing before the splash thread needs it
     HalpSplashThreadObject = KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
+}
+
+void HalpWaitForSplash() {
+    KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
 }
 
 #pragma code_seg()

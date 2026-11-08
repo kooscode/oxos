@@ -13,6 +13,7 @@
 #include <xk/selftest.h>
 #include <xk/bootscreen.h>
 #include <xk/filesystems.h>
+#include <xk/gamepad.h>
 #include <xk/uploader.h>
 
 constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
@@ -494,7 +495,7 @@ NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 
 // --- Launch (spec/stock/05 §1-3, §5)
 
-volatile ULONG XeTitleLaunched;          // 1 = disc title, 2 = dashboard, 3 = launched from the LaunchDataPage
+volatile ULONG XeTitleLaunched; // 1 = disc title, 2 = dashboard, 3 = from the LaunchDataPage, 4 = from the File Manager
 volatile ULONG XeLaunchReason;           // the cold-boot pre-launch check result (§1)
 volatile ULONG XeDashboardLaunchData[3]; // diagnostics: {type, reason, code} as last written for the dashboard
 
@@ -545,6 +546,22 @@ static ULONG XepCheckFirstBoot() {
     return reason;
 }
 
+// The OXOS File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads: true then. False when the
+// network card cannot be used.
+static bool XepServeFileManager() {
+    char path[260];
+    for (NTSTATUS last = STATUS_SUCCESS; UploadServe(last, path, sizeof(path));) {
+        last = XeLoadImage(path, FALSE);
+        if (NT_SUCCESS(last)) {
+            UploadStop();
+            XeTitleLaunched = 4;
+            return true;
+        }
+    }
+    XK_SERIAL("filemanager: no network card\n");
+    return false;
+}
+
 static void XepLaunchDashboard() {
     for (const char *path : XepDashboards) {
         if (NT_SUCCESS(XeLoadImage(path, TRUE)))
@@ -557,16 +574,11 @@ static void XepLaunchDashboard() {
             code += ldp->DashboardReason;
         else if (XeTitleDiscAuthenticated)
             code = 20;
-        // A cold boot with no dashboard: the upload server (spec/oxos_internal/31) until a browser launches an XBE
-        // that loads; the fatal error only when the network card cannot be used.
-        char path[260];
-        for (NTSTATUS last = STATUS_SUCCESS; UploadServe(code, last, path, sizeof(path));) {
-            last = XeLoadImage(path, FALSE);
-            if (NT_SUCCESS(last)) {
-                UploadStop();
-                return;
-            }
-        }
+        // The error's screen until X is pressed, then the File Manager (spec/oxos_internal/32 §1); the fatal
+        // error without a network card.
+        XkNoDashboardError(code);
+        if (XepServeFileManager())
+            return;
         IdexFatalError(code);
     }
     HalReturnToFirmware(4);
@@ -713,6 +725,13 @@ static void XepWaitForTray() {
     }
 }
 
+// Cold boot with X pressed during the splash (spec/oxos_internal/32): the File Manager instead of a title. False
+// without the press, or when the network card cannot be used (the title is then chosen as usual).
+static bool XepRunFileManager() {
+    HalpWaitForSplash();
+    return GamepadXPressed && XepServeFileManager();
+}
+
 // spec/stock/03 §4: cold boot runs the pre-launch checks and honours the SMC boot flags; a quick reboot just launches.
 static void XepChooseTitle() {
     if (KiQuickRebootFlag || (HalpBootFlags & 4) || (XeConsoleGameRegion & 0x80000000))
@@ -750,7 +769,8 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
             IdexFatalError(21);
         IdexDiskCountPowerCycle();
     }
-    XepChooseTitle();
+    if (KiQuickRebootFlag || !XepRunFileManager())
+        XepChooseTitle();
     HDDFSRememberTitleFolder();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
