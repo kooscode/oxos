@@ -91,6 +91,8 @@ ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),
 XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
+# The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
+CXXFLAGS += -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /SECTION:.xka,D /SECTION:.xkb,D \
@@ -108,9 +110,9 @@ OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) 
 all: $(BUILD)/xboxkrnl.exe
 
 # Boot-only code (spec/oxos_internal/18_boot_memory.md): these files may call one another's boot-only functions.
-BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj
+BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj,nic.obj,ip.obj,tcp.obj,server.obj,page.obj
 # ... and the boot-only functions kept code calls during a cold boot, before the pages are freed.
-BOOT_ENTRIES := HalpStartSplash
+BOOT_ENTRIES := HalpStartSplash,UploadServe,UploadStop
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 
@@ -381,7 +383,7 @@ test_fatal:
 
 # Formatting at boot (spec/oxos_internal/30 §4): a new blank 16 GB disk (5 s countdown: not a release build), a
 # blank one with the partition delete's marker asking for 0 s, and a PC disk (MBR, NTFS; 5 s); each is formatted,
-# then 13.
+# then, with no dashboard on it, the upload server starts (no network link in these runs: it waits for one).
 FORMAT_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
     $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --blank-hdd 16 --boot-wait 2
 test_format:
@@ -389,6 +391,12 @@ test_format:
 	$(FORMAT_TEST)
 	$(FORMAT_TEST) --blank-marker 0
 	$(FORMAT_TEST) --foreign
+
+# The upload server (spec/oxos_internal/31): a blank disk formatted at once, no dashboard on it, so the kernel serves
+# the upload page; the test uploads a file and the FTP server's XBE through xemu's NAT network and launches it.
+test_upload: ftp_server
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(ROOT)/tools/ftp_server/bin/default.xbe
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test_udf: $(BUILD)/bios.bin $(HDD_FETCH)
@@ -603,4 +611,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_fatal test_format test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_fatal test_format test_upload test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso

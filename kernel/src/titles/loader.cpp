@@ -13,6 +13,7 @@
 #include <xk/selftest.h>
 #include <xk/bootscreen.h>
 #include <xk/filesystems.h>
+#include <xk/uploader.h>
 
 constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
 constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10,
@@ -556,6 +557,16 @@ static void XepLaunchDashboard() {
             code += ldp->DashboardReason;
         else if (XeTitleDiscAuthenticated)
             code = 20;
+        // A cold boot with no dashboard: the upload server (spec/oxos_internal/31) until a browser launches an XBE
+        // that loads; the fatal error only when the network card cannot be used.
+        char path[260];
+        for (NTSTATUS last = STATUS_SUCCESS; UploadServe(code, last, path, sizeof(path));) {
+            last = XeLoadImage(path, FALSE);
+            if (NT_SUCCESS(last)) {
+                UploadStop();
+                return;
+            }
+        }
         IdexFatalError(code);
     }
     HalReturnToFirmware(4);

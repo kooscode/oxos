@@ -718,30 +718,78 @@ def fatal_checks(mon):
 
 
 def blank_disk_fatal_checks(mon, reason, seconds):
-    """A blank (reason 1) or foreign (2) disk: the kernel counts down, formats it, finds no dashboard on it and stops
-    with 13 (spec/oxos_internal/30 §4)."""
+    """A blank (reason 1) or foreign (2) disk: the kernel counts down, formats it, finds no dashboard on it and starts
+    the upload server (spec/oxos_internal/30 §4, 31 §1; xemu's network card has no link here: it waits for one)."""
     shown = 0
     for _ in range(4 * (seconds + 30)):
         if not shown and mon.read("XkFatalErrorFrameBuffer") == 0 and mon.read("IdexDiskCountdownSeconds"):
             shown = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)  # the countdown on screen
-        if mon.read("IdexFatalErrorCode"):
+        if mon.read("IdexFatalErrorCode") or mon.read("UploadServing"):
             break
         time.sleep(0.25)
-    code = mon.read("IdexFatalErrorCode")
+    code, serving = mon.read("IdexFatalErrorCode"), mon.read("UploadServing")
     got = (mon.read("IdexDiskCountdownSeconds"), mon.read("IdexDiskCountdownReason"))
-    print(f"  (fatal error {code}, countdown {got[0]} s, reason {got[1]})")
-    for _ in range(60):  # with the splash still running, the error waits for it and the jingle (up to a few seconds)
-        stopped = mon.read("XkFatalSoundStopped")
-        if stopped:
-            break
-        time.sleep(0.25)
+    print(f"  (fatal error {code}, upload server {serving}, countdown {got[0]} s, reason {got[1]})")
+    freed = bin(mon.read("MiBootPagesFreed")).count("1") + bin(mon.read_offset("MiBootPagesFreed", 4)).count("1")
     checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
-              "formatted, then no dashboard: fatal error 13": code == 13,
-              # the jingle must not keep looping under the error screen (1: stopped at once, 2: ended with the splash)
-              f"the boot sound stopped ({stopped})": stopped in (1, 2)}
+              "formatted, then no dashboard: the upload server, not a fatal error": serving == 1 and code == 0,
+              f"the boot-only pages it runs from are kept ({freed} freed)": freed == 0}
     if seconds:
         checks["the countdown screen was shown"] = shown != 0
     return {"blank disk": checks}
+
+
+def upload_checks(mon, port, xbe):
+    """The upload server (spec/oxos_internal/31) on a freshly formatted disk with no dashboard: the page, the drives,
+    an upload read back through a listing, and a launch."""
+    import http.client, json
+    def request(method, path, body=None, timeout=30):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        c.request(method, path, body=body)
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+    page = None
+    for _ in range(240):  # the boot, the format, DHCP
+        try:
+            status, page = request("GET", "/", timeout=5)
+            if status == 200:
+                break
+        except OSError:
+            pass
+        time.sleep(0.5)
+    checks = {"the page is served": bool(page) and b"OXOS upload" in page}
+    if not checks["the page is served"]:
+        return {"upload server": checks}
+    status, drives = request("GET", "/api/list?path=%2F")
+    names = [e["name"] for e in json.loads(drives)] if status == 200 else []
+    checks[f"the drives are listed ({', '.join(names)})"] = {"C", "E", "F"} <= set(names)
+    blob = bytes((i * 7 + 3) & 0xFF for i in range(300000))
+    status, _ = request("PUT", "/api/file?path=%2FE%2Fupload%20test%2Fdata.bin", blob)
+    checks["a 300 KB upload into a new folder (201)"] = status == 201
+    status, listing = request("GET", "/api/list?path=%2FE%2Fupload%20test")
+    entries = json.loads(listing) if status == 200 else []
+    checks["it is listed with its size"] = any(e["name"] == "data.bin" and e["size"] == len(blob) for e in entries)
+    status, _ = request("GET", "/api/list?path=%2FE%2F..")
+    checks["'..' in a path is refused (400)"] = status == 400
+    if xbe:
+        data = open(xbe, "rb").read()
+        status, _ = request("PUT", "/api/file?path=%2FE%2Fapp%2Fdefault.xbe", data)
+        checks[f"an XBE uploaded ({len(data) >> 10} KB)"] = status == 201
+        status, _ = request("POST", "/api/launch?path=%2FE%2Fapp%2Fdefault.xbe")
+        checks["its launch is accepted"] = status == 200
+        launched = ""
+        for _ in range(60):
+            time.sleep(0.5)
+            ptr = mon.read_offset("XeImageFileName", 4)
+            raw = b"".join(struct.pack("<I", int(w, 16)) for w in re.findall(r"0x([0-9a-f]{8})",
+                           mon.hmp(f"x/16wx {ptr:#x}").split(":", 1)[1]))
+            launched = raw.split(b"\0")[0].decode("latin-1")
+            if launched.endswith("default.xbe"):
+                break
+        checks[f"the console runs it: {launched}"] = launched == "\\Device\\Harddisk0\\Partition1\\app\\default.xbe"
+    return {"upload server": checks}
 
 
 def blank_disk_checks(path, gigabytes):
@@ -944,6 +992,10 @@ def main():
                     "partition delete leaves, asking for SECONDS of countdown")
     ap.add_argument("--countdown", type=int, default=5, help="--blank-hdd: the countdown expected without a marker "
                     "(5 in development builds, 30 in release builds)")
+    ap.add_argument("--upload", type=int, metavar="PORT", help="--blank-hdd: xemu's NAT network with host port PORT "
+                    "forwarded to the console's 80; check the upload server (spec/oxos_internal/31): its page, a "
+                    "listing, an upload read back, and launching --upload-xbe")
+    ap.add_argument("--upload-xbe", help="--upload: the XBE to upload and launch")
     ap.add_argument("--foreign", action="store_true", help="--blank-hdd: a PC disk instead (MBR, one NTFS partition)")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
@@ -1015,7 +1067,9 @@ def main():
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
         + (f"hdd_path = '{hdd_copy}'\n" if a.hdd or a.blank_hdd else "")
-        + ("" if a.no_disc else f"dvd_path = '{dvd}'\n"))
+        + ("" if a.no_disc else f"dvd_path = '{dvd}'\n")
+        + (f"\n[net]\nenable = true\nbackend = 'nat'\n[net.nat]\n"
+           f"forward_ports = [{{host = {a.upload}, guest = 80, protocol = 'tcp'}}]\n" if a.upload else ""))
     log = open(os.path.join(work, "xemu.log"), "w")
     serial_log = os.path.join(work, "serial.log")
     serial_args = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
@@ -1037,6 +1091,8 @@ def main():
             results = udf_checks(mon)
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
+        elif a.blank_hdd and a.upload:
+            results = upload_checks(mon, a.upload, a.upload_xbe)
         elif a.blank_hdd:
             results = blank_disk_fatal_checks(mon, 2 if a.foreign else 1,
                                               a.blank_marker if a.blank_marker is not None else a.countdown)
@@ -1073,7 +1129,15 @@ def main():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed
     if a.blank_hdd:  # xemu has written the disk back
-        for name, passed in blank_disk_checks(hdd_copy, a.blank_hdd).items():
+        extra = {}
+        if a.upload:  # the upload, read back from the disk
+            try:
+                v = exfat.EXFAT(Qcow2(hdd_copy))
+                got = v.read_file("/E/upload test/data.bin")
+                extra["the upload on the disk, byte for byte"] = got == bytes((i * 7 + 3) & 0xFF for i in range(300000))
+            except Exception as e:
+                extra[f"the upload on the disk ({e})"] = False
+        for name, passed in {**blank_disk_checks(hdd_copy, a.blank_hdd), **extra}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] blank disk: {name}")
             ok &= passed
     if os.path.exists(hdd_copy) and a.keep_hdd:

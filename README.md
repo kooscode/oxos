@@ -56,6 +56,8 @@ welcome in the [issues](https://github.com/kooscode/oxos/issues).
 ## Games and disks
 - **exFAT disk:** format the disk as exFAT on a PC, as one partition or the whole disk, or on the console: the OXOS
   FTP server's `SITE FORMAT-EXFAT YES` turns any disk into one, and OXOS formats a blank disk by itself at boot.
+- **No dashboard?** The console shows a web address instead of an error: open it in any browser on the same network
+  to upload a dashboard (whole folders at once) and launch it. ([`spec/oxos_internal/31`](spec/oxos_internal/31_upload_server.md))
   The Xbox drives are folders at its root: `/C` (dashboard), `/E` (saves and apps), `/F` (games), and so on.
   [Details](spec/oxos_internal/05_exfat_storage_spec.md).
 - **Game folders:** [`tools/oxos_isonator`](tools/oxos_isonator) turns a disc image or an extracted game into a folder

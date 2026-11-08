@@ -126,7 +126,6 @@ static ULONG XkpFatalDetails(ULONG Code, char (*lines)[XK_FATAL_LINE + 1]) {
 }
 
 static void XkpDrawFatal(ULONG *fb, ULONG Code) {
-    XkpStartScreen(fb);
     XkpDrawDigit(fb, 330, 72, Code % 10);
     XkpDrawDigit(fb, 250, 72, Code / 10 % 10);
     const XK_FATAL_HELP *help = XkFatalHelp(Code);
@@ -141,30 +140,52 @@ static void XkpDrawFatal(ULONG *fb, ULONG Code) {
         XkDrawText(fb, XKP_W, XKP_LEFT, y, details[i], 2, XKP_GREY);
 }
 
-// The fatal error screen (only with an AV pack connected), in its own frame buffer.
-static void XkpShowCode(ULONG Code) {
-    if (HalBootSMCVideoMode == 7)
-        return;
-    const ULONG pitch = XKP_W * 4;
-    auto fb = (ULONG *)MmAllocateContiguousMemoryEx(pitch * XKP_H, 0, 0x3FFFFFF, 0x1000,
-                                                    PAGE_READWRITE | PAGE_WRITECOMBINE);
-    if (!fb)
-        return;
-    XkpDrawFatal(fb, Code);
-    ULONG phys = MmGetPhysicalAddress(fb);
-    AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, pitch, phys);
-    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr); // the screen on (spec/stock/22 §2.3)
-    XkFatalErrorFrameBuffer = phys;
-}
-
-// --- The countdown before the kernel formats a blank or foreign disk (spec/oxos_internal/30 §4)
-
-static ULONG *XkpCountdownScreen; // the countdown's frame buffer while it is shown
+// --- Opening and closing a screen: the fatal error's, and those that stay up while the kernel works (the format
+// countdown, the upload server: drawn once, then only the parts that change; taken down before the boot goes on).
 
 static void XkpClear(ULONG *fb, ULONG x, ULONG y, ULONG w, ULONG h) {
     for (ULONG j = y; j < y + h; j++)
         RtlZeroMemory(fb + j * XKP_W + x, w * 4);
 }
+
+// A new black screen with the header, or null without an AV pack or memory; XkpShowScreen puts it on the TV.
+static ULONG *XkpOpenScreen() {
+    if (HalBootSMCVideoMode == 7)
+        return nullptr;
+    auto fb = (ULONG *)MmAllocateContiguousMemoryEx(XKP_W * XKP_H * 4, 0, 0x3FFFFFF, 0x1000,
+                                                    PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (fb)
+        XkpStartScreen(fb);
+    return fb;
+}
+
+static void XkpShowScreen(ULONG *fb) {
+    AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, XKP_W * 4, MmGetPhysicalAddress(fb));
+    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr);
+}
+
+// Screen off (the boot goes on), memory back.
+static void XkpCloseScreen(ULONG **fb) {
+    if (!*fb)
+        return;
+    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
+    MmFreeContiguousMemory(*fb);
+    *fb = nullptr;
+}
+
+// The fatal error screen (only with an AV pack connected), in its own frame buffer.
+static void XkpShowCode(ULONG Code) {
+    ULONG *fb = XkpOpenScreen();
+    if (!fb)
+        return;
+    XkpDrawFatal(fb, Code);
+    XkpShowScreen(fb);
+    XkFatalErrorFrameBuffer = MmGetPhysicalAddress(fb);
+}
+
+// --- The countdown before the kernel formats a blank or foreign disk (spec/oxos_internal/30 §4)
+
+static ULONG *XkpCountdownScreen; // the countdown's frame buffer while it is shown
 
 // The line with the seconds (line 5 of the text) and the seconds in large digits.
 constexpr ULONG XKP_COUNTDOWN_LINE = 244 + 4 * XKP_LINE;
@@ -180,27 +201,13 @@ static void XkpDrawSeconds(ULONG *fb, ULONG Seconds) {
 }
 
 void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
-    auto regs = (PVOID)0xFD000000;
-    if (!Title) { // the countdown is over: screen off (the format and the boot go on), memory back
-        if (XkpCountdownScreen) {
-            AvSendTVEncoderOption(regs, 9, 1, nullptr);
-            MmFreeContiguousMemory(XkpCountdownScreen);
-            XkpCountdownScreen = nullptr;
-        }
-        return;
-    }
-    if (HalBootSMCVideoMode == 7)
-        return;
-    if (XkpCountdownScreen) {
-        XkpDrawSeconds(XkpCountdownScreen, Seconds);
-        return;
-    }
-    const ULONG pitch = XKP_W * 4;
-    auto fb = (ULONG *)MmAllocateContiguousMemoryEx(pitch * XKP_H, 0, 0x3FFFFFF, 0x1000,
-                                                    PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (!Title)
+        return XkpCloseScreen(&XkpCountdownScreen);
+    if (XkpCountdownScreen)
+        return XkpDrawSeconds(XkpCountdownScreen, Seconds);
+    ULONG *fb = XkpOpenScreen();
     if (!fb)
         return;
-    XkpStartScreen(fb);
     XkpTitle(fb, 204, Title);
     char lines[8][XK_FATAL_LINE + 1] = {};
     XkpDiskLine(lines[0], sizeof(lines[0]));
@@ -211,10 +218,48 @@ void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
     for (ULONG i = 0; i < 8; i++)
         XkDrawText(fb, XKP_W, XKP_LEFT, 244 + i * XKP_LINE, lines[i], 2, i < 3 ? XKP_TEXT : XKP_WHITE);
     XkpDrawSeconds(fb, Seconds);
-    ULONG phys = MmGetPhysicalAddress(fb);
-    AvSetDisplayMode(regs, 0, AvBootModeWord(), 0x1E, pitch, phys);
-    AvSendTVEncoderOption(regs, 9, 0, nullptr);
+    XkpShowScreen(fb);
     XkpCountdownScreen = fb;
+}
+
+// --- The upload server's screen (spec/oxos_internal/31 §5): "No Dashboard Found" with the server's address
+
+static ULONG *XkpUploadScreen; // its frame buffer while it is shown
+
+// The lines that change: the address (line 1) and the status (line 6).
+constexpr ULONG XKP_ADDRESS_LINE = 244 + XKP_LINE, XKP_STATUS_LINE = 244 + 6 * XKP_LINE;
+
+static void XkpDrawUploadState(ULONG *fb, const char *Address, const char *Status) {
+    char line[XK_FATAL_LINE + 1];
+    XkpClear(fb, XKP_LEFT, XKP_ADDRESS_LINE, XKP_W - 2 * XKP_LEFT, 16);
+    if (Address && Address[0])
+        RtlSnprintf(line, sizeof(line), "  http://%s/", Address);
+    else
+        RtlSnprintf(line, sizeof(line), "  (no network address yet)");
+    XkDrawText(fb, XKP_W, XKP_LEFT, XKP_ADDRESS_LINE, line, 2, XKP_WHITE);
+    XkpClear(fb, XKP_LEFT, XKP_STATUS_LINE, XKP_W - 2 * XKP_LEFT, 16);
+    RtlSnprintf(line, sizeof(line), "%s", Status ? Status : "");
+    XkDrawText(fb, XKP_W, XKP_LEFT, XKP_STATUS_LINE, line, 2, XKP_GREY);
+}
+
+void XkShowUploadScreen(ULONG Code, const char *Address, const char *Status) {
+    if (XkpUploadScreen)
+        return XkpDrawUploadState(XkpUploadScreen, Address, Status);
+    ULONG *fb = XkpOpenScreen();
+    if (!fb)
+        return;
+    XkpDrawDigit(fb, 330, 72, Code % 10);
+    XkpDrawDigit(fb, 250, 72, Code / 10 % 10);
+    XkpTitle(fb, 204, XkFatalHelp(Code)->Title);
+    XkDrawText(fb, XKP_W, XKP_LEFT, 244, "Upload one from a browser on this network:", 2, XKP_TEXT);
+    XkDrawText(fb, XKP_W, XKP_LEFT, 244 + 3 * XKP_LINE, "[ You can upload files and launch any XBE ]", 2, XKP_TEXT);
+    XkpDrawUploadState(fb, Address, Status);
+    XkpShowScreen(fb);
+    XkpUploadScreen = fb;
+}
+
+void XkCloseUploadScreen() {
+    XkpCloseScreen(&XkpUploadScreen);
 }
 
 // The running title's ID from its XBE header at 0x10000 (certificate address at +0x118, title ID at +8); 0 if none.

@@ -5,6 +5,8 @@ served by a PC (`tools/netboot/netboot.py`, user guide in `tools/netboot/README.
 needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 
 ## 1. Where it runs
+- The network card's registers, bring-up and shut-down are in `kernel/include/xk/nic.h`, shared with the kernel's own
+  network stack (spec/oxos_internal/31); `netboot.h` keeps the rings, the frames and the protocol.
 - In the open image's 2BL (`kernel/boot/netboot.h`, included by `boot/bl.cpp` when built with `NETBOOT=1`), after
   the SMC challenge and the chipset set-up (`BlSetUpChipset`, which enables the NIC: spec/stock/21), before the
   kernel is unpacked.

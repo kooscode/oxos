@@ -4,18 +4,17 @@
 // into RAM and boots the kernel and key block from it instead. No answer, no link, or a bad download: the flash image
 // boots as usual.
 //
-// Runs with paging off (physical addresses), interrupts off, polled. The NIC sequence follows XboxDev/cromwell's
-// etherboot forcedeth order (once also the kernel's network log, removed 2026-10-28); the receive ring follows nxdk's
-// nvnetdrv (MIT): a descriptor handed to the NIC has flags bit 15 (available) set; the NIC clears it and sets bit 0
-// (valid) and the length; the driver gives it back and writes TxRxControl bit 1 (get).
+// Runs with paging off (physical addresses), interrupts off, polled. The card's registers, bring-up and shut-down are
+// shared with the kernel's network stack (xk/nic.h); here: the rings, the frames and the protocol.
+
+#include <xk/nic.h>
 
 namespace netboot {
 
-constexpr ULONG NIC = 0xFEF00000;                     // BAR0, as the kernel's HalpInitPci assigns it
 constexpr ULONG RING = 0x00300000;                    // RX_COUNT receive descriptors, then 2 transmit descriptors
 constexpr ULONG RX_BUFFERS = 0x00301000, TX_BUFFERS = 0x00320000;
 constexpr ULONG IMAGE = 0x00800000;                   // the downloaded bank
-constexpr ULONG RX_COUNT = 32, BUFFER = 2048, BANK_SIZE = 0x40000, CHUNK = 1024;
+constexpr ULONG RX_COUNT = 32, BUFFER = NIC_BUFFER, BANK_SIZE = 0x40000, CHUNK = 1024;
 // A download is one bank or more (a kernel too large for one bank, a netbooted title's files after it), at most
 // 4 MiB: 0x800000-0xBFFFFF, free RAM while the 2BL runs (the kernel keeps a title's pages: titles/nettitle.cpp).
 constexpr ULONG MAX_IMAGE = 0x400000;
@@ -25,25 +24,6 @@ constexpr unsigned short PORT = 5141;
 constexpr ULONG MAGIC = 0x424E584F;                   // 'OXNB'
 enum : UCHAR { OP_HELLO = 1, OP_OFFER = 2, OP_READ = 3, OP_DATA = 4, OP_BOOT = 5, OP_MCPX = 6 };
 
-enum : ULONG {
-    NvIrqStatus = 0x000, NvIrqMask = 0x004, NvSetup6 = 0x008, NvPollingInterval = 0x00C, NvMisc1 = 0x080,
-    NvTxControl = 0x084, NvTxStatus = 0x088, NvPacketFilter = 0x08C, NvOffload = 0x090, NvRxControl = 0x094,
-    NvRxStatus = 0x098, NvRandomSeed = 0x09C, NvSetup1 = 0x0A0, NvSetup2 = 0x0A4, NvMacA = 0x0A8, NvMacB = 0x0AC,
-    NvMcastA = 0x0B0, NvMcastB = 0x0B4, NvMcastMaskA = 0x0B8, NvMcastMaskB = 0x0BC, NvTxRing = 0x100,
-    NvRxRing = 0x104, NvRingSizes = 0x108, NvTxUnknown = 0x10C, NvLinkSpeed = 0x110, NvSetup5 = 0x130,
-    NvSetup3 = 0x134, NvTxRxControl = 0x144, NvMiiStatus = 0x180, NvSetup4 = 0x184, NvAdapterControl = 0x188,
-    NvMiiSpeed = 0x18C, NvMiiControl = 0x190, NvMiiData = 0x194, NvWakeUpFlags = 0x200, NvPowerState = 0x26C,
-};
-constexpr unsigned short TX_VALID = 1u << 15, TX_FLAGS = (1u << 0) | (1u << 8) | (1u << 15);
-constexpr unsigned short RX_AVAIL = 1u << 15, RX_VALID = 1u << 0, RX_ERRORS = 0x1F80; // errors 1-4, CRC, overflow
-constexpr ULONG TXRX_KICK = 1, TXRX_GET = 2, TXRX_BIT2 = 4, TXRX_RESET = 0x10;
-
-struct Desc {
-    ULONG Buffer;
-    unsigned short Length;
-    unsigned short Flags;
-};
-
 // The UDP payload of every netboot message (little-endian), followed by the data of OP_HELLO / OP_DATA.
 struct Message {
     ULONG Magic;
@@ -52,58 +32,19 @@ struct Message {
     ULONG Session, Offset, Length; // OP_OFFER: Offset = CRC-32 of the image, Length = its size
 };
 
-static volatile ULONG &Nv(ULONG offset) {
-    return *(volatile ULONG *)(NIC + offset);
+static NIC_DESCRIPTOR *Rx() {
+    return (NIC_DESCRIPTOR *)RING;
 }
 
-static Desc *Rx() {
-    return (Desc *)RING;
-}
-
-static Desc *Tx() {
-    return (Desc *)RING + RX_COUNT;
-}
-
-// --- Time: the MCPX ACPI PM timer (I/O 0x8008, 3.375 MHz), as the kernel's KeStallExecutionProcessor.
-static ULONG Now() {
-    return BlIn32(0x8008);
-}
-
-static ULONG Ticks(ULONG us) {
-    return us * 27 / 8;
-}
-
-static bool Before(ULONG start, ULONG us) {
-    return Now() - start < Ticks(us);
-}
-
-static void Stall(ULONG us) {
-    for (ULONG t = Now(); Before(t, us);) {
-        // Spin until us microseconds have passed.
-    }
+static NIC_DESCRIPTOR *Tx() {
+    return (NIC_DESCRIPTOR *)RING + RX_COUNT;
 }
 
 static bool TimerRuns() {
-    ULONG t = Now();
+    ULONG t = NicNow();
     for (int i = 0; i < 1000; i++) // about 1 ms of port cycles
         BlPost(0x30);
-    return Now() != t;
-}
-
-// --- PHY 1 over MII (as kernel/src/hardware/ethernet.cpp).
-static bool MiiWait() {
-    for (ULONG t = Now(); Before(t, 10000);) {
-        if (!(Nv(NvMiiControl) & 0x8000))
-            return true;
-    }
-    return false;
-}
-
-static ULONG MiiRead(ULONG reg) {
-    MiiWait();
-    Nv(NvMiiControl) = reg | 0x20;
-    MiiWait();
-    return Nv(NvMiiData);
+    return NicNow() != t;
 }
 
 // --- Frames.
@@ -124,11 +65,11 @@ static unsigned short IpChecksum(const UCHAR *p, ULONG n) {
 
 // One UDP broadcast from SourceIp:5141 to 255.255.255.255:5141.
 static void Send(const Message &m, const void *data, ULONG length) {
-    Desc &d = Tx()[TxNext & 1];
-    for (ULONG t = Now(); (d.Flags & TX_VALID) && Before(t, 20000);) {
+    NIC_DESCRIPTOR &d = Tx()[TxNext & 1];
+    for (ULONG t = NicNow(); (d.Flags & NIC_TX_VALID) && NicBefore(t, 20000);) {
         // Wait for the controller to finish with this descriptor, at most 20 ms.
     }
-    if (d.Flags & TX_VALID)
+    if (d.Flags & NIC_TX_VALID)
         return;
     UCHAR *f = (UCHAR *)(TX_BUFFERS + (TxNext & 1) * BUFFER);
     memset(f, 0xFF, 6);
@@ -163,31 +104,23 @@ static void Send(const Message &m, const void *data, ULONG length) {
     ULONG size = 14 + ip;
     while (size < 60)
         f[size++] = 0;
-    d.Buffer = (ULONG)f;
-    d.Length = (unsigned short)(size - 1);
-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
-    d.Flags = TX_FLAGS;
-    Nv(NvTxRxControl) = TXRX_KICK;
-    (void)Nv(NvTxRxControl);
+    NicTransmit(d, (ULONG)f, size);
     TxNext++;
 }
 
 // The next netboot message for Session (any op), or nullptr; Data points at what follows the header.
 static const Message *Receive(ULONG Session, const UCHAR **Data) {
     for (ULONG n = 0; n < RX_COUNT; n++) {
-        Desc &d = Rx()[RxHead];
-        if (d.Flags & RX_AVAIL)
+        NIC_DESCRIPTOR &d = Rx()[RxHead];
+        if (d.Flags & NIC_RX_AVAIL)
             return nullptr;
         // Copy the frame out before the descriptor goes back to the NIC.
         static UCHAR frame[BUFFER];
         ULONG length = d.Length & 0x3FFF;
-        bool ok = (d.Flags & RX_VALID) && !(d.Flags & RX_ERRORS) && length <= BUFFER;
+        bool ok = (d.Flags & NIC_RX_VALID) && !(d.Flags & NIC_RX_ERRORS) && length <= BUFFER;
         if (ok)
             memcpy(frame, (const void *)d.Buffer, length);
-        d.Length = BUFFER;
-        __atomic_thread_fence(__ATOMIC_SEQ_CST);
-        d.Flags = RX_AVAIL;
-        Nv(NvTxRxControl) = TXRX_GET;
+        NicGiveBack(d);
         RxHead = (RxHead + 1) % RX_COUNT;
         if (!ok || length < 14 + 20 + 8 + sizeof(Message) || frame[12] != 0x08 || frame[13] != 0x00 ||
             frame[14 + 9] != 17)
@@ -206,102 +139,13 @@ static const Message *Receive(ULONG Session, const UCHAR **Data) {
     return nullptr;
 }
 
-// --- NIC bring-up and shut-down.
+// --- NIC bring-up and shut-down (xk/nic.h): the rings at RING, then the card, waiting up to 4 s for the link.
 static bool Start() {
-    BlPciWrite(4, 0x10, NIC);
-    BlPciWrite(4, 0x14, 0xE001);
-    BlPciWrite(4, 0x04, BlPciRead(4, 0x04) | 7); // I/O, memory, bus master
-    ULONG ids = BlPciRead(4, 0x00);
-    if (ids == 0xFFFFFFFF || !ids)
-        return false;
-    Nv(NvMcastA) = 1;
-    Nv(NvMcastB) = 0;
-    Nv(NvMcastMaskA) = 0;
-    Nv(NvMcastMaskB) = 0;
-    Nv(NvPacketFilter) = 0;
-    Nv(NvAdapterControl) = 0;
-    Nv(NvLinkSpeed) = 0;
-    Nv(NvTxUnknown) = 0;
-    Nv(NvTxRxControl) = TXRX_BIT2 | TXRX_RESET;
-    (void)Nv(NvTxRxControl);
-    Stall(4);
-    Nv(NvTxRxControl) = TXRX_BIT2;
-    Nv(NvSetup6) = 0;
     for (ULONG i = 0; i < RX_COUNT; i++)
-        Rx()[i] = {RX_BUFFERS + i * BUFFER, (unsigned short)BUFFER, RX_AVAIL};
+        Rx()[i] = {RX_BUFFERS + i * BUFFER, (unsigned short)BUFFER, NIC_RX_AVAIL};
     Tx()[0] = Tx()[1] = {0, 0, 0};
     RxHead = TxNext = 0;
-    Nv(NvMacA) = (ULONG)Mac[0] | Mac[1] << 8 | Mac[2] << 16 | (ULONG)Mac[3] << 24; // byte order as nxdk
-    Nv(NvMacB) = (ULONG)Mac[4] | Mac[5] << 8;
-    Nv(NvSetup3) = 0x200010;
-    Nv(NvTxRxControl) = 0;
-    (void)Nv(NvTxRxControl);
-    Nv(NvTxRxControl) = TXRX_GET;
-    for (ULONG t = Now(); !(Nv(NvSetup5) & 1u << 31) && Before(t, 50000);) {
-        // Wait for the transmit/receive engine to start (bit 31), at most 50 ms.
-    }
-    Nv(NvSetup4) = 0;
-    // The link: auto-negotiation finishes about 2-3 s after power-on.
-    Nv(NvMiiSpeed) = (1u << 8) | 5;
-    ULONG status = 0;
-    for (ULONG t = Now(); Before(t, 4000000);) {
-        status = MiiRead(1);
-        if ((status & 0x24) == 0x24) // negotiated, link up
-            break;
-        Stall(10000);
-    }
-    if ((status & 0x24) != 0x24)
-        return false;
-    ULONG common = MiiRead(4) & MiiRead(5);
-    bool fast = common & 0x180, full = fast ? (common & 0x100) : (common & 0x40);
-    Nv(NvMisc1) = 0x3B0F3C | (full ? 0 : 2);
-    Nv(NvTxStatus) = Nv(NvTxStatus);
-    Nv(NvPacketFilter) = 0x7F0020; // always + our address (broadcasts included), as nxdk
-    Nv(NvOffload) = 0x5EE;
-    Nv(NvRxStatus) = Nv(NvRxStatus);
-    Nv(NvRandomSeed) = 0x7F00 | (Now() & 0xFF);
-    Nv(NvSetup1) = 0x16070F;
-    Nv(NvSetup2) = 0x16;
-    Nv(NvPollingInterval) = 970;
-    Nv(NvSetup6) = 3;
-    Nv(NvAdapterControl) = (1u << 24) | 0x4000;
-    Nv(NvSetup4) = 8;
-    Nv(NvWakeUpFlags) = 0x7770;
-    Nv(NvRxRing) = RING;
-    Nv(NvTxRing) = (ULONG)Tx();
-    Nv(NvRingSizes) = ((RX_COUNT - 1) << 16) | 1;
-    ULONG power = Nv(NvPowerState);
-    if (!(power & 0x8000))
-        Nv(NvPowerState) = power | 0x8000;
-    Stall(10);
-    Nv(NvPowerState) = Nv(NvPowerState) | 0x100;
-    Nv(NvAdapterControl) = 0x100000;
-    Nv(NvIrqMask) = 0;
-    Nv(NvIrqStatus) = 0x1FF;
-    Nv(NvMiiStatus) = 0xF;
-    Nv(NvIrqStatus) = 0x1FF;
-    Nv(NvLinkSpeed) = 0x10000 | (fast ? 100 : 1000); // forcedeth: 100 = 100 Mbit/s, 1000 = 10 Mbit/s
-    Nv(NvTxControl) = 1;
-    Nv(NvRxControl) = 1;
-    Nv(NvTxRxControl) = TXRX_KICK | TXRX_GET;
-    (void)Nv(NvTxControl);
-    return true;
-}
-
-// Leave the NIC quiet: no DMA into RAM the kernel is about to reuse. The kernel's own drivers set it up again.
-static void Stop() {
-    Nv(NvRxControl) = 0;
-    Nv(NvTxControl) = 0;
-    Stall(100);
-    Nv(NvTxRxControl) = TXRX_BIT2 | TXRX_RESET;
-    (void)Nv(NvTxRxControl);
-    Stall(10);
-    Nv(NvTxRxControl) = TXRX_BIT2;
-    Nv(NvRxRing) = 0;
-    Nv(NvTxRing) = 0;
-    Nv(NvAdapterControl) = 0;
-    Nv(NvIrqMask) = 0;
-    Nv(NvIrqStatus) = 0x1FF;
+    return NicStart(Mac, RING, RX_COUNT, (ULONG)Tx(), 2, 4000000);
 }
 
 static ULONG Crc32(const UCHAR *p, ULONG n) {
@@ -318,7 +162,7 @@ static ULONG Crc32(const UCHAR *p, ULONG n) {
 static const UCHAR *Fetch() {
     if (!Start())
         return nullptr;
-    const ULONG session = Now() ^ 0x4F584E42;
+    const ULONG session = NicNow() ^ 0x4F584E42;
 #if XK_MCPX_DUMP
     // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs
     // (tools/mcpx_dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
@@ -326,7 +170,7 @@ static const UCHAR *Fetch() {
         for (int i = 0; i < 3; i++) {
             const Message dump = {MAGIC, OP_MCPX, 1, 0, session, 0, 512};
             Send(dump, (const void *)0x2000, 512);
-            Stall(100000);
+            NicStall(100000);
         }
     }
 #endif
@@ -336,7 +180,7 @@ static const UCHAR *Fetch() {
     // 1. Ask, every 250 ms for 2 s.
     for (int i = 0; i < 8 && !r; i++) {
         Send(m, Mac, sizeof(Mac));
-        for (ULONG t = Now(); Before(t, 250000) && !(r = Receive(session, &data));) {
+        for (ULONG t = NicNow(); NicBefore(t, 250000) && !(r = Receive(session, &data));) {
             // Poll for the PC's answer, at most 250 ms.
         }
         if (r && r->Op != OP_OFFER)
@@ -352,7 +196,7 @@ static const UCHAR *Fetch() {
         bool got = false;
         for (int retry = 0; retry < 30 && !got; retry++) {
             Send(m, nullptr, 0);
-            for (ULONG t = Now(); Before(t, 100000) && !got;) {
+            for (ULONG t = NicNow(); NicBefore(t, 100000) && !got;) {
                 r = Receive(session, &data);
                 if (r && r->Op == OP_DATA && r->Offset == offset && r->Length == CHUNK) {
                     memcpy(image + offset, data, CHUNK);
@@ -368,7 +212,7 @@ static const UCHAR *Fetch() {
     bool good = Crc32(image, size) == crc && payload->Magic == PAYLOAD_MAGIC;
     m = {MAGIC, OP_BOOT, 1, 0, session, good ? 0u : 1u, 0};
     Send(m, nullptr, 0);
-    for (ULONG t = Now(); (Tx()[(TxNext - 1) & 1].Flags & TX_VALID) && Before(t, 20000);) {
+    for (ULONG t = NicNow(); (Tx()[(TxNext - 1) & 1].Flags & NIC_TX_VALID) && NicBefore(t, 20000);) {
         // Wait for the last packet to go out, at most 20 ms.
     }
     return good ? image : nullptr;
@@ -378,7 +222,7 @@ static const UCHAR *Boot() {
     if (!TimerRuns())
         return nullptr;
     const UCHAR *image = Fetch();
-    Stop();
+    NicStop();
     return image;
 }
 

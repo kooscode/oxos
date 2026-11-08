@@ -16,7 +16,8 @@ pages are freed anyway). Debug builds (`DEBUG=1`) keep `-Og`.
 Code and data used only during a cold boot go in two sections of their own, which the kernel frees before the first
 title starts:
 - `.xkb`, code: the splash (`src/bootscreen/splash.cpp`, except `HalpEndSplash`, which every title start calls), its vector renderer (`src/bootscreen/vsplash.cpp`), the jingle's synthesizer and
-  player (`src/bootscreen/jingle.cpp`, `src/bootscreen/bootsound.cpp`). The files say `#pragma code_seg(".xkb")`.
+  player (`src/bootscreen/jingle.cpp`, `src/bootscreen/bootsound.cpp`), the network stack (`src/network/`) and the
+  upload server (`src/uploader/`, spec/oxos_internal/31). The files say `#pragma code_seg(".xkb")`.
 - `.xka`, read-only data, in this order (COFF grouped sections, sorted by the name after `$`):
   `$c0`/`$c1` the Conexant's tables, `$f0`/`$f1` the Focus's, `$x0`/`$x1` the Xcalibur's, `$x9` the end marker
   (`hardware/video.cpp`; `tools/gen_av_tables.py` tags each table with `AVP_CX`, `AVP_FO` or `AVP_XC`), then `$y`, the boot
@@ -56,7 +57,9 @@ stays loaded). The kept encoder's tables are still in place: a console's encoder
 - The linker keeps one copy of an inline function or a shared constant that several objects define, and that copy
   can be the one a boot-only file put in `.xkb`. So no other object may define or use a global symbol that the map
   places in a boot-only section, except the boot-only files themselves (they call one another before the pages
-  go) and `HalpStartSplash`, which start-up calls on a cold boot.
+  go) and the entries kept code calls on a cold boot: `HalpStartSplash` (start-up), `UploadServe` and `UploadStop`
+  (the dashboard launch with no dashboard: spec/oxos_internal/31). Ending the splash early (`HalpStopSplash`: the
+  format countdown, the upload screen) keeps the pages; the title start (`HalpEndSplash`) frees them.
 - The initialised `.data` must fit in the quick-reboot copy (`KI_DATA_COPY_SIZE`, `src/arch/entry.S`).
 
 ## 6. Smaller items
