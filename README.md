@@ -14,8 +14,8 @@ https://github.com/user-attachments/assets/b6f78345-d3c6-48db-a134-33634e4fc74c
 - **Complete kernel:** every function and variable of the retail kernel implemented ([clean-room](dmca_compliance.md)).
 - **Open BIOS:** our own boot code from the first instruction; 
 - **Vector-based boot animation:** the OXOS vector based animation at boot, freeing up kernel space.
-- **Games from disc images** of your own discs (XISO, full dumps, CCI), mounted as the console's disc.
-- **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions.
+- **Games ISO images (No size limit)** Make your game disks into ISO (XISO, full dumps, CCI)
+- **Large disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions.
 - **Auto Format blank/Unsupported disk:** OXOS formats a new or unsupported disk as exFAT itself.
 - **Web Server Uploads and Launch:** Empty Disk or missing dashboard, Kernel starts web server for file uploads and XBE Launching
 - **Error screens that explain themselves:** See exactly what happened and what to try, instead of a bare number
