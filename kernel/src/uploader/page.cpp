@@ -1,7 +1,7 @@
 // The upload server's page (spec/oxos_internal/31_upload_server.md §4): the drives and the current folder, uploads of
 // files and whole folders (one PUT per file, with its path inside the folder), a Launch button for each .xbe, and a
-// Delete button for each file and folder (a folder only when it is empty: the server refuses the others), and a
-// Create Folder button in the ".." row.
+// Rename and Delete button for each file and folder (Delete: a folder only when it is empty, the server refuses the
+// others), and a Create Folder button in the ".." row.
 // Boot-only data.
 #include <xk/uploader.h>
 
@@ -99,10 +99,12 @@ function row(table, name, dir, bytes, open, xbe, full) {
   sizeCell.className = 'size';
   sizeCell.textContent = dir ? '' : size(bytes);
   if (full) {
-    const b = document.createElement('button');
-    b.textContent = 'Delete';
-    b.onclick = () => remove(full, dir);
-    action.append(b);
+    for (const [label, act] of [['Rename', () => rename(full, name)], ['Delete', () => remove(full, dir)]]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = act;
+      action.append(b);
+    }
   }
   if (xbe) {
     const b = document.createElement('button');
@@ -130,12 +132,23 @@ async function upload(fileList) {
   list(cwd);
 }
 
+const badName = name => /[\/\\:*?"<>|]/.test(name) || name === '.' || name === '..';
+
 async function createFolder() {
   const name = prompt('New folder in ' + cwd + ':');
   if (!name) return;
-  if (/[\/\\:*?"<>|]/.test(name) || name === '.' || name === '..') { say('Not a folder name: ' + name); return; }
+  if (badName(name)) { say('Not a folder name: ' + name); return; }
   const r = await fetch('/api/folder?path=' + q(join(cwd, name)), {method: 'PUT'});
   say(r.ok ? 'Created ' + join(cwd, name) : 'Create folder failed: ' + await r.text());
+  if (r.ok) list(cwd);
+}
+
+async function rename(path, old) {
+  const name = prompt('Rename ' + old + ' to:', old);
+  if (!name || name === old) return;
+  if (badName(name)) { say('Not a name: ' + name); return; }
+  const r = await fetch('/api/rename?path=' + q(path) + '&name=' + q(name), {method: 'POST'});
+  say(r.ok ? 'Renamed ' + old + ' to ' + name : 'Rename failed: ' + await r.text());
   if (r.ok) list(cwd);
 }
 

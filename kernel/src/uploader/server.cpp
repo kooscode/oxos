@@ -1,6 +1,6 @@
 // The upload server (spec/oxos_internal/31_upload_server.md §3): HTTP/1.1 on the kernel's network stack, one request
-// per connection: the page, folder listings, uploads written to the disk as they arrive, creating a folder, deleting
-// a file or an empty folder, and launching an XBE.
+// per connection: the page, folder listings, uploads written to the disk as they arrive, creating a folder, renaming
+// and deleting a file or folder (a folder only when empty), and launching an XBE.
 // Boot-only.
 //
 // Each connection's request moves through phases: its head (request line and headers), then an upload's body, then
@@ -118,18 +118,23 @@ static int UploadpHexDigit(char c) {
     return -1;
 }
 
-// The decoded value of the query parameter "path" in Target ("/api/list?path=%2FE%2FApps"), or false.
-static bool UploadpQueryPath(const char *Target, char *Out, ULONG Size) {
+// Text starts with Word.
+static bool UploadpIs(const char *Text, const char *Word) {
+    ULONG i = 0;
+    while (Word[i] && Text[i] == Word[i])
+        i++;
+    return !Word[i];
+}
+
+// The decoded value of query parameter Key ("path=", "name=") in Target ("/api/list?path=%2FE%2FApps"), or false.
+static bool UploadpQueryValue(const char *Target, const char *Key, char *Out, ULONG Size) {
     const char *p = Target;
-    while (*p && *p != '?')
+    while (*p && *p != ' ' && !((*p == '?' || *p == '&') && UploadpIs(p + 1, Key)))
         p++;
-    for (; *p; p++) {
-        if ((p[0] == '?' || p[0] == '&') && p[1] == 'p' && p[2] == 'a' && p[3] == 't' && p[4] == 'h' && p[5] == '=')
-            break;
-    }
-    if (!*p)
+    if (*p != '?' && *p != '&')
         return false;
-    p += 6;
+    for (p++; *Key; Key++)
+        p++;
     ULONG n = 0;
     for (; *p && *p != '&' && *p != ' '; p++) {
         char c = *p;
@@ -145,6 +150,12 @@ static bool UploadpQueryPath(const char *Target, char *Out, ULONG Size) {
     }
     Out[n] = 0;
     return n > 0;
+}
+
+// A character FATX allows in a name (exFAT allows a few more; FATX's rule holds on both).
+static bool UploadpNameCharacter(char c) {
+    return (UCHAR)c >= 0x20 && c != '"' && c != '*' && c != '/' && c != ':' && c != '<' && c != '>' && c != '?' &&
+           c != '\\' && c != '|';
 }
 
 // The NT path of a page path ("/E/Apps/x.xbe" -> "\Device\Harddisk0\Partition1\Apps\x.xbe"); false for an unknown
@@ -175,11 +186,9 @@ static bool UploadpNtPath(const char *Path, char *Out, ULONG Size) {
             return false;
         Out[n++] = '\\';
         for (ULONG i = 0; i < length; i++) {
-            char c = p[i];
-            if ((UCHAR)c < 0x20 || c == '"' || c == '*' || c == ':' || c == '<' || c == '>' || c == '?' || c == '\\' ||
-                c == '|')
+            if (!UploadpNameCharacter(p[i]))
                 return false;
-            Out[n++] = c;
+            Out[n++] = p[i];
         }
         p += length;
     }
@@ -335,6 +344,38 @@ static void UploadpCreateFolder(UPLOADP_REQUEST *r) {
     UploadpText(r, 201, "Created %s", r->Path);
 }
 
+// --- Renaming
+
+// Renames the file or folder at the request's path to Name, in the same folder. A drive is refused (403), a name in use
+// too (409).
+static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
+    if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
+        return UploadpText(r, 403, "%s: a drive cannot be renamed", r->Path);
+    char name[PATH_SIZE];
+    bool valid = UploadpQueryValue(Target, "name=", name, sizeof(name));
+    for (ULONG i = 0; valid && name[i]; i++)
+        valid = UploadpNameCharacter(name[i]);
+    if (!valid || (name[0] == '.' && (!name[1] || (name[1] == '.' && !name[2]))))
+        return UploadpText(r, 400, "Bad name");
+    HANDLE h;
+    NTSTATUS status = UploadpOpen(r->NtPath, DELETE, FILE_OPEN, 0, &h);
+    if (NT_SUCCESS(status)) {
+        FILE_RENAME_INFORMATION info = {FALSE, nullptr, {}};
+        RtlInitAnsiString(&info.FileName, name);
+        IO_STATUS_BLOCK iosb;
+        status = NtSetInformationFile(h, &iosb, &info, sizeof(info), FileRenameInformation);
+        NtClose(h);
+    }
+    if (!NT_SUCCESS(status)) {
+        UploadpStatusPath("Rename failed:", r->Path);
+        if (status == STATUS_OBJECT_NAME_COLLISION_)
+            return UploadpText(r, 409, "%s: already exists", name);
+        return UploadpText(r, 500, "%s: rename failed (%08lx)", r->Path, status);
+    }
+    UploadpStatusPath("Renamed", r->Path);
+    UploadpText(r, 200, "Renamed %s to %s", r->Path, name);
+}
+
 // --- Deleting
 
 // Deletes the file or empty folder at the request's path. A drive's own folder is refused, and a folder with
@@ -418,13 +459,6 @@ static const char *UploadpHeader(const UPLOADP_REQUEST *r, const char *Name) {
     return nullptr;
 }
 
-static bool UploadpIs(const char *Text, const char *Word) {
-    ULONG i = 0;
-    while (Word[i] && Text[i] == Word[i])
-        i++;
-    return !Word[i];
-}
-
 // The head has arrived (Body: the bytes after it in Head, BodyLength of them): what the request asks for.
 static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLength) {
     const char *target = r->Head;
@@ -440,12 +474,13 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         return UploadpReply(r, 200, "text/html; charset=utf-8", page, length);
     }
     bool list = UploadpIs(target, "/api/list?"), file = UploadpIs(target, "/api/file?"),
-         folder = UploadpIs(target, "/api/folder?"), launch = UploadpIs(target, "/api/launch?");
-    if (!list && !file && !folder && !launch)
+         folder = UploadpIs(target, "/api/folder?"), rename = UploadpIs(target, "/api/rename?"),
+         launch = UploadpIs(target, "/api/launch?");
+    if (!list && !file && !folder && !rename && !launch)
         return UploadpText(r, 404, "No such page");
-    if ((list && !get) || (file && !put && !remove) || (folder && !put) || (launch && !post))
+    if ((list && !get) || (file && !put && !remove) || (folder && !put) || ((rename || launch) && !post))
         return UploadpText(r, 405, "Wrong method");
-    if (!UploadpQueryPath(target, r->Path, sizeof(r->Path)))
+    if (!UploadpQueryValue(target, "path=", r->Path, sizeof(r->Path)))
         return UploadpText(r, 400, "Bad path");
     bool drives = list && r->Path[0] == '/' && !r->Path[1]; // the list of drives
     if (!drives && !UploadpNtPath(r->Path, r->NtPath, sizeof(r->NtPath)))
@@ -454,6 +489,8 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         return UploadpList(r);
     if (folder)
         return UploadpCreateFolder(r);
+    if (rename)
+        return UploadpRename(r, target);
     if (remove)
         return UploadpDelete(r);
     if (launch) {

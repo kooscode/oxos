@@ -45,6 +45,7 @@ HTTP/1.1, one request per connection (`Connection: close`). Paths use the FTP se
 | `GET /api/list?path=/E/Apps` | the folder's entries as JSON: `[{"name":"default.xbe","dir":false,"size":123}, ...]` |
 | `PUT /api/file?path=/E/Apps/x/default.xbe` | the request body becomes that file; missing folders on the way are created; `201` |
 | `PUT /api/folder?path=/E/Apps/new` | creates that folder (and missing folders on the way); `201`; one that exists: `409` |
+| `POST /api/rename?path=/E/Apps/old&name=new` | renames that file or folder in its folder (`FileRenameInformation`); `200`. A name in use: `409`; a drive: `403`; a name FATX does not allow: `400` |
 | `DELETE /api/file?path=/E/Apps/old.bin` | deletes that file, or that folder when it is empty (`NtDeleteFile`); `200`. A folder with anything in it: `409`, nothing deleted (nothing is deleted recursively). A drive (`/E`): `403` |
 | `POST /api/launch?path=/E/Apps/x/default.xbe` | `200`, then the server stops and the kernel starts that XBE as a title |
 
@@ -54,8 +55,8 @@ writes; `Expect: 100-continue` (curl's large uploads) is answered. `GET /api/lis
 
 ## 4. The page
 One HTML page with a small script, served from the kernel image, titled "OXOS File Manager": the current folder (drive buttons, a path, the
-folder's entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has a
-Delete button, which asks first; the `..` row has Create Folder, which asks for the name), "Upload files" (several at once) and "Upload a
+folder's entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has
+Rename (asks for the new name) and Delete (asks first); the `..` row has Create Folder, which asks for the name), "Upload files" (several at once) and "Upload a
 folder" (the browser sends every file with its path inside the folder: a whole dashboard in one go). Files go one
 at a time with `PUT` and a progress line.
 
@@ -82,7 +83,8 @@ starts.
   dashboard, the server starts; the page, the drive list, a 300 KB upload into a new folder listed with its size and
   read back byte for byte from the disk image afterwards, `..` refused, a folder with a file in it not deleted
   (`409`), the file then the empty folder deleted, a drive not deleted (`403`), a folder created (`201`) and not
-  created twice (`409`), the FTP server's XBE uploaded and launched
+  created twice (`409`), a file renamed but not onto a name in use (`409`), a folder renamed with its files, a drive
+  not renamed (`403`), the FTP server's XBE uploaded and launched
   (the kernel runs it from `E:\app`).
 - `make test_format`: the three blank or foreign disks end in the upload server (no link in those runs), the
   boot-only pages kept.
