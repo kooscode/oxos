@@ -49,6 +49,12 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     for (int i = 0; i < 4; i++)
         KiBugCheckData[i + 1] = KiBugCheckParameters[i];
     post(0xBC);
+#ifndef XK_HOST_TEST
+    {
+        const ULONG_PTR parameters[4] = {P1, P2, P3, P4};
+        XkShowBugCheck(BugCheckCode, parameters);
+    }
+#endif
     for (;;)
         halt();
 }

@@ -635,3 +635,15 @@ struct PS_STATISTICS {
 };
 
 XBAPI NTSTATUS NTAPI PsQueryStatistics(PS_STATISTICS *ProcessStatistics);
+
+// The error screens (core/fatal.cpp, spec/oxos_internal/29_error_screens.md). The fatal error screen's text per code
+// (core/fatal_help.cpp): a title and lines of at most XK_FATAL_LINE characters, ending with nullptr.
+constexpr ULONG XK_FATAL_LINE = 45;
+struct XK_FATAL_HELP {
+    ULONG First, Last; // the codes it covers
+    const char *Title;
+    const char *const *Lines;
+};
+const XK_FATAL_HELP *XkFatalHelp(ULONG Code);
+// The bug check screen, drawn into the frame buffer on screen (KeBugCheckEx, interrupts off).
+void XkShowBugCheck(ULONG Code, const ULONG_PTR *Parameters);

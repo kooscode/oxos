@@ -698,15 +698,19 @@ def fatal_checks(mon):
         time.sleep(0.25)
     time.sleep(2)
     code, fb = mon.read("IdexFatalErrorCode"), mon.read("XkFatalErrorFrameBuffer")
-    lit = 0
-    for y in range(185, 295, 8):  # the two digit cells (x 250-390)
+    lit = text = 0
+    for y in range(72, 182, 8):  # the two digit cells (x 250-390)
         out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
         lit += len(re.findall(r"0xffffffff", out))
-    print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit samples)")
+    for y in range(204, 228, 2):  # the help's title, white text, centred (x 48-592)
+        out = mon.hmp(f"xp/544wx {fb + (y * 640 + 48) * 4:#x}") if fb else ""
+        text += len(re.findall(r"0x00ffffff", out))
+    print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit digit samples, {text} title samples)")
     return {"M5f": {
         "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
         "error code drawn on screen": fb != 0 and lit > 20
             and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
+        "the error's title drawn under it": text > 20,
     }}, code
 
 

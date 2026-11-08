@@ -122,6 +122,8 @@ Then phase-1 calls the entry point at 0x10128 (spec 03).
   then (with an AV pack) a 640x480 X8R8G8B8 framebuffer with the two digits in **our own** seven-segment layout,
   shown through `AvSetDisplayMode`; the thread then sleeps forever. No GPU drawing, no animation to stop yet.
 - Test: `make test_fatal` boots without a hard disk → code 9; checks the drawn digits and the EEPROM history bit.
+- Since milestone 34 the screen also has a title, what to try and details, and bug checks get a screen too
+  (spec/oxos_internal/29).
 
 ## 7. Details confirmed for milestone 4a
 Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section load 0x8002ea65, post-load protect
