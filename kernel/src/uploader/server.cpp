@@ -56,7 +56,6 @@ struct UPLOADP_REQUEST {
 
 struct UPLOADP_SERVER {
     UPLOADP_REQUEST Requests[NET_TCP_CONNECTIONS];
-    ULONG Code;                 // the "No Dashboard Found" error the screen shows
     char Status[STATUS_SIZE];   // the screen's status line
     char Shown[STATUS_SIZE + 32]; // what the screen shows now (address and status), to redraw only on a change
     char Launch[PATH_SIZE];     // the NT path of the XBE to launch, once its reply has gone out
@@ -100,7 +99,7 @@ static void UploadpUpdateScreen() {
     for (ULONG i = 0; i < sizeof(shown); i++) {
         if (shown[i] != UploadpServer->Shown[i]) {
             RtlCopyMemory(UploadpServer->Shown, shown, sizeof(shown));
-            XkShowUploadScreen(UploadpServer->Code, address, status ? status : "Waiting for a browser.");
+            XkShowFileManagerScreen(address, status ? status : "Waiting for a browser.");
             return;
         }
         if (!shown[i])
@@ -545,7 +544,7 @@ static void UploadpStep(UPLOADP_REQUEST *r) {
 
 // --- Entry points
 
-bool UploadServe(ULONG Code, NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
+bool UploadServe(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
     if (!UploadpServer) {
         UploadpServer = (UPLOADP_SERVER *)MmAllocateSystemMemory(sizeof(UPLOADP_SERVER), PAGE_READWRITE);
         if (!UploadpServer)
@@ -556,14 +555,13 @@ bool UploadServe(ULONG Code, NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) 
             UploadpServer = nullptr;
             return false;
         }
-        UploadpServer->Code = Code;
         HalpStopSplash(); // the screen is the server's; the boot-only pages it runs from stay
     }
     if (LastLaunch)
         UploadpStatus("Launch failed (%08lx)", LastLaunch);
     UploadpServer->LaunchReady = false;
     UploadServing = 1;
-    XK_SERIAL("upload: serving (code %lu)\n", Code);
+    XK_SERIAL("upload: serving the File Manager\n");
     for (;;) {
         bool busy = NetPoll();
         for (LONG id; (id = NetTcpAccept()) >= 0;) {
@@ -604,7 +602,7 @@ void UploadStop() {
     if (!UploadpServer)
         return;
     NetStop();
-    XkCloseUploadScreen();
+    XkCloseFileManagerScreen();
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
         if (UploadpServer->Requests[i].File)
             NtClose(UploadpServer->Requests[i].File);

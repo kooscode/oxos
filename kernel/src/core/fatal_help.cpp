@@ -38,23 +38,16 @@ static const char *const XkpHelpNoDisk[] = {
     nullptr,
 };
 
+// Codes 13-20: the dashboards tried (titles/loader.cpp, in its order), and the way to the File Manager (core/fatal.cpp,
+// XkNoDashboardError).
 static const char *const XkpHelpNoDashboard[] = {
-    "None of these could be started:",
-    "  C:\\evoxdash.xbe  E:\\evoxdash.xbe",
+    "Tried:",
+    "  C:\\evoxdash.xbe",
+    "  E:\\evoxdash.xbe",
     "  C:\\xboxdash.xbe",
     "  E:\\XBLDashboard\\default.xbe",
-    "- Copy a dashboard to C: (/C on exFAT).",
-    "- Or netboot the OXOS FTP app to upload one.",
-    nullptr,
-};
-
-static const char *const XkpHelpNoDashboardDisc[] = {
-    "A game disc is in the drive, and no dashboard",
-    "could be started after it:",
-    "  C:\\evoxdash.xbe  E:\\evoxdash.xbe",
-    "  C:\\xboxdash.xbe",
-    "  E:\\XBLDashboard\\default.xbe",
-    "- Copy a dashboard to C: (/C on exFAT).",
+    "",
+    "[ Press  X  to launch Web File Manager ]", // the X drawn as the button (XkDrawText)
     nullptr,
 };
 
@@ -83,7 +76,7 @@ static const XK_FATAL_HELP XkpHelp[] = {
     {8, 8, "HDD IDENTIFY Failed", XkpHelpIdentify},
     {9, 9, "No HDD Detected", XkpHelpNoDisk},
     {13, 19, "No Dashboard Found", XkpHelpNoDashboard},
-    {20, 20, "No Dashboard Found (Disc Inserted)", XkpHelpNoDashboardDisc},
+    {20, 20, "No Dashboard Found (Disc Inserted)", XkpHelpNoDashboard},
     {21, 21, "Previous Boot Failed", XkpHelpPreviousBoot},
 };
 

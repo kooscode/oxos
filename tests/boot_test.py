@@ -17,6 +17,8 @@ from fatx import FATX, FATXWriter  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
+from controller_test import xemu_env  # noqa: E402
+from virtual_gamepad import VirtualPad  # noqa: E402
 
 
 def map_symbols(path):
@@ -717,9 +719,10 @@ def fatal_checks(mon):
     }}, code
 
 
-def blank_disk_fatal_checks(mon, reason, seconds):
-    """A blank (reason 1) or foreign (2) disk: the kernel counts down, formats it, finds no dashboard on it and starts
-    the upload server (spec/oxos_internal/30 §4, 31 §1; xemu's network card has no link here: it waits for one)."""
+def blank_disk_fatal_checks(mon, reason, seconds, pad=None):
+    """A blank (reason 1) or foreign (2) disk: the kernel counts down, formats it, finds no dashboard on it and stops
+    with error 13, whose screen says to press X for the File Manager (spec/oxos_internal/30 §4, 32 §1). With pad,
+    X is then pressed and the File Manager must start."""
     shown = 0
     for _ in range(4 * (seconds + 30)):
         if not shown and mon.read("XkFatalErrorFrameBuffer") == 0 and mon.read("IdexDiskCountdownSeconds"):
@@ -730,17 +733,27 @@ def blank_disk_fatal_checks(mon, reason, seconds):
     code, serving = mon.read("IdexFatalErrorCode"), mon.read("UploadServing")
     got = (mon.read("IdexDiskCountdownSeconds"), mon.read("IdexDiskCountdownReason"))
     print(f"  (fatal error {code}, upload server {serving}, countdown {got[0]} s, reason {got[1]})")
-    freed = bin(mon.read("MiBootPagesFreed")).count("1") + bin(mon.read_offset("MiBootPagesFreed", 4)).count("1")
     checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
-              "formatted, then no dashboard: the upload server, not a fatal error": serving == 1 and code == 0,
-              f"the boot-only pages it runs from are kept ({freed} freed)": freed == 0}
+              "formatted, then no dashboard and X not pressed: error 13, no File Manager":
+                  code == 13 and serving == 0 and mon.read("GamepadXPressed") == 0}
+    if pad and code == 13:
+        time.sleep(3)  # the error screen sets up the controllers
+        pad.set("X", 1)  # the pad's X is X in xemu's mapping
+        for _ in range(80):
+            if mon.read("UploadServing"):
+                break
+            time.sleep(0.25)
+        pad.set("X", 0)
+        checks[f"X on the error screen: the File Manager ({mon.read('GamepadPadsFound')} pads)"] = \
+            mon.read("UploadServing") == 1 and mon.read("IdexFatalErrorCode") == 0
     if seconds:
         checks["the countdown screen was shown"] = shown != 0
     return {"blank disk": checks}
 
 
 def upload_checks(mon, port, xbe):
-    """The upload server (spec/oxos_internal/31) on a freshly formatted disk with no dashboard: the page, the drives,
+    """The File Manager (spec/oxos_internal/31, 32), opened by X held on a virtual pad during the splash, on a
+    freshly formatted disk with no dashboard: the pad seen, the page, the drives,
     an upload read back through a listing, deleting a file and an empty folder, creating a folder, and a launch."""
     import http.client, json
     def request(method, path, body=None, timeout=30):
@@ -759,7 +772,8 @@ def upload_checks(mon, port, xbe):
         except OSError:
             pass
         time.sleep(0.5)
-    checks = {"the page is served": bool(page) and b"OXOS File Manager" in page}
+    checks = {f"X seen during the splash ({mon.read('GamepadPadsFound')} pads)": mon.read("GamepadXPressed") == 1,
+              "the page is served": bool(page) and b"OXOS File Manager" in page}
     if not checks["the page is served"]:
         return {"upload server": checks}
     status, drives = request("GET", "/api/list?path=%2F")
@@ -1012,9 +1026,12 @@ def main():
     ap.add_argument("--countdown", type=int, default=5, help="--blank-hdd: the countdown expected without a marker "
                     "(5 in development builds, 30 in release builds)")
     ap.add_argument("--upload", type=int, metavar="PORT", help="--blank-hdd: xemu's NAT network with host port PORT "
-                    "forwarded to the console's 80; check the upload server (spec/oxos_internal/31): its page, a "
-                    "listing, an upload read back, and launching --upload-xbe")
+                    "forwarded to the console's 80, and X held on a virtual pad during the boot; check the File "
+                    "Manager (spec/oxos_internal/31, 32): its page, a listing, an upload read back, and launching "
+                    "--upload-xbe")
     ap.add_argument("--upload-xbe", help="--upload: the XBE to upload and launch")
+    ap.add_argument("--x-at-error", action="store_true", help="--blank-hdd: press X on a virtual pad once "
+                    "error 13 is on screen, and check that the File Manager starts (spec/oxos_internal/32 §1)")
     ap.add_argument("--foreign", action="store_true", help="--blank-hdd: a PC disk instead (MBR, one NTFS partition)")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
@@ -1094,8 +1111,13 @@ def main():
     serial_args = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
     if a.encoder:
         serial_args += ["-machine", f"video-encoder={a.encoder}"]
+    pad = None
+    if a.upload or a.x_at_error:  # the pad exists before xemu starts, so xemu binds it to a controller port
+        pad = VirtualPad()
+    if a.upload:  # X held from power-on
+        pad.set("X", 1)
     proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"] + serial_args,
-                            stdout=log, stderr=subprocess.STDOUT)
+                            stdout=log, stderr=subprocess.STDOUT, env=xemu_env())
     ok = False
     try:
         for _ in range(100):
@@ -1114,7 +1136,8 @@ def main():
             results = upload_checks(mon, a.upload, a.upload_xbe)
         elif a.blank_hdd:
             results = blank_disk_fatal_checks(mon, 2 if a.foreign else 1,
-                                              a.blank_marker if a.blank_marker is not None else a.countdown)
+                                              a.blank_marker if a.blank_marker is not None else a.countdown,
+                                              pad if a.x_at_error else None)
         elif a.dash:
             results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox, a.xbl)
         elif a.relaunch:
@@ -1131,6 +1154,8 @@ def main():
                 print(f"  [{'PASS' if passed else 'FAIL'}] {group}: {name}")
                 ok &= passed
     finally:
+        if pad:
+            pad.close()
         proc.terminate()
         try:
             proc.wait(5)

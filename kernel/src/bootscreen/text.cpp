@@ -111,23 +111,47 @@ ULONG XkTextWidth(const char *Text, ULONG Scale) {
     return n ? n * 6 * Scale - Scale : 0;
 }
 
-void XkDrawText(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, const char *Text, ULONG Scale, ULONG Color) {
-    for (; *Text; Text++, X += 6 * Scale) {
-        UCHAR c = (UCHAR)*Text;
-        if (c < 0x20 || c > 0x7E)
-            c = '?';
-        const UCHAR *rows = XkFont[c - 0x20];
-        for (ULONG r = 0; r < 8; r++) {
-            for (ULONG col = 0; col < 5; col++) {
-                if (!(rows[r] & (0x10 >> col)))
-                    continue;
-                for (ULONG dy = 0; dy < Scale; dy++) {
-                    ULONG *line = Image + (Y + r * Scale + dy) * Pitch + X + col * Scale;
-                    for (ULONG dx = 0; dx < Scale; dx++)
-                        line[dx] = Color;
-                }
+static void XkpDrawGlyph(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, UCHAR Char, ULONG Scale, ULONG Color) {
+    if (Char < 0x20 || Char > 0x7E)
+        Char = '?';
+    const UCHAR *rows = XkFont[Char - 0x20];
+    for (ULONG r = 0; r < 8; r++) {
+        for (ULONG col = 0; col < 5; col++) {
+            if (!(rows[r] & (0x10 >> col)))
+                continue;
+            for (ULONG dy = 0; dy < Scale; dy++) {
+                ULONG *line = Image + (Y + r * Scale + dy) * Pitch + X + col * Scale;
+                for (ULONG dx = 0; dx < Scale; dx++)
+                    line[dx] = Color;
             }
         }
+    }
+}
+
+constexpr ULONG XK_X_BUTTON_BLUE = 0x3C8CFF; // the controller's X button
+
+// The controller's X button in the place of the letter at (X, Y): the letter bold in blue, in a blue ring around the
+// glyph's centre (radii 4.75 and 5.75 glyph pixels; computed in half pixels, so the edge is round).
+static void XkpDrawXButton(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, ULONG Scale) {
+    const LONG cx = 2 * X + 5 * Scale, cy = 2 * Y + 7 * Scale, outer = 23 * Scale, inner = 19 * Scale;
+    const LONG reach = 6 * Scale;
+    for (LONG y = (LONG)Y + (LONG)(7 * Scale) / 2 - reach; y <= (LONG)Y + (LONG)(7 * Scale) / 2 + reach; y++) {
+        for (LONG x = (LONG)X + (LONG)(5 * Scale) / 2 - reach; x <= (LONG)X + (LONG)(5 * Scale) / 2 + reach; x++) {
+            LONG dx = 2 * x + 1 - cx, dy = 2 * y + 1 - cy, d = 4 * (dx * dx + dy * dy);
+            if (d <= outer * outer && d > inner * inner)
+                Image[y * (LONG)Pitch + x] = XK_X_BUTTON_BLUE;
+        }
+    }
+    XkpDrawGlyph(Image, Pitch, X, Y, 'X', Scale, XK_X_BUTTON_BLUE);
+    XkpDrawGlyph(Image, Pitch, X + Scale / 2, Y, 'X', Scale, XK_X_BUTTON_BLUE);
+}
+
+void XkDrawText(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, const char *Text, ULONG Scale, ULONG Color) {
+    for (const char *p = Text; *p; p++, X += 6 * Scale) {
+        if (*p == 'X' && p - Text >= 2 && p[-1] == ' ' && p[-2] == ' ' && p[1] == ' ' && p[2] == ' ')
+            XkpDrawXButton(Image, Pitch, X, Y, Scale);
+        else
+            XkpDrawGlyph(Image, Pitch, X, Y, (UCHAR)*p, Scale, Color);
     }
 }
 

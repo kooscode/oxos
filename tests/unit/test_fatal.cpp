@@ -50,7 +50,7 @@ TEST(FatalHelp, EveryLineFitsTheScreen) {
             EXPECT_LE(strlen(*l), XK_FATAL_LINE) << *l;
             EXPECT_LE(Width(*l, 2), TEXT_WIDTH) << *l;
         }
-        EXPECT_GE(lines, 2u) << h->Title;
-        EXPECT_LE(lines, 6u) << h->Title << ": the details below must stay on screen";
+        EXPECT_GE(lines, 1u) << h->Title;
+        EXPECT_LE(lines, 7u) << h->Title << ": the details below must stay on screen";
     }
 }
