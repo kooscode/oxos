@@ -261,14 +261,14 @@ static void HalpFreeBootPages() {
     MmFreeBootPages(start, end);
 }
 
-// Before the title starts: wait for the splash, turn the screen off and free the splash's memory, so the title gets
-// the whole budget (spec/stock/09 §7). The reference frees its boot animation's framebuffer too (it is in the INIT
-// section); the title's display-mode change and first frame turn the screen on again.
-void HalpEndSplash() {
-    if (!HalpSplashScreen) {
-        HalpFreeBootPages();
+// Wait for the splash and the jingle to end, turn the screen off and free the splash's memory. HalpStopSplash keeps
+// the boot-only pages: the format countdown and the upload server take the screen and still run from them
+// (spec/oxos_internal/30 §4, 31 §6). HalpEndSplash, before a title starts, frees them too, so the title gets the whole
+// budget (spec/stock/09 §7; the reference frees its boot animation's framebuffer, in its INIT section, too); the
+// title's display-mode change and first frame turn the screen on again.
+void HalpStopSplash() {
+    if (!HalpSplashScreen)
         return;
-    }
     KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
     if (HalpSplashThreadObject) { // until it has exited: the next switch back frees its stack
         KeWaitForSingleObject(HalpSplashThreadObject, Executive, KernelMode, FALSE, nullptr);
@@ -285,7 +285,11 @@ void HalpEndSplash() {
     MmFreeContiguousMemory(HalpSplashImage);
     MmFreeContiguousMemory(HalpSplashScreen);
     HalpSplashScreen = HalpSplashImage = HalpSplashStart = nullptr;
-    HalpFreeBootPages(); // the splash and the jingle have ended: their code goes
+}
+
+void HalpEndSplash() {
+    HalpStopSplash();
+    HalpFreeBootPages(); // the splash and the jingle have ended: the boot-only code goes
 }
 
 // --- The 2BL's splash record (boot/bl.cpp: 'OXSP', physical address, size at physical 0x2380), taken on a cold boot

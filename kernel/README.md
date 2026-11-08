@@ -196,7 +196,9 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/io/` | I/O manager: devices, IRPs, files, completion ports |
 | `src/hardware/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, EEPROM, AV (video modes), network PHY, GPU set-up, in-game reset, debug serial port (spec/oxos_internal/03_debug_serial.md) |
 | `src/bootscreen/` | the boot splash and jingle: boot-only code, freed before the first title starts (spec/oxos_internal/18) |
-| `src/storage/` | IDE channel, hard disk (28- and 48-bit addressing), its layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), DVD drive, virtual discs (disc images standing in for the DVD drive) |
+| `src/storage/` | IDE channel, hard disk (28- and 48-bit addressing), its layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), DVD drive, virtual discs (disc images standing in for the DVD drive) |
+| `src/network/` | the network card polled (`nic.cpp`, its bring-up shared with the 2BL's netboot through `include/xk/nic.h`), IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`): boot-only, for the upload server (spec/oxos_internal/31) |
+| `src/uploader/` | the upload server: a web page that uploads files and folders and launches an XBE when no dashboard is found (`server.cpp`, `page.cpp`; boot-only, spec/oxos_internal/31) |
 | `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
 | `src/titles/` | the title (XBE) loader and launcher, netboot titles, the title-patch parser; the kernel call tracer (`trace.cpp`, trace builds only) |
@@ -267,6 +269,7 @@ the boot tests; console = checked on the 1.4 console.
 | 33 | Overlapped hard-disk transfers report STATUS_PENDING as the reference does; RtlNtStatusToDosError as the reference | stock/04b, stock/13 | ✅ unit tests, xemu, console (1.6): a game that streams with overlapped reads |
 | 34 | Error screens: fatal errors with a title, what to try and details; a bug check screen with its code and parameters; one font for every OXOS screen | stock/05, oxos/29 | ✅ unit tests, xemu (`test_fatal`, bug check over the splash and the dashboard) |
 | 35 | Formatting the hard disk as exFAT and deleting all partitions: OXOS exports 400/401 (FTP `SITE FORMAT-EXFAT`, `SITE DELETE-ALL-PARTITIONS`); a blank disk is formatted at boot | oxos/30 | ✅ unit tests (fsck.exfat), xemu (`test_format`), console (debug kit) |
+| 36 | The upload server: with no dashboard on a cold boot, a web page on the local network uploads files and folders to the disk and launches an XBE; the kernel's own network stack (boot-only); the 2BL's netboot shares the card's bring-up | oxos/31 | ✅ xemu (`test_upload`, `test_format`), console (debug kit: 11 MB/s, a 50 MB upload read back intact, a launched XBE) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).

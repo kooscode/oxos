@@ -13,7 +13,8 @@ void HalpEndBootSound();
 void HalpStartSplash();
 void HalpTakeSplashRecord(bool QuickReboot);
 bool HalpIsSplashPage(ULONG pfn);
-void HalpEndSplash();
+void HalpStopSplash(); // the splash ends; the boot-only pages stay
+void HalpEndSplash();  // the splash ends and the boot-only pages are freed (a title starts)
 void HalpStopBootSound(); // resident: the sound controller stopped at once (a fatal error on the idle thread)
 
 // Text (text.cpp, resident: the fatal error and bug check screens draw with it after the boot-only code is freed):

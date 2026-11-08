@@ -29,7 +29,8 @@ def boot_only_users(map_path, boot, entries, objects):
             sections.add(m[1])
             continue
         m = re.match(r"\s*([0-9a-f]{4}):[0-9a-f]{8}\s+(\S+)\s+[0-9a-f]{16}\s+(?:\S+\s+)*?(\S+\.obj)\s*$", line)
-        if m and m[1] in sections and re.match(r"[?_]?([A-Za-z0-9_]+)", m[2])[1] not in entries:
+        # The plain name: C++ names start "?Name@", C ones "_Name"; string literals ("??_C@...") have none of their own.
+        if m and m[1] in sections and re.match(r"[?_]*([A-Za-z0-9_]*)", m[2])[1] not in entries:
             boot_syms[m[2]] = m[3]
     used = {}
     out = subprocess.run(["nm", "-A"] + objects, capture_output=True, text=True, check=True).stdout

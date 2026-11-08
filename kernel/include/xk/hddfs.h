@@ -35,10 +35,7 @@ static_assert(sizeof(FATX_DIRENT) == 64);
 constexpr ULONG HDDFS_CLUSTER_FREE = 0, HDDFS_CLUSTER_LAST = 0xFFFFFFFF, HDDFS_CLUSTER_BAD = 0xFFFFFFF7;
 constexpr ULONG HDDFS_BLOCK_SIZE = 0x1000;
 
-// File attributes and the results of a create (NT's values).
-constexpr UCHAR FILE_ATTRIBUTE_READONLY = 0x01, FILE_ATTRIBUTE_HIDDEN = 0x02, FILE_ATTRIBUTE_SYSTEM = 0x04,
-                FILE_ATTRIBUTE_DIRECTORY = 0x10, FILE_ATTRIBUTE_ARCHIVE = 0x20;
-constexpr ULONG FILE_ATTRIBUTE_NORMAL = 0x80;
+// The results of a create (NT's values; the file attributes are in xk/io.h).
 constexpr ULONG FILE_SUPERSEDED = 0, FILE_OPENED = 1, FILE_CREATED = 2, FILE_OVERWRITTEN = 3;
 
 // EXFATFlags: the file's clusters are consecutive; its FAT entries are not used.

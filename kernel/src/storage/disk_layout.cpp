@@ -179,13 +179,13 @@ constexpr ULONG IDEX_COUNTDOWN = XK_RELEASE_VERSION ? DISK_FORMAT_COUNTDOWN : DI
 volatile ULONG IdexDiskCountdownSeconds, IdexDiskCountdownReason;
 
 // Seconds on the screen and the serial port before the disk is formatted: turning the console off keeps the disk.
-// The splash ends first, as the countdown takes the screen.
+// The splash ends first, as the countdown takes the screen; the boot-only pages stay (the upload server may run next).
 static void IdexDiskCountdown(const char *Title, const char *What, ULONG Seconds, ULONG Reason) {
     IdexDiskCountdownSeconds = Seconds;
     IdexDiskCountdownReason = Reason;
     if (!Seconds)
         return;
-    HalpEndSplash();
+    HalpStopSplash();
     for (ULONG left = Seconds; left; left--) {
         XK_SERIAL("disk: %s (%s): formatting it as exFAT in %lu s\n", Title, What, left);
         XkShowFormatCountdown(Title, What, left);
