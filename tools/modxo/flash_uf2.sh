@@ -16,7 +16,7 @@ import serial, sys, time
 s = serial.Serial(sys.argv[1], 115200); time.sleep(0.2); s.baudrate = 1200; time.sleep(0.5); s.close()" "$dev" 2>/dev/null
 for attempt in 1 2 3; do
     m=
-    for i in $(seq 1 120); do
+    for i in $(seq 1 240); do # up to 2 min: the drive has taken over a minute to appear
         m=$(findmnt -rn -o TARGET -S LABEL=RPI-RP2 2>/dev/null)
         [ -n "$m" ] && break
         # not auto-mounted (no desktop session): mount it ourselves
