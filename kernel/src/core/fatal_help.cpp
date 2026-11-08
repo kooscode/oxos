@@ -42,7 +42,7 @@ static const char *const XkpHelpNoDashboard[] = {
     "None of these could be started:",
     "  C:\\evoxdash.xbe  E:\\evoxdash.xbe",
     "  C:\\xboxdash.xbe",
-    "",
+    "  E:\\XBLDashboard\\default.xbe",
     "- Copy a dashboard to C: (/C on exFAT).",
     "- Or netboot the OXOS FTP app to upload one.",
     nullptr,
@@ -53,7 +53,7 @@ static const char *const XkpHelpNoDashboardDisc[] = {
     "could be started after it:",
     "  C:\\evoxdash.xbe  E:\\evoxdash.xbe",
     "  C:\\xboxdash.xbe",
-    "",
+    "  E:\\XBLDashboard\\default.xbe",
     "- Copy a dashboard to C: (/C on exFAT).",
     nullptr,
 };
