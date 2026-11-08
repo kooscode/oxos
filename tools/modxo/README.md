@@ -20,10 +20,10 @@ These scripts are the PC side.
   collector to the power switch's signal side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the
   SERIRQ module unregistered.
 - **1.6 board without the transistor** (e.g. an RP2040-Zero on the ModXo-RP2040-Zero PCB): build Modxo with
-  `-DMODXO_PINOUT=rp2040_zero_1_6` and wire GPIO 6 (the D0 pad, which a 1.6 does not use) straight to the power switch
-  line: the pin stays high and is pulled low for a press. Modxo's D0 handling moves to the unused GPIO 29. The switch
-  line has its own pull-up on the console, so the pin not being driven while the Pico restarts does not press it
-  (checked: reflashing the firmware with the console off left it off).
+  `-DMODXO_PINOUT=rp2040_zero_1_6` and wire GPIO 9 straight to the power switch line; D0 stays on GPIO 6 as on the
+  standard pinout. The pin stays high and is pulled low for a press. The switch line has its own pull-up on the
+  console, so the pin not being driven while the Pico restarts does not press it (checked: reflashing the firmware
+  with the console off left it off).
 - **1.6 console:** it has no LPC header, so the LPC lines are wired to the board (a rebuilt header). LFRAME goes to
   the Pico's LFRAME pin (GPIO 5 on the RP2040-Tiny), not to ground. Use two ground
   wires and keep every wire short: with long wires the LPC cycles were corrupted and the console showed FRAG (red and
