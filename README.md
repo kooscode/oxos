@@ -54,8 +54,9 @@ So far OXOS is tested on a 1.4 console, a second MCPX 1.1 console and a 1.6 cons
 welcome in the [issues](https://github.com/kooscode/oxos/issues).
 
 ## Games and disks
-- **exFAT disk:** format the disk as exFAT on a PC, as one partition or the whole disk. The Xbox drives are folders
-  at its root: `/C` (dashboard), `/E` (saves and apps), `/F` (games), and so on.
+- **exFAT disk:** format the disk as exFAT on a PC, as one partition or the whole disk, or on the console: the OXOS
+  FTP server's `SITE FORMAT-EXFAT YES` turns any disk into one, and OXOS formats a blank disk by itself at boot.
+  The Xbox drives are folders at its root: `/C` (dashboard), `/E` (saves and apps), `/F` (games), and so on.
   [Details](spec/oxos_internal/05_exfat_storage_spec.md).
 - **Game folders:** [`tools/oxos_isonator`](tools/oxos_isonator) turns a disc image or an extracted game into a folder
   with the image and a launcher, which dashboards such as XBMC4Gamers list as the game itself.

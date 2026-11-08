@@ -714,6 +714,46 @@ def fatal_checks(mon):
     }}, code
 
 
+def blank_disk_fatal_checks(mon, reason, seconds):
+    """A blank (reason 1) or foreign (2) disk: the kernel counts down, formats it, finds no dashboard on it and stops
+    with 13 (spec/oxos_internal/30 §4)."""
+    shown = 0
+    for _ in range(4 * (seconds + 30)):
+        if not shown and mon.read("XkFatalErrorFrameBuffer") == 0 and mon.read("IdexDiskCountdownSeconds"):
+            shown = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)  # the countdown on screen
+        if mon.read("IdexFatalErrorCode"):
+            break
+        time.sleep(0.25)
+    code = mon.read("IdexFatalErrorCode")
+    got = (mon.read("IdexDiskCountdownSeconds"), mon.read("IdexDiskCountdownReason"))
+    print(f"  (fatal error {code}, countdown {got[0]} s, reason {got[1]})")
+    checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
+              "formatted, then no dashboard: fatal error 13": code == 13}
+    if seconds:
+        checks["the countdown screen was shown"] = shown != 0
+    return {"blank disk": checks}
+
+
+def blank_disk_checks(path, gigabytes):
+    """The disk the kernel formatted: GPT, one exFAT partition from sector 2048, the folders, a clean volume."""
+    q = Qcow2(path)
+    s0 = q.read(0, 512)
+    checks = {"protective MBR (GPT)": s0[510:512] == b"\x55\xAA" and s0[446 + 4] == 0xEE}
+    try:
+        v = exfat.EXFAT(q)
+    except ValueError as e:
+        return {**checks, f"exFAT volume ({e})": False}
+    names = sorted(x.name for x in v.listdir("/") or [])
+    checks.update({
+        "the partition starts at sector 2048": v.lba == 2048,
+        "folders C E F OXOS X Y Z": names == ["C", "E", "F", "OXOS", "X", "Y", "Z"],
+        f"volume fills the disk ({v.vol_len * 512 >> 20} MiB of {gigabytes} GiB)":
+            v.vol_len * 512 >= (gigabytes << 30) - (4 << 20),
+        f"no problems found by the reader ({', '.join(v.problems) or 'none'})": not v.problems,
+    })
+    return checks
+
+
 def udf_checks(mon):
     for _ in range(160):
         if mon.read("KiTestDvdDone"):
@@ -888,6 +928,13 @@ def main():
     ap.add_argument("--no-disc", action="store_true")
     ap.add_argument("--udf", action="store_true", help="attach a UDF test disc (tests/mkudf.py) and check UDF")
     ap.add_argument("--fatal", action="store_true", help="boot without a hard disk: check the fatal-error report")
+    ap.add_argument("--blank-hdd", type=int, metavar="GB", help="attach a blank disk of GB gigabytes: check that the "
+                    "kernel formats it as exFAT (spec/oxos_internal/30), then stops with 13 (no dashboard yet)")
+    ap.add_argument("--blank-marker", type=int, metavar="SECONDS", help="--blank-hdd: with the blank-disk marker a "
+                    "partition delete leaves, asking for SECONDS of countdown")
+    ap.add_argument("--countdown", type=int, default=5, help="--blank-hdd: the countdown expected without a marker "
+                    "(5 in development builds, 30 in release builds)")
+    ap.add_argument("--foreign", action="store_true", help="--blank-hdd: a PC disk instead (MBR, one NTFS partition)")
     ap.add_argument("--dash", action="store_true", help="check the dashboard phase instead of the self-tests")
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
@@ -918,6 +965,21 @@ def main():
             mkudf.build(dvd)
         else:
             mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
+    if a.blank_hdd:
+        subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", hdd_copy, f"{a.blank_hdd}G"], check=True)
+        if a.blank_marker is not None or a.foreign:
+            q = Qcow2(hdd_copy)
+            if a.blank_marker is not None:  # sector 1023 (kernel/include/xk/disk_format.h)
+                q.write(1023 * 512, b"OXOS BLANK DISK\0" + struct.pack("<I", a.blank_marker))
+            else:  # an MBR with one NTFS partition at sector 2048
+                mbr = bytearray(512)
+                mbr[446 + 4] = 0x07
+                struct.pack_into("<II", mbr, 446 + 8, 2048, 0x100000)
+                mbr[510:512] = b"\x55\xAA"
+                q.write(0, bytes(mbr))
+                q.write(2048 * 512, b"\xEB\x52\x90NTFS    " + bytes(501))
+            q.save(hdd_copy + ".new")
+            os.replace(hdd_copy + ".new", hdd_copy)
     if a.hdd and not a.iso_launch:
         shutil.copyfile(a.hdd, hdd_copy)
         if a.title and a.title_map and not a.dash:
@@ -932,7 +994,7 @@ def main():
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
-        + (f"hdd_path = '{hdd_copy}'\n" if a.hdd else "")
+        + (f"hdd_path = '{hdd_copy}'\n" if a.hdd or a.blank_hdd else "")
         + ("" if a.no_disc else f"dvd_path = '{dvd}'\n"))
     log = open(os.path.join(work, "xemu.log"), "w")
     serial_log = os.path.join(work, "serial.log")
@@ -955,6 +1017,9 @@ def main():
             results = udf_checks(mon)
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
+        elif a.blank_hdd:
+            results = blank_disk_fatal_checks(mon, 2 if a.foreign else 1,
+                                              a.blank_marker if a.blank_marker is not None else a.countdown)
         elif a.dash:
             results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox)
         elif a.relaunch:
@@ -986,6 +1051,10 @@ def main():
     if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder and not a.iso_launch:
         for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
+            ok &= passed
+    if a.blank_hdd:  # xemu has written the disk back
+        for name, passed in blank_disk_checks(hdd_copy, a.blank_hdd).items():
+            print(f"  [{'PASS' if passed else 'FAIL'}] blank disk: {name}")
             ok &= passed
     if os.path.exists(hdd_copy) and a.keep_hdd:
         shutil.move(hdd_copy, a.keep_hdd)

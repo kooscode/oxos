@@ -57,7 +57,10 @@ static NTSTATUS NTAPI IdexDiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PUCHAR buffer = (PUCHAR)Irp->UserBuffer + s->Parameters.Read.BufferOffset;
     UCHAR kind = IdexKind(DeviceObject);
     bool remap = IdexDiskEXFATLayout && kind == IDE_KIND_PARTITION; // Partition0 on an exFAT disk: reserved area only
-    bool foreignWrite = IdexDiskForeignLayout && s->MajorFunction == IRP_MJ_WRITE;
+    // Writes refused on a foreign disk, and after a format or a partition delete until the next boot (the old
+    // partitions' file systems would write into the new layout); the whole-disk device writes the new layout.
+    bool foreignWrite = (IdexDiskForeignLayout || IdexDiskReformatted) && s->MajorFunction == IRP_MJ_WRITE &&
+                        kind != IDE_KIND_PHYSICAL;
     if (kind == IDE_KIND_FOLDER || (remap && offset + len > IDE_RESERVED_LENGTH) || foreignWrite) {
         Irp->IoStatus.Status = kind == IDE_KIND_FOLDER ? STATUS_INVALID_DEVICE_REQUEST
                                : foreignWrite          ? (NTSTATUS)0xC00000A2 // STATUS_MEDIA_WRITE_PROTECTED

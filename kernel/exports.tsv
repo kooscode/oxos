@@ -365,3 +365,5 @@ ordinal	name	convention	arg_bytes	kind
 364	RtlVsprintf	cdecl/data		func
 365	HalEnableSecureTrayEject	stdcall	0	func
 366	HalWriteSMCScratchRegister	stdcall	4	func
+400	OXOSFormatDisk	stdcall	4	func
+401	OXOSDeleteAllPartitions	stdcall	4	func
