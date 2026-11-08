@@ -148,6 +148,22 @@ class FATXWriter(FATX):
         self._set(chain[-1], new)
         self.disk.write(self.data + (new - 1) * self.cluster, entry)
 
+    def delete_entry(self, path):
+        """Marks PATH's directory entry deleted (its clusters stay allocated: enough for a test disk)."""
+        parent, name = self._parent(path)
+        chain = self.chain(self.root if parent is None else parent)
+        for c in chain:
+            base = self.data + (c - 1) * self.cluster
+            raw = self.disk.read(base, self.cluster)
+            for i in range(0, self.cluster, 64):
+                n = raw[i]
+                if n in (0x00, 0xFF):
+                    break
+                if n <= 42 and raw[i + 2:i + 2 + n].decode("latin-1").lower() == name.lower():
+                    self.disk.write(base + i, b"\xe5")
+                    return
+        raise FileNotFoundError(path)
+
     def _parent(self, path):
         parts = [p for p in path.split("\\") if p]
         parent = None

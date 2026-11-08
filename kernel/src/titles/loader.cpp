@@ -498,11 +498,13 @@ volatile ULONG XeLaunchReason;           // the cold-boot pre-launch check resul
 volatile ULONG XeDashboardLaunchData[3]; // diagnostics: {type, reason, code} as last written for the dashboard
 
 // The dashboard: EvoX's when it is installed (C:\evoxdash.xbe, or E:\evoxdash.xbe), else the Xbox dashboard
-// (C:\xboxdash.xbe). The first that loads is started (spec/oxos_internal/19_dashboard_choice.md).
+// (C:\xboxdash.xbe), else one in E:\XBLDashboard. The first that loads is started
+// (spec/oxos_internal/19_dashboard_choice.md).
 static const char *const XepDashboards[] = {
     "\\Device\\Harddisk0\\Partition2\\evoxdash.xbe",
     "\\Device\\Harddisk0\\Partition1\\evoxdash.xbe",
     "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe",
+    "\\Device\\Harddisk0\\Partition1\\XBLDashboard\\default.xbe",
 };
 
 // The launch data page's layout (one 4 KB page; the fields the kernel reads).
