@@ -128,8 +128,7 @@ kernel/
 
 ## Not yet
 - One image for every revision: the 1.6 still needs its own image (a run-time 1.6 check in the X-codes is planned).
-- Retail 1.0 – 1.3 and 1.5 consoles are untested (their Conexant encoder runs on the debug kit; the 1.5's Focus on the
-  1.4).
+- Retail 1.0 – 1.3 consoles are untested (Conexant tested on 1.0 debug kit)
 - Debugging on a real console (a GDB stub over the serial port).
 
 ## Credits and license
