@@ -1,7 +1,8 @@
 // The upload server's page (spec/oxos_internal/31_upload_server.md §4): the disk (file system and size), its drives
-// (FATX) or top-level folders (exFAT) and the current folder, uploads of files and whole folders (one PUT per file, with
-// its path inside the folder), a Launch button for each .xbe, and a Rename and Delete button for each file and folder
-// (Delete: a folder only when it is empty, the server refuses the others), and a Create Folder button in the ".." row.
+// (FATX) or top-level folders (exFAT) and the current folder, uploads of files and whole folders (one PUT per file,
+// with its path inside the folder), a Launch button for each .xbe, and a Rename and Delete button for each file and
+// folder (Delete: a folder only when it is empty, the server refuses the others), and a Create Folder button in the
+// ".." row.
 // Boot-only data.
 #include <xk/uploader.h>
 
