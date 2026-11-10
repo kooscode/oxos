@@ -327,7 +327,9 @@ static void UploadpList(UPLOADP_REQUEST *r) {
     UploadpReply(r, 200, "application/json", r->Json, n);
 }
 
-// A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\\Apps" ("/E" reads "E:\\"); an
+// --- The disk
+
+// A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\Apps" ("/E" reads "E:\"); an
 // exFAT disk has one volume whose top-level folders stand for the drives, so its paths stay as they are.
 static void UploadpShowPath(const char *Path, char *Out, ULONG Size) {
     ULONG i = 0, o = 0;
@@ -345,8 +347,6 @@ static void UploadpShowPath(const char *Path, char *Out, ULONG Size) {
     }
     Out[o] = 0;
 }
-
-// --- The disk
 
 // The disk's file system and size, for the page's header and its folder buttons (spec/oxos_internal/31 §4):
 // {"fs":"exFAT","bytes":2000398934016}. "fs" is "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
