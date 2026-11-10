@@ -1,7 +1,7 @@
-// The upload server's page (spec/oxos_internal/31_upload_server.md §4): the drives and the current folder, uploads of
-// files and whole folders (one PUT per file, with its path inside the folder), a Launch button for each .xbe, and a
-// Rename and Delete button for each file and folder (Delete: a folder only when it is empty, the server refuses the
-// others), and a Create Folder button in the ".." row.
+// The upload server's page (spec/oxos_internal/31_upload_server.md §4): the disk (file system and size), its drives
+// (FATX) or top-level folders (exFAT) and the current folder, uploads of files and whole folders (one PUT per file, with
+// its path inside the folder), a Launch button for each .xbe, and a Rename and Delete button for each file and folder
+// (Delete: a folder only when it is empty, the server refuses the others), and a Create Folder button in the ".." row.
 // Boot-only data.
 #include <xk/uploader.h>
 
@@ -32,10 +32,10 @@ td button{margin-right:6px}
 a{color:#5b3;cursor:pointer}
 .file{color:#bdb}
 </style></head><body>
-<header><h1>OXOS File Manager</h1></header>
+<header><h1 id="title">OXOS File Manager</h1></header>
 <main>
 <div class="top">
-<span class="label">Select Drive:</span><div class="bar" id="drives"></div>
+<span class="label" id="drivesLabel">Drives:</span><div class="bar" id="drives"></div>
 <span class="label">Click to upload:</span><div class="bar">
 <button onclick="$('files').click()">Single File</button>
 <button onclick="$('folder').click()">Entire Folder</button>
@@ -50,21 +50,30 @@ a{color:#5b3;cursor:pointer}
 <table id="list"></table>
 </main>
 <script>
-let cwd = '/E';
+let cwd = '/E', exfat = false;
 const $ = id => document.getElementById(id);
 const q = p => encodeURIComponent(p);
 const say = text => $('msg').textContent = text;
 const join = (folder, name) => (folder === '/' ? '' : folder) + '/' + name;
+// A path as the page shows it: a FATX disk has partitions, so /E/Apps reads E:\\Apps (/E reads E:\\); an exFAT disk has
+// one volume whose top-level folders stand for the drives, so its paths stay as they are.
+const show = path => exfat || !/^\/[^\/]/.test(path) ? path :
+  path[1] + ':\\' + path.slice(3).replace(/\//g, '\\');
 
 function size(n) {
   return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 }
 
+// A disk's size as its maker states it (decimal units): "8.0 GB", "2.0 TB".
+function diskSize(n) {
+  return n >= 1e12 ? (n / 1e12).toFixed(1) + ' TB' : (n / 1e9).toFixed(1) + ' GB';
+}
+
 async function list(path) {
   const r = await fetch('/api/list?path=' + q(path));
-  if (!r.ok) { say('Cannot open ' + path + ': ' + await r.text()); return; }
+  if (!r.ok) { say('Cannot open ' + show(path) + ': ' + await r.text()); return; }
   cwd = path;
-  $('path').textContent = path;
+  $('path').textContent = show(path);
   const entries = (await r.json()).sort((a, b) => b.dir - a.dir || a.name.localeCompare(b.name));
   const table = $('list');
   table.innerHTML = '';
@@ -117,7 +126,7 @@ function row(table, name, dir, bytes, open, xbe, full) {
 async function upload(fileList) {
   const files = [...fileList];
   if (!files.length) return;
-  if (cwd === '/') { say('Open a drive first'); return; }
+  if (cwd === '/') { say(exfat ? 'Open a folder first' : 'Open a drive first'); return; }
   let done = 0, bytes = 0;
   for (const f of files) {
     const path = f.webkitRelativePath || f.name;
@@ -135,11 +144,11 @@ async function upload(fileList) {
 const badName = name => /[\/\\:*?"<>|]/.test(name) || name === '.' || name === '..';
 
 async function createFolder() {
-  const name = prompt('New folder in ' + cwd + ':');
+  const name = prompt('New folder in ' + show(cwd) + ':');
   if (!name) return;
   if (badName(name)) { say('Not a folder name: ' + name); return; }
   const r = await fetch('/api/folder?path=' + q(join(cwd, name)), {method: 'PUT'});
-  say(r.ok ? 'Created ' + join(cwd, name) : 'Create folder failed: ' + await r.text());
+  say(r.ok ? 'Created ' + show(join(cwd, name)) : 'Create folder failed: ' + await r.text());
   if (r.ok) list(cwd);
 }
 
@@ -153,25 +162,38 @@ async function rename(path, old) {
 }
 
 async function remove(path, dir) {
-  if (!confirm('Delete ' + path + (dir ? '/' : '') + '?')) return;
+  if (!confirm('Delete ' + show(path) + '?')) return;
   const r = await fetch('/api/file?path=' + q(path), {method: 'DELETE'});
-  say(r.ok ? 'Deleted ' + path : 'Delete failed: ' + await r.text());
+  say(r.ok ? 'Deleted ' + show(path) : 'Delete failed: ' + await r.text());
   if (r.ok) list(cwd);
 }
 
 async function launch(path) {
-  say('Launching ' + path + ' ...');
+  say('Launching ' + show(path) + ' ...');
   const r = await fetch('/api/launch?path=' + q(path), {method: 'POST'});
-  say(r.ok ? 'Launching ' + path + ': [ Starting XBE ]' : '[ Launch failed: ' + await r.text() + ' ]' );
+  say(r.ok ? 'Launching ' + show(path) + ': [ Starting XBE ]' : '[ Launch failed: ' + await r.text() + ' ]' );
   }
 
-for (const d of ['C', 'E', 'F', 'G', 'X', 'Y', 'Z']) {
-  const b = document.createElement('button');
-  b.textContent = d + ':';
-  b.onclick = () => list('/' + d);
-  $('drives').append(b);
+// The header and the drive (FATX) or folder (exFAT) buttons: the file system and size, then one button for each
+// top-level drive or folder that exists.
+async function start() {
+  const r = await fetch('/api/disk');
+  if (r.ok) {
+    const disk = await r.json();
+    exfat = disk.fs === 'exFAT';
+    $('title').textContent = 'OXOS File Manager [' + disk.fs + ', ' + diskSize(disk.bytes) + ']';
+    $('drivesLabel').textContent = exfat ? 'Folders:' : 'Drives:';
+  }
+  const top = await fetch('/api/list?path=' + q('/'));
+  for (const e of top.ok ? await top.json() : []) {
+    const b = document.createElement('button');
+    b.textContent = exfat ? '/' + e.name : e.name + ':';
+    b.onclick = () => list('/' + e.name);
+    $('drives').append(b);
+  }
+  list(cwd);
 }
-list(cwd);
+start();
 </script>
 </body></html>
 )PAGE";

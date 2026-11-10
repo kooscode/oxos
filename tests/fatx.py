@@ -4,7 +4,8 @@ through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/stock
 
 usage: fatx.py IMAGE                                   list each partition's root
        fatx.py IMAGE --add DRIVE:\\PATH=HOST_PATH ... --out NEW_IMAGE
-                                                       copy host files or folders into a copy of IMAGE"""
+                                                       copy host files or folders into a copy of IMAGE
+       fatx.py IMAGE --format-f --out NEW_IMAGE        a copy of IMAGE (larger than 8 GB) with an empty F:"""
 import os, struct, time
 
 PARTITIONS = {"E": (0x55F400, 0x1312D6000), "C": (0x465400, 0x1F400000), "X": (0x400, 0x2EE00000),
@@ -70,6 +71,26 @@ class FATX:
     def read_file(self, path):
         e = self.lookup(path)
         return None if e is None else self.read_chain(e[2], e[3])
+
+
+# F: on a disk without a partition table (kernel/src/storage/disk_layout.cpp, spec/cerbios/03 §3): from the retail
+# partitions' end up to sector 0x0FFFFFFF (or the disk's end), at most 0x74000000 sectors.
+def f_partition(disk_bytes):
+    start, end = 0xEE8AB0, min(disk_bytes // 512, 0x0FFFFFFF)
+    return start, min(end - start, 0x74000000)
+
+
+def format_partition(disk, lba, sectors, cluster=16384, serial=0x4F584F53):
+    """An empty FATX volume of SECTORS sectors at LBA: the 4 KB header, the FAT (entries 0 and 1, the root, set) and
+    the root directory's one cluster, all entries never used (0xFF)."""
+    base, length = lba * 512, sectors * 512
+    disk.write(base, struct.pack("<4sIII", b"FATX", serial, cluster // 512, 1) + b"\xff" * (0x1000 - 16))
+    entries = length // cluster + 1
+    esize = 2 if entries < 0xFFF0 else 4
+    fat_size = (entries * esize + 4095) & ~4095
+    fat = (struct.pack("<HH", 0xFFF8, 0xFFFF) if esize == 2 else struct.pack("<II", 0xFFFFFFF8, 0xFFFFFFFF))
+    disk.write(base + 0x1000, fat + bytes(fat_size - len(fat)))
+    disk.write(base + 0x1000 + fat_size, b"\xff" * cluster)
 
 
 BAD_NAME_CHARS = set('"*/:<>?\\|')
@@ -215,6 +236,13 @@ if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # qcow2.py, also under python3 -I
     from qcow2 import Qcow2
     d = Qcow2(sys.argv[1])
+    if "--format-f" in sys.argv:
+        out = sys.argv[sys.argv.index("--out") + 1]
+        lba, sectors = f_partition(d.size)
+        format_partition(d, lba, sectors)
+        d.save(out)
+        print(f"saved {out}: F: at sector {lba:#x}, {sectors * 512 >> 20} MiB")
+        sys.exit(0)
     if "--add" in sys.argv:
         args = sys.argv[2:]
         out = args[args.index("--out") + 1]

@@ -112,6 +112,7 @@ XBAPI ULONG HalDiskCachePartitionCount;
 // exFAT layout (spec/oxos_internal/05_exfat_storage_spec.md): set before the first partition lookup.
 extern BOOLEAN IdexDiskEXFATLayout;
 extern PDEVICE_OBJECT IdexDiskEXFATVolume;    // the exFAT partition
+extern BOOLEAN IdexDiskForeignLayout; // a PC partition table without a usable exFAT volume: no partitions, no writes
 PCSZ IdexDiskFolderOf(PDEVICE_OBJECT Device); // "E", "C", ... for a folder partition, else nullptr
 
 // ATA task file.

@@ -17,7 +17,6 @@ struct IDE_PARTITION {
     ULONGLONG Start, Length;
 };
 extern IDE_PARTITION IdexDiskPartitions[15];
-extern BOOLEAN IdexDiskForeignLayout; // a PC partition table without a usable exFAT volume: no partitions, no writes
 extern BOOLEAN IdexDiskReformatted;   // formatted or partitions deleted since boot: only the whole-disk device writes
 
 // The layout (disk_layout.cpp).

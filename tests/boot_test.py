@@ -751,10 +751,11 @@ def blank_disk_fatal_checks(mon, reason, seconds, pad=None):
     return {"blank disk": checks}
 
 
-def upload_checks(mon, port, xbe):
+def upload_checks(mon, port, xbe, fs="exFAT"):
     """The File Manager (spec/oxos_internal/31, 32), opened by X held on a virtual pad during the splash, on a
     freshly formatted disk with no dashboard: the pad seen, the page, the drives,
-    an upload read back through a listing, deleting a file and an empty folder, creating a folder, and a launch."""
+    an upload read back through a listing, deleting a file and an empty folder, creating a folder, and a launch.
+    fs="FATX" (--hdd instead of --blank-hdd): a FATX disk; its C: is not empty."""
     import http.client, json
     def request(method, path, body=None, timeout=30):
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
@@ -778,15 +779,26 @@ def upload_checks(mon, port, xbe):
         return {"upload server": checks}
     status, drives = request("GET", "/api/list?path=%2F")
     names = [e["name"] for e in json.loads(drives)] if status == 200 else []
-    checks[f"the drives are listed ({', '.join(names)})"] = {"C", "E", "F"} <= set(names)
+    expected = {"C", "E", "F"} if fs == "exFAT" else {"C", "E"}  # an 8 GB FATX disk has no F:
+    checks[f"the drives are listed ({', '.join(names)})"] = expected <= set(names)
+    if "F" in names:  # a larger disk: F: takes a file and lists it back
+        status, _ = request("PUT", "/api/file?path=%2FF%2Fon%20F.bin", b"F" * 5000)
+        _, listing = request("GET", "/api/list?path=%2FF")
+        listed = any(e["name"] == "on F.bin" and e["size"] == 5000 for e in json.loads(listing))
+        checks[f"a file written to F: and listed ({status})"] = status == 201 and listed
+    status, disk = request("GET", "/api/disk")
+    disk = json.loads(disk) if status == 200 else {}
+    checks[f"the disk is reported ({disk})"] = disk.get("fs") == fs and disk.get("bytes", 0) >= 8 << 30
+    checks["the page asks for it (header, Drives: or Folders:)"] = b"/api/disk" in page and b"'Folders:'" in page
     blob = bytes((i * 7 + 3) & 0xFF for i in range(300000))
     status, _ = request("PUT", "/api/file?path=%2FE%2Fupload%20test%2Fdata.bin", blob)
     checks["a 300 KB upload into a new folder (201)"] = status == 201
     status, listing = request("GET", "/api/list?path=%2FE%2Fupload%20test")
     entries = json.loads(listing) if status == 200 else []
     checks["it is listed with its size"] = any(e["name"] == "data.bin" and e["size"] == len(blob) for e in entries)
-    status, empty = request("GET", "/api/list?path=%2FC")  # a fresh disk: C: is an empty folder
-    checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
+    if fs == "exFAT":
+        status, empty = request("GET", "/api/list?path=%2FC")  # a fresh disk: C: is an empty folder
+        checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
     status, _ = request("GET", "/api/list?path=%2FE%2F..")
     checks["'..' in a path is refused (400)"] = status == 400
     status, _ = request("PUT", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin", b"x" * 1000)
@@ -799,8 +811,9 @@ def upload_checks(mon, port, xbe):
     _, listing = request("GET", "/api/list?path=%2FE")
     gone = not any(e["name"] == "delete test" for e in json.loads(listing))
     checks[f"the empty folder deleted ({status})"] = status == 200 and gone
-    status, _ = request("DELETE", "/api/file?path=%2FE")
-    checks[f"a drive is not deleted (403: {status})"] = status == 403
+    status, text = request("DELETE", "/api/file?path=%2FE")
+    said = b"Cannot delete /E (a top-level folder)" if fs == "exFAT" else b"Cannot delete E:\\ (a drive)"
+    checks[f"a drive is not deleted (403: {status} {text!r})"] = status == 403 and text == said
     status, _ = request("PUT", "/api/folder?path=%2FE%2Fnew%20folder")
     again, _ = request("PUT", "/api/folder?path=%2FE%2Fnew%20folder")
     _, listing = request("GET", "/api/list?path=%2FE")
@@ -1039,7 +1052,7 @@ def main():
                     "partition delete leaves, asking for SECONDS of countdown")
     ap.add_argument("--countdown", type=int, default=5, help="--blank-hdd: the countdown expected without a marker "
                     "(5 in development builds, 30 in release builds)")
-    ap.add_argument("--upload", type=int, metavar="PORT", help="--blank-hdd: xemu's NAT network with host port PORT "
+    ap.add_argument("--upload", type=int, metavar="PORT", help="--blank-hdd (exFAT) or --hdd (FATX): xemu's NAT network with host port PORT "
                     "forwarded to the console's 80, and X held on a virtual pad during the boot; check the File "
                     "Manager (spec/oxos_internal/31, 32): its page, a listing, an upload read back, and launching "
                     "--upload-xbe")
@@ -1147,8 +1160,8 @@ def main():
             results = udf_checks(mon)
         elif a.fatal:
             results, fatal_code = fatal_checks(mon)
-        elif a.blank_hdd and a.upload:
-            results = upload_checks(mon, a.upload, a.upload_xbe)
+        elif a.upload:
+            results = upload_checks(mon, a.upload, a.upload_xbe, "exFAT" if a.blank_hdd else "FATX")
         elif a.blank_hdd:
             results = blank_disk_fatal_checks(mon, 2 if a.foreign else 1,
                                               a.blank_marker if a.blank_marker is not None else a.countdown,
@@ -1183,7 +1196,8 @@ def main():
         passed = fatal_code > 4 and bool(history & (1 << (fatal_code - 5)))
         print(f"  [{'PASS' if passed else 'FAIL'}] M5f: EEPROM error history bit {fatal_code - 5} (word {history:#06x})")
         ok &= passed
-    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder and not a.iso_launch:
+    if ok and a.hdd and not a.dash and not a.relaunch and not a.udf and not a.encoder and not a.iso_launch \
+            and not a.upload:  # the self-test's files; an upload run has none
         for name, passed in {**disk_checks(hdd_copy), **lba48_disk_checks(Qcow2(hdd_copy), Qcow2(a.hdd))}.items():
             print(f"  [{'PASS' if passed else 'FAIL'}] disk: {name}")
             ok &= passed

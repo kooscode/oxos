@@ -397,11 +397,25 @@ test_format:
 	$(FORMAT_TEST) --foreign
 	$(FORMAT_TEST) --blank-marker 0 --x-at-error
 
-# The upload server (spec/oxos_internal/31): a blank disk formatted at once, no dashboard on it, so the kernel serves
-# the upload page; the test uploads a file and the FTP server's XBE through xemu's NAT network and launches it.
-test_upload: ftp_server
+# The upload server (spec/oxos_internal/31): a blank disk formatted at once (exFAT), no dashboard on it, so the kernel
+# serves the upload page; the test uploads a file and the FTP server's XBE through xemu's NAT network and launches it.
+# Then the same on two FATX disks (copies), opened with X held during the splash: the 8 GB dashboard disk (no F:), and
+# that disk grown to 16 GB with an empty F: (tests/fatx.py --format-f; kept in xemu_state/oxos_xemu_fatx16/).
+FATX16_STATE := $(ROOT)/xemu_state/oxos_xemu_fatx16
+FATX16_HDD   := $(FATX16_STATE)/hdd.qcow2
+$(FATX16_HDD): $(XDASH_HDD)
+	mkdir -p $(FATX16_STATE)
+	python3 -I $(ROOT)/tests/qcow2.py --grow $(XDASH_HDD) $(FATX16_STATE)/grown.qcow2 16G
+	python3 -I $(ROOT)/tests/fatx.py $(FATX16_STATE)/grown.qcow2 --format-f --out $@
+	rm -f $(FATX16_STATE)/grown.qcow2
+UPLOAD_FATX_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
+    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --boot-wait 2 \
+    --upload 18080 --upload-xbe $(ROOT)/tools/ftp_server/bin/default.xbe
+test_upload: ftp_server $(XDASH_HDD) $(FATX16_HDD)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(ROOT)/tools/ftp_server/bin/default.xbe
+	$(UPLOAD_FATX_TEST) --hdd $(XDASH_HDD)
+	$(UPLOAD_FATX_TEST) --hdd $(FATX16_HDD)
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test_udf: $(BUILD)/bios.bin $(HDD_FETCH)

@@ -15,6 +15,7 @@
 #include <xk/objects.h>
 #include <xk/runtime.h>
 #include <xk/serial.h>
+#include <xk/storage.h>
 
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
@@ -38,6 +39,7 @@ struct UPLOADP_REQUEST {
     char Head[HEAD_SIZE]; // the request line and headers (HeadLength bytes)
     ULONG HeadLength;
     char Path[PATH_SIZE];   // the request's path= value, as the page sends it ("/E/Apps/x.xbe")
+    char Shown[PATH_SIZE];  // Path as messages show it: E:\Apps on a FATX disk, /E/Apps on an exFAT one
     char NtPath[PATH_SIZE]; // the same as an NT path
     // An upload: its file, the bytes still to come, the bytes not yet written, and the first error.
     HANDLE File;
@@ -298,7 +300,7 @@ static void UploadpList(UPLOADP_REQUEST *r) {
         HANDLE h;
         NTSTATUS status = UploadpOpen(r->NtPath, GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE, &h);
         if (!NT_SUCCESS(status))
-            return UploadpText(r, 404, "%s: not a folder (%08lx)", r->Path, status);
+            return UploadpText(r, 404, "%s: not a folder (%08lx)", r->Shown, status);
         UCHAR buffer[2048];
         for (bool first = true;; first = false) {
             IO_STATUS_BLOCK iosb;
@@ -319,10 +321,45 @@ static void UploadpList(UPLOADP_REQUEST *r) {
         }
         NtClose(h);
         if (status != STATUS_NO_MORE_FILES_)
-            return UploadpText(r, 500, "%s: listing failed (%08lx)", r->Path, status);
+            return UploadpText(r, 500, "%s: listing failed (%08lx)", r->Shown, status);
     }
     r->Json[n++] = ']';
     UploadpReply(r, 200, "application/json", r->Json, n);
+}
+
+// A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\\Apps" ("/E" reads "E:\\"); an
+// exFAT disk has one volume whose top-level folders stand for the drives, so its paths stay as they are.
+static void UploadpShowPath(const char *Path, char *Out, ULONG Size) {
+    ULONG i = 0, o = 0;
+    if (!IdexDiskEXFATLayout && Path[0] == '/' && Path[1] && Path[1] != '/' && (!Path[2] || Path[2] == '/') &&
+        Size > 3) {
+        Out[o++] = Path[1];
+        Out[o++] = ':';
+        Out[o++] = '\\';
+        i = Path[2] ? 3 : 2;
+        for (; Path[i] && o + 1 < Size; i++)
+            Out[o++] = Path[i] == '/' ? '\\' : Path[i];
+    } else {
+        for (; Path[i] && o + 1 < Size; i++)
+            Out[o++] = Path[i];
+    }
+    Out[o] = 0;
+}
+
+// --- The disk
+
+// The disk's file system and size, for the page's header and its folder buttons (spec/oxos_internal/31 §4):
+// {"fs":"exFAT","bytes":2000398934016}. "fs" is "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
+static void UploadpDisk(UPLOADP_REQUEST *r) {
+    const char *fs = IdexDiskEXFATLayout ? "exFAT" : IdexDiskForeignLayout ? "none" : "FATX";
+    ULONG n = (ULONG)RtlSnprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs,
+                                 IdexDiskLengthInSectors * 512);
+    UploadpReply(r, 200, "application/json", r->Json, n);
+}
+
+// What a top-level folder is, for a refusal: a drive on a FATX disk, a folder of the volume on an exFAT one.
+static const char *UploadpTopName() {
+    return IdexDiskEXFATLayout ? "a top-level folder" : "a drive";
 }
 
 // --- Creating a folder
@@ -334,14 +371,14 @@ static void UploadpCreateFolder(UPLOADP_REQUEST *r) {
     if (NT_SUCCESS(status))
         status = UploadpOpen(r->NtPath, GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE, &h);
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("New folder failed:", r->Path);
+        UploadpStatusPath("New folder failed:", r->Shown);
         if (status == STATUS_OBJECT_NAME_COLLISION_)
-            return UploadpText(r, 409, "%s: already exists", r->Path);
-        return UploadpText(r, 500, "%s: cannot create it (%08lx)", r->Path, status);
+            return UploadpText(r, 409, "%s: already exists", r->Shown);
+        return UploadpText(r, 500, "%s: cannot create it (%08lx)", r->Shown, status);
     }
     NtClose(h);
-    UploadpStatusPath("New folder", r->Path);
-    UploadpText(r, 201, "Created %s", r->Path);
+    UploadpStatusPath("New folder", r->Shown);
+    UploadpText(r, 201, "Created %s", r->Shown);
 }
 
 // --- Renaming
@@ -350,7 +387,7 @@ static void UploadpCreateFolder(UPLOADP_REQUEST *r) {
 // too (409).
 static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
-        return UploadpText(r, 403, "%s: a drive cannot be renamed", r->Path);
+        return UploadpText(r, 403, "Cannot rename %s (%s)", r->Shown, UploadpTopName());
     char name[PATH_SIZE];
     bool valid = UploadpQueryValue(Target, "name=", name, sizeof(name));
     for (ULONG i = 0; valid && name[i]; i++)
@@ -367,13 +404,13 @@ static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
         NtClose(h);
     }
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("Rename failed:", r->Path);
+        UploadpStatusPath("Rename failed:", r->Shown);
         if (status == STATUS_OBJECT_NAME_COLLISION_)
             return UploadpText(r, 409, "%s: already exists", name);
-        return UploadpText(r, 500, "%s: rename failed (%08lx)", r->Path, status);
+        return UploadpText(r, 500, "%s: rename failed (%08lx)", r->Shown, status);
     }
-    UploadpStatusPath("Renamed", r->Path);
-    UploadpText(r, 200, "Renamed %s to %s", r->Path, name);
+    UploadpStatusPath("Renamed", r->Shown);
+    UploadpText(r, 200, "Renamed %s to %s", r->Shown, name);
 }
 
 // --- Deleting
@@ -382,19 +419,19 @@ static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
 // anything in it is left as it is (409): the page deletes nothing recursively.
 static void UploadpDelete(UPLOADP_REQUEST *r) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
-        return UploadpText(r, 403, "%s: a drive cannot be deleted", r->Path);
+        return UploadpText(r, 403, "Cannot delete %s (%s)", r->Shown, UploadpTopName());
     ANSI_STRING name;
     RtlInitAnsiString(&name, r->NtPath);
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     NTSTATUS status = NtDeleteFile(&a);
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("Delete failed:", r->Path);
+        UploadpStatusPath("Delete failed:", r->Shown);
         if (status == STATUS_DIRECTORY_NOT_EMPTY_)
-            return UploadpText(r, 409, "%s: the folder is not empty", r->Path);
-        return UploadpText(r, 500, "%s: delete failed (%08lx)", r->Path, status);
+            return UploadpText(r, 409, "%s: the folder is not empty", r->Shown);
+        return UploadpText(r, 500, "%s: delete failed (%08lx)", r->Shown, status);
     }
-    UploadpStatusPath("Deleted", r->Path);
-    UploadpText(r, 200, "Deleted %s", r->Path);
+    UploadpStatusPath("Deleted", r->Shown);
+    UploadpText(r, 200, "Deleted %s", r->Shown);
 }
 
 // --- Uploads
@@ -416,11 +453,11 @@ static void UploadpEndUpload(UPLOADP_REQUEST *r) {
         r->File = nullptr;
     }
     if (!NT_SUCCESS(r->Error)) {
-        UploadpStatusPath("Upload failed:", r->Path);
-        return UploadpText(r, 500, "%s: write failed (%08lx)", r->Path, r->Error);
+        UploadpStatusPath("Upload failed:", r->Shown);
+        return UploadpText(r, 500, "%s: write failed (%08lx)", r->Shown, r->Error);
     }
-    UploadpStatusPath("Saved", r->Path);
-    UploadpText(r, 201, "%s: %llu bytes", r->Path, r->Received);
+    UploadpStatusPath("Saved", r->Shown);
+    UploadpText(r, 201, "%s: %llu bytes", r->Shown, r->Received);
 }
 
 static void UploadpStartUpload(UPLOADP_REQUEST *r, ULONGLONG Length, bool Continue) {
@@ -432,7 +469,7 @@ static void UploadpStartUpload(UPLOADP_REQUEST *r, ULONGLONG Length, bool Contin
     r->Remaining = Length;
     r->Received = r->ChunkUsed = 0;
     r->Phase = UploadpReadBody;
-    UploadpStatusPath("Receiving", r->Path);
+    UploadpStatusPath("Receiving", r->Shown);
     if (Continue) { // curl and others wait for this before they send a large body
         static const char go[] = "HTTP/1.1 100 Continue\r\n\r\n";
         NetTcpSend(r->Connection, go, sizeof(go) - 1);
@@ -473,6 +510,8 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         const char *page = UploadPage(&length);
         return UploadpReply(r, 200, "text/html; charset=utf-8", page, length);
     }
+    if (get && UploadpIs(target, "/api/disk "))
+        return UploadpDisk(r);
     bool list = UploadpIs(target, "/api/list?"), file = UploadpIs(target, "/api/file?"),
          folder = UploadpIs(target, "/api/folder?"), rename = UploadpIs(target, "/api/rename?"),
          launch = UploadpIs(target, "/api/launch?");
@@ -482,6 +521,7 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         return UploadpText(r, 405, "Wrong method");
     if (!UploadpQueryValue(target, "path=", r->Path, sizeof(r->Path)))
         return UploadpText(r, 400, "Bad path");
+    UploadpShowPath(r->Path, r->Shown, sizeof(r->Shown));
     bool drives = list && r->Path[0] == '/' && !r->Path[1]; // the list of drives
     if (!drives && !UploadpNtPath(r->Path, r->NtPath, sizeof(r->NtPath)))
         return UploadpText(r, 400, "Bad path");
@@ -494,9 +534,9 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
     if (remove)
         return UploadpDelete(r);
     if (launch) {
-        UploadpStatusPath("Launching", r->Path);
+        UploadpStatusPath("Launching", r->Shown);
         r->Launch = true;
-        return UploadpText(r, 200, "Launching %s", r->Path);
+        return UploadpText(r, 200, "Launching %s", r->Shown);
     }
     const char *length = UploadpHeader(r, "Content-Length");
     if (!length)
