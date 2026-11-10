@@ -17,6 +17,9 @@
 #include <xk/uploader.h>
 
 constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
+// The XOR keys of the header's entry point (+0x128) and kernel thunk table address (+0x158): retail and debug XBEs.
+constexpr ULONG XBE_ENTRY_KEY_RETAIL = 0xA8FC57AB, XBE_THUNK_KEY_RETAIL = 0x5B6D40B6;
+constexpr ULONG XBE_ENTRY_KEY_DEBUG = 0x94859D4B, XBE_THUNK_KEY_DEBUG = 0xEFB1F152;
 constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10,
                 XBE_SECTION_TAIL_RO = 0x20;
 constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_ORDINAL_NOT_FOUND = (NTSTATUS)0xC0000138,
@@ -380,16 +383,26 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
                                sections + count * 0x38 > XBE_BASE + sizeOfHeaders || XbeField(0x15C)))
         status = STATUS_INVALID_IMAGE_FORMAT;
     if (NT_SUCCESS(status)) {
-        // Entry point and thunk table are XOR-encoded: retail keys first, then the debug keys.
+        // Entry point and thunk table are XOR-encoded: the retail keys when they give an entry point and thunk table
+        // inside the image, else the debug keys. A thunk table at 0 is an XBE with no kernel imports for the loader
+        // (packed XBEs such as EvolutionX's dashboard resolve their own), and is left unresolved.
         ULONG entry = XbeField(0x128), thunk = XbeField(0x158);
-        auto inside = [&](ULONG va) { return va >= XBE_BASE && va < XBE_BASE + sizeOfImage; };
-        if (inside(entry ^ 0xA8FC57AB) && inside(thunk ^ 0x5B6D40B6))
-            entry ^= 0xA8FC57AB, thunk ^= 0x5B6D40B6;
-        else
-            entry ^= 0x94859D4B, thunk ^= 0xEFB1F152;
+        auto inside = [&](ULONG va) {
+            return va >= XBE_BASE && va < XBE_BASE + sizeOfImage;
+        };
+        auto usable = [&](ULONG e, ULONG t) {
+            return inside(e) && (!t || inside(t));
+        };
+        if (usable(entry ^ XBE_ENTRY_KEY_RETAIL, thunk ^ XBE_THUNK_KEY_RETAIL)) {
+            entry ^= XBE_ENTRY_KEY_RETAIL;
+            thunk ^= XBE_THUNK_KEY_RETAIL;
+        } else {
+            entry ^= XBE_ENTRY_KEY_DEBUG;
+            thunk ^= XBE_THUNK_KEY_DEBUG;
+        }
         *(ULONG *)(XBE_BASE + 0x128) = entry;
         *(ULONG *)(XBE_BASE + 0x158) = thunk;
-        if (!inside(entry) || !inside(thunk))
+        if (!usable(entry, thunk))
             status = STATUS_INVALID_IMAGE_FORMAT;
     }
     // Media/region policy: XK_RETAIL_MEDIA_POLICY=1 enforces both like a retail kernel; the default behaves like a
@@ -445,7 +458,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         }
         XK_SERIAL("load: reset on eject set\n");
     }
-    if (NT_SUCCESS(status))
+    if (NT_SUCCESS(status) && XbeField(0x158)) // 0: no kernel thunk table
         status = XepResolveKernelThunks((PULONG)XbeField(0x158));
     XK_SERIAL("load: thunks %#lx\n", status);
     if (NT_SUCCESS(status)) {

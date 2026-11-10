@@ -839,16 +839,26 @@ def upload_checks(mon, port, xbe, fs="exFAT"):
         checks[f"an XBE uploaded ({len(data) >> 10} KB)"] = status == 201
         status, _ = request("POST", "/api/launch?path=%2FE%2Fapp%2Fdefault.xbe")
         checks["its launch is accepted"] = status == 200
-        launched = ""
-        for _ in range(60):
-            time.sleep(0.5)
+        def running():
             ptr = mon.read_offset("XeImageFileName", 4)
             raw = b"".join(struct.pack("<I", int(w, 16)) for w in re.findall(r"0x([0-9a-f]{8})",
                            mon.hmp(f"x/16wx {ptr:#x}").split(":", 1)[1]))
-            launched = raw.split(b"\0")[0].decode("latin-1")
+            return raw.split(b"\0")[0].decode("latin-1")
+        launched, wanted = "", "\\Device\\Harddisk0\\Partition1\\app\\default.xbe"
+        for _ in range(60):
+            time.sleep(0.5)
+            launched = running()
             if launched.endswith("default.xbe"):
                 break
-        checks[f"the console runs it: {launched}"] = launched == "\\Device\\Harddisk0\\Partition1\\app\\default.xbe"
+        checks[f"the console runs it: {launched}"] = launched == wanted
+        # The name is set before the loader checks the file. A rejected XBE leaves the File Manager up (its screen
+        # shows "launch failed"); a running title has stopped it, so the page no longer answers.
+        time.sleep(10)
+        try:
+            answer, _ = request("GET", "/", timeout=5)
+        except OSError as e:
+            answer = type(e).__name__
+        checks[f"the File Manager has stopped 10 s later ({answer})"] = answer != 200
     return {"upload server": checks}
 
 

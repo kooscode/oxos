@@ -161,7 +161,10 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
   - Section digest mismatches are counted (`XeDigestMismatches`) but not fatal: homebrew XBEs (nxdk/cxbe)
     carry no valid digests. The reference reboots with fatal-error firmware return.
   - Retail XOR keys (entry 0xA8FC57AB, thunk 0x5B6D40B6) are tried first, then the debug keys
-    (0x94859D4B / 0xEFB1F152); the reference BIOS kernel used for RE carries the debug pair.
+    (0x94859D4B / 0xEFB1F152); the reference BIOS kernel used for RE carries the debug pair. The retail pair is
+    taken when it gives an entry point inside the image and a thunk table inside it or at 0. A thunk table at 0 is
+    an XBE with no kernel imports for the loader to resolve (packed XBEs such as EvolutionX's dashboard resolve their
+    own); it is left alone. Before 2026-11-10 such an XBE fell to the debug keys and failed with 0xC000007B.
   - The console region is all regions until the EEPROM is read.
   - No logo or SMC tray state yet (LaunchDataPage launches: §9).
 - Path symbolic links (`\??\D:` → a directory inside a device) reparse the link target plus the rest of the name.
