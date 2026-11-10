@@ -42,11 +42,12 @@ HTTP/1.1, one request per connection (`Connection: close`). Paths use the FTP se
 | Request | Answer |
 |---|---|
 | `GET /` | the page (§4) |
+| `GET /api/disk` | the disk as JSON: `{"fs":"exFAT","bytes":2000398934016}`; `fs` is `FATX`, `exFAT`, or `none` (a PC disk without an exFAT volume, spec/oxos_internal/05) |
 | `GET /api/list?path=/E/Apps` | the folder's entries as JSON: `[{"name":"default.xbe","dir":false,"size":123}, ...]` |
 | `PUT /api/file?path=/E/Apps/x/default.xbe` | the request body becomes that file; missing folders on the way are created; `201` |
 | `PUT /api/folder?path=/E/Apps/new` | creates that folder (and missing folders on the way); `201`; one that exists: `409` |
-| `POST /api/rename?path=/E/Apps/old&name=new` | renames that file or folder in its folder (`FileRenameInformation`); `200`. A name in use: `409`; a drive: `403`; a name FATX does not allow: `400` |
-| `DELETE /api/file?path=/E/Apps/old.bin` | deletes that file, or that folder when it is empty (`NtDeleteFile`); `200`. A folder with anything in it: `409`, nothing deleted (nothing is deleted recursively). A drive (`/E`): `403` |
+| `POST /api/rename?path=/E/Apps/old&name=new` | renames that file or folder in its folder (`FileRenameInformation`); `200`. A name in use: `409`; a drive (FATX) or top-level folder (exFAT): `403` ("Cannot rename E:\\ (a drive)" or "Cannot rename /E (a top-level folder)"); a name FATX does not allow: `400` |
+| `DELETE /api/file?path=/E/Apps/old.bin` | deletes that file, or that folder when it is empty (`NtDeleteFile`); `200`. A folder with anything in it: `409`, nothing deleted (nothing is deleted recursively). A drive or top-level folder (`/E`): `403` ("Cannot delete E:\\ (a drive)", or "/E (a top-level folder)" on exFAT) |
 | `POST /api/launch?path=/E/Apps/x/default.xbe` | `200`, then the server stops and the kernel starts that XBE as a title |
 
 Paths are percent-decoded; `..`, empty parts and characters FATX does not allow are refused (`400`). A file
@@ -54,7 +55,13 @@ system error answers `500` with the NT status. Uploads stream: the body goes to 
 writes; `Expect: 100-continue` (curl's large uploads) is answered. `GET /api/list?path=/` lists the drives that open.
 
 ## 4. The page
-One HTML page with a small script, served from the kernel image, titled "OXOS File Manager": the current folder (drive buttons, a path, the
+One HTML page with a small script, served from the kernel image, titled "OXOS File Manager". Its header adds the disk's
+file system and size from `/api/disk`, e.g. `OXOS File Manager [exFAT, 2.0 TB]` (decimal units, as disk makers state
+them). Below it, one button for each drive or top-level folder that `/api/list?path=/` returns: on a FATX disk the
+label is `Drives:` and the buttons read `C:` `E:` ...; on an exFAT disk, which has one volume and no drives, the label
+is `Folders:` and the buttons read `/C` `/E` ... (spec/oxos_internal/05 §2). Paths are shown the same way, on the
+page and in the server's messages and status line: `E:\Apps\x.xbe` on a FATX disk (partitions), `/E/Apps/x.xbe` on an
+exFAT disk (folders off the volume's root); requests always use the `/E/...` form. Then the current folder (a path, the
 folder's entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has
 Rename (asks for the new name) and Delete (asks first); the `..` row has Create Folder, which asks for the name), "Upload files" (several at once) and "Upload a
 folder" (the browser sends every file with its path inside the folder: a whole dashboard in one go). Files go one
