@@ -34,15 +34,17 @@ pm32:
     movl %eax, %fs
     movl %eax, %gs
 
-    // X-code interpreter. %esi = next X-code, %edi = accumulator; each X-code is {u8 op, u32 a, u32 b}.
+    // X-code interpreter (spec/oxos_internal/27 §5.3). %esi = next X-code, %edi = accumulator. Each X-code is
+    // 9 bytes, {u8 op, u32 a, u32 b}, with Cromwell's op numbers. The table starts at bank offset 0x80, where the
+    // MCPX ROM reads it too.
     movl $(BANK + 0x80), %esi
     xorl %edi, %edi
 next:
     movzbl (%esi), %ebp
     movl 1(%esi), %ebx
     movl 5(%esi), %ecx
-    addl $9, %esi
-    cmpl $0x07, %ebp // "use result": run opcode a with operands (b, accumulator)
+    addl $9, %esi // before the op runs, so jumps are relative to the next X-code
+    cmpl $0x07, %ebp // 0x07 "use result": run op a (all 32 bits) with operands (b, accumulator)
     jne 1f
     movl %ebx, %ebp
     movl %ecx, %ebx
@@ -67,14 +69,17 @@ next:
     je op_inb
     cmpl $0xEE, %ebp
     je done
-    jmp next // unknown opcodes are skipped
+    jmp next // any other op (0x10 included) does nothing
 
+// 0x02 read: accumulator = 32-bit read of address a (no address mask, unlike the ROM).
 op_peek:
     movl (%ebx), %edi
     jmp next
+// 0x03 write: 32-bit write of b to address a.
 op_poke:
     movl %ecx, (%ebx)
     jmp next
+// 0x04 PCI write: configuration address a to 0xCF8, then b to 0xCFC (no guard on 0x80000880, unlike the ROM).
 op_pciout:
     movw $0xCF8, %dx
     movl %ebx, %eax
@@ -83,6 +88,7 @@ op_pciout:
     movl %ecx, %eax
     outl %eax, %dx
     jmp next
+// 0x05 PCI read: configuration address a to 0xCF8, then accumulator = 32-bit read of 0xCFC.
 op_pciin:
     movw $0xCF8, %dx
     movl %ebx, %eax
@@ -91,27 +97,33 @@ op_pciin:
     inl %dx, %eax
     movl %eax, %edi
     jmp next
+// 0x06 AND-OR: accumulator = (accumulator AND a) OR b.
 op_andor:
     andl %ebx, %edi
     orl %ecx, %edi
     jmp next
+// 0x08 jump if not equal: when accumulator != a, go on into 0x09 (move the pointer by b); else the next X-code.
 op_jne:
     cmpl %ebx, %edi
     je next
+// 0x09 jump: move the pointer by b (signed).
 op_jmp:
     addl %ecx, %esi
     jmp next
+// 0x11 I/O write: low byte of b to port a.
 op_outb:
     movw %bx, %dx
     movb %cl, %al
     outb %al, %dx
     jmp next
+// 0x12 I/O read: accumulator = byte read from port a, zero-extended.
 op_inb:
     movw %bx, %dx
     inb %dx, %al
     movzbl %al, %edi
     jmp next
 
+// 0xEE exit: jump to the 2BL at bank offset 0x1000 (start.S). Operand a is not used; the caches stay off.
 done:
     movl $0xFFFC1000, %eax
     jmp *%eax

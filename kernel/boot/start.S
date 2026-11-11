@@ -7,6 +7,8 @@
     .code32
     .globl _start
 _start:
+    // Our own GDT (the table below), then reload every segment register from it: CS by the far jump, DS, ES, SS with
+    // the flat data selector, FS and GS with the null one.
     cli
     lgdt gdt_desc
     ljmp $0x08, $1f
@@ -24,8 +26,8 @@ _start:
     movl %eax, 0
     movl %eax, 4
 #if XK_XCODE_ENTRY_SNAPSHOT
-    // Debug (spec/oxos_internal/27 §4): the X-code settings that get lost on some cold boots, read before anything else
-    // runs, kept in MMX registers until the memory is sized, then stored at physical 0x2340 for the kernel's log.
+    // Debug (spec/oxos_internal/27 §4): the X-code settings that get lost on some cold boots, read before anything
+    // else runs, kept in MMX registers until the memory is sized, then stored at physical 0x2340 for the kernel's log.
     movl 0xFD0010B0, %eax
     movd %eax, %mm0
     movl 0xFD0010BC, %eax
@@ -57,7 +59,8 @@ _start:
     xorl %eax, %eax
 #endif
 
-    // Caches off while the MTRRs change.
+    // Caches off while the MTRRs change (CR0.CD and NW set, caches flushed), MTRRs off (default type register 0x2FF
+    // = 0), then the 8 variable ranges (MSRs 0x200-0x20F, base and mask each) cleared.
     movl %cr0, %eax
     orl $0x60000000, %eax
     movl %eax, %cr0
@@ -66,30 +69,31 @@ _start:
     xorl %edx, %edx
     movl $0x2FF, %ecx
     wrmsr
-    movl $0x200, %ecx // clear the 8 variable ranges
+    movl $0x200, %ecx
 2:  wrmsr
     incl %ecx
     cmpl $0x210, %ecx
     jne 2b
-    // As the reference 2BL leaves them: RAM 0-64 MB write-back, the top 512 KB of flash write-protect cached,
-    // everything else uncached (default type).
-    movl $0x200, %ecx
+    // As the reference 2BL leaves them (spec/stock/01 §4): RAM 0-64 MB write-back, the top 512 KB of flash
+    // write-protect cached, everything else uncached (default type). On a 128 MB console the kernel widens range 0
+    // to 128 MB (memory/init.cpp).
+    movl $0x200, %ecx                       // range 0 base: 0, type 6 (write-back)
     movl $0x00000006, %eax
     xorl %edx, %edx
     wrmsr
-    incl %ecx
+    incl %ecx                               // range 0 mask: 64 MB, valid
     movl $0xFC000800, %eax
     movl $0x0000000F, %edx
     wrmsr
-    incl %ecx
+    incl %ecx                               // range 1 base: 0xFFF80000, type 5 (write-protect)
     movl $0xFFF80005, %eax
     xorl %edx, %edx
     wrmsr
-    incl %ecx
+    incl %ecx                               // range 1 mask: 512 KB, valid
     movl $0xFFF80800, %eax
     movl $0x0000000F, %edx
     wrmsr
-    movl $0x2FF, %ecx
+    movl $0x2FF, %ecx                       // default type: MTRRs on, everything else uncached
     movl $0x800, %eax
     xorl %edx, %edx
     wrmsr
@@ -165,11 +169,13 @@ _start:
     outl %eax, %dx
 13:
 
+    // Caches on (CR0.CD and NW cleared): from here the MTRRs above decide what is cached.
     movl %cr0, %eax
     andl $0x9FFFFFFF, %eax
     movl %eax, %cr0
 
 #if XK_XCODE_ENTRY_SNAPSHOT
+    // The entry snapshot taken at _start, now that RAM is sized and safe to write.
     movl $0x53304358, 0x2340                // 'XC0S'
     movd %mm0, 0x2344
     movd %mm1, 0x2348
@@ -182,8 +188,9 @@ _start:
     emms
 #endif
 4:
+    // A stack just below the C part at 4 MB (it grows down, away from it).
     movl $0x003FFFF0, %esp
-    // Copy the C part (.text/.rodata/.data) to RAM and clear its .bss.
+    // Copy the C part (.text/.rodata/.data) to RAM and clear its .bss (addresses from bl.ld).
     movl $__ram_load, %esi
     movl $__ram_start, %edi
     movl $__ram_copy_dwords, %ecx
@@ -192,10 +199,12 @@ _start:
     movl $__bss_dwords, %ecx
     xorl %eax, %eax
     rep stosl
+    // The rest of the 2BL in C++ (bl.cpp): it starts the kernel and does not return; if it did, halt.
     call BlMain
 3:  hlt
     jmp 3b
 
+    // The GDT: null, flat code and flat data over the whole 4 GB, the same layout as reset.S's.
     .p2align 3
 gdt:
     .quad 0
