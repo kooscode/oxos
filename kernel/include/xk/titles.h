@@ -22,6 +22,11 @@ bool MiIsNetbootTitlePage(ULONG pfn);
 ULONG XkTraceWrap(USHORT ordinal, ULONG target);
 constexpr ULONG XK_TRACE_WORDS = 15;    // a ring entry: ordinal, caller, thread, three arguments, result, 32-byte name
 constexpr ULONG XK_TRACE_RING = 0x8000; // entries in the ring
+constexpr ULONG XK_TRACE_MAX_IMPORTS = 512; // imports that can be traced (a 10-byte stub each)
+// TRACE_IMPORTS=2 (128 MB): the ring and the stubs at a fixed physical address near the top of RAM, kept from the
+// memory manager (memory/init.cpp), clear of the second GPU instance memory at 0x7FE0000.
+constexpr ULONG XK_TRACE_HIGH_PHYSICAL = 0x7C00000;
+constexpr ULONG XK_TRACE_HIGH_BYTES = XK_TRACE_RING * XK_TRACE_WORDS * 4 + XK_TRACE_MAX_IMPORTS * 10;
 extern "C" volatile ULONG (*XkTraceRing)[XK_TRACE_WORDS];
 extern "C" volatile ULONG XkTraceCount;
 extern "C" void XkTraceThreadExit(PKTHREAD Thread);

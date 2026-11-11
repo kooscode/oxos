@@ -3,6 +3,7 @@
 #include <xk/serial.h>
 #include <xk/arch.h>
 #include <xk/hardware.h>
+#include <xk/memory.h>
 
 IDE_CHANNEL_OBJECT IdexChannelObject;
 
@@ -49,14 +50,14 @@ static bool IdexProgramDmaPages(PVOID Buffer, ULONG Length) {
     ULONG va = (ULONG)Buffer, n = 0;
     while (Length) {
         // Real hardware hangs the bus on a transfer to an address that is not RAM (xemu ignores it): check each
-        // page is mapped and below 64 MB before the engine sees it.
+        // page is mapped and inside the RAM (64 or 128 MB) before the engine sees it.
         if (!MmIsAddressValid((PVOID)va)) {
             IdexBadDmaPages = IdexBadDmaPages + 1;
             XK_SERIAL("*** ide: DMA buffer %p (%lu bytes left) is not mapped; transfer refused\n", (PVOID)va, Length);
             return false;
         }
         ULONG phys = MmGetPhysicalAddress((PVOID)va);
-        if (phys >= 0x04000000 || (phys & 1)) {
+        if ((phys >> PAGE_SHIFT) > MmHighestPhysicalPage || (phys & 1)) {
             IdexBadDmaPages = IdexBadDmaPages + 1;
             XK_SERIAL("*** ide: DMA buffer %p -> physical %08lx is not RAM; transfer refused\n", (PVOID)va, phys);
             return false;

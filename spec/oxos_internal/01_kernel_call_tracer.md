@@ -12,7 +12,7 @@ host side `tools/trace.py`, `tools/run.py --trace-map`.
 |---|---|---|
 | 0 (default) | no tracer: `trace.cpp` and `trace.S` are not even compiled | release and self-test builds |
 | 1 | ring from contiguous memory, stubs from pool: inside the console's 64 MB (about 2 MB less for the title) | `make run_trace_full TRACE=1` (`build/trace_full_64mb`) |
-| 2 | ring and stubs mapped at physical 0x4000000, **above** the 64 MB the kernel manages; needs xemu with 128 MB | `make run_trace_full` (default, `build/trace_full`): the title sees exactly a release build's memory |
+| 2 | ring and stubs mapped at physical 0x7C00000, near the top of 128 MB and kept from the memory manager; needs xemu with 128 MB | `make run_trace_full` (default, `build/trace_full`): a title limited to 64 MB (retail games) sees exactly a release build's memory; a 128 MB title (spec/stock/09 §10) about 2 MB less of the upper half |
 
 Trace builds also turn on the debug serial port (03_debug_serial.md); the host tools use its crash lines.
 
@@ -54,9 +54,9 @@ the caller's registers and stack unchanged.
   - NtReadFile (219), NtWriteFile (236): tag `0x10000000 | ordinal`, APC context, I/O status block, buffer, length,
     the 64-bit byte offset (all ones when none), and the buffer's first dword.
   - NtSetInformationFile (226): tag, information class, length, the first four dwords of the information.
-- `XkTraceCount` is in the persisted section, so with TRACE_IMPORTS=2 the numbering, and the ring above 64 MB,
-  continue across a quick reboot (title to title). With TRACE_IMPORTS=1 the ring is newly allocated and cleared
-  when the first title of each boot is loaded, so entries from before the reboot read as empty.
+- `XkTraceCount` is in the persisted section, so with TRACE_IMPORTS=2 the numbering, and the ring outside the memory
+  manager, continue across a quick reboot (title to title). With TRACE_IMPORTS=1 the ring is newly allocated and
+  cleared when the first title of each boot is loaded, so entries from before the reboot read as empty.
 
 ## 4. Catching the return value
 - Per thread, a slot (128 slots) keeps up to 8 calls in flight: titles' APCs can nest kernel calls.

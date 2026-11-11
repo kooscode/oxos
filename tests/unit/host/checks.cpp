@@ -7,13 +7,13 @@
 std::string CheckPfnDatabase() {
     char msg[200];
     uint32_t total = 0;
-    std::vector<uint8_t> seen(MM_PAGES);
+    std::vector<uint8_t> seen(MM_LOW_PAGES);
     for (uint32_t color = 0; color < 32; color++) {
         USHORT packed = MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, prev = 0xFFFE;
         uint32_t n = 0;
         while (packed != 0xFFFE) {
             uint32_t pfn = ((uint32_t)packed << 4) | color;
-            if (pfn >= MM_PAGES || seen[pfn]) {
+            if (pfn >= MM_LOW_PAGES || seen[pfn]) {
                 snprintf(msg, sizeof(msg), "colour %u: pfn %#x out of range or listed twice", color, pfn);
                 return msg;
             }
@@ -30,7 +30,7 @@ std::string CheckPfnDatabase() {
             }
             prev = packed;
             packed = (USHORT)e;
-            if (++n > MM_PAGES)
+            if (++n > MM_LOW_PAGES)
                 return "a colour list loops";
         }
         if (MmRetailPfnRegion.FreePagesByColor[color].PackedPfnBlink != prev) {

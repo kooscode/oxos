@@ -356,12 +356,15 @@ test_dash: $(HDD_FETCH)
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
-# media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2).
+# media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console:
+# the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10).
 test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map \
-	    --relaunch --boot-wait 1
+	for memory in 64 128; do \
+	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory $$memory || exit 1; \
+	done
 
 # Video encoder phase: the encoder tables must be what tools/gen_av_tables.py makes from the specs
 # (spec/stock/18-20); then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus

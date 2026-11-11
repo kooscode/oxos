@@ -86,12 +86,13 @@ Classic NT x86 self-mapped paging: **page tables at 0xC0000000, page directory a
 - **0xF8000000–0xFF7FFFFF**: 30 × 4 MB large pages identity-mapped, **uncached** (PCD|PWT). This
   covers the MMIO: NV2A at 0xFD000000, MCPX/USB/NIC, flash at 0xFF000000.
 - PDE for 0xFFC00000: cleared.
-- Reads PCI bus 0, device 0, config byte 0x87 (host bridge). Probably the RAM size or type; to be confirmed.
+- Reads PCI bus 0, device 0, config byte 0x87 (host bridge): the top of RAM in 16 MB units (0x03 = 64 MB, 0x07 =
+  128 MB); the debug kernel sizes its memory from it (spec 09 §10).
 - Physical memory init: cold → full init (0x800557f4); quick → **re-adopt persisted memory** (0x8001fa6c).
 - **0x80000000–0x83FFFFFF (64 MB)**: 16 PDEs pointing at page tables in physical memory starting at
   0x03FF0000, so all of RAM is visible at 0x80000000. PDEs for 0x84000000–0x8FFFFFFF are cleared.
-  **128 MB consoles** (devkits, RAM-upgraded retail units) will need those extra PDEs. Check how
-  this kernel handles them before deciding what ours does.
+  **128 MB consoles** (devkits, RAM-upgraded retail units): the retail kernel ignores the upper half; the
+  debug kernel's handling, which ours follows, is spec 09 §10.
 - Then: further init (0x80018e38), pool init (0x80012dc2), a lookaside/zone init (0x8001f745),
   and **`FscSetCacheSize(16)`**: the initial file-system cache is 16 pages.
 
@@ -139,5 +140,4 @@ Titles read `XboxHardwareInfo`, so these bits must match on each console revisio
 ## Open questions
 - The pre-reset hook 0x8001eabc; the 0x80CF pulse; the 0x8003B138 skip-pulse bit (spec 03 §boot flags).
 - Meaning of XboxHardwareInfo flags 0x10/0x20/0x40/0x80/0x01 (check against several console revisions).
-- PCI 0:0 reg 0x87 and 128 MB RAM handling.
 - Phase-1 system thread 0x8001576F → spec 03.

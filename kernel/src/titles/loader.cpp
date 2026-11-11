@@ -22,6 +22,7 @@ constexpr ULONG XBE_ENTRY_KEY_RETAIL = 0xA8FC57AB, XBE_THUNK_KEY_RETAIL = 0x5B6D
 constexpr ULONG XBE_ENTRY_KEY_DEBUG = 0x94859D4B, XBE_THUNK_KEY_DEBUG = 0xEFB1F152;
 constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10,
                 XBE_SECTION_TAIL_RO = 0x20;
+constexpr ULONG XBE_INIT_LIMIT_64_MB = 4; // header +0x124 (init flags): the title keeps to 64 MB on a 128 MB console
 constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_ORDINAL_NOT_FOUND = (NTSTATUS)0xC0000138,
                    STATUS_REGION_MISMATCH = (NTSTATUS)0xC0050001, STATUS_MEDIA_MISMATCH = (NTSTATUS)0xC0050002;
 
@@ -489,6 +490,9 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
         }
         if (!(region & 0x80000000))
             RtlZeroMemory(XboxEEPROMKey, 16); // retail titles never see the EEPROM key
+        // A 128 MB console's upper half, unless the XBE asks for the 64 MB limit (spec/stock/09 §10).
+        if (!(XbeField(0x124) & XBE_INIT_LIMIT_64_MB))
+            MmAllowUpperMemory();
     }
     NtClose(h);
     if (!NT_SUCCESS(status) && reserved)

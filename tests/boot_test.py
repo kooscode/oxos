@@ -521,6 +521,17 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
     return checks
 
 
+def ram_checks(mon, memory):
+    """The RAM the kernel manages, read after the quick reboots: the cold boot's probe has to survive them."""
+    pages = memory * 256
+    return {
+        # 2 = more than 64 MB; 1 (64 MB) and 3 (unclear: xemu at 64 MB) are both used as 64 MB.
+        f"{memory} MB probed at the cold boot": (mon.read("MiRamProbe") == 2) == (memory == 128),
+        f"{pages} pages managed after the quick reboots": mon.read("MmNumberOfPhysicalPages") == pages
+            and mon.read("MmHighestPhysicalPage") == pages - 1,
+    }
+
+
 # --- Disc images (spec/oxos_internal/16_virtual_discs.md): the ISO launcher on the disc mounts an image of the kernel
 # test title (with relaunch.txt) from F:\titles on an exFAT disk; the title then runs from the image, relaunches
 # itself (the mount survives the quick reboots) and ends in the dashboard.
@@ -1088,6 +1099,8 @@ def main():
                     "file while it plays, to compare with tools/jingle's render")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), help="present this video encoder (xemu -machine "
                     "video-encoder=...) and check that the kernel finds and reports it")
+    ap.add_argument("--memory", type=int, choices=(64, 128), default=64, help="the console's RAM in MB; --relaunch "
+                    "also checks that the kernel still manages all of it after the quick reboots (spec/stock/09 §10)")
     a = ap.parse_args()
 
     work = tempfile.mkdtemp(prefix="xk-boot-")
@@ -1136,7 +1149,7 @@ def main():
             q.save(hdd_copy + ".new")
             os.replace(hdd_copy + ".new", hdd_copy)
     open(cfg, "w").write(
-        "[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys.files]\n"
+        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '{a.memory}'\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"
@@ -1179,7 +1192,7 @@ def main():
         elif a.dash:
             results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox, a.xbl)
         elif a.relaunch:
-            results = {"M5d-2": title_checks(mon, a.title_map, True)}
+            results = {"M5d-2": title_checks(mon, a.title_map, True), "RAM": ram_checks(mon, a.memory)}
         elif a.iso_launch:
             results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:
