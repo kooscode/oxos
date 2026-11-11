@@ -1,6 +1,6 @@
 // Open BIOS image: 2BL entry at bank offset 0x1000 (0xFFFC1000), reached in flat 32-bit protected mode from the
-// X-codes' overflow trick (MCPX ROM present) or from our reset code (no ROM). The GDT may still point into the
-// hidden boot ROM, so ours is loaded first. Then caches/MTRRs as the reference 2BL leaves them, a stack below
+// X-codes' overflow trick (retail MCPX ROM) or from our reset code (no ROM: MCPX X2, xemu). The GDT may still point
+// into the hidden boot ROM, so ours is loaded first. Then caches/MTRRs as the reference 2BL leaves them, a stack below
 // 4 MB, and the C part copied to RAM at 0x400000 (where the reference 2BL lives and the kernel wipes it).
 
     .section .entry, "ax"
@@ -18,8 +18,9 @@ _start:
     movl %eax, %fs
     movl %eax, %gs
 
-    // The overflow trick left `mov eax, 0xFFFC1000; jmp eax` in RAM at address 0: clear it, so physical page 0
-    // starts zeroed as a Microsoft BIOS leaves it (titles' USB library keeps its state there).
+    // The X-codes left the overflow trick's `mov eax, 0xFFFC1000; jmp eax` in RAM at address 0 (also when our reset
+    // code ran them): clear it, so physical page 0 starts zeroed as a Microsoft BIOS leaves it (titles' USB library
+    // keeps its state there).
     movl %eax, 0
     movl %eax, 4
 #if XK_XCODE_ENTRY_SNAPSHOT

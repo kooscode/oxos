@@ -181,7 +181,7 @@ Microsoft's 2BL and keys: do not distribute it.
 - **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and
   EEPROM key handling of [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs
   Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without any Microsoft key; without a boot ROM
-  (xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back checks to their memory set-up
+  (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back checks to their memory set-up
   writes, which some consoles' GPU ignores (spec/oxos_internal/27). The hard disk unlocks with Cromwell's EEPROM key
   states.
 

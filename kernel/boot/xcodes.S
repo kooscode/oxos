@@ -3,8 +3,9 @@
 // The X-codes are XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0, https://github.com/XboxDev/cromwell), included
 // from the copy the build fetches into third_party/cromwell. They set up the memory controller, chipset and SMBus
 // devices, then end with Cromwell's "overflow trick": they write `mov eax, 0xFFFC1000; jmp eax` to RAM address 0
-// and exit. The MCPX boot ROM then fails its check of the (absent) Microsoft 2BL, hides itself, and the CPU runs on
-// from address 0 into our 2BL at bank offset 0x1000. The header values below are also Cromwell's
+// and exit. On a retail console the MCPX boot ROM then fails its check of the (absent) Microsoft 2BL, hides itself,
+// and the CPU runs on from address 0 into our 2BL at bank offset 0x1000. Without a boot ROM (MCPX X2, xemu) our
+// reset code (reset.S) runs this table and jumps to the 2BL itself. The header values below are also Cromwell's
 // (boot_rom/2bBootStartup.S); MCPXREVD5 selects the values for the 1.6 console's MCPX and OXOS's own 1.6 program,
 // boot/xcodes_1_6.inc (spec/stock/24).
 //

@@ -11,6 +11,7 @@ It works on consoles with:
 | 1.0 | 1.0 | RC4 attack |
 | 1.1-1.5 | 1.1 | TEA attack |
 | 1.6 | 1.6 (Xyclops) | not supported |
+| debug kit | X2 | nothing to dump: it has no boot ROM (the CPU starts in flash) |
 
 Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_dump.md).
 

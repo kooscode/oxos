@@ -76,6 +76,52 @@ Evidence conventions:
 - Both ROMs use **RAM at 0x8F000** after the exit and fetch the overflow-trick jump from RAM at 0: the program must leave
   the DRAM working.
 
+### 1.6 The decoy loader (flash 0x3FE00-0x3FFFF)
+The top 512 bytes of the retail 4627 and 5838 images hold a loader (the same bytes in both; flash offsets below are in
+5838.bin). A retail console never runs it: the MCPX ROM covers 0xFFFFFE00-0xFFFFFFFF. A console without a boot ROM
+does (the MCPX X2 of debug kits, spec 01 §5). What it does if run:
+1. **Entry**, laid out as the ROM's (§1.1): the reset vector jumps to 0xFFFFFFB8; GDT and IDT are both loaded from the
+   descriptor at 0xFFFFFFF4 (limit 0x18, base 0xFFFFFFD8: null, flat code 0x08, flat data 0x10); protected mode on;
+   far jump to 0x08:0xFFFFFE00 (0x3FFB8-0x3FFD5, 0x3FFF0).
+2. DS, ES, SS ← 0x10; no stack is set. The program pointer starts at **0xFFFC0000**: bank offset 0, which in a retail
+   image is the init table, not the X-code program at 0x80 (0x3FE00-0x3FE0A).
+3. **Ops**: the ROM's 9-byte format and accumulator (§1.2), the ROM's operations under other op numbers, plus one more.
+   Unknown ops are no-ops (0x3FE0F-0x3FEAF):
+
+   | Operation | Decoy op | ROM op (§1.3) |
+   |---|---|---|
+   | memory read (no address mask) | 0x01 | 0x02 |
+   | memory write | 0x09 | 0x03 |
+   | PCI write (no 0x80000880 guard) | 0x11 | 0x04 |
+   | PCI read | 0x04 | 0x05 |
+   | AND-OR | 0x12 | 0x06 |
+   | use result | 0x03 | 0x07 |
+   | jump if not equal | 0x10 | 0x08 |
+   | jump | 0x02 | 0x09 |
+   | AND-OR, second register | 0x06 | 0x10 |
+   | I/O write | 0x05 | 0x11 |
+   | I/O read | 0x07 | 0x12 |
+   | exit | 0xEE | 0xEE |
+   | read port 0x80 operand-2 times into memory at the accumulator's address | 0x08 | — |
+4. **Exit** (op 0xEE): MSRs 0x200-0x20F ← 0, MSR 0x2FF ← operand 1, CR0 CD and NW cleared: the ROM's exit steps 1-3
+   (§1.4) (0x3FEB4-0x3FED2).
+5. **Key schedule**: 256 bytes of state S at RAM 0x10000 ← 0..255, then mixed with 256 key bytes K from flash
+   0x3FC80-0x3FD7F (the bytes just below the loader): for i = 0..255, j ← j + S[j] + K[i] (8-bit), swap S[i] and
+   S[j]. RC4's key schedule adds S[i], not S[j] (0x3FED5-0x3FF04).
+6. **Decryption**: 0x4000 bytes from flash 0x3A000 (0xFFFFA000) to RAM **0x400000**: for byte n, with i = n mod 256,
+   out = in XOR S[i]; then S[i] and S[out] are swapped. This is not RC4's output step (0x3FF06-0x3FF29).
+7. Jump to 0x400000, with no check (0x3FF2B-0x3FF30). 0x3FF32-0x3FFB7 is filler (NOPs).
+8. 0x3FFFA-0x3FFFF hold the bytes of the ROM's final hide write (PCI 0x80000880 byte ← 2, ending `B0 02 EE`), as at
+   the end of the real ROM; nothing jumps there.
+
+Compared with the real ROM (§1.5): table at offset 0 instead of 0x80, renumbered ops, a key from flash instead of
+16 bytes inside the ROM, an RC4-like cipher instead of RC4, 0x4000 bytes from 0x3A000 to 0x400000 instead of 0x6000
+from 0x39E00 to 0x90000, and no check or hiding before the jump.
+
+On an X2 console a retail image therefore does not boot: the loader runs the init table and the X-code program under
+its own op numbers (seen 2026-11-10 on the green debug kit: the 4627 image ran into wild reads, the 5838 image hung
+reading 0xFFFFFE3F).
+
 ## 2. The 5838 X-code program, step by step
 The program runs from 0x80 to the exit at 0x0DAF (376 ops; the next free byte is 0x0DB8). The pad-calibration
 breakpoints follow at 0x0DC0 (flash header 0x7C = 0xDC0, spec 21 §3.7). It is a 1.6-only program: it has no NV2A
