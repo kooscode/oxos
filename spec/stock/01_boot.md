@@ -103,9 +103,18 @@ Bank 1 holds the splash instead (spec/oxos_internal/00_boot_splash.md). `make bi
   Microsoft 2BL then fails; it hides itself, and execution runs on from address 0 into our 2BL. No MCPX key is
   involved, so the same image serves MCPX 1.0 and 1.1 (console revisions 1.0-1.5). `MCPX16=1` selects
   Cromwell's header and X-code values for the 1.6's MCPX.
-- **Without a ROM** (xemu with an empty `bootrom_path`): the CPU starts at 0xFFFFFFF0, in our reset code. It
-  enters flat protected mode, interprets the same X-code table and jumps to 0xFFFC1000. On hardware the MCPX ROM
-  hides this range, so the code never runs there.
+- **Without a ROM** (debug kits with the MCPX X2, and xemu with an empty `bootrom_path`): the CPU starts at
+  0xFFFFFFF0, in our reset code. It enters flat protected mode, interprets the same X-code table and jumps to
+  0xFFFC1000. On a retail console the MCPX ROM covers this range, so the code never runs there.
+  - **MCPX X2** (2026-11-10, green debug kit): the CPU's reads of 0xFFFFFE00-0xFFFFFFFF reach the flash (seen on the
+    LPC bus). Retail 4627 and 5838 images have their decoy loader in their top 512 bytes (a reset jump at 0x1F0 and
+    an X-code interpreter that reads its table at 0xFFFC0000 with other opcode numbers than the ROM's), so on an X2
+    the CPU runs the decoy loader and a retail image's X-code table cannot run there (spec/stock/24 §1.6).
+  - Our interpreter has no address mask on reads (the ROM folds reads at or above 256 MB into the low 256 MB), does
+    not keep 0x80000880 bit 1 clear and has no op 0x10 (spec/stock/24 §1.3); our X-code tables use none of these.
+  - At exit (op 0xEE) it only jumps to 0xFFFC1000: the ROM's MTRR clear, default type 0x806 and caches on are left
+    to the 2BL, which sets the MTRRs and caches itself.
+  - No loader check and no hiding: the overflow trick's jump written to RAM 0 is not used, and the 2BL clears it.
 - **2BL:**
   - answers the SMC's start-up challenge first: reads SMC registers 0x1C-0x1F and writes the answer to 0x20 and
     0x21 (the algorithm as in XboxDev/cromwell's `boot_rom/2bPicResponseAction.c`). On a console the SMC resets the

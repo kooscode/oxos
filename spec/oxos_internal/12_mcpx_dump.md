@@ -7,6 +7,10 @@ Verified:
 - MCPX 1.1, on the no-DVD 1.4 console. The dump matched the loader hash it stores.
 - MCPX 1.0, in xemu with a 1.0 ROM. The dump was identical to the ROM given to xemu.
 
+Not applicable: the MCPX X2 of debug kits has no boot ROM; the CPU starts in the flash's top 512 bytes (spec/stock/01
+§5). Both attack images were run on the green debug kit (2026-11-10): the CPU ran the retail BIOS's decoy loader (its top
+512 bytes) and never reached the payload (RC4 image: wild reads; TEA image: hung at 0xFFFFFE3F).
+
 ## 1. Why our normal entry can't read the ROM
 - Open images enter the 2BL through the X-codes' overflow trick (spec/stock/01 §5). The ROM's check fails, it hides
   itself (host bridge 0x80000880 ← 2), and execution wraps to RAM address 0. By then 0xFFFFFE00-0xFFFFFFFF reads
