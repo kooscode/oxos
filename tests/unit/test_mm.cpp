@@ -454,7 +454,7 @@ TEST_F(Vm, StatisticsFollowTheAllocations) {
     ASSERT_EQ(MmQueryStatistics(&st), STATUS_SUCCESS);
     EXPECT_EQ(st.VirtualMemoryBytesCommitted, committed + 0x10000);
     EXPECT_EQ(st.VirtualMemoryBytesReserved, reserved + 0x10000);
-    EXPECT_EQ(st.TotalPhysicalPages, MM_PAGES);
+    EXPECT_EQ(st.TotalPhysicalPages, MM_LOW_PAGES);
     Free(base, 0, MEM_RELEASE);
     ASSERT_EQ(MmQueryStatistics(&st), STATUS_SUCCESS);
     EXPECT_EQ(st.VirtualMemoryBytesCommitted, committed);

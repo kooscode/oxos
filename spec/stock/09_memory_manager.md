@@ -21,7 +21,8 @@ and a live dump of the 2BL page directory. Virtual memory: batch_decompile `ev_e
 | 0x3FE0000–0x3FEFFFF | GPU instance memory (64 KB initial claim) | pa\|0x7B (uncached) |
 | 0x3FF0000–0x3FFFFFF | page tables for VA 0x80000000–0x83FFFFFF | pa\|0x463 |
 - VA **0x80000000 + PA** maps all 64 MB with **4 KB PTEs**. The PTE array (16 K entries) is itself at VA 0x83FF0000.
-- PDE changes: 0x200–0x20F point at those page tables; 0x210–0x23F cleared (no RAM above 64 MB in this kernel);
+- PDE changes: 0x200–0x20F point at those page tables; 0x210–0x23F cleared (no RAM above 64 MB in this kernel; 128 MB:
+  §10);
   0x000–0x1FF cleared (user space); 0x3C0–0x3DF = 4 MB write-through (0xF0000000–0xF7FFFFFF, 0xEB);
   0x3E0–0x3FD = 4 MB uncached (0xF8000000–0xFF7FFFFF, 0xFB). The reference clears PDE 0x3FF (flash).
   Ours clears it too (spec/oxos_internal/13).
@@ -255,6 +256,41 @@ system PTE range are now built that way for allocation-order parity, and the add
 RTL_CRITICAL_SECTION), so tools that walk them see the same data. Our VADs are an address-sorted list, not the
 reference's address-node tree; rather than hand tools a list they would misread as a tree, the three VAD entries
 point at a NULL root (an empty tree). Making the VADs a tree would only serve those tools, so it is left undone.
+
+## 10. 128 MB (development-kit kernel)
+Evidence: the 4627 **debug** kernel (`xboxkrnl-original-debug.exe`, sha256 19c376b2…): batch_decompile
+`ev_55f7258d…` (MmInitSystem phase 0 and the physical init), `ev_8523a0c0…` (MmClaimGpuInstanceMemory),
+`ev_f9182fe3…` (page removal), `ev_e6e48d7d…` (free-list unlink, page move), `ev_7cc1e848…`
+(MmAllocateContiguousMemoryEx, MmQueryStatistics), the XBE loader's assembly (`ev_69b04205…`, 0x800312a2). The
+**retail** 4627 kernel has none of this: its MmClaimGpuInstanceMemory returns 0x84000000 − padding
+(`ev_bf720775…`) and it manages 64 MB only (§2).
+**Reference behaviour (debug kernel, observed):**
+- The last page of RAM is (PCI 0:0 config byte **0x87**) × 0x1000 + 0xFFF: 0x3FFF (64 MB) or 0x7FFF (128 MB).
+- **Page tables**: one per 4 MB of RAM, from physical 0x3FF0000: 16 (0x3FF0–0x3FFF) or 32 (0x3FF0–0x400F), so the
+  PTE array at 0x83FF0000 continues past 0x84000000. PDEs 0x200–0x21F point at them; the rest up to 0x23F are cleared.
+- **Free pages**: 0–0xF, image end – 0x3FDF, and with 128 MB 0x4010–0x7FFF, except **0x7FE0–0x7FEF**, which are
+  mapped uncached (0x7B) like the low GPU instance memory 0x3FE0–0x3FEF (both are reserved).
+- **Two free regions**, picked by PFN ≥ 0x4000: the retail region (MmGlobalData's RetailPfnRegion) and a second
+  one for the upper half. A page is taken from the retail region; from the upper one only when the retail region
+  is empty. MmAvailablePages counts the retail region only, until the XBE loader calls the routine that adds the
+  upper region's count to it and sets a flag that makes later frees and removals in that region count as well.
+- **The XBE loader** calls that routine after loading the image unless the XBE's init flags (header **+0x124**) have
+  bit **0x4** set (the XDK's "limit to 64 MB"). Retail XBEs normally set it; a quick reboot starts the next title
+  without the upper region.
+- **Contiguous memory** is still capped at PFN 0x3FDF (§4), as in the retail kernel.
+- **MmClaimGpuInstanceMemory** returns (last page + 1) × 0x1000 + 0x80000000 − padding (0x87FF0000 with 128 MB);
+  when shrinking it frees each page of the low instance memory and, with 128 MB, the same page + 0x4000.
+- MmQueryStatistics's TotalPhysicalPages is the page count of the RAM.
+
+**Ours:** the same layout, regions, XBE flag rule and GPU instance memory (memory/init.cpp, memory/memory.cpp,
+titles/loader.cpp), with these differences:
+- the RAM size comes from the cold boot's probe (64 MB + x aliasing x or not, MiRamProbe), kept across quick reboots;
+- the kernel widens MTRR range 0 from 64 to 128 MB at a cold boot when the 2BL left it at 64 MB, so the upper half
+  is cached;
+- the debug kernel's second system-PTE range (debugger memory) does not exist; nothing else takes upper pages;
+- the IDE bus master accepts buffers anywhere in the RAM (storage/ide_channel.cpp);
+- TRACE_IMPORTS=2 builds keep the tracer's ring at physical 0x7C00000 out of the free pages
+  (spec/oxos_internal/01_kernel_call_tracer.md).
 
 ## Implementation notes (internal, ABI-neutral)
 - The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/oxos_internal/00_boot_splash.md).

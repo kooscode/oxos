@@ -1,14 +1,17 @@
-// Memory manager (spec/stock/09). 64 MB retail layout:
+// Memory manager (spec/stock/09). Physical layout of the low 64 MB (all the RAM of a retail console):
 //   physical 0x00000-0x0FFFF reserved (page directory at 0xF000), kernel image from 0x10000,
 //   free RAM up to 0x3FDFFFF, GPU instance memory 0x3FE0000-0x3FEFFFF (uncached),
-//   page tables for the 0x80000000 mapping at 0x3FF0000-0x3FFFFFF.
+//   page tables for the 0x80000000 mapping from 0x3FF0000: 16 pages, or 32 with 128 MB (to 0x400FFFF).
+// With 128 MB (spec/stock/09 §10) the upper 64 MB is free RAM from 0x4010000, except a second GPU instance memory at
+// 0x7FE0000-0x7FEFFFF; a title gets it only when its XBE does not ask for the 64 MB limit.
 // Virtual: 0x80000000 + PA maps all RAM with 4 KB PTEs (PTE array at 0x83FF0000); contiguous memory
 // is returned at 0x80000000|PA. System memory, kernel stacks and I/O mappings use 0xD0000000-0xEFFFFFFF.
 #pragma once
 #include <xk/types.h>
 
 constexpr ULONG PAGE_SIZE = 0x1000, PAGE_SHIFT = 12;
-constexpr ULONG MM_PAGES = 0x4000;                 // 64 MB
+constexpr ULONG MM_LOW_PAGES = 0x4000; // 64 MB: a retail console's RAM; contiguous memory stays in it
+constexpr ULONG MM_MAX_PAGES = 0x8000; // 128 MB: development kits and upgraded consoles
 constexpr ULONG MM_GPU_INSTANCE_FIRST_PFN = 0x3FE0, MM_PAGE_TABLES_FIRST_PFN = 0x3FF0;
 constexpr ULONG MM_HIGHEST_CONTIGUOUS_PFN = 0x3FDF;
 constexpr ULONG MM_SYSTEM_PHYSICAL_MAP = 0x80000000;
@@ -51,6 +54,10 @@ enum MMPFN_USAGE : ULONG {
 };
 extern ULONG MmAllocatedPagesByUsage[MmMaximumUsage];
 extern ULONG MmAvailablePages, MmNumberOfPhysicalPages;
+extern ULONG MmHighestPhysicalPage; // MM_LOW_PAGES - 1, or MM_MAX_PAGES - 1 with 128 MB
+// Lets the running title's allocations use the upper 64 MB: its free pages count as available from now until the next
+// quick reboot (the XBE loader calls it for an XBE without the 64 MB limit flag). Nothing to do with 64 MB.
+void MmAllowUpperMemory();
 // A page for `usage`, mapped by *ownerPte (or, for a user page table, by a user PDE): zeroed unless asked not to.
 // The caller writes the mapping. Returns the PFN, or 0 when no page is free.
 ULONG MiAllocatePage(ULONG usage, ULONG *ownerPte, bool zero = true);
@@ -143,7 +150,7 @@ extern volatile ULONG MiPteListDamaged; // diagnostics: the system PTE free list
 extern volatile ULONG MiPteDoubleFrees; // diagnostics: releases that overlapped free system PTEs (refused)
 extern volatile ULONG MiRelocations;    // diagnostics: pages moved for contiguous requests
 extern volatile ULONG MiCommitFailures; // diagnostics: commits refused for lack of pages
-extern "C" volatile ULONG MiRamProbe; // diagnostics: 1 = 64 MB, 2 = memory above 64 MB, 3 = unclear
+extern "C" volatile ULONG MiRamProbe; // 1 = 64 MB, 2 = memory above 64 MB (128 MB), 3 = unclear (64 MB is used)
 extern "C" volatile ULONG MiGpuSizeBefore, MiGpuSizeAfter; // diagnostics: PFB 0x10020C before / after the set-up
 
 // The reference's free-page region (MmGlobalData->RetailPfnRegion, memory/init.cpp): per-colour list heads, then the

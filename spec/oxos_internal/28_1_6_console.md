@@ -74,7 +74,7 @@ extended as listed in G0.
 |---|---|---|---|
 | B1 | 1.6 repair table (uncommitted) lacks 0x10D4 and 0x10B8 | If a repair stays: 0x10B0, 0x10CC, 0x10B8 (the value read at 2BL entry, or EEPROM 0xC2), 0x10D4 0x0F, 0x10B4, 0x10BC, 0x10C4, 0x10C8, 0x10D8, 0x10DC, 0x10E8 in that order (spec 24 §5.3). The retail 2BL repairs nothing: once G1 and the write checks hold, the 1.6 repair can go | XCHK at 0x2600 empty |
 | B2 | `BlXcodeValues` holds Cromwell's values | A 1.6 list (spec 24 §7, 5838 column; EEPROM-derived registers left out or compared with the logged EEPROM bytes) | XCHK record lists only real losses |
-| B3 | MTRR range 0 is 64 MB | 5838's 2BL makes it 128 MB (spec 24 §5.3); matters only on 128 MB consoles | — |
+| B3 | MTRR range 0 is 64 MB | 5838's 2BL makes it 128 MB (spec 24 §5.3); matters only on 128 MB consoles | Done in the kernel instead: widened at a cold boot when the RAM is 128 MB (spec/stock/09 §10) |
 | B4 | Pad method choice | Nothing to change: NV2A ≥ D3 and not "upgraded" → EEPROM method. With the retail decision "upgraded" cannot happen: host 0x84 is 128 MB only when the large mask is 0xFF, never with 0x0F/0xF0 | POST 0x32 |
 | B5 | SMC 0x13/0x12 | If the memory test stays in start.S: send the two masks to the SMC from the 2BL (retail sends them from the X-codes; Cromwell sends 0x0F/0xF0) | — (nothing reads them back; spec 24 §8) |
 
@@ -97,7 +97,7 @@ extended as listed in G0.
 3. 2BL: the 1.6 X-code check list (B2), then the repair table (B1: complete it, or drop it if the loop of step 2 shows
    no losses), and the SMC report if the test stays in start.S (B5).
 4. Kernel flag 0x10 on a 1.6 (K1).
-5. Optional: 128 MB MTRR (B3).
+5. Optional: 128 MB MTRR (B3). Done in the kernel (spec/stock/09 §10).
 6. Future (decided 2026-11-07, after steps 1-4): one hybrid image for 1.0-1.6, the X-codes detecting a 1.6 at run
    time (as Cerbios does with an SMBus read of 0xE1, spec 24 §7) instead of the MCPX16 build switch.
 

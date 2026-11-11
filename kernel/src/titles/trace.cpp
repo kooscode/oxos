@@ -6,14 +6,13 @@
 #include <xk/io.h>
 #include <xk/serial.h>
 
-constexpr ULONG XK_TRACE_MAX_IMPORTS = 512; // imports that can be traced (the ring's size: xk/titles.h)
-
 extern "C" {
 ULONG XkTraceTargets[XK_TRACE_MAX_IMPORTS];
 USHORT XkTraceOrdinals[XK_TRACE_MAX_IMPORTS];
 // The ring (entries of XK_TRACE_WORDS: xk/titles.h).
 volatile ULONG (*XkTraceRing)[XK_TRACE_WORDS]; // allocated at the top of RAM (not in the image)
-// Entries written. Persisted: with TRACE_IMPORTS=2 the ring above 64 MB keeps the calls from before a quick reboot too.
+// Entries written. Persisted: with TRACE_IMPORTS=2 the ring outside the memory manager keeps the calls from before a
+// quick reboot too.
 XK_PERSIST volatile ULONG XkTraceCount;
 
 // The stubs a traced import enters and returns through (arch/trace.S).
@@ -250,10 +249,10 @@ ULONG XkTraceWrap(USHORT ordinal, ULONG target) {
     static ULONG used;
     if (!stubs) {
 #if XK_TRACE_IMPORTS == 2
-        // TRACE_IMPORTS=2 needs 128 MB (xemu mem_limit = '128'): ring and stubs live above the 64 MB the kernel
-        // manages, so the title sees exactly the memory of a release build.
+        // TRACE_IMPORTS=2 needs 128 MB (xemu mem_limit = '128'): ring and stubs live near the top of the upper 64 MB,
+        // which a title limited to 64 MB never uses, so it sees exactly the memory of a release build.
         ULONG ringBytes = XK_TRACE_RING * XK_TRACE_WORDS * 4;
-        auto high = (PUCHAR)MmMapIoSpace(0x4000000, ringBytes + XK_TRACE_MAX_IMPORTS * 10, PAGE_READWRITE);
+        auto high = (PUCHAR)MmMapIoSpace(XK_TRACE_HIGH_PHYSICAL, XK_TRACE_HIGH_BYTES, PAGE_READWRITE);
         XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])high;
         stubs = high ? high + ringBytes : nullptr;
 #else

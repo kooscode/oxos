@@ -62,17 +62,35 @@ static inline ULONG MiBusyIndex(ULONG e) {
     return (e >> 18) & 0x3FF;
 }
 
+// The free pages of the low 64 MB, and of the upper 64 MB with 128 MB (spec/stock/09 §10). Upper pages count as
+// available only while the running title is allowed them (MmAllowUpperMemory).
 MMPFNREGION MmRetailPfnRegion;
+static MMPFNREGION MiUpperPfnRegion;
+static bool MiUpperMemoryAllowed;
 static ULONG MiNextColor; // single pages take the colours in turn
 
-// Page counts: free, all, and in use for each MMPFN_USAGE.
+// Page counts: free, all, and in use for each MMPFN_USAGE; the last page of RAM.
 ULONG MmAvailablePages, MmNumberOfPhysicalPages;
 ULONG MmAllocatedPagesByUsage[MmMaximumUsage];
+ULONG MmHighestPhysicalPage = MM_LOW_PAGES - 1;
+
+// A page's region, by its half of the RAM (as the reference: a table indexed by PFN >> 14).
+static MMPFNREGION *const MiPfnRegions[2] = {&MmRetailPfnRegion, &MiUpperPfnRegion};
+static inline MMPFNREGION &MiRegionOf(ULONG pfn) {
+    return *MiPfnRegions[pfn / MM_LOW_PAGES];
+}
+
+// A free page joins (+1) or leaves (-1) its region's count, and MmAvailablePages when the page counts as available.
+[[gnu::noinline]] static void MiCountFreePage(ULONG pfn, LONG change) {
+    MiRegionOf(pfn).AvailablePages += change;
+    if (pfn < MM_LOW_PAGES || MiUpperMemoryAllowed)
+        MmAvailablePages += change;
+}
 
 // Callers hold DISPATCH_LEVEL for all of these.
 static void MiInsertFreePage(ULONG pfn, bool atHead) {
     ULONG color = pfn & (MM_COLORS - 1);
-    MMPFNFREE &list = MmRetailPfnRegion.FreePagesByColor[color];
+    MMPFNFREE &list = MiRegionOf(pfn).FreePagesByColor[color];
     USHORT me = MiPack(pfn);
     if (list.PackedPfnFlink == MM_PACKED_NULL) {
         MiFlink(pfn) = MiBlink(pfn) = MM_PACKED_NULL;
@@ -88,13 +106,12 @@ static void MiInsertFreePage(ULONG pfn, bool atHead) {
         MiFlink(MiUnpack(list.PackedPfnBlink, color)) = me;
         list.PackedPfnBlink = me;
     }
-    MmRetailPfnRegion.AvailablePages++;
-    MmAvailablePages++;
+    MiCountFreePage(pfn, 1);
 }
 
 static void MiUnlinkFreePage(ULONG pfn) {
     ULONG color = pfn & (MM_COLORS - 1);
-    MMPFNFREE &list = MmRetailPfnRegion.FreePagesByColor[color];
+    MMPFNFREE &list = MiRegionOf(pfn).FreePagesByColor[color];
     USHORT next = MiFlink(pfn), prev = MiBlink(pfn);
     if (prev == MM_PACKED_NULL)
         list.PackedPfnFlink = next;
@@ -104,22 +121,23 @@ static void MiUnlinkFreePage(ULONG pfn) {
         list.PackedPfnBlink = prev;
     else
         MiBlink(MiUnpack(next, color)) = prev;
-    MmRetailPfnRegion.AvailablePages--;
-    MmAvailablePages--;
+    MiCountFreePage(pfn, -1);
 }
 
 // The head of the next non-empty colour list, as the reference: colours in turn, so consecutive pages differ in
-// colour, and each list in insertion order (boot-time pages ascending, freed system pages first).
+// colour, and each list in insertion order (boot-time pages ascending, freed system pages first). The low 64 MB
+// first; upper pages once it is empty (callers checked MmAvailablePages, which counts them only when allowed).
 static ULONG MiRemoveAnyPage() {
+    MMPFNREGION &region = MmRetailPfnRegion.AvailablePages ? MmRetailPfnRegion : MiUpperPfnRegion;
     ULONG color = MiNextColor;
-    for (ULONG tried = 0; MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL; tried++) {
+    for (ULONG tried = 0; region.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL; tried++) {
         if (tried == MM_COLORS) { // callers checked MmAvailablePages: the count and the lists disagree
-            KeBugCheckEx(0x4E /*PFN_LIST_CORRUPT*/, 0x99, MmAvailablePages, MmRetailPfnRegion.AvailablePages,
+            KeBugCheckEx(0x4E /*PFN_LIST_CORRUPT*/, 0x99, MmAvailablePages, region.AvailablePages,
                          (ULONG)__builtin_return_address(0));
         }
         color = (color + 1) & (MM_COLORS - 1);
     }
-    ULONG pfn = MiUnpack(MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, color);
+    ULONG pfn = MiUnpack(region.FreePagesByColor[color].PackedPfnFlink, color);
     MiUnlinkFreePage(pfn);
     MiNextColor = (color + 1) & (MM_COLORS - 1);
     return pfn;
@@ -489,12 +507,18 @@ void MiReleaseSystemPtes(PVOID va, ULONG count) {
 
 volatile ULONG MmPersistedPages;                // pages re-adopted by the last quick reboot
 volatile ULONG MiGpuSizeBefore, MiGpuSizeAfter; // diagnostics: PFB 0x10020C before / after the 64 MB set-up
-volatile ULONG MiRamProbe; // diagnostics: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB, 3 = unclear
+// The cold boot's RAM probe, kept for quick reboots: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB
+// (128 MB), 3 = unclear (used as 64 MB).
+XK_PERSIST volatile ULONG MiRamProbe;
 
 static inline void MiReloadCr3() {
     ULONG cr3;
     __asm__ volatile("mov %%cr3, %0\n\tmov %0, %%cr3" : "=r"(cr3)::"memory");
 }
+
+// The cold boot's RAM set-up runs once, before the boot-only pages are freed: boot-only code
+// (spec/oxos_internal/18_boot_memory.md).
+#pragma code_seg(".xkb")
 
 // How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0 and at
 // 0x80000000): a marker written at 64 MB + x either appears at x (only 64 MB, the address wraps) or not.
@@ -510,27 +534,89 @@ static void MiProbeRamSize() {
     *low = saved;
 }
 
-void MmInitSystem(bool QuickReboot) {
-    if (!QuickReboot) {
-        MiProbeRamSize();
-        // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
-        // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
-        // Our 2BL sizes the DRAM as the retail X-codes do (spec/stock/22 §6.3); on a retail 64 MB console of four
-        // 128 Mbit chips that ends with 0x100200 0x03070003 and 0x100204 0x11448000 (bit 8 clear). Only an older 2BL
-        // that left 0x03070103 with 0x11448000 on a 64 MB console needs this fallback: PFB 0x100200 bit 8 clear, as
-        // the retail probe and Cromwell leave it.
-        auto pfb = (volatile ULONG *)0xFD100200;
-        MiGpuSizeBefore = pfb[3];
-        if (MiRamProbe != 2 && pfb[1] != 0x11338000 && (pfb[0] & 0x100))
-            pfb[0] = pfb[0] & ~0x100u;
-        MiGpuSizeAfter = pfb[3];
-        // And the host bridge's top of memory (bus 0 device 0 register 0x84): 64 MB - 1, not 128 MB - 1.
-        if (MiRamProbe != 2) {
-            outl(0xCF8, 0x80000084);
-            if (inl(0xCFC) == 0x07FFFFFF)
-                outl(0xCFC, 0x03FFFFFF);
-        }
+// The 2BL's MTRRs make only the low 64 MB write-back (variable range 0: base 0, mask 0xFC000800, as the reference 2BL
+// leaves it), so with 128 MB the upper half would be uncached. Range 0 is widened to 128 MB at a cold boot with
+// Intel's procedure: caches off and flushed, the MTRRs off while the mask is written, then a TLB flush. A 2BL that
+// already covers 128 MB (or sets the MTRRs some other way) is left as it is.
+static void MiCacheUpperMemory() {
+    constexpr ULONG MTRR_PHYSICAL_MASK_0 = 0x201, MTRR_DEFAULT_TYPE = 0x2FF, MTRR_ENABLE = 0x800, CR0_CD = 0x40000000;
+    constexpr ULONGLONG MASK_64_MB = 0xFFC000800ULL, MASK_128_MB = 0xFF8000800ULL;
+    if (rdmsr(MTRR_PHYSICAL_MASK_0) != MASK_64_MB)
+        return;
+    ULONG flags = save_flags_cli();
+    ULONG cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    __asm__ volatile("mov %0, %%cr0\n\twbinvd" ::"r"(cr0 | CR0_CD) : "memory");
+    ULONGLONG defaultType = rdmsr(MTRR_DEFAULT_TYPE);
+    wrmsr(MTRR_DEFAULT_TYPE, defaultType & ~(ULONGLONG)MTRR_ENABLE);
+    wrmsr(MTRR_PHYSICAL_MASK_0, MASK_128_MB);
+    __asm__ volatile("wbinvd" ::: "memory");
+    MiReloadCr3();
+    wrmsr(MTRR_DEFAULT_TYPE, defaultType);
+    __asm__ volatile("mov %0, %%cr0" ::"r"(cr0) : "memory");
+    restore_flags(flags);
+}
+
+// Cold boot: the RAM size, and the GPU, host bridge and caches set up for it. Not inlined: it stays boot-only code.
+[[gnu::noinline]] static void MiSetUpRam() {
+    MiProbeRamSize();
+    // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
+    // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
+    // Our 2BL sizes the DRAM as the retail X-codes do (spec/stock/22 §6.3); on a retail 64 MB console of four
+    // 128 Mbit chips that ends with 0x100200 0x03070003 and 0x100204 0x11448000 (bit 8 clear). Only an older 2BL
+    // that left 0x03070103 with 0x11448000 on a 64 MB console needs this fallback: PFB 0x100200 bit 8 clear, as
+    // the retail probe and Cromwell leave it.
+    auto pfb = (volatile ULONG *)0xFD100200;
+    MiGpuSizeBefore = pfb[3];
+    if (MiRamProbe != 2 && pfb[1] != 0x11338000 && (pfb[0] & 0x100))
+        pfb[0] = pfb[0] & ~0x100u;
+    MiGpuSizeAfter = pfb[3];
+    // And the host bridge's top of memory (bus 0 device 0 register 0x84): 64 MB - 1, not 128 MB - 1.
+    if (MiRamProbe != 2) {
+        outl(0xCF8, 0x80000084);
+        if (inl(0xCFC) == 0x07FFFFFF)
+            outl(0xCFC, 0x03FFFFFF);
+    } else {
+        MiCacheUpperMemory();
     }
+}
+
+#pragma code_seg()
+
+#if XK_TRACE_IMPORTS == 2
+// TRACE_IMPORTS=2 builds: the tracer's ring and stubs (titles/trace.cpp) are kept from the memory manager.
+static bool MiIsTraceRingPage(ULONG pfn) {
+    return pfn >= (XK_TRACE_HIGH_PHYSICAL >> PAGE_SHIFT) &&
+           pfn < ((XK_TRACE_HIGH_PHYSICAL + XK_TRACE_HIGH_BYTES + PAGE_SIZE - 1) >> PAGE_SHIFT);
+}
+#else
+static bool MiIsTraceRingPage(ULONG) {
+    return false; // the ring is ordinary contiguous memory in other builds
+}
+#endif
+
+// The GPU instance memory: below the top 64 KB of the low 64 MB, and on 128 MB again below the top of the upper half.
+static bool MiIsGpuInstancePage(ULONG pfn) {
+    ULONG inHalf = pfn & (MM_LOW_PAGES - 1);
+    return inHalf >= MM_GPU_INSTANCE_FIRST_PFN && inHalf < MM_PAGE_TABLES_FIRST_PFN;
+}
+
+// Lets the running title use the upper 64 MB (spec/stock/09 §10).
+void MmAllowUpperMemory() {
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    if (!MiUpperMemoryAllowed) {
+        MiUpperMemoryAllowed = true;
+        MmAvailablePages += MiUpperPfnRegion.AvailablePages;
+    }
+    KfLowerIrql(old);
+}
+
+void MmInitSystem(bool QuickReboot) {
+    if (!QuickReboot)
+        MiSetUpRam();
+    // With 128 MB the page tables run on past 64 MB: one page of PTEs per 4 MB of RAM.
+    MmHighestPhysicalPage = (MiRamProbe == 2 ? MM_MAX_PAGES : MM_LOW_PAGES) - 1;
+    ULONG pageTablesEndPfn = MM_PAGE_TABLES_FIRST_PFN + ((MmHighestPhysicalPage + 1) >> 10);
     // Kernel image extent from our own PE header; .text (first section) becomes read-only.
     auto image = (UCHAR *)0x80010000;
     ULONG lfanew = *(ULONG *)(image + 0x3C);
@@ -559,29 +645,31 @@ void MmInitSystem(bool QuickReboot) {
     if (!QuickReboot)
         MiBootPagesFreed[0] = MiBootPagesFreed[1] = 0;
 
-    // 1. The page database (still reachable through the 2BL large pages). Pages 1-14 (below the page directory)
-    //    and those between the image and the GPU memory are allocatable; a quick reboot re-adopts persisted
-    //    allocations (PTE bit 10) there.
+    // 1. The page database (still reachable through the 2BL large pages, which map 256 MB). Pages 1-14 (below the
+    //    page directory), those between the image and the GPU memory, and with 128 MB those above the page tables
+    //    (but the second GPU instance memory) are allocatable; a quick reboot re-adopts persisted allocations
+    //    (PTE bit 10) there.
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
     auto allocatable = [&](ULONG pfn) {
-        return ((pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN) ||
-                MiBootPageFreed(pfn)) &&
-               !MiIsNetbootTitlePage(pfn) && !HalpIsSplashPage(pfn);
+        bool low = (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
+        bool upper = pfn >= pageTablesEndPfn && !MiIsTraceRingPage(pfn);
+        return (low || upper || MiBootPageFreed(pfn)) && !MiIsNetbootTitlePage(pfn) && !HalpIsSplashPage(pfn);
     };
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
     //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
     //    first, even briefly, unmaps the code and stack running this loop as soon as a cached translation is evicted.
     RtlZeroMemory(MmAllocatedPagesByUsage, sizeof(MmAllocatedPagesByUsage));
     ULONG persisted = 0;
-    for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
+    for (ULONG pfn = 0; pfn <= MmHighestPhysicalPage; pfn++) {
         ULONG pte = 0;
-        if (pfn >= MM_PAGE_TABLES_FIRST_PFN) {
+        if (pfn >= MM_PAGE_TABLES_FIRST_PFN && pfn < pageTablesEndPfn) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PERSIST;
-        } else if (pfn >= MM_GPU_INSTANCE_FIRST_PFN) {
+        } else if (MiIsGpuInstancePage(pfn)) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
         } else if (!allocatable(pfn)) {
-            if (MiIsNetbootTitlePage(pfn) || HalpIsSplashPage(pfn)) // a netbooted title's files, the splash copy:
-                pte = (pfn << PAGE_SHIFT) | rw;                       // held (contiguous usage) until used
+            // Held (contiguous usage): a netbooted title's files and the splash copy until used, the tracer's ring.
+            if (MiIsNetbootTitlePage(pfn) || HalpIsSplashPage(pfn) || MiIsTraceRingPage(pfn))
+                pte = (pfn << PAGE_SHIFT) | rw;
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
                 pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);
         } else if (QuickReboot &&
@@ -595,24 +683,29 @@ void MmInitSystem(bool QuickReboot) {
 
     // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
     //    count as contiguous memory.
-    for (ULONG c = 0; c < MM_COLORS; c++)
+    //    Each title starts without the upper 64 MB (MmAllowUpperMemory).
+    for (ULONG c = 0; c < MM_COLORS; c++) {
         MmRetailPfnRegion.FreePagesByColor[c] = {MM_PACKED_NULL, MM_PACKED_NULL};
-    MmRetailPfnRegion.AvailablePages = MmAvailablePages = 0;
+        MiUpperPfnRegion.FreePagesByColor[c] = {MM_PACKED_NULL, MM_PACKED_NULL};
+    }
+    MmRetailPfnRegion.AvailablePages = MiUpperPfnRegion.AvailablePages = MmAvailablePages = 0;
+    MiUpperMemoryAllowed = false;
     MiNextColor = 0;
-    for (ULONG pfn = 0; pfn < MM_PAGES; pfn++) {
+    for (ULONG pfn = 0; pfn <= MmHighestPhysicalPage; pfn++) {
         if (!MiPteArray[pfn])
             MiInsertFreePage(pfn, false);
         else
             MmAllocatedPagesByUsage[MmContiguousUsage]++;
     }
-    MmNumberOfPhysicalPages = MM_PAGES;
+    MmNumberOfPhysicalPages = MmHighestPhysicalPage + 1;
 
-    // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above 64 MB, no user
+    // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above the RAM, no user
     //    mappings, and the reference MMIO windows (spec/stock/02 §4).
     ULONG *pd = (ULONG *)0xC0300000;
-    for (ULONG i = 0; i < 16; i++)
+    ULONG pageTables = pageTablesEndPfn - MM_PAGE_TABLES_FIRST_PFN;
+    for (ULONG i = 0; i < pageTables; i++)
         pd[0x200 + i] = ((MM_PAGE_TABLES_FIRST_PFN + i) << PAGE_SHIFT) | rw;
-    for (ULONG i = 0x210; i < 0x240; i++)
+    for (ULONG i = 0x200 + pageTables; i < 0x240; i++)
         pd[i] = 0;
     for (ULONG i = 0; i < 0x200; i++) // no title mappings
         pd[i] = 0;

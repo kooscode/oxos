@@ -265,7 +265,7 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
 XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pfn = PhysicalAddress >> PAGE_SHIFT;
-    if (pfn < MM_PAGES && !(MiPteArray[pfn] & PTE_PRESENT))
+    if (pfn <= MmHighestPhysicalPage && !(MiPteArray[pfn] & PTE_PRESENT))
         ((USHORT *)&MiPteArray[pfn])[0] += UnlockPage ? -2 : 2;
     KfLowerIrql(old);
 }
@@ -282,13 +282,15 @@ XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes,
             continue; // no page table here (nothing to lock)
         ULONG *pte = MiGetPteAddress(a);
         ULONG pfn = *pte >> PAGE_SHIFT;
-        if ((*pte & PTE_PRESENT) && pfn < MM_PAGES && !(MiPteArray[pfn] & PTE_PRESENT))
+        if ((*pte & PTE_PRESENT) && pfn <= MmHighestPhysicalPage && !(MiPteArray[pfn] & PTE_PRESENT))
             ((USHORT *)&MiPteArray[pfn])[0] += UnlockPages ? -2 : 2;
     }
     KfLowerIrql(old);
 }
 
-// --- GPU instance memory: the region below the page tables; shrinking it returns pages to the pool.
+// --- GPU instance memory: the region below the top 64 KB of the low 64 MB, and with 128 MB its copy below the top of
+// RAM (spec/stock/09 §10); shrinking it returns pages of both to the pool. The address returned is the top of RAM
+// less the padding: the GPU uses the top of the memory it has.
 
 XBAPI PVOID NTAPI MmClaimGpuInstanceMemory(ULONG NumberOfBytes, ULONG *NumberOfPaddingBytes) {
     *NumberOfPaddingBytes = 0x10000;
@@ -296,10 +298,13 @@ XBAPI PVOID NTAPI MmClaimGpuInstanceMemory(ULONG NumberOfBytes, ULONG *NumberOfP
         KIRQL old = KeRaiseIrqlToDpcLevel();
         ULONG oldFirst = MM_PAGE_TABLES_FIRST_PFN - BytesToPages(MiGpuInstanceSize);
         ULONG newFirst = MM_PAGE_TABLES_FIRST_PFN - BytesToPages(NumberOfBytes);
-        for (ULONG pfn = oldFirst; pfn < newFirst; pfn++)
+        for (ULONG pfn = oldFirst; pfn < newFirst; pfn++) {
             MiFreeContiguousPage(pfn);
+            if (MmHighestPhysicalPage >= MM_LOW_PAGES)
+                MiFreeContiguousPage(pfn + MM_LOW_PAGES);
+        }
         MiGpuInstanceSize = (NumberOfBytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         KfLowerIrql(old);
     }
-    return (PVOID)(0x84000000 - *NumberOfPaddingBytes);
+    return (PVOID)(MM_SYSTEM_PHYSICAL_MAP + ((MmHighestPhysicalPage + 1) << PAGE_SHIFT) - *NumberOfPaddingBytes);
 }
