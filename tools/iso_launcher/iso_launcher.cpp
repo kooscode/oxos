@@ -1,5 +1,5 @@
-// ISO launcher (nxdk, open source): mounts an image of an Xbox disc (made from your own disc) from the hard disk as
-// the console's disc and starts the title on it, the way a disc in the drive starts
+// ISO launcher (nxdk + SDL3, open source): mounts an image of an Xbox disc (made from your own disc) from the hard
+// disk as the console's disc and starts the title on it, the way a disc in the drive starts
 // (spec/oxos_internal/16_virtual_discs.md).
 //
 // Which image:
@@ -11,14 +11,14 @@
 // The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then
 // \Device\CdRom0\default.xbe is launched through the launch data page and a quick reboot; the mount stays for the
 // title's own reboots until the console is switched off (or the disc tray is opened). The launcher leaves the screen
-// alone, so the title's video mode change is the only one; it sets a mode and shows text only when something is wrong.
-#include <hal/debug.h>
-#include <hal/video.h>
+// alone, so the title's video mode change is the only one; it starts SDL (tools/sdl_screen) and shows text only when
+// something is wrong.
 #include <hal/xbox.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 
 #include "mount_iso.h"
+#include "sdl_screen.h"
 
 #include <cstdio>
 #include <cstring>
@@ -28,11 +28,6 @@ namespace {
 
 constexpr std::size_t PATH = 300;
 using oxos_vdisc::PartitionOf; // the retail drive letters and the exFAT drives F: and G:
-
-[[noreturn]] void Stay() {
-    for (;;)
-        Sleep(1000);
-}
 
 NTSTATUS Open(HANDLE *h, const char *path, ULONG options, ACCESS_MASK access = GENERIC_READ) {
     ANSI_STRING name;
@@ -174,9 +169,9 @@ void ListFolder(const char *folder) {
             break;
         for (auto *e = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer); shown < 24; shown++) {
             if (e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                debugPrint("  %.*s\\\n", int(e->FileNameLength), e->FileName);
+                sdl_screen::Print("  %.*s\\\n", int(e->FileNameLength), e->FileName);
             } else {
-                debugPrint("  %.*s  (%lu MB)\n", int(e->FileNameLength), e->FileName,
+                sdl_screen::Print("  %.*s  (%lu MB)\n", int(e->FileNameLength), e->FileName,
                            static_cast<unsigned long>(e->EndOfFile.QuadPart >> 20));
             }
             if (!e->NextEntryOffset)
@@ -187,14 +182,13 @@ void ListFolder(const char *folder) {
     NtClose(h);
 }
 
-// The first message: set a video mode (the launcher leaves the screen alone otherwise) and show the heading.
+// The first message: start the screen (the launcher leaves it alone otherwise) and show the heading.
 void Heading() {
-    static bool shown;
-    if (!shown) {
-        XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-        debugPrint("OXOS ISO launcher\n\n");
-    }
-    shown = true;
+    if (sdl_screen::IsOpen())
+        return;
+    if (!sdl_screen::Open(false))
+        DbgPrint("iso launcher: SDL: %s\n", SDL_GetError());
+    sdl_screen::Print("OXOS ISO launcher\n\n");
 }
 
 // The title name from the image's default.xbe certificate (UTF-16, 40 characters), as ASCII.
@@ -251,16 +245,20 @@ int main() {
     if (length && (!std::strcmp(line, "none") || !std::strcmp(line, "NONE"))) {
         NTSTATUS status = UnmountISO();
         Heading();
-        debugPrint("Unmount: status 0x%08lx. Starting the dashboard...\n", static_cast<unsigned long>(status));
+        sdl_screen::Print("Unmount: status 0x%08lx. Starting the dashboard...\n", static_cast<unsigned long>(status));
+        sdl_screen::Present();
         Sleep(1000);
+        sdl_screen::Close();
         XLaunchXBE(nullptr);
-        Stay();
+        Heading();
+        sdl_screen::Print("The dashboard did not start.\n");
+        sdl_screen::ShowForever();
     }
     if (length) {
         if (!DevicePath(line, path)) {
             Heading();
-            debugPrint("Unknown drive in \"%s\" (C, E, F, G, X, Y, Z or a \\Device\\ path).\n", line);
-            Stay();
+            sdl_screen::Print("Unknown drive in \"%s\" (C, E, F, G, X, Y, Z or a \\Device\\ path).\n", line);
+            sdl_screen::ShowForever();
         }
     } else {
         OwnFolder(path);
@@ -272,14 +270,14 @@ int main() {
         ListImages(path, &found);
         if (!found.Count) {
             Heading();
-            debugPrint("No .iso or .cci image in %s\n", length ? line : path);
-            Stay();
+            sdl_screen::Print("No .iso or .cci image in %s\n", length ? line : path);
+            sdl_screen::ShowForever();
         }
         std::snprintf(folder, sizeof(folder), "%s", path);
         std::snprintf(path, sizeof(path), "%s\\%s", folder, found.Name[0]);
     } else if (!IsFile(path)) {
         Heading();
-        debugPrint("Cannot find %s\n= %s\n", length ? line : "an image", path);
+        sdl_screen::Print("Cannot find %s\n= %s\n", length ? line : "an image", path);
         // Show what is there: the nearest folder above the path that exists.
         std::snprintf(folder, sizeof(folder), "%s", path);
         while (char *slash = std::strrchr(folder, '\\')) {
@@ -288,32 +286,33 @@ int main() {
                 break;
         }
         if (IsFolder(folder)) {
-            debugPrint("\n%s holds:\n", folder);
+            sdl_screen::Print("\n%s holds:\n", folder);
             ListFolder(folder);
         }
-        Stay();
+        sdl_screen::ShowForever();
     }
 
     // Mount (a split image's second part is found by MountISO).
     NTSTATUS status = MountISO(path);
     if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
         Heading();
-        debugPrint("Image: %s\n\nThis BIOS cannot mount disc images (no \\Device\\CdRom1).\n", path);
-        Stay();
+        sdl_screen::Print("Image: %s\n\nThis BIOS cannot mount disc images (no \\Device\\CdRom1).\n", path);
+        sdl_screen::ShowForever();
     }
     if (!NT_SUCCESS(status)) {
         Heading();
-        debugPrint("Image: %s\n\nThe mount failed: status 0x%08lx (not a disc image?)\n", path,
+        sdl_screen::Print("Image: %s\n\nThe mount failed: status 0x%08lx (not a disc image?)\n", path,
                    static_cast<unsigned long>(status));
-        Stay();
+        sdl_screen::ShowForever();
     }
 
     if (IsFile("\\Device\\CdRom0\\default.xbe"))
         StartDisc();
     char title[48];
     TitleName(title, sizeof(title));
-    debugClearScreen();
     Heading();
-    debugPrint("Image: %s\nTitle: %s\n\nThe launch failed.\n", path, title[0] ? title : "(no default.xbe?)");
-    Stay();
+    sdl_screen::Clear();
+    sdl_screen::Print("OXOS ISO launcher\n\n");
+    sdl_screen::Print("Image: %s\nTitle: %s\n\nThe launch failed.\n", path, title[0] ? title : "(no default.xbe?)");
+    sdl_screen::ShowForever();
 }

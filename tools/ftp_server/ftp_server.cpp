@@ -1,5 +1,5 @@
-// FTP server (nxdk, open source): the console's disks over the network, for copying, moving and deleting files with
-// any FTP client (FileZilla, curl, lftp, Windows Explorer). No log-in: any user name and password are accepted.
+// FTP server (nxdk + SDL3, open source): the console's disks over the network, for copying, moving and deleting files
+// with any FTP client (FileZilla, curl, lftp, Windows Explorer). No log-in: any user name and password are accepted.
 //
 //   /            the drives: C, E, F, G, X, Y, Z (those that exist)
 //   /F/games     F:\games (\Device\Harddisk0\Partition6\games)
@@ -15,6 +15,8 @@
 // port.
 // The screen (and the debug serial port) shows every command as it arrives and what it did.
 // BACK on any controller reboots the console (as SITE REBOOT).
+// The main thread owns the screen and the controllers (SDL3, tools/sdl_screen) and starts titles; the network runs in
+// a thread of its own, and each client in another.
 // The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
 #include <cstdarg>
 #include <cstdio>
@@ -23,11 +25,7 @@
 #include <string>
 #include <vector>
 
-#include <hal/debug.h>
-#include <hal/video.h>
 #include <hal/xbox.h>
-#include <usbh_lib.h>
-#include <xid_driver.h>
 #include <lwip/sockets.h>
 #include <lwip/netif.h>
 #include <lwip/netifapi.h>
@@ -35,6 +33,8 @@
 #include <nxdk/net.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
+
+#include "sdl_screen.h"
 
 extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 
@@ -48,6 +48,7 @@ constexpr char ServerName[] = "OXOS FTP server 0.1.1 (built " __DATE__ " " __TIM
 constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
+constexpr SIZE_T SessionStack = 64 * 1024; // each client's thread, and the network's
 constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
 // 192.168.1.222, little-endian as nxdk wants it: the address the netboot BIOS uses for this console, so free on a
 // network set up for it (.223 was in use on the test network).
@@ -96,9 +97,33 @@ void Log(const char *format, ...) {
     std::vsnprintf(line, sizeof(line), format, ap);
     va_end(ap);
     EnterCriticalSection(&PrintLock);
-    debugPrint("%s\n", line);
+    sdl_screen::Print("%s\n", line);
     DbgPrint("ftp: %s\n", line);
     LeaveCriticalSection(&PrintLock);
+}
+
+// --- Starting a title: the main thread does it, after SDL and the USB host have stopped (sdl_screen::Close) --------
+
+char LaunchPath[300];
+volatile LONG LaunchRequested;
+bool LaunchRebootOnFailure; // a cold reboot when the launch fails (after a format: the old layout is gone)
+
+void RequestLaunch(const std::string &path, bool rebootOnFailure) {
+    std::snprintf(LaunchPath, sizeof(LaunchPath), "%s", path.c_str());
+    LaunchRebootOnFailure = rebootOnFailure;
+    InterlockedExchange(&LaunchRequested, 1);
+}
+
+// Called by the main thread once a frame. Returns only when there was no request or the launch failed.
+void LaunchIfRequested() {
+    if (!InterlockedExchange(&LaunchRequested, 0))
+        return;
+    sdl_screen::Close();
+    XLaunchXBE(LaunchPath);
+    if (LaunchRebootOnFailure)
+        HalReturnToFirmware(HalRebootRoutine);
+    sdl_screen::Open(true);
+    Log("launch FAILED: %s", LaunchPath);
 }
 
 // --- Paths --------------------------------------------------------------------------------------------------------
@@ -650,8 +675,7 @@ struct Session {
         Reply(200, "Launching %s", FtpPath(p).c_str());
         Log("%s: launch %s", peer, FtpPath(p).c_str());
         Sleep(300); // let the reply reach the client
-        XLaunchXBE(path.c_str());
-        Log("launch FAILED: %s", path.c_str()); // only returns on failure; the reply has gone out
+        RequestLaunch(path, false);
     }
 
     // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z OXOS and keeps
@@ -683,9 +707,9 @@ struct Session {
         Log("formatted as exFAT; %s", keep ? "restarting the server from the new disk" : "rebooting");
         Reply(200, "Formatted as exFAT; %s", keep ? "the server restarts from the new disk" : "rebooting");
         Sleep(300); // let the reply reach the client
-        if (keep)
-            XLaunchXBE(self.c_str());
-        HalReturnToFirmware(HalRebootRoutine);
+        if (!keep)
+            HalReturnToFirmware(HalRebootRoutine);
+        RequestLaunch(self, true);
     }
 
     // SITE DELETE-ALL-PARTITIONS YES [SECONDS]: the kernel clears every partition table and header, then the console
@@ -915,57 +939,10 @@ DWORD WINAPI SessionThread(LPVOID parameter) {
     return 0;
 }
 
-// --- BACK reboots -----------------------------------------------------------------------------------------------
+// --- The network --------------------------------------------------------------------------------------------------
 
-constexpr unsigned short PadBack = 0x20;
-volatile LONG BackPressed;
-
-void PadReport(UTR_T *utr) {
-    auto dev = static_cast<xid_dev_t *>(utr->context);
-    if (utr->status < 0 || !dev)
-        return;
-    if (utr->xfer_len >= static_cast<int>(sizeof(xid_gamepad_in)) &&
-        (reinterpret_cast<const xid_gamepad_in *>(utr->buff)->dButtons & PadBack))
-        BackPressed = 1;
-    utr->xfer_len = 0;
-    utr->bIsTransferDone = 0;
-    usbh_int_xfer(utr);
-}
-
-void PadConnected(xid_dev_t *dev, int) {
-    if (usbh_xid_get_type(dev) >> 8 == XID_TYPE_GAMECONTROLLER)
-        usbh_xid_read(dev, 0, reinterpret_cast<void *>(&PadReport)); // the API takes the callback as void *
-}
-
-void PadDisconnected(xid_dev_t *, int) {
-    // Nothing to do: a pad that is gone stops sending reports.
-}
-
-// Polls the controllers; on BACK reboots the console (cold, as SITE REBOOT: every device starts reset, and a
-// netbooted console starts what the PC serves). Quitting to the dashboard with a quick reboot hung the Xbox
-// dashboard on the 1.4 console.
-DWORD WINAPI PadThread(LPVOID) {
-    usbh_core_init();
-    usbh_xid_init();
-    usbh_install_xid_conn_callback(PadConnected, PadDisconnected);
-    while (!BackPressed) {
-        usbh_pooling_hubs();
-        Sleep(10);
-    }
-    Log("BACK: reboot");
-    HalReturnToFirmware(HalRebootRoutine);
-    return 0;
-}
-
-} // namespace
-
-int main() {
-    XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-    InitializeCriticalSection(&PrintLock);
-    debugPrint("%s\n(BACK: reboot)\n\n", ServerName);
-    if (HANDLE pad = CreateThread(nullptr, 16 * 1024, PadThread, nullptr, 0, nullptr))
-        CloseHandle(pad);
-
+// Starts the network (DHCP, else the fixed address), then accepts clients, each in a thread of its own.
+DWORD WINAPI ServerThread(LPVOID) {
     nx_net_parameters_t dhcp = {};
     dhcp.ipv4_mode = NX_NET_DHCP;
     dhcp.ipv6_mode = NX_NET_DHCP;
@@ -987,8 +964,7 @@ int main() {
         Log("no DHCP answer: fixed address");
     } else if (r != 0) {
         Log("network start failed (%d)", r);
-        for (;;)
-            Sleep(1000);
+        return 1;
     }
     Log("ftp://%s/  (any user name and password)", ip4addr_ntoa(netif_ip4_addr(g_pnetif)));
 
@@ -999,8 +975,7 @@ int main() {
     a.sin_addr.s_addr = INADDR_ANY;
     if (lwip_bind(listener, reinterpret_cast<sockaddr *>(&a), sizeof(a)) != 0 || lwip_listen(listener, 4) != 0) {
         Log("cannot listen on port %u", ControlPort);
-        for (;;)
-            Sleep(1000);
+        return 1;
     }
     for (;;) {
         sockaddr_in from = {};
@@ -1022,10 +997,36 @@ int main() {
         std::snprintf(session->peer, sizeof(session->peer), "%s", inet_ntoa(from.sin_addr));
         Log("%s connected", session->peer);
         InterlockedIncrement(&SessionCount);
-        HANDLE thread = CreateThread(nullptr, 64 * 1024, SessionThread, session, 0, nullptr);
+        HANDLE thread = CreateThread(nullptr, SessionStack, SessionThread, session, 0, nullptr);
         if (thread)
             CloseHandle(thread);
         else
             SessionThread(session);
+    }
+}
+
+} // namespace
+
+// The main thread: the screen, the controllers (BACK reboots the console cold, as SITE REBOOT: every device starts
+// reset, and a netbooted console starts what the PC serves; quitting to the dashboard with a quick reboot hung the
+// Xbox dashboard on the 1.4 console) and the titles SITE LAUNCH starts.
+int main() {
+    InitializeCriticalSection(&PrintLock);
+    if (!sdl_screen::Open(true))
+        DbgPrint("ftp: SDL: %s\n", SDL_GetError());
+    Log("%s", ServerName);
+    Log("(BACK: reboot)\n");
+    if (HANDLE server = CreateThread(nullptr, SessionStack, ServerThread, nullptr, 0, nullptr))
+        CloseHandle(server);
+    for (;;) {
+        sdl_screen::Poll();
+        if (sdl_screen::Pressed(SDL_GAMEPAD_BUTTON_BACK)) {
+            Log("BACK: reboot");
+            HalReturnToFirmware(HalRebootRoutine);
+        }
+        LaunchIfRequested();
+        sdl_screen::Present();
+        if (!sdl_screen::IsOpen())
+            Sleep(10);
     }
 }

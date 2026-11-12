@@ -1,8 +1,8 @@
 # Image test title
 
-The simplest check that a console (or xemu) runs the OXOS kernel and a title: an nxdk title that sets a 640x480
-video mode, loads `D:\picture.jpg` from its disc, and decodes it on the console with libjpeg (file I/O, memory).
-It shows the picture with a status panel below it. The picture keeps its shape on the TV: when the console's video
+The simplest check that a console (or xemu) runs the OXOS kernel and a title: an nxdk title that starts SDL3 (a
+640x480 video mode and the GPU renderer), loads `D:\picture.jpg` from its disc, and decodes it on the console with
+libjpeg (file I/O, memory). It shows the picture as a texture with a status panel below it. The picture keeps its shape on the TV: when the console's video
 setting is widescreen, it is drawn 3/4 as wide, because a 16:9 TV stretches the 640-pixel width. Once a second the
 panel updates and the front LED changes pattern: a frozen console is obvious at a glance.
 

@@ -30,6 +30,7 @@ tests/*_title/*.obj
 tests/*_title/*.d
 tests/*_title/*.exe
 tests/*_title/*.pdb
+tests/*_title/*.lib
 __pycache__/
 
 # Local tool state
@@ -55,6 +56,10 @@ tools/ftp_server/*.obj
 tools/ftp_server/*.d
 tools/ftp_server/*.exe
 tools/ftp_server/*.pdb
+# SDL3 (built per app from third_party/nxdk-sdl3) and the shared text screen's objects
+tools/*/libSDL3.lib
+tools/sdl_screen/*.obj
+tools/sdl_screen/*.d
 # Host unit-test build output
 tests/unit/build*/
 tools/mkcci/bin/

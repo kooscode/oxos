@@ -495,24 +495,43 @@ print_trace_dump:
 	python3 -I $(ROOT)/tools/trace.py --qmp $(TRACE_BUILD)/qmp.sock --map $(TRACE_BUILD)/xboxkrnl.map \
 	    --exports exports.tsv $(if $(LAST),--last $(LAST)) $(if $(ONLY),--only $(ONLY)) $(if $(filter 1,$(ALL)),--all)
 
-# Controller input test (tests/controller_test_title, an nxdk title): a virtual uinput gamepad presses every input
-# and the title reports what it received. The title is built on demand (its disc image below) with nxdk, which
-# `make nxdk` (or the first make test_controller) fetches into third_party/ (not committed). CONTROLLER_BIOS=stock
-# compares with the reference BIOS.
-NXDK_DIR    := $(abspath $(ROOT)/third_party/nxdk)
-NXDK_COMMIT := 14d5ee97e73347c973f1f57b68b79ec08c9e77f2
-NXDK_ENV    := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
+# nxdk and SDL3 for the console apps (tools/*, tests/*_title except the kernel test title), fetched into third_party/
+# (not committed) by `make nxdk` or the first app build:
+#   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk 14d5ee9 with pbkit's graphics-context fix (pb_init on a cold
+#     boot; XboxDev/nxdk#801);
+#   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
+# Every app draws and reads the controllers through SDL3 and the shared text screen in tools/sdl_screen.
+NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
+NXDK_URL         := https://github.com/kooscode/nxdk
+NXDK_COMMIT      := 11c56fef89cc1bc387167e6e710d068331e022fc
+NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
+NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
+NXDK_SDL3_COMMIT := 62455b72ac80d318961c05c1230ffcb471e9f2d4
+NXDK_ENV         := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
+SDL_SCREEN       := $(addprefix $(ROOT)/tools/sdl_screen/,sdl_screen.cpp sdl_screen.h sdl_screen.mk)
+# Both checkouts at their pinned commits: the stamp's name holds the two commits, so a new pin checks out again.
+NXDK_READY := $(ROOT)/third_party/.nxdk_$(NXDK_COMMIT)_$(NXDK_SDL3_COMMIT)
+
+$(NXDK_READY):
+	set -e; checkout() { \
+	    [ -d $$1/.git ] || git clone -q $$2 $$1; \
+	    git -C $$1 cat-file -e $$3^{commit} 2>/dev/null || git -C $$1 fetch -q $$2; \
+	    git -C $$1 checkout -q $$3; \
+	    git -C $$1 submodule update -q --init --recursive; \
+	}; \
+	checkout $(NXDK_DIR) $(NXDK_URL) $(NXDK_COMMIT); \
+	checkout $(NXDK_SDL3_DIR) $(NXDK_SDL3_URL) $(NXDK_SDL3_COMMIT)
+	rm -f $(ROOT)/third_party/.nxdk_*
+	touch $@
+nxdk: $(NXDK_READY)
+
+# Controller input test (tests/controller_test_title): a virtual uinput gamepad presses every input and the title
+# reports what it received. CONTROLLER_BIOS=stock compares with the reference BIOS.
 CONTROLLER_BIOS ?= ours
 CONTROLLER_DIR  := $(ROOT)/tests/controller_test_title
 CONTROLLER_ISO  := $(CONTROLLER_DIR)/controller_test_title.iso
 
-$(NXDK_DIR)/Makefile:
-	git clone -q https://github.com/XboxDev/nxdk $(NXDK_DIR)
-	git -C $(NXDK_DIR) checkout -q $(NXDK_COMMIT)
-	git -C $(NXDK_DIR) submodule update -q --init --recursive
-nxdk: $(NXDK_DIR)/Makefile
-
-$(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.cpp $(CONTROLLER_DIR)/Makefile
+$(CONTROLLER_ISO): $(NXDK_READY) $(SDL_SCREEN) $(CONTROLLER_DIR)/controller_test_title.cpp $(CONTROLLER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(CONTROLLER_DIR) -j8
 
 # Image test title (tests/image_test_title, an nxdk title): a picture decoded on the console, a status panel and
@@ -520,7 +539,8 @@ $(CONTROLLER_ISO): $(NXDK_DIR)/Makefile $(CONTROLLER_DIR)/controller_test_title.
 # make run_image_test boots it in xemu with the release BIOS (RUN_OPTS as make run).
 IMAGE_TEST_DIR := $(ROOT)/tests/image_test_title
 IMAGE_TEST_ISO := $(IMAGE_TEST_DIR)/image_test.iso
-$(IMAGE_TEST_ISO): $(NXDK_DIR)/Makefile $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile $(IMAGE_TEST_DIR)/picture.jpg
+$(IMAGE_TEST_ISO): $(NXDK_READY) $(SDL_SCREEN) $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile \
+                   $(IMAGE_TEST_DIR)/picture.jpg
 	$(NXDK_ENV) $(MAKE) -C $(IMAGE_TEST_DIR) -j8
 image_test: $(IMAGE_TEST_ISO)
 run_image_test: $(IMAGE_TEST_ISO) $(PLAY_FETCH)
@@ -543,7 +563,7 @@ LAUNCHER_DIR := $(ROOT)/tools/xbe_launcher
 LAUNCHER_XBE := $(LAUNCHER_DIR)/bin/default.xbe
 XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xemu_state/oxos_exfat)
 
-$(LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(LAUNCHER_DIR)/xbe_launcher.cpp $(LAUNCHER_DIR)/Makefile
+$(LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(LAUNCHER_DIR)/xbe_launcher.cpp $(LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(LAUNCHER_DIR) -j8
 
 xbe_disc: $(LAUNCHER_XBE) $(PLAY_FETCH)
@@ -572,7 +592,8 @@ ISO_LAUNCHER_DIR := $(ROOT)/tools/iso_launcher
 ISO_LAUNCHER_XBE := $(ISO_LAUNCHER_DIR)/bin/default.xbe
 ISO_KINDS ?= plain split cci splitcci large
 
-$(ISO_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h $(ISO_LAUNCHER_DIR)/Makefile
+$(ISO_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h \
+                     $(ISO_LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
 iso_launcher: $(ISO_LAUNCHER_XBE)
 
@@ -580,7 +601,8 @@ iso_launcher: $(ISO_LAUNCHER_XBE)
 # the controller. make title_launcher builds bin/default.xbe and title_launcher.iso.
 TITLE_LAUNCHER_DIR := $(ROOT)/tools/title_launcher
 TITLE_LAUNCHER_XBE := $(TITLE_LAUNCHER_DIR)/bin/default.xbe
-$(TITLE_LAUNCHER_XBE): $(NXDK_DIR)/Makefile $(TITLE_LAUNCHER_DIR)/title_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h $(TITLE_LAUNCHER_DIR)/Makefile
+$(TITLE_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(TITLE_LAUNCHER_DIR)/title_launcher.cpp \
+                       $(ISO_LAUNCHER_DIR)/mount_iso.h $(TITLE_LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(TITLE_LAUNCHER_DIR) -j8
 title_launcher: $(TITLE_LAUNCHER_XBE)
 
@@ -588,7 +610,7 @@ title_launcher: $(TITLE_LAUNCHER_XBE)
 # make ftp_server builds bin/default.xbe and ftp_server.iso; netboot.py IMAGE --title tools/ftp_server/bin runs it.
 FTP_SERVER_DIR := $(ROOT)/tools/ftp_server
 FTP_SERVER_XBE := $(FTP_SERVER_DIR)/bin/default.xbe
-$(FTP_SERVER_XBE): $(NXDK_DIR)/Makefile $(FTP_SERVER_DIR)/ftp_server.cpp $(FTP_SERVER_DIR)/Makefile
+$(FTP_SERVER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(FTP_SERVER_DIR)/ftp_server.cpp $(FTP_SERVER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(FTP_SERVER_DIR) -j8
 ftp_server: $(FTP_SERVER_XBE)
 
@@ -615,7 +637,7 @@ run_iso: iso_disc
 MEMORY_DIR  := $(ROOT)/tests/memory_test_title
 MEMORY_XBE  := $(MEMORY_DIR)/bin/default.xbe
 
-$(MEMORY_XBE): $(NXDK_DIR)/Makefile $(MEMORY_DIR)/memory_test_title.cpp $(MEMORY_DIR)/Makefile
+$(MEMORY_XBE): $(NXDK_READY) $(SDL_SCREEN) $(MEMORY_DIR)/memory_test_title.cpp $(MEMORY_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(MEMORY_DIR) -j8
 
 test_memory: $(MEMORY_XBE) $(HDD_FETCH)

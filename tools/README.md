@@ -1,7 +1,8 @@
 # Tools
 
 Python scripts for the build machine (the `kernel/Makefile` targets call them; each script's `--help` and docstring
-give the details), and nxdk console apps (built with `make -C kernel <name>`).
+give the details), and nxdk console apps (built with `make -C kernel <name>`), which draw and read the controllers
+through SDL3 and the shared text screen in `sdl_screen/`.
 
 ## Running and debugging in xemu
 | Tool | What it does |
@@ -13,6 +14,7 @@ give the details), and nxdk console apps (built with `make -C kernel <name>`).
 | `ftp_server/` | Console app: an FTP server for the console's disks, any login; on OXOS it also formats the disk as exFAT and deletes all partitions (`SITE FORMAT-EXFAT`, `SITE DELETE-ALL-PARTITIONS`). [`ftp_server/README.md`](ftp_server/README.md). |
 | `iso_launcher/` | Console app: mounts the disc image named in its `iso.txt` (or the image next to it) and starts its title; `mount_iso.h` gives dashboards the same `MountISO` / `UnmountISO` ([`spec/oxos_internal/16`](../spec/oxos_internal/16_virtual_discs.md)). `make run_iso ISO='F:\titles\x.iso'` runs it in xemu; `make test_iso` tests it. |
 | `oxos_isonator/` | Makes game folders (disc image + launcher) from disc images or extracted games, for OXOS and Cerbios. [`oxos_isonator/README.md`](oxos_isonator/README.md). |
+| `sdl_screen/` | Shared by the console apps: SDL3's start-up, a text screen drawn by the GPU (8x16 characters inside a TV-safe margin, a highlighted row, a picture under the text), the controllers' buttons, and the shutdown before a title starts (SDL and the USB host stop first). An app adds `sdl_screen.cpp` to its sources and includes `sdl_screen.mk`. |
 | `title_launcher/` | Console app: lists the disc images, game folders and XBEs in `F:\games`, `F:\titles` and `F:\Applications` (the old `F:\Tools` still works) and starts the one picked (D-pad, A). |
 | `mkcci/` | A host tool that converts a disc image (.iso) to CCI: `make -C tools/mkcci`, then `tools/mkcci/bin/mkcci IN.iso OUT [--split]`. It writes `OUT.cci`, or `OUT.1.cci` + `OUT.2.cci` when the CCI would pass 4 GB (or with `--split`, cut at the middle sector). It then decodes every part and compares it with the input. |
 | `jingle/` | Renders the boot jingle (the kernel's own synthesizer, `kernel/src/bootscreen/jingle.cpp`) to a WAV file and prints its levels: `make -C tools/jingle && tools/jingle/bin/jingle out.wav [MUTE]` (MUTE leaves instruments out: bit 1 cello and bass, 2 drums, 3 reverb) ([`spec/oxos_internal/17_boot_jingle.md`](../spec/oxos_internal/17_boot_jingle.md)). |

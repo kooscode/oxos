@@ -1,9 +1,8 @@
-// Image test title (nxdk, open source): the simplest title that shows the kernel, a title and video all work.
-// It sets a video mode, loads a JPEG from its disc (D:\picture.jpg) and decodes it on the console with libjpeg
-// (file I/O, memory allocation), shows it, and then keeps a status panel and the front LED changing once a second, so
-// a frozen console is obvious (README.md in this folder). The same state is kept in XkImageTest for automated runs
-// (found in RAM by its signature).
-#include <hal/debug.h>
+// Image test title (nxdk + SDL3, open source): the simplest title that shows the kernel, a title and video all work.
+// It starts SDL (tools/sdl_screen: video mode, GPU renderer), loads a JPEG from its disc (D:\picture.jpg) and decodes
+// it on the console with libjpeg (file I/O, memory allocation), shows it as a texture, and then keeps a status panel
+// and the front LED changing once a second, so a frozen console is obvious (README.md in this folder). The same state
+// is kept in XkImageTest for automated runs (found in RAM by its signature).
 #include <hal/video.h>
 extern "C" {
 #include <hal/led.h> // no C++ linkage guard of its own
@@ -19,11 +18,13 @@ extern "C" {
 
 #include <jpeglib.h> // after <cstdio>: it uses FILE
 
+#include "sdl_screen.h"
+
 namespace {
 
-constexpr unsigned int Width = 640, Height = 480;
+constexpr unsigned int Width = sdl_screen::WIDTH;
 constexpr unsigned int PictureHeight = 330; // the picture's band; the status lines go below it
-constexpr int TextX = 30, TextY = 340;
+constexpr int TextRow = 20;                 // the status lines' first text row, below the picture's band
 constexpr const char *PicturePath = "D:\\picture.jpg";
 
 enum class PictureStatus : unsigned int { Loading = 0, Shown = 1, Missing = 2, Undecodable = 3, OutOfMemory = 4 };
@@ -69,7 +70,7 @@ volatile struct {
     char Magic[8];          // "XKIMGTS1"
     unsigned int Self;      // this block's virtual address
     unsigned int Seconds;   // seconds since the title started (from its own tick count)
-    unsigned int Frames;    // vertical blanks waited for
+    unsigned int Frames;    // frames shown (each waits for a vertical blank)
     unsigned int Status; // a PictureStatus
     unsigned int PictureWidth, PictureHeight, PictureMs;
     unsigned int FreePages;
@@ -89,8 +90,8 @@ void JpegErrorExit(j_common_ptr cinfo) {
     std::longjmp(reinterpret_cast<JpegError *>(cinfo->err)->Jump, 1);
 }
 
-// Decodes a JPEG into 32-bit pixels in the framebuffer's byte order (B, G, R, x). The pixels are allocated with
-// new[] and handed to *pixels as soon as they exist, so the caller frees them on every path.
+// Decodes a JPEG into 32-bit pixels in the byte order B, G, R, x (SDL_PIXELFORMAT_XRGB8888). The pixels are
+// allocated with new[] and handed to *pixels as soon as they exist, so the caller frees them on every path.
 PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned char **pixels, unsigned int &width,
                          unsigned int &height) {
     jpeg_decompress_struct cinfo;
@@ -125,9 +126,9 @@ PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned c
     return PictureStatus::Shown;
 }
 
-// Decode the JPEG and draw it scaled (keeping its aspect on the TV) and centred into the picture band of the
-// framebuffer. In widescreen the TV stretches the 640-pixel width over 16:9 instead of 4:3, so every framebuffer
-// pixel shows 4/3 as wide: the picture is drawn 3/4 as wide to come out right.
+// Decodes the JPEG into a texture and sets it as the screen's picture, scaled (keeping its aspect on the TV) and
+// centred in the picture band. In widescreen the TV stretches the 640-pixel width over 16:9 instead of 4:3, so every
+// pixel shows 4/3 as wide: the picture is drawn 3/4 as wide to come out right. The texture stays for the title's life.
 PictureStatus ShowPicture(const char *path, bool widescreen) {
     DWORD start = GetTickCount();
     std::size_t size;
@@ -141,21 +142,20 @@ PictureStatus ShowPicture(const char *path, bool widescreen) {
     if (status != PictureStatus::Shown)
         return status;
     file.reset();
+    SDL_Texture *picture = SDL_CreateTexture(sdl_screen::Renderer(), SDL_PIXELFORMAT_XRGB8888,
+                                             SDL_TEXTUREACCESS_STATIC, static_cast<int>(w), static_cast<int>(h));
+    if (!picture || !SDL_UpdateTexture(picture, nullptr, pixels.get(), static_cast<int>(w * 4)))
+        return PictureStatus::OutOfMemory;
+    SDL_SetTextureScaleMode(picture, SDL_SCALEMODE_LINEAR);
     const unsigned long long pixelW = widescreen ? 4 : 1, pixelH = widescreen ? 3 : 1; // a pixel's shape on the TV
     unsigned int dw = Width, dh = static_cast<unsigned int>(h * Width * pixelW / (w * pixelH));
     if (dh > PictureHeight) {
         dh = PictureHeight;
         dw = static_cast<unsigned int>(w * PictureHeight * pixelH / (h * pixelW));
     }
-    const unsigned int x0 = (Width - dw) / 2, y0 = (PictureHeight - dh) / 2;
-    auto fb = reinterpret_cast<unsigned int *>(XVideoGetFB());
-    auto src = reinterpret_cast<const unsigned int *>(pixels.get());
-    for (unsigned int y = 0; y < dh; y++) {
-        const unsigned int *row = src + static_cast<unsigned long long>(y * h / dh) * w;
-        unsigned int *dst = fb + (y0 + y) * Width + x0;
-        for (unsigned int x = 0; x < dw; x++)
-            dst[x] = row[static_cast<unsigned long long>(x) * w / dw];
-    }
+    const SDL_FRect where{static_cast<float>((Width - dw) / 2), static_cast<float>((PictureHeight - dh) / 2),
+                          static_cast<float>(dw), static_cast<float>(dh)};
+    sdl_screen::SetPicture(picture, where);
     XkImageTest.PictureWidth = w;
     XkImageTest.PictureHeight = h;
     XkImageTest.PictureMs = GetTickCount() - start;
@@ -179,9 +179,10 @@ constexpr std::array<std::array<XLEDColor, 4>, 4> LedPatterns{{
 
 int main() {
     XkImageTest.Self = reinterpret_cast<unsigned int>(&XkImageTest);
-    XVideoSetMode(Width, Height, 32, REFRESH_DEFAULT);
-    std::memset(XVideoGetFB(), 0, Width * Height * 4);
-    debugPrint(""); // debugPrint learns the screen size on its first call; until then debugMoveCursor is ignored
+    if (!sdl_screen::Open(false)) {
+        DbgPrint("image test: SDL: %s\n", SDL_GetError());
+        return 1;
+    }
     const bool widescreen = XVideoGetEncoderSettings() & VIDEO_WIDESCREEN;
     XkImageTest.Widescreen = widescreen;
     auto status = ShowPicture(PicturePath, widescreen);
@@ -190,7 +191,7 @@ int main() {
     const DWORD start = GetTickCount();
     DWORD lastSecond = static_cast<DWORD>(-1);
     for (;;) {
-        XVideoWaitForVBlank();
+        sdl_screen::Present();
         XkImageTest.Frames = XkImageTest.Frames + 1;
         const DWORD seconds = (GetTickCount() - start) / 1000;
         if (seconds == lastSecond)
@@ -201,15 +202,16 @@ int main() {
         const auto &leds = LedPatterns[seconds % LedPatterns.size()];
         XSetCustomLED(leds[0], leds[1], leds[2], leds[3]);
         const unsigned int frames = XkImageTest.Frames;
-        debugMoveCursor(TextX, TextY);
-        debugPrint("OXOS image test - kernel %u.%u.%u.%u            \n", XboxKrnlVersion.Major, XboxKrnlVersion.Minor,
-                   XboxKrnlVersion.Build, XboxKrnlVersion.Qfe & 0x7FFF);
-        debugPrint("Uptime: %u s, %u frames (%u per s)             \n", static_cast<unsigned int>(seconds), frames,
-                   seconds ? frames / static_cast<unsigned int>(seconds) : 0);
-        debugPrint("Free memory %u KB                            \n", XkImageTest.FreePages * 4);
+        using sdl_screen::Print;
+        sdl_screen::SetCursor(TextRow);
+        Print("OXOS image test - kernel %u.%u.%u.%u\n", XboxKrnlVersion.Major, XboxKrnlVersion.Minor,
+              XboxKrnlVersion.Build, XboxKrnlVersion.Qfe & 0x7FFF);
+        Print("Uptime: %u s, %u frames (%u per s)\n", static_cast<unsigned int>(seconds), frames,
+              seconds ? frames / static_cast<unsigned int>(seconds) : 0);
+        Print("Free memory %u KB\n", XkImageTest.FreePages * 4);
         if (status == PictureStatus::Shown)
-            debugPrint("Image: %s                                        \n", PicturePath);
+            Print("Image: %s\n", PicturePath);
         else
-            debugPrint("Image: %s (%s)                                   \n", PicturePath, Describe(status));
+            Print("Image: %s (%s)\n", PicturePath, Describe(status));
     }
 }
