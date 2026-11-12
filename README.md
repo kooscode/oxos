@@ -17,6 +17,8 @@ needed to build or run it.
   [OXOS File Manager](#oxos-file-manager) to upload files and launch XBEs from any browser.
 - **Games from disc images:** of your own discs (XISO, full dumps, CCI).
 - **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
+- **Launch redirects:** `C:\OXOS\launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a
+  new Xbox Live updater instead of the old one ([details](spec/oxos_internal/33_launch_redirect.md)).
 - **In-Game Reset (IGR):** the standard In Game Reset we are used to (LT + RT + BACK + BLACK).
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
 - **Error screens that explain themselves:** what happened and what to try, instead of a bare number; a kernel

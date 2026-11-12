@@ -70,6 +70,9 @@ void MiFreeContiguousPage(ULONG pfn);
 // Frees the boot-only pages (the image's discardable sections) except those overlapping [KeepStart, KeepEnd), once;
 // quick reboots keep them free. Returns the number of pages freed.
 ULONG MmFreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd);
+// True until MmFreeBootPages has run: during a cold boot, before the first title starts. Code that may also run later
+// asks it before it calls boot-only code (spec/oxos_internal/18 §2).
+bool MmBootPagesPresent();
 
 // System PTE range 0xD0000000-0xEFFFFFFF
 PVOID MiReserveSystemPtes(ULONG count);

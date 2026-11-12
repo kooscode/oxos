@@ -1,6 +1,7 @@
 // XBE loader and title launch (spec/stock/05 §2-4).
 #include <xk/titles.h>
 #include <xk/io.h>
+#include <xk/launch_redirect.h>
 #include <xk/title_patches.h>
 #include <xk/core.h>
 #include <xk/runtime.h>
@@ -80,6 +81,40 @@ static NTSTATUS XeOpenImage(HANDLE *h) {
                       FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
+// --- Kernel files in C:\OXOS (title_patches.ini, launch_redirect.ini): C: on a FATX disk, /C/OXOS on an exFAT disk
+
+// A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does
+// not open (*Status says why: STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be
+// read.
+static char *XepReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
+    *Got = 0;
+    OBJECT_STRING name;
+    RtlInitAnsiString(&name, Path);
+    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE h;
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
+                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    *Status = status;
+    if (!NT_SUCCESS(status))
+        return nullptr;
+    ULONG info[6] = {}; // FILE_STANDARD_INFORMATION: EndOfFile at +8
+    status = NtQueryInformationFile(h, &iosb, info, sizeof(info), FileStandardInformation);
+    ULONG size = info[2];
+    if (NT_SUCCESS(status) && (info[3] || size > MaxSize))
+        status = STATUS_INSUFFICIENT_RESOURCES;
+    auto text = NT_SUCCESS(status) && size ? (char *)ExAllocatePoolWithTag(size, Tag) : nullptr;
+    if (text)
+        status = XeReadFile(h, text, size, 0, Got);
+    NtClose(h);
+    *Status = status;
+    if (text && !NT_SUCCESS(status)) {
+        ExFreePool(text);
+        return nullptr;
+    }
+    return text;
+}
+
 // --- Title patches from C:\OXOS\title_patches.ini (spec/oxos_internal/25 §3): read once per title load, written into
 // each section whenever it is read from the image (at load for preloaded sections, later through XeLoadSection).
 
@@ -87,32 +122,20 @@ static PUCHAR XepPatchRecords; // this title's records (XePatchParse), or null
 static ULONG XepPatchSize;
 
 static void XepLoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *Sections, ULONG Count) {
-    if (XepPatchRecords)
-        ExFreePool(XepPatchRecords), XepPatchRecords = nullptr, XepPatchSize = 0;
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, "\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini");
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
-    HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
-                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
-    if (!NT_SUCCESS(status))
+    if (XepPatchRecords) {
+        ExFreePool(XepPatchRecords);
+        XepPatchRecords = nullptr;
+        XepPatchSize = 0;
+    }
+    constexpr ULONG MAX_PATCH_FILE = 0x100000;
+    ULONG got;
+    NTSTATUS status;
+    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE,
+                                 'tPeX', &got, &status);
+    if (!text) {
+        if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
+            XK_SERIAL("patches: title_patches.ini not read: %#lx\n", status);
         return; // no file: no patches
-    ULONG info[6] = {}; // FILE_STANDARD_INFORMATION: EndOfFile at +8
-    status = NtQueryInformationFile(h, &iosb, info, sizeof(info), FileStandardInformation);
-    ULONG size = info[2];
-    if (NT_SUCCESS(status) && (info[3] || size > 0x100000))
-        status = STATUS_INSUFFICIENT_RESOURCES; // larger than 1 MB: not read
-    auto text = NT_SUCCESS(status) && size ? (char *)ExAllocatePoolWithTag(size, 'tPeX') : nullptr;
-    ULONG got = 0;
-    if (text)
-        status = XeReadFile(h, text, size, 0, &got);
-    NtClose(h);
-    if (!text || !NT_SUCCESS(status)) {
-        XK_SERIAL("patches: title_patches.ini not read: %#lx\n", status);
-        if (text)
-            ExFreePool(text);
-        return;
     }
     // A record is never more than twice its line ("patch=1:00" makes 12 bytes, "name=" 8).
     ULONG room = 2 * got + 16;
@@ -631,6 +654,53 @@ static bool XepPlainDashboardError(NTSTATUS s) {
            s == (NTSTATUS)0xC000014F;
 }
 
+// Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0);
+// the link is removed again when the image does not load.
+static NTSTATUS XepLoadFromFolder(PCSZ Path, ULONG FolderLength) {
+    OBJECT_STRING link;
+    RtlInitAnsiString(&link, "\\??\\D:");
+    OBJECT_STRING folder = {(USHORT)FolderLength, (USHORT)FolderLength, (PCHAR)Path};
+    bool linked = FolderLength && NT_SUCCESS(IoCreateSymbolicLink(&link, &folder));
+    NTSTATUS status = XeLoadImage(Path, FALSE);
+    if (!NT_SUCCESS(status) && linked)
+        IoDeleteSymbolicLink(&link);
+    return status;
+}
+
+// --- Launch redirects from C:\OXOS\launch_redirect.ini (spec/oxos_internal/33)
+
+// Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names
+// it: true once the target is loaded. False when there is no file or no section for Path, or the target does not load
+// (the caller then starts Path as asked, §4).
+static bool XepRedirectLaunch(PCSZ Path) {
+    constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
+    ULONG got;
+    NTSTATUS status;
+    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\launch_redirect.ini", MAX_REDIRECT_FILE,
+                                 'rLeX', &got, &status);
+    if (!text)
+        return false;
+    XE_REDIRECT redirect;
+    ULONG errors;
+    bool found = XeRedirectLookup(text, got, Path, &redirect, &errors);
+    ExFreePool(text);
+    if (errors)
+        XK_SERIAL("redirect: launch_redirect.ini: %lu lines not understood\n", errors);
+    if (!found)
+        return false;
+    XK_SERIAL("redirect: [%s] %s -> %s\n", redirect.Name, Path, redirect.Target);
+    ULONG folder = 0;
+    for (ULONG i = 0; redirect.Target[i]; i++) {
+        if (redirect.Target[i] == '\\')
+            folder = i;
+    }
+    status = XepLoadFromFolder(redirect.Target, folder);
+    if (NT_SUCCESS(status))
+        return true;
+    XK_SERIAL("redirect: target did not load (%#lx); starting %s\n", status, Path);
+    return false;
+}
+
 // §2. Returns with XeTitleLaunched set once an image is loaded (or does not return).
 static void XepLaunchTitle(ULONG Reason) {
     NTSTATUS status;
@@ -652,24 +722,24 @@ static void XepLaunchTitle(ULONG Reason) {
             return XepLaunchDashboard();
         }
         // "\Device\...\dir;name.xbe": D: is the directory, the image is dir\name.xbe.
-        OBJECT_STRING dir, link;
-        RtlInitAnsiString(&link, "\\??\\D:");
-        bool linked = false;
+        ULONG folder = 0;
         for (ULONG i = 0; path[i]; i++) {
             if (path[i] == ';') {
                 path[i] = '\\';
-                dir = {(USHORT)i, (USHORT)i, path};
-                linked = NT_SUCCESS(IoCreateSymbolicLink(&link, &dir));
+                folder = i;
                 break;
             }
         }
-        status = XeLoadImage(path, FALSE);
+        // The redirect file's target in its place (spec/oxos_internal/33), else the image the page names.
+        if (XepRedirectLaunch(path)) {
+            XeTitleLaunched = 3;
+            return;
+        }
+        status = XepLoadFromFolder(path, folder);
         if (NT_SUCCESS(status)) {
             XeTitleLaunched = 3;
             return;
         }
-        if (linked)
-            IoDeleteSymbolicLink(&link);
     } else {
         // B. A title delivered by netboot (titles/nettitle.cpp), else the disc, else the dashboard. The netbooted title
         // runs whatever the dashboard would be asked to do (a console without a clock backup always has a reason:

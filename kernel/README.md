@@ -205,7 +205,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/gamepad/` | the controllers read during the boot splash, for the X button (the File Manager): the USB controller polled (`usb_host.cpp`), hubs and pads (`pads.cpp`); boot-only, spec/oxos_internal/32 |
 | `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
-| `src/titles/` | the title (XBE) loader and launcher, netboot titles, the title-patch parser; the kernel call tracer (`trace.cpp`, trace builds only) |
+| `src/titles/` | the title (XBE) loader and launcher, netboot titles, the title-patch and launch-redirect parsers and their ini reader; the kernel call tracer (`trace.cpp`, trace builds only) |
 | `src/runtime/` | runtime library: strings, sprintf, interlocked operations, critical sections, time |
 | `selftest/` | the boot self-tests `make test` checks (`selftest.cpp` runs them; one file per subsystem); built only into the self-test kernel (`SELFTEST=1`), declared in `include/xk/selftest.h` |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |

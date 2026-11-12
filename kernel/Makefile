@@ -117,6 +117,8 @@ BOOT_OBJS := $(BOOT_OBJS),usb_host.obj,pads.obj
 BOOT_ENTRIES := HalpStartSplash,HalpWaitForSplash,UploadServe,UploadStop
 BOOT_ENTRIES := $(BOOT_ENTRIES),XkShowFileManagerScreen,XkCloseFileManagerScreen,XkNoDashboardError
 BOOT_ENTRIES := $(BOOT_ENTRIES),GamepadWaitForX
+# The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
+BOOT_ENTRIES := $(BOOT_ENTRIES),IdexDiskBlankCountdown,IdexDiskIsBlank,IdexDiskDescribe
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 
@@ -357,13 +359,15 @@ test_dash: $(HDD_FETCH)
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console:
-# the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10).
+# the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10). A third run puts
+# C:\OXOS\launch_redirect.ini on the test disk: the relaunch must start the disc's redirected\second.xbe instead
+# (spec/oxos_internal/33 §6).
 test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	for memory in 64 128; do \
+	for run in "--memory 64" "--memory 128" "--memory 64 --redirect"; do \
 	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
-	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory $$memory || exit 1; \
+	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 $$run || exit 1; \
 	done
 
 # Video encoder phase: the encoder tables must be what tools/gen_av_tables.py makes from the specs

@@ -215,6 +215,10 @@ ULONG MmFreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd) {
     return freed;
 }
 
+bool MmBootPagesPresent() {
+    return !(MiBootPagesFreed[0] | MiBootPagesFreed[1]);
+}
+
 // --- Moving a page that is in use (for a contiguous request). Its mapping is found from the busy entry: page
 // tables through the page directory, title pages through the title page tables, the rest through the system PTE
 // range. The copy and the switch run with interrupts off, so the page may be the current stack.

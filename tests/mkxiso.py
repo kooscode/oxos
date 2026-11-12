@@ -18,13 +18,15 @@ TREE = {
 }
 
 
-def build(path, default_xbe=None, relaunch=False):
+def build(path, default_xbe=None, relaunch=False, redirect=False):
     tree = dict(TREE)
     if default_xbe is not None:
         tree["default.xbe"] = default_xbe
         tree["media"] = dict(tree["media"], **{"second.xbe": default_xbe})
     if relaunch:  # the kernel test title relaunches itself as media\\second.xbe
         tree["relaunch.txt"] = b"quick reboot"
+    if redirect:  # boot_test.py --redirect sends that relaunch here (spec/oxos_internal/33 §6)
+        tree["redirected"] = dict(tree["media"])
     return write_image(path, tree)
 
 
