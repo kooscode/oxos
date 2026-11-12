@@ -1,17 +1,14 @@
-// Title launcher (nxdk, open source): lists the titles in F:\games and F:\titles (and their game folders) and the
-// applications in F:\Applications (one folder each, e.g. F:\Applications\ftp\ftp.xbe; F:\Tools, the folder's old
-// name, is still read), and starts the one chosen with the controller.
+// Title launcher (nxdk + SDL3, open source): lists the titles in F:\games and F:\titles (and their game folders) and
+// the applications in F:\Applications (one folder each, e.g. F:\Applications\ftp\ftp.xbe; F:\Tools, the folder's
+// old name, is still read), and starts the one chosen with the controller.
 //   D-pad up / down: move (held: repeats), A: start the selected title.
 // Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files.
 // A disc image is mounted as the console's disc (tools/iso_launcher/mount_iso.h) and its default.xbe started; an
 // .xbe is started from where it is. Starting goes through the launch data page and a quick reboot, as a dashboard.
-#include <hal/debug.h>
-#include <hal/video.h>
+// The screen and the controllers are SDL3's, through tools/sdl_screen.
 #include <hal/xbox.h>
-#include <usbh_lib.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
-#include <xid_driver.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -20,6 +17,7 @@
 #include <vector>
 
 #include "../iso_launcher/mount_iso.h"
+#include "sdl_screen.h"
 
 namespace {
 
@@ -28,9 +26,10 @@ constexpr const char *FolderDevice = "\\Device\\Harddisk0\\Partition6"; // F:
 constexpr const char *FolderShown = "F:";
 constexpr const char *Folders[] = {"games", "titles", "Applications", "Tools"};
 
-// nxdk's text output (hal/debug.c) fits about 23 lines of 65 characters on 640x480 (16-pixel font, 25-pixel
-// margins) and clears the whole screen when text runs past the bottom: 3 header lines, the list, 2 message lines.
-constexpr int VisibleRows = 16, NameWidth = 60;
+// The screen's rows: 3 header rows, the list, 2 message rows; a name fills the row after the 2-character marker.
+constexpr int HeaderRows = 3;
+constexpr int VisibleRows = sdl_screen::ROWS - HeaderRows - 2;
+constexpr int NameWidth = sdl_screen::COLUMNS - 2;
 
 // Listed after the games: entries of these folders.
 bool IsApplication(const std::string &entry) {
@@ -135,62 +134,39 @@ NTSTATUS ReadList(std::vector<std::string> &list) {
 
 // --- The controller ----------------------------------------------------------------------------------------------
 
-constexpr unsigned short DpadUp = 0x01, DpadDown = 0x02;
-constexpr unsigned char APressed = 0x30; // analog button: pressed above this
-
-// The latest report of the first controller connected (0 when none).
-volatile unsigned short PadButtons;
-volatile unsigned char PadA;
-volatile unsigned int PadUid, PadPresent;
-
-void ReadDone(UTR_T *utr) {
-    auto dev = static_cast<xid_dev_t *>(utr->context);
-    if (utr->status < 0 || !dev)
-        return;
-    if (PadPresent && dev->uid == PadUid && utr->xfer_len >= static_cast<int>(sizeof(xid_gamepad_in))) {
-        auto in = reinterpret_cast<const xid_gamepad_in *>(utr->buff);
-        PadButtons = in->dButtons;
-        PadA = in->a;
-    }
-    utr->xfer_len = 0;
-    utr->bIsTransferDone = 0;
-    usbh_int_xfer(utr);
-}
-
-void Connected(xid_dev_t *dev, int) {
-    if (PadPresent || usbh_xid_get_type(dev) >> 8 != XID_TYPE_GAMECONTROLLER)
-        return;
-    PadUid = dev->uid;
-    PadPresent = 1;
-    usbh_xid_read(dev, 0, reinterpret_cast<void *>(&ReadDone)); // the API takes the callback as void *
-}
-
-void Disconnected(xid_dev_t *dev, int) {
-    if (PadPresent && dev->uid == PadUid) {
-        PadPresent = 0;
-        PadButtons = 0;
-        PadA = 0;
-    }
-}
+// Frames a held D-pad waits before it repeats, and the frames between repeats.
+constexpr int RepeatDelay = 20, RepeatEvery = 4;
 
 // --- The screen --------------------------------------------------------------------------------------------------
 
 void Draw(const std::vector<std::string> &list, int selected, int top, const char *message) {
-    debugResetCursor();
-    debugPrint("%-*s\n", NameWidth + 2, "OXOS title launcher - F:\\games, F:\\titles, F:\\Applications");
-    debugPrint("%-*s\n\n", NameWidth + 2, "D-pad: move    A: start");
+    using sdl_screen::Print;
+    sdl_screen::SetCursor(0);
+    Print("OXOS title launcher - F:\\games, F:\\titles, F:\\Applications\n");
+    Print("D-pad: move    A: start\n\n");
     for (int row = 0; row < VisibleRows; row++) {
         if (list.empty() && row == 0) {
-            debugPrint("%-*s\n", NameWidth + 2, "  (no .iso, .cci or .xbe files)");
+            Print("  (no .iso, .cci or .xbe files)\n");
             continue;
         }
         int i = top + row;
         if (i < static_cast<int>(list.size()))
-            debugPrint("%s %-*.*s\n", i == selected ? ">" : " ", NameWidth, NameWidth, list[i].c_str());
+            Print("%s %.*s\n", i == selected ? ">" : " ", NameWidth, list[i].c_str());
         else
-            debugPrint("%-*s\n", NameWidth + 2, "");
+            Print("\n");
     }
-    debugPrint("\n%-*.*s\n", NameWidth + 2, NameWidth + 2, message ? message : "");
+    Print("\n%.*s\n", NameWidth + 2, message ? message : "");
+    sdl_screen::SetHighlight(list.empty() ? -1 : HeaderRows + selected - top);
+    sdl_screen::Present();
+}
+
+// Shows the message and starts the title: SDL and the USB host stop first, so nothing is left running into the title.
+// Returns only when the launch failed; the screen is open again then.
+void Launch(const char *path, const std::vector<std::string> &list, int selected, int top, const char *message) {
+    Draw(list, selected, top, message);
+    sdl_screen::Close();
+    XLaunchXBE(path);
+    sdl_screen::Open(true);
 }
 
 [[noreturn]] void Start(const std::string &file, std::vector<std::string> &list, int selected, int top) {
@@ -198,35 +174,29 @@ void Draw(const std::vector<std::string> &list, int selected, int top, const cha
     if (HasExtension(file, ".xbe")) {
         std::snprintf(path, sizeof(path), "%s\\%s", FolderDevice, file.c_str());
         std::snprintf(message, sizeof(message), "Starting %s ...", file.c_str());
-        Draw(list, selected, top, message);
-        usbh_core_deinit(); // the USB host stops its DMA before the quick reboot hands memory to the title
-        XLaunchXBE(path);
+        Launch(path, list, selected, top, message);
     } else {
         std::snprintf(path, sizeof(path), "%s\\%s", FolderShown, file.c_str());
         NTSTATUS status = MountISO(path);
         if (NT_SUCCESS(status)) {
             std::snprintf(message, sizeof(message), "Mounted %s, starting its title ...", file.c_str());
-            Draw(list, selected, top, message);
-            usbh_core_deinit();
-            XLaunchXBE("\\Device\\CdRom0\\default.xbe");
+            Launch("\\Device\\CdRom0\\default.xbe", list, selected, top, message);
         }
         std::snprintf(message, sizeof(message), "Cannot mount %s: status 0x%08lx", file.c_str(),
                       static_cast<unsigned long>(status));
         Draw(list, selected, top, message);
     }
     // XLaunchXBE returns only when the launch failed; stay on the message.
-    for (;;)
-        Sleep(1000);
+    sdl_screen::ShowForever();
 }
 
 } // namespace
 
 int main() {
-    XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-    debugClearScreen();
-    usbh_core_init();
-    usbh_xid_init();
-    usbh_install_xid_conn_callback(Connected, Disconnected);
+    if (!sdl_screen::Open(true)) {
+        DbgPrint("title launcher: SDL: %s\n", SDL_GetError());
+        return 1;
+    }
 
     std::vector<std::string> list;
     static char message[120];
@@ -237,22 +207,19 @@ int main() {
     }
 
     int selected = 0, top = 0, held = 0;
-    unsigned short lastButtons = 0;
-    bool lastA = false, dirty = true;
     for (;;) {
-        usbh_pooling_hubs();
-        unsigned short buttons = PadButtons;
-        bool a = PadA > APressed;
+        sdl_screen::Poll();
+        bool up = sdl_screen::Held(SDL_GAMEPAD_BUTTON_DPAD_UP);
+        bool down = sdl_screen::Held(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
         int move = 0;
-        if (buttons & (DpadUp | DpadDown)) {
-            // Once on the press, then every 4 frames after holding for 20.
-            if (!(lastButtons & (DpadUp | DpadDown)))
-                held = 0;
-            if (held == 0 || (held >= 20 && held % 4 == 0))
-                move = buttons & DpadUp ? -1 : 1;
+        if (up || down) {
+            // Once on the press, then every RepeatEvery frames after holding for RepeatDelay.
+            if (held == 0 || (held >= RepeatDelay && held % RepeatEvery == 0))
+                move = up ? -1 : 1;
             held++;
+        } else {
+            held = 0;
         }
-        lastButtons = buttons;
         int count = static_cast<int>(list.size());
         if (move && count) {
             selected = (selected + move + count) % count;
@@ -261,15 +228,9 @@ int main() {
             if (selected >= top + VisibleRows)
                 top = selected - VisibleRows + 1;
             message[0] = 0;
-            dirty = true;
         }
-        if (a && !lastA && count)
+        if (sdl_screen::Pressed(SDL_GAMEPAD_BUTTON_SOUTH) && count)
             Start(list[selected], list, selected, top);
-        lastA = a;
-        if (dirty) {
-            Draw(list, selected, top, message);
-            dirty = false;
-        }
-        XVideoWaitForVBlank();
+        Draw(list, selected, top, message);
     }
 }

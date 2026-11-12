@@ -24,8 +24,10 @@ same packages under their own names.
    first use the build fetches into `../third_party/`, each at a pinned version (so the first build needs internet
    access): [XboxDev/cromwell](https://github.com/XboxDev/cromwell) by `make bios`, the
    [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk (checked by SHA-256) by `make test` and
-   `make run`, and [nxdk](https://github.com/XboxDev/nxdk) by the targets that build console apps. Intel's microcode
-   is in the repo (`../third_party/intel_ucode`).
+   `make run`, and nxdk with SDL3 by the targets that build console apps (`make nxdk`):
+   [kooscode/nxdk](https://github.com/kooscode/nxdk) branch `oxos` (XboxDev's nxdk with pbkit's graphics-context
+   fix) and [kooscode/nxdk-sdl3](https://github.com/kooscode/nxdk-sdl3) (a fork of Ryzee119's SDL3 for nxdk).
+   Intel's microcode is in the repo (`../third_party/intel_ucode`).
 4. **Optional, your own files** (git-ignored, never committed): images of your own discs (XISO) in `../xiso/`;
    `../xbox_files/` for your own copyrighted files, e.g. a disk with the stock Microsoft dashboard as
    `xbox_files/hdd/msdash.qcow2`, which `make run` then prefers over the default disk. No BIOS, MCPX boot ROM or

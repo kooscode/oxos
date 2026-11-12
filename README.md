@@ -96,8 +96,10 @@ Building, testing, debugging and the source layout: [`kernel/README.md`](kernel/
 
 ## Credits and license
 OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0),
-Intel's Pentium III microcode, [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) (MIT) and
-[nxdk](https://github.com/XboxDev/nxdk). Full notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Intel's Pentium III microcode, [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) (MIT), and for its
+console apps [nxdk](https://github.com/XboxDev/nxdk) with [SDL3](https://www.libsdl.org) (zlib) through Ryzee119's
+[nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) (MIT). Full notices:
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Legal
 An independent project, not affiliated with or endorsed by Microsoft. "Xbox" is a trademark of Microsoft

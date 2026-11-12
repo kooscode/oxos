@@ -25,7 +25,9 @@ valid live context, as a stock console's boot animation leaves it.
     the first switch. With the junk, every Kelvin method then fails with "FD invalid operation" (class 0x97, first
     at method 0x1D6C), and pbkit stops at its GPU error screen.
   - This hit every pbkit app on hardware: nxdk's samples, the XBL Dashboard installer. xemu is not affected.
-  - Fixed in pbkit by https://github.com/XboxDev/nxdk/pull/801, but apps built before the fix keep the bug.
+  - Fixed in pbkit by https://github.com/XboxDev/nxdk/pull/801, but apps built before the fix keep the bug. OXOS's
+    own console apps build with the fix (nxdk from kooscode/nxdk, branch `oxos`; `kernel/Makefile`, `make nxdk`);
+    their SDL3 renderer starts the engine through the same `pb_init`.
 - **With a valid live context**, that save is harmless. Measured: these apps work after any Direct3D title has run,
   and on a cold OXOS boot with this set-up.
 - The splash does not draw with the graphics engine (it writes the frame buffer). This set-up also leaves the engine

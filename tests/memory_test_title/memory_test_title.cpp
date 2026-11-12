@@ -1,4 +1,4 @@
-// OXOS memory test title (nxdk): measures how much memory a title is given, for the 64/128 MB comparison between
+// OXOS memory test title (nxdk + SDL3): measures how much memory a title is given, for the 64/128 MB comparison between
 // kernels (tests/memory_test.py runs it and reads the results). The same XBE is run twice: as built (nxdk sets the
 // XBE init flag 0x4, "limit to 64 MB", like retail games) and with that flag cleared.
 //
@@ -10,10 +10,12 @@
 //   4. ordinary title memory: 1 MB blocks (NtAllocateVirtualMemory, committed) until the kernel says no; every page
 //      is touched and looked up (MmGetPhysicalAddress): total bytes, pages above 64 MB, highest physical address
 //   5. MmQueryStatistics at the end
-#include <hal/debug.h>
-#include <hal/video.h>
+// SDL (tools/sdl_screen) starts only after the measurements, once the title memory of step 4 is freed again, so it
+// takes nothing from what is measured; the XBE itself is larger with SDL in it (about 1 MB).
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
+
+#include "sdl_screen.h"
 
 namespace {
 constexpr unsigned int Block = 1024 * 1024;
@@ -50,9 +52,6 @@ void Stats(volatile unsigned int &total, volatile unsigned int &available) {
 
 int main() {
     XkMemoryTest.Self = reinterpret_cast<unsigned int>(&XkMemoryTest);
-    XVideoSetMode(640, 480, 32, REFRESH_DEFAULT);
-    debugClearScreen();
-    debugPrint("OXOS memory test title\n\n");
 
     // 1. Init flags of the running XBE (the header is loaded at 0x10000).
     XkMemoryTest.InitFlags = *reinterpret_cast<volatile unsigned int *>(0x10124);
@@ -66,12 +65,14 @@ int main() {
         MmFreeContiguousMemory(high);
     }
 
-    // 4. Ordinary memory until the kernel refuses; never freed, so the total is what the title can have.
+    // 4. Ordinary memory until the kernel refuses; kept until step 5 has run, so the total is what the title can have.
+    static PVOID blocks[MaxBlocks];
     for (unsigned int b = 0; b < MaxBlocks; b++) {
-        PVOID base = nullptr;
+        PVOID &base = blocks[b];
         SIZE_T size = Block;
         NTSTATUS status = NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (!NT_SUCCESS(status)) {
+            base = nullptr;
             XkMemoryTest.FailStatus = static_cast<unsigned int>(status);
             break;
         }
@@ -92,16 +93,25 @@ int main() {
     Stats(XkMemoryTest.TotalPagesEnd, XkMemoryTest.AvailablePagesEnd);
     XkMemoryTest.Done = 1;
 
-    debugPrint("init flags %08x (limit to 64 MB: %s)\n", XkMemoryTest.InitFlags,
-               XkMemoryTest.InitFlags & 4 ? "yes" : "no");
-    debugPrint("kernel reports %u pages (%u MB), %u available\n", XkMemoryTest.TotalPages,
-               XkMemoryTest.TotalPages / 256, XkMemoryTest.AvailablePages);
-    debugPrint("contiguous page above 64 MB: %08x\n", XkMemoryTest.HighContiguous);
-    debugPrint("title memory: %u MB in %u blocks, %u pages above 64 MB, highest %08x\n",
-               XkMemoryTest.Bytes / Block, XkMemoryTest.Blocks, XkMemoryTest.PagesAbove64MB,
-               XkMemoryTest.HighestPhysical);
-    debugPrint("ended by status %08x; at the end %u available\n", XkMemoryTest.FailStatus,
-               XkMemoryTest.AvailablePagesEnd);
-    for (;;)
-        XVideoWaitForVBlank();
+    // The memory goes back for SDL, then the results go on the screen.
+    for (PVOID &base : blocks) {
+        SIZE_T size = 0;
+        if (base)
+            NtFreeVirtualMemory(&base, &size, MEM_RELEASE);
+    }
+    if (!sdl_screen::Open(false))
+        DbgPrint("memory test: SDL: %s\n", SDL_GetError());
+    using sdl_screen::Print;
+    Print("OXOS memory test title\n\n");
+    Print("init flags %08x (limit to 64 MB: %s)\n", XkMemoryTest.InitFlags,
+          XkMemoryTest.InitFlags & 4 ? "yes" : "no");
+    Print("kernel reports %u pages (%u MB), %u available\n", XkMemoryTest.TotalPages,
+          XkMemoryTest.TotalPages / 256, XkMemoryTest.AvailablePages);
+    Print("contiguous page above 64 MB: %08x\n", XkMemoryTest.HighContiguous);
+    Print("title memory: %u MB in %u blocks, %u pages above 64 MB, highest %08x\n",
+          XkMemoryTest.Bytes / Block, XkMemoryTest.Blocks, XkMemoryTest.PagesAbove64MB,
+          XkMemoryTest.HighestPhysical);
+    Print("ended by status %08x; at the end %u available\n", XkMemoryTest.FailStatus,
+          XkMemoryTest.AvailablePagesEnd);
+    sdl_screen::ShowForever();
 }
