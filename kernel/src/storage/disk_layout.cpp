@@ -178,6 +178,9 @@ constexpr ULONG IDEX_COUNTDOWN = XK_RELEASE_VERSION ? DISK_FORMAT_COUNTDOWN : DI
 // The boot tests' view of the last countdown (spec/oxos_internal/30 §4): its length, and why (1 blank, 2 foreign).
 volatile ULONG IdexDiskCountdownSeconds, IdexDiskCountdownReason;
 
+// The checks of a cold boot (IdexDiskDetectLayout): boot-only code, which runs only while its pages are present.
+#pragma code_seg(".xkb")
+
 // Seconds on the screen and the serial port before the disk is formatted: turning the console off keeps the disk.
 // The splash ends first, as the countdown takes the screen; the boot-only pages stay (the upload server may run next).
 static void IdexDiskCountdown(const char *Title, const char *What, ULONG Seconds, ULONG Reason) {
@@ -217,6 +220,8 @@ static bool IdexDiskHasFatx(PUCHAR Scratch) {
     }
     return false;
 }
+
+#pragma code_seg()
 
 // Reads the layout: exFAT (IdexDiskEXFATLayout), a foreign PC disk (IdexDiskForeignLayout), else FATX partitions.
 // The caller holds IdexDiskLayoutLock.
@@ -295,7 +300,10 @@ void IdexDiskDetectLayout() {
         return;
     KeWaitForSingleObject(&IdexDiskLayoutLock, Executive, KernelMode, FALSE, nullptr);
     if (!IdexDiskLayoutKnown) {
-        auto scratch = (PUCHAR)MmAllocateSystemMemory(DISK_FORMAT_SCRATCH, PAGE_READWRITE);
+        // A blank or foreign disk is formatted only on a cold boot, while the boot-only code that recognises it is
+        // there: a quick reboot finds the disk the cold boot left.
+        bool coldBoot = MmBootPagesPresent();
+        auto scratch = coldBoot ? (PUCHAR)MmAllocateSystemMemory(DISK_FORMAT_SCRATCH, PAGE_READWRITE) : nullptr;
         if (scratch)
             IdexDiskFormatIfBlank(scratch);
         IdexDiskReadLayout();

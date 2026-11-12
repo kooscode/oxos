@@ -56,6 +56,11 @@ NTSTATUS IdexDiskDeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Ext
     return status;
 }
 
+// Recognising a blank disk and naming what a disk holds is boot-only code: the kernel looks at the disk only on a cold
+// boot, while the boot-only pages are present (storage/disk_layout.cpp, spec/oxos_internal/18 §2).
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
+
 ULONG IdexDiskBlankCountdown(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONG Default) {
     if (!NT_SUCCESS(Io->Read(Io->Context, DISK_FORMAT_MARKER, Scratch, 1)))
         return Default;
@@ -254,6 +259,9 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
         append("no partitions");
     return DISK_FORMAT_PC_TABLE;
 }
+
+#pragma code_seg()
+#pragma const_seg()
 
 // --- The GPT
 

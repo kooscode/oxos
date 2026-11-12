@@ -9,6 +9,7 @@
 //   match = 1C930D: 8B F0 56 E8          when these bytes are at this address, the blind patches below it in the
 //                                        section (no CURRENT_BYTES: "patch = ADDR: > NEW_BYTES") are written
 #include <xk/title_patches.h>
+#include <xk/ini_file.h>
 
 namespace {
 bool IsBlank(char c) {
@@ -77,15 +78,6 @@ struct Cursor {
     }
 };
 
-bool KeyIs(const char *k, ULONG n, const char *want) {
-    ULONG i = 0;
-    for (; i < n && want[i]; i++) {
-        if ((k[i] | 0x20) != want[i])
-            return false;
-    }
-    return i == n && !want[i];
-}
-
 // Room for a record of `length` bytes: its address, or null (and an error counted) when it does not fit.
 PUCHAR Reserve(PUCHAR Out, ULONG OutSize, ULONG *used, ULONG length, XE_PATCH_COUNTS *c) {
     ULONG size = (sizeof(XE_PATCH_RECORD) + length + 3) & ~3u;
@@ -106,51 +98,37 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
     bool active = false;
     ULONG matchAddress = 0, matchLength = 0; // the current section's `match =` line
     UCHAR match[XE_PATCH_MAX_BYTES];
-    const char *end = Text + Length;
-    for (const char *line = Text; line < end;) {
-        const char *eol = line;
-        while (eol < end && *eol != '\n')
-            eol++;
-        Cursor cur = {line, eol};
-        line = eol + 1;
-        if (cur.AtEnd())
+    INI_READER reader = {Text, Text + Length};
+    INI_LINE line;
+    while (IniNextLine(&reader, &line)) {
+        if (line.Kind == INI_LINE_KIND::BAD_LINE) {
+            c.Errors++;
             continue;
-        if (*cur.p == '[') { // [TITLEID] or [TITLEID/VERSION]
-            cur.p++;
+        }
+        if (line.Kind != INI_LINE_KIND::KEY) { // [TITLEID] or [TITLEID/VERSION]
             matchLength = 0;
+            active = false;
+            Cursor cur = {line.Text, line.Text + line.TextLength};
             ULONG id, version = 0;
-            bool ok = cur.Number(&id, true), versioned = false;
+            bool ok = line.Kind == INI_LINE_KIND::SECTION && cur.Number(&id, true);
+            bool versioned = false;
             if (ok && cur.Expect('/')) {
                 versioned = true;
                 ok = cur.Number(&version, false);
             }
-            ok = ok && cur.Expect(']') && cur.AtEnd();
-            if (!ok) {
+            if (!(ok && cur.AtEnd())) {
                 c.Errors++;
-                active = false;
                 continue;
             }
             active = id == TitleId && (!versioned || version == Version);
             c.Sections += active;
             continue;
         }
-        // key = value
-        const char *key = cur.p;
-        while (cur.p < cur.end && *cur.p != '=' && !IsBlank(*cur.p))
-            cur.p++;
-        ULONG keyLength = (ULONG)(cur.p - key);
-        if (!cur.Expect('=')) {
-            c.Errors++;
-            continue;
-        }
-        if (KeyIs(key, keyLength, "name")) {
+        Cursor cur = {line.Value, line.Value + line.ValueLength};
+        if (IniKeyIs(line, "name")) {
             if (!active)
                 continue;
-            cur.SkipBlanks();
-            const char *text = cur.p, *stop = cur.end;
-            while (stop > text && IsBlank(stop[-1]))
-                stop--;
-            ULONG n = (ULONG)(stop - text);
+            ULONG n = line.ValueLength;
             if (n > XE_PATCH_MAX_NAME)
                 n = XE_PATCH_MAX_NAME;
             if (PUCHAR r = Reserve(Out, OutSize, &used, n, &c)) {
@@ -161,9 +139,9 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
                 h->Kind = XE_PATCH_NAME;
                 h->Check = 0;
                 for (ULONG i = 0; i < n; i++)
-                    r[sizeof(*h) + i] = (UCHAR)text[i];
+                    r[sizeof(*h) + i] = (UCHAR)line.Value[i];
             }
-        } else if (KeyIs(key, keyLength, "match")) {
+        } else if (IniKeyIs(line, "match")) {
             // ADDRESS: CURRENT_BYTES: when they are there, the blind patches below it in the section are written
             ULONG address, n = 0;
             UCHAR bytes[XE_PATCH_MAX_BYTES];
@@ -175,7 +153,7 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
             matchLength = n;
             for (ULONG i = 0; i < n; i++)
                 match[i] = bytes[i];
-        } else if (KeyIs(key, keyLength, "patch")) {
+        } else if (IniKeyIs(line, "patch")) {
             // ADDRESS: CURRENT_BYTES > NEW_BYTES (hex bytes; spaces between bytes are optional; both sides any
             // length), or a blind patch ADDRESS: > NEW_BYTES, written when the section's `match =` bytes are there
             ULONG address;

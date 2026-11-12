@@ -17,7 +17,13 @@ Code and data used only during a cold boot go in two sections of their own, whic
 title starts:
 - `.xkb`, code: the splash (`src/bootscreen/splash.cpp`, except `HalpEndSplash`, which every title start calls), its vector renderer (`src/bootscreen/vsplash.cpp`), the jingle's synthesizer and
   player (`src/bootscreen/jingle.cpp`, `src/bootscreen/bootsound.cpp`), the network stack (`src/network/`) and the
-  upload server (`src/uploader/`, spec/oxos_internal/31). The files say `#pragma code_seg(".xkb")`.
+  upload server (`src/uploader/`, spec/oxos_internal/31), and the disk checks of a cold boot (recognising a blank
+  disk, naming what a foreign one holds: `src/storage/disk_format.cpp`, and the countdown and checks in
+  `src/storage/disk_layout.cpp`, spec/oxos_internal/30 §4). The files, or those parts of them, say
+  `#pragma code_seg(".xkb")`.
+- Code that can also run after the pages are freed asks `MmBootPagesPresent()` before it calls boot-only code: the
+  layout detection runs on every boot, and on a quick reboot it skips the disk checks (the cold boot already made
+  the disk usable).
 - `.xka`, read-only data, in this order (COFF grouped sections, sorted by the name after `$`):
   `$c0`/`$c1` the Conexant's tables, `$f0`/`$f1` the Focus's, `$x0`/`$x1` the Xcalibur's, `$x9` the end marker
   (`hardware/video.cpp`; `tools/gen_av_tables.py` tags each table with `AVP_CX`, `AVP_FO` or `AVP_XC`), then `$y`, the boot

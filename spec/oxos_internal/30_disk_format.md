@@ -54,7 +54,9 @@ Then it writes the **blank-disk marker** in sector 1023 (zeroed by the delete, n
 again by a format): `OXOS BLANK DISK\0` and the countdown in seconds (4 bytes, little-endian, at most 600).
 
 ## 4. Formatting at boot, after a countdown
-Before the layout is read (the first partition open):
+On a cold boot, before the layout is read (the first partition open). The checks are boot-only code
+(spec/oxos_internal/18 §2): a quick reboot finds the disk the cold boot left and skips them
+(`MmBootPagesPresent`):
 1. **Blank disk:** every sector a layout is recognised by reads back as zeros: 0, 1, 2048, the last and the one 8
    before it, and the first sectors of the retail C: and E:. The C: and E: checks matter: the first sectors of a
    retail FATX disk can be all zeros, and such a disk must never be taken for blank. A read that fails means not blank

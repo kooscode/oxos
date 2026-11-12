@@ -52,8 +52,9 @@ Some games ask the sector size of `D:\` and expect a DVD's 2048 bytes:
 Some problems are in a game's own code, and no kernel answer can fix them (spec/cerbios/13 §7: a race in an intro, a
 CPUID wrapper, a display mode). For those the kernel writes patches into the loaded game, taken from a file, so any
 title can be fixed without a new kernel.
-- **Code:** `kernel/src/titles/patchfile.cpp` (the parser, `include/xk/title_patches.h`); `kernel/src/titles/loader.cpp`
-  (`XepLoadPatches`, `XepApplyPatches`).
+- **Code:** `kernel/src/titles/patchfile.cpp` (the parser, `include/xk/title_patches.h`), on the ini line reader it
+  shares with the launch redirects (`kernel/src/titles/ini_file.cpp`, `include/xk/ini_file.h`, spec/oxos_internal/33);
+  `kernel/src/titles/loader.cpp` (`XepLoadPatches`, `XepApplyPatches`).
 - **Tests:** host unit tests `tests/unit/test_patches.cpp` (the format, and the shipped file parses without an
   error); boot self-test "title patches" (boot_test.py puts a patch file for the test title on the test disk: a
   matching section changes a variable, a section for another certificate version leaves another one alone, a patch

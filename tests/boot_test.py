@@ -452,6 +452,26 @@ def write_title_patches(hdd_copy, title, title_map):
     TITLE_PATCHES = True
 
 
+REDIRECT = False  # set when the disk copy carries the launch redirect file (--redirect)
+
+
+def write_launch_redirect(hdd_copy):
+    """C:\\OXOS\\launch_redirect.ini (spec/oxos_internal/33 §6), on a FATX test disk: the relaunch goes to the disc's
+    redirected\\ folder; the third launch's missing image goes to a target that does not exist either, so the kernel
+    falls back to the image the page names (§4)."""
+    global REDIRECT
+    q = Qcow2(hdd_copy)
+    w = FATXWriter(q, "C")
+    text = ("; boot_test.py --redirect\r\n"
+            "[relaunch test]\r\nsource = D:\\media\\second.xbe\r\ntarget = D:\\redirected\\second.xbe\r\n"
+            "[missing target]\r\nsource = d:/media/missing.xbe\r\ntarget = D:\\nowhere\\missing.xbe\r\n")
+    w.makedirs("OXOS")
+    w.write_file("OXOS\\launch_redirect.ini", text.encode())
+    q.save(hdd_copy + ".new")
+    os.replace(hdd_copy + ".new", hdd_copy)
+    REDIRECT = True
+
+
 def title_checks(mon, title_map, relaunch=False, reboots=0):
     # reboots: quick reboots before the title's first run (the ISO launcher's launch)
     if not title_map:
@@ -505,8 +525,11 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
         checks |= {
             "quick reboot (HalReturnToFirmware(2)): kernel re-entered (twice), LaunchDataPage re-adopted":
                 mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("MmPersistedPages") >= 1,
-            "LaunchDataPage launch of media;second.xbe, first run's results carried over": words[25] == 1
-                and second == "\\Device\\CdRom0\\media\\second.xbe",
+            "LaunchDataPage launch of media;second.xbe"
+            + (", redirected to redirected\\second.xbe (launch_redirect.ini)" if REDIRECT else "")
+            + ", first run's results carried over": words[25] == 1
+                and second == ("\\Device\\CdRom0\\redirected\\second.xbe" if REDIRECT
+                               else "\\Device\\CdRom0\\media\\second.xbe"),
             "persisted launch page contents (type, title id, flags, data)": words[27] == 1,
             "\\??\\D: -> launch directory": words[26] == 1,
         }
@@ -1085,6 +1108,8 @@ def main():
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
+    ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\launch_redirect.ini: the "
+                    "relaunch must start the disc's redirected\\second.xbe (spec/oxos_internal/33 §6)")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     ap.add_argument("--keep-hdd", metavar="PATH", help="keep the disk copy after the run (as PATH), to inspect it")
     ap.add_argument("--serial", action="store_true", help="attach xemu's SuperIO and check the debug serial log")
@@ -1114,7 +1139,7 @@ def main():
         if a.udf:
             mkudf.build(dvd)
         else:
-            mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch)
+            mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch, a.redirect)
     if a.blank_hdd:
         subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", hdd_copy, f"{a.blank_hdd}G"], check=True)
         if a.blank_marker is not None or a.foreign:
@@ -1134,6 +1159,8 @@ def main():
         shutil.copyfile(a.hdd, hdd_copy)
         if a.title and a.title_map and not a.dash:
             write_title_patches(hdd_copy, a.title, a.title_map)
+        if a.redirect:
+            write_launch_redirect(hdd_copy)
         if a.xbl:  # C:\xboxdash.xbe moved to C:\Dashboard\default.xbe, the XBL Dashboard's loader (spec/oxos_internal/19)
             q = Qcow2(hdd_copy)
             dash = FATX(q, "C").read_file("xboxdash.xbe")
