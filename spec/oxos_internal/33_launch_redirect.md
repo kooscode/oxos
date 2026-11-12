@@ -10,6 +10,8 @@ When a title starts another XBE (`XLaunchNewImage`, `XLaunchXBE`), the kernel ca
 place, named in a file on the hard disk. The first user: the XBL team replaces the Xbox dashboard's legacy Xbox Live
 updater (`C:\xodash\xonlinedash.xbe`), which no longer works, with their own, without changing the dashboard.
 
+User guide: [`docs/launch_redirect.md`](../../docs/launch_redirect.md).
+
 ## 1. The file
 `C:\OXOS\launch_redirect.ini`, read through `\Device\Harddisk0\Partition2`, next to `title_patches.ini`
 (spec/oxos_internal/25 §3.1): C: on a FATX disk, `/C/OXOS/launch_redirect.ini` on an exFAT disk. Text, at most
