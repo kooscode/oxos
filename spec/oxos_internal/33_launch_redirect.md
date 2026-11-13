@@ -1,6 +1,7 @@
 # 33. Launch redirects (OXOS's own)
 
-Status: implemented 2026-11-12. Code: `kernel/src/titles/launch_redirect.cpp` (the file's parser,
+Status: implemented 2026-11-12; the file renamed from `launch_redirect.ini` to `oxos_launch_redirect.ini` on
+2026-11-13 (OXOS's own files get the `oxos_` prefix). Code: `kernel/src/titles/launch_redirect.cpp` (the file's parser,
 `include/xk/launch_redirect.h`), on the ini line reader it shares with title_patches.ini
 (`kernel/src/titles/ini_file.cpp`, `include/xk/ini_file.h`, spec/oxos_internal/25 §3.1);
 `kernel/src/titles/loader.cpp` (`XepRedirectLaunch`, in `XepLaunchTitle`, and `XepReadOxosFile`, which reads both
@@ -13,8 +14,8 @@ updater (`C:\xodash\xonlinedash.xbe`), which no longer works, with their own, wi
 User guide: [`docs/launch_redirect.md`](../../docs/launch_redirect.md).
 
 ## 1. The file
-`C:\OXOS\launch_redirect.ini`, read through `\Device\Harddisk0\Partition2`, next to `title_patches.ini`
-(spec/oxos_internal/25 §3.1): C: on a FATX disk, `/C/OXOS/launch_redirect.ini` on an exFAT disk. Text, at most
+`C:\OXOS\oxos_launch_redirect.ini`, read through `\Device\Harddisk0\Partition2`, next to `title_patches.ini`
+(spec/oxos_internal/25 §3.1): C: on a FATX disk, `/C/OXOS/oxos_launch_redirect.ini` on an exFAT disk. Text, at most
 64 KB, lines ending in LF or CR LF:
 
 ```ini
@@ -67,13 +68,13 @@ does not load either, the usual fallback follows (the dashboard with reason 1, s
 ## 5. Serial log (SERIAL=1 builds)
 - `redirect: [NAME] SOURCE -> TARGET` when a section matches;
 - `redirect: target did not load (STATUS); starting SOURCE` for §4;
-- `redirect: launch_redirect.ini: N lines not understood` when the file has errors.
+- `redirect: oxos_launch_redirect.ini: N lines not understood` when the file has errors.
 
 ## 6. Tests
 - Host unit tests `tests/unit/test_launch_redirect.cpp`: drive letters, device paths, `/`, case, comments, sections
   without a source or target, the first match deciding, paths too long, CR LF; `tests/unit/test_ini_file.cpp`: the
   shared line reader.
-- `make test_relaunch` (boot_test.py `--redirect`): the test disk's `C:\OXOS\launch_redirect.ini` sends the kernel
+- `make test_relaunch` (boot_test.py `--redirect`): the test disk's `C:\OXOS\oxos_launch_redirect.ini` sends the kernel
   test title's relaunch (`D:\media\second.xbe`) to `D:\redirected\second.xbe` on the same disc, and its third launch
   (`D:\media\missing.xbe`, which does not exist) to a target that does not exist either. Checked: the kernel loaded
   the target (`XeImageFileName`), the first run's results arrived through the unchanged launch data, D: is linked (the

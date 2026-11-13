@@ -1,5 +1,5 @@
-// Launch redirects from C:\OXOS\launch_redirect.ini (spec/oxos_internal/33): the parser. It makes no kernel calls, so
-// the host unit tests run it unchanged (tests/unit/test_launch_redirect.cpp).
+// Launch redirects from C:\OXOS\oxos_launch_redirect.ini (spec/oxos_internal/33): the parser. It makes no kernel
+// calls, so the host unit tests run it unchanged (tests/unit/test_launch_redirect.cpp).
 #pragma once
 #include <xk/types.h>
 

@@ -81,7 +81,8 @@ static NTSTATUS XeOpenImage(HANDLE *h) {
                       FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
-// --- Kernel files in C:\OXOS (title_patches.ini, launch_redirect.ini): C: on a FATX disk, /C/OXOS on an exFAT disk
+// --- Kernel files in C:\OXOS (title_patches.ini, oxos_launch_redirect.ini): C: on a FATX disk, /C/OXOS on an
+// exFAT disk
 
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does
 // not open (*Status says why: STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be
@@ -667,7 +668,7 @@ static NTSTATUS XepLoadFromFolder(PCSZ Path, ULONG FolderLength) {
     return status;
 }
 
-// --- Launch redirects from C:\OXOS\launch_redirect.ini (spec/oxos_internal/33)
+// --- Launch redirects from C:\OXOS\oxos_launch_redirect.ini (spec/oxos_internal/33)
 
 // Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names
 // it: true once the target is loaded. False when there is no file or no section for Path, or the target does not load
@@ -676,7 +677,7 @@ static bool XepRedirectLaunch(PCSZ Path) {
     constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
     ULONG got;
     NTSTATUS status;
-    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\launch_redirect.ini", MAX_REDIRECT_FILE,
+    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE,
                                  'rLeX', &got, &status);
     if (!text)
         return false;
@@ -685,7 +686,7 @@ static bool XepRedirectLaunch(PCSZ Path) {
     bool found = XeRedirectLookup(text, got, Path, &redirect, &errors);
     ExFreePool(text);
     if (errors)
-        XK_SERIAL("redirect: launch_redirect.ini: %lu lines not understood\n", errors);
+        XK_SERIAL("redirect: oxos_launch_redirect.ini: %lu lines not understood\n", errors);
     if (!found)
         return false;
     XK_SERIAL("redirect: [%s] %s -> %s\n", redirect.Name, Path, redirect.Target);

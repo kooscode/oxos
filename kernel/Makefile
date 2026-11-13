@@ -363,7 +363,7 @@ test_dash: $(HDD_FETCH)
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
 # media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console:
 # the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10). A third run puts
-# C:\OXOS\launch_redirect.ini on the test disk: the relaunch must start the disc's redirected\second.xbe instead
+# C:\OXOS\oxos_launch_redirect.ini on the test disk: the relaunch must start the disc's redirected\second.xbe instead
 # (spec/oxos_internal/33 §6).
 test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin

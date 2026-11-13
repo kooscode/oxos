@@ -1,5 +1,5 @@
 // The kernel's ini files in C:\OXOS: the line reader that title_patches.ini (spec/oxos_internal/25 §3.1) and
-// launch_redirect.ini (spec/oxos_internal/33 §1) share. It makes no kernel calls, so the host unit tests run it
+// oxos_launch_redirect.ini (spec/oxos_internal/33 §1) share. It makes no kernel calls, so the host unit tests run it
 // unchanged (tests/unit/test_patches.cpp, test_launch_redirect.cpp).
 //
 //   ; a comment (also # ...)

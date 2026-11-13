@@ -5,13 +5,14 @@ small text file on the hard disk; nothing else changes. For example, the Xbox da
 no longer works, and an Xbox Live revival service can have its own updater start instead, without changing the
 dashboard.
 
-Needs OXOS v0.4.5 or later. The details and the rules behind them are in
+Needs OXOS v0.4.5 or later. The file is `oxos_launch_redirect.ini` from v0.4.7 on; v0.4.5 and v0.4.6 read it as
+`launch_redirect.ini`. The details and the rules behind them are in
 [`spec/oxos_internal/33_launch_redirect.md`](../spec/oxos_internal/33_launch_redirect.md).
 
 ## Set it up
 1. **Put the replacement XBE on the console**, for example in `E:\Apps\XBLive\`, with the OXOS File Manager
    (X at boot) or FTP.
-2. **Write the file** `launch_redirect.ini`, one section per redirect:
+2. **Write the file** `oxos_launch_redirect.ini`, one section per redirect:
 
    ```ini
    ; Replace the legacy Xbox Live updater with ours
@@ -22,9 +23,9 @@ Needs OXOS v0.4.5 or later. The details and the rules behind them are in
 
    - `source`: the XBE titles try to start. `target`: the XBE to start instead.
    - The name in the brackets is yours to choose; it shows in the serial log.
-3. **Copy it to `C:\OXOS\launch_redirect.ini`.** On an exFAT disk that is `/C/OXOS/launch_redirect.ini` (the File
-   Manager shows it as `/C/OXOS`). Create the `OXOS` folder if it is not there; `title_patches.ini` goes in the same
-   folder.
+3. **Copy it to `C:\OXOS\oxos_launch_redirect.ini`.** On an exFAT disk that is `/C/OXOS/oxos_launch_redirect.ini`
+   (the File Manager shows it as `/C/OXOS`). Create the `OXOS` folder if it is not there; `title_patches.ini` goes in
+   the same folder.
 4. **That is all.** The file is read each time a title launches another XBE, so a change counts from the next
    launch, with no reboot.
 5. **Try it:** do what starts the original (in the example, choose Xbox Live in the dashboard). Your target starts.
@@ -72,7 +73,7 @@ Only a title starting another XBE is redirected. These are not:
 Delete the section, or the whole file.
 
 ## When it does not work
-- Check the file's place and name: `C:\OXOS\launch_redirect.ini` (exFAT: `/C/OXOS/launch_redirect.ini`).
+- Check the file's place and name: `C:\OXOS\oxos_launch_redirect.ini` (exFAT: `/C/OXOS/oxos_launch_redirect.ini`).
 - Check that `source` is exactly the path the title launches: the folder and the file name, for example
   `C:\xodash\xonlinedash.xbe`, not `C:\xodash`.
 - Each section needs both a `source =` and a `target =` line, under a `[name]` line.
