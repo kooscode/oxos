@@ -43,7 +43,7 @@ namespace {
 // The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every
 // build, so a client can tell which build answers. The version is MAJOR.MINOR.PATCH: raise it when the server's
 // behaviour changes.
-constexpr char ServerName[] = "OXOS FTP server 0.1.1 (built " __DATE__ " " __TIME__ ")";
+constexpr char ServerName[] = "OXOS FTP server 0.1.2 (built " __DATE__ " " __TIME__ ")";
 
 constexpr unsigned short ControlPort = 21;
 constexpr unsigned BufferSize = 64 * 1024;
@@ -335,7 +335,8 @@ void TimeText(LONGLONG t, char *ls, std::size_t lsSize, char *mdtm, std::size_t 
         std::snprintf(mdtm, mdtmSize, "%04d%02d%02d%02d%02d%02d", f.Year, f.Month, f.Day, f.Hour, f.Minute, f.Second);
 }
 
-const char *StatusText(NTSTATUS s) {
+// The words for the failures a client meets most, or null.
+const char *StatusName(NTSTATUS s) {
     switch ((ULONG)s) {
     case 0xC0000034: return "No such file or folder";
     case 0xC000003A: return "Path not found";
@@ -346,8 +347,19 @@ const char *StatusText(NTSTATUS s) {
     case 0xC00000D4: return "Not the same drive";
     case 0xC000007F: return "Disk full";
     case 0xC0000033: return "Invalid name";
-    default: return "Failed";
+    case 0xC0000056: return "Being deleted (still open)";
+    case 0xC0000121: return "Read-only";
+    default: return nullptr;
     }
+}
+
+// A failure for a reply or the log: its words, else its status, so every failure can be traced.
+std::string StatusText(NTSTATUS s) {
+    if (const char *name = StatusName(s))
+        return name;
+    char text[32];
+    std::snprintf(text, sizeof(text), "Failed (status %08lx)", (unsigned long)s);
+    return text;
 }
 
 // --- Sessions -----------------------------------------------------------------------------------------------------
@@ -543,7 +555,7 @@ struct Session {
         NTSTATUS status = p.size() < 2 ? STATUS_OBJECT_NAME_NOT_FOUND
                                        : Open(&h, NtPath(p), GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE);
         if (!NT_SUCCESS(status)) {
-            Reply(550, "%s", StatusText(status));
+            Reply(550, "%s", StatusText(status).c_str());
             return;
         }
         int data = OpenData();
@@ -592,7 +604,7 @@ struct Session {
         NTSTATUS status = Open(&h, NtPath(p), GENERIC_WRITE, resume ? FILE_OPEN_IF : FILE_OVERWRITE_IF,
                                FILE_NON_DIRECTORY_FILE, FILE_SHARE_READ);
         if (!NT_SUCCESS(status)) {
-            Reply(550, "%s", StatusText(status));
+            Reply(550, "%s", StatusText(status).c_str());
             return;
         }
         LARGE_INTEGER offset;
@@ -643,7 +655,8 @@ struct Session {
             Reply(226, "Stored %lld bytes", total);
         } else {
             Log("%s store FAILED %s (status %08lx)", peer, FtpPath(p).c_str(), (unsigned long)status);
-            Reply(NT_SUCCESS(status) ? 426 : 552, "%s", NT_SUCCESS(status) ? "Connection lost" : StatusText(status));
+            Reply(NT_SUCCESS(status) ? 426 : 552, "%s",
+                  NT_SUCCESS(status) ? "Connection lost" : StatusText(status).c_str());
         }
     }
 
@@ -701,7 +714,7 @@ struct Session {
         NTSTATUS status = format(keep ? self.c_str() : nullptr);
         if (!NT_SUCCESS(status)) {
             Log("format FAILED: %08lx", (unsigned long)status);
-            Reply(550, "Format failed: %s (%08lx)", StatusText(status), (unsigned long)status);
+            Reply(550, "Format failed: %s", StatusText(status).c_str());
             return;
         }
         Log("formatted as exFAT; %s", keep ? "restarting the server from the new disk" : "rebooting");
@@ -734,7 +747,7 @@ struct Session {
         NTSTATUS status = remove(seconds);
         if (!NT_SUCCESS(status)) {
             Log("delete all partitions FAILED: %08lx", (unsigned long)status);
-            Reply(550, "Deleting the partitions failed: %s (%08lx)", StatusText(status), (unsigned long)status);
+            Reply(550, "Deleting the partitions failed: %s", StatusText(status).c_str());
             return;
         }
         Log("all partitions deleted; rebooting");
@@ -842,20 +855,22 @@ struct Session {
         } else if (verb == "DELE" || verb == "RMD" || verb == "XRMD") {
             if (Path(arg, p)) {
                 NTSTATUS status = p.size() < 2 ? STATUS_ACCESS_DENIED : Delete(p, verb != "DELE");
-                Log("%s delete %s: %s", peer, FtpPath(p).c_str(), NT_SUCCESS(status) ? "ok" : StatusText(status));
+                Log("%s delete %s: %s", peer, FtpPath(p).c_str(),
+                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(250, "Deleted");
                 else
-                    Reply(550, "%s", StatusText(status));
+                    Reply(550, "%s", StatusText(status).c_str());
             }
         } else if (verb == "MKD" || verb == "XMKD") {
             if (Path(arg, p)) {
                 NTSTATUS status = p.size() < 2 ? STATUS_ACCESS_DENIED : MakeFolder(p);
-                Log("%s mkdir %s: %s", peer, FtpPath(p).c_str(), NT_SUCCESS(status) ? "ok" : StatusText(status));
+                Log("%s mkdir %s: %s", peer, FtpPath(p).c_str(),
+                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(257, "\"%s\" created", FtpPath(p).c_str());
                 else
-                    Reply(550, "%s", StatusText(status));
+                    Reply(550, "%s", StatusText(status).c_str());
             }
         } else if (verb == "RNFR") {
             if (Path(arg, p)) {
@@ -874,11 +889,11 @@ struct Session {
             } else if (Path(arg, p)) {
                 NTSTATUS status = Rename(renameFrom, p);
                 Log("%s move %s -> %s: %s", peer, FtpPath(renameFrom).c_str(), FtpPath(p).c_str(),
-                    NT_SUCCESS(status) ? "ok" : StatusText(status));
+                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(250, "Renamed");
                 else
-                    Reply(550, "%s", StatusText(status));
+                    Reply(550, "%s", StatusText(status).c_str());
             }
             haveFrom = false;
         } else if (verb == "ABOR") {
