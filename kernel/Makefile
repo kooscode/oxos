@@ -248,8 +248,9 @@ bios_256k: $(BUILD)/bios_256k.bin
 # A release, in order, stopping at the first failure: every host unit test (tools/unit_tests.sh), the release
 # images (1 MB and 256 KB, no self-tests, no serial log), the dashboard test on them (make test_dash), and a check
 # that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also packs the release file
-# build/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin and the title patches
-# (title_patches/title_patches.ini), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
+# build/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin, the title
+# patches (title_patches/title_patches.ini) and the FTP server (tools/ftp_server, as ftp.xbe; built with nxdk, which
+# `make nxdk` fetches), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
 # test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
@@ -258,16 +259,18 @@ release:
 	$(MAKE) BUILD=$(RELEASE16_BUILD) SELFTEST=0 MCPX16=1 $(RELEASE16_BUILD)/bios_256k.bin
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
+	$(if $(VERSION),$(MAKE) ftp_server)
 	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
 	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
 	    cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
 	    cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_1.6_v$(VERSION)_256k.bin && \
 	    cp title_patches/title_patches.ini $(RELEASE_BUILD)/dist/title_patches.ini && \
+	    cp $(FTP_SERVER_XBE) $(RELEASE_BUILD)/dist/ftp.xbe && \
 	    cd $(RELEASE_BUILD)/dist && \
 	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
-	        title_patches.ini && \
+	        title_patches.ini ftp.xbe && \
 	    sha256sum oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
-	        title_patches.ini)
+	        title_patches.ini ftp.xbe)
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
 # kernel at every power-on and boots its own (a serial-log build) when no PC answers.
