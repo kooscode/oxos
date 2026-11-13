@@ -22,17 +22,17 @@ Needs OXOS v0.4.5 or later. The details and the rules behind them are in
 
    - `source`: the XBE titles try to start. `target`: the XBE to start instead.
    - The name in the brackets is yours to choose; it shows in the serial log.
-3. **Copy it to `C:\OXOS\launch_redirect.ini`.** On an exFAT disk that is `/C/OXOS/launch_redirect.ini` (the File
-   Manager shows it as `/C/OXOS`). Create the `OXOS` folder if it is not there; `title_patches.ini` goes in the same
-   folder.
+3. **Copy it to `C:\OXOS\launch_redirect.ini`.** Create the `OXOS` folder if it is not there; `title_patches.ini`
+   goes in the same folder.
 4. **That is all.** The file is read each time a title launches another XBE, so a change counts from the next
    launch, with no reboot.
 5. **Try it:** do what starts the original (in the example, choose Xbox Live in the dashboard). Your target starts.
 
 ## Writing paths
-- Drive letters as titles see them: `C:`, `E:`, `F:`, `G:`, `X:`, `Y:`, `Z:`, and `D:` for the DVD drive (the disc,
-  not the launching title's own `D:`). Or a device path such as `\Device\Harddisk0\Partition1\Apps\x.xbe`.
-- Letters in any case, `/` or `\`: `e:/apps/xblive/default.xbe` is the same path.
+- Start each path with its drive letter, as titles and dashboards name it: `C:`, `E:`, `F:`, `G:`, `X:`, `Y:`, `Z:`,
+  and `D:` for the DVD drive (the disc, not the launching title's own `D:`). The same paths work on every disk OXOS
+  supports.
+- Letters in any case: `e:\apps\xblive\default.xbe` is the same path.
 - A path names one XBE: `source = C:\xodash\xonlinedash.xbe` matches only that file.
 - At most 359 characters.
 
@@ -72,7 +72,7 @@ Only a title starting another XBE is redirected. These are not:
 Delete the section, or the whole file.
 
 ## When it does not work
-- Check the file's place and name: `C:\OXOS\launch_redirect.ini` (exFAT: `/C/OXOS/launch_redirect.ini`).
+- Check the file's place and name: `C:\OXOS\launch_redirect.ini`.
 - Check that `source` is exactly the path the title launches: the folder and the file name, for example
   `C:\xodash\xonlinedash.xbe`, not `C:\xodash`.
 - Each section needs both a `source =` and a `target =` line, under a `[name]` line.
