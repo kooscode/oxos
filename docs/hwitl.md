@@ -29,19 +29,3 @@ The console's video goes through an HDMI adapter into a USB capture card. Screen
 are taken with `ffmpeg`, so the agent can check what the console shows (the splash, the dashboard, a title's start
 screen). The serial log and the frames are matched by their timestamps.
 
-## One iteration
-Build (`make -C kernel BUILD=... SERIAL=1`) → `netboot.py` serves it → `console.py on` → read the serial log, POST
-codes and capture frames → `console.py off`. `bootrun.py` repeats a boot N times and classifies each one (PASS /
-FREEZE / NOBOOT), which found the layout-dependent boot freeze that only showed on hardware
-([`spec/oxos_internal/13_flash_mapping.md`](../spec/oxos_internal/13_flash_mapping.md)).
-
-## Results so far
-The boot freezes on the 1.4 console were found and fixed this way, along with the CPU set-up, interrupt start-up and
-NV2A pad calibration (specs 13–15), and the DRAM refresh loss behind rare crashes on warm boots (spec 20). So was the
-first retail title on real hardware: Halo 2 from an XISO on an exFAT SSD, and later Brute Force the same way.
-
-The 1.6 console was brought up on the same rig in one session: the board moved to a 1.6 (wiring notes in
-[`tools/modxo/README.md`](../tools/modxo/README.md)), the retail 1.6 boot path was reverse engineered into a spec, and
-OXOS's own 1.6 X-codes were written from it and checked register by register against the retail set-up on the
-console ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md)). A game that then hung on its first screen
-was traced the same way, from a thread dump on the serial log to two kernel fixes in overlapped disk reads.
