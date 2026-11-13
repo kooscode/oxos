@@ -502,12 +502,12 @@ print_trace_dump:
 # nxdk and SDL3 for the console apps (tools/*, tests/*_title except the kernel test title), fetched into third_party/
 # (not committed) by `make nxdk` or the first app build:
 #   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk 14d5ee9 with pbkit's graphics-context fix (pb_init on a cold
-#     boot; XboxDev/nxdk#801);
+#     boot; XboxDev/nxdk#801) and lwIP sockets for more than one network client (MEMP_NUM_NETCONN 32);
 #   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
 # Every app draws and reads the controllers through SDL3 and the shared text screen in tools/sdl_screen.
 NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_URL         := https://github.com/kooscode/nxdk
-NXDK_COMMIT      := 11c56fef89cc1bc387167e6e710d068331e022fc
+NXDK_COMMIT      := d1e7004a236a7357b87e9d9ae7433b2ae6126fc0
 NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
 NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
 NXDK_SDL3_COMMIT := 62455b72ac80d318961c05c1230ffcb471e9f2d4
@@ -525,6 +525,10 @@ $(NXDK_READY):
 	}; \
 	checkout $(NXDK_DIR) $(NXDK_URL) $(NXDK_COMMIT); \
 	checkout $(NXDK_SDL3_DIR) $(NXDK_SDL3_URL) $(NXDK_SDL3_COMMIT)
+	# nxdk rebuilds a library object only when its .c file changes, not when a header does: the objects start over,
+	# so every library (and SDL3) is built from the pinned sources.
+	find $(NXDK_DIR)/lib $(NXDK_SDL3_DIR) -name '*.obj' -delete
+	rm -f $(NXDK_DIR)/lib/*.lib
 	rm -f $(ROOT)/third_party/.nxdk_*
 	touch $@
 nxdk: $(NXDK_READY)
