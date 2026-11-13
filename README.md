@@ -75,6 +75,10 @@ It is built into the kernel and its memory is freed when a title starts, so game
 anyone on the local network can use it while it is on screen.
 [Details](spec/oxos_internal/32_file_manager_button.md).
 
+**For whole disks, FTP:** each release includes `ftp.xbe`, the OXOS FTP server ([`tools/ftp_server`](tools/ftp_server)).
+Upload it with the File Manager and launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy,
+move and delete across the disk, several clients at once, at about 8 – 10 MB/s.
+
 ## Games and disks
 - **exFAT:** format the disk as exFAT on a PC, or let OXOS do it: a blank or non-Xbox disk is formatted at boot after
   a 30 s countdown (turn the console off to keep it). The drives are folders at the disk's root: `/C`, `/E`, `/F`, ...
