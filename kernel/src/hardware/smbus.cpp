@@ -4,6 +4,7 @@
 #include <xk/serial.h>
 #include <xk/core.h>
 #include <xk/titles.h>
+#include <xk/extensions.h>
 
 // The SMC (SMBus address 0x20) and its registers that more than one section uses.
 constexpr UCHAR SMC_ADDRESS = 0x20, SMC_RESET = 0x02, SMC_TRAY_STATE = 0x03, SMC_SCRATCH = 0x1B;
@@ -290,6 +291,8 @@ XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
             // Wait for the reset to take the console down.
         }
     }
+    // The kernel extensions' exit event, their threads' end and Unload (spec/oxos_internal/34 §4.3).
+    XkExtensionsTitleExiting();
     HalpRunShutdownNotifications();
     KiQuickReboot();
 }

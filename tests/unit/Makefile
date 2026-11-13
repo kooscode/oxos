@@ -38,7 +38,8 @@ KERNEL_SOURCES := \
     src/runtime/memory.cpp src/runtime/runtime.cpp src/runtime/sprintf.cpp src/runtime/status.cpp \
     src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
     src/hardware/interrupts_timers.cpp src/bootscreen/vsplash.cpp src/titles/patchfile.cpp src/core/fatal_help.cpp src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
-    src/titles/launch_redirect.cpp src/titles/ini_file.cpp
+    src/titles/launch_redirect.cpp src/titles/ini_file.cpp \
+    overlay/extension_list.cpp overlay/pe_image.cpp
 KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/include $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS)
@@ -51,7 +52,7 @@ TEST_FLAGS   := -std=gnu++20 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ..
 # GoogleTest itself, from its sources (one translation unit), 32-bit with everything else.
 GTEST_FLAGS  := -std=c++20 $(COMMON) -DGTEST_HAS_PTHREAD=1 -fexceptions -I$(GTEST_SRC)/include -I$(GTEST_SRC)
 
-KERNEL_OBJS := $(patsubst src/%.cpp,$(BUILD)/kernel/%.o,$(KERNEL_SOURCES))
+KERNEL_OBJS := $(patsubst %.cpp,$(BUILD)/kernel/%.o,$(KERNEL_SOURCES))
 TEST_OBJS   := $(patsubst %.cpp,$(BUILD)/%.o,$(TEST_SOURCES)) $(BUILD)/host/host_asm.o
 GTEST_OBJ   := $(BUILD)/gtest/gtest-all.o
 # The kernel objects go into an archive of this name: host/kernel_text.ld places its code (and only its code) in
@@ -70,7 +71,7 @@ $(CORE_LIB): $(KERNEL_OBJS)
 	rm -f $@
 	$(AR) rcs $@ $^
 
-$(BUILD)/kernel/%.o: $(KERNEL)/src/%.cpp
+$(BUILD)/kernel/%.o: $(KERNEL)/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(KERNEL_FLAGS) -c $< -o $@
 

@@ -56,10 +56,31 @@ u32 = lambda d, o: struct.unpack_from("<I", d, o)[0]
 u16 = lambda d, o: struct.unpack_from("<H", d, o)[0]
 
 
-def flatten(pe, data_src_addr_for):
+OVERLAY_MAGIC, OVERLAY_HEADER_FIELD = 0x4C564F58, 0x38  # "XOVL"; kernel/include/xk/extensions.h
+
+
+def overlay_blob(path, kernel_stamp):
+    """The kernel extension loader overlay (spec/oxos_internal/34 §8.1) as the kernel finds it: XK_OVERLAY_HEADER
+    {magic, the kernel's stamp, base, size, entry RVA}, then the overlay's image laid out at its RVAs."""
+    pe = open(path, "rb").read()
+    lfanew = u32(pe, 0x3C)
+    nsec, optsz = u16(pe, lfanew + 6), u16(pe, lfanew + 20)
+    oh = lfanew + 24
+    image = bytearray(u32(pe, oh + 56))
+    image[:u32(pe, oh + 60)] = pe[:u32(pe, oh + 60)]
+    for i in range(nsec):
+        vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", pe, oh + optsz + i * 40 + 8)
+        image[va:va + min(vsize, rawsize)] = pe[rawptr:rawptr + min(vsize, rawsize)]
+    header = struct.pack("<5I", OVERLAY_MAGIC, kernel_stamp, u32(pe, oh + 28), len(image), u32(pe, oh + 16))
+    return header + bytes(image)
+
+
+def flatten(pe, data_src_addr_for, overlay=None):
     """Return (image, data_init) with raw == RVA layout and quick-reboot header fields set.
 
     data_src_addr_for(len) -> flash address where the .data initializer of that length will live.
+    overlay: the kernel extension loader overlay's PE, appended to the image (in its boot-only pages) and named in
+    the DOS header at OVERLAY_HEADER_FIELD.
     """
     lfanew = u32(pe, 0x3C)
     nsec, optsz = u16(pe, lfanew + 6), u16(pe, lfanew + 20)
@@ -85,6 +106,13 @@ def flatten(pe, data_src_addr_for):
     init_len = min((rawsize + 0xF) & ~0xF, vsize)
     base = u32(pe, oh + 28)
     struct.pack_into("<IIII", img, 0x28, vsize - init_len, init_len, data_src_addr_for(init_len), base + va)
+    if overlay:
+        at = (len(img) + 0x1F) & ~0x1F
+        blob = overlay_blob(overlay, u32(pe, lfanew + 8))
+        img += bytes(at - len(img)) + blob
+        img += bytes(-len(img) % 0x20)
+        struct.pack_into("<I", img, OVERLAY_HEADER_FIELD, at)
+        struct.pack_into("<I", img, oh + 56, len(img))  # SizeOfImage: the memory manager keeps it until the title
     # PE checksum over the final image.
     struct.pack_into("<I", img, oh + 64, 0)
     s = 0
@@ -149,8 +177,8 @@ def splash_bank(path):
 #   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size,
 #                           splash offset, splash size} (splash 0, 0 when there is none in the bank)
 #   0x06040 key block (below), then the kernel as a raw deflate stream
-#   ...     a copy of the splash ("XKSPLASH" header + vector scene) when it fits in the space left, so a 256 KiB image (one
-#           bank: --size 256K, or the first 256 KiB of a 1 MiB image) shows it too
+#   ...     a copy of the splash ("XKSPLASH" header + vector scene) when it fits in the space left, so a 256 KiB image
+#           (one bank: --size 256K, or the first 256 KiB of a 1 MiB image) shows it too
 #   ...     the kernel's .data initializer (quick reboot), ending at 0x3FE00
 #   0x3FE00 our reset code (kernel/boot/reset.S) for running without an MCPX boot ROM
 OPEN_LOADER, OPEN_PAYLOAD, OPEN_KEYS, OPEN_RESET = 0x1000, 0x6000, 0x6040, BANK - 0x200
@@ -199,7 +227,7 @@ def build_open(a):
         sys.exit(f"open image parts do not fit: x-codes {len(xcodes):#x}, 2BL {len(loader):#x}, reset {len(reset):#x}")
     pe = open(a.kernel, "rb").read()
     data_end = OPEN_RESET
-    image, data_init = flatten(pe, lambda n: OPEN_FLASH + ((data_end - n) & ~0xF))
+    image, data_init = flatten(pe, lambda n: OPEN_FLASH + ((data_end - n) & ~0xF), a.overlay)
     if a.flat_kernel:
         open(a.flat_kernel, "wb").write(image)
     dstart = (data_end - len(data_init)) & ~0xF
@@ -262,6 +290,8 @@ def main():
     ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
+    ap.add_argument("--overlay", help="the kernel extension loader overlay (tools/link_overlay.py), appended to the "
+                    "kernel image")
     ap.add_argument("--splash", help="boot splash SVG: flash bank 1 of a 1 MiB image, and (open image) a copy in "
                     "each boot bank when it fits")
     ap.add_argument("--size", choices=("256K", "1M"), default="1M", help="open image size (default 1M)")
@@ -285,7 +315,7 @@ def main():
     kkey = bytes(bl[BLDR_KEYS + 32:BLDR_KEYS + 48])
 
     pe = open(a.kernel, "rb").read()
-    image, data_init = flatten(pe, lambda n: FLASH_BASE + OFF_2BL - n)
+    image, data_init = flatten(pe, lambda n: FLASH_BASE + OFF_2BL - n, a.overlay)
     if a.flat_kernel:
         open(a.flat_kernel, "wb").write(image)
 

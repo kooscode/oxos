@@ -6,10 +6,12 @@
 XBAPI void *memset(void *dst, int c, __SIZE_TYPE__ n);
 XBAPI void *memcpy(void *dst, const void *src, __SIZE_TYPE__ n);
 XBAPI void *memmove(void *dst, const void *src, __SIZE_TYPE__ n);
+XBAPI int memcmp(const void *a, const void *b, __SIZE_TYPE__ n);
 #else
 XBAPI void *memset(void *dst, int c, SIZE_T n);
 XBAPI void *memcpy(void *dst, const void *src, SIZE_T n);
 XBAPI void *memmove(void *dst, const void *src, SIZE_T n);
+XBAPI int memcmp(const void *a, const void *b, SIZE_T n);
 #endif
 
 XBAPI void NTAPI RtlZeroMemory(PVOID Destination, SIZE_T Length);

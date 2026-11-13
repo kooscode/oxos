@@ -19,7 +19,11 @@ title starts:
   player (`src/bootscreen/jingle.cpp`, `src/bootscreen/bootsound.cpp`), the network stack (`src/network/`) and the
   upload server (`src/uploader/`, spec/oxos_internal/31), and the disk checks of a cold boot (recognising a blank
   disk, naming what a foreign one holds: `src/storage/disk_format.cpp`, and the countdown and checks in
-  `src/storage/disk_layout.cpp`, spec/oxos_internal/30 §4). The files, or those parts of them, say
+  `src/storage/disk_layout.cpp`, spec/oxos_internal/30 §4), the cold boot's launch choice (`XeColdBootLaunch` in
+  `src/titles/loader.cpp`: the pre-launch checks, the SMC boot flags, X for the File Manager and B for safe mode,
+  2026-11-13), the netboot title's installation (`src/titles/nettitle.cpp`) and the kernel extension loader's cache
+  file (`XkExtensionsWriteCache`, spec/oxos_internal/34 §8.1). The kernel extension loader itself is appended to the
+  image after these sections, so its pages are boot-only too. The files, or those parts of them, say
   `#pragma code_seg(".xkb")`.
 - Code that can also run after the pages are freed asks `MmBootPagesPresent()` before it calls boot-only code: the
   layout detection runs on every boot, and on a quick reboot it skips the disk checks (the cold boot already made

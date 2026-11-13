@@ -13,7 +13,10 @@ describe the code directly below it.
 
 ## 1. Language
 
-- C++20 for all native code; there are no `.c` files.
+- C++20 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`oxos_sdk/`) supports
+  extensions in plain C (spec/oxos_internal/34 §9), so its public headers are valid C17 as well as C++20 (their
+  constants are `#define`s, their structures `typedef struct`), and `tests/extensions/plain_c.c` checks that a C
+  extension builds and runs. The SDK's own code is C++.
 - The kernel and the 2BL are freestanding: no exceptions, no RTTI, no standard library, no static constructors.
   The kernel is built `-Oz` on purpose (free memory for titles); a readability change must not cost code size.
 - Constants are `constexpr`, not `#define` (Core Guidelines ES.31). Macros are for build options (`XK_DEBUG_SERIAL`,
@@ -58,6 +61,21 @@ describe the code directly below it.
   not `object.cpp`. No two- or three-letter abbreviations.
 - Names the repo does not own stay as they are: vendored files (Intel's microcode, the game trainers), upstream
   projects and their URLs (`xemu-dashboard`), command-line flags (`--title-name`), the user's own files.
+
+### Names users and extension authors see
+
+- **Descriptive, never short or jargon:** a console user or an extension author must understand a name without
+  reading the code. `oxos_extensions.ini`, not `oxos_ext.ini`; `oxos_title_patches.xos`, not `oxos_patches.xos`
+  (which reads like kernel patches); `oxos_interfaces.h`, not `abi.h`. When a name could be read two ways, take the
+  longer one that cannot.
+- **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console
+  (`C:\OXOS\oxos_launch_redirect.ini`, `oxos_extensions.ini`, `extensions\oxos_extensions_loader.cache`), OXOS's own
+  extensions and their data (`oxos_NAME.xos` with `oxos_NAME.ini`), and the SDK's headers (`oxos_interfaces.h`).
+  Names without it belong to users and third-party extensions.
+- **OXOS is written `OXOS` or `oxos`, never `Oxos`**, in identifiers as in text: `OXOS_CONTEXT`, `OXOS_API_VERSION`,
+  `oxos_log`, `oxos::NtCreateFile`.
+- **Everything the user writes or reads:** ini keys (`extension =`, `enabled =`, never `ext =`), folders
+  (`C:\OXOS\extensions\`, not `ext\`), section names, log and screen text.
 
 ## 3. Source tree
 

@@ -1,7 +1,10 @@
 # 34. Kernel extensions (OXOS's own)
 
-Status: **draft, 2026-11-13, not implemented.** Nothing here is in the kernel yet; sections marked *open* are
-decisions still to make.
+Status: **being implemented, 2026-11-13.** In the kernel: the loader (as an overlay, §8.1), hooks, events, Main and
+Unload, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base with its tests (§9,
+§9.3: `make -C kernel test_extensions`). Not yet: the SDK's C++ class and complete kernel function table (§4.4, §9.2),
+`oxos_write_file` and `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS
+features as extensions (§10). Sections marked *open* are decisions still to make.
 
 A kernel extension is a DLL, file type `.xos`, that the kernel loads from the hard disk before each title and runs
 in kernel mode, with the kernel's own rights. It can watch and change what titles ask of the kernel (hooks on kernel
@@ -31,14 +34,14 @@ X at boot (spec/oxos_internal/32), launch redirects and the shared ini reader (s
 | `insmod` / `rmmod` | add / remove (or `enabled = no`) a section in `oxos_extensions.ini`; counts from the next launch |
 | `module_init` / `module_exit` | `Load` / `Unload` (§4) |
 | module parameters | the section's other keys, read with `Setting("key")` (§3.1) |
-| `MODULE_LICENSE`, `MODULE_AUTHOR`, `MODULE_DESCRIPTION` | the descriptor's name, version, author, description, licence (any; open source preferred, §11) |
+| `MODULE_LICENSE`, `MODULE_AUTHOR`, `MODULE_DESCRIPTION` | none: the descriptor has only a name and a version (§4.1, §11) |
 | vermagic (refuses a module built for another kernel) | `ApiVersion` in the descriptor (§4.2) |
 | `EXPORT_SYMBOL` symbols | the `xboxkrnl.exe` exports (332 functions, 34 variables), called as `oxos::Name` (§7.1) |
 | `kthread_run` | `Main`, started on a system thread (§4.3) |
 | `printk` / `dmesg` | `Log`, written to the debug serial port (§5.1) |
 | kprobes / ftrace on syscalls | hooks on kernel functions, as titles call them (§7.1) |
 | `init=/bin/sh`, `modprobe.blacklist` | hold **B** at boot: safe mode, no extensions (§3.3) |
-| kbuild | the SDK's `extension.mk` (§9) |
+| kbuild | the SDK's `oxos_extension.mk` (§9) |
 
 The main difference: Linux keeps a module loaded until it is removed. OXOS **reloads every extension from the disk
 at each launch**, because a quick reboot restarts the kernel (§3.2). Only the state page carries over.
@@ -122,39 +125,37 @@ Not loaded:
 ### 3.4 A failing extension
 - **Refused by the loader** (bad format, too large, wrong `ApiVersion`, an import other than `xboxkrnl.exe`, a
   missing kernel ordinal): skipped and logged; the others load.
-- **`Load` returns an error status:** the image is freed, its hooks and events are dropped, the others go on.
+- **`Load` returns an error status:** the image and its state page are freed, its hooks and events are dropped, the
+  others go on.
 - **A crash in extension code** (in `Load`, `Main`, a hook or an event): the kernel's fatal error screen
   (spec/oxos_internal/29) names the extension (its section name) when the faulting address lies in an extension's
   image, and says "Hold B at boot to start without extensions". *Open:* also mark that extension off for the rest of
   the boot (a persisted "crashed" list), so the next launch skips it without B.
 
 ## 4. The extension's interface
-Extensions are written as a C++ class with the SDK (§4.4); the descriptor and context below are what the SDK
-generates and what the kernel sees. Both are plain C structures, so an extension can also be written without the
-class.
+Extensions are written in **plain C** or as a **C++ class** with the SDK. C is the base: the descriptor, the context
+and the kernel's functions below are plain C, and an extension in C fills them itself (§4.5). The C++ class (§4.4) is
+built on top and generates the same descriptor and calls for the author.
 
 ### 4.1 The descriptor
-Each `.xos` exports one data symbol by name, **`XosExtension`**, an `XOS_EXTENSION`. The SDK's `XOS_EXTENSION(...)`
-macro writes it.
+Each `.xos` exports one data symbol by name, **`oxos_extension`**, an `OXOS_EXTENSION`. The SDK writes it:
+`OXOS_DEFINE_EXTENSION(...)` in C (§4.5), `OXOS_DEFINE_EXTENSION_CLASS(Class, ...)` for the C++ class (§4.4).
 
 ```cpp
-struct XOS_EXTENSION {
+struct OXOS_EXTENSION {
     ULONG Magic;                 // 'XOSX'
-    ULONG ApiVersion;            // XOS_API_VERSION of the SDK it was built with (§4.2)
+    ULONG ApiVersion;            // OXOS_API_VERSION of the SDK it was built with (§4.2)
     const char *Name;            // short name, the key of its state page (§6), e.g. "netlog"
     const char *Version;         // the extension's own version, e.g. "1.2.0"
-    const char *Author;
-    const char *Description;
-    const char *Licence;         // SPDX name, e.g. "GPL-2.0-or-later", "MIT", "Proprietary" (§11)
-    ULONG Flags;                 // XOS_FLAG_*, none defined yet: 0
-    NTSTATUS (NTAPI *Load)(XOS_CONTEXT *Context);   // required (the SDK generates it, §4.4)
-    void (NTAPI *Main)(XOS_CONTEXT *Context);       // optional: run on its own thread
-    void (NTAPI *Unload)(XOS_CONTEXT *Context);     // optional
+    ULONG Flags;                 // OXOS_FLAG_*, none defined yet: 0
+    NTSTATUS (NTAPI *Load)(OXOS_CONTEXT *Context);   // required (the SDK generates it, §4.4)
+    void (NTAPI *Main)(OXOS_CONTEXT *Context);       // optional: run on its own thread
+    void (NTAPI *Unload)(OXOS_CONTEXT *Context);     // optional
 };
 ```
 
 ### 4.2 Versions
-- `XOS_API_VERSION` is `major << 16 | minor`. The kernel loads an extension whose major equals its own and whose
+- `OXOS_API_VERSION` is `major << 16 | minor`. The kernel loads an extension whose major equals its own and whose
   minor is at most its own.
 - Within a major, the API only grows: new functions are added at the end of the context's tables, which carry their
   own size (§5), and existing ones keep their meaning.
@@ -162,7 +163,7 @@ struct XOS_EXTENSION {
 
 ### 4.3 The order of calls in one launch
 1. The loader reads `oxos_extensions.ini`, loads each enabled extension's image (§8) in order, and fills an
-   `XOS_CONTEXT` for it.
+   `OXOS_CONTEXT` for it.
 2. **`Load(Context)`** of each, in order, on the loading thread, before the title is loaded. Here the extension
    hooks kernel functions (§7.1), registers for events (§7.2) and reads its state page (§6) and settings. Returns
    `STATUS_SUCCESS`, or an error to be unloaded (§3.4). It must return promptly: the title waits for it.
@@ -174,18 +175,19 @@ struct XOS_EXTENSION {
 6. **`Unload(Context)`**, if set, when the title quick-reboots to start another one (`HalReturnToFirmware(2)`),
    before the kernel's shutdown notifications, on the thread that asked for the reboot. `StopEvent` is signalled
    first. The state page is already in memory and needs no saving; `Unload` is for closing files and network
-   connections. *Open:* how long the kernel waits for `Main` to return (a few hundred milliseconds), and whether
-   `Unload` runs at all on a full reset or power-off.
+   connections. The kernel waits up to 500 ms for each `Main` to return, when the title asked for the reboot at
+   `PASSIVE_LEVEL` (a title rebooting at a raised IRQL cannot wait); a `Main` that has not returned is logged.
+   *Open:* whether `Unload` runs on a full reset or power-off (it does not today).
 
 ### 4.4 The extension class (SDK)
-The author derives from `xos::Extension<T>` and writes **only what the extension needs**. Every member function
+The author derives from `oxos::Extension<T>` and writes **only what the extension needs**. Every member function
 below is optional: one that is not written does not exist in the extension, and the kernel never calls it. A kernel
 function that is not written is not hooked.
 
 ```cpp
-#include <xos/extension.h>
+#include <oxos/oxos_extension.h>
 
-class SaveWatch : public xos::Extension<SaveWatch> {
+class SaveWatch : public oxos::Extension<SaveWatch> {
 public:
     // Lifecycle (§4.3)
     NTSTATUS Load() {
@@ -199,7 +201,7 @@ public:
     void Unload() {}
 
     // Events (§7.2)
-    void OnTitleLoaded(const xos::Title &title) {
+    void OnTitleLoaded(const oxos::Title &title) {
         Log("title %08lx %s", title.Id, title.Name);
     }
 
@@ -217,12 +219,11 @@ public:
     }
 };
 
-XOS_EXTENSION(SaveWatch, .Name = "savewatch", .Version = "1.0.0", .Author = "OXOS",
-              .Description = "Logs file opens, refuses deletes", .Licence = "GPL-2.0-or-later");
+OXOS_DEFINE_EXTENSION_CLASS(SaveWatch, .Name = "savewatch", .Version = "1.0.0");
 ```
 
-- **`XOS_EXTENSION(Class, ...)`** writes the descriptor and a generated `Load`. For each hookable kernel function in
-  the SDK's table (§9), a C++20 check asks whether the class has a member function of that name:
+- **`OXOS_DEFINE_EXTENSION_CLASS(Class, ...)`** writes the descriptor and a generated `Load`. For each hookable
+  kernel function in the SDK's table (§9), a C++20 check asks whether the class has a member function of that name:
   - **no:** nothing is generated, the function is not hooked;
   - **yes, with the kernel's arguments and result:** the generated `Load` hooks it (`HookExport`, §7.1) with a
     small stub that has the kernel function's calling convention and calls the member;
@@ -233,39 +234,63 @@ XOS_EXTENSION(SaveWatch, .Name = "savewatch", .Version = "1.0.0", .Author = "OXO
 - **Helpers in the base class:** `Log(Format, ...)`, `Generation()`, `IsColdBoot()`, `Setting(Key)` (the section's
   value, or `nullptr`), `State<S>()` (the state page as the extension's own struct, §6), `StateIsNew()`,
   `WaitForStop(Milliseconds)` (true once `StopEvent` is signalled), `ReadFile`, `WriteFile`, `ResolvePath` (§5.1),
-  `Context()` for the raw `XOS_CONTEXT`.
+  `Context()` for the raw `OXOS_CONTEXT`. They call the SDK's C functions (§5.1).
+- **The class lives in namespace `oxos`** with the kernel's functions (`oxos::Extension`, `oxos::Title`,
+  `oxos::NtCreateFile`): one namespace for everything the SDK gives C++.
+
+### 4.5 An extension in plain C
+The same extension without the class: the author writes `Load` (and `Main`, `Unload`, if wanted), registers hooks and
+events through `Context->Api`, and names the functions in the descriptor. A hook has a name of its own, with the
+kernel function's prototype and calling convention; it passes a call on through the kernel function's own name, which
+goes through the extension's import of it, as `oxos::` does in C++ (§7.1). The C helpers are `oxos_log`,
+`oxos_get_setting`, `oxos_wait_for_stop`, `oxos_read_file` (§5.1).
+
+```c
+#include <oxos/oxos_extension.h>
+
+static NTSTATUS NTAPI WatchNtDeleteFile(POBJECT_ATTRIBUTES Attributes) {
+    return STATUS_ACCESS_DENIED; // answered here: OXOS never sees it
+}
+
+static NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
+    oxos_log(Context, "loaded, launch %lu, log to %s", Context->Generation, oxos_get_setting(Context, "host"));
+    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtDeleteFile, (PVOID)WatchNtDeleteFile, NULL);
+}
+
+OXOS_DEFINE_EXTENSION(.Name = "nodelete", .Version = "1.0.0", .Load = Load);
+```
 
 ## 5. The context
-The kernel passes each extension its own `XOS_CONTEXT`, in pool memory that stays valid until the title ends.
+The kernel passes each extension its own `OXOS_CONTEXT`, in pool memory that stays valid until the title ends.
 Everything an extension knows about the kernel, beyond the `xboxkrnl.exe` exports, comes through it. The extension
 does not use kernel addresses it found some other way: they change with every build.
 
 ```cpp
-struct XOS_CONTEXT {
-    ULONG Size;                  // sizeof(XOS_CONTEXT) of the kernel that filled it
-    ULONG ApiVersion;            // the kernel's XOS_API_VERSION
+struct OXOS_CONTEXT {
+    ULONG Size;                  // sizeof(OXOS_CONTEXT) of the kernel that filled it
+    ULONG ApiVersion;            // the kernel's OXOS_API_VERSION
     const char *KernelVersion;   // e.g. "0.4.7"
     ULONG Generation;            // launches since the cold boot: 1 = the cold boot's title (§1)
-    ULONG BootFlags;             // XOS_BOOT_COLD, XOS_BOOT_QUICK; XOS_BOOT_128MB, ...
+    ULONG BootFlags;             // OXOS_BOOT_COLD or OXOS_BOOT_QUICK (the memory size: Kernel->MemoryPages)
 
     // This extension
     const char *SectionName;     // its section in oxos_extensions.ini, e.g. "netlog"
-    const XOS_SETTING *Settings; // the section's other keys (§3.1): {Key, Value} pairs
+    const OXOS_SETTING *Settings; // the section's other keys (§3.1): {Key, Value} pairs
     ULONG SettingCount;
     PVOID ImageBase;             // where it is loaded this launch (a different address each launch is possible)
     ULONG ImageSize;
     PVOID State;                 // its state page (§6)
     ULONG StateSize;             // 4096
     BOOLEAN StateIsNew;          // the page was just created (zeroed): first launch after a cold boot, or a new Name
-    PKEVENT StopEvent;           // signalled before Unload (§4.3)
+    PVOID StopEvent;             // a KEVENT, signalled before Unload (§4.3)
 
-    const XOS_API *Api;          // the loader's functions (§5.1): only in Load, null afterwards
-    const XOS_KERNEL_INFO *Kernel; // read-only facts about the console and the title (§5.2)
+    const OXOS_API *Api;          // the loader's functions (§5.1): only in Load, null afterwards
+    const OXOS_KERNEL_INFO *Kernel; // read-only facts about the console and the title (§5.2)
 };
 ```
 
 ### 5.1 Functions
-**The loader's (`XOS_API`):** a table of `NTAPI` function pointers, starting with its own `Size`. They belong to the
+**The loader's (`OXOS_API`):** a table of `NTAPI` function pointers, starting with its own `Size`. They belong to the
 loader (§8.1), which is gone once every `Load` has returned, so they are **only for `Load`**: the kernel clears
 `Context->Api` before it frees the loader, and a later call faults on a null pointer instead of running freed
 memory. The class (§4.4) calls them for the author.
@@ -275,26 +300,30 @@ memory. The class (§4.4) calls them for the author.
 | `HookExport(Context, Ordinal, Replacement, &Next)` | hook a kernel function as titles call it (§7.1) |
 | `RegisterEvent(Context, Event, Callback, CallbackContext)` | be called at a launch event (§7.2) |
 
-**The SDK's**, usable at any time (`Load`, `Main`, hooks, events): built into each extension on top of the kernel's
-exports, so the kernel keeps no code for them:
+**The SDK's**, usable at any time (`Load`, `Main`, hooks, events): C functions in the SDK's static library
+`oxos_runtime.lib`, linked into each extension and built on the kernel's exports, so the kernel keeps no code for them.
+The C++ class calls them for its author.
 
-| SDK function | What it does |
-|---|---|
-| `Log(Format, ...)` | one line to the debug serial port through `DbgPrint`, prefixed with the extension's section name (a `SERIAL=1` kernel; the others keep only the in-memory debug log) |
-| `ReadFile(Path, MaxSize, &Buffer, &Size)` | read a whole file into pool memory (drive letter or device path) |
-| `WriteFile(Path, Buffer, Size)` | write a whole file (created or replaced) |
-| `ResolvePath(DosPath, Buffer, BufferSize)` | `E:\Apps\x.xbe` to `\Device\Harddisk0\Partition1\Apps\x.xbe`, the same drive table as the kernel (spec/oxos_internal/33 §1) |
+| C function | Class method | What it does |
+|---|---|---|
+| `oxos_log(Context, Format, ...)` | `Log(Format, ...)` | one line to the debug serial port through `DbgPrint`, prefixed with the extension's section name (a `SERIAL=1` kernel; the others keep only the in-memory debug log) |
+| `oxos_get_setting(Context, Key)` | `Setting(Key)` | the value of `Key` in the extension's section of `oxos_extensions.ini` (any case), or null |
+| `oxos_wait_for_stop(Context, Milliseconds)` | `WaitForStop(Milliseconds)` | waits for the stop request (§4.3); for `Main`'s loop |
+| `oxos_read_file(Path, MaxSize, &Size)` | `ReadFile(...)` | reads a whole file into pool memory (a `\Device\...` path) |
+| `oxos_write_file(Path, Buffer, Size)` | `WriteFile(...)` | *planned:* writes a whole file (created or replaced) |
+| `oxos_resolve_path(DosPath, Buffer, BufferSize)` | `ResolvePath(...)` | *planned:* `E:\Apps\x.xbe` to `\Device\Harddisk0\Partition1\Apps\x.xbe`, the kernel's drive table (spec/oxos_internal/33 §1) |
 
-**The kernel's own functions:** every `xboxkrnl.exe` export, as **`oxos::Name`**: `oxos::ExAllocatePoolWithTag`,
-`oxos::KeWaitForSingleObject`, `oxos::PsCreateSystemThreadEx`, `oxos::HalReadSMBusValue`, and so on (§7.1 for what
-`oxos::` means for a hooked function).
+**The kernel's own functions:** every `xboxkrnl.exe` export, under its own name in C (`NtCreateFile(...)`) and as
+**`oxos::Name`** in C++: `oxos::ExAllocatePoolWithTag`, `oxos::KeWaitForSingleObject`, `oxos::PsCreateSystemThreadEx`,
+`oxos::HalReadSMBusValue`, and so on (§7.1 for what `oxos::` means for a hooked function). The memory functions and
+the compiler's helpers are the kernel's too (§9.1).
 
-### 5.2 Kernel facts (`XOS_KERNEL_INFO`)
+### 5.2 Kernel facts (`OXOS_KERNEL_INFO`)
 Read-only, filled at each launch, also starting with its `Size`: the console revision and video encoder, memory
 size, the disk layout (FATX or exFAT, partitions), whether the network card is up, and, from the
-`XOS_EVENT_TITLE_LOADED` event on, the running title's ID, name, XBE path and certificate. *Open:* the exact list,
+`OXOS_EVENT_TITLE_LOADED` event on, the running title's ID, name, XBE path and certificate. *Open:* the exact list,
 decided by the first extensions that need it. Kernel internals reach extensions only through fields added here and
-functions added to `XOS_API`, never as raw addresses.
+functions added to `OXOS_API`, never as raw addresses.
 
 ## 6. The state page
 One page, 4096 bytes, per extension, that keeps its contents from one launch to the next until the next cold boot.
@@ -307,7 +336,9 @@ One page, 4096 bytes, per extension, that keeps its contents from one launch to 
   its state page's address. At a launch the kernel checks the magic and the checksum; if either is wrong (a cold
   boot, or memory written over), it starts a new, empty index.
 - **Which page an extension gets:** the one under its descriptor `Name`. A new name gets a new zeroed page
-  (`StateIsNew`). A page whose extension is not loaded at a launch (removed from the ini, `enabled = no`) is freed then.
+  (`StateIsNew`). A page whose extension is not loaded at a launch (removed from the ini, `enabled = no`, its `Load`
+  failed, or `oxos_extensions.ini` deleted) is freed then: the loader runs while state pages are kept, also without
+  the ini. Only without a loader cache for this kernel (§8.1) do they stay until the next cold boot.
 - **Contents:** entirely the extension's; the kernel never reads them. An extension should put its own magic and
   layout version at the start, since an older build of it may have written the page.
 - **Pointers:** the page keeps bytes, not objects. A pointer into the extension's image, a pool block, a handle,
@@ -349,8 +380,9 @@ title -> [savewatch] NtCreateFile -> oxos:: -> [netlog] NtCreateFile -> oxos:: -
 
 **How the loader does it** (no dispatcher stays in the kernel):
 - Each extension imports the kernel's functions from `xboxkrnl.exe` by ordinal (§8). The SDK declares them in
-  namespace `oxos` (`namespace oxos { extern "C" NTSTATUS NTAPI NtCreateFile(...); }`), so `oxos::NtCreateFile`
-  calls through the extension's own import entry.
+  as C functions (`extern "C"`), in C++ in namespace `oxos` (`namespace oxos { extern "C" NTSTATUS NTAPI
+  NtCreateFile(...); }`), so `NtCreateFile` in C and `oxos::NtCreateFile` in C++ call through the extension's own
+  import entry.
 - `HookExport(Context, Ordinal, Replacement, &Next)` records the hook. During `Load` the imports point at the kernel.
 - After every `Load` (§4.3 step 3), the loader links each chain: an extension's import entry for a hooked ordinal is
   pointed at the next hook below it (or left at the kernel's function), and the title's thunk for that ordinal
@@ -371,7 +403,8 @@ title -> [savewatch] NtCreateFile -> oxos:: -> [netlog] NtCreateFile -> oxos:: -
 - **Not hookable** (not in the SDK's table; `HookExport` returns `STATUS_NOT_SUPPORTED`): the 34 data exports
   (`KeTickCount`, `LaunchDataPage`, ...: an extension reads or writes them directly); `KeGetCurrentIrql`,
   `KfRaiseIrql`, `KfLowerIrql`, `KeRaiseIrqlToDpcLevel` (called at every IRQL, in titles' interrupt paths);
-  `HalReturnToFirmware` (use `XOS_EVENT_TITLE_EXITING`).
+  `HalReturnToFirmware` (use `OXOS_EVENT_TITLE_EXITING`); OXOS's runtime exports for extensions, 402-415 (§9.1:
+  titles never import them).
 - **Kernel internals that are not exports** (`XepLaunchTitle`, the exFAT driver, the scheduler) are not hookable;
   extensions reach them through events (§7.2) and the kernel facts (§5.2). *Later, if a use needs it:* hooks that
   also catch the kernel's own calls, as a separate API (patching the function's first instructions, with a generated
@@ -385,9 +418,9 @@ generated `Load` (`RegisterEvent`). Called in `oxos_extensions.ini` order.
 
 | Event | When | The callback gets | It may |
 |---|---|---|---|
-| `XOS_EVENT_TITLE_LOADING` | before the XBE is loaded: after `oxos_launch_redirect.ini` (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | replace the XBE path (then the same rules as a redirect target: one replacement per launch, and the original is started if the replacement does not load) |
-| `XOS_EVENT_TITLE_LOADED` | the XBE is loaded and its thunks resolved, before its entry point | the title ID, name, certificate, XBE header, base | read or patch the title's image (as `oxos_title_patches.xos` does, §10) |
-| `XOS_EVENT_TITLE_EXITING` | the title calls `HalReturnToFirmware(2)` to start another XBE or the dashboard; the title is still in memory | the launch data page the title wrote | read it, or change the next launch |
+| `OXOS_EVENT_TITLE_LOADING` | before the XBE is loaded: after `oxos_launch_redirect.ini` (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them (version 1: replacing the XBE path is left to launch redirects, spec/oxos_internal/33) |
+| `OXOS_EVENT_TITLE_LOADED` | the XBE is loaded and its thunks resolved, before its entry point | the title ID, name, certificate, XBE header, base | read or patch the title's image (as `oxos_title_patches.xos` does, §10) |
+| `OXOS_EVENT_TITLE_EXITING` | the title calls `HalReturnToFirmware(2)` to start another XBE or the dashboard; the title is still in memory | the launch data page the title wrote | read it, or change the next launch |
 
 *Open:* events for the disk (mounted, formatted), the network (link up), and the controllers.
 
@@ -398,7 +431,7 @@ generated `Load` (`RegisterEvent`). Called in `oxos_extensions.ini` order.
 - **Imports:** only from `xboxkrnl.exe`, by ordinal, the same table titles use, resolved against the kernel's own
   export directory as `XepResolveKernelThunks` does for titles, then linked into the chains (§7.1). An import from
   any other DLL, or by name, refuses the file.
-- **Exports:** `XosExtension` by name (§4.1). Other exports are ignored. *Open:* extensions calling each other.
+- **Exports:** `oxos_extension` by name (§4.1). Other exports are ignored. *Open:* extensions calling each other.
 - **No entry point is called:** the kernel uses the descriptor, not `DllMain` (built with `/NOENTRY`).
 - **No CRT, no TLS, no C++ exceptions or RTTI, no static constructors** in the first version. The SDK builds with
   these off (§9); the loader refuses an image with a TLS directory.
@@ -410,59 +443,94 @@ Every loaded image, pool block, thread stack and state page is memory a title do
 `oxos_extensions.ini`, or with no enabled section, titles keep exactly the memory they had (the parity rule,
 spec/oxos_internal/18): the loader runs, finds nothing to load, and allocates nothing (the index page is only created
 for the first extension). With extensions, titles lose their size, and a title that needs nearly all of its 64 MB
-can fail to start. The serial log reports what each extension holds after `Load`; *open:* showing it in the File
-Manager too.
+can fail to start. The serial log reports each extension's image size after `Load`; *open:* its pool, threads and
+state page too, and showing it in the File Manager.
 
-**The loader is not resident: it is an overlay in the flash** (decided 2026-11-13), read again at every launch, as
-the File Manager's code is only there when it runs (spec/oxos_internal/31, 18 §2):
-- The loader (`oxos_extensions.ini`, PE loading, relocation, import binding, chains, the state-page index, `HookExport`,
-  `RegisterEvent`, safe mode) is linked as its own blob and stored **compressed** in the flash image, after the
-  kernel stream, with the same Deflate (RFC 1951, `zlib` level 9) as the open image's kernel (`tools/mkbios.py`
-  `build_open`). The 256 KB image of v0.4.6 has about 66 KB free there (0x29680-0x39C50); the loader should take a
-  few KB.
-- In front of the compressed loader sits a small **uncompressed stub**: the decoder the 2BL already uses,
-  `include/xk/inflate.h` (header-only, about 1-2 KB of code). At each launch the kernel copies stub and compressed
-  loader from flash into temporary pages and jumps to the stub; the stub inflates the loader into more temporary
-  pages and runs it. All of them are freed before the title is loaded. Before a title loads all of its memory is
-  free, so the pages cost titles nothing. The flash is mapped again for the copy, as `quick_reboot.S` does for the
-  `.data` copy.
-- So the resident kernel has no decompressor either: a copy and a jump (decided 2026-11-13, compressed from the
-  start). The blob has a small header (magic, sizes, entry offset, the kernel build it belongs to); a mismatch, as
-  with a flash from another build, loads no extensions and logs it.
-- **Resident in the kernel** stays only what runs while the title runs: the title's thunks for hooked ordinals
-  pointing at their chains (`XepResolveKernelThunks`), the three event call sites, signalling `StopEvent` and calling
-  `Unload` from `HalReturnToFirmware(2)`, and the index page's persisted pointer. Tens of bytes to a few hundred:
-  within the image's slack, or paid for as spec/oxos_internal/33 §1.1 did.
-- **Netboot:** a netbooted kernel's flash holds the netboot image, not its own loader. The 2BL's downloaded image
-  includes the blob; the kernel keeps a copy of it in held pages (spec/oxos_internal/09 §7), a cost only on
-  development consoles. *Open:* the exact place.
+**The loader is not resident: it is an overlay, run from a cache file on the disk** (decided 2026-11-13):
+- **Built on its own.** The loader's sources (`kernel/overlay/`: `oxos_extensions.ini`, PE loading, relocation,
+  import binding, chains, the state-page index, `HookExport`, `RegisterEvent`) are compiled like the kernel but are not
+  part of its link. `tools/link_overlay.py` links them at the fixed address 0xB0000000 (`XK_OVERLAY_BASE`, a page
+  directory entry nothing else uses) and gives each kernel symbol they use as an absolute symbol at this kernel's
+  address, from the kernel's map: the loader calls the kernel directly. A symbol in the kernel's boot-only sections
+  stops the build.
+- **In the kernel image.** `tools/mkbios.py --overlay` appends it to the kernel image after the boot-only sections,
+  behind a 20-byte header (`XK_OVERLAY_HEADER`: magic, the kernel's PE stamp, base, size, entry), and names the
+  header in the kernel's DOS header (offset 0x38). Its pages are boot-only: freed before the first title.
+- **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\extensions\oxos_extensions_loader.cache`
+  (`XkExtensionsWriteCache`, boot-only), always: the file is a cache, overwritten with the known-good copy at every
+  cold boot. Without the extensions folder nothing is written.
+- **Run from the cache at every launch** (the cold boot's too): `XkExtensionsLoad` (`src/extensions/
+  extension_overlay.cpp`) reads the file only when `oxos_extensions.ini` exists, checks the header (magic, this
+  kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps them at 0xB0000000 through a
+  temporary page table, calls the entry, then unmaps and frees everything before the title loads. No cache, or one
+  from another kernel: no extensions at that launch (logged).
+- **Not from the flash.** Reading the flash while the kernel runs coincided with RAM bits changing on the Modxo
+  console (2026-10-28, `kernel/boot/bl.cpp`), and some modchips hide themselves after the boot; a copy kept in RAM
+  instead would cost about as much as the resident loader. So the flash is not read after the boot, and the loader
+  is not compressed (nothing extra goes into the flash).
+- **Netboot:** the image the 2BL downloads holds the overlay like a flashed one; the cold boot writes the cache.
+- **Resident in the kernel** stays what runs while the title runs (`extension_runtime.cpp`: the hooked imports, the
+  three events, the end of a title, the Main thread routine) and the overlay runner: about 1.1 KB. To keep every
+  page titles had, the cold boot's launch choice and the netboot title's installation moved to the boot-only pages
+  in the same change (spec/oxos_internal/18 §2). Checked: the memory test title starts with 15 960 free pages (xemu,
+  64 MB), as before kernel extensions.
 
 ## 9. The SDK: building an extension
 Extension writers do not need nxdk. nxdk's runtime (its C library, `winapi`, heaps, threads, SDL) is made for a
 title: it allocates title memory, sets up title-only state, and is torn down at the quick reboot. None of it is safe
 in the kernel. An extension needs much less, and what it needs is the kernel's.
 
-**Layout, `sdk/xos/` in this repository (MIT, §11):**
+- **Plain C is the base, C++ on top** (decided 2026-11-13): every header is valid C17 and C++20; the C++ class
+  (§4.4) and namespace `oxos` are added only when the compiler is C++.
+- **Windows, macOS and Linux alike:** an extension needs only LLVM's `clang` and `lld-link` (18 or newer) and GNU
+  make. The libraries come prebuilt, and the build rules run no other command, so they work from `cmd.exe`,
+  PowerShell, bash or zsh. No CMake (decided 2026-11-13).
+- **The same bytes everywhere:** objects without time stamps and `/Brepro` links, so a source builds the same `.xos`
+  on any system.
+- **Its own repository later:** `oxos_sdk/` is self-contained (it never reads the kernel's sources), so it can move to
+  its own repository as it is; the kernel then takes `oxos_interfaces.h` from it (decided 2026-11-13: later).
+
+**Layout, `oxos_sdk/` in this repository (MIT, §11):**
 
 | Part | Contents |
 |---|---|
-| `include/xos/extension.h` | `xos::Extension<T>`, `XOS_EXTENSION(...)`, the events and their structures, `XOS_EXTENSION`, `XOS_CONTEXT`, `XOS_API`, `XOS_KERNEL_INFO`, `XOS_API_VERSION` |
-| `include/xos/kernel.h` | the kernel's types and constants (NT types, `OBJECT_ATTRIBUTES`, `KEVENT`, status codes, ...) and every `xboxkrnl.exe` function in namespace `oxos` |
-| `include/xos/exports.inc` | the table of kernel functions, one line each: `XOS_EXPORT(190, NtCreateFile, NTSTATUS, stdcall, (PHANDLE Handle, ...))`; generated from `kernel/exports.tsv` and the kernel's prototypes; drives `oxos::`, the hookable list and the class's compile-time checks |
-| `lib/xboxkrnl.lib` | the import library: generated from `kernel/exports.tsv` with `tools/gen_def.py` and `lld-link /DEF`, the same `.def` the kernel links with |
-| `lib/xosrt.lib` | a small freestanding runtime: `memcpy`/`memset`/`memmove`/`memcmp`, string functions, `snprintf`, C++ `new`/`delete` on `ExAllocatePoolWithTag`, the compiler's 64-bit division helpers, and the helpers of §5.1 |
-| `extension.mk` | the build rules (below) |
-| `docs/kernel_functions.md` | every hookable kernel function, ready to copy into a class (§9.1) |
-| `examples/hello/` | the smallest extension: counts launches in its state page and logs each title |
+| `include/oxos/oxos_extension.h` | what an extension includes: the others below, `OXOS_DEFINE_EXTENSION(...)`, the C helpers (§5.1); in C++ also `oxos::Extension<T>` and `OXOS_DEFINE_EXTENSION_CLASS(Class, ...)` (§4.4, not yet) |
+| `include/oxos/oxos_interfaces.h` | the structures the kernel and an extension exchange: `OXOS_EXTENSION`, `OXOS_CONTEXT`, `OXOS_API`, `OXOS_KERNEL_INFO`, the events and their data, `OXOS_API_VERSION`; the kernel includes it too, so the layout has one definition |
+| `include/oxos/oxos_kernel.h` | the kernel's types and constants (`OBJECT_ATTRIBUTES`, `KEVENT`, ...), every `xboxkrnl.exe` function (in C++ in namespace `oxos`), `memcpy` and its kin, the hookable functions' ordinals (`OXOS_ORDINAL_NtOpenFile`) |
+| `include/oxos/oxos_types.h` | the NT base types (`ULONG`, `NTSTATUS`, `LARGE_INTEGER`, `STRING`, ...) and status codes |
+| `include/oxos/oxos_exports.inc` | *not yet:* the table of kernel functions, one line each: `OXOS_EXPORT(190, NtCreateFile, NTSTATUS, stdcall, (PHANDLE Handle, ...))`; generated from `kernel/exports.tsv` and the kernel's prototypes; drives the declarations, the ordinals, the hookable list and the class's compile-time checks |
+| `lib/xboxkrnl.def` | every `xboxkrnl.exe` export by ordinal, generated from `kernel/exports.tsv` by `tools/gen_oxos_sdk.py` |
+| `lib/xboxkrnl.lib` | the kernel's import library, prebuilt from `xboxkrnl.def` (`lld-link /lib /def:`) |
+| `lib/oxos_runtime.lib` | the SDK's static library, prebuilt from `src/`: the helpers of §5.1, with C names, so C and C++ extensions link the same one |
+| `src/oxos_runtime.cpp` | the runtime's source |
+| `oxos_extension.mk` | the build rules extensions include (below) |
+| `Makefile` | rebuilds `lib/` (for the SDK's maintainers) |
+| `docs/kernel_functions.md` | *not yet:* every hookable kernel function, ready to copy into a class (§9.2) |
+| `examples/hello/` | the example to start from, in C: `Load`, `Main`, `Unload`, a hook, an event, settings and the state page, each commented; its Makefile, a sample `oxos_extensions.ini` and a README (build, install, what it prints) |
 
-### 9.1 The kernel function reference
-`sdk/xos/docs/kernel_functions.md` lists **every kernel function an extension can hook**, each as the member
+### 9.1 What the kernel provides
+Extensions call the kernel for everything a freestanding program needs, as Linux modules and Windows drivers do; the
+SDK carries no copies. The Xbox kernel never exported these (titles link their own C library), so OXOS exports them at
+ordinals of its own, after its other exports (400-401, spec/oxos_internal/30 §1). Titles never import them and they
+cannot be hooked (§7.1).
+
+| Ordinals | Exports | Why |
+|---|---|---|
+| 402-405 | `memcpy`, `memset`, `memmove`, `memcmp` (`cdecl`) | the compiler calls them for copies and zeroing, even with `-fno-builtin` |
+| 406-415 | `_allmul`, `_alldiv`, `_aulldiv`, `_allrem`, `_aullrem`, `_alldvrm`, `_aulldvrm`, `_allshl`, `_allshr`, `_aullshr` | the compiler's 64-bit arithmetic helpers for the `i386-pc-win32` target, each with its own register convention (`kernel/src/arch/int64.S`) |
+
+`kernel/exports.tsv` lists them with the convention `cdecl` or `compiler`. They cost the resident kernel 4 bytes each
+in its export table, and `memcmp`.
+
+### 9.2 The kernel function reference
+`oxos_sdk/docs/kernel_functions.md` lists **every kernel function an extension can hook**, each as the member
 function declaration to paste into the class, with an empty body that passes the call on. A user finds the function,
 copies the block, and edits the body.
 
-- **Generated, never written by hand:** from the same table as the SDK (`include/xos/exports.inc`), by the tool that
-  generates the table, so the reference, `oxos::` and the class's compile-time check cannot disagree. `make sdk`
-  regenerates it, and a check fails the build when the committed file differs from the generated one.
+- **Generated, never written by hand:** from the same table as the SDK (`include/oxos/oxos_exports.inc`), by the tool
+  that generates the table, so the reference, `oxos::` and the class's compile-time check cannot disagree.
+  `tools/gen_oxos_sdk.py` regenerates it, and a check fails the build when the committed file differs from the
+  generated one.
 - **Grouped by area**, in ordinal order within each, with a table of contents: files and I/O (`Nt*File`, `Io*`),
   memory (`Mm*`, `Ex*Pool`), threads and synchronisation (`Ps*`, `Ke*`, `Nt*Event`, ...), objects (`Ob*`), runtime
   (`Rtl*`), hardware (`Hal*`, `Av*`, `Phy*`), settings (`ExQueryNonVolatileSetting`, ...), crypto (`Xc*`), titles
@@ -491,23 +559,30 @@ copies the block, and edits the body.
 - The events (`OnTitleLoading`, `OnTitleLoaded`, `OnTitleExiting`) and the lifecycle members (`Load`, `Main`,
   `Unload`) get their own copy-ready blocks at the top, so the file is the one place to start a new extension from.
 
-**Build:** the same compiler and linker as the kernel and nxdk, `clang` and `lld-link`, nothing else:
+**Build:** GNU make with the SDK's rules; `clang` and `lld-link` from the `PATH`, or from the folder `LLVM=` names:
 
 ```make
 # examples/hello/Makefile
 NAME := hello
-SRCS := hello.cpp
-include ../../extension.mk
-# extension.mk: clang++ --target=i386-pc-win32 -march=pentium3 -std=c++20 -ffreestanding -fno-exceptions -fno-rtti
-#               -fno-builtin -fno-threadsafe-statics -O2 ... ; lld-link /DLL /NOENTRY /NODEFAULTLIB /SUBSYSTEM:NATIVE
-#               /OUT:$(NAME).xos ... xosrt.lib xboxkrnl.lib
+SOURCES := hello.c
+include ../../oxos_extension.mk
+# oxos_extension.mk: clang --target=i386-pc-win32 -march=pentium -mno-sse -mno-mmx -mno-80387 -ffreestanding
+#                    -nostdinc -fno-builtin -O2 -std=c17 (.c) or -std=c++20 -fno-exceptions -fno-rtti (.cpp) ...
+#                    (no floating point or SIMD: the kernel does not save those registers for extensions);
+#                    lld-link /DLL /NOENTRY /NODEFAULTLIB /OUT:hello.xos ... oxos_runtime.lib xboxkrnl.lib
 ```
+
+The output folder (`OXOS_OUT`, default the current one) must exist; the rules create no folders, so they need no
+shell commands. Sources are in the Makefile's folder; their objects go to the output folder, named after the
+extension.
+
+Once the class exists (§4.4), the example gets a C++ version next to `hello.c`:
 
 ```cpp
 // examples/hello/hello.cpp
-#include <xos/extension.h>
+#include <oxos/oxos_extension.h>
 
-class Hello : public xos::Extension<Hello> {
+class Hello : public oxos::Extension<Hello> {
     struct Saved { ULONG Magic, Launches; };
 
 public:
@@ -519,13 +594,12 @@ public:
         Log("launch %lu since the cold boot", saved.Launches);
         return STATUS_SUCCESS;
     }
-    void OnTitleLoaded(const xos::Title &title) {
+    void OnTitleLoaded(const oxos::Title &title) {
         Log("title %08lx %s", title.Id, title.Name);
     }
 };
 
-XOS_EXTENSION(Hello, .Name = "hello", .Version = "1.0.0", .Author = "OXOS", .Description = "Counts launches",
-              .Licence = "GPL-2.0-or-later");
+OXOS_DEFINE_EXTENSION_CLASS(Hello, .Name = "hello", .Version = "1.0.0");
 ```
 
 **Install:** copy `hello.xos` to `C:\OXOS\extensions\` (File Manager or FTP) and add it to
@@ -538,37 +612,39 @@ extension = hello.xos
 
 It runs from the next launch.
 
-### 9.2 Test extensions
-`tests/extensions/`, built with the SDK, run in xemu by `make test_extensions` on a test disk with an
-`oxos_extensions.ini`, through a cold boot and two quick reboots (`test_relaunch`'s title). Checked from the serial log
-and from the test title.
+### 9.3 Test extensions
+`tests/extensions/`, built with the SDK; `make -C kernel test_extensions` (`tests/boot_test.py --extensions`) puts them
+and an `oxos_extensions.ini` on the test disk and runs `test_relaunch`'s title through a cold boot and two quick
+reboots. The extensions record what the kernel did in their state pages; the test reads those back through
+`XkExtensionsState` (the offsets are checked at compile time in `include/xk/extensions.h`).
 
-**`xostest.xos`**, every part of the API:
+**`extension_test.xos`:**
 
 | It does | It proves |
 |---|---|
-| `Load`: on `StateIsNew()` writes a magic and `Launches = 0` to its state page; `Launches++`; logs `xostest: launch N gen G` | the state page survives quick reboots: `N` = `Generation()`, and both are 1 after a cold boot |
-| hooks `NtQueryFullAttributesFile`: for `D:\__xostest__` it answers success with size 0x0C0FFEE, other paths go to `oxos::` | a hook replaces a title's call and passes the others on; the test title asks for the path and checks the answer (without the extension the file does not exist) |
-| `OnTitleLoading`, `OnTitleLoaded`, `OnTitleExiting` log path, title ID, launch kind | each event once per launch, in order, with the data `test_relaunch` expects |
-| `Main`: counts a heartbeat in its state page every 10 ms until `WaitForStop` | `Main` runs while the title runs and stops when asked |
-| `Unload`: sets a "clean exit" flag in its state page; the next `Load` logs `xostest: previous unload ok, heartbeat H` (H > 0) | `Unload` runs at the quick reboot, and `Main` ran |
-| reads `Setting("answer")` from its section, `ReadFile`s a file next to it, allocates and frees pool with `oxos::` | settings, the SDK runtime and the kernel imports |
+| `Load`: on `StateIsNew` zeroes its state page and writes its magic; counts its Loads and keeps `Generation` | the state page survives quick reboots: 3 Loads, generation 3, never a mismatch |
+| hooks `NtOpenFile` and counts the title's calls, passing each on with `oxos::` | the title's calls go through the hook, and the title still works |
+| registers the three events and counts them | a loading and a loaded title per launch, an exit per quick reboot |
+| `Main`: one `NtOpenFile` of its own, then a heartbeat every 10 ms until the stop request | `Main` runs while the title runs and returns when asked; its own call passes only the extensions below it |
+| `Unload` counts | `Unload` at each quick reboot |
+| `oxos_get_setting(Context, "Answer")` is `42`; `oxos_read_file` reads its own `.xos` | settings, the SDK runtime and the kernel imports |
 
-**Companions**, one check each:
-- `chain.xos`, listed after `xostest`: hooks the same `NtQueryFullAttributesFile` and adds 1 to the size its
-  `oxos::` call returns. The title must see 0x0C0FFEF: the chain runs in ini order and both hooks run.
-- `badver.xos`: a wrong `ApiVersion`; refused and logged, the others load.
-- `failload.xos`: `Load` returns `STATUS_UNSUCCESSFUL`; unloaded, its hook not applied, the others go on.
-- `badimport.xos`: imports a function by name from another DLL; refused.
-- `disabled.xos` with `enabled = no`, and `unlisted.xos` in the folder but not in the ini: neither loads.
+**Companions:**
+- `chain.xos`, listed after `extension_test`: hooks the same `NtOpenFile` and counts: the title's calls (through
+  extension_test's hook, then this one) and extension_test's own from `Main` (this one only).
+- `plain_c.xos`, written in C: counts its Loads and loaded titles and reads its setting, so the SDK's headers, macro
+  and runtime work without C++; checks a struct copy, `memset`, `memcmp` and signed and unsigned 64-bit division and
+  remainder at each Load, which the compiler turns into calls to the kernel's exports 402-410 (§9.1).
+- `hello.xos`, the SDK's example (`oxos_sdk/examples/hello`), listed after `plain_c` with `heartbeat = 1`: built and
+  loaded at every launch so the example keeps working; its state page counts the launches.
+- `failload.xos`: hooks `NtOpenFile`, then fails its `Load`: unloaded, its hook dropped (a title call through it
+  would run freed memory), its state page freed.
+- `badversion.xos`: built for the next major API version: refused.
+- `disabled.xos` (`enabled = no`) and `unlisted.xos` (in the folder, not in the list): neither loads.
 
-**Runs:**
-1. `test_extensions`: the ini and the files above; cold boot and two quick reboots.
-2. Safe mode: the same disk with B held at boot (xemu's controller input): no `xostest:` lines, no fake file, also
-   after a quick reboot.
-3. No `oxos_extensions.ini` (the files still in the folder): nothing loads, and the memory test title starts with the
-   same free pages as without the feature (15 960 in xemu at 64 MB).
-4. `crash.xos` (writes to address 0 in `Load`), a run of its own: the error screen names its section.
+*Not yet automated:* safe mode (B at the splash), an extension that crashes (the error screen naming it, §3.4), and
+state pages freed when `oxos_extensions.ini` is deleted between launches (§6).
+Without `oxos_extensions.ini` nothing loads: `make test_memory` checks that titles keep 15 960 free pages.
 
 ## 10. OXOS features as extensions
 Decided 2026-11-13. What runs only for some users, or only on development consoles, leaves the kernel and becomes an
@@ -622,7 +698,7 @@ extension = oxos_title_patches.xos
     `.exe` as it is.
 - **Screenshots (`screenshot.xos`)**: a controller combination saves the screen the console shows as a file on the
   disk.
-  - Needs a new event: **`XOS_EVENT_CONTROLLER`**, every controller state a title reads, from the hook the in-game
+  - Needs a new event: **`OXOS_EVENT_CONTROLLER`**, every controller state a title reads, from the hook the in-game
     reset already has on `XInputGetState` (spec/oxos_internal/22 §2).
   - The event only signals `Main`; `Main` reads the front buffer (its address, pitch and format from the GPU's
     display registers) and writes a BMP or PNG to `E:\Screenshots\` while the title goes on.
@@ -630,18 +706,25 @@ extension = oxos_title_patches.xos
   trainers), save-game redirection or backup, a background FTP server for titles that do not use the network.
 
 ## 11. Decisions
-- **Licence (2026-11-13).** The kernel stays GPL-2.0. The SDK (headers, `xosrt.lib`, build files, examples) is open
-  source under the **MIT** licence, so an extension built with it may use any licence: open source is preferred,
-  closed source is allowed. (A GPL SDK would make every extension that links `xosrt.lib` GPL too, which is why the
-  SDK is not GPL.) The SDK is written for it, not copied from GPL kernel sources. The descriptor's `Licence` field
-  (an SPDX name, e.g. `GPL-2.0-or-later`, `MIT`, or `Proprietary`) is required and is logged at load.
+- **Licence (2026-11-13).** The kernel stays GPL-2.0. The SDK (headers, `oxos_runtime.lib`, build files, examples)
+  is open source under the **MIT** licence (`oxos_sdk/LICENSE`), so an extension built with it may use any licence:
+  open source is preferred, closed source is allowed. (A GPL SDK would make every extension that links
+  `oxos_runtime.lib` GPL too, which is why the SDK is not GPL.) The SDK is written for it, not copied from GPL
+  kernel sources.
+- **The descriptor has no author, description or licence (2026-11-13):** nothing uses them. It names the extension
+  (its state page) and its version (the log), and points at its functions (§4.1).
 - **Trust (2026-11-13):** every enabled extension in `oxos_extensions.ini` is loaded and run, with no signing and no
   confirmation, as XBEs are today. The ways out are the File Manager (X) and safe mode (B).
 - **`oxos_extensions.ini` is required (2026-11-13):** without it nothing loads; it gives the order (and so the chains),
   switches and settings (§3.1).
 - **Hooks are for titles' calls (2026-11-13):** an extension implements kernel functions by name, and `oxos::Name`
   passes a call on to OXOS (§4.4, §7.1).
-- **The loader is a compressed overlay in the flash (2026-11-13)** (§8.1).
+- **The loader is an overlay run from a cache file on the disk (2026-11-13)**, not from the flash (§8.1).
+- **The SDK (2026-11-13):** `oxos_sdk/`; plain C as the base with C++ on top; prebuilt `.lib` libraries; GNU make
+  only, on Windows, macOS and Linux; no nxdk; its own repository later (§9). The kernel exports `memcpy` and its kin
+  and the compiler's 64-bit helpers, as Windows and Linux kernels do (§9.1). Names: `OXOS_` for types and macros,
+  `oxos_` for functions and files, never `Oxos` (docs/cpp_style.md §2).
+- **A failed `Load` frees its state page (2026-11-13)** (§3.4).
 
-**Open:** a crashed extension's persisted "off" mark (§3.4), `Unload` timing (§4.3), the kernel facts list (§5.2), more
-events (§7.2), extensions calling each other (§8), where the netbooted loader is kept (§8.1), the proposals of §10.1.
+**Open:** a crashed extension's persisted "off" mark (§3.4), `Unload` on a reset (§4.3), the kernel facts list (§5.2), more
+events (§7.2), extensions calling each other (§8), the proposals of §10.1.

@@ -10,4 +10,5 @@ void GamepadWatchStop();  // the USB controller reset and its memory freed, befo
 void GamepadWaitForX();
 
 extern volatile ULONG GamepadXPressed; // 1 once X was seen pressed (read by the title launcher and the tests)
+extern volatile ULONG GamepadBPressed; // 1 once B was seen pressed: safe mode (spec/oxos_internal/34 §3.3)
 extern volatile ULONG GamepadPadsFound;    // the controllers found (read by the boot tests)

@@ -63,6 +63,13 @@ class Monitor:
         out = self.hmp(f"x/1wx {self.addr(name) + offset:#x}")
         return int(out.split(":")[1].split()[0], 16)
 
+    def pause(self):
+        """Stops the emulated CPU: what the checks read next cannot change under them."""
+        self.hmp("stop")
+
+    def resume(self):
+        self.hmp("cont")
+
     def rate(self, name, seconds=2.0):
         v0, t0 = self.read(name), time.monotonic()
         time.sleep(seconds)
@@ -472,8 +479,95 @@ def write_launch_redirect(hdd_copy):
     REDIRECT = True
 
 
-def title_checks(mon, title_map, relaunch=False, reboots=0):
-    # reboots: quick reboots before the title's first run (the ISO launcher's launch)
+# The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: four that
+# load (plain_c in C, then the SDK's example hello), two the kernel must unload or refuse, one switched off, and one
+# in the folder that the list does not name.
+EXTENSIONS_INI = ("; boot_test.py --extensions\r\n"
+                  "[extension_test]\r\nextension = extension_test.xos\r\nanswer = 42\r\n"
+                  "[chain]\r\nextension = chain.xos\r\n"
+                  "[plain C]\r\nextension = plain_c.xos\r\ngreeting = hello\r\n"
+                  "[hello]\r\nextension = hello.xos\r\nheartbeat = 1\r\n"
+                  "[failload]\r\nextension = failload.xos\r\n"
+                  "[badversion]\r\nextension = badversion.xos\r\n"
+                  "[switched off]\r\nextension = disabled.xos\r\nenabled = no\r\n")
+
+
+def write_extensions(hdd_copy, folder):
+    """C:\\OXOS\\oxos_extensions.ini and the test extensions in C:\\OXOS\\extensions, on a FATX test disk.
+    disabled.xos and unlisted.xos are copies of failload.xos: neither may load."""
+    q = Qcow2(hdd_copy)
+    w = FATXWriter(q, "C")
+    w.makedirs("OXOS\\extensions")
+    w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
+    for name in ("extension_test", "chain", "plain_c", "hello", "failload", "badversion"):
+        w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, f"{name}.xos"), "rb").read())
+    for name in ("disabled", "unlisted"):
+        w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, "failload.xos"), "rb").read())
+    q.save(hdd_copy + ".new")
+    os.replace(hdd_copy + ".new", hdd_copy)
+
+
+def extension_state_pages(mon):
+    """The state pages of the loaded extensions, in load order (none when no extension is loaded)."""
+    state = mon.read("XkExtensionsState")
+    if not state:
+        return []
+    count = int(mon.hmp(f"x/1wx {state:#x}").split(":")[1].split()[0], 16)
+    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[8] of 88 bytes, each starting with its OXOS_CONTEXT (State at +40).
+    return [int(mon.hmp(f"x/1wx {state + 4 + 88 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
+
+
+def extension_loaded_titles(mon):
+    """The titles both extension_test.xos and plain_c.xos (the first and the last to count them, in one event) have
+    seen loaded: their OXOS_EVENT_TITLE_LOADED counts; 0 before they load."""
+    pages = extension_state_pages(mon)
+    if len(pages) < 3:
+        return 0
+    def word(address):
+        return int(mon.hmp(f"x/1wx {address:#x}").split(":")[1].split()[0], 16)
+    return min(word(pages[0] + 4 * 8), word(pages[2] + 4 * 2))
+
+
+def extension_checks(mon, launches):
+    """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
+    plain_c.c, oxos_sdk/examples/hello) after `launches` launches: the cold boot's title and each quick reboot's
+    (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks)."""
+    def words(address, n):
+        out = mon.hmp(f"x/{n}wx {address:#x}")
+        return [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:n]
+    pages = extension_state_pages(mon)
+    count = len(pages)
+    x = words(pages[0], 14) if count >= 1 else [0] * 14
+    c = words(pages[1], 3) if count >= 2 else [0] * 3
+    p = words(pages[2], 6) if count >= 3 else [0] * 6
+    h = words(pages[3], 2) if count >= 4 else [0] * 2
+    if not count:
+        return {"extensions loaded (XkExtensionsState)": False}
+    return {
+        "extension_test, chain, plain_c and the SDK's example hello loaded; failload unloaded, badversion refused, "
+        "disabled and unlisted not loaded": count == 4 and x[0] == 0x54534F58 and c[0] == 0x4E414843
+            and p[0] == 0x434E4C50 and h[0] == 0x4F4C4548 and h[1] == launches,
+        f"state page kept across the quick reboots: {launches} Loads, Generation {launches}": x[1] == launches
+            and x[2] == launches and x[3] == 0 and c[1] == launches,
+        "Main ran while the titles ran and returned at each stop request": x[5] > 0 and x[6] == launches - 1,
+        "Unload at each quick reboot": x[4] == launches - 1,
+        "events: a load and a loaded title per launch, an exit per quick reboot":
+            x[7] >= launches and x[8] == launches and x[9] == launches - 1,
+        "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (Main) only chain's":
+            x[10] > 0 and c[2] == x[10] + launches,
+        "settings from oxos_extensions.ini and oxos_read_file": x[12] == 1 and x[13] == 1,
+        f"plain C extension: {launches} Loads and loaded titles, its setting": p[1] == launches and p[2] == launches
+            and p[5] == 1,
+        "the kernel's memcpy, memset, memcmp and 64-bit division for extensions (exports 402-415)":
+            p[3] == 1 and p[4] == 1,
+    }
+
+
+def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False):
+    # reboots: quick reboots before the title's first run (the ISO launcher's launch). With relaunch the console does
+    # not stop at the third launch: the dashboard starts the test disc again, and the cycle repeats. So the checks
+    # pause the emulator for each reading: once the title's results are complete, and at the third launch's dashboard,
+    # where it stays paused for the checks after this one (RAM, extensions).
     if not title_map:
         return {"test title built": False}
     syms = map_symbols(title_map)
@@ -486,11 +580,13 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
         v = mon.hmp(f"x/1wx {base:#x}")
         if os.environ.get("XK_DEBUG"):
             print(i, time.time(), v.strip(), mon.read("XeTitleLaunched"), mon.read("KiQuickRebootCount"))
-        if v.split(":")[1].split()[0] == "0x54544b58":
+        # The results are complete once the title has finished; with relaunch, in its second run (second.xbe).
+        if v.split(":")[1].split()[0] == "0x54544b58" and (not relaunch or mon.read("KiQuickRebootCount") >= 1):
             break
         time.sleep(0.25)
+    mon.pause()
     count = 9 + 16 + 3 + 16
-    out = mon.hmp(f"x/{count}wx {base:#x}")  # one command: the relaunch test moves on after 8 s
+    out = mon.hmp(f"x/{count}wx {base:#x}")
     try:
         words = [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:count]
     except (ValueError, IndexError):  # no title mapped there (it never started): every title check fails
@@ -500,9 +596,11 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
     def text(ws):
         return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
     name, second = text(words[9:25]), text(words[28:44])
+    launched = mon.read("XeTitleLaunched")
+    mon.resume()
     checks = {
         "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
-            and mon.read("XeTitleLaunched") == (3 if relaunch or reboots else 1),
+            and launched == (3 if relaunch or reboots else 1),
         "XeImageFileName": name == "\\Device\\CdRom0\\default.xbe",
         "kernel thunks resolved: KeTickCount (data) + sleep": words[2] == 1,
         "pool, disc file read, system thread from the title": words[3] == 1 and words[4] == 1 and words[5] == 1,
@@ -512,10 +610,13 @@ def title_checks(mon, title_map, relaunch=False, reboots=0):
         "title finished": words[0] == 0x54544B58,
     }
     if relaunch:
-        for _ in range(80):
-            if mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("XeTitleLaunched") == 2:
+        # The third launch: the dashboard, after the kernel's events for it (the extensions count them).
+        for _ in range(200):
+            if mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("XeTitleLaunched") == 2 and (
+                    not extensions or extension_loaded_titles(mon) >= 3 + reboots):
                 break
-            time.sleep(0.25)
+            time.sleep(0.1)
+        mon.pause()
         # What the kernel wrote to the launch page for the dashboard (a dashboard may consume the page itself, as
         # the stock one does).
         page = [mon.read_offset("XeDashboardLaunchData", 4 * i) for i in range(3)]
@@ -1108,6 +1209,8 @@ def main():
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
+    ap.add_argument("--extensions", metavar="DIR", help="with --relaunch: the test extensions built in DIR "
+                    "(tests/extensions) and an oxos_extensions.ini on the test disk (spec/oxos_internal/34 §9.3)")
     ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\oxos_launch_redirect.ini: "
                     "the relaunch must start the disc's redirected\\second.xbe (spec/oxos_internal/33 §6)")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
@@ -1161,6 +1264,8 @@ def main():
             write_title_patches(hdd_copy, a.title, a.title_map)
         if a.redirect:
             write_launch_redirect(hdd_copy)
+        if a.extensions:
+            write_extensions(hdd_copy, a.extensions)
         if a.xbl:  # C:\xboxdash.xbe moved to C:\Dashboard\default.xbe, the XBL Dashboard's loader (spec/oxos_internal/19)
             q = Qcow2(hdd_copy)
             dash = FATX(q, "C").read_file("xboxdash.xbe")
@@ -1219,13 +1324,23 @@ def main():
         elif a.dash:
             results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox, a.xbl)
         elif a.relaunch:
-            results = {"M5d-2": title_checks(mon, a.title_map, True), "RAM": ram_checks(mon, a.memory)}
+            results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions)),
+                       "RAM": ram_checks(mon, a.memory)}
+            if a.extensions:
+                results["extensions"] = extension_checks(mon, 3)
         elif a.iso_launch:
             results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:
             results = run_checks(mon, a.hdd, a.title_map)
         if a.serial:
             results["serial"] = serial_checks(serial_log)
+            if a.extensions:  # the SDK's example writes what its README shows
+                text = open(serial_log, "rb").read().decode("latin1") if os.path.exists(serial_log) else ""
+                hello = [line for line in text.splitlines() if line.startswith("[hello]")]
+                results["serial"]["the example extension hello: its greeting, title, goodbye"] = (
+                    any(line.startswith("[hello] Hello from OXOS ") for line in hello)
+                    and any(line.endswith('"OXOS kernel test title" is starting.') for line in hello)
+                    and any(line.startswith("[hello] Goodbye: ") for line in hello))
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():

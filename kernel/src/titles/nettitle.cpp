@@ -58,6 +58,12 @@ bool MiIsNetbootTitlePage(ULONG pfn) {
            pfn < ((XePackagePhys + XePackageSize + PAGE_SIZE - 1) >> PAGE_SHIFT);
 }
 
+// --- Installing and launching the package: only at a cold boot (a quick reboot never has one), so boot-only
+// (spec/oxos_internal/18 §2); the title launcher asks MmBootPagesPresent() first.
+
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
+
 static void XepReleasePackage() {
     ULONG first = XePackagePhys >> PAGE_SHIFT, last = (XePackagePhys + XePackageSize + PAGE_SIZE - 1) >> PAGE_SHIFT;
     XePackageSize = 0;
@@ -141,3 +147,6 @@ bool XeLaunchNetbootTitle() {
         IoDeleteSymbolicLink(&link);
     return false;
 }
+
+#pragma code_seg()
+#pragma const_seg()

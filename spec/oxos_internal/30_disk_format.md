@@ -18,6 +18,9 @@ still runs on another kernel (the FTP server reports "needs OXOS").
 | 400 | `NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath)` | formats the hard disk as exFAT (§2); KeepPath (optional): a file on the hard disk, copied to the same place on the new disk |
 | 401 | `NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds)` | deletes all partitions (§3); the next boot formats the blank disk after CountdownSeconds (§4) |
 
+The ordinals after them, 402-415, are OXOS's exports for kernel extensions: `memcpy` and its kin and the compiler's
+64-bit helpers (spec/oxos_internal/34 §9.1).
+
 - Both run at PASSIVE_LEVEL in the caller's thread and hold the layout lock while they write.
 - **KeepPath** is `\Device\Harddisk0\PartitionN\...` with N one of the drives an exFAT disk has (1 E:, 2 C:, 3–5 X:–Z:,
   6 F:). The file (at most 64 MB) is read into memory before anything is written, so a bad path or a read error

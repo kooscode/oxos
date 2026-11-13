@@ -91,6 +91,8 @@ ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),
 XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
+# The kernel extensions' binary interface, shared with their SDK (spec/oxos_internal/34).
+CXXFLAGS += -I$(ROOT)/oxos_sdk/include
 # The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
 CXXFLAGS += -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
@@ -119,6 +121,12 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),XkShowFileManagerScreen,XkCloseFileManagerScreen
 BOOT_ENTRIES := $(BOOT_ENTRIES),GamepadWaitForX
 # The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
 BOOT_ENTRIES := $(BOOT_ENTRIES),IdexDiskBlankCountdown,IdexDiskIsBlank,IdexDiskDescribe
+# The kernel extension loader's cache, written at a cold boot from the boot-only copy (extensions/extension_overlay.cpp).
+BOOT_ENTRIES := $(BOOT_ENTRIES),XkExtensionsWriteCache
+# The netboot title's installation (titles/nettitle.cpp): a package only ever comes with a cold boot.
+BOOT_ENTRIES := $(BOOT_ENTRIES),XeLaunchNetbootTitle
+# The cold boot's launch choice and the File Manager (titles/loader.cpp).
+BOOT_ENTRIES := $(BOOT_ENTRIES),XeColdBootLaunch,XeServeFileManager
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 
@@ -143,14 +151,15 @@ $(XK_VERSION_HEADER): FORCE
 	@printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' "$(XK_VERSION_TEXT)" \
 	    "$(if $(VERSION),1,0)" | cmp -s - $@ || printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' \
 	    "$(XK_VERSION_TEXT)" "$(if $(VERSION),1,0)" > $@
-$(BUILD)/bootscreen/text.obj $(BUILD)/storage/disk_layout.obj: $(XK_VERSION_HEADER)
+$(BUILD)/bootscreen/text.obj $(BUILD)/storage/disk_layout.obj $(BUILD)/extensions/extension_runtime.obj: \
+    $(XK_VERSION_HEADER)
 FORCE:
 
 # The boot self-tests (SELFTEST=1 only).
 $(BUILD)/selftest/%.obj: selftest/%.cpp $(wildcard include/xk/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
--include $(OBJS:.obj=.d)
+-include $(OBJS:.obj=.d) $(OVERLAY_OBJS:.obj=.d)
 
 $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
@@ -283,21 +292,33 @@ MCPX_DUMP_BUILD := build/mcpx_dump
 mcpx_dump:
 	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios_256k.bin
 
+# The kernel extension loader overlay (spec/oxos_internal/34 §8.1): overlay/*.cpp, compiled as the kernel is but
+# linked on its own at 0xB0000000 (XK_OVERLAY_BASE) against this kernel's addresses, then appended to the kernel image.
+OVERLAY_OBJS := $(patsubst overlay/%.cpp,$(BUILD)/overlay/%.obj,$(wildcard overlay/*.cpp))
+OVERLAY := $(BUILD)/extensions_loader.exe
+$(BUILD)/overlay/%.obj: overlay/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+$(OVERLAY): $(OVERLAY_OBJS) $(BUILD)/xboxkrnl.exe $(ROOT)/tools/link_overlay.py
+	python3 -I $(ROOT)/tools/link_overlay.py --kernel $(BUILD)/xboxkrnl.exe --map $(BUILD)/xboxkrnl.map \
+	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(OVERLAY_OBJS)
+
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 ifeq ($(IMAGE),base)
-$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH))
+$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(OVERLAY)
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --overlay $(OVERLAY)
 else
 $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin
+                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(OVERLAY)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
-	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS)
+	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --overlay $(OVERLAY)
 $(BUILD)/bios_256k.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin
+                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(OVERLAY)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
-	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K
+	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K \
+	    --overlay $(OVERLAY)
 endif
 
 $(XDASH_HDD):
@@ -372,6 +393,21 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 $$run || exit 1; \
 	done
+
+# Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions, built with oxos_sdk) and an
+# oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks,
+# events, Main threads and Unloads, and leave out the ones that fail, are refused or are not listed. The SDK's prebuilt
+# libraries are brought up to date with exports.tsv first (committed with it when they change).
+TEST_EXTENSIONS_DIR := $(abspath $(BUILD))/test_extensions
+test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/oxos_sdk/lib/xboxkrnl.def
+	$(MAKE) -C $(ROOT)/oxos_sdk
+	mkdir -p $(TEST_EXTENSIONS_DIR)
+	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	    --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR)
 
 # Video encoder phase: the encoder tables must be what tools/gen_av_tables.py makes from the specs
 # (spec/stock/18-20); then the release build on each encoder xemu can present (Conexant, Focus, Xcalibur): the bus
@@ -666,4 +702,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_fatal test_format test_upload test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso

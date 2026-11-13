@@ -367,3 +367,17 @@ ordinal	name	convention	arg_bytes	kind
 366	HalWriteSMCScratchRegister	stdcall	4	func
 400	OXOSFormatDisk	stdcall	4	func
 401	OXOSDeleteAllPartitions	stdcall	4	func
+402	memcpy	cdecl		func
+403	memset	cdecl		func
+404	memmove	cdecl		func
+405	memcmp	cdecl		func
+406	_allmul	compiler		func
+407	_alldiv	compiler		func
+408	_aulldiv	compiler		func
+409	_allrem	compiler		func
+410	_aullrem	compiler		func
+411	_alldvrm	compiler		func
+412	_aulldvrm	compiler		func
+413	_allshl	compiler		func
+414	_allshr	compiler		func
+415	_aullshr	compiler		func

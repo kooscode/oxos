@@ -4,6 +4,10 @@
 usage: gen_def.py EXPORTS_TSV OUT_DEF
 
 The table has one row per ordinal of the 4627 kernel: ordinal, name, calling convention, argument bytes, kind.
+Calling conventions: stdcall, fastcall, cdecl, and compiler: a 64-bit arithmetic helper the compiler calls itself
+(_alldiv, ...), with its own register convention. OXOS exports these and memcpy/memset/memmove/memcmp to kernel
+extensions at its own ordinals 402-415 (spec/oxos_internal/34 §9.1).
+
 Kinds:
   func   a function, exported at its ordinal;
   data   a variable, exported at its ordinal with the DATA keyword;

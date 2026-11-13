@@ -1,4 +1,5 @@
-// Freestanding memory primitives (the compiler may also emit calls to memset/memcpy).
+// Freestanding memory primitives (the compiler may also emit calls to memset/memcpy). Exported to kernel extensions at
+// OXOS's own ordinals 402-405 (spec/oxos_internal/34 §9.1).
 #include <xk/runtime.h>
 
 #ifdef XK_HOST_TEST // host unit tests link with the C library: the kernel's own versions get their own names
@@ -27,6 +28,16 @@ extern "C" void *XK_MEM(memmove)(void *dst, const void *src, SIZE_T n) {
     const UCHAR *s = (const UCHAR *)src + n - 1;
     __asm__ volatile("std\n\trep movsb\n\tcld" : "+D"(d), "+S"(s), "+c"(n)::"memory");
     return dst;
+}
+
+extern "C" int XK_MEM(memcmp)(const void *a, const void *b, SIZE_T n) {
+    auto x = (const UCHAR *)a;
+    auto y = (const UCHAR *)b;
+    for (SIZE_T i = 0; i < n; i++) {
+        if (x[i] != y[i])
+            return x[i] < y[i] ? -1 : 1;
+    }
+    return 0;
 }
 
 XBAPI void NTAPI RtlZeroMemory(PVOID Destination, SIZE_T Length) {

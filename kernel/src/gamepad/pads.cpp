@@ -1,7 +1,7 @@
 // The controllers during the boot splash (spec/oxos_internal/32 §2-4): every device on the root hub's ports is set
 // up, a hub's own ports too (each Xbox controller is a hub with the pad and its memory-unit slots on it), and each Xbox
 // pad (interface class 0x58) gets an interrupt-IN pipe. The splash then reads the pads between its frames; X
-// pressed at any time sets GamepadXPressed. Boot-only.
+// pressed at any time sets GamepadXPressed, B GamepadBPressed (safe mode, spec/oxos_internal/34 §3.3). Boot-only.
 #include <xk/gamepad.h>
 #include <xk/usb_host.h>
 #include <xk/core.h>
@@ -20,23 +20,29 @@ constexpr UCHAR CLASS_HUB = 0x09, CLASS_XBOX_INPUT = 0x58;
 constexpr USHORT HUB_PORT_RESET = 4, HUB_PORT_POWER = 8, HUB_C_PORT_CONNECTION = 16, HUB_C_PORT_RESET = 20;
 // The Xbox pad's input report: 0, its length (20), the digital buttons (16 bits), then the eight analog buttons
 // A, B, X, Y, BLACK, WHITE, LT, RT (0-255), then the sticks.
-constexpr ULONG REPORT_X = 6;
-constexpr UCHAR X_PRESSED = 0x80; // pressed at least halfway
+constexpr ULONG REPORT_B = 5, REPORT_X = 6;
+constexpr UCHAR BUTTON_PRESSED = 0x80; // pressed at least halfway
 
 // Hubs followed from a root port: a controller is a hub (1); xemu puts its own hub in front of the controllers (2).
 constexpr ULONG GAMEPAD_HUB_DEPTH = 3;
 
 volatile ULONG GamepadXPressed;
+volatile ULONG GamepadBPressed;
 volatile ULONG GamepadPadsFound;
 static bool GamepadpRunning;   // the controller was started (stopped again by GamepadWatchStop)
 static UCHAR GamepadpAddress;  // the last address given
 
-// A report from a pad: X pressed?
+// A report from a pad: X or B pressed?
 static void GamepadpCheck(const UCHAR *Report, LONG Length) {
-    if (Length > (LONG)REPORT_X && Report[1] > REPORT_X && Report[REPORT_X] >= X_PRESSED &&
-        !GamepadXPressed) {
+    if (Length <= (LONG)REPORT_X || Report[1] <= REPORT_X)
+        return;
+    if (Report[REPORT_X] >= BUTTON_PRESSED && !GamepadXPressed) {
         GamepadXPressed = 1;
         XK_SERIAL("gamepad: X pressed: the File Manager opens after the splash\n");
+    }
+    if (Report[REPORT_B] >= BUTTON_PRESSED && !GamepadBPressed) {
+        GamepadBPressed = 1;
+        XK_SERIAL("gamepad: B pressed: safe mode, no kernel extensions\n");
     }
 }
 

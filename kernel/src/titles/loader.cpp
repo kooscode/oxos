@@ -1,6 +1,7 @@
 // XBE loader and title launch (spec/stock/05 §2-4).
 #include <xk/titles.h>
 #include <xk/io.h>
+#include <xk/extensions.h>
 #include <xk/launch_redirect.h>
 #include <xk/title_patches.h>
 #include <xk/core.h>
@@ -46,7 +47,6 @@ XK_PERSIST ULONG XeDiscTitleId; // the title pinned to the current game disc (0 
 XK_PERSIST UCHAR XeTitleDiscAuthenticated; // set by the DVD authentication (src/storage/dvd_drive.cpp)
 
 // --- Exported state
-XBAPI OBJECT_STRING XeImageFileName;
 XBAPI UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 XBAPI UCHAR XePublicKeyData[284];
 OBJECT_STRING XeImageFileName;
@@ -87,7 +87,7 @@ static NTSTATUS XeOpenImage(HANDLE *h) {
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does
 // not open (*Status says why: STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be
 // read.
-static char *XepReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
+char *XeReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
     *Got = 0;
     OBJECT_STRING name;
     RtlInitAnsiString(&name, Path);
@@ -131,7 +131,7 @@ static void XepLoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADE
     constexpr ULONG MAX_PATCH_FILE = 0x100000;
     ULONG got;
     NTSTATUS status;
-    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE,
+    char *text = XeReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE,
                                  'tPeX', &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
@@ -288,26 +288,35 @@ XBAPI NTSTATUS NTAPI XeUnloadSection(XBE_SECTION_HEADER *Section) {
 #endif
 
 // --- Kernel thunks: entries are ordinals (low 16 bits), resolved through our own export directory.
-static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
+
+ULONG XeKernelExport(ULONG Ordinal) {
     auto image = (PUCHAR)0x80010000;
     PUCHAR nt = image + *(ULONG *)(image + 0x3C);
     ULONG exportRva = *(ULONG *)(nt + 0x78);
     if (!exportRva)
-        return STATUS_ORDINAL_NOT_FOUND;
+        return 0;
     PUCHAR exports = image + exportRva;
-    ULONG ordinalBase = *(ULONG *)(exports + 0x10), count = *(ULONG *)(exports + 0x14);
+    ULONG index = Ordinal - *(ULONG *)(exports + 0x10);
     auto functions = (PULONG)(image + *(ULONG *)(exports + 0x1C));
+    if (index >= *(ULONG *)(exports + 0x14) || !functions[index])
+        return 0;
+    return (ULONG)image + functions[index];
+}
+
+static NTSTATUS XepResolveKernelThunks(PULONG thunk) {
     NTSTATUS status = STATUS_SUCCESS;
     for (; *thunk; thunk++) {
-        ULONG index = (*thunk & 0xFFFF) - ordinalBase;
-        if (index >= count || !functions[index]) {
-            XeLastMissingOrdinal = *thunk & 0xFFFF;
+        ULONG ordinal = *thunk & 0xFFFF;
+        ULONG target = XeKernelExport(ordinal);
+        if (!target) {
+            XeLastMissingOrdinal = ordinal;
             status = STATUS_ORDINAL_NOT_FOUND; // keep going so the list of missing ordinals is complete
             continue;
         }
-        *thunk = (ULONG)image + functions[index];
+        // An extension's hook in the export's place (spec/oxos_internal/34 §7.1).
+        *thunk = XkExtensionsTitleImport(ordinal, target);
 #if XK_TRACE_IMPORTS
-        *thunk = XkTraceWrap((USHORT)(index + ordinalBase), *thunk);
+        *thunk = XkTraceWrap((USHORT)ordinal, *thunk);
 #endif
     }
     return status;
@@ -529,6 +538,7 @@ static NTSTATUS XepLoadImage(PCSZ Path, BOOLEAN Dashboard) {
 
 NTSTATUS XeLoadImage(PCSZ Path, BOOLEAN Dashboard) {
     XK_SERIAL("load %s: start\n", Path);
+    XkExtensionsTitleLoading(Path, Dashboard);
     NTSTATUS status = XepLoadImage(Path, Dashboard);
     XK_SERIAL("load %s: %#lx\n", Path, status);
     return status;
@@ -565,45 +575,6 @@ struct LAUNCH_DATA_PAGE {
 };
 static_assert(sizeof(LAUNCH_DATA_PAGE) == 0x1000);
 
-// §1: bit 0 the clock was never set (CMOS signature, see NtSetSystemTime) or is outside [2001, 2101);
-// bits 1/2 the user settings are unreadable or lack a language (+0x08) / time zone (+0x30).
-static ULONG XepCheckFirstBoot() {
-    ULONG reason = 0;
-    if (HalpCmosSignatureValid()) {
-        LARGE_INTEGER now;
-        KeQuerySystemTime(&now);
-        if (now.QuadPart < 0x1C07385C89DC000LL /* 2001-01-01 */ || now.QuadPart >= 0x2309034F02AC000LL /* 2101-01-01 */)
-            reason = 1;
-    } else {
-        reason = 1;
-    }
-    UCHAR settings[0x60];
-    ULONG type, length;
-    if (!NT_SUCCESS(ExQueryNonVolatileSetting(0xFF, &type, settings, sizeof(settings), &length)))
-        return reason | 6;
-    if (!*(ULONG *)(settings + 0x30))
-        reason |= 4;
-    if (!settings[0x08])
-        reason |= 2;
-    return reason;
-}
-
-// The OXOS File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads: true then. False when the
-// network card cannot be used.
-static bool XepServeFileManager() {
-    char path[260];
-    for (NTSTATUS last = STATUS_SUCCESS; UploadServe(last, path, sizeof(path));) {
-        last = XeLoadImage(path, FALSE);
-        if (NT_SUCCESS(last)) {
-            UploadStop();
-            XeTitleLaunched = 4;
-            return true;
-        }
-    }
-    XK_SERIAL("filemanager: no network card\n");
-    return false;
-}
-
 static void XepLaunchDashboard() {
     for (const char *path : XepDashboards) {
         if (NT_SUCCESS(XeLoadImage(path, TRUE)))
@@ -619,7 +590,7 @@ static void XepLaunchDashboard() {
         // The error's screen until X is pressed, then the File Manager (spec/oxos_internal/32 §1); the fatal
         // error without a network card.
         XkNoDashboardError(code);
-        if (XepServeFileManager())
+        if (XeServeFileManager())
             return;
         IdexFatalError(code);
     }
@@ -677,7 +648,7 @@ static bool XepRedirectLaunch(PCSZ Path) {
     constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
     ULONG got;
     NTSTATUS status;
-    char *text = XepReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE,
+    char *text = XeReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE,
                                  'rLeX', &got, &status);
     if (!text)
         return false;
@@ -745,7 +716,7 @@ static void XepLaunchTitle(ULONG Reason) {
         // B. A title delivered by netboot (titles/nettitle.cpp), else the disc, else the dashboard. The netbooted title
         // runs whatever the dashboard would be asked to do (a console without a clock backup always has a reason:
         // the clock is not set).
-        if (XeLaunchNetbootTitle()) {
+        if (MmBootPagesPresent() && XeLaunchNetbootTitle()) {
             XeTitleLaunched = 1;
             return;
         }
@@ -788,6 +759,51 @@ static void XepPrepareToEnterTitle() {
     MmFreeContiguousMemory(old);
 }
 
+// --- The cold boot's choice (spec/stock/03 §4): the pre-launch checks, the SMC boot flags, X for the File Manager and
+// B for safe mode. Boot-only (spec/oxos_internal/18 §2): a quick reboot just launches.
+
+#pragma code_seg(".xkb")
+#pragma const_seg(".xka$y")
+
+// §1: bit 0 the clock was never set (CMOS signature, see NtSetSystemTime) or is outside [2001, 2101);
+// bits 1/2 the user settings are unreadable or lack a language (+0x08) / time zone (+0x30).
+static ULONG XepCheckFirstBoot() {
+    ULONG reason = 0;
+    if (HalpCmosSignatureValid()) {
+        LARGE_INTEGER now;
+        KeQuerySystemTime(&now);
+        if (now.QuadPart < 0x1C07385C89DC000LL /* 2001-01-01 */ || now.QuadPart >= 0x2309034F02AC000LL /* 2101-01-01 */)
+            reason = 1;
+    } else {
+        reason = 1;
+    }
+    UCHAR settings[0x60];
+    ULONG type, length;
+    if (!NT_SUCCESS(ExQueryNonVolatileSetting(0xFF, &type, settings, sizeof(settings), &length)))
+        return reason | 6;
+    if (!*(ULONG *)(settings + 0x30))
+        reason |= 4;
+    if (!settings[0x08])
+        reason |= 2;
+    return reason;
+}
+
+// The OXOS File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads: true then. False when the
+// network card cannot be used.
+bool XeServeFileManager() {
+    char path[260];
+    for (NTSTATUS last = STATUS_SUCCESS; UploadServe(last, path, sizeof(path));) {
+        last = XeLoadImage(path, FALSE);
+        if (NT_SUCCESS(last)) {
+            UploadStop();
+            XeTitleLaunched = 4;
+            return true;
+        }
+    }
+    XK_SERIAL("filemanager: no network card\n");
+    return false;
+}
+
 // Boot flag 0x40 (the tray was opened during boot, spec/stock/05 §3): wait while the tray is closing or settling, then
 // the disc if one is in, otherwise the dashboard.
 static void XepWaitForTray() {
@@ -818,12 +834,19 @@ static void XepWaitForTray() {
 // without the press, or when the network card cannot be used (the title is then chosen as usual).
 static bool XepRunFileManager() {
     HalpWaitForSplash();
-    return GamepadXPressed && XepServeFileManager();
+    return GamepadXPressed && XeServeFileManager();
 }
 
-// spec/stock/03 §4: cold boot runs the pre-launch checks and honours the SMC boot flags; a quick reboot just launches.
-static void XepChooseTitle() {
-    if (KiQuickRebootFlag || (HalpBootFlags & 4) || (XeConsoleGameRegion & 0x80000000))
+void XeColdBootLaunch() {
+    if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
+        IdexFatalError(21);
+    IdexDiskCountPowerCycle();
+    if (XepRunFileManager())
+        return;
+    // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).
+    XkExtensionsSafeMode = GamepadBPressed != 0;
+    XkExtensionsLoad();
+    if ((HalpBootFlags & 4) || (XeConsoleGameRegion & 0x80000000))
         return XepLaunchTitle(0);
     XeLaunchReason = XepCheckFirstBoot();
     if (XeLaunchReason)
@@ -844,6 +867,9 @@ static void XepChooseTitle() {
     XepLaunchTitle(0);
 }
 
+#pragma code_seg()
+#pragma const_seg()
+
 static void NTAPI XepTitleThread(PVOID, PVOID) {
 #if XK_BOOT_SELFTEST
     while (!KiQuickRebootFlag && !KiTestDvdDone) {
@@ -853,13 +879,13 @@ static void NTAPI XepTitleThread(PVOID, PVOID) {
     }
 #endif
     VdRestoreMounts();
-    if (!KiQuickRebootFlag) {
-        if (HalpBootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
-            IdexFatalError(21);
-        IdexDiskCountPowerCycle();
+    if (KiQuickRebootFlag) {
+        XkExtensionsLoad();
+        XepLaunchTitle(0);
+    } else {
+        XeColdBootLaunch();
     }
-    if (KiQuickRebootFlag || !XepRunFileManager())
-        XepChooseTitle();
+    XkExtensionsTitleLoaded();
     HDDFSRememberTitleFolder();
     XepPrepareToEnterTitle();
     HalpSetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
