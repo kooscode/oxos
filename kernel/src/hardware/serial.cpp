@@ -5,6 +5,8 @@
 #include <xk/serial.h>
 #include <xk/runtime.h>
 
+namespace xk::hardware {
+
 #if XK_DEBUG_SERIAL
 #define va_start(v, l) __builtin_va_start(v, l)
 #define va_end(v) __builtin_va_end(v)
@@ -14,30 +16,30 @@ constexpr USHORT UART_THR = COM1, UART_DLL = COM1, UART_IER = COM1 + 1, UART_DLM
                  UART_LCR = COM1 + 3, UART_MCR = COM1 + 4, UART_LSR = COM1 + 5;
 constexpr ULONG SERIAL_TIMEOUT = 200000; // LSR polls (about 1 us each on the LPC bus) before giving up on a byte
 
-volatile BOOLEAN HalpSerialPresent; // a UART answered at set-up and has not timed out since
+volatile BOOLEAN SerialPresent; // a UART answered at set-up and has not timed out since
 
-static void HalpSioWrite(UCHAR Register, UCHAR Value) {
+static void WriteSio(UCHAR Register, UCHAR Value) {
     outb(SIO_INDEX, Register);
     outb(SIO_DATA, Value);
 }
 
-static UCHAR HalpSioRead(UCHAR Register) {
+static UCHAR ReadSio(UCHAR Register) {
     outb(SIO_INDEX, Register);
     return inb(SIO_DATA);
 }
 
-void HalpSerialInit() {
-    HalpSerialPresent = FALSE;
+void InitSerial() {
+    SerialPresent = FALSE;
     outb(SIO_INDEX, 0x55); // enter configuration mode
-    if (HalpSioRead(0x26) != SIO_INDEX) {
+    if (ReadSio(0x26) != SIO_INDEX) {
         outb(SIO_INDEX, 0xAA);
         return;
     }
-    HalpSioWrite(0x07, 4); // logical device: serial port 1
-    HalpSioWrite(0x60, COM1 >> 8);
-    HalpSioWrite(0x61, COM1 & 0xFF);
-    HalpSioWrite(0x70, 4);
-    HalpSioWrite(0x30, 1); // activate
+    WriteSio(0x07, 4); // logical device: serial port 1
+    WriteSio(0x60, COM1 >> 8);
+    WriteSio(0x61, COM1 & 0xFF);
+    WriteSio(0x70, 4);
+    WriteSio(0x30, 1);     // activate
     outb(SIO_INDEX, 0xAA); // leave configuration mode
 
     outb(UART_LCR, 0x80); // divisor latch: 115200 baud
@@ -47,36 +49,36 @@ void HalpSerialInit() {
     outb(UART_FCR, 0x07);
     outb(UART_MCR, 0x03);
     outb(UART_IER, 0);
-    HalpSerialPresent = inb(UART_LSR) != 0xFF;
+    SerialPresent = inb(UART_LSR) != 0xFF;
 }
 
-static bool HalpSerialPut(UCHAR c) {
+static bool PutSerialByte(UCHAR c) {
     for (ULONG i = 0; i < SERIAL_TIMEOUT; i++) {
         if (inb(UART_LSR) & 0x20) {
             outb(UART_THR, c);
             return true;
         }
     }
-    HalpSerialPresent = FALSE; // stuck or removed: stop rather than slow every line down
+    SerialPresent = FALSE; // stuck or removed: stop rather than slow every line down
     return false;
 }
 
-void HalpSerialWrite(const char *Text, ULONG Length) {
-    if (!HalpSerialPresent)
+void WriteSerial(const char *Text, ULONG Length) {
+    if (!SerialPresent)
         return;
     ULONG flags = save_flags_cli();
     for (ULONG i = 0; i < Length; i++) {
-        if (Text[i] == '\n' && !HalpSerialPut('\r'))
+        if (Text[i] == '\n' && !PutSerialByte('\r'))
             break;
-        if (!HalpSerialPut((UCHAR)Text[i]))
+        if (!PutSerialByte((UCHAR)Text[i]))
             break;
     }
     restore_flags(flags);
 }
 
-void XkSerialPrint(const char *Format, ...) {
-    XkBootMark(Format);
-    if (!HalpSerialPresent)
+void SerialPrint(const char *Format, ...) {
+    core::BootMark(Format);
+    if (!SerialPresent)
         return;
     char line[256];
     va_list ap;
@@ -84,7 +86,9 @@ void XkSerialPrint(const char *Format, ...) {
     int n = RtlVsnprintf(line, sizeof(line), Format, ap);
     va_end(ap);
     XK_MARK("mark: log line formatted");
-    HalpSerialWrite(line, n < 0 || n >= (int)sizeof(line) ? sizeof(line) - 1 : (ULONG)n);
+    WriteSerial(line, n < 0 || n >= (int)sizeof(line) ? sizeof(line) - 1 : (ULONG)n);
     XK_MARK("mark: log line written");
 }
 #endif
+
+} // namespace xk::hardware

@@ -1,9 +1,10 @@
 # 23 — Title-start call for game trainers
 
-OXOS addition, implemented 2026-10-31. Code: `kernel/include/xk/title_call.h` (`XeCallTitleEntry`), used by
-`kernel/src/titles/loader.cpp` (`XepTitleThread`). Guards: unit tests `tests/unit/test_trainer.cpp` (the bytes, the
-dashboard's patch round trip, page 0) and the link-time check `tools/check_kernel_layout.py` (check 3: the image). Background: spec/stock/03 §6 (the stock kernel starts the title with
-`call [0x00010128]`), spec/oxos_internal/18 §3 (no boot-only page is freed below 0x8003B000).
+OXOS addition, implemented 2026-10-31. Code: `kernel/include/xk/title_call.h` (`titles::CallTitleEntry`), used by
+`kernel/src/titles/loader.cpp` (`titles::TitleThread`). Guards: unit tests `tests/unit/test_trainer.cpp` (the bytes, the
+dashboard's patch round trip, page 0) and the link-time check `tools/check_kernel_layout.py` (check 3: the image).
+Background: spec/stock/03 §6 (the stock kernel starts the title with `call [0x00010128]`), spec/oxos_internal/18 §3 (no
+boot-only page is freed below 0x8003B000).
 
 The kernel starts every title with exactly the 6-byte instruction **`call [0x00010128]`** (`FF 15 28 01 01 00`), the
 XBE entry point that the loader decoded into the image header. There is one copy of it in the kernel image. It lies
@@ -36,8 +37,8 @@ The hook would otherwise outlive the game: a quick reboot re-enters the same ker
 flash), so the patched call stays for every later title until XBMC runs again. A cold boot always starts clean.
 
 ## 2. What OXOS needs for it
-- **The call instruction.** It is written as inline assembly (`XeCallTitleEntry`), so the compiler can't turn it into
-  `mov eax, [0x10128]; call eax`. Registers eax/ecx/edx are clobbered; the title returns only to
+- **The call instruction.** It is written as inline assembly (`titles::CallTitleEntry`), so the compiler can't turn it
+  into `mov eax, [0x10128]; call eax`. Registers eax/ecx/edx are clobbered; the title returns only to
   `PsTerminateSystemThread`.
 - **Exactly one match.** Dashboards take the first match. The build checks that the image has exactly one
   `FF 15 28 01 01 00` below 0x8003AF90, outside .xka/.xkb, and no `FF 15 10 00 00 80` or `FF 15 0C 00 00 80`.
@@ -45,9 +46,9 @@ flash), so the patched call stays for every later title until XBMC runs again. A
 - **The page stays mapped.** It is kernel .text (read-only; the dashboard clears CR0.WP to write it) and is never
   freed (spec 18 §3: nothing below 0x8003B000 is freed).
 - **Page 0 is free for the dashboard.** Physical page 0 is reserved, mapped read-write at 0x80000000 and kept
-  across quick reboots (MmInitSystem). OXOS writes nothing to physical 0xC, 0x10 or 0x14.
-- **Persisted contiguous memory is re-adopted by the quick reboot** (MmPersistContiguousMemory, MmInitSystem: PTE
-  bit 10).
+  across quick reboots (memory::InitMemoryManager). OXOS writes nothing to physical 0xC, 0x10 or 0x14.
+- **Persisted contiguous memory is re-adopted by the quick reboot** (MmPersistContiguousMemory,
+  memory::InitMemoryManager: PTE bit 10).
 
 ## 3. Other kernel patches by XBMC4Gamers
 - At XBE 0x116F00 it searches 0x80011000-0x80023FFF for the 25-byte start of a stock-kernel function (a setting

@@ -5,6 +5,8 @@
 #include <xk/memory.h>
 #include <xk/runtime.h>
 
+namespace xk::crypto {
+
 // --- Multiprecision helpers
 
 static int BnCompare(const ULONG *a, const ULONG *b, ULONG n) {
@@ -158,16 +160,16 @@ struct BSAFE_KEY {
 };
 constexpr ULONG RSA1 = 0x31415352, RSA2 = 0x32415352;
 
-static ULONG XcpKeyWords(const BSAFE_KEY *k) {
+static ULONG KeyWords(const BSAFE_KEY *k) {
     ULONG q = k->BitLength >> 6; // 64-bit units, plus one (or two when the length is not a multiple of 64)
     return ((k->BitLength >> 1) & 0x1F ? q + 2 : q + 1) * 2;
 }
 
-static ULONG NTAPI XcpPKEncPublic(PUCHAR pbPubKey, PUCHAR pbInput, PUCHAR pbOutput) {
+static ULONG NTAPI PKEncPublic(PUCHAR pbPubKey, PUCHAR pbInput, PUCHAR pbOutput) {
     auto k = (const BSAFE_KEY *)pbPubKey;
     if (k->Magic != RSA1)
         return 0;
-    ULONG n = XcpKeyWords(k);
+    ULONG n = KeyWords(k);
     if (k->PublicExponent == 1) {
         RtlCopyMemory(pbOutput, pbInput, n * 4);
         return 1;
@@ -184,11 +186,11 @@ static ULONG NTAPI XcpPKEncPublic(PUCHAR pbPubKey, PUCHAR pbInput, PUCHAR pbOutp
     return ok;
 }
 
-static ULONG NTAPI XcpPKDecPrivate(PUCHAR pbPrvKey, PUCHAR pbInput, PUCHAR pbOutput) {
+static ULONG NTAPI PKDecPrivate(PUCHAR pbPrvKey, PUCHAR pbInput, PUCHAR pbOutput) {
     auto k = (const BSAFE_KEY *)pbPrvKey;
     if (k->Magic != RSA2)
         return 0;
-    ULONG n = XcpKeyWords(k);
+    ULONG n = KeyWords(k);
     if (k->PublicExponent == 1) {
         RtlCopyMemory(pbOutput, pbInput, n * 4);
         return 1;
@@ -199,12 +201,12 @@ static ULONG NTAPI XcpPKDecPrivate(PUCHAR pbPrvKey, PUCHAR pbInput, PUCHAR pbOut
                     (const ULONG *)k->Modulus, n);
 }
 
-static ULONG NTAPI XcpPKGetKeyLen(PUCHAR pbPubKey) {
+static ULONG NTAPI PKGetKeyLen(PUCHAR pbPubKey) {
     return ((const BSAFE_KEY *)pbPubKey)->KeyLength;
 }
 
 // The decrypted block (little-endian) is: digest reversed | [DigestInfo] | 00 | FF.. | 01 | 00.
-static BOOLEAN NTAPI XcpVerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, PUCHAR pbDigest) {
+static BOOLEAN NTAPI VerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, PUCHAR pbDigest) {
     auto k = (const BSAFE_KEY *)pbPubKey;
     if (k->Magic != RSA1)
         return FALSE;
@@ -214,7 +216,7 @@ static BOOLEAN NTAPI XcpVerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, PUCH
     PUCHAR in = buf + k->KeyLength + 8;
     RtlZeroMemory(in, k->KeyLength);
     RtlCopyMemory(in, pbSig, (k->BitLength + 7) / 8);
-    BOOLEAN ok = (BOOLEAN)XcpPKEncPublic(pbPubKey, in, buf);
+    BOOLEAN ok = (BOOLEAN)PKEncPublic(pbPubKey, in, buf);
     for (ULONG i = 0; ok && i < 20; i++)
         ok = buf[i] == pbDigest[19 - i];
     ULONG pos = 20;
@@ -230,7 +232,7 @@ static BOOLEAN NTAPI XcpVerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, PUCH
     return ok;
 }
 
-static ULONG NTAPI XcpModExp(PULONG pA, PULONG pB, PULONG pC, PULONG pD, ULONG dwN) {
+static ULONG NTAPI ModExp(PULONG pA, PULONG pB, PULONG pC, PULONG pD, ULONG dwN) {
     return BnModExp(pA, pB, pC, pD, dwN);
 }
 
@@ -332,14 +334,14 @@ static void DesBlock(const DES_TABLE *t, UCHAR *out, const UCHAR *in, bool encry
         out[i] = (UCHAR)v;
 }
 
-static void NTAPI XcpDESKeyParity(PUCHAR pbKey, ULONG dwKeyLength) {
+static void NTAPI DESKeyParity(PUCHAR pbKey, ULONG dwKeyLength) {
     for (ULONG i = 0; i < dwKeyLength; i++) {
         if (!(__builtin_popcount(pbKey[i]) & 1))
             pbKey[i] ^= 1;
     }
 }
 
-static void NTAPI XcpKeyTable(ULONG dwCipher, PUCHAR pbKeyTable, PUCHAR pbKey) {
+static void NTAPI KeyTable(ULONG dwCipher, PUCHAR pbKeyTable, PUCHAR pbKey) {
     auto t = (DES_TABLE *)pbKeyTable;
     DesKeySchedule(&t[0], pbKey);
     if (dwCipher) { // triple DES: three keys
@@ -349,7 +351,7 @@ static void NTAPI XcpKeyTable(ULONG dwCipher, PUCHAR pbKeyTable, PUCHAR pbKey) {
 }
 
 // dwOp: 1 encrypt, 0 decrypt. 3DES is encrypt-decrypt-encrypt.
-static void NTAPI XcpBlockCrypt(ULONG dwCipher, PUCHAR pbOutput, PUCHAR pbInput, PUCHAR pbKeyTable, ULONG dwOp) {
+static void NTAPI BlockCrypt(ULONG dwCipher, PUCHAR pbOutput, PUCHAR pbInput, PUCHAR pbKeyTable, ULONG dwOp) {
     auto t = (const DES_TABLE *)pbKeyTable;
     if (!dwCipher) {
         DesBlock(&t[0], pbOutput, pbInput, dwOp != 0);
@@ -367,19 +369,19 @@ static void NTAPI XcpBlockCrypt(ULONG dwCipher, PUCHAR pbOutput, PUCHAR pbInput,
     }
 }
 
-static void NTAPI XcpBlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput,
-                                   PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback) {
+static void NTAPI BlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput,
+                                PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback) {
     for (ULONG off = 0; off + 8 <= dwInputLength; off += 8) {
         UCHAR block[8];
         if (dwOp) {
             for (int i = 0; i < 8; i++)
                 block[i] = pbInput[off + i] ^ pbFeedback[i];
-            XcpBlockCrypt(dwCipher, pbOutput + off, block, pbKeyTable, 1);
+            BlockCrypt(dwCipher, pbOutput + off, block, pbKeyTable, 1);
             RtlCopyMemory(pbFeedback, pbOutput + off, 8);
         } else {
             UCHAR saved[8];
             RtlCopyMemory(saved, pbInput + off, 8);
-            XcpBlockCrypt(dwCipher, block, pbInput + off, pbKeyTable, 0);
+            BlockCrypt(dwCipher, block, pbInput + off, pbKeyTable, 0);
             for (int i = 0; i < 8; i++)
                 pbOutput[off + i] = block[i] ^ pbFeedback[i];
             RtlCopyMemory(pbFeedback, saved, 8);
@@ -387,84 +389,84 @@ static void NTAPI XcpBlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR p
     }
 }
 
-static ULONG NTAPI XcpCryptService(ULONG, PVOID) {
+static ULONG NTAPI CryptService(ULONG, PVOID) {
     return 0;
 }
 
 // --- The crypto vector: exported Xc* functions call through it; XcUpdateCrypto replaces entries.
 
-static CRYPTO_VECTOR XcpVector = {XcpSHAInit,      XcpSHAUpdate,        XcpSHAFinal,       XcpRC4Key,
-                                  XcpRC4Crypt,     XcpHMAC,             XcpPKEncPublic,    XcpPKDecPrivate,
-                                  XcpPKGetKeyLen,  XcpVerifyPKCS1Signature, XcpModExp,     XcpDESKeyParity,
-                                  XcpKeyTable,     XcpBlockCrypt,       XcpBlockCryptCBC,  XcpCryptService};
+static CRYPTO_VECTOR CryptoVector = {InitSHA,      UpdateSHA,            FinishSHA,     InitRC4Key,
+                                     CryptRC4,     ComputeHMAC,          PKEncPublic,   PKDecPrivate,
+                                     PKGetKeyLen,  VerifyPKCS1Signature, ModExp,        DESKeyParity,
+                                     KeyTable,     BlockCrypt,           BlockCryptCBC, CryptService};
 
 XBAPI void NTAPI XcSHAInit(PUCHAR c) {
-    XcpVector.SHAInit(c);
+    CryptoVector.SHAInit(c);
 }
 
 XBAPI void NTAPI XcSHAUpdate(PUCHAR c, const UCHAR *p, ULONG n) {
-    XcpVector.SHAUpdate(c, p, n);
+    CryptoVector.SHAUpdate(c, p, n);
 }
 
 XBAPI void NTAPI XcSHAFinal(PUCHAR c, PUCHAR d) {
-    XcpVector.SHAFinal(c, d);
+    CryptoVector.SHAFinal(c, d);
 }
 
 XBAPI void NTAPI XcRC4Key(PUCHAR s, ULONG n, const UCHAR *k) {
-    XcpVector.RC4Key(s, n, k);
+    CryptoVector.RC4Key(s, n, k);
 }
 
 XBAPI void NTAPI XcRC4Crypt(PUCHAR s, ULONG n, PUCHAR p) {
-    XcpVector.RC4Crypt(s, n, p);
+    CryptoVector.RC4Crypt(s, n, p);
 }
 
 XBAPI void NTAPI XcHMAC(const UCHAR *k, ULONG kl, const UCHAR *d1, ULONG l1, const UCHAR *d2, ULONG l2, PUCHAR out) {
-    XcpVector.HMAC(k, kl, d1, l1, d2, l2, out);
+    CryptoVector.HMAC(k, kl, d1, l1, d2, l2, out);
 }
 
 XBAPI ULONG NTAPI XcPKEncPublic(PUCHAR k, PUCHAR in, PUCHAR out) {
-    return XcpVector.PKEncPublic(k, in, out);
+    return CryptoVector.PKEncPublic(k, in, out);
 }
 
 XBAPI ULONG NTAPI XcPKDecPrivate(PUCHAR k, PUCHAR in, PUCHAR out) {
-    return XcpVector.PKDecPrivate(k, in, out);
+    return CryptoVector.PKDecPrivate(k, in, out);
 }
 
 XBAPI ULONG NTAPI XcPKGetKeyLen(PUCHAR k) {
-    return XcpVector.PKGetKeyLen(k);
+    return CryptoVector.PKGetKeyLen(k);
 }
 
 XBAPI BOOLEAN NTAPI XcVerifyPKCS1Signature(PUCHAR s, PUCHAR k, PUCHAR d) {
-    return XcpVector.VerifyPKCS1Signature(s, k, d);
+    return CryptoVector.VerifyPKCS1Signature(s, k, d);
 }
 
 XBAPI ULONG NTAPI XcModExp(PULONG a, PULONG b, PULONG c, PULONG d, ULONG n) {
-    return XcpVector.ModExp(a, b, c, d, n);
+    return CryptoVector.ModExp(a, b, c, d, n);
 }
 
 XBAPI void NTAPI XcDESKeyParity(PUCHAR k, ULONG n) {
-    XcpVector.DESKeyParity(k, n);
+    CryptoVector.DESKeyParity(k, n);
 }
 
 XBAPI void NTAPI XcKeyTable(ULONG c, PUCHAR t, PUCHAR k) {
-    XcpVector.KeyTable(c, t, k);
+    CryptoVector.KeyTable(c, t, k);
 }
 
 XBAPI void NTAPI XcBlockCrypt(ULONG c, PUCHAR o, PUCHAR i, PUCHAR t, ULONG op) {
-    XcpVector.BlockCrypt(c, o, i, t, op);
+    CryptoVector.BlockCrypt(c, o, i, t, op);
 }
 
 XBAPI void NTAPI XcBlockCryptCBC(ULONG c, ULONG n, PUCHAR o, PUCHAR i, PUCHAR t, ULONG op, PUCHAR fb) {
-    XcpVector.BlockCryptCBC(c, n, o, i, t, op, fb);
+    CryptoVector.BlockCryptCBC(c, n, o, i, t, op, fb);
 }
 
 XBAPI ULONG NTAPI XcCryptService(ULONG op, PVOID args) {
-    return XcpVector.CryptService(op, args);
+    return CryptoVector.CryptService(op, args);
 }
 
 // Replace the non-NULL entries; the reference also returns a 64-byte "ROM hash" (not reproduced: zeros).
 XBAPI void NTAPI XcUpdateCrypto(CRYPTO_VECTOR *pNewVector, PUCHAR pROMHash) {
-    auto dst = (PVOID *)&XcpVector;
+    auto dst = (PVOID *)&CryptoVector;
     auto src = (PVOID *)pNewVector;
     for (int i = 0; pNewVector && i < 16; i++) {
         if (src[i])
@@ -473,3 +475,5 @@ XBAPI void NTAPI XcUpdateCrypto(CRYPTO_VECTOR *pNewVector, PUCHAR pROMHash) {
     if (pROMHash)
         RtlZeroMemory(pROMHash, 64);
 }
+
+} // namespace xk::crypto

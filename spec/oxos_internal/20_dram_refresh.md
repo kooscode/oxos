@@ -28,7 +28,7 @@ check runs at three places, each cheap and harmless when refresh is on:
    or 0.
 3. KiSystemStartup, the kernel's first code, for any boot loader (another modchip BIOS, an older OXOS image, a
    quick reboot). The value found is kept.
-A debug build logs each one that acted ("*** refresh: ..."), after the memory manager starts (KiReportRefresh).
+A debug build logs each one that acted ("*** refresh: ..."), after the memory manager starts (core::ReportRefresh).
 
 ## 3. Result on the 1.4 console
 Warm band (A 0x5C-0x5E), cold boots 8 s apart: before, 8 bad of 40; with the check, 0 bad of 56. The start.S check

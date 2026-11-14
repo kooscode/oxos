@@ -24,25 +24,29 @@ struct XE_PATCH_COUNTS {
     ULONG Errors;   // lines that could not be read (in any section) or did not fit in the output
 };
 
+namespace xk::titles {
+
 // Reads the patch file text and writes the records of every section that names TitleId, without a version or with
 // Version. Returns the number of bytes of records written.
-ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
-                   XE_PATCH_COUNTS *Counts);
+ULONG ParsePatchFile(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
+                     XE_PATCH_COUNTS *Counts);
 
-inline ULONG XePatchRecordSize(const XE_PATCH_RECORD *r) {
+inline ULONG PatchRecordSize(const XE_PATCH_RECORD *r) {
     return (sizeof(XE_PATCH_RECORD) + r->OriginalLength + r->Length + 3) & ~3u;
 }
 
-inline const UCHAR *XePatchOriginal(const XE_PATCH_RECORD *r) {
+inline const UCHAR *PatchOriginal(const XE_PATCH_RECORD *r) {
     return (const UCHAR *)(r + 1);
 }
 
-inline const UCHAR *XePatchData(const XE_PATCH_RECORD *r) {
+inline const UCHAR *PatchData(const XE_PATCH_RECORD *r) {
     return (const UCHAR *)(r + 1) + r->OriginalLength;
 }
 
 // The bytes a patch touches at Address: it writes Length bytes there, and compares OriginalLength bytes there too
 // unless they are checked at Check.
-inline ULONG XePatchSpan(const XE_PATCH_RECORD *r) {
+inline ULONG PatchSpan(const XE_PATCH_RECORD *r) {
     return !r->Check && r->OriginalLength > r->Length ? r->OriginalLength : r->Length;
 }
+
+} // namespace xk::titles

@@ -5,6 +5,8 @@
 #include <xk/graphics.h>
 #include <xk/serial.h>
 
+namespace xk::hardware {
+
 namespace {
 
 // The GPU instance memory window; in it, the default context image at 0x18000 (inside the reserved 64 KB) and a
@@ -37,7 +39,7 @@ void RdiWrite(ULONG select, ULONG address, ULONG value) {
 } // namespace
 
 // Cold boot, after the GPU reset (hardware/chipset.cpp): the engine's set-up, then the default context loaded into it.
-void HalpInitGraphicsEngine() {
+void InitGraphicsEngine() {
     // All engines on, as the stock graphics device does first (spec/stock/22 §7 step 4). At a cold boot PFIFO and
     // PGRAPH are off (PMC 0x200 reads 0x01110000 on the 1.4 console); reading a switched-off block can hang.
     [[maybe_unused]] ULONG pmc = Nv(0x200);
@@ -64,7 +66,7 @@ void HalpInitGraphicsEngine() {
     Nv(0x400780) = CTX_TABLE;
     bool idle = WaitIdle();
     // 2. The engine's copies of the frame-buffer tiles, Z compression and memory configuration (registers and RDI
-    //    table 0xEA). HalpQuiesceBusMasters (hardware/chipset.cpp) has just cleared the tiles and Z compression.
+    //    table 0xEA). QuiesceBusMasters (hardware/chipset.cpp) has just cleared the tiles and Z compression.
     for (ULONG i = 0; i < 8; i++) {
         ULONG tile = Nv(0x100240 + 16 * i), limit = Nv(0x100244 + 16 * i), pitch = Nv(0x100248 + 16 * i);
         Nv(0x400900 + 16 * i) = tile;
@@ -115,3 +117,5 @@ void HalpInitGraphicsEngine() {
     XK_SERIAL("gpu: default graphics context loaded%s (PMC %08lx -> %08lx, 0x40005c %08lx -> %08lx)\n",
               idle ? "" : " (engine not idle!)", pmc, Nv(0x200), junk, Nv(0x40005C));
 }
+
+} // namespace xk::hardware

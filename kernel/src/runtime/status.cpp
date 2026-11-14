@@ -2,12 +2,14 @@
 #include <xk/runtime.h>
 #include <xk/types.h>
 
+namespace xk::runtime {
+
 struct RTL_STATUS_MAP {
     ULONG Status;
     ULONG Error;
 };
 
-static const RTL_STATUS_MAP RtlpStatusTable[] = {
+static const RTL_STATUS_MAP StatusToDosErrorTable[] = {
     {0x00000000, 0},    // STATUS_SUCCESS
     {0x00000103, 997},  // STATUS_PENDING -> ERROR_IO_PENDING
     {0x00000105, 234},  // STATUS_MORE_ENTRIES -> ERROR_MORE_DATA
@@ -72,7 +74,7 @@ XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status) {
         return s & 0xFFFF;
     if ((s >> 28) == 0xD)
         s &= ~0x30000000u;
-    for (const auto &m : RtlpStatusTable) {
+    for (const auto &m : StatusToDosErrorTable) {
         if (m.Status == s)
             return m.Error;
     }
@@ -80,3 +82,5 @@ XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status) {
         return s & 0xFFFF;
     return 317; // ERROR_MR_MID_NOT_FOUND
 }
+
+} // namespace xk::runtime

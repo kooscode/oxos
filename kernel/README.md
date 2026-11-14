@@ -1,11 +1,11 @@
 # Open Xbox kernel
 
-A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with
-retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code,
-machine code, disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables are the one
-data taken from Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6:
-tested with all three video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its
-own X-codes: `MCPX16=1`). It builds on Linux with clang + lld-link.
+A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with retail 1.0.4627.1.
+It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code, machine code,
+disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables are the one data taken from
+Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6: tested with
+all three video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its own X-codes:
+`MCPX16=1`). It builds on Linux with clang + lld-link.
 
 ## Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
@@ -41,10 +41,11 @@ Optional extras:
   (`make nxdk` fetches one into `../third_party/nxdk`).
 - **256 KB flash chips:** `make bios_256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the
   1 MB image is the same image.
-- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=../build/kernel/release_1_6 SELFTEST=0`). The image
-  then carries OXOS's own 1.6 X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings read
-  from the EEPROM) instead of Cromwell's, and the 2BL calibrates the memory pads from the EEPROM
-  ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md), [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
+- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=../build/kernel/release_1_6 SELFTEST=0`). The
+  image then carries OXOS's own 1.6 X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings
+  read from the EEPROM) instead of Cromwell's, and the 2BL calibrates the memory pads from the EEPROM
+  ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md),
+  [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
 - **Your own boot splash:** `make bios SPLASH=my-logo.svg` turns an SVG into the animated vector splash (mark the
   parts to fade from and to with `data-oxos-phase="start"` / `"end"`; preview with `tools/vsplash`). The default is
   `splash/oxos_splash.svg`.
@@ -120,8 +121,8 @@ Design: [`../spec/oxos_internal/05_exfat_storage_spec.md`](../spec/oxos_internal
 **Disc images** of your own discs: XISO, full disc dumps and `.cci`, whole or split in two (`name.1.iso` +
 `name.2.iso`; on FATX split below 4 GB); names of 42 characters or fewer.
 1. Copy the image to the hard disk, e.g. `F:\titles\` (`/F/titles` on exFAT).
-2. Build the ISO launcher (`make iso_launcher`, output `../build/tools/iso_launcher/bin/default.xbe`) and put a copy next to
-   the image, or anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
+2. Build the ISO launcher (`make iso_launcher`, output `../build/tools/iso_launcher/bin/default.xbe`) and put a copy
+   next to the image, or anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
    [`../tools/oxos_isonator`](../tools/oxos_isonator) does this for you, one folder per game, with a launcher that
    carries the game's name, title ID and artwork.
 3. Start the launcher from the dashboard: it mounts the image as the console's disc and the title starts. The image
@@ -136,13 +137,13 @@ level: breakpoints, stepping, variables and the call stack, in your own [nxdk](h
 apps and in the kernel, in one session (step from your app into a kernel call and back). You need `gdb-multiarch`
 and GNU `objcopy` (binutils).
 
-**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel
-source and press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts
-xemu paused and runs to your breakpoint. For example, a breakpoint in `XepLoadImage` (`src/titles/loader.cpp`) stops on
-every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and `XeImageFileName`
-its path.
+**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and
+press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts xemu paused and
+runs to your breakpoint. For example, a breakpoint in `titles::LoadImageFile` (`src/titles/loader.cpp`) stops on every
+title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and `XeImageFileName` its path.
 
-![Kernel debugging in VS Code: stopped in XepLoadImage, with the loaded title's name in a watch](../docs/kernel_debugging.jpg)
+![Kernel debugging in VS Code: stopped in titles::LoadImageFile, with the loaded title's name in a
+watch](../docs/kernel_debugging.jpg)
 
 **An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
 1. Copy `../tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in
@@ -154,10 +155,10 @@ its path.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
 **From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with
-`gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`. For an
-nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then attach with
-`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf'
--ex 'target remote localhost:1234'`.
+`gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`.
+For an nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then attach with `gdb-multiarch
+path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf' -ex 'target
+remote localhost:1234'`.
 
 Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
 `CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to their Makefile, so that gdb shows function names (it cannot
@@ -183,9 +184,9 @@ Microsoft's 2BL and keys: do not distribute it.
 - **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and
   EEPROM key handling of [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs
   Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without any Microsoft key; without a boot ROM
-  (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back checks to their memory set-up
-  writes, which some consoles' GPU ignores (spec/oxos_internal/27). The hard disk unlocks with Cromwell's EEPROM key
-  states.
+  (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back
+  checks to their memory set-up writes, which some consoles' GPU ignores (spec/oxos_internal/27). The hard disk unlocks
+  with Cromwell's EEPROM key states.
 
 ## Layout
 | path | contents |
@@ -201,7 +202,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/bootscreen/` | the boot splash and jingle: boot-only code, freed before the first title starts (spec/oxos_internal/18) |
 | `src/storage/` | IDE channel, hard disk (28- and 48-bit addressing), its layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), DVD drive, virtual discs (disc images standing in for the DVD drive) |
 | `src/network/` | the network card polled (`nic.cpp`, its bring-up shared with the 2BL's netboot through `include/xk/nic.h`), IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`): boot-only, for the File Manager (spec/oxos_internal/31) |
-| `src/uploader/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`server.cpp`, `page.cpp`; boot-only, spec/oxos_internal/31) |
+| `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`server.cpp`, `page.cpp`; boot-only, spec/oxos_internal/31) |
 | `src/gamepad/` | the controllers read during the boot splash, for the X button (the File Manager): the USB controller polled (`usb_host.cpp`), hubs and pads (`pads.cpp`); boot-only, spec/oxos_internal/32 |
 | `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
@@ -215,22 +216,22 @@ Microsoft's 2BL and keys: do not distribute it.
 | `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
 
-Function and variable names keep the Xbox kernel's prefixes: the exports are the ABI titles link against, and the
-specs and the reference kernel use the same names. Where to find each prefix:
+Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, the ABI titles import (`Ke`, `Mm`,
+`Io`, `Ob`, `Rtl`, `Hal`, `Av`, `Xc`, `Xe`, `Nt`, `Ex`, ...). Everything else is in a namespace per folder:
 
-| prefix | folder | prefix | folder |
+| namespace | folder | namespace | folder |
 |---|---|---|---|
-| `Ke`, `Ki`, `Ps`, `Kd`, `Dbg` | `core/` | `Hal`, `Halp`, `Av` | `hardware/` |
-| `Mm`, `Mi` | `memory/` | `Idex`, `Vd` | `storage/` |
-| `Ob`, `Obp` | `objects/` | `FATX`, `EXFAT`, `HDDFS`, `Xdvdfs`, `Udf`, `Raw`, `Fsc` | `filesystems/` |
-| `Io`, `Iop` | `io/` | `Xc`, `Xcp` | `crypto/` |
-| `Rtl` | `runtime/` | `Xe`, `Xep` | `titles/` |
+| `xk::core` | `core/` | `xk::hardware` (and `xk::hardware::gpu`) | `hardware/` |
+| `xk::memory` | `memory/` | `xk::storage` | `storage/` |
+| `xk::objects` | `objects/` | `xk::filesystems` (names keep their format: `filesystems::FATXLookup`) | `filesystems/` |
+| `xk::io` | `io/` | `xk::crypto` | `crypto/` |
+| `xk::runtime` | `runtime/` | `xk::titles` | `titles/` |
+| `xk::bootscreen` (and `::jingle`, `::vsplash`) | `bootscreen/` | `xk::network` | `network/` |
+| `xk::gamepad` | `gamepad/` | `xk::webserver` | `webserver/` |
+| `xk::extensions` | `extensions/` | assembly only, C names | `arch/` |
 
-The boot screen's functions keep the HAL's prefix (`HalpStartSplash`, `HalpStartBootSound`, ...) and live in
-`bootscreen/`. Two prefixes name a kind of service rather than a subsystem and are spread over the folders: `Nt`
-(the system calls: files in `io/`, events, mutants, semaphores and timers in `objects/`, virtual memory in `memory/`,
-threads in `core/`) and `Ex` (the executive: pool in `memory/`, read/write locks and interlocked lists in
-`runtime/`, EEPROM settings in `hardware/`, objects in `objects/`).
+Names assembly uses keep their C names (`KiPcr`, `KiQuickRebootFlag`, the trap stubs, ...), and so does the call
+tracer (`titles/trace.cpp`) until it becomes `oxos_tracer.xos`.
 
 ## Milestones
 Specs are in `../spec/stock/` unless named otherwise (`oxos/NN` = `../spec/oxos_internal/NN`). ✅ xemu = checked by
@@ -280,7 +281,8 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
 `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
 
 ## Known deviations (tracked)
-- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
+- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1).
+  KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
 - Only 64 MB RAM is supported, like the 4627 kernel.
 - The disk's and DVD drive's start-up waits run at the caller's IRQL, not raised to the IDE interrupt's, so the boot
   splash shows while a hard disk spins up (`../spec/oxos_internal/00_boot_splash.md`).
@@ -292,8 +294,8 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
   size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
   a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters, and
   files of 4 GB or more, are not shown to titles.
-- No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0` acting
-  as an empty drive, where the reference stops with fatal error 10, 11 or 12.
+- No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0`
+  acting as an empty drive, where the reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
 - Video (milestone 20; `../spec/oxos_internal/02_display_modes.md`): the NV2A timing is OXOS's own (derived from each
   encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait

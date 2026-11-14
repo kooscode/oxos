@@ -9,21 +9,25 @@
 // serial log the address is the format string's; without it (release builds) the text is not needed, so each log
 // point has a one-byte mark instead, named in the map after the function that holds it (the strings would take
 // about 5 KB of resident memory, spec/oxos_internal/18_boot_memory.md).
-extern "C" void XkBootMark(const char *Format);
+namespace xk::core {
+void BootMark(const char *Format);
+} // namespace xk::core
 #define XK_MARK_ID() ([] { static const char XkMark = 0; return &XkMark; }())
 #if XK_DEBUG_SERIAL
 // A start-up mark that is never printed (hot paths: each disk transfer, each SMBus transaction).
-#define XK_MARK(Label) XkBootMark(Label)
+#define XK_MARK(Label) ::xk::core::BootMark(Label)
 #else
-#define XK_MARK(Label) XkBootMark(XK_MARK_ID())
+#define XK_MARK(Label) ::xk::core::BootMark(XK_MARK_ID())
 #endif
 
 #if XK_DEBUG_SERIAL
-void HalpSerialInit();
-void HalpSerialWrite(const char *Text, ULONG Length);
-void XkSerialPrint(const char *Format, ...);
-extern volatile BOOLEAN HalpSerialPresent;
-#define XK_SERIAL(...) XkSerialPrint(__VA_ARGS__)
+namespace xk::hardware {
+void InitSerial();
+void WriteSerial(const char *Text, ULONG Length);
+void SerialPrint(const char *Format, ...);
+extern volatile BOOLEAN SerialPresent;
+} // namespace xk::hardware
+#define XK_SERIAL(...) ::xk::hardware::SerialPrint(__VA_ARGS__)
 #else
-#define XK_SERIAL(Format, ...) XkBootMark(XK_MARK_ID())
+#define XK_SERIAL(Format, ...) ::xk::core::BootMark(XK_MARK_ID())
 #endif

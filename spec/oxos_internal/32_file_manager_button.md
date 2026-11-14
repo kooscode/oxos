@@ -1,8 +1,8 @@
 # 32. The X button: the OXOS File Manager (OXOS's own)
 
-Status: implemented 2026-11-08. Code: `kernel/src/gamepad/` (the USB controller and the pads), `kernel/src/bootscreen/splash.cpp`
-(when the pads are read), `kernel/src/titles/loader.cpp` (what happens then), `kernel/src/core/fatal.cpp` (the
-screen), `kernel/src/uploader/` (the File Manager, spec/oxos_internal/31).
+Status: implemented 2026-11-08. Code: `kernel/src/gamepad/` (the USB controller and the pads),
+`kernel/src/bootscreen/splash.cpp` (when the pads are read), `kernel/src/titles/loader.cpp` (what happens then),
+`kernel/src/core/fatal.cpp` (the screen), `kernel/src/webserver/` (the File Manager, spec/oxos_internal/31).
 
 X pressed on any controller while the boot splash and jingle run, or on the "No Dashboard Found" screen, opens
 the OXOS File Manager: a web page for uploading, organizing and launching files from a browser. X, not WHITE: the
@@ -11,24 +11,24 @@ Xbox Live dashboard already uses WHITE held at its start (2026-11-08).
 ## 1. When
 - Cold boot only, with an AV pack (the splash runs); a quick reboot never reads the pads.
 - X at any time from the start picture to the end of the jingle (about 4 s). The title thread waits for the
-  splash to end (`HalpWaitForSplash`) before it chooses a title, then:
+  splash to end (`bootscreen::WaitForSplash`) before it chooses a title, then:
   - X seen: the File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads
-    (`XeTitleLaunched` 4). Without a network card it cannot run: the title is chosen as usual.
+    (`titles::TitleLaunched` 4). Without a network card it cannot run: the title is chosen as usual.
   - Otherwise: the usual title (spec/stock/03 §4).
-- No dashboard on a cold boot (13–20): `XkNoDashboardError` shows the fatal error's screen (the dashboards tried and
-  "[ Press X to launch Web File Manager ]", spec/oxos_internal/29), with its LED sequence and error history, but
-  keeps the boot-only pages (`HalpStopSplash`, not `HalpEndSplash`) and the keys (a title launched from the File
-  Manager needs them). It reads the controllers (`GamepadWaitForX`: set up, read every 10 ms; with none found,
-  set up again every 3 s for one plugged in later) until X, then closes the screen, sets the LED green and runs the
-  File Manager. Without a network card: the fatal error (`IdexFatalError`). A quick reboot without a dashboard still
-  reboots cold.
+- No dashboard on a cold boot (13–20): `core::NoDashboardError` shows the fatal error's screen (the dashboards tried and
+  "[ Press X to launch Web File Manager ]", spec/oxos_internal/29), with its LED sequence and error history, but keeps
+  the boot-only pages (`bootscreen::StopSplash`, not `bootscreen::EndSplash`) and the keys (a title launched from the
+  File Manager needs them). It reads the controllers (`gamepad::WaitForXButton`: set up, read every 10 ms; with none
+  found, set up again every 3 s for one plugged in later) until X, then closes the screen, sets the LED green and runs
+  the File Manager. Without a network card: the fatal error (`core::ShowFatalError`). A quick reboot without a dashboard
+  still reboots cold.
 
 ## 2. In the splash thread
 No thread of its own: the splash thread mostly sleeps between frames.
-- After the fade-in, while the start picture stands still (0.5 s before the jingle): `GamepadWatchStart` finds and
-  sets up the pads (§3, §4). It blocks; a few hundred milliseconds with one controller.
-- Every sleep of the splash after that reads the pads about every 10 ms (`GamepadWatchPoll`), without waiting.
-- Before the splash signals its end: `GamepadWatchStop` (§3).
+- After the fade-in, while the start picture stands still (0.5 s before the jingle): `gamepad::StartWatchingControllers`
+  finds and sets up the pads (§3, §4). It blocks; a few hundred milliseconds with one controller.
+- Every sleep of the splash after that reads the pads about every 10 ms (`gamepad::PollControllers`), without waiting.
+- Before the splash signals its end: `gamepad::StopWatchingControllers` (§3).
 
 ## 3. The USB controller
 The first OHCI controller (USB 0, 0xFED00000: the four controller ports), polled, following OpenHCI 1.0a:
@@ -51,7 +51,7 @@ The first OHCI controller (USB 0, 0xFED00000: the four controller ports), polled
   Its state is asked for once at once (XID GET_REPORT: 0xA1, 1, 0x0100), for X already held; a pad without that
   request is read through its pipe only.
 - The report: 0, its length (20), the digital buttons, then the analog buttons A, B, X, Y, BLACK, WHITE, LT, RT.
-  X (byte 6) at 0x80 or more (half way) sets `GamepadXPressed`.
+  X (byte 6) at 0x80 or more (half way) sets `gamepad::XButtonPressed`.
 
 ## 5. The File Manager's screen
 Not a fatal error (no number, no LED sequence, no EEPROM history), drawn in the layout of the error screens

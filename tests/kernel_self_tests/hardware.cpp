@@ -3,6 +3,8 @@
 #include <xk/hardware.h>
 #include <xk/core.h>
 
+using namespace xk; // the kernel's subsystems as storage::, hardware::, ...
+
 volatile ULONG KiTestHalEepromOk, KiTestHalSettingsOk, KiTestHalSaveOk, KiTestHalTrayState, KiTestHalRegion,
     KiTestHalDone;
 
@@ -16,7 +18,7 @@ static void NTAPI HalControllerThread(PVOID) {
     UCHAR all[256];
     bool ok = ExQueryNonVolatileSetting(0xFFFF, &type, all, sizeof(all), &len) == 0 && type == 3 && len == 256;
     ok &= ExQueryNonVolatileSetting(0xFFFF, &type, all, 16, &len) == (NTSTATUS)0xC0000023;
-    KiTestHalEepromOk = ok && ExpEepromSecurityValid;
+    KiTestHalEepromOk = ok && hardware::EepromSecurityValid;
 
     ok = ExQueryNonVolatileSetting(0x104, &type, &v, 4, &len) == 0 && type == 4;
     KiTestHalRegion = v;
@@ -41,5 +43,5 @@ static void NTAPI HalControllerThread(PVOID) {
 }
 
 void KiStartHalSelfTests() {
-    KiCreateSystemThread(HalControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(HalControllerThread, nullptr, 0, 9);
 }

@@ -6,6 +6,8 @@
 
 #include <xk/core.h>
 
+using namespace xk; // the kernel's subsystems as storage::, core::, ...
+
 namespace {
 // The screen: 640 pixels, 48 on each side, glyphs 6 * scale apart.
 constexpr unsigned TEXT_WIDTH = 640 - 2 * 48;
@@ -31,17 +33,17 @@ TEST(FatalHelp, EveryCodeTheKernelRaisesHasItsOwnScreen) {
         {20, "No Dashboard Found (Disc Inserted)"},                  {21, "Previous Boot Failed"},
     };
     for (auto &e : expected)
-        EXPECT_STREQ(XkFatalHelp(e.Code)->Title, e.Title) << "code " << e.Code;
+        EXPECT_STREQ(core::FatalHelp(e.Code)->Title, e.Title) << "code " << e.Code;
 }
 
 TEST(FatalHelp, OtherCodesGetTheGeneralScreen) {
     for (ULONG code : {0ul, 5ul, 10ul, 12ul, 22ul, 0x10E5Ful})
-        EXPECT_STREQ(XkFatalHelp(code)->Title, "Fatal Error") << "code " << code;
+        EXPECT_STREQ(core::FatalHelp(code)->Title, "Fatal Error") << "code " << code;
 }
 
 TEST(FatalHelp, EveryLineFitsTheScreen) {
     for (ULONG code = 0; code < 32; code++) {
-        const XK_FATAL_HELP *h = XkFatalHelp(code);
+        const XK_FATAL_HELP *h = core::FatalHelp(code);
         CheckText(h->Title);
         EXPECT_LE(Width(h->Title, 2), TEXT_WIDTH) << h->Title;
         unsigned lines = 0;

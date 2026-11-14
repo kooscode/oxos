@@ -7,8 +7,12 @@ constexpr unsigned char XE_TITLE_CALL[6] = {0xFF, 0x15, 0x28, 0x01, 0x01, 0x00};
 // What the call looks like while a dashboard's trainer is installed (`call [0x8000000C]`).
 constexpr unsigned char XE_TITLE_CALL_HOOKED[6] = {0xFF, 0x15, 0x0C, 0x00, 0x00, 0x80};
 
+namespace xk::titles {
+
 // Inline assembly, so the compiler cannot load the entry point into a register first. The title may clobber the
 // caller-saved registers.
-__attribute__((always_inline)) inline void XeCallTitleEntry() {
+__attribute__((always_inline)) inline void CallTitleEntry() {
     asm volatile("call *0x00010128" ::: "eax", "ecx", "edx", "memory", "cc");
 }
+
+} // namespace xk::titles

@@ -4,6 +4,8 @@
 #include <xk/hddfs.h>
 #include <xk/serial.h>
 
+namespace xk::filesystems {
+
 constexpr NTSTATUS STATUS_FILE_CORRUPT_ERROR_ = (NTSTATUS)0xC0000102;
 
 // FATX timestamps count years from 2000, exFAT's from 1980; the other fields are the same.
@@ -461,3 +463,5 @@ NTSTATUS EXFATCountFolder(HDDFS_VOLUME *v) {
 // The directory operations of an exFAT volume (HDDFS_VOLUME::Format).
 const HDDFS_FORMAT EXFATFormat = {EXFATLookup, EXFATReadEntry, EXFATNextEntry, EXFATInitDirectory, EXFATRemoveDirent,
                                    EXFATCreateDirent, EXFATFlushFcb, EXFATDeleteDirent, EXFATIsDirectoryEmpty};
+
+} // namespace xk::filesystems

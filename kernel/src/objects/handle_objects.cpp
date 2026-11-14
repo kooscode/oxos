@@ -3,6 +3,8 @@
 #include <xk/runtime.h>
 #include <xk/core.h>
 
+namespace xk::objects {
+
 constexpr NTSTATUS STATUS_INVALID_PARAMETER = (NTSTATUS)0xC000000D, STATUS_MUTANT_NOT_OWNED = (NTSTATUS)0xC0000046,
                    STATUS_SEMAPHORE_LIMIT_EXCEEDED = (NTSTATUS)0xC0000047;
 constexpr LONG EVENT_INCREMENT = 1, MUTANT_INCREMENT = 1, SEMAPHORE_INCREMENT = 1;
@@ -14,25 +16,28 @@ struct ETIMER {
     BOOLEAN ApcAssociated;
 };
 
-static void NTAPI ExpDeleteMutant(PVOID Object) {
+static void NTAPI DeleteMutant(PVOID Object) {
     auto m = (PKMUTANT)Object;
     if (m->OwnerThread)
         KeReleaseMutant(m, MUTANT_INCREMENT, TRUE, FALSE);
 }
 
-static void NTAPI ExpDeleteTimer(PVOID Object) {
+static void NTAPI DeleteTimer(PVOID Object) {
     auto t = (ETIMER *)Object;
     KeCancelTimer(&t->KeTimer);
     KeRemoveQueueDpc(&t->TimerDpc);
 }
 
-OBJECT_TYPE ExEventObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0, 'vevE'};
-OBJECT_TYPE ExMutantObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, ExpDeleteMutant, nullptr, (PVOID)0,
-                                  'atuM'};
-OBJECT_TYPE ExSemaphoreObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0, 'ameS'};
-OBJECT_TYPE ExTimerObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, ExpDeleteTimer, nullptr, (PVOID)0, 'emiT'};
+XBAPI OBJECT_TYPE ExEventObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0, 'vevE'};
+XBAPI OBJECT_TYPE ExMutantObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteMutant, nullptr, (PVOID)0,
+                                        'atuM'};
+XBAPI OBJECT_TYPE ExSemaphoreObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0,
+                                           'ameS'};
+XBAPI OBJECT_TYPE ExTimerObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteTimer, nullptr, (PVOID)0,
+                                       'emiT'};
 
-template <typename T> static NTSTATUS ExpCreate(POBJECT_TYPE type, POBJECT_ATTRIBUTES attrs, PHANDLE handle, T init) {
+template <typename T>
+static NTSTATUS CreateNamedObject(POBJECT_TYPE type, POBJECT_ATTRIBUTES attrs, PHANDLE handle, T init) {
     PVOID o;
     NTSTATUS status = ObCreateObject(type, attrs, sizeof(*init(nullptr)), &o);
     if (!NT_SUCCESS(status)) {
@@ -49,14 +54,14 @@ XBAPI NTSTATUS NTAPI NtCreateEvent(PHANDLE EventHandle, POBJECT_ATTRIBUTES Objec
                                    BOOLEAN InitialState) {
     if (EventType != NotificationEvent && EventType != SynchronizationEvent)
         return STATUS_INVALID_PARAMETER;
-    return ExpCreate(&ExEventObjectType, ObjectAttributes, EventHandle, [&](PVOID o) {
-        if (o)
-            KeInitializeEvent((PKEVENT)o, EventType, InitialState);
+    return CreateNamedObject(&ExEventObjectType, ObjectAttributes, EventHandle, [&](PVOID o) {
+                             if (o)
+                             KeInitializeEvent((PKEVENT)o, EventType, InitialState);
         return (PKEVENT)o;
     });
 }
 
-template <typename F> static NTSTATUS ExpWithObject(HANDLE h, POBJECT_TYPE type, F f) {
+template <typename F> static NTSTATUS WithReferencedObject(HANDLE h, POBJECT_TYPE type, F f) {
     PVOID o;
     NTSTATUS status = ObReferenceObjectByHandle(h, type, &o);
     if (!NT_SUCCESS(status))
@@ -67,8 +72,8 @@ template <typename F> static NTSTATUS ExpWithObject(HANDLE h, POBJECT_TYPE type,
 }
 
 XBAPI NTSTATUS NTAPI NtSetEvent(HANDLE EventHandle, PLONG PreviousState) {
-    return ExpWithObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
-        LONG prev = KeSetEvent((PKEVENT)o, EVENT_INCREMENT, FALSE);
+    return WithReferencedObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
+                                LONG prev = KeSetEvent((PKEVENT)o, EVENT_INCREMENT, FALSE);
         if (PreviousState)
             *PreviousState = prev;
         return STATUS_SUCCESS;
@@ -76,15 +81,15 @@ XBAPI NTSTATUS NTAPI NtSetEvent(HANDLE EventHandle, PLONG PreviousState) {
 }
 
 XBAPI NTSTATUS NTAPI NtClearEvent(HANDLE EventHandle) {
-    return ExpWithObject(EventHandle, &ExEventObjectType, [](PVOID o) {
-        ((PKEVENT)o)->Header.SignalState = 0;
+    return WithReferencedObject(EventHandle, &ExEventObjectType, [](PVOID o) {
+                                ((PKEVENT)o)->Header.SignalState = 0;
         return STATUS_SUCCESS;
     });
 }
 
 XBAPI NTSTATUS NTAPI NtPulseEvent(HANDLE EventHandle, PLONG PreviousState) {
-    return ExpWithObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
-        LONG prev = KePulseEvent((PKEVENT)o, EVENT_INCREMENT, FALSE);
+    return WithReferencedObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
+                                LONG prev = KePulseEvent((PKEVENT)o, EVENT_INCREMENT, FALSE);
         if (PreviousState)
             *PreviousState = prev;
         return STATUS_SUCCESS;
@@ -92,8 +97,8 @@ XBAPI NTSTATUS NTAPI NtPulseEvent(HANDLE EventHandle, PLONG PreviousState) {
 }
 
 XBAPI NTSTATUS NTAPI NtQueryEvent(HANDLE EventHandle, EVENT_BASIC_INFORMATION *EventInformation) {
-    return ExpWithObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
-        auto e = (PKEVENT)o;
+    return WithReferencedObject(EventHandle, &ExEventObjectType, [&](PVOID o) {
+                                auto e = (PKEVENT)o;
         EventInformation->EventType = (EVENT_TYPE)e->Header.Type;
         EventInformation->EventState = e->Header.SignalState;
         return STATUS_SUCCESS;
@@ -103,16 +108,16 @@ XBAPI NTSTATUS NTAPI NtQueryEvent(HANDLE EventHandle, EVENT_BASIC_INFORMATION *E
 // --- Mutants
 
 XBAPI NTSTATUS NTAPI NtCreateMutant(PHANDLE MutantHandle, POBJECT_ATTRIBUTES ObjectAttributes, BOOLEAN InitialOwner) {
-    return ExpCreate(&ExMutantObjectType, ObjectAttributes, MutantHandle, [&](PVOID o) {
-        if (o)
-            KeInitializeMutant((PKMUTANT)o, InitialOwner);
+    return CreateNamedObject(&ExMutantObjectType, ObjectAttributes, MutantHandle, [&](PVOID o) {
+                             if (o)
+                             KeInitializeMutant((PKMUTANT)o, InitialOwner);
         return (PKMUTANT)o;
     });
 }
 
 XBAPI NTSTATUS NTAPI NtReleaseMutant(HANDLE MutantHandle, PLONG PreviousCount) {
-    return ExpWithObject(MutantHandle, &ExMutantObjectType, [&](PVOID o) {
-        auto m = (PKMUTANT)o;
+    return WithReferencedObject(MutantHandle, &ExMutantObjectType, [&](PVOID o) {
+                                auto m = (PKMUTANT)o;
         if (m->OwnerThread != KeGetCurrentThread())
             return STATUS_MUTANT_NOT_OWNED;
         LONG prev = KeReleaseMutant(m, MUTANT_INCREMENT, FALSE, FALSE);
@@ -123,8 +128,8 @@ XBAPI NTSTATUS NTAPI NtReleaseMutant(HANDLE MutantHandle, PLONG PreviousCount) {
 }
 
 XBAPI NTSTATUS NTAPI NtQueryMutant(HANDLE MutantHandle, MUTANT_BASIC_INFORMATION *MutantInformation) {
-    return ExpWithObject(MutantHandle, &ExMutantObjectType, [&](PVOID o) {
-        auto m = (PKMUTANT)o;
+    return WithReferencedObject(MutantHandle, &ExMutantObjectType, [&](PVOID o) {
+                                auto m = (PKMUTANT)o;
         MutantInformation->CurrentCount = m->Header.SignalState;
         MutantInformation->OwnedByCaller = m->OwnerThread == KeGetCurrentThread();
         MutantInformation->AbandonedState = m->Abandoned;
@@ -138,9 +143,9 @@ XBAPI NTSTATUS NTAPI NtCreateSemaphore(PHANDLE SemaphoreHandle, POBJECT_ATTRIBUT
                                        LONG MaximumCount) {
     if (MaximumCount <= 0 || InitialCount < 0 || InitialCount > MaximumCount)
         return STATUS_INVALID_PARAMETER;
-    return ExpCreate(&ExSemaphoreObjectType, ObjectAttributes, SemaphoreHandle, [&](PVOID o) {
-        if (o)
-            KeInitializeSemaphore((PKSEMAPHORE)o, InitialCount, MaximumCount);
+    return CreateNamedObject(&ExSemaphoreObjectType, ObjectAttributes, SemaphoreHandle, [&](PVOID o) {
+                             if (o)
+                             KeInitializeSemaphore((PKSEMAPHORE)o, InitialCount, MaximumCount);
         return (PKSEMAPHORE)o;
     });
 }
@@ -148,8 +153,8 @@ XBAPI NTSTATUS NTAPI NtCreateSemaphore(PHANDLE SemaphoreHandle, POBJECT_ATTRIBUT
 XBAPI NTSTATUS NTAPI NtReleaseSemaphore(HANDLE SemaphoreHandle, LONG ReleaseCount, PLONG PreviousCount) {
     if (ReleaseCount <= 0)
         return STATUS_INVALID_PARAMETER;
-    return ExpWithObject(SemaphoreHandle, &ExSemaphoreObjectType, [&](PVOID o) {
-        auto s = (PKSEMAPHORE)o;
+    return WithReferencedObject(SemaphoreHandle, &ExSemaphoreObjectType, [&](PVOID o) {
+                                auto s = (PKSEMAPHORE)o;
         LONG cur = s->Header.SignalState;
         if (cur + ReleaseCount > s->Limit || cur + ReleaseCount < cur)
             return STATUS_SEMAPHORE_LIMIT_EXCEEDED;
@@ -161,8 +166,8 @@ XBAPI NTSTATUS NTAPI NtReleaseSemaphore(HANDLE SemaphoreHandle, LONG ReleaseCoun
 }
 
 XBAPI NTSTATUS NTAPI NtQuerySemaphore(HANDLE SemaphoreHandle, SEMAPHORE_BASIC_INFORMATION *SemaphoreInformation) {
-    return ExpWithObject(SemaphoreHandle, &ExSemaphoreObjectType, [&](PVOID o) {
-        auto s = (PKSEMAPHORE)o;
+    return WithReferencedObject(SemaphoreHandle, &ExSemaphoreObjectType, [&](PVOID o) {
+                                auto s = (PKSEMAPHORE)o;
         SemaphoreInformation->CurrentCount = s->Header.SignalState;
         SemaphoreInformation->MaximumCount = s->Limit;
         return STATUS_SUCCESS;
@@ -171,11 +176,11 @@ XBAPI NTSTATUS NTAPI NtQuerySemaphore(HANDLE SemaphoreHandle, SEMAPHORE_BASIC_IN
 
 // --- Timers (optional APC to the thread that set the timer)
 
-static void NTAPI ExpTimerApcKernelRoutine(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+static void NTAPI TimerApcKernelRoutine(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
     // Nothing at kernel level: the timer's APC routine runs as the APC's normal routine.
 }
 
-static void NTAPI ExpTimerDpcRoutine(PKDPC, PVOID Context, PVOID SystemArgument1, PVOID SystemArgument2) {
+static void NTAPI TimerDpcRoutine(PKDPC, PVOID Context, PVOID SystemArgument1, PVOID SystemArgument2) {
     auto t = (ETIMER *)Context;
     if (t->ApcAssociated)
         KeInsertQueueApc(&t->TimerApc, SystemArgument1, SystemArgument2, 0);
@@ -184,11 +189,11 @@ static void NTAPI ExpTimerDpcRoutine(PKDPC, PVOID Context, PVOID SystemArgument1
 XBAPI NTSTATUS NTAPI NtCreateTimer(PHANDLE TimerHandle, POBJECT_ATTRIBUTES ObjectAttributes, TIMER_TYPE TimerType) {
     if (TimerType != NotificationTimer && TimerType != SynchronizationTimer)
         return STATUS_INVALID_PARAMETER;
-    return ExpCreate(&ExTimerObjectType, ObjectAttributes, TimerHandle, [&](PVOID o) {
-        auto t = (ETIMER *)o;
+    return CreateNamedObject(&ExTimerObjectType, ObjectAttributes, TimerHandle, [&](PVOID o) {
+                             auto t = (ETIMER *)o;
         if (t) {
             KeInitializeTimerEx(&t->KeTimer, TimerType);
-            KeInitializeDpc(&t->TimerDpc, ExpTimerDpcRoutine, t);
+            KeInitializeDpc(&t->TimerDpc, TimerDpcRoutine, t);
             t->ApcAssociated = FALSE;
         }
         return t;
@@ -200,15 +205,15 @@ XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PT
                                   PBOOLEAN PreviousState) {
     if (Period < 0)
         return STATUS_INVALID_PARAMETER;
-    return ExpWithObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
-        auto t = (ETIMER *)o;
+    return WithReferencedObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
+                                auto t = (ETIMER *)o;
         KIRQL old = KeRaiseIrqlToDpcLevel();
         BOOLEAN state = t->KeTimer.Header.SignalState != 0;
         KeCancelTimer(&t->KeTimer);
         KeRemoveQueueDpc(&t->TimerDpc);
         t->ApcAssociated = TimerApcRoutine != nullptr;
         if (TimerApcRoutine) {
-            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), ExpTimerApcKernelRoutine, nullptr,
+            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), TimerApcKernelRoutine, nullptr,
                             (PKNORMAL_ROUTINE)TimerApcRoutine, ApcMode, TimerContext);
         }
         KeSetTimerEx(&t->KeTimer, *DueTime, Period, &t->TimerDpc);
@@ -220,8 +225,8 @@ XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PT
 }
 
 XBAPI NTSTATUS NTAPI NtCancelTimer(HANDLE TimerHandle, PBOOLEAN CurrentState) {
-    return ExpWithObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
-        auto t = (ETIMER *)o;
+    return WithReferencedObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
+                                auto t = (ETIMER *)o;
         KeCancelTimer(&t->KeTimer);
         KeRemoveQueueDpc(&t->TimerDpc);
         if (CurrentState)
@@ -231,8 +236,8 @@ XBAPI NTSTATUS NTAPI NtCancelTimer(HANDLE TimerHandle, PBOOLEAN CurrentState) {
 }
 
 XBAPI NTSTATUS NTAPI NtQueryTimer(HANDLE TimerHandle, TIMER_BASIC_INFORMATION *TimerInformation) {
-    return ExpWithObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
-        auto t = (ETIMER *)o;
+    return WithReferencedObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
+                                auto t = (ETIMER *)o;
         LONGLONG remaining = 0;
         if (t->KeTimer.Header.Inserted)
             remaining = (LONGLONG)t->KeTimer.DueTime - (LONGLONG)KeQueryInterruptTime();
@@ -250,7 +255,7 @@ XBAPI NTSTATUS NTAPI NtWaitForSingleObjectEx(HANDLE Handle, KPROCESSOR_MODE Wait
     NTSTATUS status = ObReferenceObjectByHandle(Handle, nullptr, &o);
     if (!NT_SUCCESS(status))
         return status;
-    status = KeWaitForSingleObject(ObpGetWaitableObject(o), UserRequest, WaitMode, Alertable, Timeout);
+    status = KeWaitForSingleObject(GetWaitableObject(o), UserRequest, WaitMode, Alertable, Timeout);
     ObfDereferenceObject(o);
     return status;
 }
@@ -271,7 +276,7 @@ XBAPI NTSTATUS NTAPI NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], W
         status = ObReferenceObjectByHandle(Handles[n], nullptr, &objects[n]);
         if (!NT_SUCCESS(status))
             break;
-        waitables[n] = ObpGetWaitableObject(objects[n]);
+        waitables[n] = GetWaitableObject(objects[n]);
     }
     if (NT_SUCCESS(status)) {
         status = KeWaitForMultipleObjects(Count, waitables, WaitType, UserRequest, WaitMode, Alertable, Timeout,
@@ -305,7 +310,7 @@ XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDL
         status = STATUS_OBJECT_TYPE_MISMATCH;
     }
     if (NT_SUCCESS(status))
-        status = KeWaitForSingleObject(ObpGetWaitableObject(wait), UserRequest, WaitMode, Alertable, Timeout);
+        status = KeWaitForSingleObject(GetWaitableObject(wait), UserRequest, WaitMode, Alertable, Timeout);
     ObfDereferenceObject(wait);
     ObfDereferenceObject(signal);
     return status;
@@ -314,5 +319,7 @@ XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDL
 // Any ready thread gets the processor, lower priorities included (spec/stock/07); not a zero-length delay, which only
 // yields to equal or higher priorities.
 XBAPI NTSTATUS NTAPI NtYieldExecution() {
-    return KiYieldExecution();
+    return core::YieldExecution();
 }
+
+} // namespace xk::objects

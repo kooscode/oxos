@@ -11,17 +11,19 @@
 
 #include <xk/jingle.h>
 
+namespace xk::bootscreen {
+
 // Boot-only code (cold boot, with the splash): freed before the first title starts (spec/oxos_internal/18).
 #pragma code_seg(".xkb")
 
 // For the boot tests: 1 synthesizing, 2 playing, 3 played to the end, 5 played with gaps (synthesis fell behind);
 // 0x10 no codec, 0x11 no memory. The controller's descriptor at the end, and the jingle's last one.
-volatile ULONG HalpBootSoundStatus, HalpBootSoundPosition, HalpBootSoundLast;
+volatile ULONG BootSoundStatus, BootSoundPosition, BootSoundLast;
 // Descriptors synthesized before playback started, the synthesis time (ms), and the times the controller ran out
 // of samples.
-volatile ULONG HalpBootSoundAhead, HalpBootSoundSynthMs, HalpBootSoundUnderruns;
-volatile ULONG HalpBootSoundBuffer, HalpBootSoundBytes; // the samples' physical address and size, while playing
-volatile ULONG HalpBootSoundOn = 1;                     // boot tests may clear it (0: no jingle)
+volatile ULONG BootSoundAhead, BootSoundSynthMs, BootSoundUnderruns;
+volatile ULONG BootSoundBuffer, BootSoundBytes; // the samples' physical address and size, while playing
+volatile ULONG BootSoundOn = 1;                 // boot tests may clear it (0: no jingle)
 
 namespace {
 
@@ -130,9 +132,9 @@ void NTAPI BootSoundThread(PVOID) {
                                                      PAGE_READWRITE | PAGE_WRITECOMBINE);
     auto state = (jingle::State *)MmAllocateContiguousMemoryEx(stateSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     Ac97 = (volatile UCHAR *)MmMapIoSpace(AC97_BASE, AC97_SIZE, PAGE_READWRITE | PAGE_NOCACHE);
-    HalpBootSoundStatus = 1;
+    BootSoundStatus = 1;
     if (!pcm || !state || !Ac97 || !StartCodec()) {
-        HalpBootSoundStatus = !pcm || !state || !Ac97 ? 0x11 : 0x10;
+        BootSoundStatus = !pcm || !state || !Ac97 ? 0x11 : 0x10;
         XK_SERIAL("bootsound: not played\n");
     } else {
         // Every descriptor is valid from the start, over a buffer of silence that synthesis fills in ahead of the
@@ -174,12 +176,12 @@ void NTAPI BootSoundThread(PVOID) {
         KeSetPriorityThread(KeGetCurrentThread(), 9);
         if (!rendered)
             renderSlice();
-        HalpBootSoundAhead = rendered / 48;
+        BootSoundAhead = rendered / 48;
         Set8(PCM_OUT + CR, CR_RUN);
         Set8(SPDIF_OUT + CR, CR_RUN);
         ULONGLONG start = KeQueryInterruptTime();
         auto playedMs = [&] { return (ULONG)((KeQueryInterruptTime() - start) / 10000); };
-        HalpBootSoundStatus = 2;
+        BootSoundStatus = 2;
         XK_SERIAL("bootsound: playing (%lu ms synthesized)\n", rendered / 48);
         ULONG underruns = 0;
         while (rendered < frames) {
@@ -191,22 +193,22 @@ void NTAPI BootSoundThread(PVOID) {
             else
                 Sleep(10);
         }
-        HalpBootSoundUnderruns = underruns;
-        HalpBootSoundBuffer = MmGetPhysicalAddress(pcm);
-        HalpBootSoundBytes = frames * 4;
-        HalpBootSoundSynthMs = (ULONG)((KeQueryInterruptTime() - t0) / 10000) | 0x80000000; // never 0 once done
+        BootSoundUnderruns = underruns;
+        BootSoundBuffer = MmGetPhysicalAddress(pcm);
+        BootSoundBytes = frames * 4;
+        BootSoundSynthMs = (ULONG)((KeQueryInterruptTime() - t0) / 10000) | 0x80000000; // never 0 once done
         // The rest of the jingle plays out.
         ULONG lengthMs = frames / 48 + 40;
         while (playedMs() < lengthMs)
             Sleep(10);
-        HalpBootSoundPosition = Reg8(PCM_OUT + CIV);
-        HalpBootSoundLast = (frames - 1) / FRAMES_PER_DESCRIPTOR;
-        HalpBootSoundStatus = underruns ? 5 : 3;
+        BootSoundPosition = Reg8(PCM_OUT + CIV);
+        BootSoundLast = (frames - 1) / FRAMES_PER_DESCRIPTOR;
+        BootSoundStatus = underruns ? 5 : 3;
         XK_SERIAL("bootsound: done (synthesis %lu ms, %lu ms ahead at the start, %lu underruns, buffer %u, the "
                   "jingle's last %lu)\n",
-                  HalpBootSoundSynthMs & 0x7FFFFFFF, HalpBootSoundAhead, underruns, Reg8(PCM_OUT + CIV),
-                  HalpBootSoundLast);
-        HalpBootSoundBuffer = 0;
+                  BootSoundSynthMs & 0x7FFFFFFF, BootSoundAhead, underruns, Reg8(PCM_OUT + CIV),
+                  BootSoundLast);
+        BootSoundBuffer = 0;
         ResetChannel(PCM_OUT);
         ResetChannel(SPDIF_OUT);
         Set32(PCM_OUT + BDBAR, 0);
@@ -225,24 +227,24 @@ void NTAPI BootSoundThread(PVOID) {
 } // namespace
 
 // Cold boot, with the splash: start synthesizing.
-void HalpStartBootSound() {
+void StartBootSound() {
     KeInitializeEvent(&BootSoundGo, NotificationEvent, FALSE);
     KeInitializeEvent(&BootSoundDone, NotificationEvent, TRUE);
-    if (!HalpBootSoundOn)
+    if (!BootSoundOn)
         return;
     KeResetEvent(&BootSoundDone);
-    BootSoundThreadObject = KiCreateSystemThread(BootSoundThread, nullptr, 0, 7); // below the splash
+    BootSoundThreadObject = core::CreateSystemThread(BootSoundThread, nullptr, 0, 7); // below the splash
     if (!BootSoundThreadObject)
         KeSetEvent(&BootSoundDone, 0, FALSE);
 }
 
 // The splash's fade-in begins: play.
-void HalpBootSoundGo() {
+void PlayBootSound() {
     KeSetEvent(&BootSoundGo, 0, FALSE);
 }
 
 // Before the title starts: the jingle has ended, the controller is stopped and the memory freed.
-void HalpEndBootSound() {
+void EndBootSound() {
     KeSetEvent(&BootSoundGo, 0, FALSE); // no splash fade: play now (or finish)
     KeWaitForSingleObject(&BootSoundDone, Executive, KernelMode, FALSE, nullptr);
     if (BootSoundThreadObject) {
@@ -256,9 +258,11 @@ void HalpEndBootSound() {
 // runs to finish it; left running, the controller replays its buffers in a loop.
 #pragma code_seg()
 
-void HalpStopBootSound() {
+void StopBootSound() {
     if (Ac97) {
         Ac97[PCM_OUT + CR] = 0;
         Ac97[SPDIF_OUT + CR] = 0;
     }
 }
+
+} // namespace xk::bootscreen

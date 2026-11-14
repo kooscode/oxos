@@ -6,6 +6,8 @@
 
 #include <xk/extension_ini.h>
 
+using namespace xk; // the kernel's subsystems as storage::, extensions::, ...
+
 namespace {
 
 std::string Text(const XK_TEXT &t) {
@@ -20,7 +22,7 @@ struct Parsed {
 Parsed Parse(const std::string &file, ULONG max = 8) {
     std::vector<XK_EXTENSION_ENTRY> entries(max);
     ULONG errors = 99;
-    ULONG n = XkParseExtensionList(file.data(), (ULONG)file.size(), entries.data(), max, &errors);
+    ULONG n = extensions::ParseExtensionIni(file.data(), (ULONG)file.size(), entries.data(), max, &errors);
     entries.resize(n);
     return {entries, errors};
 }

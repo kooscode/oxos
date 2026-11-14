@@ -3,6 +3,8 @@
 #include <xk/core.h>
 #include <xk/runtime.h>
 
+namespace xk::io {
+
 XBAPI void NTAPI IoInitializeIrp(PIRP Irp, USHORT PacketSize, CCHAR StackSize) {
     RtlZeroMemory(Irp, PacketSize);
     Irp->Type = 6;
@@ -26,26 +28,26 @@ XBAPI void NTAPI IoFreeIrp(PIRP Irp) {
 }
 
 // Link into / unlink from the issuing thread's IRP list (APC_LEVEL keeps completion APCs out).
-void IopQueueThreadIrp(PIRP Irp) {
+void QueueThreadIrp(PIRP Irp) {
     KIRQL old = KfRaiseIrql(APC_LEVEL);
     InsertHeadList(&((PETHREAD)Irp->Tail.Overlay.Thread)->IrpList, &Irp->ThreadListEntry);
     KfLowerIrql(old);
 }
 
-static void IopDequeueThreadIrp(PIRP Irp) {
+static void DequeueThreadIrp(PIRP Irp) {
     RemoveEntryList(&Irp->ThreadListEntry);
     InitializeListHead(&Irp->ThreadListEntry);
 }
 
 XBAPI void NTAPI IoQueueThreadIrp(PIRP Irp) {
-    IopQueueThreadIrp(Irp);
+    QueueThreadIrp(Irp);
 }
 
 XBAPI void NTAPI IoMarkIrpMustComplete(PIRP Irp) {
     // Accepted, nothing to do: the Xbox never cancels a thread's IRPs (spec/stock/11).
 }
 
-void IopLockUserBuffer(PIRP Irp, ULONG Length) {
+void LockUserBuffer(PIRP Irp, ULONG Length) {
     MmLockUnlockBufferPages(Irp->UserBuffer, Length, FALSE);
     Irp->LockedBufferLength = Length;
     Irp->Flags |= IRP_UNLOCK_USER_BUFFER;
@@ -61,15 +63,15 @@ XBAPI NTSTATUS FASTCALL IofCallDriver(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 // --- Completion
 
-static void NTAPI IopUserApcKernelRoutine(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+static void NTAPI UserApcKernelRoutine(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
     IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
 }
 
-static void NTAPI IopUserApcRundown(PKAPC Apc) {
+static void NTAPI UserApcRundown(PKAPC Apc) {
     IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
 }
 
-static void IopQueueToPort(PIRP Irp, PIO_COMPLETION_CONTEXT Context) {
+static void QueueToPort(PIRP Irp, PIO_COMPLETION_CONTEXT Context) {
     Irp->Tail.CompletionKey = Context->Key;
     Irp->Tail.Overlay.PacketType = 0;
     KeInsertQueue((PKQUEUE)Context->Port, &Irp->Tail.Overlay.ListEntry);
@@ -77,7 +79,7 @@ static void IopQueueToPort(PIRP Irp, PIO_COMPLETION_CONTEXT Context) {
 
 // Final stage of I/O completion, in the context of the thread that issued the request (APC_LEVEL).
 // Runs as the IRP's kernel APC, or inline for deferred completions.
-void NTAPI IopCompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *SystemArgument1, PVOID *) {
+void NTAPI CompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *SystemArgument1, PVOID *) {
     PIRP irp = CONTAINING_RECORD(Apc, IRP, Tail.Apc);
     auto fo = (PFILE_OBJECT)*SystemArgument1;
     NTSTATUS status = irp->IoStatus.Status;
@@ -100,7 +102,7 @@ void NTAPI IopCompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *Sys
             ObfDereferenceObject(fo);
         if (irp->UserEvent && fo && !syncApi)
             ObfDereferenceObject(irp->UserEvent);
-        IopDequeueThreadIrp(irp);
+        DequeueThreadIrp(irp);
         IoFreeIrp(irp);
         return;
     }
@@ -127,17 +129,17 @@ void NTAPI IopCompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *Sys
         keepFileReference = true; // the create path owns the file object
         irp->Overlay.AsynchronousParameters.UserApcRoutine = nullptr;
     }
-    IopDequeueThreadIrp(irp);
+    DequeueThreadIrp(irp);
 
     PIO_APC_ROUTINE apcRoutine = irp->Overlay.AsynchronousParameters.UserApcRoutine;
     PVOID apcContext = irp->Overlay.AsynchronousParameters.UserApcContext;
     if (apcRoutine) {
-        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), IopUserApcKernelRoutine, IopUserApcRundown,
+        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), UserApcKernelRoutine, UserApcRundown,
                         (PKNORMAL_ROUTINE)apcRoutine,
                         apcRoutine == NtUserIoApcDispatcher ? UserMode : KernelMode, apcContext);
         KeInsertQueueApc(&irp->Tail.Apc, irp->UserIosb, nullptr, 2);
     } else if (port && apcContext) {
-        IopQueueToPort(irp, port);
+        QueueToPort(irp, port);
     } else {
         IoFreeIrp(irp);
     }
@@ -146,10 +148,10 @@ void NTAPI IopCompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *Sys
 }
 
 // Deferred completion: the dispatch routine returned without pending, finish in the caller (spec/stock/11 §5).
-void IopCompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject) {
+void CompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject) {
     KIRQL old = KfRaiseIrql(APC_LEVEL);
     PVOID arg = FileObject;
-    IopCompleteRequest(&Irp->Tail.Apc, nullptr, nullptr, &arg, nullptr);
+    CompleteRequest(&Irp->Tail.Apc, nullptr, nullptr, &arg, nullptr);
     KfLowerIrql(old);
 }
 
@@ -196,7 +198,7 @@ XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost) {
 
     PKTHREAD thread = Irp->Tail.Overlay.Thread;
     PFILE_OBJECT fo = Irp->Tail.Overlay.OriginalFileObject;
-    KeInitializeApc(&Irp->Tail.Apc, thread, IopCompleteRequest, nullptr, nullptr, KernelMode, nullptr);
+    KeInitializeApc(&Irp->Tail.Apc, thread, CompleteRequest, nullptr, nullptr, KernelMode, nullptr);
     KeInsertQueueApc(&Irp->Tail.Apc, fo, nullptr, PriorityBoost);
 }
 
@@ -214,7 +216,7 @@ XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJE
     if (MajorFunction != IRP_MJ_FLUSH_BUFFERS && MajorFunction != IRP_MJ_SHUTDOWN) {
         irp->UserBuffer = Buffer;
         if ((DeviceObject->Flags & DO_DIRECT_IO) && Length)
-            IopLockUserBuffer(irp, Length);
+            LockUserBuffer(irp, Length);
         stack->Parameters.Read.Length = Length;
         stack->Parameters.Read.ByteOffset = *StartingOffset;
     }
@@ -229,7 +231,7 @@ XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJEC
                                              IoStatusBlock);
     if (irp) {
         irp->UserEvent = Event;
-        IopQueueThreadIrp(irp);
+        QueueThreadIrp(irp);
     }
     return irp;
 }
@@ -251,10 +253,10 @@ XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJE
     irp->UserBuffer = OutputBuffer;
     ULONG method = IoControlCode & 3;
     if ((method == 1 || method == 2) && OutputBuffer && OutputBufferLength)
-        IopLockUserBuffer(irp, OutputBufferLength); // METHOD_IN/OUT_DIRECT
+        LockUserBuffer(irp, OutputBufferLength); // METHOD_IN/OUT_DIRECT
     irp->UserIosb = IoStatusBlock;
     irp->UserEvent = Event;
-    IopQueueThreadIrp(irp);
+    QueueThreadIrp(irp);
     return irp;
 }
 
@@ -298,3 +300,5 @@ XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PD
         *ReturnedOutputBufferLength = iosb.Information;
     return status;
 }
+
+} // namespace xk::io

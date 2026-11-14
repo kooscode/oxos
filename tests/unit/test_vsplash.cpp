@@ -8,6 +8,8 @@
 
 #include <xk/vsplash.h>
 
+using namespace xk::bootscreen; // jingle:: and vsplash::, the kernel's boot screen code
+
 namespace {
 
 using Bytes = std::vector<uint8_t>;

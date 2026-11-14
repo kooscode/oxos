@@ -11,6 +11,8 @@
 //   - a stereo reverb (four damped comb filters and two all-pass filters per side).
 #include <xk/jingle.h>
 
+namespace xk::bootscreen {
+
 #ifdef _WIN32 // the kernel: boot-only code, freed before the first title starts (spec/oxos_internal/18)
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
@@ -584,3 +586,5 @@ void Render(State *s, short *out, unsigned frames) {
 }
 
 } // namespace jingle
+
+} // namespace xk::bootscreen

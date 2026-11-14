@@ -83,7 +83,7 @@ extended as listed in G0.
 |---|---|---|---|
 | K1 | Flags on a 1.6 | The retail kernel sets 0x10 when flash byte 0x78 ≥ 0x80 and 0x400 when it is 0x90; OXOS tests == 0x80 and probes the encoder, so a 1.6 gets 0x440, not 0x450. Set 0x10 together with 0x400 (or apply the 5838 byte rule; the MCPX16 image has 0x90 at 0x78) | Log XboxHardwareInfo.Flags: 0x450 |
 | K2 | Nothing else is 1.6-specific | HAL phase 0, PCI, MmInit and SMC need no 1.6 change (spec 24 §6.1-6.2). The stop between the PIT and the PCI set-up seen with Cromwell's X-codes is a RAM symptom, not a missing step | — |
-| K3 | MmInitSystem fallback (0x100200 bit 8, host 0x84) | Keep; with retail sizing it changes nothing (0x11338000 is excluded; the mixed row has bit 8 clear) | Serial `ram:` line before/after equal |
+| K3 | memory::InitMemoryManager fallback (0x100200 bit 8, host 0x84) | Keep; with retail sizing it changes nothing (0x11338000 is excluded; the mixed row has bit 8 clear) | Serial `ram:` line before/after equal |
 | K4 | Encoder detection by probe | Keep (OXOS's image is not the retail one); the retail kernel sends nothing to the Xcalibur before the first mode set either (spec 24 §6.3) | Serial `av:` line: encoder 0xE0 |
 
 ### 4.5 Implementation plan (in order)

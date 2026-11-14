@@ -4,20 +4,22 @@
 #include <xk/arch.h>
 #include <xk/hardware.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 constexpr ULONG THREAD_WAIT_OBJECTS = 3, MAXIMUM_WAIT_OBJECTS = 64;
 constexpr ULONG STATUS_MUTANT_LIMIT_EXCEEDED = 0xC0000191, STATUS_SEMAPHORE_LIMIT_EXCEEDED = 0xC0000047,
                 STATUS_MUTANT_NOT_OWNED = 0xC0000046;
 
-static bool KiIsSignaledFor(DISPATCHER_HEADER *o, PKTHREAD t) {
+static bool IsSignaledFor(DISPATCHER_HEADER *o, PKTHREAD t) {
     if (o->Type == MutantObject)
         return o->SignalState > 0 || ((PKMUTANT)o)->OwnerThread == t;
     return o->SignalState > 0;
 }
 
 // Consume the signal for thread t (sync events/timers reset, semaphores count down, mutants are acquired).
-static void KiWaitSatisfy(DISPATCHER_HEADER *o, PKTHREAD t) {
+static void WaitSatisfy(DISPATCHER_HEADER *o, PKTHREAD t) {
     switch (o->Type) {
     case EventSynchronizationObject:
     case TimerSynchronizationObject:
@@ -45,9 +47,9 @@ static void KiWaitSatisfy(DISPATCHER_HEADER *o, PKTHREAD t) {
     }
 }
 
-// Wake a waiting thread (reference KiUnwaitThread): detach wait blocks and timer, credit its queue,
+// Wake a waiting thread (reference UnwaitThread): detach wait blocks and timer, credit its queue,
 // apply the wake-up boost for variable-priority threads, then ready it.
-void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment) {
+void UnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment) {
     Thread->WaitStatus |= WaitStatus;
     PKWAIT_BLOCK wb = Thread->WaitBlockList;
     do {
@@ -55,7 +57,7 @@ void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment) {
         wb = wb->NextWaitBlock;
     } while (wb != Thread->WaitBlockList);
     RemoveEntryList(&Thread->WaitListEntry); // global wait list
-    KiRemoveTimerIfInserted(&Thread->Timer);
+    RemoveTimerIfInserted(&Thread->Timer);
     if (Thread->Queue)
         Thread->Queue->CurrentCount++;
 
@@ -81,36 +83,36 @@ void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment) {
     } else {
         Thread->Quantum = process->ThreadQuantum;
     }
-    KiReadyThread(Thread);
+    ReadyThread(Thread);
 }
 
-static bool KiWaitAllSatisfiable(PKWAIT_BLOCK first) {
+static bool WaitAllSatisfiable(PKWAIT_BLOCK first) {
     PKWAIT_BLOCK wb = first;
     do {
-        if (wb->WaitKey != (SHORT)STATUS_TIMEOUT && !KiIsSignaledFor((DISPATCHER_HEADER *)wb->Object, wb->Thread))
+        if (wb->WaitKey != (SHORT)STATUS_TIMEOUT && !IsSignaledFor((DISPATCHER_HEADER *)wb->Object, wb->Thread))
             return false;
         wb = wb->NextWaitBlock;
     } while (wb != first);
     return true;
 }
 
-void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment) {
+void WaitTest(DISPATCHER_HEADER *Object, LONG Increment) {
     PLIST_ENTRY e = Object->WaitListHead.Flink;
     while (Object->SignalState > 0 && e != &Object->WaitListHead) {
         auto wb = CONTAINING_RECORD(e, KWAIT_BLOCK, WaitListEntry);
         PKTHREAD t = wb->Thread;
         e = e->Flink;
         if (wb->WaitType == WaitAny) {
-            KiWaitSatisfy(Object, t);
-            KiUnwaitThread(t, wb->WaitKey, Increment);
-        } else if (KiWaitAllSatisfiable(wb)) {
+            WaitSatisfy(Object, t);
+            UnwaitThread(t, wb->WaitKey, Increment);
+        } else if (WaitAllSatisfiable(wb)) {
             PKWAIT_BLOCK w = wb;
             do {
                 if (w->WaitKey != (SHORT)STATUS_TIMEOUT)
-                    KiWaitSatisfy((DISPATCHER_HEADER *)w->Object, t);
+                    WaitSatisfy((DISPATCHER_HEADER *)w->Object, t);
                 w = w->NextWaitBlock;
             } while (w != wb);
-            KiUnwaitThread(t, STATUS_WAIT_0, Increment);
+            UnwaitThread(t, STATUS_WAIT_0, Increment);
         }
     }
 }
@@ -143,7 +145,7 @@ struct KiTimeout {
 };
 
 // Raise to DISPATCH (unless the caller holds it via Wait=TRUE) and let pending kernel APCs run first.
-static void KiBeginWait(PKTHREAD t) {
+static void BeginWait(PKTHREAD t) {
     for (;;) {
         if (t->WaitNext)
             t->WaitNext = FALSE;
@@ -158,7 +160,7 @@ static void KiBeginWait(PKTHREAD t) {
 }
 
 // Alertable/user-APC checks done before blocking (spec/stock/07). 0 = go ahead and wait.
-static NTSTATUS KiCheckAlertable(PKTHREAD t, KPROCESSOR_MODE mode, BOOLEAN alertable) {
+static NTSTATUS CheckAlertable(PKTHREAD t, KPROCESSOR_MODE mode, BOOLEAN alertable) {
     if (alertable) {
         if (t->Alerted[(UCHAR)mode]) {
             t->Alerted[(UCHAR)mode] = FALSE;
@@ -179,9 +181,9 @@ static NTSTATUS KiCheckAlertable(PKTHREAD t, KPROCESSOR_MODE mode, BOOLEAN alert
 }
 
 // Arm the thread timer for a wait timeout and chain its wait block after `chainAfter`.
-static bool KiArmWaitTimer(PKTHREAD t, PLARGE_INTEGER timeout, PKWAIT_BLOCK chainAfter) {
+static bool ArmWaitTimer(PKTHREAD t, PLARGE_INTEGER timeout, PKWAIT_BLOCK chainAfter) {
     t->Timer.Header.SignalState = 0;
-    if (!KiInsertTimerRelative(&t->Timer, timeout->QuadPart))
+    if (!InsertTimerRelative(&t->Timer, timeout->QuadPart))
         return false;
     InsertTailList(&t->Timer.Header.WaitListHead, &t->TimerWaitBlock.WaitListEntry);
     t->TimerWaitBlock.NextWaitBlock = chainAfter->NextWaitBlock;
@@ -190,24 +192,24 @@ static bool KiArmWaitTimer(PKTHREAD t, PLARGE_INTEGER timeout, PKWAIT_BLOCK chai
 }
 
 // Block; returns WaitStatus with IRQL still at DISPATCH_LEVEL.
-static NTSTATUS KiBlock(PKTHREAD t, KWAIT_REASON reason, KPROCESSOR_MODE mode, BOOLEAN alertable) {
+static NTSTATUS BlockThread(PKTHREAD t, KWAIT_REASON reason, KPROCESSOR_MODE mode, BOOLEAN alertable) {
     if (t->Queue && reason != WrQueue)
-        KiActivateWaiterQueue(t->Queue);
+        ActivateWaiterQueue(t->Queue);
     t->Alertable = alertable;
     t->WaitMode = mode;
     t->WaitReason = (UCHAR)reason;
     t->WaitTime = KeTickCount;
     t->State = Waiting;
-    InsertTailList(&KiWaitInListHead, &t->WaitListEntry);
-    return KiSwapThread();
+    InsertTailList(&WaitInListHead, &t->WaitListEntry);
+    return SwapThread();
 }
 
 // Leave the wait: unlock at WaitIrql, run user APCs if that is why we woke.
-static NTSTATUS KiFinishWait(PKTHREAD t, NTSTATUS status, bool unlocked = false) {
+static NTSTATUS FinishWait(PKTHREAD t, NTSTATUS status, bool unlocked = false) {
     if (!unlocked)
         KiUnlockDispatcherDatabase(t->WaitIrql);
     if (status == STATUS_USER_APC)
-        KiExecuteUserApcs();
+        ExecuteUserApcs();
     return status;
 }
 
@@ -217,17 +219,17 @@ XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason
     auto o = (DISPATCHER_HEADER *)Object;
     KiTimeout timeout(Timeout);
     for (;;) {
-        KiBeginWait(t);
-        if (KiIsSignaledFor(o, t)) {
-            KiWaitSatisfy(o, t);
-            return KiFinishWait(t, t->WaitStatus);
+        BeginWait(t);
+        if (IsSignaledFor(o, t)) {
+            WaitSatisfy(o, t);
+            return FinishWait(t, t->WaitStatus);
         }
-        if (NTSTATUS s = KiCheckAlertable(t, WaitMode, Alertable))
-            return KiFinishWait(t, s);
+        if (NTSTATUS s = CheckAlertable(t, WaitMode, Alertable))
+            return FinishWait(t, s);
         PLARGE_INTEGER remaining = timeout.present ? timeout.Remaining() : nullptr;
         if (remaining && remaining->QuadPart == 0)
-            return KiFinishWait(t, STATUS_TIMEOUT);
-        // The boot thread is the idle thread until start-up ends and may not block (KiSwapThread): it polls instead.
+            return FinishWait(t, STATUS_TIMEOUT);
+        // The boot thread is the idle thread until start-up ends and may not block (SwapThread): it polls instead.
         // Every other thread has a higher priority, so the one holding the object (the splash thread's SMBus or
         // EEPROM lock during the drive set-up) runs meanwhile, once the IRQL is down.
         if (t == Prcb.IdleThread && t->WaitIrql < DISPATCH_LEVEL) {
@@ -243,13 +245,13 @@ XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason
         wb.WaitType = WaitAny;
         wb.NextWaitBlock = &wb;
         t->WaitBlockList = &wb;
-        if (remaining && !KiArmWaitTimer(t, remaining, &wb))
-            return KiFinishWait(t, STATUS_TIMEOUT);
+        if (remaining && !ArmWaitTimer(t, remaining, &wb))
+            return FinishWait(t, STATUS_TIMEOUT);
         InsertTailList(&o->WaitListHead, &wb.WaitListEntry);
-        NTSTATUS status = KiBlock(t, WaitReason, WaitMode, Alertable);
+        NTSTATUS status = BlockThread(t, WaitReason, WaitMode, Alertable);
         KfLowerIrql(t->WaitIrql);
         if (status != STATUS_KERNEL_APC)
-            return KiFinishWait(t, status, true);
+            return FinishWait(t, status, true);
     }
 }
 
@@ -268,30 +270,30 @@ XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_
     PKTHREAD t = Prcb.CurrentThread;
     KiTimeout timeout(Timeout);
     for (;;) {
-        KiBeginWait(t);
+        BeginWait(t);
         if (WaitType == WaitAny) {
             for (ULONG i = 0; i < Count; i++) {
                 auto o = (DISPATCHER_HEADER *)Object[i];
-                if (KiIsSignaledFor(o, t)) {
-                    KiWaitSatisfy(o, t);
-                    return KiFinishWait(t, t->WaitStatus | (NTSTATUS)i);
+                if (IsSignaledFor(o, t)) {
+                    WaitSatisfy(o, t);
+                    return FinishWait(t, t->WaitStatus | (NTSTATUS)i);
                 }
             }
         } else {
             bool all = true;
             for (ULONG i = 0; i < Count && all; i++)
-                all = KiIsSignaledFor((DISPATCHER_HEADER *)Object[i], t);
+                all = IsSignaledFor((DISPATCHER_HEADER *)Object[i], t);
             if (all) {
                 for (ULONG i = 0; i < Count; i++)
-                    KiWaitSatisfy((DISPATCHER_HEADER *)Object[i], t);
-                return KiFinishWait(t, t->WaitStatus);
+                    WaitSatisfy((DISPATCHER_HEADER *)Object[i], t);
+                return FinishWait(t, t->WaitStatus);
             }
         }
-        if (NTSTATUS s = KiCheckAlertable(t, WaitMode, Alertable))
-            return KiFinishWait(t, s);
+        if (NTSTATUS s = CheckAlertable(t, WaitMode, Alertable))
+            return FinishWait(t, s);
         PLARGE_INTEGER remaining = timeout.present ? timeout.Remaining() : nullptr;
         if (remaining && remaining->QuadPart == 0)
-            return KiFinishWait(t, STATUS_TIMEOUT);
+            return FinishWait(t, STATUS_TIMEOUT);
 
         for (ULONG i = 0; i < Count; i++) {
             PKWAIT_BLOCK wb = &WaitBlockArray[i];
@@ -302,14 +304,14 @@ XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_
             wb->NextWaitBlock = i + 1 < Count ? &WaitBlockArray[i + 1] : &WaitBlockArray[0];
         }
         t->WaitBlockList = WaitBlockArray;
-        if (remaining && !KiArmWaitTimer(t, remaining, &WaitBlockArray[Count - 1]))
-            return KiFinishWait(t, STATUS_TIMEOUT);
+        if (remaining && !ArmWaitTimer(t, remaining, &WaitBlockArray[Count - 1]))
+            return FinishWait(t, STATUS_TIMEOUT);
         for (ULONG i = 0; i < Count; i++)
             InsertTailList(&((DISPATCHER_HEADER *)Object[i])->WaitListHead, &WaitBlockArray[i].WaitListEntry);
-        NTSTATUS status = KiBlock(t, WaitReason, WaitMode, Alertable);
+        NTSTATUS status = BlockThread(t, WaitReason, WaitMode, Alertable);
         KfLowerIrql(t->WaitIrql);
         if (status != STATUS_KERNEL_APC)
-            return KiFinishWait(t, status, true);
+            return FinishWait(t, status, true);
     }
 }
 
@@ -317,30 +319,30 @@ XBAPI NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Al
     PKTHREAD t = Prcb.CurrentThread;
     KiTimeout timeout(Interval);
     for (;;) {
-        KiBeginWait(t);
-        if (NTSTATUS s = KiCheckAlertable(t, WaitMode, Alertable))
-            return KiFinishWait(t, s);
+        BeginWait(t);
+        if (NTSTATUS s = CheckAlertable(t, WaitMode, Alertable))
+            return FinishWait(t, s);
 
         t->Timer.Header.SignalState = 0;
-        if (!KiInsertTimerRelative(&t->Timer, timeout.Remaining()->QuadPart)) {
+        if (!InsertTimerRelative(&t->Timer, timeout.Remaining()->QuadPart)) {
             // Already elapsed: yield to a ready thread of equal or higher priority (spec/stock/07).
             if (t->Priority < 16 && t->Priority != t->BasePriority) {
                 t->PriorityDecrement = 0;
-                KiSetPriorityThread(t, t->BasePriority);
+                SetPriorityThread(t, t->BasePriority);
             }
-            if (KiSelectYieldThread(t)) {
+            if (SelectYieldThread(t)) {
                 t->Preempted = FALSE;
                 t->Quantum = t->ApcState.Process->ThreadQuantum;
             }
-            return KiFinishWait(t, STATUS_SUCCESS);
+            return FinishWait(t, STATUS_SUCCESS);
         }
         InsertTailList(&t->Timer.Header.WaitListHead, &t->TimerWaitBlock.WaitListEntry);
         t->TimerWaitBlock.NextWaitBlock = &t->TimerWaitBlock;
         t->WaitBlockList = &t->TimerWaitBlock;
-        NTSTATUS status = KiBlock(t, DelayExecution, WaitMode, Alertable);
+        NTSTATUS status = BlockThread(t, DelayExecution, WaitMode, Alertable);
         KfLowerIrql(t->WaitIrql);
         if (status != STATUS_KERNEL_APC)
-            return KiFinishWait(t, status == STATUS_TIMEOUT ? STATUS_SUCCESS : status, true);
+            return FinishWait(t, status == STATUS_TIMEOUT ? STATUS_SUCCESS : status, true);
     }
 }
 
@@ -351,14 +353,14 @@ XBAPI PLIST_ENTRY NTAPI KeRemoveQueue(PKQUEUE Queue, KPROCESSOR_MODE WaitMode, P
     KiTimeout timeout(Timeout);
     bool first = true;
     for (;;) {
-        KiBeginWait(t);
+        BeginWait(t);
         if (first) {
             first = false;
             // Associate the thread with this queue (it occupies a concurrency slot while running).
             if (t->Queue != Queue) {
                 if (PKQUEUE oldQueue = t->Queue) {
                     RemoveEntryList(&t->QueueListEntry);
-                    KiActivateWaiterQueue(oldQueue);
+                    ActivateWaiterQueue(oldQueue);
                 }
                 t->Queue = Queue;
                 InsertTailList(&Queue->ThreadListHead, &t->QueueListEntry);
@@ -373,14 +375,14 @@ XBAPI PLIST_ENTRY NTAPI KeRemoveQueue(PKQUEUE Queue, KPROCESSOR_MODE WaitMode, P
             KiUnlockDispatcherDatabase(t->WaitIrql);
             return entry;
         }
-        if (NTSTATUS s = KiCheckAlertable(t, WaitMode, FALSE)) {
+        if (NTSTATUS s = CheckAlertable(t, WaitMode, FALSE)) {
             Queue->CurrentCount++;
-            return (PLIST_ENTRY)KiFinishWait(t, s);
+            return (PLIST_ENTRY)FinishWait(t, s);
         }
         PLARGE_INTEGER remaining = timeout.present ? timeout.Remaining() : nullptr;
         if (remaining && remaining->QuadPart == 0) {
             Queue->CurrentCount++;
-            return (PLIST_ENTRY)KiFinishWait(t, STATUS_TIMEOUT);
+            return (PLIST_ENTRY)FinishWait(t, STATUS_TIMEOUT);
         }
         KWAIT_BLOCK wb;
         wb.Thread = t;
@@ -389,16 +391,16 @@ XBAPI PLIST_ENTRY NTAPI KeRemoveQueue(PKQUEUE Queue, KPROCESSOR_MODE WaitMode, P
         wb.WaitType = WaitAny;
         wb.NextWaitBlock = &wb;
         t->WaitBlockList = &wb;
-        if (remaining && !KiArmWaitTimer(t, remaining, &wb)) {
+        if (remaining && !ArmWaitTimer(t, remaining, &wb)) {
             Queue->CurrentCount++;
-            return (PLIST_ENTRY)KiFinishWait(t, STATUS_TIMEOUT);
+            return (PLIST_ENTRY)FinishWait(t, STATUS_TIMEOUT);
         }
         InsertTailList(&Queue->Header.WaitListHead, &wb.WaitListEntry);
-        // KiUnwaitThread credits CurrentCount when the thread is released.
-        NTSTATUS status = KiBlock(t, WrQueue, WaitMode, FALSE);
+        // UnwaitThread credits CurrentCount when the thread is released.
+        NTSTATUS status = BlockThread(t, WrQueue, WaitMode, FALSE);
         KfLowerIrql(t->WaitIrql);
         if (status != STATUS_KERNEL_APC)
-            return (PLIST_ENTRY)KiFinishWait(t, status, true);
+            return (PLIST_ENTRY)FinishWait(t, status, true);
         Queue->CurrentCount--; // retry after the APC: give the slot back first
     }
 }
@@ -413,7 +415,7 @@ XBAPI void NTAPI KeInitializeSemaphore(PKSEMAPHORE Semaphore, LONG Count, LONG L
     Semaphore->Limit = Limit;
 }
 
-static void KiFinishSignal(KIRQL old, BOOLEAN Wait) {
+static void FinishSignal(KIRQL old, BOOLEAN Wait) {
     if (Wait) {
         PKTHREAD t = Prcb.CurrentThread;
         t->WaitNext = TRUE;
@@ -431,8 +433,8 @@ XBAPI LONG NTAPI KeReleaseSemaphore(PKSEMAPHORE Semaphore, LONG Increment, LONG 
         KeBugCheckEx(0x1E, STATUS_SEMAPHORE_LIMIT_EXCEEDED, (ULONG)Semaphore, 0, 0);
     Semaphore->Header.SignalState = next;
     if (previous == 0 && !IsListEmpty(&Semaphore->Header.WaitListHead))
-        KiWaitTest(&Semaphore->Header, Increment);
-    KiFinishSignal(old, Wait);
+        WaitTest(&Semaphore->Header, Increment);
+    FinishSignal(old, Wait);
     return previous;
 }
 
@@ -473,8 +475,10 @@ XBAPI LONG NTAPI KeReleaseMutant(PKMUTANT Mutant, LONG Increment, BOOLEAN Abando
             RemoveEntryList(&Mutant->MutantListEntry);
         Mutant->OwnerThread = nullptr;
         if (!IsListEmpty(&Mutant->Header.WaitListHead))
-            KiWaitTest(&Mutant->Header, Increment);
+            WaitTest(&Mutant->Header, Increment);
     }
-    KiFinishSignal(old, Wait);
+    FinishSignal(old, Wait);
     return previous;
 }
+
+} // namespace xk::core

@@ -6,6 +6,8 @@
 #include <xk/types.h>
 #include <xk/core.h>
 
+namespace xk::hardware {
+
 namespace {
 // Cerbios's button mask (spec/cerbios/08 §2): bits 0-7 the digital buttons, bit 8 + i analog button i
 // (A B X Y BLACK WHITE LT RT) held fully down (0xFF).
@@ -14,13 +16,13 @@ constexpr ULONG IGR_REBOOT = IGR_LT | IGR_RT | IGR_BACK | IGR_BLACK; // 0xD020, 
 
 constexpr ULONG HAL_REBOOT_ROUTINE = 1; // HalReturnToFirmware: a full reboot
 
-bool HalpIgrSeen; // the first XInputGetState was logged
+bool InGameResetSeen; // the first XInputGetState was logged
 } // namespace
 
 // State: XINPUT_STATE (packet number, then the gamepad: buttons u16 at +4, 8 analog bytes at +6).
 XBAPI void NTAPI HalpIgrCheck(const UCHAR *State) {
-    if (!HalpIgrSeen) {
-        HalpIgrSeen = true;
+    if (!InGameResetSeen) {
+        InGameResetSeen = true;
         XK_SERIAL("igr: the title reads its controllers (XInputGetState)\n");
     }
     ULONG mask = State[4];
@@ -30,7 +32,7 @@ XBAPI void NTAPI HalpIgrCheck(const UCHAR *State) {
     }
     if ((mask & IGR_REBOOT) == IGR_REBOOT) {
         XK_SERIAL("igr: LT RT BACK BLACK: reboot\n");
-        HalpIgrReboot();
+        InGameResetReboot();
     }
 }
 
@@ -40,7 +42,7 @@ XBAPI void NTAPI HalpIgrCheck(const UCHAR *State) {
 // mis-sized and the kernel stopped, spec/oxos_internal/22 §5); port 0xCF9 alone does not reset the console at all.
 // The SMBus is polled, so this works at any IRQL (XInputGetState may be called at DISPATCH_LEVEL). If the SMC does
 // not cut the power within two seconds, the reference reset follows.
-XBAPI void NTAPI HalpIgrReboot() {
+XBAPI void NTAPI InGameResetReboot() {
     for (int i = 0; i < 5 && !NT_SUCCESS(HalWriteSMBusValue(0x20, 0x02, FALSE, 0x40)); i++) {
         // Retry until the SMC accepts the power cycle (up to five tries).
     }
@@ -48,3 +50,5 @@ XBAPI void NTAPI HalpIgrReboot() {
         KeStallExecutionProcessor(1000);
     HalReturnToFirmware(HAL_REBOOT_ROUTINE);
 }
+
+} // namespace xk::hardware

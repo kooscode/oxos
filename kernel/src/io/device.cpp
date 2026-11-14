@@ -3,27 +3,29 @@
 #include <xk/runtime.h>
 #include <xk/filesystems.h>
 
-static KEVENT IopDeviceDefaultObject; // devices are not waitable: waits complete at once
+namespace xk::io {
+
+static KEVENT DeviceDefaultObject; // devices are not waitable: waits complete at once
 
 // The I/O manager's object types (their routines are in io/file.cpp and below).
-OBJECT_TYPE IoDeviceObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, IopParseDevice,
-                                  &IopDeviceDefaultObject, 'iveD'};
-OBJECT_TYPE IoFileObjectType = {ExAllocatePoolWithTag, ExFreePool, IopCloseFileObject, IopDeleteFileObject,
-                                IopParseFile, (PVOID)__builtin_offsetof(FILE_OBJECT, Event), 'eliF'};
-OBJECT_TYPE IoCompletionObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, IopDeleteIoCompletion, nullptr,
-                                      (PVOID)0, 'pmoC'};
+XBAPI OBJECT_TYPE IoDeviceObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, ParseDevice,
+                                        &DeviceDefaultObject, 'iveD'};
+XBAPI OBJECT_TYPE IoFileObjectType = {ExAllocatePoolWithTag, ExFreePool, CloseFileObject, DeleteFileObject, ParseFile,
+                                      (PVOID)__builtin_offsetof(FILE_OBJECT, Event), 'eliF'};
+XBAPI OBJECT_TYPE IoCompletionObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteIoCompletion, nullptr,
+                                            (PVOID)0, 'pmoC'};
 
-IO_FILE_SYSTEM IopFileSystems; // the mount routines, filled in by the file systems (filesystems/mount.cpp)
+IO_FILE_SYSTEM RegisteredFileSystems; // the mount routines, filled in by the file systems (filesystems/mount.cpp)
 
 // --- Devices and symbolic links
 
-void IoInitSystem() {
-    KeInitializeEvent(&IopDeviceDefaultObject, NotificationEvent, TRUE);
-    FscInitialize();
-    HDDFSInitialize();
+void InitIoSystem() {
+    KeInitializeEvent(&DeviceDefaultObject, NotificationEvent, TRUE);
+    filesystems::InitCache();
+    filesystems::HDDFSInitialize();
 }
 
-static bool IopIsMountableDeviceType(ULONG type) {
+static bool IsMountableDeviceType(ULONG type) {
     return type == FILE_DEVICE_DISK || type == FILE_DEVICE_CD_ROM || type == FILE_DEVICE_MEMORY_UNIT ||
            type == FILE_DEVICE_MEDIA_BOARD;
 }
@@ -46,7 +48,7 @@ XBAPI NTSTATUS NTAPI IoCreateDevice(PDRIVER_OBJECT DriverObject, ULONG DeviceExt
     dev->DeviceType = (UCHAR)DeviceType;
     dev->StackSize = 1;
     KeInitializeDeviceQueue(&dev->DeviceQueue);
-    if (IopIsMountableDeviceType(DeviceType))
+    if (IsMountableDeviceType(DeviceType))
         KeInitializeEvent(&dev->DeviceLock, SynchronizationEvent, TRUE);
     else
         dev->MountedOrSelfDevice = dev;
@@ -60,18 +62,18 @@ XBAPI NTSTATUS NTAPI IoCreateDevice(PDRIVER_OBJECT DriverObject, ULONG DeviceExt
 }
 
 // Last reference to a deleted device: let the driver tear down, then drop the creation reference.
-static void IopCompleteUnload(PDEVICE_OBJECT DeviceObject) {
+static void CompleteUnload(PDEVICE_OBJECT DeviceObject) {
     if (DeviceObject->DriverObject && DeviceObject->DriverObject->DriverDeleteDevice)
         DeviceObject->DriverObject->DriverDeleteDevice(DeviceObject);
     ObfDereferenceObject(DeviceObject);
 }
 
-void IopDereferenceDevice(PDEVICE_OBJECT DeviceObject) {
+void DereferenceDevice(PDEVICE_OBJECT DeviceObject) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     bool unload = --DeviceObject->ReferenceCount == 0 && DeviceObject->DeletePending;
     KfLowerIrql(old);
     if (unload)
-        IopCompleteUnload(DeviceObject);
+        CompleteUnload(DeviceObject);
 }
 
 XBAPI void NTAPI IoDeleteDevice(PDEVICE_OBJECT DeviceObject) {
@@ -82,11 +84,11 @@ XBAPI void NTAPI IoDeleteDevice(PDEVICE_OBJECT DeviceObject) {
     bool unload = DeviceObject->ReferenceCount == 0;
     KfLowerIrql(old);
     if (unload)
-        IopCompleteUnload(DeviceObject);
+        CompleteUnload(DeviceObject);
 }
 
 XBAPI NTSTATUS NTAPI IoCreateSymbolicLink(POBJECT_STRING SymbolicLinkName, POBJECT_STRING DeviceName) {
-    return ObpCreateSymbolicLink(SymbolicLinkName, DeviceName);
+    return objects::CreateSymbolicLink(SymbolicLinkName, DeviceName);
 }
 
 XBAPI NTSTATUS NTAPI IoDeleteSymbolicLink(POBJECT_STRING SymbolicLinkName) {
@@ -111,21 +113,21 @@ XBAPI NTSTATUS NTAPI IoInvalidDeviceRequest(PDEVICE_OBJECT DeviceObject, PIRP Ir
 
 // --- StartIo serialisation (all at DISPATCH_LEVEL)
 
-static void IopStartIo(PDEVICE_OBJECT dev, PIRP irp) {
+static void StartIo(PDEVICE_OBJECT dev, PIRP irp) {
     dev->CurrentIrp = irp;
     dev->StartIoFlags |= DO_STARTIO_BUSY;
     dev->DriverObject->DriverStartIo(dev, irp);
     dev->StartIoFlags &= ~DO_STARTIO_BUSY;
 }
 
-static void IopStartNextPacket(PDEVICE_OBJECT dev, bool byKey, ULONG key) {
+static void StartNextPacket(PDEVICE_OBJECT dev, bool byKey, ULONG key) {
     for (;;) {
         dev->CurrentIrp = nullptr;
         PKDEVICE_QUEUE_ENTRY e = byKey ? KeRemoveByKeyDeviceQueue(&dev->DeviceQueue, key)
                                        : KeRemoveDeviceQueue(&dev->DeviceQueue);
         if (!e)
             return;
-        IopStartIo(dev, CONTAINING_RECORD(e, IRP, Tail.Overlay.DeviceQueueEntry));
+        StartIo(dev, CONTAINING_RECORD(e, IRP, Tail.Overlay.DeviceQueueEntry));
         // A StartNextPacket requested from inside StartIo runs here instead of recursing.
         if (!(dev->StartIoFlags & DO_STARTIO_REQUESTED))
             return;
@@ -141,39 +143,39 @@ XBAPI void NTAPI IoStartPacket(PDEVICE_OBJECT DeviceObject, PIRP Irp, PULONG Key
                                                     &Irp->Tail.Overlay.DeviceQueueEntry, *Key)
                          : KeInsertDeviceQueue(&DeviceObject->DeviceQueue, &Irp->Tail.Overlay.DeviceQueueEntry);
     if (!queued) {
-        IopStartIo(DeviceObject, Irp);
+        StartIo(DeviceObject, Irp);
         if (DeviceObject->StartIoFlags & DO_STARTIO_REQUESTED) {
             DeviceObject->StartIoFlags &= ~DO_STARTIO_REQUESTED;
-            IopStartNextPacket(DeviceObject, DeviceObject->StartIoFlags & DO_STARTIO_REQUESTED_BYKEY,
-                               DeviceObject->StartIoKey);
+            StartNextPacket(DeviceObject, DeviceObject->StartIoFlags & DO_STARTIO_REQUESTED_BYKEY,
+                            DeviceObject->StartIoKey);
         }
     }
     KfLowerIrql(old);
 }
 
-static void IopRequestStartNextPacket(PDEVICE_OBJECT dev, bool byKey, ULONG key) {
+static void RequestStartNextPacket(PDEVICE_OBJECT dev, bool byKey, ULONG key) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     if (dev->StartIoFlags & DO_STARTIO_BUSY) {
         dev->StartIoFlags = (UCHAR)((dev->StartIoFlags & ~DO_STARTIO_REQUESTED_BYKEY) | DO_STARTIO_REQUESTED |
                                     (byKey ? DO_STARTIO_REQUESTED_BYKEY : 0));
         dev->StartIoKey = key;
     } else {
-        IopStartNextPacket(dev, byKey, key);
+        StartNextPacket(dev, byKey, key);
     }
     KfLowerIrql(old);
 }
 
 XBAPI void NTAPI IoStartNextPacket(PDEVICE_OBJECT DeviceObject) {
-    IopRequestStartNextPacket(DeviceObject, false, 0);
+    RequestStartNextPacket(DeviceObject, false, 0);
 }
 
 XBAPI void NTAPI IoStartNextPacketByKey(PDEVICE_OBJECT DeviceObject, ULONG Key) {
-    IopRequestStartNextPacket(DeviceObject, true, Key);
+    RequestStartNextPacket(DeviceObject, true, Key);
 }
 
 // --- Share access (byte counters)
 
-static void IopComputeAccess(ACCESS_MASK access, ULONG share, PFILE_OBJECT f) {
+static void ComputeAccess(ACCESS_MASK access, ULONG share, PFILE_OBJECT f) {
     f->ReadAccess = (access & (FILE_READ_DATA | FILE_EXECUTE)) != 0;
     f->WriteAccess = (access & (FILE_WRITE_DATA | FILE_APPEND_DATA)) != 0;
     f->DeleteAccess = (access & DELETE) != 0;
@@ -183,7 +185,7 @@ static void IopComputeAccess(ACCESS_MASK access, ULONG share, PFILE_OBJECT f) {
     f->SharedDelete = any && (share & FILE_SHARE_DELETE);
 }
 
-static void IopAddShare(PFILE_OBJECT f, PSHARE_ACCESS s) {
+static void AddShare(PFILE_OBJECT f, PSHARE_ACCESS s) {
     s->OpenCount++;
     s->Readers += f->ReadAccess;
     s->Writers += f->WriteAccess;
@@ -195,7 +197,7 @@ static void IopAddShare(PFILE_OBJECT f, PSHARE_ACCESS s) {
 
 XBAPI NTSTATUS NTAPI IoCheckShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject,
                                         PSHARE_ACCESS ShareAccess, BOOLEAN Update) {
-    IopComputeAccess(DesiredAccess, DesiredShareAccess, FileObject);
+    ComputeAccess(DesiredAccess, DesiredShareAccess, FileObject);
     PFILE_OBJECT f = FileObject;
     if (!(f->ReadAccess || f->WriteAccess || f->DeleteAccess))
         return STATUS_SUCCESS;
@@ -207,17 +209,17 @@ XBAPI NTSTATUS NTAPI IoCheckShareAccess(ACCESS_MASK DesiredAccess, ULONG Desired
         (s->Deleters && !(DesiredShareAccess & FILE_SHARE_DELETE)))
         return STATUS_SHARING_VIOLATION;
     if (Update)
-        IopAddShare(f, s);
+        AddShare(f, s);
     return STATUS_SUCCESS;
 }
 
 XBAPI void NTAPI IoSetShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject,
                                   PSHARE_ACCESS ShareAccess) {
-    IopComputeAccess(DesiredAccess, DesiredShareAccess, FileObject);
+    ComputeAccess(DesiredAccess, DesiredShareAccess, FileObject);
     PFILE_OBJECT f = FileObject;
     if (f->ReadAccess || f->WriteAccess || f->DeleteAccess) {
         RtlZeroMemory(ShareAccess, sizeof(*ShareAccess));
-        IopAddShare(f, ShareAccess);
+        AddShare(f, ShareAccess);
     } else {
         RtlZeroMemory(ShareAccess, sizeof(*ShareAccess));
     }
@@ -256,14 +258,14 @@ XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject) {
     KfLowerIrql(old);
     if (vol) {
         status = vol->DriverObject->DriverDismountVolume(vol);
-        IopDereferenceDevice(vol);
+        DereferenceDevice(vol);
     }
     return status;
 }
 
 // FILE_SYSTEM_CONTROL for file systems whose only control is FSCTL_DISMOUNT_VOLUME (RAW, XDVDFS, UDF; the
 // reference's 0x8002aef5): the driver's dismount routine, anything else is an invalid request.
-NTSTATUS NTAPI IoFsControlDismountOnly(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+NTSTATUS NTAPI DismountOnlyFsControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     NTSTATUS status = STATUS_INVALID_DEVICE_REQUEST;
     if (IoGetCurrentIrpStackLocation(Irp)->Parameters.FileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
         status = DeviceObject->DriverObject->DriverDismountVolume(DeviceObject);
@@ -282,3 +284,5 @@ XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName) {
     }
     return status;
 }
+
+} // namespace xk::io

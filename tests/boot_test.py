@@ -50,8 +50,16 @@ class Monitor:
         return r.get("return", r)
 
     def addr(self, name):
+        """A symbol's address: a C name, a global C++ name, or a namespaced one ("storage::DiskLengthInSectors", in
+        namespace xk), as the linker map spells them."""
+        if "::" in name:
+            parts = name.split("::")
+            parts = parts if parts[0] == "xk" else ["xk"] + parts
+            prefix = "?" + parts[-1] + "@" + "@".join(reversed(parts[:-1])) + "@@"
+        else:
+            prefix = f"?{name}@@"
         for k, v in self.syms.items():
-            if k in ("_" + name, name) or k.startswith(f"?{name}@@"):
+            if k in ("_" + name, name) or k.startswith(prefix):
                 return v
         sys.exit(f"symbol {name} not in map")
 
@@ -78,15 +86,15 @@ class Monitor:
 
 
 def run_checks(mon, hdd=None, title_map=None):
-    exc = mon.read("KiLastExceptionVector")
+    exc = mon.read("core::LastExceptionVector")
     tick_rate = mon.rate("KeTickCount")
     timer_rate = mon.rate("KiTestTimerTicks")
     eip = int(re.search(r"EIP=([0-9a-f]+)", mon.hmp("info registers")).group(1), 16)
     values = {name: mon.read(name) for name in (
-        "KiBootStage", "KiTestDpcCount", "KiTestOneShotFired", "KiTestEventState",
+        "core::BootStage", "KiTestDpcCount", "KiTestOneShotFired", "KiTestEventState",
         "KiTestRtcCount", "KiTestRtcDisconnected", "KiTestRtcIrqlOk")}
     m2b = {name: mon.read(name) for name in (
-        "KiBugCheckCode", "KiTestPingA", "KiTestPingB", "KiTestSleepMs", "KiTestSemaphoreConsumed",
+        "core::LastBugCheckCode", "KiTestPingA", "KiTestPingB", "KiTestSleepMs", "KiTestSemaphoreConsumed",
         "KiTestMutantOk", "KiTestWaitAnyIndex", "KiTestWaitAllStatus", "KiTestTimeoutStatus", "KiTestJoinOk",
         "KiTestFpuOk", "KiTestThreadsDone")}
     m2bp = {name: mon.read(name) for name in (
@@ -110,7 +118,9 @@ def run_checks(mon, hdd=None, title_map=None):
     spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
-    print(f"exception vector {exc:#x} code {mon.read('KiLastExceptionCode'):#x} at {mon.read('KiLastExceptionEip'):#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, periodic timer DPC {timer_rate:.1f}/s")
+    code, at = mon.read("core::LastExceptionCode"), mon.read("core::LastExceptionEip")
+    print(f"exception vector {exc:#x} code {code:#x} at {at:#x}, EIP {eip:#x}, clock {tick_rate:.0f}/s, "
+          f"periodic timer DPC {timer_rate:.1f}/s")
     print("  " + ", ".join(f"{k}={v}" for k, v in values.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith(("Status", "Code")) else f"{k}={v}" for k, v in m2b.items()))
     print("  " + ", ".join(f"{k}={v:#x}" if k.endswith("Status") or k.endswith("Timeout") else f"{k}={v}" for k, v in m2bp.items()))
@@ -119,7 +129,7 @@ def run_checks(mon, hdd=None, title_map=None):
     print(f"  spinner rates {spin_a:.0f}/s and {spin_b:.0f}/s, context switches {switches}")
     return {
         "M1": {
-            "reached idle (stage 0x30)": values["KiBootStage"] == 0x30,
+            "reached idle (stage 0x30)": values["core::BootStage"] == 0x30,
             "no exception": exc == 0xFFFFFFFF,
             "clock ~1000 ticks/s": 900 <= tick_rate <= 1100,
             "EIP inside kernel": 0x80010000 <= eip < 0x80100000,
@@ -134,7 +144,7 @@ def run_checks(mon, hdd=None, title_map=None):
             "interrupt disconnected from a DPC": values["KiTestRtcDisconnected"] == 1,
         },
         "M2b": {
-            "no bug check": m2b["KiBugCheckCode"] == 0,
+            "no bug check": m2b["core::LastBugCheckCode"] == 0,
             "event ping-pong 1000 rounds each": m2b["KiTestPingA"] == 1000 and m2b["KiTestPingB"] == 1000,
             "10 x 50 ms sleep ~500 ms": 495 <= m2b["KiTestSleepMs"] <= 530,
             "semaphore: 100 releases consumed": m2b["KiTestSemaphoreConsumed"] == 100,
@@ -265,15 +275,15 @@ def idex_checks(mon, hdd):
         return raw[:length]
     password = hmac.new(mem("XboxHDKey", 16), ansi("HalDiskModelNumber") + ansi("HalDiskSerialNumber"),
                         hashlib.sha1).digest() + bytes(12)
-    before, after = mon.read("IdexDiskSecurityWord") & 0xFFFF, mon.read("KiTestIdexSecurityAfter")
+    before, after = mon.read("storage::DiskSecurityWord") & 0xFFFF, mon.read("KiTestIdexSecurityAfter")
     print(f"  (IDENTIFY word 128: {before:#06x} at boot, {after:#06x} after)")
     return {
         "IDE pass-through: IDENTIFY, buffer rule, failing command completes": mon.read("KiTestIdexPassThroughOk") == 1,
         "drive password = HMAC-SHA1(XboxHDKey, model, serial)": mem("KiTestIdexPassword", 32) == password,
         "locked drive unlocked at boot (word 128: locked bit gone)": not (before & 4)
-            or (after & 6) == 2 and mon.read("IdexDiskSecurityUnlocked") & 0xFF == 1,
-        "disk identified: capacity of the image (64-bit size)": mon.read("IdexDiskLengthInSectors")
-            | mon.read_offset("IdexDiskLengthInSectors", 4) << 32 == q.size // 512,
+            or (after & 6) == 2 and mon.read("storage::DiskSecurityUnlocked") & 0xFF == 1,
+        "disk identified: capacity of the image (64-bit size)": mon.read("storage::DiskLengthInSectors")
+            | mon.read_offset("storage::DiskLengthInSectors", 4) << 32 == q.size // 512,
         "\\Device\\Harddisk0\\PartitionN on demand, names checked": mon.read("KiTestIdexNamesOk") == 1,
         "sector 0 of partitions 0-5 matches the image": sigs_ok,
         "256 KB DMA read (2 chunks) matches the image": mon.read("KiTestIdexBigOk") == 1 and mon.read("KiTestIdexBigSum") == want,
@@ -289,7 +299,7 @@ def idex_exfat_checks(mon, q):
     nothing beyond it; the folder partitions have no sectors of their own."""
     reserved = q.read(1024 * 512, 16)
     return {
-        "exFAT layout detected (GPT, exFAT partition)": mon.read("IdexDiskEXFATLayout") & 0xFF == 1,
+        "exFAT layout detected (GPT, exFAT partition)": mon.read("storage::DiskHasEXFATLayout") & 0xFF == 1,
         "Partition0 sector 0 = the reserved-area copy at sector 1024": [
             mon.read_offset("KiTestIdexPartitionSig", 4 * w) for w in range(4)] == list(struct.unpack("<4I", reserved)),
         "Partition0 refuses access past the reserved area; folder partitions refuse raw reads":
@@ -311,7 +321,7 @@ def lba48_kernel_checks(mon, q):
     if q.size // 512 < 0x20001000:
         return {}
     return {
-        "48-bit drive detected (IDENTIFY words 83/86)": mon.read("IdexDiskLba48") & 0xFF == 1,
+        "48-bit drive detected (IDENTIFY words 83/86)": mon.read("storage::DiskSupportsLba48") & 0xFF == 1,
         "48-bit self-test ran (target sectors were free)": mon.read("KiTestIdexLba48Ran") == 1,
         "48-bit writes read back (around 0x0FFFFFFF, 256-sector counts, end of disk)": mon.read("KiTestIdexLba48Ok") == 1,
     }
@@ -509,7 +519,7 @@ def write_extensions(hdd_copy, folder):
 
 def extension_state_pages(mon):
     """The state pages of the loaded extensions, in load order (none when no extension is loaded)."""
-    state = mon.read("XkExtensionsState")
+    state = mon.read("extensions::LoadedExtensions")
     if not state:
         return []
     count = int(mon.hmp(f"x/1wx {state:#x}").split(":")[1].split()[0], 16)
@@ -542,7 +552,7 @@ def extension_checks(mon, launches):
     p = words(pages[2], 6) if count >= 3 else [0] * 6
     h = words(pages[3], 2) if count >= 4 else [0] * 2
     if not count:
-        return {"extensions loaded (XkExtensionsState)": False}
+        return {"extensions loaded (extensions::LoadedExtensions)": False}
     return {
         "extension_test, chain, plain_c and the SDK's example hello loaded; failload unloaded, badversion refused, "
         "disabled and unlisted not loaded": count == 4 and x[0] == 0x54534F58 and c[0] == 0x4E414843
@@ -573,13 +583,13 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False):
     syms = map_symbols(title_map)
     base = syms["_XkTitleResults"]
     for _ in range(40):  # the title starts after the kernel suites
-        if mon.read("XeTitleLaunched"):
+        if mon.read("titles::TitleLaunched"):
             break
         time.sleep(0.25)
     for i in range(160):  # includes the quick reboot into media\second.xbe
         v = mon.hmp(f"x/1wx {base:#x}")
         if os.environ.get("XK_DEBUG"):
-            print(i, time.time(), v.strip(), mon.read("XeTitleLaunched"), mon.read("KiQuickRebootCount"))
+            print(i, time.time(), v.strip(), mon.read("titles::TitleLaunched"), mon.read("KiQuickRebootCount"))
         # The results are complete once the title has finished; with relaunch, in its second run (second.xbe).
         if v.split(":")[1].split()[0] == "0x54544b58" and (not relaunch or mon.read("KiQuickRebootCount") >= 1):
             break
@@ -596,7 +606,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False):
     def text(ws):
         return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
     name, second = text(words[9:25]), text(words[28:44])
-    launched = mon.read("XeTitleLaunched")
+    launched = mon.read("titles::TitleLaunched")
     mon.resume()
     checks = {
         "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
@@ -612,20 +622,20 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False):
     if relaunch:
         # The third launch: the dashboard, after the kernel's events for it (the extensions count them).
         for _ in range(200):
-            if mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("XeTitleLaunched") == 2 and (
+            if mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("titles::TitleLaunched") == 2 and (
                     not extensions or extension_loaded_titles(mon) >= 3 + reboots):
                 break
             time.sleep(0.1)
         mon.pause()
         # What the kernel wrote to the launch page for the dashboard (a dashboard may consume the page itself, as
         # the stock one does).
-        page = [mon.read_offset("XeDashboardLaunchData", 4 * i) for i in range(3)]
+        page = [mon.read_offset("titles::DashboardLaunchData", 4 * i) for i in range(3)]
         checks["missing image from the launch page: dashboard with LDP {type 1, reason 1, code 1}"] = \
-            mon.read("XeTitleLaunched") == 2 and page == [1, 1, 1]
+            mon.read("titles::TitleLaunched") == 2 and page == [1, 1, 1]
         del checks["path symbolic link \\??\\T: -> Partition1\\XkTest"]  # keep.bin comes from the FATX self-test
         checks |= {
             "quick reboot (HalReturnToFirmware(2)): kernel re-entered (twice), LaunchDataPage re-adopted":
-                mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("MmPersistedPages") >= 1,
+                mon.read("KiQuickRebootCount") == 2 + reboots and mon.read("memory::PersistedPages") >= 1,
             "LaunchDataPage launch of media;second.xbe"
             + (", redirected to redirected\\second.xbe (oxos_launch_redirect.ini)" if REDIRECT else "")
             + ", first run's results carried over": words[25] == 1
@@ -650,9 +660,9 @@ def ram_checks(mon, memory):
     pages = memory * 256
     return {
         # 2 = more than 64 MB; 1 (64 MB) and 3 (unclear: xemu at 64 MB) are both used as 64 MB.
-        f"{memory} MB probed at the cold boot": (mon.read("MiRamProbe") == 2) == (memory == 128),
-        f"{pages} pages managed after the quick reboots": mon.read("MmNumberOfPhysicalPages") == pages
-            and mon.read("MmHighestPhysicalPage") == pages - 1,
+        f"{memory} MB probed at the cold boot": (mon.read("memory::RamProbe") == 2) == (memory == 128),
+        f"{pages} pages managed after the quick reboots": mon.read("memory::NumberOfPhysicalPages") == pages
+            and mon.read("memory::HighestPhysicalPage") == pages - 1,
     }
 
 
@@ -715,8 +725,9 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
 
 def iso_checks(mon, a):
     checks = title_checks(mon, a.title_map, relaunch=True, reboots=1)
-    checks["image mounted by the launcher (VdLastMountStatus 0), read without errors"] = \
-        mon.read("VdLastMountStatus") == 0 and mon.read("VdReads") > 0 and mon.read("VdErrors") == 0
+    checks["image mounted by the launcher (storage::VirtualDiscLastMountStatus 0), read without errors"] = (
+        mon.read("storage::VirtualDiscLastMountStatus") == 0 and mon.read("storage::VirtualDiscReads") > 0
+        and mon.read("storage::VirtualDiscErrors") == 0)
     return checks
 
 
@@ -756,7 +767,7 @@ def misc_checks(mon):
         "SMC tray events update the tray cache and change count": mon.read("KiTestMiscSmcOk") == 1,
         "performance counter: 3.375 MHz, monotonic, matches the clock": mon.read("KiTestMiscPerfOk") == 1,
         "FATX scatter/gather: NtWriteFileGather + NtReadFileScatter round trip": mon.read("KiTestMiscScatterOk") == 1,
-        "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("HalpSciCount") >= 1,
+        "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("hardware::SciCount") >= 1,
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "TV encoder: every SD and HD mode word programs the Conexant registers (read back)":
             mon.read("KiTestAvModesTried") == 15 and mon.read("KiTestAvModesOk") == 15,
@@ -769,31 +780,33 @@ def misc_checks(mon):
 def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     if jingle_pcm:  # once synthesis has finished (the jingle is still playing): the whole buffer
         for _ in range(200):
-            if mon.read("HalpBootSoundSynthMs"):
+            if mon.read("bootscreen::BootSoundSynthMs"):
                 break
             time.sleep(0.05)
-        r = mon.hmp(f"pmemsave {mon.read('HalpBootSoundBuffer'):#x} {mon.read('HalpBootSoundBytes'):#x} \"{jingle_pcm}\"")
+        buffer, size = mon.read("bootscreen::BootSoundBuffer"), mon.read("bootscreen::BootSoundBytes")
+        r = mon.hmp(f"pmemsave {buffer:#x} {size:#x} \"{jingle_pcm}\"")
         print("  jingle samples saved:", jingle_pcm, r.strip() if isinstance(r, str) else r)
     for _ in range(60):
-        if mon.read("XeTitleLaunched"):
+        if mon.read("titles::TitleLaunched"):
             break
         time.sleep(0.25)
     time.sleep(4)
     for _ in range(40):  # the jingle (and the splash) end a little after the dashboard has loaded
-        if mon.read("HalpBootSoundStatus") >= 3:
+        if mon.read("bootscreen::BootSoundStatus") >= 3:
             break
         time.sleep(0.25)
-    exc = mon.read("KiLastExceptionVector")
+    exc = mon.read("core::LastExceptionVector")
     t0 = mon.read("KeTickCount")
     time.sleep(0.5)
     ticking = mon.read("KeTickCount") > t0
     # Boot-only memory (spec/oxos_internal/18): pages freed, and the page database (the PTEs at 0x83FF0000) no longer
     # maps the splash's code; the tables of xemu's encoder (a Conexant) stay mapped.
-    boot_freed = bin(mon.read("MiBootPagesFreed")).count("1") + bin(mon.read_offset("MiBootPagesFreed", 4)).count("1")
+    boot_freed = (bin(mon.read("memory::BootPagesFreed")).count("1")
+                  + bin(mon.read_offset("memory::BootPagesFreed", 4)).count("1"))
     def mapped(name):
         pfn = (mon.addr(name) & 0x03FFFFFF) >> 12
         return int(mon.hmp(f"x/1wx {0x83FF0000 + 4 * pfn:#x}").split(":")[1].split()[0], 16) & 1
-    boot_code_present, tables_present = mapped("HalpStartSplash"), mapped("AvpCxTables")
+    boot_code_present, tables_present = mapped("bootscreen::StartSplash"), mapped("ConexantTablesStart")
     start = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)
     fb = start & 0x03FFFFFF
     words = []
@@ -806,25 +819,29 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     dash = raw.split(b"\0")[0].decode("latin-1")
     want = ("\\Device\\Harddisk0\\Partition2\\Dashboard\\default.xbe" if xbl else
             "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if evox else "xboxdash.xbe"))
+    # The boot screen's diagnostics (kernel/src/bootscreen), read once: the splash and the jingle have ended.
+    bs = {name: mon.read(f"bootscreen::{name}") for name in (
+        "SplashFullMs", "SplashFadeMs", "SplashFrames", "SplashSource", "SplashStatus", "BootSoundStatus",
+        "BootSoundPosition", "BootSoundLast", "BootSoundAhead", "BootSoundUnderruns", "BootSoundSynthMs")}
     return {"M4b-2": {
         f"dashboard launched without a disc: {dash} "
         f"({'EvoX first' if evox else 'only C:\\Dashboard' if xbl else 'no EvoX: the Xbox dashboard'})":
-            mon.read("XeTitleLaunched") == 2 and mon.read("XeLastLoadStatus") == 0 and dash == want,
+            mon.read("titles::TitleLaunched") == 2 and mon.read("titles::LastLoadStatus") == 0 and dash == want,
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
-        "AvSetDisplayMode called, CRTC start set": mon.read("AvpSetDisplayModeCalls") >= 1 and fb != 0,
+        "AvSetDisplayMode called, CRTC start set": mon.read("hardware::SetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
-        f"boot splash faded in before the dashboard, full intensity {mon.read('HalpSplashFullMs')} ms after the jingle's "
-        f"start, at its climax ({mon.read('HalpSplashFadeMs')} ms)":
-            mon.read("HalpSplashFrames") >= 10 and mon.read("HalpSplashFadeMs") > 0
-            and 0 <= mon.read("HalpSplashFullMs") - mon.read("HalpSplashFadeMs") < 100,
-        "splash scene (flash, copied to RAM by the 2BL) drawn": mon.read("HalpSplashSource") == 2
-            and mon.read("HalpSplashStatus") == 0,
-        f"boot jingle played to its last buffer through the AC'97 controller (status {mon.read('HalpBootSoundStatus'):#x}, "
-        f"buffer {mon.read('HalpBootSoundPosition')} at the end, the jingle's last {mon.read('HalpBootSoundLast')}, "
-        f"{mon.read('HalpBootSoundAhead')} ms synthesized ahead, {mon.read('HalpBootSoundUnderruns')} underruns, "
-        f"synthesis {mon.read('HalpBootSoundSynthMs') & 0x7FFFFFFF} ms)":
-            mon.read("HalpBootSoundStatus") == 3
-            and mon.read("HalpBootSoundPosition") >= mon.read("HalpBootSoundLast") > 0,
+        f"boot splash faded in before the dashboard, full intensity {bs['SplashFullMs']} ms after the jingle's "
+        f"start, at its climax ({bs['SplashFadeMs']} ms)":
+            bs["SplashFrames"] >= 10 and bs["SplashFadeMs"] > 0
+            and 0 <= bs["SplashFullMs"] - bs["SplashFadeMs"] < 100,
+        "splash scene (flash, copied to RAM by the 2BL) drawn": bs["SplashSource"] == 2
+            and bs["SplashStatus"] == 0,
+        f"boot jingle played to its last buffer through the AC'97 controller (status {bs['BootSoundStatus']:#x}, "
+        f"buffer {bs['BootSoundPosition']} at the end, the jingle's last {bs['BootSoundLast']}, "
+        f"{bs['BootSoundAhead']} ms synthesized ahead, {bs['BootSoundUnderruns']} underruns, "
+        f"synthesis {bs['BootSoundSynthMs'] & 0x7FFFFFFF} ms)":
+            bs["BootSoundStatus"] == 3
+            and bs["BootSoundPosition"] >= bs["BootSoundLast"] > 0,
         f"boot-only pages freed before the dashboard ({boot_freed} pages; the splash code's page free, the encoder "
         f"tables' kept)": boot_freed >= 5 and not boot_code_present and tables_present,
     }, "M5e": launch_reason_checks(mon)}
@@ -832,11 +849,11 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
 
 def fatal_checks(mon):
     for _ in range(240):  # the disk wait times out first
-        if mon.read("IdexFatalErrorCode"):
+        if mon.read("core::FatalErrorCode"):
             break
         time.sleep(0.25)
     time.sleep(2)
-    code, fb = mon.read("IdexFatalErrorCode"), mon.read("XkFatalErrorFrameBuffer")
+    code, fb = mon.read("core::FatalErrorCode"), mon.read("core::FatalErrorFrameBuffer")
     lit = text = 0
     for y in range(72, 182, 8):  # the two digit cells (x 250-390)
         out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
@@ -845,12 +862,13 @@ def fatal_checks(mon):
         out = mon.hmp(f"xp/544wx {fb + (y * 640 + 48) * 4:#x}") if fb else ""
         text += len(re.findall(r"0x00ffffff", out))
     print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit digit samples, {text} title samples)")
+    sound_stopped = mon.read("core::FatalSoundStopped")
     return {"M5f": {
         "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
         "error code drawn on screen": fb != 0 and lit > 20
             and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
         "the error's title drawn under it": text > 20,
-        f"the boot sound stopped ({mon.read('XkFatalSoundStopped')})": mon.read("XkFatalSoundStopped") in (1, 2),
+        f"the boot sound stopped ({sound_stopped})": sound_stopped in (1, 2),
     }}, code
 
 
@@ -860,27 +878,27 @@ def blank_disk_fatal_checks(mon, reason, seconds, pad=None):
     X is then pressed and the File Manager must start."""
     shown = 0
     for _ in range(4 * (seconds + 30)):
-        if not shown and mon.read("XkFatalErrorFrameBuffer") == 0 and mon.read("IdexDiskCountdownSeconds"):
+        if not shown and mon.read("core::FatalErrorFrameBuffer") == 0 and mon.read("storage::DiskCountdownSeconds"):
             shown = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)  # the countdown on screen
-        if mon.read("IdexFatalErrorCode") or mon.read("UploadServing"):
+        if mon.read("core::FatalErrorCode") or mon.read("webserver::Serving"):
             break
         time.sleep(0.25)
-    code, serving = mon.read("IdexFatalErrorCode"), mon.read("UploadServing")
-    got = (mon.read("IdexDiskCountdownSeconds"), mon.read("IdexDiskCountdownReason"))
+    code, serving = mon.read("core::FatalErrorCode"), mon.read("webserver::Serving")
+    got = (mon.read("storage::DiskCountdownSeconds"), mon.read("storage::DiskCountdownReason"))
     print(f"  (fatal error {code}, upload server {serving}, countdown {got[0]} s, reason {got[1]})")
     checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
               "formatted, then no dashboard and X not pressed: error 13, no File Manager":
-                  code == 13 and serving == 0 and mon.read("GamepadXPressed") == 0}
+                  code == 13 and serving == 0 and mon.read("gamepad::XButtonPressed") == 0}
     if pad and code == 13:
         time.sleep(3)  # the error screen sets up the controllers
         pad.set("X", 1)  # the pad's X is X in xemu's mapping
         for _ in range(80):
-            if mon.read("UploadServing"):
+            if mon.read("webserver::Serving"):
                 break
             time.sleep(0.25)
         pad.set("X", 0)
-        checks[f"X on the error screen: the File Manager ({mon.read('GamepadPadsFound')} pads)"] = \
-            mon.read("UploadServing") == 1 and mon.read("IdexFatalErrorCode") == 0
+        checks[f"X on the error screen: the File Manager ({mon.read('gamepad::ControllersFound')} pads)"] = \
+            mon.read("webserver::Serving") == 1 and mon.read("core::FatalErrorCode") == 0
     if seconds:
         checks["the countdown screen was shown"] = shown != 0
     return {"blank disk": checks}
@@ -908,7 +926,8 @@ def upload_checks(mon, port, xbe, fs="exFAT"):
         except OSError:
             pass
         time.sleep(0.5)
-    checks = {f"X seen during the splash ({mon.read('GamepadPadsFound')} pads)": mon.read("GamepadXPressed") == 1,
+    pads = mon.read("gamepad::ControllersFound")
+    checks = {f"X seen during the splash ({pads} pads)": mon.read("gamepad::XButtonPressed") == 1,
               "the page is served": bool(page) and b"OXOS File Manager" in page}
     if not checks["the page is served"]:
         return {"upload server": checks}
@@ -1024,7 +1043,8 @@ def udf_checks(mon):
         time.sleep(0.25)
     vob, ifo = mkudf.TREE["VIDEO_TS"]["VTS_01_1.VOB"], mkudf.TREE["VIDEO_TS"]["VIDEO_TS.IFO"]
     names = "".join(mkudf.plain(n) + "|" for n in mkudf.TREE)
-    print(f"  (UDF mount: stage {mon.read('UdfMountStage')}, status {mon.read('UdfMountStatus'):#x}; "
+    stage, status = mon.read("filesystems::UdfMountStage"), mon.read("filesystems::UdfMountStatus")
+    print(f"  (UDF mount: stage {stage}, status {status:#x}; "
           f"names {read_string(mon, 'KiTestUdfDirNames', 64)!r})")
     return {"M8": {
         "UDF mounted on \\Device\\CdRom0 (volume attributes, offset read)": mon.read("KiTestUdfVolumeOk") == 1,
@@ -1053,7 +1073,7 @@ def serial_checks(path):
 
 
 def launch_reason_checks(mon):
-    reason, ldp = mon.read("XeLaunchReason"), mon.read("LaunchDataPage")
+    reason, ldp = mon.read("titles::LaunchReason"), mon.read("LaunchDataPage")
     page = [int(mon.hmp(f"x/1wx {ldp + off:#x}").split(":")[1].split()[0], 16) for off in (0, 0x400, 0x408)] \
         if ldp else None
     print(f"  (cold-boot launch reason {reason:#x}, LaunchDataPage {ldp:#x} {page})")
@@ -1131,10 +1151,10 @@ def encoder_checks(mon, name, self_test=False):
     (spec/stock/18-20)."""
     address, flag, kind = ENCODERS[name]
     for _ in range(40):
-        if mon.read("AvpEncoderAddress") & 0xFF:
+        if mon.read("hardware::EncoderAddress") & 0xFF:
             break
         time.sleep(0.25)
-    found = mon.read("AvpEncoderAddress") & 0xFF
+    found = mon.read("hardware::EncoderAddress") & 0xFF
     flags = mon.read("XboxHardwareInfo")
     print(f"  encoder {name}: found {found:#x}, XboxHardwareInfo.Flags {flags:#x}")
     checks = {
@@ -1144,15 +1164,15 @@ def encoder_checks(mon, name, self_test=False):
     # The dashboard sets an SD mode: Conexant and Focus registers read back as the tables have them; on the Xcalibur
     # every write completes and the values written are the ones spec/stock/20 gives for that mode.
     for _ in range(60):
-        if mon.read("AvpEncoderProgrammed"):
+        if mon.read("hardware::EncoderProgrammed"):
             break
         time.sleep(0.25)
-    mode, bad = mon.read("AvpEncoderProgrammed"), mon.read("AvpEncoderMismatches")
+    mode, bad = mon.read("hardware::EncoderProgrammed"), mon.read("hardware::EncoderMismatches")
     print(f"  {name}: mode {mode:#010x} programmed, {bad} registers read back differently or writes failed")
     checks[f"{name}: the dashboard's mode set programs the encoder"] = mode != 0 and bad == 0
     if name == "xcalibur" and mode and not self_test:
         row, want = xcalibur_expected(mode)
-        got = {r: mon.read_offset("AvpXcShadow", r * 4) for r in want}
+        got = {r: mon.read_offset("hardware::XcShadow", r * 4) for r in want}
         diff = {f"{r:#04x}": (f"{got[r]:#010x}", f"{v:#010x}") for r, v in want.items() if got[r] != v}
         print(f"  Xcalibur row {row:#04x}: {len(want) - len(diff)} of {len(want)} registers as spec/stock/20 gives them"
               + (f"; differ: {diff}" if diff else ""))
@@ -1174,7 +1194,7 @@ def encoder_checks(mon, name, self_test=False):
         # xemu models the Xcalibur as byte registers, so a 4-byte block read returns its register 0 as the byte count
         # and the kernel rejects it, as it would a short reply on hardware (spec/stock/20 §1); the block writes
         # themselves complete on the bus.
-        last = mon.read("HalpSMBusLastBlock")
+        last = mon.read("hardware::SMBusLastBlock")
         print(f"  last block transfer {last:#x}")
         checks["xcalibur: a 4-byte block SMBus transfer completes on the bus"] = (last >> 8) & 0x10 != 0
     return checks

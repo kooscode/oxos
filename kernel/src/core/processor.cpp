@@ -4,6 +4,10 @@
 #include <xk/core.h>
 #include <xk/arch.h>
 
+KPCR KiPcr; // the processor control region (FS:0): outside the namespace, the unit tests' assembly uses it
+
+namespace xk::core {
+
 namespace {
 
 struct [[gnu::packed]] SegmentDescriptor {
@@ -80,8 +84,7 @@ void InitFaultTss(KTSS &tss, void (*entry)(), UCHAR *stack) {
 
 } // namespace
 
-KPCR KiPcr;           // the processor control region (FS:0)
-KTHREAD KiIdleThread; // the boot thread, which becomes the idle loop
+KTHREAD IdleThreadObject; // the boot thread, which becomes the idle loop
 
 // The entry points the IDT and the fault TSSs point at (arch/entry.S, arch/interrupt_stubs.S).
 extern "C" void KiDoubleFaultTask();
@@ -98,7 +101,7 @@ extern "C" PVOID KiIrqStubs[16];
 // After the task's POST code (0xDF or 0xD2), the interrupted eip (4 bytes, low first) and esp (bytes 1-3) go to port
 // 0x80 too: a POST display or the Modxo's bus log then shows where it stopped on every build, not only a serial one.
 extern "C" void KiFaultTaskReport(ULONG Kind) {
-    KiSaveFaultTaskLastWords(Kind, KiTss.Eip);
+    SaveFaultTaskLastWords(Kind, KiTss.Eip);
     for (int i = 0; i < 4; i++)
         post((UCHAR)(KiTss.Eip >> (8 * i)));
     for (int i = 1; i < 4; i++)
@@ -107,7 +110,7 @@ extern "C" void KiFaultTaskReport(ULONG Kind) {
 
 // --- Descriptor tables and the PCR
 
-static void KiInitializeGdt() {
+static void InitializeGdt() {
     constexpr UCHAR TSS_AVAILABLE = 0x89;
     KiGdt[0] = {};
 #if XK_TRACE_IMPORTS
@@ -168,7 +171,7 @@ static void KiInitializeIdt() {
     __asm__ volatile("lidt %0" ::"m"(idtr) : "memory");
 }
 
-static void KiInitializePcr() {
+static void InitializePcr() {
     KiPcr = {};
     KiPcr.NtTib.ExceptionList = (PVOID)0xFFFFFFFF;
     KiPcr.NtTib.StackBase = KiBootStack + KI_BOOT_STACK_SIZE - NPX_FRAME_LENGTH;
@@ -177,8 +180,8 @@ static void KiInitializePcr() {
     KiPcr.SelfPcr = &KiPcr;
     KiPcr.Prcb = &KiPcr.PrcbData;
     KiPcr.Irql = HIGH_LEVEL;
-    KiPcr.PrcbData.CurrentThread = &KiIdleThread;
-    KiPcr.PrcbData.IdleThread = &KiIdleThread;
+    KiPcr.PrcbData.CurrentThread = &IdleThreadObject;
+    KiPcr.PrcbData.IdleThread = &IdleThreadObject;
 }
 
 // --- The page attribute table and microcode
@@ -188,7 +191,7 @@ static void KiInitializePcr() {
 // rely on; the power-on table makes PWT write-through, i.e. cached: the CPU then keeps stale copies of memory the GPU
 // writes (fences, push-buffer state) and a title waits for it forever. Set here too so that any 2BL works; the
 // change follows Intel's procedure (caches off and flushed around the write, then a TLB flush).
-static void KiInitializePat() {
+static void InitializePat() {
     constexpr ULONGLONG RETAIL_PAT = 0x0007010600070106ULL;
     ULONG a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
@@ -214,9 +217,9 @@ alignas(16) XK_BOOT_DATA static const ULONG KiMicrocode[][512] = {
 #include "ucode.inc"
 };
 #endif
-ULONG KiMicrocodeRevision; // after the load (MSR 0x8B high half); 0 = none reported
+ULONG MicrocodeRevision; // after the load (MSR 0x8B high half); 0 = none reported
 
-static void KiLoadMicrocode() {
+static void LoadMicrocode() {
 #ifndef XK_HOST_TEST
     ULONG a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
@@ -231,20 +234,22 @@ static void KiLoadMicrocode() {
     }
     wrmsr(0x8B, 0);
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1) : "memory");
-    KiMicrocodeRevision = (ULONG)(rdmsr(0x8B) >> 32);
+    MicrocodeRevision = (ULONG)(rdmsr(0x8B) >> 32);
 #endif
 }
 
 // --- Bring-up (spec/stock/01 §2): microcode and PAT first, then the PCR before anything loads FS, the GDT, the IDT
 
-void KiInitializeProcessor() {
-    KiLoadMicrocode();
-    KiInitializePat();
+void InitializeProcessor() {
+    LoadMicrocode();
+    InitializePat();
     // The PCR must be filled before FS is loaded with a descriptor pointing at it.
-    KiInitializePcr();
+    InitializePcr();
     post(post_code::Pcr);
-    KiInitializeGdt();
+    InitializeGdt();
     post(post_code::Gdt);
     KiInitializeIdt();
     post(post_code::Idt);
 }
+
+} // namespace xk::core

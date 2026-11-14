@@ -1,7 +1,7 @@
 # 10. Stopping bus masters left running at kernel entry
 
-OXOS addition. Implemented 2026-10-22 (`HalpQuiesceBusMasters` in `kernel/src/hardware/chipset.cpp`, the first step of
-`HalpInitPci`, HAL phase 0).
+OXOS addition. Implemented 2026-10-22 (`hardware::QuiesceBusMasters` in `kernel/src/hardware/chipset.cpp`, the first
+step of `hardware::InitPci`, HAL phase 0).
 
 ## 1. Why
 - A console with a modchip usually runs the modchip's menu (XeniumOS) before it starts a flash bank. If that start
@@ -12,7 +12,7 @@ OXOS addition. Implemented 2026-10-22 (`HalpQuiesceBusMasters` in `kernel/src/ha
 - On a 1.4 console OXOS hung at changing places (right after the DVD probe, in the dashboard's USB or network
   start-up) depending on the build, with interrupts dead. The RAMDAC colour table also kept the menu's contents.
   xemu starts every device reset.
-- `HalpInitPci` itself enables bus mastering on every device (command bits 0-2), without resetting the devices, as
+- `hardware::InitPci` itself enables bus mastering on every device (command bits 0-2), without resetting the devices, as
   the reference does on a cold boot from its own 2BL.
 
 ## 2. What it does, in order
@@ -55,8 +55,8 @@ OXOS addition. Implemented 2026-10-22 (`HalpQuiesceBusMasters` in `kernel/src/ha
         - Setting the engine's copies of the memory configuration (PGRAPH 0x4009A0-0x4009A8, RDI select 0xEA
           0x00-0x0C) and every readable register that differs from the after-Direct3D state was not enough.
       - The rest: the graphics engine's live context is power-on junk, which nxdk's pbkit saves over its own context
-        image. Spec 24 (HalpInitGraphicsEngine, right after this step) loads a default context at a cold boot.
+        image. Spec 24 (hardware::InitGraphicsEngine, right after this step) loads a default context at a cold boot.
 
 ## 3. Not covered
 - The APU's own engines are not reset: no register-level description is available. Its bus-master bit is
-  cleared, but the rest of `HalpInitPci` sets it again.
+  cleared, but the rest of `hardware::InitPci` sets it again.

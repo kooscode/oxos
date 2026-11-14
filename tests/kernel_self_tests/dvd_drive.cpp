@@ -5,6 +5,8 @@
 #include <xk/runtime.h>
 #include <xk/core.h>
 
+using namespace xk; // the kernel's subsystems as storage::, core::, ...
+
 volatile ULONG KiTestDvdDeviceOk, KiTestDvdBigSum, KiTestDvdBigLength, KiTestDvdReadOk, KiTestDvdDirOk,
     KiTestDvdErrorsOk, KiTestDvdRawOk, KiTestDvdSortKeyOk, KiTestDvdDone;
 volatile char KiTestDvdDirNames[64];
@@ -219,5 +221,5 @@ static void NTAPI DvdControllerThread(PVOID) {
 }
 
 void KiStartDvdSelfTests() {
-    KiCreateSystemThread(DvdControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(DvdControllerThread, nullptr, 0, 9);
 }

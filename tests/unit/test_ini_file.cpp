@@ -7,6 +7,8 @@
 
 #include <xk/ini_file.h>
 
+using namespace xk; // the kernel's subsystems as storage::, titles::, ...
+
 namespace {
 
 // Each line the reader returns, as "S:text", "K:key=value", "BS" or "BL".
@@ -14,7 +16,7 @@ std::vector<std::string> Lines(const std::string &text) {
     INI_READER reader = {text.data(), text.data() + text.size()};
     INI_LINE line;
     std::vector<std::string> out;
-    while (IniNextLine(&reader, &line)) {
+    while (titles::NextIniLine(&reader, &line)) {
         switch (line.Kind) {
         case INI_LINE_KIND::SECTION:
             out.push_back("S:" + std::string(line.Text, line.TextLength));
@@ -59,8 +61,8 @@ TEST(IniFile, KeysMatchInAnyCase) {
     const std::string text = "SoUrCe = x";
     INI_READER reader = {text.data(), text.data() + text.size()};
     INI_LINE line;
-    ASSERT_TRUE(IniNextLine(&reader, &line));
-    EXPECT_TRUE(IniKeyIs(line, "source"));
-    EXPECT_FALSE(IniKeyIs(line, "sourc"));
-    EXPECT_FALSE(IniKeyIs(line, "sources"));
+    ASSERT_TRUE(titles::NextIniLine(&reader, &line));
+    EXPECT_TRUE(titles::IsIniKey(line, "source"));
+    EXPECT_FALSE(titles::IsIniKey(line, "sourc"));
+    EXPECT_FALSE(titles::IsIniKey(line, "sources"));
 }

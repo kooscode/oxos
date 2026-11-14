@@ -1,10 +1,12 @@
-// The graphics engine's default channel context (spec/oxos_internal/24): the table HalpInitGraphicsEngine loads at a
-// cold boot so that titles which create their own graphics device start from a valid engine.
+// The graphics engine's default channel context (spec/oxos_internal/24): the table hardware::InitGraphicsEngine loads
+// at a cold boot so that titles which create their own graphics device start from a valid engine.
 #include "kernel_test.h"
 
 #include <map>
 
 #include <xk/graphics.h>
+
+using namespace xk::hardware; // gpu::, the graphics engine's context layout
 
 namespace {
 std::map<unsigned, unsigned> DefaultImage() {

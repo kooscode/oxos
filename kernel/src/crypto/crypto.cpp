@@ -3,6 +3,8 @@
 #include <xk/crypto.h>
 #include <xk/runtime.h>
 
+namespace xk::crypto {
+
 struct XC_SHA_CONTEXT {
     ULONG State[5];
     ULONG CountLow, CountHigh; // bytes
@@ -14,7 +16,7 @@ static ULONG Rol(ULONG x, int n) {
     return (x << n) | (x >> (32 - n));
 }
 
-static void XcpShaBlock(ULONG *s, const UCHAR *p) {
+static void SHABlock(ULONG *s, const UCHAR *p) {
     ULONG w[80];
     for (int i = 0; i < 16; i++)
         w[i] = (ULONG)p[4 * i] << 24 | (ULONG)p[4 * i + 1] << 16 | (ULONG)p[4 * i + 2] << 8 | p[4 * i + 3];
@@ -50,7 +52,7 @@ static void XcpShaBlock(ULONG *s, const UCHAR *p) {
     s[4] += e;
 }
 
-XBAPI void NTAPI XcpSHAInit(PUCHAR pbSHAContext) {
+void NTAPI InitSHA(PUCHAR pbSHAContext) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     static const ULONG init[5] = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
     for (int i = 0; i < 5; i++)
@@ -58,7 +60,7 @@ XBAPI void NTAPI XcpSHAInit(PUCHAR pbSHAContext) {
     c->CountLow = c->CountHigh = 0;
 }
 
-XBAPI void NTAPI XcpSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength) {
+void NTAPI UpdateSHA(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     ULONG used = c->CountLow & 63;
     ULONG low = c->CountLow + dwInputLength;
@@ -72,21 +74,21 @@ XBAPI void NTAPI XcpSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG d
         pbInput += n;
         dwInputLength -= n;
         if (used == 64) {
-            XcpShaBlock(c->State, c->Buffer);
+            SHABlock(c->State, c->Buffer);
             used = 0;
         }
     }
 }
 
-XBAPI void NTAPI XcpSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest) {
+void NTAPI FinishSHA(PUCHAR pbSHAContext, PUCHAR pbDigest) {
     auto c = (XC_SHA_CONTEXT *)pbSHAContext;
     ULONG bitsHigh = (c->CountHigh << 3) | (c->CountLow >> 29), bitsLow = c->CountLow << 3;
     static const UCHAR pad[64] = {0x80};
     ULONG used = c->CountLow & 63;
-    XcpSHAUpdate(pbSHAContext, pad, used < 56 ? 56 - used : 120 - used);
+    UpdateSHA(pbSHAContext, pad, used < 56 ? 56 - used : 120 - used);
     UCHAR len[8] = {(UCHAR)(bitsHigh >> 24), (UCHAR)(bitsHigh >> 16), (UCHAR)(bitsHigh >> 8), (UCHAR)bitsHigh,
                     (UCHAR)(bitsLow >> 24),  (UCHAR)(bitsLow >> 16),  (UCHAR)(bitsLow >> 8),  (UCHAR)bitsLow};
-    XcpSHAUpdate(pbSHAContext, len, 8);
+    UpdateSHA(pbSHAContext, len, 8);
     for (int i = 0; i < 5; i++) {
         for (int j = 0; j < 4; j++)
             pbDigest[4 * i + j] = (UCHAR)(c->State[i] >> (24 - 8 * j));
@@ -94,32 +96,32 @@ XBAPI void NTAPI XcpSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest) {
 }
 
 // HMAC-SHA1 over the concatenation of two inputs (either may be empty).
-XBAPI void NTAPI XcpHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
-                        const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData) {
+void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
+                       const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData) {
     UCHAR key[64] = {}, ctx[116], inner[20];
     if (cbKeyMaterial > 64) {
-        XcpSHAInit(ctx);
-        XcpSHAUpdate(ctx, pbKeyMaterial, cbKeyMaterial);
-        XcpSHAFinal(ctx, key);
+        InitSHA(ctx);
+        UpdateSHA(ctx, pbKeyMaterial, cbKeyMaterial);
+        FinishSHA(ctx, key);
     } else {
         RtlCopyMemory(key, pbKeyMaterial, cbKeyMaterial);
     }
     UCHAR pad[64];
     for (int i = 0; i < 64; i++)
         pad[i] = key[i] ^ 0x36;
-    XcpSHAInit(ctx);
-    XcpSHAUpdate(ctx, pad, 64);
+    InitSHA(ctx);
+    UpdateSHA(ctx, pad, 64);
     if (cbData)
-        XcpSHAUpdate(ctx, pbData, cbData);
+        UpdateSHA(ctx, pbData, cbData);
     if (cbData2)
-        XcpSHAUpdate(ctx, pbData2, cbData2);
-    XcpSHAFinal(ctx, inner);
+        UpdateSHA(ctx, pbData2, cbData2);
+    FinishSHA(ctx, inner);
     for (int i = 0; i < 64; i++)
         pad[i] = key[i] ^ 0x5C;
-    XcpSHAInit(ctx);
-    XcpSHAUpdate(ctx, pad, 64);
-    XcpSHAUpdate(ctx, inner, 20);
-    XcpSHAFinal(ctx, HmacData);
+    InitSHA(ctx);
+    UpdateSHA(ctx, pad, 64);
+    UpdateSHA(ctx, inner, 20);
+    FinishSHA(ctx, HmacData);
 }
 
 struct XC_RC4_STATE {
@@ -127,7 +129,7 @@ struct XC_RC4_STATE {
     UCHAR I, J;
 };
 
-XBAPI void NTAPI XcpRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey) {
+void NTAPI InitRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey) {
     auto r = (XC_RC4_STATE *)pbKeyStruct;
     for (int i = 0; i < 256; i++)
         r->S[i] = (UCHAR)i;
@@ -141,7 +143,7 @@ XBAPI void NTAPI XcpRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *p
     r->I = r->J = 0;
 }
 
-XBAPI void NTAPI XcpRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput) {
+void NTAPI CryptRC4(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput) {
     auto r = (XC_RC4_STATE *)pbKeyStruct;
     UCHAR i = r->I, j = r->J;
     for (ULONG n = 0; n < dwInputLength; n++) {
@@ -155,3 +157,5 @@ XBAPI void NTAPI XcpRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbI
     r->I = i;
     r->J = j;
 }
+
+} // namespace xk::crypto

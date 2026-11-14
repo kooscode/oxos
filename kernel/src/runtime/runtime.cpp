@@ -7,6 +7,8 @@
 #include <xk/hardware.h>
 #include <xk/core.h>
 
+namespace xk::runtime {
+
 // --- Interlocked (fastcall, uniprocessor but locked anyway)
 
 XBAPI LONG FASTCALL InterlockedIncrement(volatile LONG *Addend) {
@@ -30,7 +32,7 @@ XBAPI LONG FASTCALL InterlockedCompareExchange(volatile LONG *Destination, LONG 
     return Comparand;
 }
 
-static bool XkCas64(volatile ULONGLONG *p, ULONGLONG *expected, ULONGLONG value) {
+static bool CompareAndSwap64(volatile ULONGLONG *p, ULONGLONG *expected, ULONGLONG value) {
     return __atomic_compare_exchange_n(p, expected, value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
@@ -42,7 +44,7 @@ XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER ListHe
         now.Next.Next = ListEntry;
         now.Depth = (USHORT)(old.Depth + 1);
         now.Sequence = (USHORT)(old.Sequence + 1);
-    } while (!XkCas64(&ListHead->Alignment, &old.Alignment, now.Alignment));
+    } while (!CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
     return old.Next.Next;
 }
 
@@ -55,7 +57,7 @@ XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER ListHea
         now.Next.Next = old.Next.Next->Next;
         now.Depth = (USHORT)(old.Depth - 1);
         now.Sequence = old.Sequence;
-    } while (!XkCas64(&ListHead->Alignment, &old.Alignment, now.Alignment));
+    } while (!CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
     return old.Next.Next;
 }
 
@@ -65,7 +67,7 @@ XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead) 
     do {
         now.Alignment = 0;
         now.Sequence = old.Sequence;
-    } while (old.Next.Next && !XkCas64(&ListHead->Alignment, &old.Alignment, now.Alignment));
+    } while (old.Next.Next && !CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
     return old.Next.Next;
 }
 
@@ -301,8 +303,8 @@ XBAPI WCHAR NTAPI RtlDowncaseUnicodeChar(WCHAR SourceCharacter) {
     return c;
 }
 
-static NTSTATUS RtlpCaseUnicodeString(PUNICODE_STRING Destination, const UNICODE_STRING *Source, BOOLEAN Allocate,
-                                      WCHAR (*Map)(WCHAR)) {
+static NTSTATUS ChangeUnicodeCase(PUNICODE_STRING Destination, const UNICODE_STRING *Source, BOOLEAN Allocate,
+                                  WCHAR (*Map)(WCHAR)) {
     if (Allocate) {
         Destination->Buffer = (PWSTR)ExAllocatePoolWithTag(Source->Length ? Source->Length : 2, 'grtS');
         if (!Destination->Buffer)
@@ -317,22 +319,22 @@ static NTSTATUS RtlpCaseUnicodeString(PUNICODE_STRING Destination, const UNICODE
     return STATUS_SUCCESS;
 }
 
-static WCHAR RtlpUp(WCHAR c) {
+static WCHAR ToUpperWide(WCHAR c) {
     return RtlUpcaseUnicodeChar(c);
 }
 
-static WCHAR RtlpDown(WCHAR c) {
+static WCHAR ToLowerWide(WCHAR c) {
     return RtlDowncaseUnicodeChar(c);
 }
 
 XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
                                             BOOLEAN AllocateDestinationString) {
-    return RtlpCaseUnicodeString(DestinationString, SourceString, AllocateDestinationString, RtlpUp);
+    return ChangeUnicodeCase(DestinationString, SourceString, AllocateDestinationString, ToUpperWide);
 }
 
 XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
                                               BOOLEAN AllocateDestinationString) {
-    return RtlpCaseUnicodeString(DestinationString, SourceString, AllocateDestinationString, RtlpDown);
+    return ChangeUnicodeCase(DestinationString, SourceString, AllocateDestinationString, ToLowerWide);
 }
 
 // Multibyte <-> Unicode: Latin-1 (characters above 0xFF become '?').
@@ -354,8 +356,8 @@ XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeSize(PULONG BytesInUnicodeString, cons
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS RtlpUnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PULONG BytesInMultiByteString,
-                                       const WCHAR *UnicodeString, ULONG BytesInUnicodeString, bool upper) {
+static NTSTATUS UnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PULONG BytesInMultiByteString,
+                                   const WCHAR *UnicodeString, ULONG BytesInUnicodeString, bool upper) {
     ULONG n = BytesInUnicodeString / 2 < MaxBytes ? BytesInUnicodeString / 2 : MaxBytes;
     for (ULONG i = 0; i < n; i++) {
         WCHAR c = upper ? RtlUpcaseUnicodeChar(UnicodeString[i]) : UnicodeString[i];
@@ -369,15 +371,15 @@ static NTSTATUS RtlpUnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PU
 XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
                                             PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
                                             ULONG BytesInUnicodeString) {
-    return RtlpUnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
-                                  BytesInUnicodeString, false);
+    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
+                              BytesInUnicodeString, false);
 }
 
 XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
                                                   PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
                                                   ULONG BytesInUnicodeString) {
-    return RtlpUnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
-                                  BytesInUnicodeString, true);
+    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
+                              BytesInUnicodeString, true);
 }
 
 XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *,
@@ -388,7 +390,7 @@ XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, co
 
 // --- Integer <-> text
 
-static int RtlpDigit(int c) {
+static int DigitValue(int c) {
     if (c >= '0' && c <= '9')
         return c - '0';
     if (c >= 'a' && c <= 'z')
@@ -399,7 +401,7 @@ static int RtlpDigit(int c) {
 }
 
 template <typename CharT>
-static NTSTATUS RtlpTextToInteger(const CharT *p, ULONG n, ULONG Base, PULONG Value) {
+static NTSTATUS TextToInteger(const CharT *p, ULONG n, ULONG Base, PULONG Value) {
     ULONG i = 0;
     while (i < n && p[i] <= ' ' && p[i])
         i++;
@@ -425,7 +427,7 @@ static NTSTATUS RtlpTextToInteger(const CharT *p, ULONG n, ULONG Base, PULONG Va
     }
     ULONG v = 0;
     for (; i < n && p[i]; i++) {
-        ULONG d = (ULONG)RtlpDigit(p[i]);
+        ULONG d = (ULONG)DigitValue(p[i]);
         if (d >= Base)
             break;
         v = v * Base + d;
@@ -435,14 +437,14 @@ static NTSTATUS RtlpTextToInteger(const CharT *p, ULONG n, ULONG Base, PULONG Va
 }
 
 XBAPI NTSTATUS NTAPI RtlCharToInteger(PCSZ String, ULONG Base, PULONG Value) {
-    return RtlpTextToInteger(String, 0xFFFFFFFF, Base, Value);
+    return TextToInteger(String, 0xFFFFFFFF, Base, Value);
 }
 
 XBAPI NTSTATUS NTAPI RtlUnicodeStringToInteger(const UNICODE_STRING *String, ULONG Base, PULONG Value) {
-    return RtlpTextToInteger(String->Buffer, String->Length / 2u, Base, Value);
+    return TextToInteger(String->Buffer, String->Length / 2u, Base, Value);
 }
 
-static ULONG RtlpFormatUnsigned(ULONG Value, ULONG Base, CHAR *out) {
+static ULONG FormatUnsigned(ULONG Value, ULONG Base, CHAR *out) {
     CHAR tmp[33];
     ULONG n = 0;
     do {
@@ -461,7 +463,7 @@ XBAPI NTSTATUS NTAPI RtlIntegerToChar(ULONG Value, ULONG Base, LONG OutputLength
     if (Base != 2 && Base != 8 && Base != 10 && Base != 16)
         return STATUS_INVALID_PARAMETER_;
     CHAR digits[33];
-    ULONG n = RtlpFormatUnsigned(Value, Base, digits);
+    ULONG n = FormatUnsigned(Value, Base, digits);
     if ((LONG)n > OutputLength)
         return STATUS_BUFFER_OVERFLOW_;
     RtlCopyMemory(String, digits, n);
@@ -476,7 +478,7 @@ XBAPI NTSTATUS NTAPI RtlIntegerToUnicodeString(ULONG Value, ULONG Base, PUNICODE
     if (Base != 2 && Base != 8 && Base != 10 && Base != 16)
         return STATUS_INVALID_PARAMETER_;
     CHAR digits[33];
-    ULONG n = RtlpFormatUnsigned(Value, Base, digits);
+    ULONG n = FormatUnsigned(Value, Base, digits);
     if ((n + 1) * 2 > String->MaximumLength)
         return STATUS_BUFFER_OVERFLOW_;
     for (ULONG i = 0; i < n; i++)
@@ -485,3 +487,5 @@ XBAPI NTSTATUS NTAPI RtlIntegerToUnicodeString(ULONG Value, ULONG Base, PUNICODE
     String->Length = (USHORT)(n * 2);
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::runtime

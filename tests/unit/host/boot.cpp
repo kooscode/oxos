@@ -11,6 +11,8 @@
 #include <xk/memory.h>
 #include <xk/objects.h>
 
+using namespace xk; // the kernel's subsystems as memory::, objects::, ...
+
 namespace host {
 std::string CurrentTestName;
 
@@ -61,23 +63,23 @@ static void NTAPI TestThread(PVOID p) {
 
 int BootAndRun(int (*body)(void *), void *context) {
     Make2blState();
-    KiInitializeProcessor();
-    HalpInitPic();
-    HalpInitPit();
-    MmInitSystem(false);
-    KiInitializeDpcs();
-    KiInitializeTimers();
-    KiInitializeScheduler(KiBootStack + KI_BOOT_STACK_SIZE, KiBootStack);
-    ObInitSystem();
+    core::InitializeProcessor();
+    hardware::InitPic();
+    hardware::InitPit();
+    memory::InitMemoryManager(false);
+    core::InitializeDpcs();
+    core::InitializeTimers();
+    core::InitializeScheduler(KiBootStack + KI_BOOT_STACK_SIZE, KiBootStack);
+    objects::InitObjectManager();
     HalEnableSystemInterrupt(0, Latched); // the clock
     static RunArgs args;
     args = {body, context};
-    if (!KiCreateSystemThread(TestThread, &args, 1u << 20, 8)) {
+    if (!core::CreateSystemThread(TestThread, &args, 1u << 20, 8)) {
         fprintf(stderr, "host: cannot create the test thread\n");
         return 96;
     }
     KfLowerIrql(DISPATCH_LEVEL);
-    KiIdleLoop();
+    core::IdleLoop();
 }
 
 } // namespace host

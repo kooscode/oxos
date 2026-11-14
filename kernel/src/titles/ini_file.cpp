@@ -1,6 +1,8 @@
 // The kernel's ini files: the line reader (include/xk/ini_file.h).
 #include <xk/ini_file.h>
 
+namespace xk::titles {
+
 namespace {
 
 bool IsBlank(char c) {
@@ -57,7 +59,7 @@ void ReadKey(const char *From, const char *To, INI_LINE *Line) {
 
 } // namespace
 
-bool IniNextLine(INI_READER *Reader, INI_LINE *Line) {
+bool NextIniLine(INI_READER *Reader, INI_LINE *Line) {
     while (Reader->Next < Reader->End) {
         const char *from = Reader->Next;
         const char *to = from;
@@ -76,7 +78,7 @@ bool IniNextLine(INI_READER *Reader, INI_LINE *Line) {
     return false;
 }
 
-bool IniKeyIs(const INI_LINE &Line, const char *Word) {
+bool IsIniKey(const INI_LINE &Line, const char *Word) {
     ULONG i = 0;
     for (; i < Line.TextLength && Word[i]; i++) {
         if ((Line.Text[i] | 0x20) != Word[i])
@@ -84,3 +86,5 @@ bool IniKeyIs(const INI_LINE &Line, const char *Word) {
     }
     return i == Line.TextLength && !Word[i];
 }
+
+} // namespace xk::titles

@@ -11,6 +11,8 @@
 #include <xk/types.h>
 #include <xk/bootscreen.h>
 
+using namespace xk; // the kernel's subsystems as storage::, core::, ...
+
 // entry.S / interrupt_stubs.S
 extern "C" {
 alignas(16) unsigned char KiBootStack[KI_BOOT_STACK_SIZE];
@@ -34,17 +36,19 @@ void KiTrap45() {
 }
 
 // hardware/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
-volatile BOOLEAN HalpSerialPresent = TRUE;
+namespace xk::hardware {
 
-void HalpSerialInit() {
-    // Nothing to set up: HalpSerialWrite hands the text to the harness.
+volatile BOOLEAN SerialPresent = TRUE;
+
+void InitSerial() {
+    // Nothing to set up: WriteSerial hands the text to the harness.
 }
 
-void HalpSerialWrite(const char *Text, ULONG Length) {
+void WriteSerial(const char *Text, ULONG Length) {
     HostLogWrite(Text, Length);
 }
 
-void XkSerialPrint(const char *Format, ...) {
+void SerialPrint(const char *Format, ...) {
     char line[256];
     va_list ap;
     va_start(ap, Format);
@@ -53,31 +57,35 @@ void XkSerialPrint(const char *Format, ...) {
     HostLogWrite(line, n < 0 ? 0 : n >= (int)sizeof(line) ? sizeof(line) - 1 : (size_t)n);
 }
 
+} // namespace xk::hardware
+
 // core/startup.cpp: the start-up marks and last words (CMOS records) are not under test here.
-extern "C" {
-volatile BOOLEAN XkBootMarksOn;
+namespace xk::core {
+volatile BOOLEAN BootMarksOn;
 
-void XkBootMark(const char *) {
+void BootMark(const char *) {
     // Not under test.
 }
 
-void XkBootMarkWatchdog(ULONG, UCHAR) {
+void BootMarkWatchdog(ULONG, UCHAR) {
     // Not under test.
 }
 
-void KiSaveBugCheckLastWords(ULONG, ULONG, ULONG) {
+void SaveBugCheckLastWords(ULONG, ULONG, ULONG) {
     // Not under test.
 }
 
-void KiSaveFaultTaskLastWords(ULONG, ULONG) {
+void SaveFaultTaskLastWords(ULONG, ULONG) {
     // Not under test.
 }
-}
+} // namespace xk::core
 
 // filesystems/cache.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
-ULONG *FscCachePte(ULONG) {
+namespace xk::filesystems {
+ULONG *CachePte(ULONG) {
     return nullptr;
 }
+} // namespace xk::filesystems
 
 // arch/in_game_reset.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination);
 // here it is what it does for kernel callers.
@@ -86,11 +94,13 @@ XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
 }
 
 // bootscreen/splash.cpp: no splash copy in host tests (no page holds one).
-bool HalpIsSplashPage(ULONG) {
+bool xk::bootscreen::IsSplashPage(ULONG) {
     return false;
 }
 
 // titles/nettitle.cpp: no network-delivered title in host tests (no page holds one).
-bool MiIsNetbootTitlePage(ULONG) {
+namespace xk::titles {
+bool IsNetbootTitlePage(ULONG) {
     return false;
 }
+} // namespace xk::titles

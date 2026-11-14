@@ -6,6 +6,8 @@
 #include <xk/core.h>
 #include <xk/runtime.h>
 
+using namespace xk; // the kernel's subsystems as storage::, core::, ...
+
 struct XK_RECORD {
     ULONG ExceptionCode, ExceptionFlags;
     PVOID Record, ExceptionAddress;
@@ -152,5 +154,5 @@ static void NTAPI SehControllerThread(PVOID) {
 }
 
 void KiStartSehSelfTests() {
-    KiCreateSystemThread(SehControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(SehControllerThread, nullptr, 0, 9);
 }

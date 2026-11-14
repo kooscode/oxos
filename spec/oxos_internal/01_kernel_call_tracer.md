@@ -17,7 +17,7 @@ host side `tools/trace.py`, `tools/run.py --trace-map`.
 Trace builds also turn on the debug serial port (03_debug_serial.md); the host tools use its crash lines.
 
 ## 2. Hooking the title's imports
-- When the XBE loader resolves the title's kernel thunks (`XepResolveKernelThunks`), each resolved address goes
+- When the XBE loader resolves the title's kernel thunks (`titles::ResolveKernelThunks`), each resolved address goes
   through `XkTraceWrap(ordinal, target)`.
 - Only **code** exports are wrapped: a target outside the kernel image's first (code) section is a data export
   (KeTickCount, LaunchDataPage, ...) and is returned unchanged.

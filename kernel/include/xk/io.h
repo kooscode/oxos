@@ -376,7 +376,6 @@ XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJE
                                                PIO_STATUS_BLOCK IoStatusBlock);
 XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
                                              ULONG Length, PLARGE_INTEGER StartingOffset);
-NTSTATUS NTAPI IoFsControlDismountOnly(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject,
                                                          PVOID InputBuffer, ULONG InputBufferLength,
                                                          PVOID OutputBuffer, ULONG OutputBufferLength,
@@ -445,26 +444,33 @@ struct IO_FILE_SYSTEM {
     IO_MOUNT_ROUTINE CdRom; // XDVDFS (UDF is not in the stock retail path)
     IO_MOUNT_ROUTINE Raw;   // raw volume access when opening the device itself
 };
-extern IO_FILE_SYSTEM IopFileSystems;
-
-void IoInitSystem();
-
-// Inside the I/O manager (io/device.cpp, io/file.cpp, io/io_requests.cpp).
-void IopDereferenceDevice(PDEVICE_OBJECT DeviceObject);
 XBAPI NTSTATUS NTAPI IoDismountVolume(PDEVICE_OBJECT DeviceObject);
 XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName);
-void NTAPI IopCloseFileObject(PVOID Object, ULONG SystemHandleCount);
-void NTAPI IopDeleteFileObject(PVOID Object);
-void NTAPI IopDeleteIoCompletion(PVOID Object);
-void IopQueueThreadIrp(PIRP Irp);
-void IopLockUserBuffer(PIRP Irp, ULONG Length);
-void IopCompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject);
+
+namespace xk::io {
+
+extern IO_FILE_SYSTEM RegisteredFileSystems;
+
+void InitIoSystem();
+
+// Inside the I/O manager (io/device.cpp, io/file.cpp, io/io_requests.cpp).
+void DereferenceDevice(PDEVICE_OBJECT DeviceObject);
+void NTAPI CloseFileObject(PVOID Object, ULONG SystemHandleCount);
+void NTAPI DeleteFileObject(PVOID Object);
+void NTAPI DeleteIoCompletion(PVOID Object);
+void QueueThreadIrp(PIRP Irp);
+void LockUserBuffer(PIRP Irp, ULONG Length);
+void CompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject);
 // The parse routines of the device and file object types (io/file.cpp); the IDE disk driver's devices use the first.
-NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
-                              POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
-                              PVOID *Object);
-NTSTATUS NTAPI IopParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
-                            POBJECT_STRING RemainingName, PVOID Context, PVOID *Object);
+NTSTATUS NTAPI ParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
+                           POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
+                           PVOID *Object);
+NTSTATUS NTAPI ParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
+                         POBJECT_STRING RemainingName, PVOID Context, PVOID *Object);
+// The file-system control routine of a file system that only handles dismount requests (io/device.cpp).
+NTSTATUS NTAPI DismountOnlyFsControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+
+} // namespace xk::io
 XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                        PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
                                        ULONG Length, PLARGE_INTEGER ByteOffset);

@@ -124,10 +124,14 @@ XBAPI void NTAPI ObMakeTemporaryObject(PVOID Object);
 XBAPI NTSTATUS NTAPI NtClose(HANDLE Handle);
 XBAPI NTSTATUS NTAPI NtDuplicateObject(HANDLE SourceHandle, PHANDLE TargetHandle, ULONG Options);
 
-void ObInitSystem();
-NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
+namespace xk::objects {
+
+void InitObjectManager();
+NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
 // Waitable dispatcher header for an object (applies the type's DefaultObject rule).
-PVOID ObpGetWaitableObject(PVOID Object);
+PVOID GetWaitableObject(PVOID Object);
+
+} // namespace xk::objects
 
 constexpr NTSTATUS STATUS_OBJECT_NAME_EXISTS = 0x40000000, STATUS_INVALID_HANDLE = (NTSTATUS)0xC0000008,
                    STATUS_OBJECT_TYPE_MISMATCH = (NTSTATUS)0xC0000024,
@@ -178,7 +182,9 @@ XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus);
 typedef void(NTAPI *PCREATE_THREAD_NOTIFY_ROUTINE)(PVOID Thread, HANDLE ThreadId, BOOLEAN Create);
 XBAPI NTSTATUS NTAPI PsSetCreateThreadNotifyRoutine(PCREATE_THREAD_NOTIFY_ROUTINE NotifyRoutine);
 
-extern volatile ULONG ObpTraceSymbolicLink;
+namespace xk::objects {
+extern volatile ULONG TraceSymbolicLink;
+} // namespace xk::objects
 XBAPI NTSTATUS NTAPI RtlUnicodeStringToInteger(const UNICODE_STRING *String, ULONG Base, PULONG Value);
 XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
                                             BOOLEAN AllocateDestinationString);

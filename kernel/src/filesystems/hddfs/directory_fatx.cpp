@@ -2,6 +2,8 @@
 // operations through FATXFormat (at the end).
 #include <xk/hddfs.h>
 
+namespace xk::filesystems {
+
 // Map entry Index of a directory. With Extend, a directory that ends exactly there grows by one cluster
 // (filled with end markers).
 static NTSTATUS FATXMapDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, FATX_DIRENT **Entry,
@@ -222,3 +224,5 @@ NTSTATUS FATXIsDirectoryEmpty(HDDFS_VOLUME *v, HDDFS_FCB *dir) {
 // The directory operations of a FATX volume (HDDFS_VOLUME::Format).
 const HDDFS_FORMAT FATXFormat = {FATXLookup, FATXReadEntry, FATXNextEntry, FATXInitDirectory, FATXRemoveDirent,
                                   FATXCreateDirent, FATXFlushFcb, FATXDeleteDirent, FATXIsDirectoryEmpty};
+
+} // namespace xk::filesystems

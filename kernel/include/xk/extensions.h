@@ -9,22 +9,24 @@
 
 // --- Called by the rest of the kernel
 
+namespace xk::extensions {
 // Runs the extension loader (§8.1) for this launch: it loads the extensions of oxos_extensions.ini, calls
 // each one's Load and starts their Main threads (§3.2, §4.3). Called once per launch by the title launcher, before the
 // title is chosen; nothing in safe mode or without the list.
-void XkExtensionsLoad();
+void LoadExtensions();
 // The address a title's import of Ordinal is resolved to: the first extension's hook, else Target (§7.1).
-ULONG XkExtensionsTitleImport(ULONG Ordinal, ULONG Target);
-// OXOS_EVENT_TITLE_LOADING for the XBE the kernel is about to load (§7.2); Dashboard as XeLoadImage's.
-void XkExtensionsTitleLoading(PCSZ Path, BOOLEAN Dashboard);
+ULONG ResolveTitleImport(ULONG Ordinal, ULONG Target);
+// OXOS_EVENT_TITLE_LOADING for the XBE the kernel is about to load (§7.2); Dashboard as titles::LoadImage's.
+void TitleLoading(PCSZ Path, BOOLEAN Dashboard);
 // OXOS_EVENT_TITLE_LOADED for the XBE now at 0x00010000, before its entry point runs.
-void XkExtensionsTitleLoaded();
+void TitleLoaded();
 // The title quick-reboots (HalReturnToFirmware(2)): OXOS_EVENT_TITLE_EXITING, then each extension's StopEvent, its Main
 // thread's end and Unload (§4.3).
-void XkExtensionsTitleExiting();
+void TitleExiting();
 
 // Safe mode (B held at the cold boot's splash, §3.3): no extension loads until the next cold boot.
-extern XK_PERSIST BOOLEAN XkExtensionsSafeMode;
+extern XK_PERSIST BOOLEAN SafeMode;
+} // namespace xk::extensions
 
 // --- The loader (§8.1): linked on its own at XK_EXTENSION_LOADER_BASE against this kernel's addresses
 // (tools/link_extension_loader.py) and appended to the kernel image by tools/mkbios.py, in the boot-only pages. A cold
@@ -47,15 +49,19 @@ XK_SIZE(XK_EXTENSION_LOADER_HEADER, 20);
 
 // The loader's entry point (src/extensions/extension_loader.cpp).
 extern "C" void XkExtensionLoaderEntry();
+namespace xk::extensions {
 // Cold boot, boot-only: writes the loader from the kernel image to the cache file, when the extensions folder exists.
-void XkExtensionsWriteCache();
+void WriteLoaderCache();
+} // namespace xk::extensions
 
 // --- Resident state and code the loader uses (extensions/extension_runtime.cpp)
 
-extern XK_PERSIST PVOID XkExtensionsStateIndex; // the state pages' index (§6), kept across quick reboots
-extern const char XkKernelVersionText[];        // OXOS_CONTEXT::KernelVersion
+namespace xk::extensions {
+extern XK_PERSIST PVOID StateIndexPage; // the state pages' index (§6), kept across quick reboots
+extern const char KernelVersionText[];  // OXOS_CONTEXT::KernelVersion
 // A Main thread's routine: the extension's Main (StartRoutine) with its context, then the thread ends.
-void NTAPI XkExtensionsMainThread(PVOID Main, PVOID Context);
+void NTAPI MainThreadRoutine(PVOID Main, PVOID Context);
+} // namespace xk::extensions
 
 // --- Shared by the loader and the runtime
 
@@ -101,4 +107,6 @@ struct XK_EXTENSIONS_STATE {
     XK_EXTENSION_EVENT Events[XK_EXTENSION_EVENTS_MAX];
     OXOS_KERNEL_INFO Kernel;
 };
-extern XK_EXTENSIONS_STATE *XkExtensionsState; // null when no extension is loaded
+namespace xk::extensions {
+extern XK_EXTENSIONS_STATE *LoadedExtensions; // null when no extension is loaded
+} // namespace xk::extensions

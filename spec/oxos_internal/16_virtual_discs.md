@@ -1,8 +1,9 @@
 # 16. Virtual discs: titles from disc images on the hard disk
 
 Implemented 2026-10-27. An image of an Xbox disc (made from the user's own disc) on the hard disk stands in for the DVD
-drive, so a title starts and runs from it as from the disc. The device interface is the one Cerbios has (spec/cerbios/07), so tools written for Cerbios work
-here, and the OXOS ISO launcher works on Cerbios. Code: `kernel/src/storage/virtual_disc.cpp`, `tools/iso_launcher/`.
+drive, so a title starts and runs from it as from the disc. The device interface is the one Cerbios has
+(spec/cerbios/07), so tools written for Cerbios work here, and the OXOS ISO launcher works on Cerbios. Code:
+`kernel/src/storage/virtual_disc.cpp`, `tools/iso_launcher/`.
 
 ## 1. Images
 - **XISO** (the game partition only) and **full disc dumps**. A dump is recognised as Cerbios does it (spec/cerbios/07
@@ -18,8 +19,8 @@ here, and the OXOS ISO launcher works on Cerbios. Code: `kernel/src/storage/virt
 ## 2. Devices and requests
 As in spec/cerbios/07 §1–2:
 - The control device is `\Device\Virtual0\Image0`, with the links `\Device\CdRom1` and `\??\CdRom1:`. It is created
-  after the drive (`VdInitialize`, from `IdexChannelInit`). It is not a mountable device type, so an open reaches the
-  driver directly.
+  after the drive (`storage::InitVirtualDiscs`, from `storage::InitIdeChannel`). It is not a mountable device type, so
+  an open reaches the driver directly.
 - Images go in slots 1 and 2, as `\Device\Virtual0\Image1` and `Image2` (CD-ROM devices, 2048-byte sectors).
 - The device controls are 0x1EE7CD00/01/02 (alias 0x0CE52B00/01/02): present, mount and unmount. A mount request has
   the Cerbios layout (0x4C bytes: part count, type, eight counted-string paths, a link name). The strings are copied,
@@ -32,7 +33,7 @@ As in spec/cerbios/07 §1–2:
 ## 3. The image is the console's disc (OXOS design)
 Cerbios moves links: the drive's device has another name, and `\Device\CdRom0` is a link it points at the image
 (spec/cerbios/05 §4). OXOS keeps `\Device\CdRom0` as the drive's device. While a DVD-type image is mounted, the
-drive's read and device-control routines hand every request to the image (`VdServeCdRom`). So:
+drive's read and device-control routines hand every request to the image (`storage::ServeVirtualDvd`). So:
 - D:, `\??\CdRom0:`, the loader's `\Device\CdRom0\default.xbe` and every title's own drive requests reach the image
   with no renamed objects. The drive's volume is dismounted at mount and unmount, so the next open mounts XDVDFS on
   the image (or on the drive again).
@@ -47,7 +48,7 @@ drive's read and device-control routines hand every request to the image (`VdSer
 | 0x24000 READ_TOC, 0x24038 GET_LAST_SESSION | Cerbios's 12 bytes: one data track (`00 12 01 01 00 14 01 00 00 00 02 00`) |
 | 0x2404C GET_DRIVE_GEOMETRY | image sectors, RemovableMedia, 1, 1, 2048 |
 | 0x24800 CHECK_VERIFY, 0x24080 AUTHENTICATE_DISK | success |
-| 0x4D014 SCSI pass-through | the Xbox security commands (the drive emulation's own test, `IdexCdRomIsSecurityCommand`: MODE SENSE / SELECT of page 0x3E, READ DVD STRUCTURE at 0xFF02FDFF layer 0xFE) get the drive emulation's replies (spec/stock/04 §3a): the authenticated mode page 0x3E, an accepted MODE SELECT, a security sector built for the running title and signed for the open key. TEST UNIT READY succeeds; other commands fail. Cerbios fails all pass-through on images; OXOS answers so that titles which check the disc themselves still start. |
+| 0x4D014 SCSI pass-through | the Xbox security commands (the drive emulation's own test, `storage::IsDvdSecurityCommand`: MODE SENSE / SELECT of page 0x3E, READ DVD STRUCTURE at 0xFF02FDFF layer 0xFE) get the drive emulation's replies (spec/stock/04 §3a): the authenticated mode page 0x3E, an accepted MODE SELECT, a security sector built for the running title and signed for the open key. TEST UNIT READY succeeds; other commands fail. Cerbios fails all pass-through on images; OXOS answers so that titles which check the disc themselves still start. |
 | others (e.g. 0x335140 DVD_READ_STRUCTURE) | STATUS_INVALID_DEVICE_REQUEST, as Cerbios |
 
 An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
@@ -68,7 +69,7 @@ An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
 The slot table (type, part paths, link name) is in `.persist`. A mount survives quick reboots (launches, a title's own
 restarts) and ends at a cold boot. On a console with a DVD drive an eject also ends it: opening the tray while a title
 runs resets the console through the SMC, and that is a cold boot. At each boot the title-launch thread re-attaches every
-saved slot before choosing a title (`VdRestoreMounts`). A slot whose files no longer open is dropped.
+saved slot before choosing a title (`storage::RestoreVirtualDiscMounts`). A slot whose files no longer open is dropped.
 
 Unmounting stops new requests to the slot and waits for running ones to finish. It then closes the files, deletes
 the image's link and frees the slot. The image device stays (a later mount reuses it).
@@ -107,15 +108,15 @@ an extracted game folder, or an existing image) and a `default.xbe` next to it. 
 with the game's certificate fields (title ID, title name, alternate title IDs, region, ratings, disc number, version)
 and its title image section (`$$XTIMAGE`) copied in, so dashboards list the game itself. Started, it takes the image in
 its own folder (step 1). Images are one file unless `--split` (two parts under 4 GB, for FATX). Checked in xemu on OXOS
-(exFAT, F:) and on Cerbios 3.1.0 (FATX, E:): the launcher mounts the image and the game starts. For a path that does not exist, it lists the
-nearest folder above it that does.
+(exFAT, F:) and on Cerbios 3.1.0 (FATX, E:): the launcher mounts the image and the game starts. For a path that does not
+exist, it lists the nearest folder above it that does.
 
 ## 8. Tests
 - `make test_iso` boots the release build in xemu with a disc that holds the launcher. The image, of the kernel test
-  title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in five forms: one `.iso`; a `.1.iso` + `.2.iso`
-  pair; a `.cci` named through its folder; a `.1.cci` + `.2.cci` pair; and a >4 GB image whose `media\a.txt` lies beyond 4 GB. The title must
-  start from `\Device\CdRom0\default.xbe`, pass its checks, relaunch itself twice through quick reboots (the mount
-  survives), and end in the dashboard. The mount must succeed with no failed image reads.
+  title with relaunch.txt, sits in `F:\titles` on an exFAT disk, in five forms: one `.iso`; a `.1.iso` + `.2.iso` pair;
+  a `.cci` named through its folder; a `.1.cci` + `.2.cci` pair; and a >4 GB image whose `media\a.txt` lies beyond 4 GB.
+  The title must start from `\Device\CdRom0\default.xbe`, pass its checks, relaunch itself twice through quick reboots
+  (the mount survives), and end in the dashboard. The mount must succeed with no failed image reads.
 - `tests/mkcci.py` writes CCI images (a greedy LZ4 compressor), and `tests/mkxiso.py` places `High` files beyond
   4 GB in a sparse image.
 - Checked by hand: in xemu, Halo 2 (a 4.7 GB XISO on an exFAT disk) reaches its title screen through the launcher.

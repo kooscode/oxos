@@ -13,7 +13,7 @@ device and Team-Resurgent/Modxo's `superio` module), and the standard 16550 UART
 - **xemu:** `-device lpc47m157 -serial file:PATH` (or any QEMU chardev). Not present unless asked for.
 - Without any of these, LPC I/O reads return 0xFF: the port is reported absent and nothing is written.
 
-## 2. Bring-up (HalpSerialInit, first thing in KiSystemStartup, cold and quick boots)
+## 2. Bring-up (hardware::InitSerial, first thing in KiSystemStartup, cold and quick boots)
 1. SuperIO configuration port 0x2E (index) / 0x2F (data): write 0x55 to enter configuration mode.
 2. Presence: global register 0x26 (configuration port address, low byte) must read 0x2E. Otherwise write 0xAA and
    stop: no serial port.
@@ -41,9 +41,11 @@ device and Team-Resurgent/Modxo's `superio` module), and the standard 16550 UART
   fatal errors reported through the fatal-error screen (code).
 
 ## 5. Builds
-- `SERIAL=1` compiles it in (`XK_DEBUG_SERIAL`). On by default in the self-test build (`make`, `make test`) and
-  the troubleshooting builds (`make run_trace_basic`, `make run_trace_full`); off in release builds, where it would cost resident memory.
-- `make run_trace_basic` and `make run_trace_full` start xemu with the SuperIO and prints the serial output in the terminal.
+- `SERIAL=1` compiles it in (`XK_DEBUG_SERIAL`). On by default in the self-test build (`make`, `make test`) and the
+  troubleshooting builds (`make run_trace_basic`, `make run_trace_full`); off in release builds, where it would cost
+  resident memory.
+- `make run_trace_basic` and `make run_trace_full` start xemu with the SuperIO and prints the serial output in the
+  terminal.
 - `make test` checks the serial log of the self-test phase.
 
 ## 6. Boot status on the front LED (every build)
@@ -56,7 +58,7 @@ register 0x08 is the sequence (bits 7–4 red, 3–0 green, one bit per quarter 
 | NETBOOT=1 2BL, waiting for the link and the network (spec/oxos_internal/09) | 0xFF, solid orange | `kernel/boot/bl.cpp` |
 | the kernel, from the end of HAL phase 0 to the title launch (cold and quick boots) | 0x0A, fast green blink | `KiSystemStartup` |
 | the title (dashboard or game) entered | 0x0F, solid green | the title launcher |
-| fatal error | 0xE1, red / green (the reference's) | `IdexFatalError` |
+| fatal error | 0xE1, red / green (the reference's) | `core::ShowFatalError` |
 
 - A normal boot only blinks green, then goes steady green: orange looked like a fault to users (2026-10-30; until then
   the 2BL blinked orange, 0xAA, and the kernel alternated green / orange, 0x5F).

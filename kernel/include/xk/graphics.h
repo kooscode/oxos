@@ -1,7 +1,7 @@
 // The NV2A graphics engine's default channel context (spec/oxos_internal/24_graphics_engine_init.md).
 #pragma once
 
-namespace gpu {
+namespace xk::hardware::gpu {
 
 // A channel's graphics context image in GPU instance memory: the engine saves its state there when it leaves the
 // channel and loads it back when it returns to it.
@@ -61,4 +61,4 @@ template <class Put> constexpr void DefaultGraphicsContext(Put put) {
         put(GR_CTX_20DWORDS + 0x10 + 4 * i, 0x001C527C);
 }
 
-} // namespace gpu
+} // namespace xk::hardware::gpu

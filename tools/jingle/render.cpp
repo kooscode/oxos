@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <vector>
 
+using namespace xk::bootscreen; // jingle:: and vsplash::, the kernel's boot screen code
+
 int main(int argc, char **argv) {
     if (argc != 2 && argc != 3) {
         std::fprintf(stderr, "usage: jingle OUT.wav [MUTE]  (MUTE: bit 1 cello and bass, 2 drums, 3 reverb)\n");

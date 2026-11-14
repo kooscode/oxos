@@ -1,6 +1,8 @@
 // Open files: the tree of FCBs (only open files and their ancestors have one), shared by both formats.
 #include <xk/hddfs.h>
 
+namespace xk::filesystems {
+
 HDDFS_FCB *HDDFSFindOpenFcb(HDDFS_FCB *dir, const CHAR *Name, ULONG Length) {
     for (PLIST_ENTRY l = dir->ChildList.Flink; l != &dir->ChildList; l = l->Flink) {
         auto f = CONTAINING_RECORD(l, HDDFS_FCB, SiblingLink);
@@ -47,3 +49,5 @@ void HDDFSDereferenceFcb(HDDFS_FCB *f) {
         f = parent;
     }
 }
+
+} // namespace xk::filesystems

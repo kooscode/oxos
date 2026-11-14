@@ -8,6 +8,8 @@
 #include <atomic>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 #define Prcb (KiPcr.PrcbData)
 
 // --- Alerts and boosts
@@ -91,11 +93,11 @@ TEST(Priority, ProcessBasePriorityShiftsItsThreads) {
             SleepMs(1);
     });
     SleepMs(1);
-    KPRIORITY old = KeSetPriorityProcess(&KiSystemProcess, 10);
+    KPRIORITY old = KeSetPriorityProcess(&core::SystemProcess, 10);
     EXPECT_EQ(old, 8);
     EXPECT_EQ(t->BasePriority, 10);
     EXPECT_EQ(KeGetCurrentThread()->BasePriority, 10);
-    KeSetPriorityProcess(&KiSystemProcess, old);
+    KeSetPriorityProcess(&core::SystemProcess, old);
     EXPECT_EQ(t->BasePriority, 8);
     stop = true;
     Join(t);
@@ -123,7 +125,7 @@ TEST(Time, PerformanceCounterFollowsThePmTimerAcrossBit31) {
     host::SkipTime(640000);
     LARGE_INTEGER c = KeQueryPerformanceCounter();
     EXPECT_NEAR((double)(c.QuadPart - b.QuadPart), 640000.0 * 3375, 4.0) << "bit 31 toggled, not yet reported";
-    KiPerfCounterOverflow();
+    core::PerfCounterOverflow();
     LARGE_INTEGER d = KeQueryPerformanceCounter();
     EXPECT_NEAR((double)(d.QuadPart - c.QuadPart), 0.0, 2.0) << "reported: the same count";
     host::SkipTime(1000);
@@ -136,7 +138,7 @@ TEST(Time, StallReturns) {
 }
 
 TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
-    HalpInitRtc();
+    hardware::InitRtc();
     TIME_FIELDS f = {2026, 10, 23, 13, 45, 30, 0, 5};
     LARGE_INTEGER t;
     ASSERT_TRUE(RtlTimeFieldsToTime(&f, &t));
@@ -145,24 +147,24 @@ TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);
     EXPECT_EQ(now.QuadPart, t.QuadPart);
-    EXPECT_TRUE(HalpCmosSignatureValid());
+    EXPECT_TRUE(hardware::CmosSignatureValid());
     TIME_FIELDS r = {};
-    HalpQueryRealTimeClock(&r);
+    hardware::QueryRealTimeClock(&r);
     EXPECT_EQ(r.Year, 2026);
     EXPECT_EQ(r.Month, 10);
     EXPECT_EQ(r.Day, 23);
     EXPECT_EQ(r.Hour, 13);
     EXPECT_EQ(r.Minute, 45);
     EXPECT_EQ(r.Second, 30);
-    EXPECT_EQ(HalpCmosRead(0x09), 0x26) << "BCD year";
-    EXPECT_EQ(HalpCmosRead(0x7F), 0x20) << "BCD century";
+    EXPECT_EQ(hardware::ReadCmos(0x09), 0x26) << "BCD year";
+    EXPECT_EQ(hardware::ReadCmos(0x7F), 0x20) << "BCD century";
     LARGE_INTEGER bad;
     bad.QuadPart = -1;
     EXPECT_NE(NtSetSystemTime(&bad, nullptr), STATUS_SUCCESS);
-    HalpCmosWrite(0x10, 0); // break the signature
-    EXPECT_FALSE(HalpCmosSignatureValid());
-    HalpWriteCmosSignature();
-    EXPECT_TRUE(HalpCmosSignatureValid());
+    hardware::WriteCmos(0x10, 0); // break the signature
+    EXPECT_FALSE(hardware::CmosSignatureValid());
+    hardware::WriteCmosSignature();
+    EXPECT_TRUE(hardware::CmosSignatureValid());
 }
 
 // --- FPU state
@@ -275,9 +277,9 @@ TEST(MmMore, GpuInstanceMemorySitsBelowThePageTables) {
     ULONG padding = 0;
     EXPECT_EQ(MmClaimGpuInstanceMemory(0xFFFFFFFF, &padding), (PVOID)(0x84000000 - 0x10000));
     EXPECT_EQ(padding, 0x10000u);
-    ULONG available = MmAvailablePages;
+    ULONG available = memory::AvailablePages;
     MmClaimGpuInstanceMemory(0x8000, &padding); // shrink from 64 KB to 32 KB: 8 pages come back
-    EXPECT_EQ(MmAvailablePages, available + 8);
+    EXPECT_EQ(memory::AvailablePages, available + 8);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 
@@ -288,7 +290,7 @@ TEST(MmMore, ImageMemoryCommitsIntoAReservation) {
     MM_STATISTICS st0 = {sizeof(st0)}, st1 = {sizeof(st1)};
     MmQueryStatistics(&st0);
     size = 0x3000;
-    ASSERT_EQ(MiCommitImageMemory(&base, &size), STATUS_SUCCESS);
+    ASSERT_EQ(memory::CommitImageMemory(&base, &size), STATUS_SUCCESS);
     MmQueryStatistics(&st1);
     EXPECT_EQ(st1.ImagePagesCommitted, st0.ImagePagesCommitted + 3);
     ((volatile ULONG *)0x00800000)[0] = 1;
@@ -307,20 +309,20 @@ TEST(MmMore, DamagedSystemPteListIsReportedNotFollowed) {
         GTEST_SKIP() << "no adjacent placement";
     }
     MmFreeSystemMemory(a, 8 * 4096);
-    uint32_t *run = (uint32_t *)MiGetPteAddress((ULONG)a);
+    uint32_t *run = (uint32_t *)memory::PteAddress((ULONG)a);
     if ((run[0] & 2) || run[1] >> 2 != 8) { // merged with a free run before it
         MmFreeSystemMemory(b, 4096);
         GTEST_SKIP() << "the run merged with a neighbour";
     }
     uint32_t saved = run[0];
-    ULONG damaged = MiPteListDamaged;
+    ULONG damaged = memory::PteListDamaged;
     run[0] = 0x12345670; // a link that points nowhere sane
-    PVOID got = MiReserveSystemPtes(20);
+    PVOID got = memory::ReserveSystemPtes(20);
     run[0] = saved; // repair before anything else allocates
     EXPECT_EQ(got, nullptr);
-    EXPECT_EQ(MiPteListDamaged, damaged + 1);
-    PVOID ok = MiReserveSystemPtes(20);
+    EXPECT_EQ(memory::PteListDamaged, damaged + 1);
+    PVOID ok = memory::ReserveSystemPtes(20);
     EXPECT_NE(ok, nullptr);
-    MiReleaseSystemPtes(ok, 20);
+    memory::ReleaseSystemPtes(ok, 20);
     MmFreeSystemMemory(b, 4096);
 }

@@ -28,9 +28,13 @@ struct XK_EXTENSION_ENTRY {
     XK_TEXT Values[XK_EXTENSION_SETTINGS_MAX];
 };
 
+namespace xk::extensions {
+
 // Reads the list in Text (Length bytes) into Entries, in the file's order, at most MaxEntries of them; returns how
 // many. A section without a valid extension = line, or naming a file an earlier section names, is left out. Every
 // line that cannot be used (left-out sections, keys outside a section, a bad enabled = value, too many settings or a
 // value too long, sections past MaxEntries) counts one in *Errors.
-ULONG XkParseExtensionList(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries,
-                           ULONG *Errors);
+ULONG ParseExtensionIni(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries,
+                        ULONG *Errors);
+
+} // namespace xk::extensions

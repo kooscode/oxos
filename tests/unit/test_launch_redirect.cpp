@@ -6,6 +6,8 @@
 
 #include <xk/launch_redirect.h>
 
+using namespace xk; // the kernel's subsystems as storage::, titles::, ...
+
 namespace {
 
 constexpr const char *LIVE_UPDATER = "\\Device\\Harddisk0\\Partition2\\xodash\\xonlinedash.xbe";
@@ -21,13 +23,13 @@ struct Result {
 Result Lookup(const std::string &text, const char *path) {
     XE_REDIRECT redirect = {};
     ULONG errors = 99;
-    bool found = XeRedirectLookup(text.data(), (ULONG)text.size(), path, &redirect, &errors);
+    bool found = titles::LookUpRedirect(text.data(), (ULONG)text.size(), path, &redirect, &errors);
     return {found, found ? redirect.Target : "", found ? redirect.Name : "", errors};
 }
 
 std::string Device(const std::string &path) {
     char out[XE_REDIRECT_MAX_PATH + 1];
-    return XeRedirectDevicePath(path.data(), (ULONG)path.size(), out) ? out : "(refused)";
+    return titles::RedirectDevicePath(path.data(), (ULONG)path.size(), out) ? out : "(refused)";
 }
 
 } // namespace

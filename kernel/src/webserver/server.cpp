@@ -5,8 +5,8 @@
 //
 // Each connection's request moves through phases: its head (request line and headers), then an upload's body, then
 // the reply, queued to the connection as its send buffer has room. Everything the server keeps is in one block,
-// allocated when it starts and freed by UploadStop.
-#include <xk/uploader.h>
+// allocated when it starts and freed by Stop.
+#include <xk/webserver.h>
 #include <xk/network.h>
 #include <xk/bootscreen.h>
 #include <xk/core.h>
@@ -17,6 +17,8 @@
 #include <xk/serial.h>
 #include <xk/storage.h>
 
+namespace xk::webserver {
+
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 
@@ -26,11 +28,11 @@ constexpr NTSTATUS STATUS_NO_MORE_FILES_ = (NTSTATUS)0x80000006, STATUS_NO_SUCH_
                    STATUS_OBJECT_NAME_COLLISION_ = (NTSTATUS)0xC0000035;
 
 enum UPLOADP_PHASE : ULONG {
-    UploadpIdle,      // no request
-    UploadpReadHead,  // reading the request line and headers
-    UploadpReadBody,  // writing an upload's body to its file (or reading it past an error)
-    UploadpQueueReply, // queuing the reply
-    UploadpClosing    // the reply is queued and the connection closing
+    Idle,       // no request
+    ReadHead,   // reading the request line and headers
+    ReadBody,   // writing an upload's body to its file (or reading it past an error)
+    QueueReply, // queuing the reply
+    Closing     // the reply is queued and the connection closing
 };
 
 struct UPLOADP_REQUEST {
@@ -64,44 +66,44 @@ struct UPLOADP_SERVER {
     bool LaunchReady;
 };
 
-static UPLOADP_SERVER *UploadpServer; // null until the server starts
-volatile ULONG UploadServing;         // 1 while the server runs (read by the boot tests)
+static UPLOADP_SERVER *Server; // null until the server starts
+volatile ULONG Serving;        // 1 while the server runs (read by the boot tests)
 
 // --- The screen's status line
 
-static void UploadpStatus(const char *Format, ...) {
+static void ShowStatus(const char *Format, ...) {
     va_list args;
     __builtin_va_start(args, Format);
-    RtlVsnprintf(UploadpServer->Status, STATUS_SIZE, Format, args);
+    RtlVsnprintf(Server->Status, STATUS_SIZE, Format, args);
     __builtin_va_end(args);
 }
 
 // "Prefix path", keeping the path's end when the line would not fit the screen.
-static void UploadpStatusPath(const char *Prefix, const char *Path) {
+static void StatusPath(const char *Prefix, const char *Path) {
     ULONG room = 45, used = 0, length = 0;
     while (Prefix[used])
         used++;
     while (Path[length])
         length++;
     if (used + 1 + length <= room)
-        return UploadpStatus("%s %s", Prefix, Path);
+        return ShowStatus("%s %s", Prefix, Path);
     ULONG keep = room > used + 4 ? room - used - 4 : 0;
-    UploadpStatus("%s ...%s", Prefix, Path + length - (keep < length ? keep : length));
+    ShowStatus("%s ...%s", Prefix, Path + length - (keep < length ? keep : length));
 }
 
-static void UploadpUpdateScreen() {
+static void UpdateScreen() {
     char address[20];
-    NetAddressText(address, sizeof(address));
-    const char *network = NetState() == NetNoLink   ? "Connect a network cable."
-                          : NetState() == NetAsking ? "Asking the network for an address..."
+    network::IpAddressText(address, sizeof(address));
+    const char *network = network::NetworkState() == NetNoLink   ? "Connect a network cable."
+                          : network::NetworkState() == NetAsking ? "Asking the network for an address..."
                                                     : nullptr;
-    const char *status = UploadpServer->Status[0] ? UploadpServer->Status : network;
-    char shown[sizeof(UploadpServer->Shown)];
+    const char *status = Server->Status[0] ? Server->Status : network;
+    char shown[sizeof(Server->Shown)];
     RtlSnprintf(shown, sizeof(shown), "%s|%s", address, status ? status : "Waiting for a browser.");
     for (ULONG i = 0; i < sizeof(shown); i++) {
-        if (shown[i] != UploadpServer->Shown[i]) {
-            RtlCopyMemory(UploadpServer->Shown, shown, sizeof(shown));
-            XkShowFileManagerScreen(address, status ? status : "Waiting for a browser.");
+        if (shown[i] != Server->Shown[i]) {
+            RtlCopyMemory(Server->Shown, shown, sizeof(shown));
+            core::ShowFileManagerScreen(address, status ? status : "Waiting for a browser.");
             return;
         }
         if (!shown[i])
@@ -112,7 +114,7 @@ static void UploadpUpdateScreen() {
 // --- Paths
 
 // A hexadecimal digit's value, or -1.
-static int UploadpHexDigit(char c) {
+static int HexDigit(char c) {
     if (c >= '0' && c <= '9')
         return c - '0';
     if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f')
@@ -121,7 +123,7 @@ static int UploadpHexDigit(char c) {
 }
 
 // Text starts with Word.
-static bool UploadpIs(const char *Text, const char *Word) {
+static bool IsWord(const char *Text, const char *Word) {
     ULONG i = 0;
     while (Word[i] && Text[i] == Word[i])
         i++;
@@ -129,9 +131,9 @@ static bool UploadpIs(const char *Text, const char *Word) {
 }
 
 // The decoded value of query parameter Key ("path=", "name=") in Target ("/api/list?path=%2FE%2FApps"), or false.
-static bool UploadpQueryValue(const char *Target, const char *Key, char *Out, ULONG Size) {
+static bool QueryValue(const char *Target, const char *Key, char *Out, ULONG Size) {
     const char *p = Target;
-    while (*p && *p != ' ' && !((*p == '?' || *p == '&') && UploadpIs(p + 1, Key)))
+    while (*p && *p != ' ' && !((*p == '?' || *p == '&') && IsWord(p + 1, Key)))
         p++;
     if (*p != '?' && *p != '&')
         return false;
@@ -140,8 +142,8 @@ static bool UploadpQueryValue(const char *Target, const char *Key, char *Out, UL
     ULONG n = 0;
     for (; *p && *p != '&' && *p != ' '; p++) {
         char c = *p;
-        if (c == '%' && UploadpHexDigit(p[1]) >= 0 && UploadpHexDigit(p[2]) >= 0) {
-            c = (char)(UploadpHexDigit(p[1]) << 4 | UploadpHexDigit(p[2]));
+        if (c == '%' && HexDigit(p[1]) >= 0 && HexDigit(p[2]) >= 0) {
+            c = (char)(HexDigit(p[1]) << 4 | HexDigit(p[2]));
             p += 2;
         } else if (c == '+') {
             c = ' ';
@@ -155,14 +157,14 @@ static bool UploadpQueryValue(const char *Target, const char *Key, char *Out, UL
 }
 
 // A character FATX allows in a name (exFAT allows a few more; FATX's rule holds on both).
-static bool UploadpNameCharacter(char c) {
+static bool NameCharacter(char c) {
     return (UCHAR)c >= 0x20 && c != '"' && c != '*' && c != '/' && c != ':' && c != '<' && c != '>' && c != '?' &&
            c != '\\' && c != '|';
 }
 
 // The NT path of a page path ("/E/Apps/x.xbe" -> "\Device\Harddisk0\Partition1\Apps\x.xbe"); false for an unknown
 // drive, an empty part, "." or "..", or a character FATX does not allow. "/" alone is the list of drives.
-static bool UploadpNtPath(const char *Path, char *Out, ULONG Size) {
+static bool NtPathOf(const char *Path, char *Out, ULONG Size) {
     static const char drives[] = "CEFGXYZ";
     static const UCHAR partitions[] = {2, 1, 6, 7, 3, 4, 5};
     if (Path[0] != '/' || !Path[1] || (Path[2] && Path[2] != '/'))
@@ -188,7 +190,7 @@ static bool UploadpNtPath(const char *Path, char *Out, ULONG Size) {
             return false;
         Out[n++] = '\\';
         for (ULONG i = 0; i < length; i++) {
-            if (!UploadpNameCharacter(p[i]))
+            if (!NameCharacter(p[i]))
                 return false;
             Out[n++] = p[i];
         }
@@ -202,8 +204,8 @@ static bool UploadpNtPath(const char *Path, char *Out, ULONG Size) {
 
 // Opens or creates NtPath; Size, when not 0, is the allocation a new file starts with (an upload's length: its
 // clusters are allocated once, not with every write).
-static NTSTATUS UploadpOpen(const char *NtPath, ACCESS_MASK Access, ULONG Disposition, ULONG Options, HANDLE *h,
-                            ULONGLONG Size = 0) {
+static NTSTATUS OpenFile(const char *NtPath, ACCESS_MASK Access, ULONG Disposition, ULONG Options, HANDLE *h,
+                         ULONGLONG Size = 0) {
     ANSI_STRING name;
     RtlInitAnsiString(&name, NtPath);
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
@@ -215,7 +217,7 @@ static NTSTATUS UploadpOpen(const char *NtPath, ACCESS_MASK Access, ULONG Dispos
 }
 
 // The folders on the way to NtPath's last part, created where missing.
-static NTSTATUS UploadpMakeFolders(char *NtPath) {
+static NTSTATUS MakeFolders(char *NtPath) {
     ULONG skip = 0, separators = 0;
     for (; NtPath[skip] && separators < 4; skip++) // past "\Device\Harddisk0\PartitionN\"
         separators += NtPath[skip] == '\\';
@@ -224,7 +226,7 @@ static NTSTATUS UploadpMakeFolders(char *NtPath) {
             continue;
         *p = 0;
         HANDLE h;
-        NTSTATUS status = UploadpOpen(NtPath, GENERIC_READ, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
+        NTSTATUS status = OpenFile(NtPath, GENERIC_READ, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
         *p = '\\';
         if (!NT_SUCCESS(status))
             return status;
@@ -235,7 +237,7 @@ static NTSTATUS UploadpMakeFolders(char *NtPath) {
 
 // --- Replies
 
-static void UploadpReply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const char *Body, ULONG Length) {
+static void Reply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const char *Body, ULONG Length) {
     const char *reason = Code == 200 ? "OK" : Code == 201 ? "Created" : Code == 400 ? "Bad Request"
                          : Code == 403 ? "Forbidden" : Code == 404 ? "Not Found" : Code == 405 ? "Method Not Allowed"
                          : Code == 409 ? "Conflict"
@@ -248,22 +250,22 @@ static void UploadpReply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const
     r->HeaderSent = r->BodySent = 0;
     r->Body = Body;
     r->BodyLength = Length;
-    r->Phase = UploadpQueueReply;
+    r->Phase = QueueReply;
 }
 
 // A plain-text reply: the message is kept in Json.
-static void UploadpText(UPLOADP_REQUEST *r, ULONG Code, const char *Format, ...) {
+static void ReplyText(UPLOADP_REQUEST *r, ULONG Code, const char *Format, ...) {
     va_list args;
     __builtin_va_start(args, Format);
     ULONG n = (ULONG)RtlVsnprintf(r->Json, sizeof(r->Json), Format, args);
     __builtin_va_end(args);
-    UploadpReply(r, Code, "text/plain; charset=utf-8", r->Json, n);
+    Reply(r, Code, "text/plain; charset=utf-8", r->Json, n);
 }
 
 // --- Listing a folder
 
 // Appends "name" (JSON-escaped) to Json at *n.
-static void UploadpJsonName(UPLOADP_REQUEST *r, ULONG *n, const char *Name, ULONG Length) {
+static void JsonName(UPLOADP_REQUEST *r, ULONG *n, const char *Name, ULONG Length) {
     for (ULONG i = 0; i < Length && *n + 8 < sizeof(r->Json); i++) {
         UCHAR c = (UCHAR)Name[i];
         if (c == '"' || c == '\\')
@@ -274,13 +276,13 @@ static void UploadpJsonName(UPLOADP_REQUEST *r, ULONG *n, const char *Name, ULON
     }
 }
 
-static void UploadpList(UPLOADP_REQUEST *r) {
+static void HandleList(UPLOADP_REQUEST *r) {
     ULONG n = 0;
     auto entry = [&](const char *name, ULONG length, bool folder, ULONGLONG size) {
         if (n + length + 64 >= sizeof(r->Json)) // a folder too large for one reply: the rest is left out
             return;
         n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "%s{\"name\":\"", n > 1 ? "," : "");
-        UploadpJsonName(r, &n, name, length);
+        JsonName(r, &n, name, length);
         n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "\",\"dir\":%s,\"size\":%llu}",
                                 folder ? "true" : "false", size);
     };
@@ -290,17 +292,17 @@ static void UploadpList(UPLOADP_REQUEST *r) {
         for (ULONG i = 0; drives[i]; i++) {
             char path[3] = {'/', drives[i], 0}, nt[64];
             HANDLE h;
-            if (UploadpNtPath(path, nt, sizeof(nt)) && NT_SUCCESS(UploadpOpen(nt, GENERIC_READ, FILE_OPEN,
-                                                                              FILE_DIRECTORY_FILE, &h))) {
+            if (NtPathOf(path, nt, sizeof(nt)) && NT_SUCCESS(OpenFile(nt, GENERIC_READ, FILE_OPEN,
+                                                                      FILE_DIRECTORY_FILE, &h))) {
                 NtClose(h);
                 entry(path + 1, 1, true, 0);
             }
         }
     } else {
         HANDLE h;
-        NTSTATUS status = UploadpOpen(r->NtPath, GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE, &h);
+        NTSTATUS status = OpenFile(r->NtPath, GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE, &h);
         if (!NT_SUCCESS(status))
-            return UploadpText(r, 404, "%s: not a folder (%08lx)", r->Shown, status);
+            return ReplyText(r, 404, "%s: not a folder (%08lx)", r->Shown, status);
         UCHAR buffer[2048];
         for (bool first = true;; first = false) {
             IO_STATUS_BLOCK iosb;
@@ -321,20 +323,20 @@ static void UploadpList(UPLOADP_REQUEST *r) {
         }
         NtClose(h);
         if (status != STATUS_NO_MORE_FILES_)
-            return UploadpText(r, 500, "%s: listing failed (%08lx)", r->Shown, status);
+            return ReplyText(r, 500, "%s: listing failed (%08lx)", r->Shown, status);
     }
     r->Json[n++] = ']';
-    UploadpReply(r, 200, "application/json", r->Json, n);
+    Reply(r, 200, "application/json", r->Json, n);
 }
 
 // --- The disk
 
 // A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\Apps" ("/E" reads "E:\"); an
 // exFAT disk has one volume whose top-level folders stand for the drives, so its paths stay as they are.
-static void UploadpShowPath(const char *Path, char *Out, ULONG Size) {
+static void ShowPath(const char *Path, char *Out, ULONG Size) {
     ULONG i = 0, o = 0;
-    if (!IdexDiskEXFATLayout && Path[0] == '/' && Path[1] && Path[1] != '/' && (!Path[2] || Path[2] == '/') &&
-        Size > 3) {
+    if (!storage::DiskHasEXFATLayout && Path[0] == '/' && Path[1] && Path[1] != '/' &&
+        (!Path[2] || Path[2] == '/') && Size > 3) {
         Out[o++] = Path[1];
         Out[o++] = ':';
         Out[o++] = '\\';
@@ -350,52 +352,52 @@ static void UploadpShowPath(const char *Path, char *Out, ULONG Size) {
 
 // The disk's file system and size, for the page's header and its folder buttons (spec/oxos_internal/31 §4):
 // {"fs":"exFAT","bytes":2000398934016}. "fs" is "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
-static void UploadpDisk(UPLOADP_REQUEST *r) {
-    const char *fs = IdexDiskEXFATLayout ? "exFAT" : IdexDiskForeignLayout ? "none" : "FATX";
+static void HandleDiskInfo(UPLOADP_REQUEST *r) {
+    const char *fs = storage::DiskHasEXFATLayout ? "exFAT" : storage::DiskHasForeignLayout ? "none" : "FATX";
     ULONG n = (ULONG)RtlSnprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs,
-                                 IdexDiskLengthInSectors * 512);
-    UploadpReply(r, 200, "application/json", r->Json, n);
+                                 storage::DiskLengthInSectors * 512);
+    Reply(r, 200, "application/json", r->Json, n);
 }
 
 // What a top-level folder is, for a refusal: a drive on a FATX disk, a folder of the volume on an exFAT one.
-static const char *UploadpTopName() {
-    return IdexDiskEXFATLayout ? "a top-level folder" : "a drive";
+static const char *TopName() {
+    return storage::DiskHasEXFATLayout ? "a top-level folder" : "a drive";
 }
 
 // --- Creating a folder
 
 // Creates the folder at the request's path, and the folders on the way to it; one that exists already: 409.
-static void UploadpCreateFolder(UPLOADP_REQUEST *r) {
-    NTSTATUS status = UploadpMakeFolders(r->NtPath);
+static void HandleCreateFolder(UPLOADP_REQUEST *r) {
+    NTSTATUS status = MakeFolders(r->NtPath);
     HANDLE h = nullptr;
     if (NT_SUCCESS(status))
-        status = UploadpOpen(r->NtPath, GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE, &h);
+        status = OpenFile(r->NtPath, GENERIC_READ, FILE_CREATE, FILE_DIRECTORY_FILE, &h);
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("New folder failed:", r->Shown);
+        StatusPath("New folder failed:", r->Shown);
         if (status == STATUS_OBJECT_NAME_COLLISION_)
-            return UploadpText(r, 409, "%s: already exists", r->Shown);
-        return UploadpText(r, 500, "%s: cannot create it (%08lx)", r->Shown, status);
+            return ReplyText(r, 409, "%s: already exists", r->Shown);
+        return ReplyText(r, 500, "%s: cannot create it (%08lx)", r->Shown, status);
     }
     NtClose(h);
-    UploadpStatusPath("New folder", r->Shown);
-    UploadpText(r, 201, "Created %s", r->Shown);
+    StatusPath("New folder", r->Shown);
+    ReplyText(r, 201, "Created %s", r->Shown);
 }
 
 // --- Renaming
 
 // Renames the file or folder at the request's path to Name, in the same folder. A drive is refused (403), a name in use
 // too (409).
-static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
+static void HandleRename(UPLOADP_REQUEST *r, const char *Target) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
-        return UploadpText(r, 403, "Cannot rename %s (%s)", r->Shown, UploadpTopName());
+        return ReplyText(r, 403, "Cannot rename %s (%s)", r->Shown, TopName());
     char name[PATH_SIZE];
-    bool valid = UploadpQueryValue(Target, "name=", name, sizeof(name));
+    bool valid = QueryValue(Target, "name=", name, sizeof(name));
     for (ULONG i = 0; valid && name[i]; i++)
-        valid = UploadpNameCharacter(name[i]);
+        valid = NameCharacter(name[i]);
     if (!valid || (name[0] == '.' && (!name[1] || (name[1] == '.' && !name[2]))))
-        return UploadpText(r, 400, "Bad name");
+        return ReplyText(r, 400, "Bad name");
     HANDLE h;
-    NTSTATUS status = UploadpOpen(r->NtPath, DELETE, FILE_OPEN, 0, &h);
+    NTSTATUS status = OpenFile(r->NtPath, DELETE, FILE_OPEN, 0, &h);
     if (NT_SUCCESS(status)) {
         FILE_RENAME_INFORMATION info = {FALSE, nullptr, {}};
         RtlInitAnsiString(&info.FileName, name);
@@ -404,40 +406,40 @@ static void UploadpRename(UPLOADP_REQUEST *r, const char *Target) {
         NtClose(h);
     }
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("Rename failed:", r->Shown);
+        StatusPath("Rename failed:", r->Shown);
         if (status == STATUS_OBJECT_NAME_COLLISION_)
-            return UploadpText(r, 409, "%s: already exists", name);
-        return UploadpText(r, 500, "%s: rename failed (%08lx)", r->Shown, status);
+            return ReplyText(r, 409, "%s: already exists", name);
+        return ReplyText(r, 500, "%s: rename failed (%08lx)", r->Shown, status);
     }
-    UploadpStatusPath("Renamed", r->Shown);
-    UploadpText(r, 200, "Renamed %s to %s", r->Shown, name);
+    StatusPath("Renamed", r->Shown);
+    ReplyText(r, 200, "Renamed %s to %s", r->Shown, name);
 }
 
 // --- Deleting
 
 // Deletes the file or empty folder at the request's path. A drive's own folder is refused, and a folder with
 // anything in it is left as it is (409): the page deletes nothing recursively.
-static void UploadpDelete(UPLOADP_REQUEST *r) {
+static void HandleDelete(UPLOADP_REQUEST *r) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
-        return UploadpText(r, 403, "Cannot delete %s (%s)", r->Shown, UploadpTopName());
+        return ReplyText(r, 403, "Cannot delete %s (%s)", r->Shown, TopName());
     ANSI_STRING name;
     RtlInitAnsiString(&name, r->NtPath);
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     NTSTATUS status = NtDeleteFile(&a);
     if (!NT_SUCCESS(status)) {
-        UploadpStatusPath("Delete failed:", r->Shown);
+        StatusPath("Delete failed:", r->Shown);
         if (status == STATUS_DIRECTORY_NOT_EMPTY_)
-            return UploadpText(r, 409, "%s: the folder is not empty", r->Shown);
-        return UploadpText(r, 500, "%s: delete failed (%08lx)", r->Shown, status);
+            return ReplyText(r, 409, "%s: the folder is not empty", r->Shown);
+        return ReplyText(r, 500, "%s: delete failed (%08lx)", r->Shown, status);
     }
-    UploadpStatusPath("Deleted", r->Shown);
-    UploadpText(r, 200, "Deleted %s", r->Shown);
+    StatusPath("Deleted", r->Shown);
+    ReplyText(r, 200, "Deleted %s", r->Shown);
 }
 
 // --- Uploads
 
 // The upload's buffered bytes go to its file (after an error they are dropped).
-static void UploadpWrite(UPLOADP_REQUEST *r) {
+static void HandleWrite(UPLOADP_REQUEST *r) {
     if (r->ChunkUsed && NT_SUCCESS(r->Error)) {
         IO_STATUS_BLOCK iosb;
         r->Error = NtWriteFile(r->File, nullptr, nullptr, nullptr, &iosb, r->Chunk, r->ChunkUsed, nullptr);
@@ -446,40 +448,40 @@ static void UploadpWrite(UPLOADP_REQUEST *r) {
     r->ChunkUsed = 0;
 }
 
-static void UploadpEndUpload(UPLOADP_REQUEST *r) {
-    UploadpWrite(r);
+static void EndUpload(UPLOADP_REQUEST *r) {
+    HandleWrite(r);
     if (r->File) {
         NtClose(r->File);
         r->File = nullptr;
     }
     if (!NT_SUCCESS(r->Error)) {
-        UploadpStatusPath("Upload failed:", r->Shown);
-        return UploadpText(r, 500, "%s: write failed (%08lx)", r->Shown, r->Error);
+        StatusPath("Upload failed:", r->Shown);
+        return ReplyText(r, 500, "%s: write failed (%08lx)", r->Shown, r->Error);
     }
-    UploadpStatusPath("Saved", r->Shown);
-    UploadpText(r, 201, "%s: %llu bytes", r->Shown, r->Received);
+    StatusPath("Saved", r->Shown);
+    ReplyText(r, 201, "%s: %llu bytes", r->Shown, r->Received);
 }
 
-static void UploadpStartUpload(UPLOADP_REQUEST *r, ULONGLONG Length, bool Continue) {
-    r->Error = UploadpMakeFolders(r->NtPath);
+static void StartUpload(UPLOADP_REQUEST *r, ULONGLONG Length, bool Continue) {
+    r->Error = MakeFolders(r->NtPath);
     if (NT_SUCCESS(r->Error))
-        r->Error = UploadpOpen(r->NtPath, GENERIC_WRITE, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &r->File, Length);
+        r->Error = OpenFile(r->NtPath, GENERIC_WRITE, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &r->File, Length);
     if (!NT_SUCCESS(r->Error))
         r->File = nullptr;
     r->Remaining = Length;
     r->Received = r->ChunkUsed = 0;
-    r->Phase = UploadpReadBody;
-    UploadpStatusPath("Receiving", r->Shown);
+    r->Phase = ReadBody;
+    StatusPath("Receiving", r->Shown);
     if (Continue) { // curl and others wait for this before they send a large body
         static const char go[] = "HTTP/1.1 100 Continue\r\n\r\n";
-        NetTcpSend(r->Connection, go, sizeof(go) - 1);
+        network::SendTcp(r->Connection, go, sizeof(go) - 1);
     }
 }
 
 // --- Requests
 
 // Header Name's value in the head (case-insensitive name), or null.
-static const char *UploadpHeader(const UPLOADP_REQUEST *r, const char *Name) {
+static const char *RequestHeader(const UPLOADP_REQUEST *r, const char *Name) {
     for (ULONG i = 0; i + 2 < r->HeadLength; i++) {
         if (r->Head[i] != '\n')
             continue;
@@ -497,55 +499,55 @@ static const char *UploadpHeader(const UPLOADP_REQUEST *r, const char *Name) {
 }
 
 // The head has arrived (Body: the bytes after it in Head, BodyLength of them): what the request asks for.
-static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLength) {
+static void DispatchRequest(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLength) {
     const char *target = r->Head;
     while (*target && *target != ' ')
         target++;
     while (*target == ' ')
         target++;
-    bool get = UploadpIs(r->Head, "GET "), put = UploadpIs(r->Head, "PUT "), post = UploadpIs(r->Head, "POST "),
-         remove = UploadpIs(r->Head, "DELETE ");
-    if (get && (UploadpIs(target, "/ ") || UploadpIs(target, "/index.html"))) {
+    bool get = IsWord(r->Head, "GET "), put = IsWord(r->Head, "PUT "), post = IsWord(r->Head, "POST "),
+         remove = IsWord(r->Head, "DELETE ");
+    if (get && (IsWord(target, "/ ") || IsWord(target, "/index.html"))) {
         ULONG length;
-        const char *page = UploadPage(&length);
-        return UploadpReply(r, 200, "text/html; charset=utf-8", page, length);
+        const char *page = FileManagerPage(&length);
+        return Reply(r, 200, "text/html; charset=utf-8", page, length);
     }
-    if (get && UploadpIs(target, "/api/disk "))
-        return UploadpDisk(r);
-    bool list = UploadpIs(target, "/api/list?"), file = UploadpIs(target, "/api/file?"),
-         folder = UploadpIs(target, "/api/folder?"), rename = UploadpIs(target, "/api/rename?"),
-         launch = UploadpIs(target, "/api/launch?");
+    if (get && IsWord(target, "/api/disk "))
+        return HandleDiskInfo(r);
+    bool list = IsWord(target, "/api/list?"), file = IsWord(target, "/api/file?"),
+         folder = IsWord(target, "/api/folder?"), rename = IsWord(target, "/api/rename?"),
+         launch = IsWord(target, "/api/launch?");
     if (!list && !file && !folder && !rename && !launch)
-        return UploadpText(r, 404, "No such page");
+        return ReplyText(r, 404, "No such page");
     if ((list && !get) || (file && !put && !remove) || (folder && !put) || ((rename || launch) && !post))
-        return UploadpText(r, 405, "Wrong method");
-    if (!UploadpQueryValue(target, "path=", r->Path, sizeof(r->Path)))
-        return UploadpText(r, 400, "Bad path");
-    UploadpShowPath(r->Path, r->Shown, sizeof(r->Shown));
+        return ReplyText(r, 405, "Wrong method");
+    if (!QueryValue(target, "path=", r->Path, sizeof(r->Path)))
+        return ReplyText(r, 400, "Bad path");
+    ShowPath(r->Path, r->Shown, sizeof(r->Shown));
     bool drives = list && r->Path[0] == '/' && !r->Path[1]; // the list of drives
-    if (!drives && !UploadpNtPath(r->Path, r->NtPath, sizeof(r->NtPath)))
-        return UploadpText(r, 400, "Bad path");
+    if (!drives && !NtPathOf(r->Path, r->NtPath, sizeof(r->NtPath)))
+        return ReplyText(r, 400, "Bad path");
     if (list)
-        return UploadpList(r);
+        return HandleList(r);
     if (folder)
-        return UploadpCreateFolder(r);
+        return HandleCreateFolder(r);
     if (rename)
-        return UploadpRename(r, target);
+        return HandleRename(r, target);
     if (remove)
-        return UploadpDelete(r);
+        return HandleDelete(r);
     if (launch) {
-        UploadpStatusPath("Launching", r->Shown);
+        StatusPath("Launching", r->Shown);
         r->Launch = true;
-        return UploadpText(r, 200, "Launching %s", r->Shown);
+        return ReplyText(r, 200, "Launching %s", r->Shown);
     }
-    const char *length = UploadpHeader(r, "Content-Length");
+    const char *length = RequestHeader(r, "Content-Length");
     if (!length)
-        return UploadpText(r, 411, "Content-Length needed");
+        return ReplyText(r, 411, "Content-Length needed");
     ULONGLONG bytes = 0;
     for (; *length >= '0' && *length <= '9'; length++)
         bytes = bytes * 10 + (ULONGLONG)(*length - '0');
-    const char *expect = UploadpHeader(r, "Expect");
-    UploadpStartUpload(r, bytes, expect && UploadpIs(expect, "100-continue"));
+    const char *expect = RequestHeader(r, "Expect");
+    StartUpload(r, bytes, expect && IsWord(expect, "100-continue"));
     // Body bytes that came with the head.
     ULONG n = BodyLength < r->Remaining ? BodyLength : (ULONG)r->Remaining;
     RtlCopyMemory(r->Chunk, Body, n);
@@ -554,116 +556,117 @@ static void UploadpDispatch(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
 }
 
 // A launch whose reply has gone out (or whose browser has gone): the server returns its path.
-static void UploadpLaunchNow(UPLOADP_REQUEST *r) {
-    if (UploadpServer->LaunchReady)
+static void LaunchNow(UPLOADP_REQUEST *r) {
+    if (Server->LaunchReady)
         return;
-    RtlCopyMemory(UploadpServer->Launch, r->NtPath, PATH_SIZE);
-    UploadpServer->LaunchReady = true;
+    RtlCopyMemory(Server->Launch, r->NtPath, PATH_SIZE);
+    Server->LaunchReady = true;
     r->Launch = false;
 }
 
 // One step of a request: whatever its connection has for it, and whatever its reply can queue.
-static void UploadpStep(UPLOADP_REQUEST *r) {
-    if (!NetTcpOpen(r->Connection)) { // closed or reset
-        if (r->Launch && r->Phase == UploadpClosing)
-            UploadpLaunchNow(r);
+static void StepRequest(UPLOADP_REQUEST *r) {
+    if (!network::IsTcpOpen(r->Connection)) { // closed or reset
+        if (r->Launch && r->Phase == Closing)
+            LaunchNow(r);
         if (r->File)
             NtClose(r->File);
         r->File = nullptr;
-        r->Phase = UploadpIdle;
+        r->Phase = Idle;
         return;
     }
-    if (r->Phase == UploadpReadHead) {
-        r->HeadLength += NetTcpReceive(r->Connection, r->Head + r->HeadLength, HEAD_SIZE - 1 - r->HeadLength);
+    if (r->Phase == ReadHead) {
+        r->HeadLength += network::ReceiveTcp(r->Connection, r->Head + r->HeadLength, HEAD_SIZE - 1 - r->HeadLength);
         r->Head[r->HeadLength] = 0;
         for (ULONG i = 3; i < r->HeadLength; i++) {
             if (r->Head[i - 3] == '\r' && r->Head[i - 2] == '\n' && r->Head[i - 1] == '\r' && r->Head[i] == '\n') {
-                return UploadpDispatch(r, r->Head + i + 1, r->HeadLength - i - 1);
+                return DispatchRequest(r, r->Head + i + 1, r->HeadLength - i - 1);
             }
         }
         if (r->HeadLength == HEAD_SIZE - 1)
-            return UploadpText(r, 431, "Request head too large");
-        if (NetTcpPeerClosed(r->Connection))
-            NetTcpClose(r->Connection);
+            return ReplyText(r, 431, "Request head too large");
+        if (network::TcpPeerClosed(r->Connection))
+            network::CloseTcp(r->Connection);
         return;
     }
-    if (r->Phase == UploadpReadBody) {
+    if (r->Phase == ReadBody) {
         while (r->Remaining) {
             ULONG room = CHUNK_SIZE - r->ChunkUsed;
-            ULONG n = NetTcpReceive(r->Connection, r->Chunk + r->ChunkUsed,
-                                    room < r->Remaining ? room : (ULONG)r->Remaining);
+            ULONG n = network::ReceiveTcp(r->Connection, r->Chunk + r->ChunkUsed,
+                                              room < r->Remaining ? room : (ULONG)r->Remaining);
             if (!n)
                 break;
             r->ChunkUsed += n;
             r->Remaining -= n;
             if (r->ChunkUsed == CHUNK_SIZE)
-                UploadpWrite(r);
+                HandleWrite(r);
         }
         if (!r->Remaining)
-            UploadpEndUpload(r);
-        else if (NetTcpPeerClosed(r->Connection)) // the browser gave up
-            NetTcpClose(r->Connection);
+            EndUpload(r);
+        else if (network::TcpPeerClosed(r->Connection)) // the browser gave up
+            network::CloseTcp(r->Connection);
         return;
     }
-    if (r->Phase == UploadpQueueReply) {
-        r->HeaderSent += NetTcpSend(r->Connection, r->Header + r->HeaderSent, r->HeaderLength - r->HeaderSent);
+    if (r->Phase == QueueReply) {
+        r->HeaderSent +=
+            network::SendTcp(r->Connection, r->Header + r->HeaderSent, r->HeaderLength - r->HeaderSent);
         if (r->HeaderSent == r->HeaderLength)
-            r->BodySent += NetTcpSend(r->Connection, r->Body + r->BodySent, r->BodyLength - r->BodySent);
+            r->BodySent += network::SendTcp(r->Connection, r->Body + r->BodySent, r->BodyLength - r->BodySent);
         if (r->HeaderSent == r->HeaderLength && r->BodySent == r->BodyLength) {
-            NetTcpClose(r->Connection);
-            r->Phase = UploadpClosing;
+            network::CloseTcp(r->Connection);
+            r->Phase = Closing;
         }
         return;
     }
-    if (r->Phase == UploadpClosing && r->Launch && NetTcpAllSent(r->Connection))
-        UploadpLaunchNow(r);
+    if (r->Phase == Closing && r->Launch && network::TcpAllSent(r->Connection))
+        LaunchNow(r);
 }
 
 // --- Entry points
 
-bool UploadServe(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
-    if (!UploadpServer) {
-        UploadpServer = (UPLOADP_SERVER *)MmAllocateSystemMemory(sizeof(UPLOADP_SERVER), PAGE_READWRITE);
-        if (!UploadpServer)
+bool Start(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
+    if (!Server) {
+        Server = (UPLOADP_SERVER *)MmAllocateSystemMemory(sizeof(UPLOADP_SERVER), PAGE_READWRITE);
+        if (!Server)
             return false;
-        RtlZeroMemory(UploadpServer, sizeof(UPLOADP_SERVER));
-        if (!NetStart()) {
-            MmFreeSystemMemory(UploadpServer, sizeof(UPLOADP_SERVER));
-            UploadpServer = nullptr;
+        RtlZeroMemory(Server, sizeof(UPLOADP_SERVER));
+        if (!network::StartNetwork()) {
+            MmFreeSystemMemory(Server, sizeof(UPLOADP_SERVER));
+            Server = nullptr;
             return false;
         }
-        HalpStopSplash(); // the screen is the server's; the boot-only pages it runs from stay
+        bootscreen::StopSplash(); // the screen is the server's; the boot-only pages it runs from stay
     }
     if (LastLaunch)
-        UploadpStatus("Launch failed (%08lx)", LastLaunch);
-    UploadpServer->LaunchReady = false;
-    UploadServing = 1;
+        ShowStatus("Launch failed (%08lx)", LastLaunch);
+    Server->LaunchReady = false;
+    Serving = 1;
     XK_SERIAL("upload: serving the File Manager\n");
     for (;;) {
-        bool busy = NetPoll();
-        for (LONG id; (id = NetTcpAccept()) >= 0;) {
+        bool busy = network::PollNetwork();
+        for (LONG id; (id = network::AcceptTcp()) >= 0;) {
             UPLOADP_REQUEST *free = nullptr;
             for (ULONG i = 0; i < NET_TCP_CONNECTIONS && !free; i++) {
-                if (UploadpServer->Requests[i].Phase == UploadpIdle)
-                    free = &UploadpServer->Requests[i];
+                if (Server->Requests[i].Phase == Idle)
+                    free = &Server->Requests[i];
             }
             if (!free) { // more connections than requests cannot happen: the stack has as many of each
-                NetTcpClose(id);
+                network::CloseTcp(id);
                 continue;
             }
-            free->Phase = UploadpReadHead;
+            free->Phase = ReadHead;
             free->Connection = id;
             free->HeadLength = 0;
             free->Launch = false;
         }
         for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
-            if (UploadpServer->Requests[i].Phase != UploadpIdle)
-                UploadpStep(&UploadpServer->Requests[i]);
+            if (Server->Requests[i].Phase != Idle)
+                StepRequest(&Server->Requests[i]);
         }
-        UploadpUpdateScreen();
-        if (UploadpServer->LaunchReady) {
-            UploadServing = 0;
-            RtlSnprintf(LaunchPath, Size, "%s", UploadpServer->Launch);
+        UpdateScreen();
+        if (Server->LaunchReady) {
+            Serving = 0;
+            RtlSnprintf(LaunchPath, Size, "%s", Server->Launch);
             XK_SERIAL("upload: launching %s\n", LaunchPath);
             return true;
         }
@@ -675,15 +678,17 @@ bool UploadServe(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
     }
 }
 
-void UploadStop() {
-    if (!UploadpServer)
+void Stop() {
+    if (!Server)
         return;
-    NetStop();
-    XkCloseFileManagerScreen();
+    network::StopNetwork();
+    core::CloseFileManagerScreen();
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
-        if (UploadpServer->Requests[i].File)
-            NtClose(UploadpServer->Requests[i].File);
+        if (Server->Requests[i].File)
+            NtClose(Server->Requests[i].File);
     }
-    MmFreeSystemMemory(UploadpServer, sizeof(UPLOADP_SERVER));
-    UploadpServer = nullptr;
+    MmFreeSystemMemory(Server, sizeof(UPLOADP_SERVER));
+    Server = nullptr;
 }
+
+} // namespace xk::webserver

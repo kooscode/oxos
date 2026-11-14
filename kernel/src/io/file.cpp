@@ -4,7 +4,9 @@
 #include <xk/runtime.h>
 #include <xk/serial.h>
 
-// Carried through the object manager from IoCreateFile to IopParseDevice.
+namespace xk::io {
+
+// Carried through the object manager from IoCreateFile to ParseDevice.
 struct OPEN_PACKET {
     CSHORT Type;
     CSHORT Size;
@@ -25,17 +27,17 @@ constexpr ULONG OPEN_PACKET_PATTERN = 0xBEAA0251;
 
 // --- File object locking (synchronous file objects serialise their I/O)
 
-static void IopAcquireFileObjectLock(PFILE_OBJECT f) {
+static void AcquireFileObjectLock(PFILE_OBJECT f) {
     if (__atomic_add_fetch(&f->LockCount, 1, __ATOMIC_SEQ_CST) != 0)
         KeWaitForSingleObject(&f->Lock, Executive, KernelMode, FALSE, nullptr);
 }
 
-static void IopReleaseFileObjectLock(PFILE_OBJECT f) {
+static void ReleaseFileObjectLock(PFILE_OBJECT f) {
     if (__atomic_sub_fetch(&f->LockCount, 1, __ATOMIC_SEQ_CST) >= 0)
         KeSetEvent(&f->Lock, 0, FALSE);
 }
 
-static PIRP IopAllocateIrpMustSucceed(CCHAR StackSize) {
+static PIRP AllocateIrpMustSucceed(CCHAR StackSize) {
     for (;;) {
         PIRP irp = IoAllocateIrp(StackSize);
         if (irp)
@@ -48,14 +50,15 @@ static PIRP IopAllocateIrpMustSucceed(CCHAR StackSize) {
 
 // --- Mounting
 
-static NTSTATUS IopMountDevice(PDEVICE_OBJECT dev, bool allowRaw) {
+static NTSTATUS MountDevice(PDEVICE_OBJECT dev, bool allowRaw) {
     KeWaitForSingleObject(&dev->DeviceLock, Executive, KernelMode, FALSE, nullptr);
     NTSTATUS status = STATUS_SUCCESS;
     if (!dev->MountedOrSelfDevice) {
-        IO_MOUNT_ROUTINE fs = dev->DeviceType == FILE_DEVICE_CD_ROM ? IopFileSystems.CdRom : IopFileSystems.Disk;
+        IO_MOUNT_ROUTINE fs =
+            dev->DeviceType == FILE_DEVICE_CD_ROM ? RegisteredFileSystems.CdRom : RegisteredFileSystems.Disk;
         status = (dev->Flags & DO_RAW_MOUNT_ONLY) || !fs ? STATUS_UNRECOGNIZED_VOLUME : fs(dev);
-        if (!NT_SUCCESS(status) && allowRaw && IopFileSystems.Raw)
-            status = IopFileSystems.Raw(dev);
+        if (!NT_SUCCESS(status) && allowRaw && RegisteredFileSystems.Raw)
+            status = RegisteredFileSystems.Raw(dev);
     }
     KeSetEvent(&dev->DeviceLock, 0, FALSE);
     return status;
@@ -64,7 +67,7 @@ static NTSTATUS IopMountDevice(PDEVICE_OBJECT dev, bool allowRaw) {
 // --- Access rights
 
 // The generic rights (GENERIC_READ, _WRITE, _EXECUTE, _ALL) mapped to the file object's specific rights.
-static ACCESS_MASK IopMapGenericAccess(ACCESS_MASK a) {
+static ACCESS_MASK MapGenericAccess(ACCESS_MASK a) {
     if (a & GENERIC_READ)
         a |= 0x120089; // FILE_GENERIC_READ
     if (a & GENERIC_WRITE)
@@ -78,9 +81,9 @@ static ACCESS_MASK IopMapGenericAccess(ACCESS_MASK a) {
 
 // --- Parse procedures
 
-NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
-                              POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
-                              PVOID *Object) {
+NTSTATUS NTAPI ParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
+                           POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
+                           PVOID *Object) {
     *Object = nullptr;
     auto op = (OPEN_PACKET *)Context;
     auto dev = (PDEVICE_OBJECT)ParseObject;
@@ -113,7 +116,7 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
     PDEVICE_OBJECT vol;
     while (!(vol = dev->MountedOrSelfDevice)) {
         KfLowerIrql(old);
-        status = IopMountDevice(dev, !RemainingName->Length && !op->RelatedFileObject);
+        status = MountDevice(dev, !RemainingName->Length && !op->RelatedFileObject);
         if (!NT_SUCCESS(status)) {
             op->FinalStatus = status;
             return status;
@@ -123,10 +126,10 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
     vol->ReferenceCount++;
     KfLowerIrql(old);
 
-    op->DesiredAccess = IopMapGenericAccess(op->DesiredAccess);
+    op->DesiredAccess = MapGenericAccess(op->DesiredAccess);
     PIRP irp = IoAllocateIrp(vol->StackSize);
     if (!irp) {
-        IopDereferenceDevice(vol);
+        DereferenceDevice(vol);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     irp->Tail.Overlay.Thread = KeGetCurrentThread();
@@ -150,7 +153,7 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
     status = ObCreateObject(&IoFileObjectType, &fattrs, sizeof(FILE_OBJECT), (PVOID *)&fo);
     if (!NT_SUCCESS(status)) {
         IoFreeIrp(irp);
-        IopDereferenceDevice(vol);
+        DereferenceDevice(vol);
         op->FinalStatus = status;
         return status;
     }
@@ -174,7 +177,7 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
     stack->FileObject = fo;
     op->FileObject = fo;
 
-    IopQueueThreadIrp(irp);
+    QueueThreadIrp(irp);
     status = IofCallDriver(vol, irp);
     if (status == STATUS_PENDING) {
         KeWaitForSingleObject(&fo->Event, Executive, KernelMode, FALSE, nullptr);
@@ -195,7 +198,7 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
         fo->DeviceObject = nullptr; // the driver never saw a successful create: no CLOSE
         ObfDereferenceObject(fo);
         op->FileObject = nullptr;
-        IopDereferenceDevice(vol);
+        DereferenceDevice(vol);
         return status;
     }
     op->ParseCheck = OPEN_PACKET_PATTERN;
@@ -204,23 +207,23 @@ NTSTATUS NTAPI IopParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG 
     return STATUS_SUCCESS;
 }
 
-NTSTATUS NTAPI IopParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
-                            POBJECT_STRING RemainingName, PVOID Context, PVOID *Object) {
+NTSTATUS NTAPI ParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
+                         POBJECT_STRING RemainingName, PVOID Context, PVOID *Object) {
     auto op = (OPEN_PACKET *)Context;
     *Object = nullptr;
     if (!op || op->Type != 8 || op->Size != sizeof(OPEN_PACKET))
         return STATUS_OBJECT_TYPE_MISMATCH;
     auto fo = (PFILE_OBJECT)ParseObject;
     op->RelatedFileObject = fo;
-    return IopParseDevice(fo->DeviceObject, ObjectType, Attributes, CompleteName, RemainingName, Context, Object);
+    return ParseDevice(fo->DeviceObject, ObjectType, Attributes, CompleteName, RemainingName, Context, Object);
 }
 
 // --- Close / delete
 
-static void IopSendCloseIrp(PFILE_OBJECT fo, UCHAR major) {
+static void SendCloseIrp(PFILE_OBJECT fo, UCHAR major) {
     PDEVICE_OBJECT vol = fo->DeviceObject;
     fo->Event.Header.SignalState = 0;
-    PIRP irp = IopAllocateIrpMustSucceed(vol->StackSize);
+    PIRP irp = AllocateIrpMustSucceed(vol->StackSize);
     KEVENT event;
     KeInitializeEvent(&event, SynchronizationEvent, FALSE);
     irp->Tail.Overlay.OriginalFileObject = fo;
@@ -231,7 +234,7 @@ static void IopSendCloseIrp(PFILE_OBJECT fo, UCHAR major) {
     PIO_STACK_LOCATION stack = IoGetNextIrpStackLocation(irp);
     stack->MajorFunction = major;
     stack->FileObject = fo;
-    IopQueueThreadIrp(irp);
+    QueueThreadIrp(irp);
     if (IofCallDriver(vol, irp) == STATUS_PENDING)
         KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, nullptr);
     KIRQL old = KfRaiseIrql(APC_LEVEL);
@@ -240,32 +243,32 @@ static void IopSendCloseIrp(PFILE_OBJECT fo, UCHAR major) {
     IoFreeIrp(irp);
 }
 
-void NTAPI IopCloseFileObject(PVOID Object, ULONG SystemHandleCount) {
+void NTAPI CloseFileObject(PVOID Object, ULONG SystemHandleCount) {
     auto fo = (PFILE_OBJECT)Object;
     if (SystemHandleCount != 1 || !fo->DeviceObject)
         return;
     fo->Flags |= FO_HANDLE_CREATED;
     bool sync = fo->Flags & FO_SYNCHRONOUS_IO;
     if (sync)
-        IopAcquireFileObjectLock(fo);
-    IopSendCloseIrp(fo, IRP_MJ_CLEANUP);
+        AcquireFileObjectLock(fo);
+    SendCloseIrp(fo, IRP_MJ_CLEANUP);
     if (sync)
-        IopReleaseFileObjectLock(fo);
+        ReleaseFileObjectLock(fo);
 }
 
-void NTAPI IopDeleteFileObject(PVOID Object) {
+void NTAPI DeleteFileObject(PVOID Object) {
     auto fo = (PFILE_OBJECT)Object;
     PDEVICE_OBJECT vol = fo->DeviceObject;
     if (!vol)
         return;
     if (!(fo->Flags & FO_HANDLE_CREATED))
-        IopCloseFileObject(fo, 1);
-    IopSendCloseIrp(fo, IRP_MJ_CLOSE);
+        CloseFileObject(fo, 1);
+    SendCloseIrp(fo, IRP_MJ_CLOSE);
     if (fo->CompletionContext) {
         ObfDereferenceObject(fo->CompletionContext->Port);
         ExFreePool(fo->CompletionContext);
     }
-    IopDereferenceDevice(vol);
+    DereferenceDevice(vol);
 }
 
 // --- Opening
@@ -326,8 +329,8 @@ XBAPI NTSTATUS NTAPI IoCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
 }
 
 // Debug (serial builds): opens that fail, with the name, so a title's error screen names the file it missed.
-static NTSTATUS IopLogFailedOpen(NTSTATUS Status, POBJECT_ATTRIBUTES ObjectAttributes, ULONG Disposition,
-                                 ULONG Options) {
+static NTSTATUS LogFailedOpen(NTSTATUS Status, POBJECT_ATTRIBUTES ObjectAttributes, ULONG Disposition,
+                              ULONG Options) {
 #if XK_DEBUG_SERIAL
     if (!NT_SUCCESS(Status) && ObjectAttributes && ObjectAttributes->ObjectName) {
         POBJECT_STRING name = ObjectAttributes->ObjectName;
@@ -343,14 +346,14 @@ XBAPI NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
                                   ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions) {
     NTSTATUS status = IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, AllocationSize,
                                    FileAttributes, ShareAccess, CreateDisposition, CreateOptions, 0);
-    return IopLogFailedOpen(status, ObjectAttributes, CreateDisposition, CreateOptions);
+    return LogFailedOpen(status, ObjectAttributes, CreateDisposition, CreateOptions);
 }
 
 XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
                                 PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions) {
     NTSTATUS status = IoCreateFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, nullptr, 0,
                                    ShareAccess, FILE_OPEN, OpenOptions, 0);
-    return IopLogFailedOpen(status, ObjectAttributes, FILE_OPEN, OpenOptions);
+    return LogFailedOpen(status, ObjectAttributes, FILE_OPEN, OpenOptions);
 }
 
 // --- Common service plumbing (spec/stock/11 §5)
@@ -362,7 +365,7 @@ struct IOP_REQUEST {
     bool Synchronous;
 };
 
-static NTSTATUS IopBeginRequest(HANDLE FileHandle, HANDLE EventHandle, IOP_REQUEST *r) {
+static NTSTATUS BeginRequest(HANDLE FileHandle, HANDLE EventHandle, IOP_REQUEST *r) {
     r->Event = nullptr;
     NTSTATUS status = ObReferenceObjectByHandle(FileHandle, &IoFileObjectType, (PVOID *)&r->File);
     if (!NT_SUCCESS(status))
@@ -378,21 +381,21 @@ static NTSTATUS IopBeginRequest(HANDLE FileHandle, HANDLE EventHandle, IOP_REQUE
     }
     r->Synchronous = r->File->Flags & FO_SYNCHRONOUS_IO;
     if (r->Synchronous)
-        IopAcquireFileObjectLock(r->File);
+        AcquireFileObjectLock(r->File);
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS IopAbortRequest(IOP_REQUEST *r, NTSTATUS status) {
+static NTSTATUS AbortRequest(IOP_REQUEST *r, NTSTATUS status) {
     if (r->Event)
         ObfDereferenceObject(r->Event);
     if (r->Synchronous)
-        IopReleaseFileObjectLock(r->File);
+        ReleaseFileObjectLock(r->File);
     ObfDereferenceObject(r->File);
     return status;
 }
 
-static PIRP IopAllocateRequestIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK iosb, PIO_APC_ROUTINE apc, PVOID apcContext,
-                                  UCHAR major) {
+static PIRP AllocateRequestIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK iosb, PIO_APC_ROUTINE apc, PVOID apcContext,
+                               UCHAR major) {
     r->File->Event.Header.SignalState = 0;
     PIRP irp = IoAllocateIrp(r->Device->StackSize);
     if (!irp)
@@ -410,25 +413,25 @@ static PIRP IopAllocateRequestIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK iosb, PIO_APC
     return irp;
 }
 
-static NTSTATUS IopSynchronousServiceTail(IOP_REQUEST *r, PIRP irp) {
-    IopQueueThreadIrp(irp);
+static NTSTATUS SynchronousServiceTail(IOP_REQUEST *r, PIRP irp) {
+    QueueThreadIrp(irp);
     NTSTATUS status = IofCallDriver(r->Device, irp);
     if (status != STATUS_PENDING)
-        IopCompleteRequestInline(irp, r->File);
+        CompleteRequestInline(irp, r->File);
     if (r->Synchronous) {
         if (status == STATUS_PENDING) {
             KeWaitForSingleObject(&r->File->Event, Executive, KernelMode, (r->File->Flags & FO_ALERTABLE_IO) != 0,
                                   nullptr);
             status = r->File->FinalStatus;
         }
-        IopReleaseFileObjectLock(r->File);
+        ReleaseFileObjectLock(r->File);
     }
     return status;
 }
 
-static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                             PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset,
-                             PFILE_SEGMENT_ELEMENT Segments, UCHAR major) {
+static NTSTATUS ReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
+                          PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset,
+                          PFILE_SEGMENT_ELEMENT Segments, UCHAR major) {
     PFILE_OBJECT f;
     NTSTATUS status = ObReferenceObjectByHandle(FileHandle, &IoFileObjectType, (PVOID *)&f);
     if (!NT_SUCCESS(status))
@@ -453,7 +456,7 @@ static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE Ap
     }
     ObfDereferenceObject(f); // re-referenced below with the event
     IOP_REQUEST r;
-    status = IopBeginRequest(FileHandle, Event, &r);
+    status = BeginRequest(FileHandle, Event, &r);
     if (!NT_SUCCESS(status))
         return status;
     if (r.Synchronous &&
@@ -461,14 +464,14 @@ static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE Ap
         offset = r.File->CurrentByteOffset;
     bool writeToEnd = write && offset.HighPart == -1 && offset.LowPart == 0xFFFFFFFF;
     if (offset.HighPart < 0 && !writeToEnd)
-        return IopAbortRequest(&r, STATUS_INVALID_PARAMETER);
-    PIRP irp = IopAllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, major);
+        return AbortRequest(&r, STATUS_INVALID_PARAMETER);
+    PIRP irp = AllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, major);
     if (!irp)
-        return IopAbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
+        return AbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
     irp->UserBuffer = Buffer;
     irp->SegmentArray = Segments;
     if (!Segments && (r.Device->Flags & DO_DIRECT_IO) && Length)
-        IopLockUserBuffer(irp, Length);
+        LockUserBuffer(irp, Length);
     // Non-cached: files opened without intermediate buffering, and every scatter/gather transfer (spec/stock/04b).
     irp->Flags |= (write ? IRP_WRITE_OPERATION : IRP_READ_OPERATION) |
                   (((r.File->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Segments) ? IRP_NOCACHE : 0);
@@ -478,57 +481,57 @@ static NTSTATUS IopReadWrite(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE Ap
     stack->Parameters.Read.ByteOffset = offset;
 #if XK_DEBUG_SERIAL
     PDEVICE_OBJECT device = r.Device;
-    status = IopSynchronousServiceTail(&r, irp);
+    status = SynchronousServiceTail(&r, irp);
     if (!NT_SUCCESS(status) && status != STATUS_END_OF_FILE) {
         XK_SERIAL("io: %s of %lx bytes at %lx on device type %u failed %08lx\n", write ? "write" : "read", Length,
                   offset.LowPart, (unsigned)device->DeviceType, (ULONG)status);
     }
     return status;
 #else
-    return IopSynchronousServiceTail(&r, irp);
+    return SynchronousServiceTail(&r, irp);
 #endif
 }
 
 XBAPI NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                 PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
                                 PLARGE_INTEGER ByteOffset) {
-    return IopReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, Buffer, Length, ByteOffset, nullptr,
-                        IRP_MJ_READ);
+    return ReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, Buffer, Length, ByteOffset, nullptr,
+                     IRP_MJ_READ);
 }
 
 XBAPI NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                  PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
                                  PLARGE_INTEGER ByteOffset) {
-    return IopReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, Buffer, Length, ByteOffset, nullptr,
-                        IRP_MJ_WRITE);
+    return ReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, Buffer, Length, ByteOffset, nullptr,
+                     IRP_MJ_WRITE);
 }
 
 XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                        PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
                                        ULONG Length, PLARGE_INTEGER ByteOffset) {
-    return IopReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, nullptr, Length, ByteOffset,
-                        SegmentArray, IRP_MJ_READ);
+    return ReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, nullptr, Length, ByteOffset,
+                     SegmentArray, IRP_MJ_READ);
 }
 
 XBAPI NTSTATUS NTAPI NtWriteFileGather(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                        PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
                                        ULONG Length, PLARGE_INTEGER ByteOffset) {
-    return IopReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, nullptr, Length, ByteOffset,
-                        SegmentArray, IRP_MJ_WRITE);
+    return ReadWrite(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, nullptr, Length, ByteOffset,
+                     SegmentArray, IRP_MJ_WRITE);
 }
 
-static NTSTATUS IopControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                               PIO_STATUS_BLOCK IoStatusBlock, ULONG Code, PVOID InputBuffer, ULONG InputBufferLength,
-                               PVOID OutputBuffer, ULONG OutputBufferLength, UCHAR major) {
+static NTSTATUS ControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
+                            PIO_STATUS_BLOCK IoStatusBlock, ULONG Code, PVOID InputBuffer, ULONG InputBufferLength,
+                            PVOID OutputBuffer, ULONG OutputBufferLength, UCHAR major) {
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, Event, &r);
+    NTSTATUS status = BeginRequest(FileHandle, Event, &r);
     if (!NT_SUCCESS(status))
         return status;
     if (r.File->CompletionContext && ApcRoutine)
-        return IopAbortRequest(&r, STATUS_INVALID_PARAMETER);
-    PIRP irp = IopAllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, major);
+        return AbortRequest(&r, STATUS_INVALID_PARAMETER);
+    PIRP irp = AllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, major);
     if (!irp)
-        return IopAbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
+        return AbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
     PIO_STACK_LOCATION stack = IoGetNextIrpStackLocation(irp);
     stack->Parameters.DeviceIoControl.OutputBufferLength = OutputBufferLength;
     stack->Parameters.DeviceIoControl.InputBuffer = InputBuffer;
@@ -537,23 +540,23 @@ static NTSTATUS IopControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE 
     irp->UserBuffer = OutputBuffer;
     ULONG method = Code & 3;
     if ((method == 1 || method == 2) && OutputBuffer && OutputBufferLength)
-        IopLockUserBuffer(irp, OutputBufferLength);
-    return IopSynchronousServiceTail(&r, irp);
+        LockUserBuffer(irp, OutputBufferLength);
+    return SynchronousServiceTail(&r, irp);
 }
 
 XBAPI NTSTATUS NTAPI NtDeviceIoControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
                                            PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG IoControlCode,
                                            PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer,
                                            ULONG OutputBufferLength) {
-    return IopControlFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, IoControlCode, InputBuffer,
-                          InputBufferLength, OutputBuffer, OutputBufferLength, IRP_MJ_DEVICE_CONTROL);
+    return ControlFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, IoControlCode, InputBuffer,
+                       InputBufferLength, OutputBuffer, OutputBufferLength, IRP_MJ_DEVICE_CONTROL);
 }
 
 XBAPI NTSTATUS NTAPI NtFsControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
                                      PIO_STATUS_BLOCK IoStatusBlock, ULONG FsControlCode, PVOID InputBuffer,
                                      ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
-    return IopControlFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, FsControlCode, InputBuffer,
-                          InputBufferLength, OutputBuffer, OutputBufferLength, IRP_MJ_FILE_SYSTEM_CONTROL);
+    return ControlFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, FsControlCode, InputBuffer,
+                       InputBufferLength, OutputBuffer, OutputBufferLength, IRP_MJ_FILE_SYSTEM_CONTROL);
 }
 
 XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
@@ -564,14 +567,14 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_A
         FileInformationClass != FileBothDirectoryInformation && FileInformationClass != FileNamesInformation)
         return STATUS_INVALID_INFO_CLASS;
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, Event, &r);
+    NTSTATUS status = BeginRequest(FileHandle, Event, &r);
     if (!NT_SUCCESS(status))
         return status;
     if (r.File->CompletionContext && ApcRoutine)
-        return IopAbortRequest(&r, STATUS_INVALID_PARAMETER);
-    PIRP irp = IopAllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, IRP_MJ_DIRECTORY_CONTROL);
+        return AbortRequest(&r, STATUS_INVALID_PARAMETER);
+    PIRP irp = AllocateRequestIrp(&r, IoStatusBlock, ApcRoutine, ApcContext, IRP_MJ_DIRECTORY_CONTROL);
     if (!irp)
-        return IopAbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
+        return AbortRequest(&r, STATUS_INSUFFICIENT_RESOURCES);
     irp->UserBuffer = FileInformation;
     PIO_STACK_LOCATION stack = IoGetNextIrpStackLocation(irp);
     stack->MinorFunction = 1; // IRP_MN_QUERY_DIRECTORY
@@ -579,22 +582,22 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_A
     stack->Parameters.QueryDirectory.Length = Length;
     stack->Parameters.QueryDirectory.FileName = FileName;
     stack->Parameters.QueryDirectory.FileInformationClass = FileInformationClass;
-    return IopSynchronousServiceTail(&r, irp);
+    return SynchronousServiceTail(&r, irp);
 }
 
 // --- Information classes (minimum lengths from the reference tables; 0 = not supported)
 
-static const UCHAR IopQueryOperationLength[FileMaximumInformation] = {
+static const UCHAR QueryOperationLength[FileMaximumInformation] = {
     0, 0, 0, 0, 40, 24, 8, 4, 0, 8, 0, 0, 0, 0, 8, 0, 4, 4, 104, 0, 0, 8, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 8,
     0};
-static const UCHAR IopSetOperationLength[FileMaximumInformation] = {
+static const UCHAR SetOperationLength[FileMaximumInformation] = {
     0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 16, 16, 0, 1, 8, 0, 4, 0, 0, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 16, 0, 0, 0, 0,
     0};
-static bool IopSetNeedsWriteAccess(ULONG c) {
+static bool SetNeedsWriteAccess(ULONG c) {
     return c == FileAllocationInformation || c == FileEndOfFileInformation || c == FileMoveClusterInformation;
 }
 
-static ULONG IopFileMode(PFILE_OBJECT f) {
+static ULONG FileMode(PFILE_OBJECT f) {
     ULONG mode = 0;
     if (f->Flags & FO_SEQUENTIAL_ONLY)
         mode |= FILE_SEQUENTIAL_ONLY;
@@ -606,13 +609,13 @@ static ULONG IopFileMode(PFILE_OBJECT f) {
 }
 
 // Query/set through an IRP. Asynchronous file objects still behave synchronously: wait on a local event.
-static NTSTATUS IopInformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                  ULONG Class, UCHAR major, PFILE_OBJECT Target = nullptr) {
+static NTSTATUS InformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
+                               ULONG Class, UCHAR major, PFILE_OBJECT Target = nullptr) {
     KEVENT event;
     IO_STATUS_BLOCK localIosb;
-    PIRP irp = IopAllocateRequestIrp(r, IoStatusBlock, nullptr, nullptr, major);
+    PIRP irp = AllocateRequestIrp(r, IoStatusBlock, nullptr, nullptr, major);
     if (!irp)
-        return IopAbortRequest(r, STATUS_INSUFFICIENT_RESOURCES);
+        return AbortRequest(r, STATUS_INSUFFICIENT_RESOURCES);
     if (!r->Synchronous) {
         KeInitializeEvent(&event, NotificationEvent, FALSE);
         irp->UserEvent = &event;
@@ -625,7 +628,7 @@ static NTSTATUS IopInformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock
     stack->Parameters.QueryFile.FileInformationClass = (FILE_INFORMATION_CLASS)Class;
     if (major == IRP_MJ_SET_INFORMATION)
         stack->Parameters.SetFile.FileObject = Target;
-    IopQueueThreadIrp(irp);
+    QueueThreadIrp(irp);
     NTSTATUS status = IofCallDriver(r->Device, irp);
     if (status == STATUS_PENDING) {
         if (!r->Synchronous) {
@@ -639,62 +642,62 @@ static NTSTATUS IopInformationIrp(IOP_REQUEST *r, PIO_STATUS_BLOCK IoStatusBlock
         if (!r->Synchronous)
             irp->UserEvent = nullptr; // nothing to wake: completing inline
         irp->UserIosb = IoStatusBlock;
-        IopCompleteRequestInline(irp, r->File);
+        CompleteRequestInline(irp, r->File);
     }
     if (r->Synchronous)
-        IopReleaseFileObjectLock(r->File);
+        ReleaseFileObjectLock(r->File);
     return status;
 }
 
 XBAPI NTSTATUS NTAPI NtQueryInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
                                             ULONG Length, FILE_INFORMATION_CLASS FileInformationClass) {
     ULONG c = FileInformationClass;
-    if (c >= FileMaximumInformation || !IopQueryOperationLength[c])
+    if (c >= FileMaximumInformation || !QueryOperationLength[c])
         return STATUS_INVALID_INFO_CLASS;
-    if (Length < IopQueryOperationLength[c])
+    if (Length < QueryOperationLength[c])
         return STATUS_INFO_LENGTH_MISMATCH;
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, nullptr, &r);
+    NTSTATUS status = BeginRequest(FileHandle, nullptr, &r);
     if (!NT_SUCCESS(status))
         return status;
     if (c == FilePositionInformation && r.Synchronous) {
         ((FILE_POSITION_INFORMATION *)FileInformation)->CurrentByteOffset = r.File->CurrentByteOffset;
         IoStatusBlock->Status = STATUS_SUCCESS;
         IoStatusBlock->Information = sizeof(FILE_POSITION_INFORMATION);
-        return IopAbortRequest(&r, STATUS_SUCCESS);
+        return AbortRequest(&r, STATUS_SUCCESS);
     }
     if (c == FileModeInformation || c == FileAlignmentInformation) {
-        *(PULONG)FileInformation = c == FileModeInformation ? IopFileMode(r.File) : r.Device->AlignmentRequirement;
+        *(PULONG)FileInformation = c == FileModeInformation ? FileMode(r.File) : r.Device->AlignmentRequirement;
         IoStatusBlock->Status = STATUS_SUCCESS;
         IoStatusBlock->Information = sizeof(ULONG);
-        return IopAbortRequest(&r, STATUS_SUCCESS);
+        return AbortRequest(&r, STATUS_SUCCESS);
     }
-    return IopInformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_QUERY_INFORMATION);
+    return InformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_QUERY_INFORMATION);
 }
 
 XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
                                           ULONG Length, FILE_INFORMATION_CLASS FileInformationClass) {
     ULONG c = FileInformationClass;
-    if (c >= FileMaximumInformation || !IopSetOperationLength[c])
+    if (c >= FileMaximumInformation || !SetOperationLength[c])
         return STATUS_INVALID_INFO_CLASS;
-    if (Length < IopSetOperationLength[c])
+    if (Length < SetOperationLength[c])
         return STATUS_INFO_LENGTH_MISMATCH;
     if ((c == FilePositionInformation || c == FileAllocationInformation || c == FileEndOfFileInformation) &&
         ((PLARGE_INTEGER)FileInformation)->HighPart < 0)
         return STATUS_INVALID_PARAMETER;
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, nullptr, &r);
+    NTSTATUS status = BeginRequest(FileHandle, nullptr, &r);
     if (!NT_SUCCESS(status))
         return status;
-    if (IopSetNeedsWriteAccess(c) && !r.File->WriteAccess)
-        return IopAbortRequest(&r, STATUS_ACCESS_DENIED);
+    if (SetNeedsWriteAccess(c) && !r.File->WriteAccess)
+        return AbortRequest(&r, STATUS_ACCESS_DENIED);
     PFILE_OBJECT f = r.File;
     auto done = [&](NTSTATUS s) {
         if (NT_SUCCESS(s)) {
             IoStatusBlock->Status = s;
             IoStatusBlock->Information = 0;
         }
-        return IopAbortRequest(&r, s);
+        return AbortRequest(&r, s);
     };
     if (c == FilePositionInformation && r.Synchronous) {
         LARGE_INTEGER pos = ((FILE_POSITION_INFORMATION *)FileInformation)->CurrentByteOffset;
@@ -757,7 +760,7 @@ XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK Io
                                   FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, FILE_OPEN_FOR_BACKUP_INTENT,
                                   IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY | IO_FORCE_ACCESS_CHECK);
             if (!NT_SUCCESS(status))
-                return IopAbortRequest(&r, status);
+                return AbortRequest(&r, status);
             status = ObReferenceObjectByHandle(targetHandle, &IoFileObjectType, (PVOID *)&target);
             if (NT_SUCCESS(status)) {
                 ObfDereferenceObject(target); // the handle keeps it
@@ -766,11 +769,11 @@ XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK Io
             }
             if (!NT_SUCCESS(status)) {
                 NtClose(targetHandle);
-                return IopAbortRequest(&r, status);
+                return AbortRequest(&r, status);
             }
         }
     }
-    status = IopInformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_SET_INFORMATION, target);
+    status = InformationIrp(&r, IoStatusBlock, FileInformation, Length, c, IRP_MJ_SET_INFORMATION, target);
     if (targetHandle)
         NtClose(targetHandle);
     return status;
@@ -782,33 +785,33 @@ XBAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(HANDLE FileHandle, PIO_STATUS_
     if (FsInformationClass <= 0 || FsInformationClass >= FileFsMaximumInformation)
         return STATUS_INVALID_INFO_CLASS;
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, nullptr, &r);
+    NTSTATUS status = BeginRequest(FileHandle, nullptr, &r);
     if (!NT_SUCCESS(status))
         return status;
-    return IopInformationIrp(&r, IoStatusBlock, FsInformation, Length, FsInformationClass,
-                             IRP_MJ_QUERY_VOLUME_INFORMATION);
+    return InformationIrp(&r, IoStatusBlock, FsInformation, Length, FsInformationClass,
+                          IRP_MJ_QUERY_VOLUME_INFORMATION);
 }
 
 XBAPI NTSTATUS NTAPI NtFlushBuffersFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock) {
     IOP_REQUEST r;
-    NTSTATUS status = IopBeginRequest(FileHandle, nullptr, &r);
+    NTSTATUS status = BeginRequest(FileHandle, nullptr, &r);
     if (!NT_SUCCESS(status))
         return status;
     if (!r.File->WriteAccess)
-        return IopAbortRequest(&r, STATUS_ACCESS_DENIED);
-    return IopInformationIrp(&r, IoStatusBlock, nullptr, 0, 0, IRP_MJ_FLUSH_BUFFERS);
+        return AbortRequest(&r, STATUS_ACCESS_DENIED);
+    return InformationIrp(&r, IoStatusBlock, nullptr, 0, 0, IRP_MJ_FLUSH_BUFFERS);
 }
 
 // Kernel-mode queries on a referenced file object.
-static NTSTATUS IopQueryObject(PFILE_OBJECT FileObject, ULONG Class, ULONG Length, PVOID Buffer, PULONG Returned,
-                               UCHAR major) {
+static NTSTATUS QueryObject(PFILE_OBJECT FileObject, ULONG Class, ULONG Length, PVOID Buffer, PULONG Returned,
+                            UCHAR major) {
     ObfReferenceObject(FileObject);
     IOP_REQUEST r = {FileObject, FileObject->DeviceObject, nullptr, (FileObject->Flags & FO_SYNCHRONOUS_IO) != 0};
     if (r.Synchronous)
-        IopAcquireFileObjectLock(FileObject);
+        AcquireFileObjectLock(FileObject);
     IO_STATUS_BLOCK iosb;
     iosb.Information = 0;
-    NTSTATUS status = IopInformationIrp(&r, &iosb, Buffer, Length, Class, major);
+    NTSTATUS status = InformationIrp(&r, &iosb, Buffer, Length, Class, major);
     if (Returned)
         *Returned = iosb.Information;
     return status;
@@ -816,14 +819,14 @@ static NTSTATUS IopQueryObject(PFILE_OBJECT FileObject, ULONG Class, ULONG Lengt
 
 XBAPI NTSTATUS NTAPI IoQueryFileInformation(PFILE_OBJECT FileObject, FILE_INFORMATION_CLASS FileInformationClass,
                                             ULONG Length, PVOID FileInformation, PULONG ReturnedLength) {
-    return IopQueryObject(FileObject, FileInformationClass, Length, FileInformation, ReturnedLength,
-                          IRP_MJ_QUERY_INFORMATION);
+    return QueryObject(FileObject, FileInformationClass, Length, FileInformation, ReturnedLength,
+                       IRP_MJ_QUERY_INFORMATION);
 }
 
 XBAPI NTSTATUS NTAPI IoQueryVolumeInformation(PFILE_OBJECT FileObject, FS_INFORMATION_CLASS FsInformationClass,
                                               ULONG Length, PVOID FsInformation, PULONG ReturnedLength) {
-    return IopQueryObject(FileObject, FsInformationClass, Length, FsInformation, ReturnedLength,
-                          IRP_MJ_QUERY_VOLUME_INFORMATION);
+    return QueryObject(FileObject, FsInformationClass, Length, FsInformation, ReturnedLength,
+                       IRP_MJ_QUERY_VOLUME_INFORMATION);
 }
 
 XBAPI NTSTATUS NTAPI NtDeleteFile(POBJECT_ATTRIBUTES ObjectAttributes) {
@@ -866,7 +869,7 @@ struct IO_MINI_COMPLETION_PACKET {
 };
 static_assert(sizeof(IO_MINI_COMPLETION_PACKET) == 0x1C);
 
-static void IopFreeCompletionEntry(PLIST_ENTRY e) {
+static void FreeCompletionEntry(PLIST_ENTRY e) {
     auto mini = CONTAINING_RECORD(e, IO_MINI_COMPLETION_PACKET, ListEntry);
     if (mini->PacketType)
         ExFreePool(mini);
@@ -874,14 +877,14 @@ static void IopFreeCompletionEntry(PLIST_ENTRY e) {
         IoFreeIrp(CONTAINING_RECORD(e, IRP, Tail.Overlay.ListEntry));
 }
 
-void NTAPI IopDeleteIoCompletion(PVOID Object) {
+void NTAPI DeleteIoCompletion(PVOID Object) {
     PLIST_ENTRY head = KeRundownQueue((PKQUEUE)Object);
     if (!head)
         return;
     PLIST_ENTRY e = head;
     do {
         PLIST_ENTRY next = e->Flink;
-        IopFreeCompletionEntry(e);
+        FreeCompletionEntry(e);
         e = next;
     } while (e != head);
 }
@@ -974,3 +977,5 @@ XBAPI void NTAPI NtUserIoApcDispatcher(PVOID ApcContext, PIO_STATUS_BLOCK IoStat
         bytes = IoStatusBlock->Information;
     ((void(NTAPI *)(ULONG, ULONG, PIO_STATUS_BLOCK))ApcContext)(error, bytes, IoStatusBlock);
 }
+
+} // namespace xk::io

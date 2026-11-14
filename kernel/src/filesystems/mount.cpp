@@ -3,21 +3,25 @@
 #include <xk/storage.h>
 #include <xk/hddfs.h>
 
+namespace xk::filesystems {
+
 // CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/stock/04c §2,
 // spec/stock/04d).
-static NTSTATUS IopMountCdRom(PDEVICE_OBJECT TargetDevice) {
+static NTSTATUS MountDvdVolume(PDEVICE_OBJECT TargetDevice) {
     NTSTATUS status = XdvdfsMountVolume(TargetDevice);
     return status == STATUS_UNRECOGNIZED_VOLUME ? UdfMountVolume(TargetDevice) : status;
 }
 
 // Disks: the folder partitions of an exFAT disk mount as exFAT views; every other partition as FATX.
-static NTSTATUS IopMountDisk(PDEVICE_OBJECT TargetDevice) {
-    PCSZ folder = IdexDiskFolderOf(TargetDevice);
+static NTSTATUS MountDiskVolume(PDEVICE_OBJECT TargetDevice) {
+    PCSZ folder = storage::FolderOfPartition(TargetDevice);
     return folder ? EXFATMountVolume(TargetDevice, folder) : FATXMountVolume(TargetDevice);
 }
 
-void FsInitSystem() {
-    IopFileSystems.Disk = IopMountDisk;
-    IopFileSystems.CdRom = IopMountCdRom;
-    IopFileSystems.Raw = RawMountVolume;
+void InitFileSystems() {
+    io::RegisteredFileSystems.Disk = MountDiskVolume;
+    io::RegisteredFileSystems.CdRom = MountDvdVolume;
+    io::RegisteredFileSystems.Raw = RawMountVolume;
 }
+
+} // namespace xk::filesystems

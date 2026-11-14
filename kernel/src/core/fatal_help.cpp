@@ -3,7 +3,9 @@
 // XK_FATAL_LINE characters (a unit test checks them all).
 #include <xk/core.h>
 
-static const char *const XkpHelpUnlock[] = {
+namespace xk::core {
+
+static const char *const HelpUnlock[] = {
     "The hard disk is locked, and this console's",
     "key does not unlock it.",
     "",
@@ -12,7 +14,7 @@ static const char *const XkpHelpUnlock[] = {
     nullptr,
 };
 
-static const char *const XkpHelpTimeout[] = {
+static const char *const HelpTimeout[] = {
     "The hard disk stayed busy for 30 seconds.",
     "",
     "- Check the IDE cable and the disk's power.",
@@ -20,7 +22,7 @@ static const char *const XkpHelpTimeout[] = {
     nullptr,
 };
 
-static const char *const XkpHelpIdentify[] = {
+static const char *const HelpIdentify[] = {
     "The hard disk did not answer the IDENTIFY",
     "command.",
     "",
@@ -29,7 +31,7 @@ static const char *const XkpHelpIdentify[] = {
     nullptr,
 };
 
-static const char *const XkpHelpNoDisk[] = {
+static const char *const HelpNoDisk[] = {
     "No hard disk answered on the IDE cable, or",
     "the disk is smaller than 8 GB.",
     "",
@@ -39,19 +41,19 @@ static const char *const XkpHelpNoDisk[] = {
 };
 
 // Codes 13-20: the dashboards tried (titles/loader.cpp, in its order), and the way to the File Manager (core/fatal.cpp,
-// XkNoDashboardError).
-static const char *const XkpHelpNoDashboard[] = {
+// NoDashboardError).
+static const char *const HelpNoDashboard[] = {
     "Tried:",
     "  C:\\evoxdash.xbe",
     "  E:\\evoxdash.xbe",
     "  C:\\xboxdash.xbe",
     "  C:\\Dashboard\\default.xbe",
     "",
-    "[ Press  X  to launch Web File Manager ]", // the X drawn as the button (XkDrawText)
+    "[ Press  X  to launch Web File Manager ]", // the X drawn as the button (bootscreen::DrawText)
     nullptr,
 };
 
-static const char *const XkpHelpPreviousBoot[] = {
+static const char *const HelpPreviousBoot[] = {
     "A title or the dashboard stopped with a fatal",
     "error and restarted the console.",
     "",
@@ -61,7 +63,7 @@ static const char *const XkpHelpPreviousBoot[] = {
     nullptr,
 };
 
-static const char *const XkpHelpOther[] = {
+static const char *const HelpOther[] = {
     "The kernel could not finish starting up.",
     "",
     "- Turn the console off and on again.",
@@ -70,22 +72,24 @@ static const char *const XkpHelpOther[] = {
 };
 
 // 13 + the launch data's dashboard reason (1-6) gives 14-19: the same screen as 13.
-static const XK_FATAL_HELP XkpHelp[] = {
-    {6, 6, "Could Not Unlock HDD", XkpHelpUnlock},
-    {7, 7, "HDD Timeout", XkpHelpTimeout},
-    {8, 8, "HDD IDENTIFY Failed", XkpHelpIdentify},
-    {9, 9, "No HDD Detected", XkpHelpNoDisk},
-    {13, 19, "No Dashboard Found", XkpHelpNoDashboard},
-    {20, 20, "No Dashboard Found (Disc Inserted)", XkpHelpNoDashboard},
-    {21, 21, "Previous Boot Failed", XkpHelpPreviousBoot},
+static const XK_FATAL_HELP Help[] = {
+    {6, 6, "Could Not Unlock HDD", HelpUnlock},
+    {7, 7, "HDD Timeout", HelpTimeout},
+    {8, 8, "HDD IDENTIFY Failed", HelpIdentify},
+    {9, 9, "No HDD Detected", HelpNoDisk},
+    {13, 19, "No Dashboard Found", HelpNoDashboard},
+    {20, 20, "No Dashboard Found (Disc Inserted)", HelpNoDashboard},
+    {21, 21, "Previous Boot Failed", HelpPreviousBoot},
 };
 
-static const XK_FATAL_HELP XkpHelpFallback = {0, 0xFFFFFFFF, "Fatal Error", XkpHelpOther};
+static const XK_FATAL_HELP HelpFallback = {0, 0xFFFFFFFF, "Fatal Error", HelpOther};
 
-const XK_FATAL_HELP *XkFatalHelp(ULONG Code) {
-    for (auto &h : XkpHelp) {
+const XK_FATAL_HELP *FatalHelp(ULONG Code) {
+    for (auto &h : Help) {
         if (Code >= h.First && Code <= h.Last)
             return &h;
     }
-    return &XkpHelpFallback;
+    return &HelpFallback;
 }
+
+} // namespace xk::core

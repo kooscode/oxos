@@ -3,6 +3,8 @@
 #include <xk/arch.h>
 #include <xk/hardware.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 XBAPI void NTAPI KeInitializeDpc(PKDPC Dpc, PKDEFERRED_ROUTINE DeferredRoutine, PVOID DeferredContext) {
@@ -45,7 +47,7 @@ XBAPI BOOLEAN NTAPI KeIsExecutingDpc() {
 }
 
 // Runs at DISPATCH_LEVEL with interrupts enabled.
-void KiRetireDpcList() {
+void RetireDpcList() {
     Prcb.DpcRoutineActive = TRUE;
     for (;;) {
         cli();
@@ -64,6 +66,8 @@ void KiRetireDpcList() {
     }
 }
 
-void KiInitializeDpcs() {
+void InitializeDpcs() {
     InitializeListHead(&Prcb.DpcListHead);
 }
+
+} // namespace xk::core

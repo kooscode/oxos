@@ -27,13 +27,15 @@ XBAPI void NTAPI XcBlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbO
 XBAPI ULONG NTAPI XcCryptService(ULONG dwOp, PVOID pArgs);
 
 // The implementations behind the exports above (crypto/crypto.cpp), which XcUpdateCrypto can replace.
-XBAPI void NTAPI XcpSHAInit(PUCHAR pbSHAContext);
-XBAPI void NTAPI XcpSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength);
-XBAPI void NTAPI XcpSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest);
-XBAPI void NTAPI XcpRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey);
-XBAPI void NTAPI XcpRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput);
-XBAPI void NTAPI XcpHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
-                        const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData);
+namespace xk::crypto {
+void NTAPI InitSHA(PUCHAR pbSHAContext);
+void NTAPI UpdateSHA(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength);
+void NTAPI FinishSHA(PUCHAR pbSHAContext, PUCHAR pbDigest);
+void NTAPI InitRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey);
+void NTAPI CryptRC4(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput);
+void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
+                       const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData);
+} // namespace xk::crypto
 
 // The crypto vector: the exports above call through it; XcUpdateCrypto replaces its non-null entries.
 struct CRYPTO_VECTOR {

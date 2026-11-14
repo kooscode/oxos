@@ -2,6 +2,8 @@
 #include <xk/runtime.h>
 #include <xk/objects.h>
 
+namespace xk::runtime {
+
 XBAPI CHAR NTAPI RtlUpperChar(CHAR Character) {
     return (Character >= 'a' && Character <= 'z') ? (CHAR)(Character - 'a' + 'A') : Character;
 }
@@ -148,3 +150,5 @@ XBAPI void NTAPI RtlFreeUnicodeString(PUNICODE_STRING UnicodeString) {
     UnicodeString->Buffer = nullptr;
     UnicodeString->Length = UnicodeString->MaximumLength = 0;
 }
+
+} // namespace xk::runtime

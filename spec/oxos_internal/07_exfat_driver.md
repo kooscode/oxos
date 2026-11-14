@@ -1,11 +1,12 @@
 # exFAT driver
 
 Status: phases 1-4 of the plan work (GPT/MBR, read-write exFAT, folder partitions with bounded sizes, cache-partition
-formatting through the volume handle with X/Y/Z usage limits; `make test_exfat` passes). Not yet run with a retail
-title on an exFAT disk until 2026-10-21, when Halo 2 ran from an exFAT USB disk (§2.1); memory units are the last phase. The storage design (layout, virtual partitions, cache formatting, size reporting) is
-`05_exfat_storage_spec.md`; this document is the driver: the on-disk format it reads and writes, and how it fits the
-kernel. The format facts come from Microsoft's published exFAT specification (2019) and the UEFI specification
-(GPT); nothing here comes from another implementation's code.
+formatting through the volume handle with X/Y/Z usage limits; `make test_exfat` passes). Not yet run with a retail title
+on an exFAT disk until 2026-10-21, when Halo 2 ran from an exFAT USB disk (§2.1); memory units are the last phase. The
+storage design (layout, virtual partitions, cache formatting, size reporting) is `05_exfat_storage_spec.md`; this
+document is the driver: the on-disk format it reads and writes, and how it fits the kernel. The format facts come from
+Microsoft's published exFAT specification (2019) and the UEFI specification (GPT); nothing here comes from another
+implementation's code.
 
 ## 1. On-disk format (the parts the driver uses)
 All values little-endian. A *sector* is 2^BytesPerSectorShift bytes, a *cluster* 2^(BytesPerSectorShift +
@@ -100,9 +101,9 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
 
 ### 2.0a Allocation equals length (2026-11-02)
 - **A file's allocation is its DataLength rounded up to clusters**, also for a FAT chain: the driver follows a chain
-  only that far (`HDDFSFileChain`, `HDDFSClusterAtIndex`, and `HDDFSFreeChain` with a count). FAT entries past it
-  mean nothing: a PC's check frees those clusters and anybody may own them later. Only the root directory, which
-  has no length, ends at its end-of-chain mark (`FCB_EXFAT_DISK_ROOT`).
+  only that far (`filesystems::HDDFSFileChain`, `filesystems::HDDFSClusterAtIndex`, and `filesystems::HDDFSFreeChain`
+  with a count). FAT entries past it mean nothing: a PC's check frees those clusters and anybody may own them later.
+  Only the root directory, which has no length, ends at its end-of-chain mark (`FCB_EXFAT_DISK_ROOT`).
 - **No preallocation on exFAT:** an allocation size at create, or FileAllocationInformation above the file size,
   allocates nothing (it succeeds); clusters come with the writes. On FATX both preallocate as the stock driver
   does. An exFAT entry set cannot hold clusters past its length.

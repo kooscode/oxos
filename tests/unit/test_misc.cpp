@@ -10,6 +10,8 @@
 
 #include <xk/runtime.h>
 
+using namespace xk; // the kernel's subsystems as storage::, objects::, ...
+
 TEST(Query, EventMutantSemaphoreTimer) {
     HANDLE e, m, s, t;
     ASSERT_EQ(NtCreateEvent(&e, nullptr, SynchronizationEvent, TRUE), STATUS_SUCCESS);
@@ -98,7 +100,7 @@ TEST(ObLinks, PathLinksReparseThroughTheParseProcedureAndLinksCanBeDeleted) {
     OBJECT_STRING link, target;
     RtlInitAnsiString(&link, "\\??\\P:");
     RtlInitAnsiString(&target, "\\Device\\ParsingThing\\Sub");
-    ASSERT_EQ(ObpCreateSymbolicLink(&link, &target), STATUS_SUCCESS);
+    ASSERT_EQ(objects::CreateSymbolicLink(&link, &target), STATUS_SUCCESS);
     OBJECT_STRING path;
     RtlInitAnsiString(&path, "\\??\\P:\\dir\\file.xbe");
     PVOID o = nullptr;
@@ -219,8 +221,8 @@ TEST(Misc, ByKeyDeviceQueueRemovalAndClockInitialisation) {
     EXPECT_EQ(KeRemoveByKeyDeviceQueue(&dq, 20), &b) << "none after it: the first one";
     EXPECT_EQ(KeRemoveByKeyDeviceQueue(&dq, 20), nullptr);
     KfLowerIrql(old);
-    HalpInitRtcLate();
-    KiInitializeSystemTime(); // from the RTC set by the time tests
+    hardware::InitRtcLate();
+    core::InitializeSystemTime(); // from the RTC set by the time tests
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);
     EXPECT_GT(now.QuadPart, 0);

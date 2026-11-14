@@ -5,10 +5,12 @@
 #include <xk/serial.h>
 #include <xk/titles.h>
 
-volatile ULONG KiBugCheckCode;           // the last bug check, for the boot tests and a debugger
-volatile ULONG KiBugCheckParameters[4];
-XBAPI ULONG KiBugCheckData[5]; // exported: code and the four parameters
-ULONG KiBugCheckData[5];
+XBAPI ULONG KiBugCheckData[5] = {}; // exported: code and the four parameters
+
+namespace xk::core {
+
+volatile ULONG LastBugCheckCode;           // the last bug check, for the boot tests and a debugger
+volatile ULONG BugCheckParameters[4];
 
 #ifdef XK_HOST_TEST
 // Host unit tests: a test can expect a bug check (the harness returns to it); any other one ends the run.
@@ -24,9 +26,9 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     // An unhandled exception (0x1E) is always raised from the dispatcher: record where it happened instead, the
     // faulting instruction (P2) and, for an access violation, the address it touched (P4).
     if (BugCheckCode == 0x1E)
-        KiSaveBugCheckLastWords(BugCheckCode, P4, P2);
+        SaveBugCheckLastWords(BugCheckCode, P4, P2);
     else
-        KiSaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
+        SaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
     XK_SERIAL("*** bug check %#lx (%#lx, %#lx, %#lx, %#lx)\n", BugCheckCode, P1, P2, P3, P4);
 #if XK_TRACE_IMPORTS
     // Trace builds: the title's last kernel calls (ordinal, return value, caller, arguments), oldest first.
@@ -40,19 +42,19 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
         }
     }
 #endif
-    KiBugCheckParameters[0] = P1;
-    KiBugCheckParameters[1] = P2;
-    KiBugCheckParameters[2] = P3;
-    KiBugCheckParameters[3] = P4;
-    KiBugCheckCode = BugCheckCode;
+    BugCheckParameters[0] = P1;
+    BugCheckParameters[1] = P2;
+    BugCheckParameters[2] = P3;
+    BugCheckParameters[3] = P4;
+    LastBugCheckCode = BugCheckCode;
     KiBugCheckData[0] = BugCheckCode;
     for (int i = 0; i < 4; i++)
-        KiBugCheckData[i + 1] = KiBugCheckParameters[i];
+        KiBugCheckData[i + 1] = BugCheckParameters[i];
     post(0xBC);
 #ifndef XK_HOST_TEST
     {
         const ULONG_PTR parameters[4] = {P1, P2, P3, P4};
-        XkShowBugCheck(BugCheckCode, parameters);
+        ShowBugCheck(BugCheckCode, parameters);
     }
 #endif
     for (;;)
@@ -67,3 +69,5 @@ XBAPI void NTAPI KeBugCheck(ULONG BugCheckCode) {
 extern "C" void KiThreadReturned() {
     KeBugCheck(0x0E);
 }
+
+} // namespace xk::core

@@ -100,7 +100,7 @@ value would be part of it (spec/oxos_internal/33 §1).
 ### 3.2 When
 At **every launch**, after the disk is mounted and before the title is chosen and loaded:
 - cold boot: before the disc, the dashboard or a netbooted title (`XepChooseTitle`, `kernel/src/titles/loader.cpp`);
-- quick reboot: before `XepLaunchTitle` reads the launch data page, so an extension sees every title start (§7.2).
+- quick reboot: before `titles::LaunchTitle` reads the launch data page, so an extension sees every title start (§7.2).
 
 A quick reboot restores the kernel's `.data`, zeroes its `.bss` and stops every thread (`quick_reboot.S`). The
 extensions' images, threads, hooks and events are all gone after it; the kernel reads `oxos_extensions.ini` and the
@@ -386,7 +386,7 @@ title -> [savewatch] NtCreateFile -> oxos:: -> [netlog] NtCreateFile -> oxos:: -
 - `HookExport(Context, Ordinal, Replacement, &Next)` records the hook. During `Load` the imports point at the kernel.
 - After every `Load` (§4.3 step 3), the loader links each chain: an extension's import entry for a hooked ordinal is
   pointed at the next hook below it (or left at the kernel's function), and the title's thunk for that ordinal
-  (`XepResolveKernelThunks`) at the first hook. `Next` receives the same address, for extensions written without
+  (`titles::ResolveKernelThunks`) at the first hook. `Next` receives the same address, for extensions written without
   the SDK's class.
 - A hooked call costs one jump (the stub) and one call more than an unhooked one.
 
@@ -405,7 +405,7 @@ title -> [savewatch] NtCreateFile -> oxos:: -> [netlog] NtCreateFile -> oxos:: -
   `KfRaiseIrql`, `KfLowerIrql`, `KeRaiseIrqlToDpcLevel` (called at every IRQL, in titles' interrupt paths);
   `HalReturnToFirmware` (use `OXOS_EVENT_TITLE_EXITING`); OXOS's runtime exports for extensions, 402-415 (§9.1:
   titles never import them).
-- **Kernel internals that are not exports** (`XepLaunchTitle`, the exFAT driver, the scheduler) are not hookable;
+- **Kernel internals that are not exports** (`titles::LaunchTitle`, the exFAT driver, the scheduler) are not hookable;
   extensions reach them through events (§7.2) and the kernel facts (§5.2). *Later, if a use needs it:* hooks that
   also catch the kernel's own calls, as a separate API (patching the function's first instructions, with a generated
   trampoline for `oxos::`).
@@ -429,7 +429,7 @@ generated `Load` (`RegisterEvent`). Called in `oxos_extensions.ini` order.
   memory and applies the relocations. Sections are mapped as the headers say; all of them are writable and
   executable (the CPU has no NX).
 - **Imports:** only from `xboxkrnl.exe`, by ordinal, the same table titles use, resolved against the kernel's own
-  export directory as `XepResolveKernelThunks` does for titles, then linked into the chains (§7.1). An import from
+  export directory as `titles::ResolveKernelThunks` does for titles, then linked into the chains (§7.1). An import from
   any other DLL, or by name, refuses the file.
 - **Exports:** `oxos_extension` by name (§4.1). Other exports are ignored. *Open:* extensions calling each other.
 - **No entry point is called:** the kernel uses the descriptor, not `DllMain` (built with `/NOENTRY`).
@@ -458,9 +458,9 @@ state page too, and showing it in the File Manager.
   sections, behind a 20-byte header (`XK_EXTENSION_LOADER_HEADER`: magic, the kernel's PE stamp, base, size, entry), and
   names the header in the kernel's DOS header (offset 0x38). Its pages are boot-only: freed before the first title.
 - **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\extensions\oxos_extension_loader.cache`
-  (`XkExtensionsWriteCache`, boot-only), always: the file is a cache, overwritten with the known-good copy at every
-  cold boot. Without the extensions folder nothing is written.
-- **Run from the cache at every launch** (the cold boot's too): `XkExtensionsLoad` (`src/extensions/
+  (`extensions::WriteLoaderCache`, boot-only), always: the file is a cache, overwritten with the known-good copy at
+  every cold boot. Without the extensions folder nothing is written.
+- **Run from the cache at every launch** (the cold boot's too): `extensions::LoadExtensions` (`src/extensions/
   extension_runtime_loader.cpp`) reads the file only when `oxos_extensions.ini` exists, checks the header (magic, this
   kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps them at 0xB0000000 through a
   temporary page table, calls the entry, then unmaps and frees everything before the title loads. No cache, or one
@@ -629,7 +629,7 @@ It runs from the next launch.
 `tests/extensions/`, built with the SDK; `make -C kernel test_extensions` (`tests/boot_test.py --extensions`) puts them
 and an `oxos_extensions.ini` on the test disk and runs `test_relaunch`'s title through a cold boot and two quick
 reboots. The extensions record what the kernel did in their state pages; the test reads those back through
-`XkExtensionsState` (the offsets are checked at compile time in `include/xk/extensions.h`).
+`extensions::LoadedExtensions` (the offsets are checked at compile time in `include/xk/extensions.h`).
 
 **`extension_test.xos`:**
 
@@ -681,7 +681,7 @@ extension = oxos_title_patches.xos
 
 | Feature | Today | As an extension | Needs from §5/§7 |
 |---|---|---|---|
-| **Title patches** (`title_patches.ini`, spec/oxos_internal/25 §3; `patchfile.cpp`, `XepLoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the trainers zip with its patch file, now **`oxos_title_patches.ini`** (the same format as `title_patches.ini`), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in `OnTitleLoaded` | `OnTitleLoaded` (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos::XeLoadSection` has read it |
+| **Title patches** (`title_patches.ini`, spec/oxos_internal/25 §3; `patchfile.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the trainers zip with its patch file, now **`oxos_title_patches.ini`** (the same format as `title_patches.ini`), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in `OnTitleLoaded` | `OnTitleLoaded` (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos::XeLoadSection` has read it |
 | **Netbooted title** (`nettitle.cpp`, spec/oxos_internal/09 §7) | in the kernel, 981 bytes resident | `oxos_nettitle.xos`; installs the package as `E:\NAME\` and replaces the launch's XBE path with it | the netboot package's address and size in the kernel facts (§5.2; the kernel still keeps those pages from the memory manager); `OnTitleLoading` replaces the path |
 | **Call tracer** (`trace.cpp`, `trace.S`, spec/oxos_internal/01) | a separate kernel build, `TRACE_IMPORTS=1/2` | `oxos_tracer.xos`, listed first in `oxos_extensions.ini` so it sees the title's calls first; release kernels can be traced | `HookExport` from plain C with its own assembly stubs for every hookable ordinal (the stubs keep the registers and jump to `Next`); its ring outside the memory manager at a fixed physical address with 128 MB, as `TRACE_IMPORTS=2` does |
 

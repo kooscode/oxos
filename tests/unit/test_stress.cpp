@@ -8,6 +8,8 @@
 #include <cstdlib>
 #include <ctime>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 namespace {
 std::atomic<bool> Stop;
 std::atomic<unsigned long> Rounds, Errors, ShortThreads;
@@ -83,7 +85,7 @@ void RunStress(unsigned loads, const char *what) {
     double seconds = env && *env ? atof(env) : 5;
     Stop = false;
     Rounds = Errors = ShortThreads = 0;
-    ULONG available = MmAvailablePages, blocks = ExpPoolBlocks;
+    ULONG available = memory::AvailablePages, blocks = memory::PoolBlocks;
     uint64_t delivered = host::AsyncDelivered, pended = host::AsyncPended;
     PKTHREAD a = Spawn([=] { Load(1, loads); }, 8), b = Spawn([=] { Load(2, loads); }, 8);
     host::SetAsyncInterrupts(50);
@@ -104,11 +106,11 @@ void RunStress(unsigned loads, const char *what) {
     EXPECT_EQ(Errors.load(), 0u) << "memory written by the load came back different";
     EXPECT_GT(Rounds.load(), 0u);
     EXPECT_GT(host::AsyncDelivered - delivered, 0u) << "no interrupt landed inside kernel code";
-    EXPECT_EQ(ExpPoolBlocks, blocks);
+    EXPECT_EQ(memory::PoolBlocks, blocks);
     if (!(loads & 1)) // the pool keeps up to two freed blocks per small size (lookaside), and so their pages
-        EXPECT_EQ(MmAvailablePages, available);
+        EXPECT_EQ(memory::AvailablePages, available);
     else
-        EXPECT_GE(MmAvailablePages + 16, available);
+        EXPECT_GE(memory::AvailablePages + 16, available);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 } // namespace

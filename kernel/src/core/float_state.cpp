@@ -5,6 +5,8 @@
 #include <xk/arch.h>
 #include <xk/memory.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 constexpr ULONG CR0_EM = 1u << 2, CR0_TS = 1u << 3;
@@ -23,7 +25,7 @@ static UCHAR *NpxArea(PKTHREAD t) {
     return (UCHAR *)t->StackBase - NPX_FRAME_LENGTH;
 }
 
-void KiInitializeNpxArea(PKTHREAD t) {
+void InitializeNpxArea(PKTHREAD t) {
     UCHAR *area = NpxArea(t);
     for (ULONG i = 0; i < NPX_FRAME_LENGTH; i++)
         area[i] = 0;
@@ -33,7 +35,7 @@ void KiInitializeNpxArea(PKTHREAD t) {
 }
 
 // Before switching to `next`: trap its first FPU use unless it already owns the FPU.
-void KiNpxPrepareSwitch(PKTHREAD next) {
+void NpxPrepareSwitch(PKTHREAD next) {
     ULONG cr0 = ReadCr0();
     ULONG want = next == Prcb.NpxThread ? cr0 & ~CR0_TS : cr0 | CR0_TS;
     if (want != cr0)
@@ -41,7 +43,7 @@ void KiNpxPrepareSwitch(PKTHREAD next) {
 }
 
 // A terminating thread gives up the FPU so its save area can be reused.
-void KiNpxRelease(PKTHREAD t) {
+void NpxRelease(PKTHREAD t) {
     if (Prcb.NpxThread == t) {
         Prcb.NpxThread = nullptr;
         WriteCr0(ReadCr0() | CR0_TS);
@@ -63,7 +65,7 @@ extern "C" void KiNpxNotAvailable() {
     Prcb.NpxThread = current;
 }
 
-void KiInitializeNpx() {
+void InitializeNpx() {
     WriteCr0(ReadCr0() | CR0_TS);
 }
 
@@ -117,3 +119,5 @@ XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState(KFLOATING_SAVE_ *FloatSave) {
     FloatSave->Buffer = nullptr;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::core

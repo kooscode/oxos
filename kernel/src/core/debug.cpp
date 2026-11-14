@@ -5,32 +5,34 @@
 #include <xk/serial.h>
 #include <xk/runtime.h>
 
+namespace xk::core {
+
 #define va_start(v, l) __builtin_va_start(v, l)
 #define va_end(v) __builtin_va_end(v)
 
 // Exported: there is no kernel debugger (titles and the XDK check these).
 XBAPI BOOLEAN KdDebuggerEnabled, KdDebuggerNotPresent;
-BOOLEAN KdDebuggerEnabled = FALSE;
-BOOLEAN KdDebuggerNotPresent = TRUE;
+XBAPI BOOLEAN KdDebuggerEnabled = FALSE;
+XBAPI BOOLEAN KdDebuggerNotPresent = TRUE;
 
-// Ring buffer of debug output, readable from the emulator monitor (XkDebugLog / XkDebugLogPosition).
-char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it stays resident (spec/stock/09 §7)
-volatile ULONG XkDebugLogPosition;
+// Ring buffer of debug output, readable from the emulator monitor (DebugLog / DebugLogPosition).
+char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it stays resident (spec/stock/09 §7)
+volatile ULONG DebugLogPosition;
 
-static void XkLogWrite(const char *s, ULONG n) {
+static void WriteDebugLog(const char *s, ULONG n) {
     ULONG flags = save_flags_cli();
     for (ULONG i = 0; i < n; i++)
-        XkDebugLog[(XkDebugLogPosition + i) % sizeof(XkDebugLog)] = s[i];
-    XkDebugLogPosition = XkDebugLogPosition + n;
+        DebugLog[(DebugLogPosition + i) % sizeof(DebugLog)] = s[i];
+    DebugLogPosition = DebugLogPosition + n;
     restore_flags(flags);
 #if XK_DEBUG_SERIAL
-    HalpSerialWrite(s, n);
+    hardware::WriteSerial(s, n);
 #endif
 }
 
 // Debug service 1 (int 0x2D, print): the counted string a title's OutputDebugString / DbgPrint passes (spec/stock/14).
-void KdPrintString(const char *Text, ULONG Length) {
-    XkLogWrite(Text, Length > 512 ? 512 : Length);
+void PrintDebugString(const char *Text, ULONG Length) {
+    WriteDebugLog(Text, Length > 512 ? 512 : Length);
 }
 
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...) {
@@ -39,7 +41,7 @@ XBAPI ULONG __cdecl DbgPrint(const char *Format, ...) {
     va_start(ap, Format);
     int n = RtlVsnprintf(line, sizeof(line), Format, ap);
     va_end(ap);
-    XkLogWrite(line, n < 0 ? sizeof(line) : (ULONG)n);
+    WriteDebugLog(line, n < 0 ? sizeof(line) : (ULONG)n);
     return STATUS_SUCCESS;
 }
 
@@ -71,3 +73,5 @@ XBAPI void NTAPI RtlRip(const char *ApiName, const char *Expression, const char 
              Expression ? Expression : "", Expression ? ')' : ' ', Message ? Message : "");
     DbgBreakPoint();
 }
+
+} // namespace xk::core

@@ -4,6 +4,8 @@
 #include <xk/arch.h>
 #include <xk/core.h>
 
+namespace xk::hardware {
+
 // Bus 0 device numbers on the Xbox (MCPX + NV2A host bridge).
 enum : ULONG {
     DEV_HOST = 0, DEV_LPC = 1, DEV_USB0 = 2, DEV_USB1 = 3, DEV_NIC = 4,
@@ -47,32 +49,32 @@ XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG R
     sti();
 }
 
-UCHAR HalpPciRead8(ULONG bus, ULONG dev, ULONG reg) {
+UCHAR ReadPci8(ULONG bus, ULONG dev, ULONG reg) {
     UCHAR v;
     HalReadWritePCISpace(bus, dev, reg, &v, 1, FALSE);
     return v;
 }
 
-ULONG HalpPciRead32(ULONG bus, ULONG dev, ULONG reg) {
+ULONG ReadPci32(ULONG bus, ULONG dev, ULONG reg) {
     ULONG v;
     HalReadWritePCISpace(bus, dev, reg, &v, 4, FALSE);
     return v;
 }
 
-void HalpPciWrite8(ULONG bus, ULONG dev, ULONG reg, UCHAR v) {
+void WritePci8(ULONG bus, ULONG dev, ULONG reg, UCHAR v) {
     HalReadWritePCISpace(bus, dev, reg, &v, 1, TRUE);
 }
 
-void HalpPciWrite16(ULONG bus, ULONG dev, ULONG reg, USHORT v) {
+void WritePci16(ULONG bus, ULONG dev, ULONG reg, USHORT v) {
     HalReadWritePCISpace(bus, dev, reg, &v, 2, TRUE);
 }
 
-void HalpPciWrite32(ULONG bus, ULONG dev, ULONG reg, ULONG v) {
+void WritePci32(ULONG bus, ULONG dev, ULONG reg, ULONG v) {
     HalReadWritePCISpace(bus, dev, reg, &v, 4, TRUE);
 }
 
 static void PciOr8(ULONG bus, ULONG dev, ULONG reg, UCHAR bits) {
-    HalpPciWrite8(bus, dev, reg, HalpPciRead8(bus, dev, reg) | bits);
+    WritePci8(bus, dev, reg, ReadPci8(bus, dev, reg) | bits);
 }
 
 // A function's whole configuration space read, edited and written back, as the reference does for each device it
@@ -111,7 +113,7 @@ template <typename F> static void PciEditAll(ULONG bus, ULONG dev, F edit) {
 // pending and addresses it never cleared; the hardware then never finishes that buffer, and a title whose graphics
 // set-up stops the overlay and waits for 0x8700 to clear waits for ever. The overlay is stopped, and reset only when
 // the buffer is not released (a reset also clears 0x8088/0x808C, which the boot display sets: they are kept).
-void HalpIdleVideoOverlay() {
+void IdleVideoOverlay() {
     if (!(*(volatile ULONG *)0xFD000200 & 0x10000000))
         return;
     auto nv = [](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(0xFD000000 + offset); };
@@ -142,15 +144,15 @@ void HalpIdleVideoOverlay() {
 }
 
 // Every MCPX function and the GPU at entry: logged, bus mastering off, each engine stopped or reset.
-static void HalpQuiesceBusMasters() {
+static void QuiesceBusMasters() {
     constexpr ULONG DEVS[] = {DEV_USB0, DEV_USB1, DEV_NIC, DEV_APU, DEV_AC97, DEV_IDE};
     for (ULONG d : DEVS) {
-        ULONG cmd = HalpPciRead32(0, d, 4);
-        [[maybe_unused]] ULONG bar0 = HalpPciRead32(0, d, 0x10);
+        ULONG cmd = ReadPci32(0, d, 4);
+        [[maybe_unused]] ULONG bar0 = ReadPci32(0, d, 0x10);
         XK_SERIAL("pci: at entry 0:%lx.0 cmd %08lx bar0 %08lx\n", d, cmd, bar0);
-        HalpPciWrite16(0, d, 4, (USHORT)(cmd & ~4u)); // bus master off
+        WritePci16(0, d, 4, (USHORT)(cmd & ~4u)); // bus master off
     }
-    [[maybe_unused]] ULONG gpuCmd = HalpPciRead32(1, 0, 4);
+    [[maybe_unused]] ULONG gpuCmd = ReadPci32(1, 0, 4);
     // Memory-mapped engines in 0xFEC00000-0xFEFFFFFF (USB 0xFED00000 / 0xFED08000, NIC 0xFEF00000): not mapped yet
     // (the 2BL maps only RAM, the NV2A and the flash), so map that 4 MB window uncached for a moment through the
     // page directory's self-map (entry 0x300: the directory at 0xC0300000).
@@ -161,8 +163,8 @@ static void HalpQuiesceBusMasters() {
     auto mmio = [](ULONG a) -> volatile ULONG & { return *(volatile ULONG *)a; };
     static const ULONG OHCI[] = {DEV_USB0, DEV_USB1};
     for (ULONG d : OHCI) { // OHCI: HcControl 0x04, HcCommandStatus 0x08, HcHCCA 0x18
-        ULONG bar = HalpPciRead32(0, d, 0x10) & ~0xFFFu;
-        if (bar < 0xFEC00000 || bar >= 0xFF000000 || !(HalpPciRead32(0, d, 4) & 2))
+        ULONG bar = ReadPci32(0, d, 0x10) & ~0xFFFu;
+        if (bar < 0xFEC00000 || bar >= 0xFF000000 || !(ReadPci32(0, d, 4) & 2))
             continue;
         XK_SERIAL("pci: USB %lu at entry: control %08lx hcca %08lx\n", d - DEV_USB0, mmio(bar + 4), mmio(bar + 0x18));
         mmio(bar + 0x14) = 0xC000007F; // HcInterruptDisable: all
@@ -172,8 +174,8 @@ static void HalpQuiesceBusMasters() {
             KeStallExecutionProcessor(1);
         mmio(bar + 4) = 0; // HcControl: back to USBRESET (the reset ends in USBSUSPEND; see KiQuickRebootQuiesce)
     }
-    ULONG nic = HalpPciRead32(0, DEV_NIC, 0x10) & ~0xFFFu;
-    if (nic >= 0xFEC00000 && nic < 0xFF000000 && (HalpPciRead32(0, DEV_NIC, 4) & 2)) {
+    ULONG nic = ReadPci32(0, DEV_NIC, 0x10) & ~0xFFFu;
+    if (nic >= 0xFEC00000 && nic < 0xFF000000 && (ReadPci32(0, DEV_NIC, 4) & 2)) {
         XK_SERIAL("pci: NIC at entry: tx ring %08lx rx ring %08lx tx %lx rx %lx\n", mmio(nic + 0x100),
                   mmio(nic + 0x104), mmio(nic + 0x84), mmio(nic + 0x94));
         mmio(nic + 0x84) = 0;     // transmitter off
@@ -189,15 +191,15 @@ static void HalpQuiesceBusMasters() {
     __asm__ volatile("invlpg (%0)" ::"r"(0xFEC00000) : "memory");
     // AC'97 bus-master channels (I/O BAR1; ICH layout: control at 0x0B, 0x1B, 0x2B, S/PDIF 0x7B): stop, then reset.
     static const USHORT AC97_CONTROL[] = {0x0B, 0x1B, 0x2B, 0x7B};
-    ULONG aci = HalpPciRead32(0, DEV_AC97, 0x14);
-    if ((aci & 1) && (aci & ~3u) && (HalpPciRead32(0, DEV_AC97, 4) & 1)) {
+    ULONG aci = ReadPci32(0, DEV_AC97, 0x14);
+    if ((aci & 1) && (aci & ~3u) && (ReadPci32(0, DEV_AC97, 4) & 1)) {
         for (USHORT c : AC97_CONTROL) {
             outb((USHORT)((aci & ~3u) + c), 0);
             outb((USHORT)((aci & ~3u) + c), 2);
         }
     }
     // IDE bus master (I/O BAR4): stop.
-    ULONG ide = HalpPciRead32(0, DEV_IDE, 0x20);
+    ULONG ide = ReadPci32(0, DEV_IDE, 0x20);
     if ((ide & 1) && (ide & ~3u))
         outb((USHORT)(ide & ~3u), 0);
     // GPU: its FIFO and graphics engines reset (PMC 0x200 bits 8 and 12 off and on; the NV2A registers are mapped).
@@ -210,7 +212,7 @@ static void HalpQuiesceBusMasters() {
               (enable & 0x100) ? *(volatile ULONG *)0xFD003220 : 0);
     *pmc = enable & ~0x1100u;
     *pmc = enable;
-    HalpIdleVideoOverlay();
+    IdleVideoOverlay();
     // Frame-buffer tiles and Z compression off (spec/oxos_internal/10 §2 step 7.3). They power up holding junk (PFB
     // 0x100300/0x100304 0x04000000, 0x100324 0x10 on the 1.4 console). On a stock console the kernel's graphics device
     // clears them before any title (spec/stock/22 §7); OXOS has no boot animation, so it does it here. nxdk's pbkit
@@ -228,12 +230,12 @@ static void HalpQuiesceBusMasters() {
 
 // --- Chipset set-up (spec/stock/02_executive_init.md §3.7-3.8), and the ACPI power-management block
 // The bus masters stopped first, then each MCPX and NV2A function in the reference's order.
-void HalpInitPci() {
-    HalpQuiesceBusMasters();
+void InitPci() {
+    QuiesceBusMasters();
     // MCPX ISA/LPC bridge.
-    HalpPciWrite8(0, DEV_LPC, 0x6A, 0x03);
-    HalpPciWrite32(0, DEV_LPC, 0x6C, 0x0E065491);
-    HalpPciWrite32(0, DEV_LPC, 0x64, 0x00000B0C);
+    WritePci8(0, DEV_LPC, 0x6A, 0x03);
+    WritePci32(0, DEV_LPC, 0x6C, 0x0E065491);
+    WritePci32(0, DEV_LPC, 0x64, 0x00000B0C);
     PciOr8(0, DEV_LPC, 0x81, 0x08);
 
     // IDE: I/O + bus master, both channels in legacy mode, bus-master registers at 0xFF60, timings.
@@ -271,14 +273,14 @@ void HalpInitPci() {
         c.Set8(0x3C, 1);
         c.Set8(0x3D, 0);
     });
-    HalpPciWrite32(0, DEV_USB0, 0x50, 0x0000000F);
+    WritePci32(0, DEV_USB0, 0x50, 0x0000000F);
     PciEditAll(0, DEV_USB1, [](PciSpace &c) {
         c.b[4] |= 7;
         c.Set32(0x10, 0xFED08000);
         c.Set8(0x3C, 9);
         c.Set8(0x3D, 0);
     });
-    HalpPciWrite32(0, DEV_USB1, 0x50, 0x00000030);
+    WritePci32(0, DEV_USB1, 0x50, 0x00000030);
 
     // AC'97 and APU.
     PciEditAll(0, DEV_AC97, [](PciSpace &c) {
@@ -297,14 +299,14 @@ void HalpInitPci() {
     });
 
     // LPC bridge register 0x8C: set bit 27, clear bit 26; then MCPX I/O 0x80CD = 8.
-    ULONG r8c = HalpPciRead32(0, DEV_LPC, 0x8C);
-    HalpPciWrite32(0, DEV_LPC, 0x8C, (r8c & ~(1u << 26)) | (1u << 27));
+    ULONG r8c = ReadPci32(0, DEV_LPC, 0x8C);
+    WritePci32(0, DEV_LPC, 0x8C, (r8c & ~(1u << 26)) | (1u << 27));
     outb(0x80CD, 0x08);
 
     // AC'97 register 0x4E |= 0x0101.
     USHORT r4e;
     HalReadWritePCISpace(0, DEV_AC97, 0x4E, &r4e, 2, FALSE);
-    HalpPciWrite16(0, DEV_AC97, 0x4E, r4e | 0x0101);
+    WritePci16(0, DEV_AC97, 0x4E, r4e | 0x0101);
 
     // AGP bridge: bus 0 -> 1, memory window 0xFD000000-0xFE7FFFFF, prefetch window 0xF0000000-0xF3FFFFFF
     // (limit extended when hardware flag 0x08 is set).
@@ -319,37 +321,39 @@ void HalpInitPci() {
     });
 
     // Host bridge, then NV2A (bus 1, device 0).
-    HalpPciWrite32(0, DEV_HOST, 0x48, 0x00000114);
+    WritePci32(0, DEV_HOST, 0x48, 0x00000114);
     PciEditAll(1, 0, [](PciSpace &c) {
         c.b[4] |= 7;
         c.Set8(0x3C, 3);
         c.Set8(0x3D, 1);
     });
-    HalpPciWrite32(1, 0, 0x4C, 0x00000114);
+    WritePci32(1, 0, 0x4C, 0x00000114);
     // The graphics engine to a valid live context, before the splash or any title uses the GPU (spec 24).
-    HalpInitGraphicsEngine();
+    InitGraphicsEngine();
 #if XK_DEBUG_SERIAL
     static const UCHAR devs[] = {0, 1, 2, 3, 4, 5, 6, 9, 0x1E};
     for (UCHAR d : devs)
-        XK_SERIAL("pci: 0:%x.0 ids %08lx cmd %08lx\n", d, HalpPciRead32(0, d, 0), HalpPciRead32(0, d, 4));
-    XK_SERIAL("pci: 1:0.0 ids %08lx; dev1 0x80 %08lx 0x8c %08lx 0xc8 %08lx; ide 0x50 %08lx\n", HalpPciRead32(1, 0, 0),
-              HalpPciRead32(0, 1, 0x80), HalpPciRead32(0, 1, 0x8C), HalpPciRead32(0, 1, 0xC8),
-              HalpPciRead32(0, 9, 0x50));
+        XK_SERIAL("pci: 0:%x.0 ids %08lx cmd %08lx\n", d, ReadPci32(0, d, 0), ReadPci32(0, d, 4));
+    XK_SERIAL("pci: 1:0.0 ids %08lx; dev1 0x80 %08lx 0x8c %08lx 0xc8 %08lx; ide 0x50 %08lx\n", ReadPci32(1, 0, 0),
+              ReadPci32(0, 1, 0x80), ReadPci32(0, 1, 0x8C), ReadPci32(0, 1, 0xC8),
+              ReadPci32(0, 9, 0x50));
     XK_SERIAL("pci: memory: host 0x84 %08lx, NV2A PFB 0x100200 %08lx 0x100204 %08lx, NVPLL %08lx, 0x68050C %08lx\n",
-              HalpPciRead32(0, 0, 0x84), *(volatile ULONG *)0xFD100200, *(volatile ULONG *)0xFD100204,
+              ReadPci32(0, 0, 0x84), *(volatile ULONG *)0xFD100200, *(volatile ULONG *)0xFD100204,
               *(volatile ULONG *)0xFD680500, *(volatile ULONG *)0xFD68050C);
     // The other clocks and the memory timing the X-codes set (debug: a boot with garbled textures).
     XK_SERIAL("pci: clocks: MPLL %08lx VPLL %08lx host 0x6C %08lx; PFB 0x100210 %08lx 0x100220 %08lx 0x100224 %08lx "
               "0x100228 %08lx\n", *(volatile ULONG *)0xFD680504, *(volatile ULONG *)0xFD680508,
-              HalpPciRead32(0, 0, 0x6C), *(volatile ULONG *)0xFD100210, *(volatile ULONG *)0xFD100220,
+              ReadPci32(0, 0, 0x6C), *(volatile ULONG *)0xFD100210, *(volatile ULONG *)0xFD100220,
               *(volatile ULONG *)0xFD100224, *(volatile ULONG *)0xFD100228);
 #endif
 }
 
 // ACPI power-management block at I/O 0x8000.
-void HalpInitAcpiPm() {
+void InitAcpiPm() {
     outw(0x8004, inw(0x8004) | 0x0001); // PM1 control: SCI enable
     outw(0x8022, inw(0x8022) | 0x0002);
     outw(0x8002, inw(0x8002) | 0x0001); // PM1 enable: timer
     outw(0x8028, inw(0x8028) | 0x0001);
 }
+
+} // namespace xk::hardware

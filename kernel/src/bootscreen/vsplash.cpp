@@ -6,6 +6,8 @@
 //     approximated by three box blurs), either replacing it ("blur") or under it ("glow").
 #include <xk/vsplash.h>
 
+namespace xk::bootscreen {
+
 #ifdef _WIN32 // the kernel: boot-only code, freed before the first title starts (spec/oxos_internal/18)
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
@@ -534,3 +536,5 @@ void Render(const unsigned char *Scene, unsigned Size, Phase Phase, unsigned *Ou
 }
 
 } // namespace vsplash
+
+} // namespace xk::bootscreen

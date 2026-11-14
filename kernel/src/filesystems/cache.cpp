@@ -8,6 +8,8 @@
 #include <xk/memory.h>
 #include <xk/runtime.h>
 
+namespace xk::filesystems {
+
 constexpr NTSTATUS STATUS_NO_MEMORY = (NTSTATUS)0xC0000017;
 
 // CacheBuffer: page VA, the low byte = number of mappings, plus these flags.
@@ -20,82 +22,84 @@ struct FSC_ELEMENT {
 };
 static_assert(sizeof(FSC_ELEMENT) == 0x14);
 
-static FSC_ELEMENT *FscElementArray; // one element per cache page
-static ULONG FscNumberOfCachePages;
-static LIST_ENTRY FscLruList;        // every element, least recently used first
-static KEVENT FscLock;               // the list and elements (callers run at passive level)
-static KEVENT FscBufferFree;         // notification: set when a buffer may have become idle
-static KEVENT FscReadComplete;       // notification: set when a read finishes
-static KEVENT FscSizeLock;           // serialises FscSetCacheSize
+static FSC_ELEMENT *CacheElementArray; // one element per cache page
+static ULONG CachePages;
+static LIST_ENTRY CacheLruList;  // every element, least recently used first
+static KEVENT CacheLock;         // the list and elements (callers run at passive level)
+static KEVENT CacheBufferFree;   // notification: set when a buffer may have become idle
+static KEVENT CacheReadComplete; // notification: set when a read finishes
+static KEVENT CacheSizeLock;     // serialises FscSetCacheSize
 
 static void Lock() {
-    KeWaitForSingleObject(&FscLock, Executive, KernelMode, FALSE, nullptr);
+    KeWaitForSingleObject(&CacheLock, Executive, KernelMode, FALSE, nullptr);
 }
 
 static void Unlock() {
-    KeSetEvent(&FscLock, 0, FALSE);
+    KeSetEvent(&CacheLock, 0, FALSE);
 }
 
-static inline ULONG FscUsage(FSC_ELEMENT *e) {
+static inline ULONG CacheUsage(FSC_ELEMENT *e) {
     return e->CacheBuffer & 0xFF;
 }
 
-static inline ULONG FscVa(FSC_ELEMENT *e) {
+static inline ULONG CacheVirtualAddress(FSC_ELEMENT *e) {
     return e->CacheBuffer & ~0xFFFu;
 }
 
-static void FscSetWritable(ULONG va, bool writable) {
-    ULONG *pte = MiGetPteAddress(va);
+static void SetCacheWritable(ULONG va, bool writable) {
+    ULONG *pte = memory::PteAddress(va);
     *pte = (*pte & ~PTE_WRITE) | (writable ? PTE_WRITE : 0);
-    MiInvalidatePage(va);
+    memory::InvalidatePage(va);
 }
 
 // The element of a cache page, from its page database entry (bits 17-27 = element index), as the reference.
-static FSC_ELEMENT *FscElementOf(ULONG va) {
-    ULONG pfn = *MiGetPteAddress(va) >> PAGE_SHIFT;
-    return &FscElementArray[(((ULONG *)0x83FF0000)[pfn] >> 17) & 0x7FF];
+static FSC_ELEMENT *CacheElementOf(ULONG va) {
+    ULONG pfn = *memory::PteAddress(va) >> PAGE_SHIFT;
+    return &CacheElementArray[(((ULONG *)0x83FF0000)[pfn] >> 17) & 0x7FF];
 }
 
-static void FscSetIndex(ULONG va, ULONG index) {
-    ULONG *e = &((ULONG *)0x83FF0000)[*MiGetPteAddress(va) >> PAGE_SHIFT];
+static void SetCacheIndex(ULONG va, ULONG index) {
+    ULONG *e = &((ULONG *)0x83FF0000)[*memory::PteAddress(va) >> PAGE_SHIFT];
     *e = (*e & ~0x0FFE0000u) | (index << 17);
 }
 
 // Page relocation (memory/init.cpp): the PTE mapping a cache page.
-ULONG *FscCachePte(ULONG elementIndex) {
-    return elementIndex < FscNumberOfCachePages ? MiGetPteAddress(FscVa(&FscElementArray[elementIndex])) : nullptr;
+ULONG *CachePte(ULONG elementIndex) {
+    if (elementIndex >= CachePages)
+        return nullptr;
+    return memory::PteAddress(CacheVirtualAddress(&CacheElementArray[elementIndex]));
 }
 
 // Rebuild the list: empty elements at the head, the rest after them.
-static void FscRebuildList() {
-    InitializeListHead(&FscLruList);
-    for (ULONG i = 0; i < FscNumberOfCachePages; i++) {
-        FSC_ELEMENT *e = &FscElementArray[i];
+static void RebuildCacheList() {
+    InitializeListHead(&CacheLruList);
+    for (ULONG i = 0; i < CachePages; i++) {
+        FSC_ELEMENT *e = &CacheElementArray[i];
         if (e->CacheExtension)
-            InsertTailList(&FscLruList, &e->ListEntry);
+            InsertTailList(&CacheLruList, &e->ListEntry);
         else
-            InsertHeadList(&FscLruList, &e->ListEntry);
+            InsertHeadList(&CacheLruList, &e->ListEntry);
     }
 }
 
-static void FscMoveToHead(FSC_ELEMENT *e) {
+static void MoveToCacheHead(FSC_ELEMENT *e) {
     RemoveEntryList(&e->ListEntry);
-    InsertHeadList(&FscLruList, &e->ListEntry);
+    InsertHeadList(&CacheLruList, &e->ListEntry);
 }
 
-static void FscMoveToTail(FSC_ELEMENT *e) {
+static void MoveToCacheTail(FSC_ELEMENT *e) {
     RemoveEntryList(&e->ListEntry);
-    InsertTailList(&FscLruList, &e->ListEntry);
+    InsertTailList(&CacheLruList, &e->ListEntry);
 }
 
 // Most recently used first; the walk stops at the first empty element.
-static FSC_ELEMENT *FscLookup(FSCACHE_EXTENSION *ext, ULONG block) {
-    for (PLIST_ENTRY l = FscLruList.Blink; l != &FscLruList; l = l->Blink) {
+static FSC_ELEMENT *LookUpCacheBlock(FSCACHE_EXTENSION *ext, ULONG block) {
+    for (PLIST_ENTRY l = CacheLruList.Blink; l != &CacheLruList; l = l->Blink) {
         auto e = CONTAINING_RECORD(l, FSC_ELEMENT, ListEntry);
         if (!e->CacheExtension)
             return nullptr;
         if (e->CacheExtension == ext && e->BlockNumber == block) {
-            FscMoveToTail(e);
+            MoveToCacheTail(e);
             return e;
         }
     }
@@ -103,155 +107,155 @@ static FSC_ELEMENT *FscLookup(FSCACHE_EXTENSION *ext, ULONG block) {
 }
 
 // The least recently used unmapped element; waits (lock dropped) while every buffer is mapped.
-static FSC_ELEMENT *FscTakeIdle() {
+static FSC_ELEMENT *TakeIdleCacheBlock() {
     for (;;) {
-        if (!FscNumberOfCachePages)
+        if (!CachePages)
             return nullptr;
-        for (PLIST_ENTRY l = FscLruList.Flink; l != &FscLruList; l = l->Flink) {
+        for (PLIST_ENTRY l = CacheLruList.Flink; l != &CacheLruList; l = l->Flink) {
             auto e = CONTAINING_RECORD(l, FSC_ELEMENT, ListEntry);
-            if (!FscUsage(e) && !(e->CacheBuffer & (FSC_READ_IN_PROGRESS | FSC_DISCARDING)))
+            if (!CacheUsage(e) && !(e->CacheBuffer & (FSC_READ_IN_PROGRESS | FSC_DISCARDING)))
                 return e;
         }
-        KeResetEvent(&FscBufferFree);
+        KeResetEvent(&CacheBufferFree);
         Unlock();
-        KeWaitForSingleObject(&FscBufferFree, Executive, KernelMode, FALSE, nullptr);
+        KeWaitForSingleObject(&CacheBufferFree, Executive, KernelMode, FALSE, nullptr);
         Lock();
     }
 }
 
-static NTSTATUS FscDeviceIo(FSCACHE_EXTENSION *ext, UCHAR major, LONGLONG offset, PVOID buffer, ULONG length) {
+static NTSTATUS CacheDeviceIo(FSCACHE_EXTENSION *ext, UCHAR major, LONGLONG offset, PVOID buffer, ULONG length) {
     LARGE_INTEGER o;
     o.QuadPart = offset;
     return IoSynchronousFsdRequest(major, ext->TargetDeviceObject, buffer, length, &o);
 }
 
-NTSTATUS FscMapBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, BOOLEAN writable, PVOID *buffer) {
+NTSTATUS MapCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, BOOLEAN writable, PVOID *buffer) {
     ULONG block = (ULONG)(offset >> PAGE_SHIFT);
     Lock();
     for (;;) {
-        FSC_ELEMENT *e = FscLookup(ext, block);
+        FSC_ELEMENT *e = LookUpCacheBlock(ext, block);
         if (e && (e->CacheBuffer & FSC_READ_IN_PROGRESS)) { // another thread is reading it
             e->CacheBuffer |= FSC_READ_WAITERS;
-            KeResetEvent(&FscReadComplete);
+            KeResetEvent(&CacheReadComplete);
             Unlock();
-            KeWaitForSingleObject(&FscReadComplete, Executive, KernelMode, FALSE, nullptr);
+            KeWaitForSingleObject(&CacheReadComplete, Executive, KernelMode, FALSE, nullptr);
             Lock();
             continue;
         }
         if (e) {
             e->CacheBuffer++;
         } else {
-            e = FscTakeIdle();
+            e = TakeIdleCacheBlock();
             if (!e) {
                 Unlock();
                 return STATUS_NO_MEMORY;
             }
             e->BlockNumber = block;
             e->CacheExtension = ext;
-            e->CacheBuffer = FscVa(e) | FSC_READ_IN_PROGRESS | 1;
-            FscMoveToTail(e);
+            e->CacheBuffer = CacheVirtualAddress(e) | FSC_READ_IN_PROGRESS | 1;
+            MoveToCacheTail(e);
             Unlock();
             // The last block of the device is read only up to its end.
             LONGLONG start = (LONGLONG)block << PAGE_SHIFT, length = ext->PartitionLength.QuadPart - start;
             ULONG n = length >= PAGE_SIZE ? PAGE_SIZE : (ULONG)length;
-            FscSetWritable(FscVa(e), true);
-            NTSTATUS status = FscDeviceIo(ext, IRP_MJ_READ, start, (PVOID)FscVa(e), n);
-            FscSetWritable(FscVa(e), false);
+            SetCacheWritable(CacheVirtualAddress(e), true);
+            NTSTATUS status = CacheDeviceIo(ext, IRP_MJ_READ, start, (PVOID)CacheVirtualAddress(e), n);
+            SetCacheWritable(CacheVirtualAddress(e), false);
             Lock();
             bool waiters = e->CacheBuffer & FSC_READ_WAITERS;
             e->CacheBuffer &= ~(FSC_READ_IN_PROGRESS | FSC_READ_WAITERS);
             if (waiters)
-                KeSetEvent(&FscReadComplete, 0, FALSE);
+                KeSetEvent(&CacheReadComplete, 0, FALSE);
             if (!NT_SUCCESS(status)) {
-                e->CacheBuffer = FscVa(e);
+                e->CacheBuffer = CacheVirtualAddress(e);
                 e->CacheExtension = nullptr;
-                FscMoveToHead(e);
-                KeSetEvent(&FscBufferFree, 0, FALSE);
+                MoveToCacheHead(e);
+                KeSetEvent(&CacheBufferFree, 0, FALSE);
                 Unlock();
                 return status;
             }
         }
         if (writable)
-            FscSetWritable(FscVa(e), true);
-        *buffer = (PVOID)(FscVa(e) + (ULONG)(offset & (PAGE_SIZE - 1)));
+            SetCacheWritable(CacheVirtualAddress(e), true);
+        *buffer = (PVOID)(CacheVirtualAddress(e) + (ULONG)(offset & (PAGE_SIZE - 1)));
         Unlock();
         return STATUS_SUCCESS;
     }
 }
 
 // A buffer for a block that will be written whole: no read, filled with 0xFF, writable.
-NTSTATUS FscMapEmptyBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, PVOID *buffer) {
+NTSTATUS MapEmptyCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, PVOID *buffer) {
     ULONG block = (ULONG)(offset >> PAGE_SHIFT);
     Lock();
-    FSC_ELEMENT *e = FscLookup(ext, block);
+    FSC_ELEMENT *e = LookUpCacheBlock(ext, block);
     if (e && (e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
         Unlock();
-        return FscMapBuffer(ext, offset & ~(LONGLONG)(PAGE_SIZE - 1), TRUE, buffer); // rare: let the read finish
+        return MapCacheBuffer(ext, offset & ~(LONGLONG)(PAGE_SIZE - 1), TRUE, buffer); // rare: let the read finish
     }
     if (e) {
         e->CacheBuffer++;
     } else {
-        e = FscTakeIdle();
+        e = TakeIdleCacheBlock();
         if (!e) {
             Unlock();
             return STATUS_NO_MEMORY;
         }
         e->BlockNumber = block;
         e->CacheExtension = ext;
-        e->CacheBuffer = FscVa(e) | 1;
-        FscMoveToTail(e);
+        e->CacheBuffer = CacheVirtualAddress(e) | 1;
+        MoveToCacheTail(e);
     }
-    FscSetWritable(FscVa(e), true);
-    RtlFillMemory((PVOID)FscVa(e), PAGE_SIZE, 0xFF);
-    *buffer = (PVOID)FscVa(e);
+    SetCacheWritable(CacheVirtualAddress(e), true);
+    RtlFillMemory((PVOID)CacheVirtualAddress(e), PAGE_SIZE, 0xFF);
+    *buffer = (PVOID)CacheVirtualAddress(e);
     Unlock();
     return STATUS_SUCCESS;
 }
 
-void FscUnmapBuffer(PVOID buffer) {
+void UnmapCacheBuffer(PVOID buffer) {
     ULONG va = (ULONG)buffer & ~(PAGE_SIZE - 1);
     Lock();
-    FSC_ELEMENT *e = FscElementOf(va);
-    if (FscUsage(e))
+    FSC_ELEMENT *e = CacheElementOf(va);
+    if (CacheUsage(e))
         e->CacheBuffer--;
-    if (!FscUsage(e)) { // read-only again once nobody has it mapped (the reference: at every unmap)
-        FscSetWritable(va, false);
-        KeSetEvent(&FscBufferFree, 0, FALSE);
+    if (!CacheUsage(e)) { // read-only again once nobody has it mapped (the reference: at every unmap)
+        SetCacheWritable(va, false);
+        KeSetEvent(&CacheBufferFree, 0, FALSE);
     }
     Unlock();
 }
 
 // Drop the block (after a failed write, or contents that are no longer valid).
-void FscDiscardBuffer(PVOID buffer) {
+void DiscardCacheBuffer(PVOID buffer) {
     ULONG va = (ULONG)buffer & ~(PAGE_SIZE - 1);
     Lock();
-    FscSetWritable(va, false);
-    FSC_ELEMENT *e = FscElementOf(va);
+    SetCacheWritable(va, false);
+    FSC_ELEMENT *e = CacheElementOf(va);
     e->CacheBuffer = va | (e->CacheBuffer & FSC_DISCARDING);
     e->CacheExtension = nullptr;
-    FscMoveToHead(e);
-    KeSetEvent(&FscBufferFree, 0, FALSE);
+    MoveToCacheHead(e);
+    KeSetEvent(&CacheBufferFree, 0, FALSE);
     Unlock();
 }
 
 // Write the sectors covering [offset, offset + length) of a mapped buffer to the device, then unmap it (discard it
 // if the write fails).
-NTSTATUS FscWriteBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length, PVOID buffer) {
+NTSTATUS WriteCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length, PVOID buffer) {
     ULONG mask = ext->SectorSize - 1;
     LONGLONG first = offset & ~(LONGLONG)mask, end = (offset + length + mask) & ~(LONGLONG)mask;
     ULONG va = ((ULONG)buffer & ~(PAGE_SIZE - 1)) | (ULONG)(first & (PAGE_SIZE - 1));
-    NTSTATUS status = FscDeviceIo(ext, IRP_MJ_WRITE, first, (PVOID)va, (ULONG)(end - first));
+    NTSTATUS status = CacheDeviceIo(ext, IRP_MJ_WRITE, first, (PVOID)va, (ULONG)(end - first));
     if (NT_SUCCESS(status))
-        FscUnmapBuffer(buffer);
+        UnmapCacheBuffer(buffer);
     else
-        FscDiscardBuffer(buffer);
+        DiscardCacheBuffer(buffer);
     return status;
 }
 
 // Unmapped blocks of the extension in [firstBlock, lastBlock] become empty; mapped ones stay.
-static void FscInvalidateBlocks(FSCACHE_EXTENSION *ext, ULONG firstBlock, ULONG lastBlock) {
+static void InvalidateCacheBlocks(FSCACHE_EXTENSION *ext, ULONG firstBlock, ULONG lastBlock) {
     Lock();
-    for (PLIST_ENTRY l = FscLruList.Blink, prev; l != &FscLruList; l = prev) {
+    for (PLIST_ENTRY l = CacheLruList.Blink, prev; l != &CacheLruList; l = prev) {
         prev = l->Blink;
         auto e = CONTAINING_RECORD(l, FSC_ELEMENT, ListEntry);
         if (!e->CacheExtension)
@@ -262,28 +266,28 @@ static void FscInvalidateBlocks(FSCACHE_EXTENSION *ext, ULONG firstBlock, ULONG 
         if (e->CacheExtension == ext && e->BlockNumber >= firstBlock && e->BlockNumber <= lastBlock &&
             !(e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
             e->CacheExtension = nullptr;
-            FscMoveToHead(e);
+            MoveToCacheHead(e);
         }
     }
-    KeSetEvent(&FscBufferFree, 0, FALSE);
+    KeSetEvent(&CacheBufferFree, 0, FALSE);
     Unlock();
 }
 
-void FscInvalidateDevice(FSCACHE_EXTENSION *ext) {
-    FscInvalidateBlocks(ext, 0, 0xFFFFFFFF);
+void InvalidateCacheDevice(FSCACHE_EXTENSION *ext) {
+    InvalidateCacheBlocks(ext, 0, 0xFFFFFFFF);
 }
 
-void FscInvalidateByteRange(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length) {
+void InvalidateCacheRange(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length) {
     if (length)
-        FscInvalidateBlocks(ext, (ULONG)(offset >> PAGE_SHIFT), (ULONG)((offset + length - 1) >> PAGE_SHIFT));
+        InvalidateCacheBlocks(ext, (ULONG)(offset >> PAGE_SHIFT), (ULONG)((offset + length - 1) >> PAGE_SHIFT));
 }
 
 // Cached read into a caller's buffer (XDVDFS, UDF). As the reference: a read whose offset and buffer meet the
 // device's alignment goes straight to the device for its whole pages, with the unaligned head and the short tail
 // through the cache; anything else (and every read of a random-access file) is copied out of cache buffers.
 // `toEnd` = the read runs to the end of the file: then the direct part may be rounded up to whole sectors.
-static bool FscUseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
-                        bool toEnd) {
+static bool UseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
+                     bool toEnd) {
     ULONG align = device->AlignmentRequirement, off = (ULONG)offset;
     if ((fileFlags & FO_RANDOM_ACCESS) || (off & align) || ((ULONG)buffer & align & 0xFFF))
         return true;
@@ -299,20 +303,20 @@ static bool FscUseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset,
     return !(((off + length) ^ off) & ~0xFFFu); // within one page
 }
 
-NTSTATUS FscCachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
-                       bool toEnd) {
+NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
+                    bool toEnd) {
     auto out = (PUCHAR)buffer;
-    if (FscUseCache(ext->TargetDeviceObject, fileFlags, offset, length, buffer, toEnd)) {
+    if (UseCache(ext->TargetDeviceObject, fileFlags, offset, length, buffer, toEnd)) {
         while (length) {
             PVOID data;
-            NTSTATUS status = FscMapBuffer(ext, offset, FALSE, &data);
+            NTSTATUS status = MapCacheBuffer(ext, offset, FALSE, &data);
             if (!NT_SUCCESS(status))
                 return status;
             ULONG n = PAGE_SIZE - (ULONG)(offset & (PAGE_SIZE - 1));
             if (n > length)
                 n = length;
             RtlCopyMemory(out, data, n);
-            FscUnmapBuffer(data);
+            UnmapCacheBuffer(data);
             offset += n;
             out += n;
             length -= n;
@@ -321,139 +325,141 @@ NTSTATUS FscCachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset,
     }
     if (offset & (PAGE_SIZE - 1)) { // head up to the next page through the cache
         PVOID data;
-        NTSTATUS status = FscMapBuffer(ext, offset, FALSE, &data);
+        NTSTATUS status = MapCacheBuffer(ext, offset, FALSE, &data);
         if (!NT_SUCCESS(status))
             return status;
         ULONG n = PAGE_SIZE - (ULONG)(offset & (PAGE_SIZE - 1));
         RtlCopyMemory(out, data, n);
-        FscUnmapBuffer(data);
+        UnmapCacheBuffer(data);
         offset += n;
         out += n;
         length -= n;
     }
     ULONG mask = ext->SectorSize - 1, direct = toEnd ? (length + mask) & ~mask : length & ~(PAGE_SIZE - 1);
-    NTSTATUS status = FscDeviceIo(ext, IRP_MJ_READ, offset, out, direct);
+    NTSTATUS status = CacheDeviceIo(ext, IRP_MJ_READ, offset, out, direct);
     if (!NT_SUCCESS(status) || direct >= length)
         return status;
     offset += direct;
     out += direct;
     length -= direct; // the short tail through the cache
     PVOID data;
-    status = FscMapBuffer(ext, offset, FALSE, &data);
+    status = MapCacheBuffer(ext, offset, FALSE, &data);
     if (!NT_SUCCESS(status))
         return status;
     RtlCopyMemory(out, data, length);
-    FscUnmapBuffer(data);
+    UnmapCacheBuffer(data);
     return STATUS_SUCCESS;
 }
 
 // --- Size
 
-static NTSTATUS FscGrow(ULONG pages) {
+static NTSTATUS GrowCache(ULONG pages) {
     auto elements = (FSC_ELEMENT *)ExAllocatePoolWithTag(pages * sizeof(FSC_ELEMENT), 'AcsF');
     if (!elements)
         return STATUS_INSUFFICIENT_RESOURCES;
-    ULONG added = pages - FscNumberOfCachePages;
-    auto va = (ULONG)MiAllocateMappedPages(added, PTE_PRESENT | PTE_ACCESSED | PTE_DIRTY, false, MmFsCacheUsage);
+    ULONG added = pages - CachePages;
+    auto va = (ULONG)memory::AllocateMappedPages(added, PTE_PRESENT | PTE_ACCESSED | PTE_DIRTY, false, MmFsCacheUsage);
     if (!va) {
         ExFreePool(elements);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    if (FscNumberOfCachePages)
-        RtlCopyMemory(elements, FscElementArray, FscNumberOfCachePages * sizeof(FSC_ELEMENT));
-    for (ULONG i = FscNumberOfCachePages; i < pages; i++, va += PAGE_SIZE) {
+    if (CachePages)
+        RtlCopyMemory(elements, CacheElementArray, CachePages * sizeof(FSC_ELEMENT));
+    for (ULONG i = CachePages; i < pages; i++, va += PAGE_SIZE) {
         elements[i] = {0, nullptr, va, {}};
-        FscSetIndex(va, i);
+        SetCacheIndex(va, i);
     }
-    if (FscElementArray)
-        ExFreePool(FscElementArray);
-    FscElementArray = elements;
-    FscNumberOfCachePages = pages;
-    FscRebuildList();
+    if (CacheElementArray)
+        ExFreePool(CacheElementArray);
+    CacheElementArray = elements;
+    CachePages = pages;
+    RebuildCacheList();
     return STATUS_SUCCESS;
 }
 
 // Shrinking discards unmapped buffers (waiting for mapped ones to be released) and frees their pages.
-static NTSTATUS FscShrink(ULONG pages) {
+static NTSTATUS ShrinkCache(ULONG pages) {
     auto elements = pages ? (FSC_ELEMENT *)ExAllocatePoolWithTag(pages * sizeof(FSC_ELEMENT), 'AcsF') : nullptr;
     if (pages && !elements)
         return STATUS_INSUFFICIENT_RESOURCES;
-    ULONG excess = FscNumberOfCachePages - pages;
+    ULONG excess = CachePages - pages;
     while (excess) {
-        for (ULONG i = FscNumberOfCachePages; i-- && excess;) {
-            FSC_ELEMENT *e = &FscElementArray[i];
-            if (!FscUsage(e) && !(e->CacheBuffer & (FSC_READ_IN_PROGRESS | FSC_DISCARDING))) {
+        for (ULONG i = CachePages; i-- && excess;) {
+            FSC_ELEMENT *e = &CacheElementArray[i];
+            if (!CacheUsage(e) && !(e->CacheBuffer & (FSC_READ_IN_PROGRESS | FSC_DISCARDING))) {
                 e->CacheBuffer |= FSC_DISCARDING;
                 e->CacheExtension = nullptr;
                 excess--;
             }
         }
         if (excess) {
-            KeResetEvent(&FscBufferFree);
+            KeResetEvent(&CacheBufferFree);
             Unlock();
-            KeWaitForSingleObject(&FscBufferFree, Executive, KernelMode, FALSE, nullptr);
+            KeWaitForSingleObject(&CacheBufferFree, Executive, KernelMode, FALSE, nullptr);
             Lock();
         }
     }
     ULONG kept = 0;
-    for (ULONG i = 0; i < FscNumberOfCachePages; i++) {
-        FSC_ELEMENT *e = &FscElementArray[i];
+    for (ULONG i = 0; i < CachePages; i++) {
+        FSC_ELEMENT *e = &CacheElementArray[i];
         if (e->CacheBuffer & FSC_DISCARDING) {
-            MmFreeSystemMemory((PVOID)FscVa(e), PAGE_SIZE);
+            MmFreeSystemMemory((PVOID)CacheVirtualAddress(e), PAGE_SIZE);
             continue;
         }
         elements[kept] = *e;
-        FscSetIndex(FscVa(e), kept);
+        SetCacheIndex(CacheVirtualAddress(e), kept);
         kept++;
     }
-    ExFreePool(FscElementArray);
-    FscElementArray = elements;
-    FscNumberOfCachePages = pages;
-    FscRebuildList();
-    KeSetEvent(&FscBufferFree, 0, FALSE);
+    ExFreePool(CacheElementArray);
+    CacheElementArray = elements;
+    CachePages = pages;
+    RebuildCacheList();
+    KeSetEvent(&CacheBufferFree, 0, FALSE);
     return STATUS_SUCCESS;
 }
 
 XBAPI ULONG NTAPI FscGetCacheSize() {
-    return FscNumberOfCachePages;
+    return CachePages;
 }
 
 XBAPI NTSTATUS NTAPI FscSetCacheSize(ULONG NumberOfCachePages) {
     if (NumberOfCachePages > 0x800)
         return STATUS_INVALID_PARAMETER;
-    KeWaitForSingleObject(&FscSizeLock, Executive, KernelMode, FALSE, nullptr);
+    KeWaitForSingleObject(&CacheSizeLock, Executive, KernelMode, FALSE, nullptr);
     Lock();
     NTSTATUS status = STATUS_SUCCESS;
-    if (NumberOfCachePages > FscNumberOfCachePages)
-        status = FscGrow(NumberOfCachePages);
-    else if (NumberOfCachePages < FscNumberOfCachePages)
-        status = FscShrink(NumberOfCachePages);
+    if (NumberOfCachePages > CachePages)
+        status = GrowCache(NumberOfCachePages);
+    else if (NumberOfCachePages < CachePages)
+        status = ShrinkCache(NumberOfCachePages);
     Unlock();
-    KeSetEvent(&FscSizeLock, 0, FALSE);
+    KeSetEvent(&CacheSizeLock, 0, FALSE);
     return status;
 }
 
 // Every unmapped buffer becomes empty.
 XBAPI void NTAPI FscInvalidateIdleBlocks() {
     Lock();
-    for (ULONG i = 0; i < FscNumberOfCachePages; i++) {
-        FSC_ELEMENT *e = &FscElementArray[i];
-        if (e->CacheExtension && !FscUsage(e) && !(e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
+    for (ULONG i = 0; i < CachePages; i++) {
+        FSC_ELEMENT *e = &CacheElementArray[i];
+        if (e->CacheExtension && !CacheUsage(e) && !(e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
             e->CacheExtension = nullptr;
-            FscMoveToHead(e);
+            MoveToCacheHead(e);
         }
     }
-    KeSetEvent(&FscBufferFree, 0, FALSE);
+    KeSetEvent(&CacheBufferFree, 0, FALSE);
     Unlock();
 }
 
-void FscInitialize() {
-    KeInitializeEvent(&FscLock, SynchronizationEvent, TRUE);
-    KeInitializeEvent(&FscSizeLock, SynchronizationEvent, TRUE);
-    KeInitializeEvent(&FscBufferFree, NotificationEvent, FALSE);
-    KeInitializeEvent(&FscReadComplete, NotificationEvent, FALSE);
-    FscElementArray = nullptr;
-    FscNumberOfCachePages = 0;
-    InitializeListHead(&FscLruList);
+void InitCache() {
+    KeInitializeEvent(&CacheLock, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&CacheSizeLock, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&CacheBufferFree, NotificationEvent, FALSE);
+    KeInitializeEvent(&CacheReadComplete, NotificationEvent, FALSE);
+    CacheElementArray = nullptr;
+    CachePages = 0;
+    InitializeListHead(&CacheLruList);
     FscSetCacheSize(16);
 }
+
+} // namespace xk::filesystems

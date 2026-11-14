@@ -3,7 +3,7 @@
 //
 // Kept simple, as one HTTP request per connection on the local network allows:
 // - receiving: in-order data only. A segment past a gap is dropped and the expected one asked for again (a duplicate
-//   ACK). One ACK per connection after each batch of received frames (NetpTcpPoll), not one per segment: a full window
+//   ACK). One ACK per connection after each batch of received frames (PollTcp), not one per segment: a full window
 //   is some 45 segments, and an ACK each would queue behind the card's transmit ring. The window is the receive
 //   buffer's free space, at most 64 KB less one byte (the field's limit), so a sender never has more in flight than
 //   the card's receive ring holds (network/nic.cpp).
@@ -14,6 +14,8 @@
 #include <xk/network_stack.h>
 #include <xk/memory.h>
 #include <xk/runtime.h>
+
+namespace xk::network {
 
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
@@ -28,12 +30,12 @@ enum TCP_STATE : UCHAR { TcpFree, TcpSynReceived, TcpEstablished };
 
 struct NETP_CONNECTION {
     TCP_STATE State;
-    bool Accepted;        // handed to the caller (NetTcpAccept)
-    bool FinQueued;       // NetTcpClose: a FIN follows the queued data
-    bool FinSent;         // our FIN is in SndNxt
-    bool PeerFin;         // the peer's FIN has arrived
-    bool AckDue;          // data or a FIN arrived since our last segment: NetpTcpPoll acknowledges it
-    UCHAR Generation;     // part of the id: a new connection in this slot gets a new one
+    bool Accepted;    // handed to the caller (AcceptTcp)
+    bool FinQueued;   // CloseTcp: a FIN follows the queued data
+    bool FinSent;     // our FIN is in SndNxt
+    bool PeerFin;     // the peer's FIN has arrived
+    bool AckDue;      // data or a FIN arrived since our last segment: PollTcp acknowledges it
+    UCHAR Generation; // part of the id: a new connection in this slot gets a new one
     UCHAR PeerMac[6], PeerIp[4];
     USHORT PeerPort, PeerMss;
     ULONG SndUna, SndNxt; // the oldest unacknowledged and the next sequence number we send
@@ -48,41 +50,41 @@ struct NETP_CONNECTION {
     ULONG HeardMs, FinAckedMs;
 };
 
-static NETP_CONNECTION *NetpConnections; // NET_TCP_CONNECTIONS of them, and their buffers after them
+static NETP_CONNECTION *Connections; // NET_TCP_CONNECTIONS of them, and their buffers after them
 
 // --- Connections and ids
 
-static LONG NetpId(ULONG Slot) {
-    return (LONG)(Slot | (ULONG)NetpConnections[Slot].Generation << 8);
+static LONG ConnectionId(ULONG Slot) {
+    return (LONG)(Slot | (ULONG)Connections[Slot].Generation << 8);
 }
 
 // The open connection Id names, or null.
-static NETP_CONNECTION *NetpConnection(LONG Id) {
+static NETP_CONNECTION *ConnectionOf(LONG Id) {
     ULONG slot = (ULONG)Id & 0xFF;
-    if (Id < 0 || slot >= NET_TCP_CONNECTIONS || !NetpConnections)
+    if (Id < 0 || slot >= NET_TCP_CONNECTIONS || !Connections)
         return nullptr;
-    NETP_CONNECTION *c = &NetpConnections[slot];
+    NETP_CONNECTION *c = &Connections[slot];
     return c->State != TcpFree && c->Generation == (UCHAR)(Id >> 8) ? c : nullptr;
 }
 
-static void NetpFree(NETP_CONNECTION *c) {
+static void FreeConnection(NETP_CONNECTION *c) {
     c->State = TcpFree;
     c->Generation++;
 }
 
-static ULONG NetpWindow(const NETP_CONNECTION *c) {
+static ULONG ReceiveWindow(const NETP_CONNECTION *c) {
     return RX_SIZE - c->RxCount;
 }
 
 // Received bytes into the receive ring, and out of it, in at most two copies each (where the ring wraps).
-static void NetpRingPut(NETP_CONNECTION *c, const UCHAR *Data, ULONG Length) {
+static void RingPut(NETP_CONNECTION *c, const UCHAR *Data, ULONG Length) {
     ULONG tail = (c->RxStart + c->RxCount) % RX_SIZE, first = Length < RX_SIZE - tail ? Length : RX_SIZE - tail;
     RtlCopyMemory(c->Rx + tail, Data, first);
     RtlCopyMemory(c->Rx, Data + first, Length - first);
     c->RxCount += Length;
 }
 
-static void NetpRingTake(NETP_CONNECTION *c, PUCHAR Out, ULONG Length) {
+static void RingTake(NETP_CONNECTION *c, PUCHAR Out, ULONG Length) {
     ULONG first = Length < RX_SIZE - c->RxStart ? Length : RX_SIZE - c->RxStart;
     RtlCopyMemory(Out, c->Rx + c->RxStart, first);
     RtlCopyMemory(Out + first, c->Rx, Length - first);
@@ -90,81 +92,81 @@ static void NetpRingTake(NETP_CONNECTION *c, PUCHAR Out, ULONG Length) {
     c->RxCount -= Length;
 }
 
-bool NetpTcpStart() {
+bool StartTcp() {
     ULONG size = NET_TCP_CONNECTIONS * (sizeof(NETP_CONNECTION) + RX_SIZE + TX_SIZE);
-    NetpConnections = (NETP_CONNECTION *)MmAllocateSystemMemory(size, PAGE_READWRITE);
-    if (!NetpConnections)
+    Connections = (NETP_CONNECTION *)MmAllocateSystemMemory(size, PAGE_READWRITE);
+    if (!Connections)
         return false;
-    RtlZeroMemory(NetpConnections, NET_TCP_CONNECTIONS * sizeof(NETP_CONNECTION));
-    PUCHAR buffers = (PUCHAR)(NetpConnections + NET_TCP_CONNECTIONS);
+    RtlZeroMemory(Connections, NET_TCP_CONNECTIONS * sizeof(NETP_CONNECTION));
+    PUCHAR buffers = (PUCHAR)(Connections + NET_TCP_CONNECTIONS);
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
-        NetpConnections[i].Rx = buffers + i * (RX_SIZE + TX_SIZE);
-        NetpConnections[i].Tx = NetpConnections[i].Rx + RX_SIZE;
+        Connections[i].Rx = buffers + i * (RX_SIZE + TX_SIZE);
+        Connections[i].Tx = Connections[i].Rx + RX_SIZE;
     }
     return true;
 }
 
-void NetpTcpStop() {
-    if (!NetpConnections)
+void StopTcp() {
+    if (!Connections)
         return;
-    MmFreeSystemMemory(NetpConnections, NET_TCP_CONNECTIONS * (sizeof(NETP_CONNECTION) + RX_SIZE + TX_SIZE));
-    NetpConnections = nullptr;
+    MmFreeSystemMemory(Connections, NET_TCP_CONNECTIONS * (sizeof(NETP_CONNECTION) + RX_SIZE + TX_SIZE));
+    Connections = nullptr;
 }
 
 // --- Segments out
 
 // One segment with Flags, sequence number Seq and Length bytes of Data, to the connection's peer (or, for a reset
 // of an unknown connection, to the given peer).
-static void NetpSegment(const UCHAR *Mac, const UCHAR *Ip, USHORT PeerPort, ULONG Seq, ULONG Ack, UCHAR Flags,
+static void SendSegment(const UCHAR *Mac, const UCHAR *Ip, USHORT PeerPort, ULONG Seq, ULONG Ack, UCHAR Flags,
                         ULONG Window, const UCHAR *Data, ULONG Length) {
-    PUCHAR t = NetpIpPayload();
+    PUCHAR t = IpPayload();
     if (!t)
         return; // the card is busy: the retransmission timer sends it again
     ULONG header = (Flags & SYN) ? 24 : 20; // a SYN carries our MSS
-    NetPut16(t, HTTP_PORT);
-    NetPut16(t + 2, PeerPort);
-    NetPut32(t + 4, Seq);
-    NetPut32(t + 8, Ack);
+    StoreBigEndian16(t, HTTP_PORT);
+    StoreBigEndian16(t + 2, PeerPort);
+    StoreBigEndian32(t + 4, Seq);
+    StoreBigEndian32(t + 8, Ack);
     t[12] = (UCHAR)(header / 4 << 4);
     t[13] = Flags;
-    NetPut16(t + 14, (USHORT)(Window > 0xFFFF ? 0xFFFF : Window));
-    NetPut16(t + 16, 0);
-    NetPut16(t + 18, 0);
+    StoreBigEndian16(t + 14, (USHORT)(Window > 0xFFFF ? 0xFFFF : Window));
+    StoreBigEndian16(t + 16, 0);
+    StoreBigEndian16(t + 18, 0);
     if (Flags & SYN) {
         t[20] = 2; // MSS option
         t[21] = 4;
-        NetPut16(t + 22, MSS);
+        StoreBigEndian16(t + 22, MSS);
     }
     if (Length)
         RtlCopyMemory(t + header, Data, Length);
     // The checksum covers a pseudo-header: both addresses, the protocol and the segment's length.
     UCHAR pseudo[12];
-    RtlCopyMemory(pseudo, NetIp, 4);
+    RtlCopyMemory(pseudo, IpAddress, 4);
     RtlCopyMemory(pseudo + 4, Ip, 4);
     pseudo[8] = 0;
     pseudo[9] = NET_TCP;
-    NetPut16(pseudo + 10, (USHORT)(header + Length));
-    NetPut16(t + 16, NetpFold(NetpSum(t, header + Length, NetpSum(pseudo, 12, 0))));
-    NetpSendIp(Mac, Ip, NET_TCP, header + Length);
+    StoreBigEndian16(pseudo + 10, (USHORT)(header + Length));
+    StoreBigEndian16(t + 16, FoldChecksum(Checksum(t, header + Length, Checksum(pseudo, 12, 0))));
+    SendIp(Mac, Ip, NET_TCP, header + Length);
 }
 
-static void NetpSend(NETP_CONNECTION *c, ULONG Seq, UCHAR Flags, const UCHAR *Data, ULONG Length) {
-    c->Advertised = NetpWindow(c);
+static void SendOnConnection(NETP_CONNECTION *c, ULONG Seq, UCHAR Flags, const UCHAR *Data, ULONG Length) {
+    c->Advertised = ReceiveWindow(c);
     c->AckDue = false; // every segment carries our ACK
-    NetpSegment(c->PeerMac, c->PeerIp, c->PeerPort, Seq, c->RcvNxt, Flags, c->Advertised, Data, Length);
+    SendSegment(c->PeerMac, c->PeerIp, c->PeerPort, Seq, c->RcvNxt, Flags, c->Advertised, Data, Length);
 }
 
-static void NetpAck(NETP_CONNECTION *c) {
-    NetpSend(c, c->SndNxt, ACK, nullptr, 0);
+static void SendAck(NETP_CONNECTION *c) {
+    SendOnConnection(c, c->SndNxt, ACK, nullptr, 0);
 }
 
-static void NetpReset(NETP_CONNECTION *c) {
-    NetpSend(c, c->SndNxt, RST | ACK, nullptr, 0);
-    NetpFree(c);
+static void ResetConnection(NETP_CONNECTION *c) {
+    SendOnConnection(c, c->SndNxt, RST | ACK, nullptr, 0);
+    FreeConnection(c);
 }
 
 // Sends what the peer's window allows of the queued data, then our FIN once everything has gone out.
-static void NetpTransmit(NETP_CONNECTION *c) {
+static void TransmitConnection(NETP_CONNECTION *c) {
     if (c->State != TcpEstablished)
         return;
     ULONG window = c->SndWindow ? c->SndWindow : 1; // a closed window gets a one-byte probe
@@ -177,15 +179,15 @@ static void NetpTransmit(NETP_CONNECTION *c) {
         if (n > window - inFlight)
             n = window - inFlight;
         if (inFlight == 0)
-            c->SentMs = NetpMilliseconds();
-        NetpSend(c, c->SndNxt, ACK | PSH, c->Tx + inFlight, n);
+            c->SentMs = Milliseconds();
+        SendOnConnection(c, c->SndNxt, ACK | PSH, c->Tx + inFlight, n);
         c->SndNxt += n;
         inFlight += n;
     }
     if (c->FinQueued && !c->FinSent && inFlight == c->TxCount) {
         if (c->SndNxt == c->SndUna)
-            c->SentMs = NetpMilliseconds();
-        NetpSend(c, c->SndNxt, FIN | ACK, nullptr, 0);
+            c->SentMs = Milliseconds();
+        SendOnConnection(c, c->SndNxt, FIN | ACK, nullptr, 0);
         c->SndNxt++;
         c->FinSent = true;
     }
@@ -194,20 +196,20 @@ static void NetpTransmit(NETP_CONNECTION *c) {
 // --- Segments in
 
 // A segment for a connection we do not have: a SYN opens one, anything but a reset is answered with a reset.
-static void NetpNewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t, ULONG Length, ULONG HeaderLength) {
+static void NewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t, ULONG Length, ULONG HeaderLength) {
     UCHAR flags = t[13];
-    USHORT port = NetGet16(t);
-    ULONG seq = NetGet32(t + 4);
+    USHORT port = LoadBigEndian16(t);
+    ULONG seq = LoadBigEndian32(t + 4);
     if (flags & RST)
         return;
     NETP_CONNECTION *c = nullptr;
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS && !c; i++) {
-        if (NetpConnections[i].State == TcpFree)
-            c = &NetpConnections[i];
+        if (Connections[i].State == TcpFree)
+            c = &Connections[i];
     }
-    if (!(flags & SYN) || (flags & ACK) || !c || NetGet16(t + 2) != HTTP_PORT) {
-        ULONG ack = (flags & ACK) ? NetGet32(t + 8) : 0;
-        NetpSegment(Mac, Ip, port, ack, seq + Length - HeaderLength + ((flags & SYN) ? 1 : 0), RST | ACK, 0, nullptr,
+    if (!(flags & SYN) || (flags & ACK) || !c || LoadBigEndian16(t + 2) != HTTP_PORT) {
+        ULONG ack = (flags & ACK) ? LoadBigEndian32(t + 8) : 0;
+        SendSegment(Mac, Ip, port, ack, seq + Length - HeaderLength + ((flags & SYN) ? 1 : 0), RST | ACK, 0, nullptr,
                     0);
         return;
     }
@@ -231,19 +233,19 @@ static void NetpNewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t,
             continue;
         }
         if (kind == 2 && t[i + 1] == 4 && i + 4 <= HeaderLength)
-            c->PeerMss = NetGet16(t + i + 2);
+            c->PeerMss = LoadBigEndian16(t + i + 2);
         i += t[i + 1] ? t[i + 1] : 1;
     }
     c->RcvNxt = seq + 1;
-    c->SndUna = c->SndNxt = NetpMilliseconds() * 2654435761u; // the initial sequence number
-    c->SndWindow = NetGet16(t + 14);
-    c->HeardMs = c->SentMs = NetpMilliseconds();
-    NetpSend(c, c->SndNxt, SYN | ACK, nullptr, 0);
+    c->SndUna = c->SndNxt = Milliseconds() * 2654435761u; // the initial sequence number
+    c->SndWindow = LoadBigEndian16(t + 14);
+    c->HeardMs = c->SentMs = Milliseconds();
+    SendOnConnection(c, c->SndNxt, SYN | ACK, nullptr, 0);
     c->SndNxt++;
 }
 
 // The acknowledgement in a segment: acknowledged data leaves the send buffer.
-static void NetpAcknowledged(NETP_CONNECTION *c, ULONG Ack, ULONG Window) {
+static void Acknowledged(NETP_CONNECTION *c, ULONG Ack, ULONG Window) {
     ULONG acked = Ack - c->SndUna;
     if (acked == 0 || acked > c->SndNxt - c->SndUna) // nothing new, or more than we sent
         return;
@@ -261,52 +263,52 @@ static void NetpAcknowledged(NETP_CONNECTION *c, ULONG Ack, ULONG Window) {
     c->SndUna = Ack;
     c->SndWindow = Window;
     c->Retries = 0;
-    c->SentMs = NetpMilliseconds();
+    c->SentMs = Milliseconds();
     if (finAcked)
-        c->FinAckedMs = NetpMilliseconds();
+        c->FinAckedMs = Milliseconds();
 }
 
-void NetpTcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, ULONG Length) {
-    if (!NetpConnections || Length < 20)
+void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, ULONG Length) {
+    if (!Connections || Length < 20)
         return;
     ULONG headerLength = (t[12] >> 4) * 4;
     UCHAR pseudo[12];
     RtlCopyMemory(pseudo, SourceIp, 4);
-    RtlCopyMemory(pseudo + 4, NetIp, 4);
+    RtlCopyMemory(pseudo + 4, IpAddress, 4);
     pseudo[8] = 0;
     pseudo[9] = NET_TCP;
-    NetPut16(pseudo + 10, (USHORT)Length);
-    if (headerLength < 20 || headerLength > Length || NetpFold(NetpSum(t, Length, NetpSum(pseudo, 12, 0))))
+    StoreBigEndian16(pseudo + 10, (USHORT)Length);
+    if (headerLength < 20 || headerLength > Length || FoldChecksum(Checksum(t, Length, Checksum(pseudo, 12, 0))))
         return;
-    USHORT port = NetGet16(t);
+    USHORT port = LoadBigEndian16(t);
     NETP_CONNECTION *c = nullptr;
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS && !c; i++) {
-        NETP_CONNECTION *k = &NetpConnections[i];
+        NETP_CONNECTION *k = &Connections[i];
         if (k->State != TcpFree && k->PeerPort == port && RtlCompareMemory(k->PeerIp, SourceIp, 4) == 4)
             c = k;
     }
     if (!c)
-        return NetpNewConnection(SourceMac, SourceIp, t, Length, headerLength);
+        return NewConnection(SourceMac, SourceIp, t, Length, headerLength);
     UCHAR flags = t[13];
-    ULONG seq = NetGet32(t + 4), dataLength = Length - headerLength;
-    c->HeardMs = NetpMilliseconds();
+    ULONG seq = LoadBigEndian32(t + 4), dataLength = Length - headerLength;
+    c->HeardMs = Milliseconds();
     if (flags & RST) {
-        NetpFree(c);
+        FreeConnection(c);
         return;
     }
     if (flags & SYN) { // our SYN-ACK was lost: send it again
         if (c->State == TcpSynReceived)
-            NetpSend(c, c->SndUna, SYN | ACK, nullptr, 0);
+            SendOnConnection(c, c->SndUna, SYN | ACK, nullptr, 0);
         return;
     }
     if (flags & ACK)
-        NetpAcknowledged(c, NetGet32(t + 8), NetGet16(t + 14));
+        Acknowledged(c, LoadBigEndian32(t + 8), LoadBigEndian16(t + 14));
     if (c->State != TcpEstablished)
         return;
     bool acknowledge = dataLength || (flags & FIN);
     if (seq == c->RcvNxt && dataLength) { // in order: as much as the buffer holds
-        ULONG n = dataLength < NetpWindow(c) ? dataLength : NetpWindow(c);
-        NetpRingPut(c, t + headerLength, n);
+        ULONG n = dataLength < ReceiveWindow(c) ? dataLength : ReceiveWindow(c);
+        RingPut(c, t + headerLength, n);
         c->RcvNxt += n;
         dataLength = n;
     }
@@ -316,102 +318,104 @@ void NetpTcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR 
     }
     if (acknowledge)
         c->AckDue = true; // a duplicate ACK when the segment was out of order
-    NetpTransmit(c);
+    TransmitConnection(c);
 }
 
 // --- Timers
 
-void NetpTcpPoll() {
-    if (!NetpConnections)
+void PollTcp() {
+    if (!Connections)
         return;
-    ULONG now = NetpMilliseconds();
+    ULONG now = Milliseconds();
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
-        NETP_CONNECTION *c = &NetpConnections[i];
+        NETP_CONNECTION *c = &Connections[i];
         if (c->State == TcpFree)
             continue;
         if (now - c->HeardMs >= IDLE_MS) {
-            NetpReset(c);
+            ResetConnection(c);
             continue;
         }
         bool finAcked = c->FinSent && c->SndUna == c->SndNxt;
         if (finAcked && (c->PeerFin || now - c->FinAckedMs >= CLOSE_MS)) {
-            NetpFree(c);
+            FreeConnection(c);
             continue;
         }
         if (c->SndUna != c->SndNxt && now - c->SentMs >= RETRY_MS) { // nothing acknowledged for a while
             if (++c->Retries > RETRIES) {
-                NetpReset(c);
+                ResetConnection(c);
                 continue;
             }
             c->SentMs = now;
             if (c->State == TcpSynReceived) {
-                NetpSend(c, c->SndUna, SYN | ACK, nullptr, 0);
+                SendOnConnection(c, c->SndUna, SYN | ACK, nullptr, 0);
                 continue;
             }
             c->SndNxt = c->SndUna; // go back: everything from the oldest unacknowledged byte again
             c->FinSent = false;
         }
-        NetpTransmit(c);
+        TransmitConnection(c);
         if (c->AckDue) // nothing went out to carry it
-            NetpAck(c);
+            SendAck(c);
     }
 }
 
 // --- The caller's side
 
-LONG NetTcpAccept() {
-    for (ULONG i = 0; NetpConnections && i < NET_TCP_CONNECTIONS; i++) {
-        NETP_CONNECTION *c = &NetpConnections[i];
+LONG AcceptTcp() {
+    for (ULONG i = 0; Connections && i < NET_TCP_CONNECTIONS; i++) {
+        NETP_CONNECTION *c = &Connections[i];
         if (c->State == TcpEstablished && !c->Accepted) {
             c->Accepted = true;
-            return NetpId(i);
+            return ConnectionId(i);
         }
     }
     return -1;
 }
 
-bool NetTcpOpen(LONG Id) {
-    return NetpConnection(Id) != nullptr;
+bool IsTcpOpen(LONG Id) {
+    return ConnectionOf(Id) != nullptr;
 }
 
-ULONG NetTcpReceive(LONG Id, PVOID Buffer, ULONG Size) {
-    NETP_CONNECTION *c = NetpConnection(Id);
+ULONG ReceiveTcp(LONG Id, PVOID Buffer, ULONG Size) {
+    NETP_CONNECTION *c = ConnectionOf(Id);
     if (!c)
         return 0;
     ULONG n = Size < c->RxCount ? Size : c->RxCount;
-    NetpRingTake(c, (PUCHAR)Buffer, n);
+    RingTake(c, (PUCHAR)Buffer, n);
     // The window has grown by two segments or more since we last told the peer: tell it now (a window update), or it
     // keeps sending into the smaller window it knows, or waits for its own timer when that one had closed.
-    if (n && NetpWindow(c) >= c->Advertised + 2 * MSS)
-        NetpAck(c);
+    if (n && ReceiveWindow(c) >= c->Advertised + 2 * MSS)
+        SendAck(c);
     return n;
 }
 
-bool NetTcpPeerClosed(LONG Id) {
-    NETP_CONNECTION *c = NetpConnection(Id);
+bool TcpPeerClosed(LONG Id) {
+    NETP_CONNECTION *c = ConnectionOf(Id);
     return !c || (c->PeerFin && !c->RxCount);
 }
 
-ULONG NetTcpSend(LONG Id, const void *Data, ULONG Size) {
-    NETP_CONNECTION *c = NetpConnection(Id);
+ULONG SendTcp(LONG Id, const void *Data, ULONG Size) {
+    NETP_CONNECTION *c = ConnectionOf(Id);
     if (!c || c->FinQueued)
         return 0;
     ULONG n = Size < TX_SIZE - c->TxCount ? Size : TX_SIZE - c->TxCount;
     RtlCopyMemory(c->Tx + c->TxCount, Data, n);
     c->TxCount += n;
-    NetpTransmit(c);
+    TransmitConnection(c);
     return n;
 }
 
-bool NetTcpAllSent(LONG Id) {
-    NETP_CONNECTION *c = NetpConnection(Id);
+bool TcpAllSent(LONG Id) {
+    NETP_CONNECTION *c = ConnectionOf(Id);
     return !c || c->TxCount == 0;
 }
 
-void NetTcpClose(LONG Id) {
-    NETP_CONNECTION *c = NetpConnection(Id);
+void CloseTcp(LONG Id) {
+    NETP_CONNECTION *c = ConnectionOf(Id);
     if (!c)
         return;
     c->FinQueued = true;
-    NetpTransmit(c);
+    TransmitConnection(c);
 }
+
+} // namespace xk::network

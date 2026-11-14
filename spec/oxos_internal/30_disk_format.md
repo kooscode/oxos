@@ -59,7 +59,7 @@ again by a format): `OXOS BLANK DISK\0` and the countdown in seconds (4 bytes, l
 ## 4. Formatting at boot, after a countdown
 On a cold boot, before the layout is read (the first partition open). The checks are boot-only code
 (spec/oxos_internal/18 §2): a quick reboot finds the disk the cold boot left and skips them
-(`MmBootPagesPresent`):
+(`memory::BootPagesPresent`):
 1. **Blank disk:** every sector a layout is recognised by reads back as zeros: 0, 1, 2048, the last and the one 8
    before it, and the first sectors of the retail C: and E:. The C: and E: checks matter: the first sectors of a
    retail FATX disk can be all zeros, and such a disk must never be taken for blank. A read that fails means not blank
@@ -70,7 +70,7 @@ On a cold boot, before the layout is read (the first partition open). The checks
 3. **The default countdown** is 30 s in release builds (made with `VERSION=`) and 5 s in development builds.
 4. **The countdown screen** (the splash ends first): the seconds in large digits, "Blank Hard Disk Found" or
    "Unsupported Hard Disk Found", the disk's model and size, what it holds ("nothing (blank)", "MBR: NTFS",
-   "GPT: EFI, NTFS", "FAT32, no partition table"; `IdexDiskDescribe`: the file systems of the first four partitions
+   "GPT: EFI, NTFS", "FAT32, no partition table"; `storage::DescribeDisk`: the file systems of the first four partitions
    by their signatures, else by their partition type; an EFI system partition named as such), and "Turn the console
    off now to keep the disk." It counts down on the screen and the serial port; turning the console off keeps the
    disk as it is. Then the format (§2) and the layout is read again.
@@ -89,11 +89,12 @@ On a cold boot, before the layout is read (the first partition open). The checks
 - Unit tests (`tests/unit/test_format.cpp`): 8 GB and 2 TB images pass `fsck.exfat`; the folders and a kept file read
   back; both GPT headers and entry arrays check out; blank / formatted / partitions deleted; a FATX disk is not blank
   and the delete clears its headers; a failed read is not blank; bad paths refused.
-- Unit tests also: the marker sets the countdown (0, 5, 30, capped at 600; a format clears it); `IdexDiskDescribe`
+- Unit tests also: the marker sets the countdown (0, 5, 30, capped at 600; a format clears it); `storage::DescribeDisk`
   names MBR + NTFS, MBR + ext4, an MBR type alone, FAT32 without a table, our own GPT + exFAT, a blank disk.
 - `make test_format` (xemu, a development build): a new blank 16 GB disk (5 s countdown, the screen shown), a blank one
   with a 0 s marker (at once), and an MBR disk with NTFS (5 s, "Unsupported Hard Disk Found", "Holds: MBR: NTFS"); each
-  formatted (GPT, partition at 2048, the seven folders, a clean volume for `tests/exfat.py`), then 13. `make test_dash`, `test_exfat`, `test_fatal` unchanged.
+  formatted (GPT, partition at 2048, the seven folders, a clean volume for `tests/exfat.py`), then 13. `make test_dash`,
+  `test_exfat`, `test_fatal` unchanged.
 - Console (debug kit, Crucial M4 256 GB SSD, FATX, 2026-11-07): `SITE FORMAT-EXFAT YES` formatted it in 0.4 s and
   the server came back from `E:\ftp\ftp.xbe` on the new disk; a 3 MB file uploaded and read back. Then
   `SITE DELETE-ALL-PARTITIONS YES`: deleted in 0.1 s, reboot, "blank: formatting it as exFAT" (0.35 s), the netboot

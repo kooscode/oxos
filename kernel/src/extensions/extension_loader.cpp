@@ -14,6 +14,8 @@
 #include <xk/serial.h>
 #include <xk/titles.h>
 
+namespace xk::extensions {
+
 namespace {
 
 constexpr char LIST_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_extensions.ini";
@@ -58,9 +60,9 @@ ULONG IndexChecksum(const STATE_INDEX *Index) {
     return sum;
 }
 
-// The persisted index (the kernel keeps its address in XkExtensionsStateIndex, extensions/extension_runtime.cpp).
+// The persisted index (the kernel keeps its address in StateIndexPage, extensions/extension_runtime.cpp).
 STATE_INDEX *&StateIndex() {
-    return *reinterpret_cast<STATE_INDEX **>(&XkExtensionsStateIndex);
+    return *reinterpret_cast<STATE_INDEX **>(&StateIndexPage);
 }
 
 bool SameName(const char *A, const char *B) {
@@ -76,7 +78,7 @@ bool SameName(const char *A, const char *B) {
 
 // Checks the state index at the start of a launch: none after a cold boot, a new one when its contents are not intact
 // (the pages it named stay lost until the next cold boot).
-static void XkpCheckStateIndex() {
+static void CheckStateIndex() {
     STATE_INDEX *index = StateIndex();
     if (!KiQuickRebootFlag || !index) {
         StateIndex() = nullptr;
@@ -93,7 +95,7 @@ static void XkpCheckStateIndex() {
 }
 
 // The state page of Name, taken for this launch: an existing one, or a new zeroed one (*IsNew).
-static PVOID XkpStatePage(const char *Name, BOOLEAN *IsNew) {
+static PVOID StatePageFor(const char *Name, BOOLEAN *IsNew) {
     STATE_INDEX *index = StateIndex();
     for (ULONG i = 0; index && i < index->Count; i++) {
         STATE_INDEX_ENTRY &e = index->Entries[i];
@@ -131,7 +133,7 @@ static PVOID XkpStatePage(const char *Name, BOOLEAN *IsNew) {
 }
 
 // Gives back the state page of an extension whose Load failed: freed with the pages no extension took.
-static void XkpReleaseStatePage(PVOID Page) {
+static void ReleaseStatePage(PVOID Page) {
     STATE_INDEX *index = StateIndex();
     for (ULONG i = 0; index && Page && i < index->Count; i++) {
         if (index->Entries[i].Page == Page)
@@ -140,7 +142,7 @@ static void XkpReleaseStatePage(PVOID Page) {
 }
 
 // After the loads: frees the pages no extension took at this launch, and the index when it holds none.
-static void XkpTidyStateIndex() {
+static void TidyStateIndex() {
     STATE_INDEX *index = StateIndex();
     if (!index)
         return;
@@ -188,12 +190,12 @@ bool IsKernelCode(ULONG Address) {
 
 // The index of the extension Context belongs to.
 ULONG ExtensionIndex(OXOS_CONTEXT *Context) {
-    return (ULONG)((XK_EXTENSION *)Context - XkExtensionsState->Extensions);
+    return (ULONG)((XK_EXTENSION *)Context - LoadedExtensions->Extensions);
 }
 
 NTSTATUS NTAPI HookExport(OXOS_CONTEXT *Context, ULONG Ordinal, PVOID Replacement, PVOID *Next) {
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
-    ULONG target = XeKernelExport(Ordinal);
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
+    ULONG target = titles::KernelExportAddress(Ordinal);
     if (!target || !Replacement)
         return STATUS_INVALID_PARAMETER;
     for (ULONG ordinal : NOT_HOOKABLE) {
@@ -214,7 +216,7 @@ NTSTATUS NTAPI HookExport(OXOS_CONTEXT *Context, ULONG Ordinal, PVOID Replacemen
 }
 
 NTSTATUS NTAPI RegisterEvent(OXOS_CONTEXT *Context, ULONG Event, PVOID Callback, PVOID CallbackContext) {
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
     if (!Event || Event >= OXOS_EVENT_COUNT || !Callback)
         return STATUS_INVALID_PARAMETER;
     if (state->EventCount == XK_EXTENSION_EVENTS_MAX)
@@ -228,7 +230,7 @@ const OXOS_API LOADER_API = {sizeof(OXOS_API), HookExport, RegisterEvent};
 
 // Removes what extension Index registered (its Load failed).
 void DropRegistrations(ULONG Index) {
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
     ULONG kept = 0;
     for (ULONG i = 0; i < state->HookCount; i++) {
         if (state->Hooks[i].Extension != Index)
@@ -265,7 +267,7 @@ struct IMPORT_SLOTS {
 
 bool ResolveImport(PVOID Context, ULONG Ordinal, ULONG *Slot) {
     auto slots = (IMPORT_SLOTS *)Context;
-    ULONG target = XeKernelExport(Ordinal);
+    ULONG target = titles::KernelExportAddress(Ordinal);
     if (!target || slots->Count == IMPORT_SLOTS_MAX)
         return false;
     *Slot = target;
@@ -295,10 +297,10 @@ OXOS_SETTING *PoolSettings(const XK_EXTENSION_ENTRY &Entry) {
 
 } // namespace
 
-// Loads the extension Entry names as XkExtensionsState->Extensions[Count] and calls its Load; true when it stays.
+// Loads the extension Entry names as LoadedExtensions->Extensions[Count] and calls its Load; true when it stays.
 // *ImagesBytes counts the loaded images' sizes against IMAGES_MAX_BYTES.
-static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, ULONG *ImagesBytes) {
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
+static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, ULONG *ImagesBytes) {
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
     char *section = PoolText(Entry.Section);
     const char *name = section ? section : "?";
     char path[sizeof(FOLDER) + XK_EXTENSION_FILE_NAME_MAX];
@@ -308,13 +310,13 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
 
     ULONG size;
     NTSTATUS status;
-    auto file = (PUCHAR)XeReadOxosFile(path, FILE_MAX_BYTES, POOL_TAG, &size, &status);
+    auto file = (PUCHAR)titles::ReadOxosFile(path, FILE_MAX_BYTES, POOL_TAG, &size, &status);
     if (!file) {
         XK_SERIAL("extensions: [%s] %s not read (%#lx)\n", name, path, status);
         return false;
     }
     ULONG imageSize = 0;
-    XK_PE_ERROR error = XkPeCheck(file, size, &imageSize);
+    XK_PE_ERROR error = CheckImage(file, size, &imageSize);
     if (error == XK_PE_ERROR::NONE && *ImagesBytes + imageSize > IMAGES_MAX_BYTES) {
         XK_SERIAL("extensions: [%s] skipped: the loaded images would pass %lu KB\n", name, IMAGES_MAX_BYTES / 1024);
         ExFreePool(file);
@@ -322,14 +324,14 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
     }
     auto image = error == XK_PE_ERROR::NONE ? (PUCHAR)MmAllocateContiguousMemory(imageSize) : nullptr;
     if (image)
-        error = XkPeMap(file, size, image, imageSize, (ULONG)image);
+        error = MapImage(file, size, image, imageSize, (ULONG)image);
     ExFreePool(file);
     Slots->Extension = state->Count;
     ULONG firstSlot = Slots->Count;
     if (image && error == XK_PE_ERROR::NONE)
-        error = XkPeBindImports(image, imageSize, ResolveImport, Slots);
+        error = BindImports(image, imageSize, ResolveImport, Slots);
     bool bound = image && error == XK_PE_ERROR::NONE;
-    ULONG descriptorRva = bound ? XkPeFindExport(image, imageSize, OXOS_EXTENSION_EXPORT_NAME) : 0;
+    ULONG descriptorRva = bound ? FindExport(image, imageSize, OXOS_EXTENSION_EXPORT_NAME) : 0;
     auto descriptor = descriptorRva ? (const OXOS_EXTENSION *)(image + descriptorRva) : nullptr;
     const char *refused = error != XK_PE_ERROR::NONE ? "not a valid .xos image"
                           : !image                  ? "no memory for its image"
@@ -354,7 +356,7 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
     OXOS_CONTEXT &context = extension.Context;
     context.Size = sizeof(OXOS_CONTEXT);
     context.ApiVersion = OXOS_API_VERSION;
-    context.KernelVersion = XkKernelVersionText;
+    context.KernelVersion = KernelVersionText;
     context.Generation = KiQuickRebootCount + 1;
     context.BootFlags = KiQuickRebootFlag ? OXOS_BOOT_QUICK : OXOS_BOOT_COLD;
     context.SectionName = name;
@@ -362,7 +364,7 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
     context.SettingCount = context.Settings ? Entry.SettingCount : 0;
     context.ImageBase = image;
     context.ImageSize = imageSize;
-    context.State = XkpStatePage(descriptor->Name ? descriptor->Name : name, &context.StateIsNew);
+    context.State = StatePageFor(descriptor->Name ? descriptor->Name : name, &context.StateIsNew);
     context.StateSize = context.State ? PAGE_SIZE : 0;
     context.StopEvent = &extension.StopEvent;
     context.Api = &LOADER_API;
@@ -372,7 +374,7 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
     if (!NT_SUCCESS(status)) {
         XK_SERIAL("extensions: [%s] Load failed (%#lx): unloaded\n", name, status);
         DropRegistrations(state->Count);
-        XkpReleaseStatePage(context.State);
+        ReleaseStatePage(context.State);
         Slots->Count = firstSlot;
         MmFreeContiguousMemory(image);
         return false;
@@ -388,11 +390,11 @@ static bool XkpLoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slot
 
 // Links the hook chains: each hook's Next is the next extension's hook of its ordinal, else the kernel's function;
 // each extension's own import of a hooked ordinal goes to the first hook of an extension loaded after it.
-static void XkpLinkChains(const IMPORT_SLOTS *Slots) {
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
+static void LinkChains(const IMPORT_SLOTS *Slots) {
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
     for (ULONG i = 0; i < state->HookCount; i++) {
         XK_EXTENSION_HOOK &hook = state->Hooks[i];
-        ULONG next = XeKernelExport(hook.Ordinal);
+        ULONG next = titles::KernelExportAddress(hook.Ordinal);
         for (ULONG j = i + 1; j < state->HookCount; j++) {
             if (state->Hooks[j].Ordinal == hook.Ordinal) {
                 next = (ULONG)state->Hooks[j].Replacement;
@@ -419,46 +421,46 @@ static void XkpLinkChains(const IMPORT_SLOTS *Slots) {
 extern "C" void XkExtensionLoaderEntry() {
     ULONG got;
     NTSTATUS status;
-    char *text = XeReadOxosFile(LIST_PATH, LIST_MAX_BYTES, POOL_TAG, &got, &status);
+    char *text = titles::ReadOxosFile(LIST_PATH, LIST_MAX_BYTES, POOL_TAG, &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
             XK_SERIAL("extensions: oxos_extensions.ini not read (%#lx)\n", status);
         // No extension at this launch: the state pages of the last one are freed (§6).
-        XkpCheckStateIndex();
-        XkpTidyStateIndex();
+        CheckStateIndex();
+        TidyStateIndex();
         return;
     }
     ULONG entriesBytes = XK_EXTENSIONS_MAX * sizeof(XK_EXTENSION_ENTRY);
     auto entries = (XK_EXTENSION_ENTRY *)ExAllocatePoolWithTag(entriesBytes, POOL_TAG);
     auto slots = (IMPORT_SLOTS *)ExAllocatePoolWithTag(sizeof(IMPORT_SLOTS), POOL_TAG);
-    XkExtensionsState = (XK_EXTENSIONS_STATE *)ExAllocatePoolWithTag(sizeof(XK_EXTENSIONS_STATE), POOL_TAG);
-    if (entries && slots && XkExtensionsState) {
-        RtlZeroMemory(XkExtensionsState, sizeof(XK_EXTENSIONS_STATE));
-        XkExtensionsState->Kernel.Size = sizeof(OXOS_KERNEL_INFO);
-        XkExtensionsState->Kernel.MemoryPages = MmHighestPhysicalPage + 1;
+    LoadedExtensions = (XK_EXTENSIONS_STATE *)ExAllocatePoolWithTag(sizeof(XK_EXTENSIONS_STATE), POOL_TAG);
+    if (entries && slots && LoadedExtensions) {
+        RtlZeroMemory(LoadedExtensions, sizeof(XK_EXTENSIONS_STATE));
+        LoadedExtensions->Kernel.Size = sizeof(OXOS_KERNEL_INFO);
+        LoadedExtensions->Kernel.MemoryPages = memory::HighestPhysicalPage + 1;
         slots->Count = 0;
         ULONG errors;
-        ULONG count = XkParseExtensionList(text, got, entries, XK_EXTENSIONS_MAX, &errors);
+        ULONG count = ParseExtensionIni(text, got, entries, XK_EXTENSIONS_MAX, &errors);
         if (errors)
             XK_SERIAL("extensions: oxos_extensions.ini: %lu lines not understood\n", errors);
-        XkpCheckStateIndex();
+        CheckStateIndex();
         ULONG imagesBytes = 0;
         for (ULONG i = 0; i < count; i++) {
             if (entries[i].Enabled)
-                XkpLoadExtension(entries[i], slots, &imagesBytes);
+                LoadExtension(entries[i], slots, &imagesBytes);
         }
-        XkpTidyStateIndex();
-        XkpLinkChains(slots);
+        TidyStateIndex();
+        LinkChains(slots);
     }
     ExFreePool(text);
     if (entries)
         ExFreePool(entries);
     if (slots)
         ExFreePool(slots);
-    XK_EXTENSIONS_STATE *state = XkExtensionsState;
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
     if (state && !state->Count) {
         ExFreePool(state);
-        XkExtensionsState = nullptr;
+        LoadedExtensions = nullptr;
         return;
     }
     if (!state)
@@ -472,9 +474,11 @@ extern "C" void XkExtensionLoaderEntry() {
             continue;
         if (!NT_SUCCESS(PsCreateSystemThreadEx(&extension.MainThread, 0, MAIN_STACK_BYTES, 0, nullptr,
                                                (PVOID)extension.Descriptor->Main, &extension.Context, FALSE, FALSE,
-                                               XkExtensionsMainThread))) {
+                                               MainThreadRoutine))) {
             extension.MainThread = nullptr;
             XK_SERIAL("extensions: [%s] Main not started\n", extension.Context.SectionName);
         }
     }
 }
+
+} // namespace xk::extensions

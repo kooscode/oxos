@@ -26,10 +26,14 @@ struct INI_READER {
     const char *End;
 };
 
+namespace xk::titles {
+
 // The next line that is not blank or a comment, in *Line; false at the end of the text. Lines end in LF or CR LF.
 // A section header must close its bracket, with only blanks or a comment after it; a key is one word followed by '='.
 // Lines that cannot be read come back as BAD_SECTION or BAD_LINE, for the caller to count.
-bool IniNextLine(INI_READER *Reader, INI_LINE *Line);
+bool NextIniLine(INI_READER *Reader, INI_LINE *Line);
 
 // True when the KEY line's key is Word (lower case), in any case.
-bool IniKeyIs(const INI_LINE &Line, const char *Word);
+bool IsIniKey(const INI_LINE &Line, const char *Word);
+
+} // namespace xk::titles

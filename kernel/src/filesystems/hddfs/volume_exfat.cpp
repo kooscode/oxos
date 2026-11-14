@@ -5,6 +5,8 @@
 #include <xk/hddfs.h>
 #include <xk/serial.h>
 
+namespace xk::filesystems {
+
 EXFAT_DISK EXFATDisk;
 // The exFAT disk's one key in the file system cache, shared by all its folder volumes (HDDFS_VOLUME::Cache).
 static FSCACHE_EXTENSION EXFATDiskCache;
@@ -378,7 +380,7 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
 }
 
 NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
-    PDEVICE_OBJECT disk = IdexDiskEXFATVolume;
+    PDEVICE_OBJECT disk = storage::EXFATVolumeDevice;
     PARTITION_INFORMATION volume, target;
     NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, disk, nullptr, 0, &volume,
                                                           sizeof(volume), nullptr, FALSE);
@@ -477,3 +479,5 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     Target->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::filesystems

@@ -7,6 +7,8 @@
 #include <xk/core.h>
 #include <xk/filesystems.h>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 volatile ULONG KiTestFATXReadOk, KiTestFATXReadSum, KiTestFATXReadLength, KiTestFATXInfoOk, KiTestFATXDirOk,
     KiTestFATXWriteOk, KiTestFATXRenameDeleteOk, KiTestFATXErrorsOk, KiTestFATXVolumeOk, KiTestFATXFreeBalanced,
     KiTestFATXTotalClusters, KiTestFATXSerial, KiTestFATXDone;
@@ -236,7 +238,7 @@ static void NTAPI FATXControllerThread(PVOID) {
         ULONG bytes = size[4] * size[5], d[6] = {}, k[6] = {}, e[6] = {};
         IoDeleteSymbolicLink(&link);
         ok = IoCreateSymbolicLink(&link, &target) == 0;
-        HDDFSRememberTitleFolder();
+        filesystems::HDDFSRememberTitleFolder();
         HANDLE hd, hk;
         if (ok && Open(&hd, "\\??\\D:\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
             ok &= NtQueryVolumeInformationFile(hd, &iosb, d, 24, FileFsSizeInformation) == 0 && d[5] == 2048 &&
@@ -253,12 +255,12 @@ static void NTAPI FATXControllerThread(PVOID) {
         }
         ok &= NtQueryVolumeInformationFile(hv, &iosb, e, 24, FileFsSizeInformation) == 0 && e[5] == size[5];
         IoDeleteSymbolicLink(&link);
-        HDDFSRememberTitleFolder(); // D: gone: nothing is remembered
+        filesystems::HDDFSRememberTitleFolder(); // D: gone: nothing is remembered
         ok &= NtQueryVolumeInformationFile(hv, &iosb, e, 24, FileFsSizeInformation) == 0 && e[5] == size[5];
         KiTestFATXTitleFolderOk = ok;
     }
     NtClose(hv);
-    if (IdexDiskEXFATLayout) {
+    if (storage::DiskHasEXFATLayout) {
         EXFATFormatTest(buf);
         EXFATCrossFolderTest(buf);
         EXFATLengthTest(buf);
@@ -379,7 +381,7 @@ static void EXFATCrossFolderTest(PUCHAR buf) {
 }
 
 void KiStartFATXSelfTests() {
-    KiCreateSystemThread(FATXControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(FATXControllerThread, nullptr, 0, 9);
 }
 
 // E:\XkStale.stale: one cluster long, its FAT chain running two clusters further into clusters marked free. Growing it

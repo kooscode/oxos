@@ -4,6 +4,8 @@
 #include <xk/arch.h>
 #include <xk/runtime.h>
 
+namespace xk::core {
+
 constexpr ULONG EXCEPTION_NONCONTINUABLE = 1, EXCEPTION_UNWINDING = 2, EXCEPTION_EXIT_UNWIND = 4,
                 EXCEPTION_NESTED_CALL = 0x10;
 constexpr ULONG STATUS_BREAKPOINT_ = 0x80000003, STATUS_SINGLE_STEP_ = 0x80000004,
@@ -51,11 +53,11 @@ enum { ExceptionContinueExecution, ExceptionContinueSearch, ExceptionNestedExcep
 
 extern "C" void KiContinueContext(PCONTEXT Context) __attribute__((noreturn)); // arch/exceptions.S
 
-static volatile ULONG KiDispatchDepth;  // traps being dispatched, nested (a cascade bug-checks past 8)
-volatile ULONG KiExceptionsDispatched; // diagnostics
+static volatile ULONG DispatchDepth; // traps being dispatched, nested (a cascade bug-checks past 8)
+volatile ULONG ExceptionsDispatched; // diagnostics
 
 // The head of the current thread's handler chain (FS:0).
-static EXCEPTION_REGISTRATION *&KiExceptionList() {
+static EXCEPTION_REGISTRATION *&ExceptionListHead() {
     return *(EXCEPTION_REGISTRATION **)&KiPcr.NtTib.ExceptionList;
 }
 
@@ -70,14 +72,14 @@ struct EXCEPTION_GUARD {
     EXCEPTION_REGISTRATION *Establisher;
 };
 
-static ULONG __cdecl KiExceptionGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
+static ULONG __cdecl ExceptionGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
     if (Record->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND))
         return ExceptionContinueSearch;
     *(EXCEPTION_REGISTRATION **)DispatcherContext = ((EXCEPTION_GUARD *)Frame)->Establisher;
     return ExceptionNestedException;
 }
 
-static ULONG __cdecl KiUnwindGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
+static ULONG __cdecl UnwindGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT, PVOID DispatcherContext) {
     if (!(Record->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND)))
         return ExceptionContinueSearch;
     *(EXCEPTION_REGISTRATION **)DispatcherContext = ((EXCEPTION_GUARD *)Frame)->Establisher;
@@ -89,24 +91,24 @@ static ULONG __cdecl KiUnwindGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTE
                                                 PCONTEXT Context, PVOID DispatcherContext,
                                                 ULONG(__cdecl *Guard)(PEXCEPTION_RECORD, PVOID, PCONTEXT, PVOID)) {
     volatile EXCEPTION_GUARD guard;
-    guard.Registration.Next = KiExceptionList();
+    guard.Registration.Next = ExceptionListHead();
     guard.Registration.Handler = Guard;
     guard.Establisher = Frame;
-    KiExceptionList() = (EXCEPTION_REGISTRATION *)&guard.Registration;
+    ExceptionListHead() = (EXCEPTION_REGISTRATION *)&guard.Registration;
     ULONG disposition = Frame->Handler(Record, Frame, Context, DispatcherContext);
-    KiExceptionList() = KiExceptionList()->Next;
+    ExceptionListHead() = ExceptionListHead()->Next;
     return disposition;
 }
 
 // Walk the registration chain; TRUE when a handler asked to continue execution.
-static BOOLEAN RtlpDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
-    KiExceptionsDispatched = KiExceptionsDispatched + 1;
+static BOOLEAN DispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
+    ExceptionsDispatched = ExceptionsDispatched + 1;
     EXCEPTION_REGISTRATION *nested = nullptr; // the highest frame whose handler was running when this one was raised
-    for (EXCEPTION_REGISTRATION *r = KiExceptionList(); r && r != EXCEPTION_CHAIN_END; r = r->Next) {
+    for (EXCEPTION_REGISTRATION *r = ExceptionListHead(); r && r != EXCEPTION_CHAIN_END; r = r->Next) {
         if (((ULONG)r & 3) || (ULONG)r < 0x10000)
             break; // corrupt chain
         EXCEPTION_REGISTRATION *dispatcherContext = nullptr;
-        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, KiExceptionGuard);
+        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, ExceptionGuard);
         if (r == nested) { // past the frames of the handler this exception was raised in
             Record->ExceptionFlags &= ~EXCEPTION_NESTED_CALL;
             nested = nullptr;
@@ -135,14 +137,14 @@ static BOOLEAN RtlpDispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context)
 }
 
 [[noreturn]] static void KiUnhandled(PEXCEPTION_RECORD Record, ULONG vector, ULONG errorCode) {
-    KiLastExceptionVector = vector;
-    KiLastExceptionCode = errorCode;
-    KiLastExceptionEip = (ULONG)Record->ExceptionAddress;
+    LastExceptionVector = vector;
+    LastExceptionCode = errorCode;
+    LastExceptionEip = (ULONG)Record->ExceptionAddress;
     KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, Record->ExceptionCode, (ULONG)Record->ExceptionAddress,
                  Record->ExceptionInformation[0], Record->ExceptionInformation[1]);
 }
 
-static ULONG KiFloatStatusCode(UCHAR vector) {
+static ULONG FloatStatusCode(UCHAR vector) {
     if (vector == 19)
         return STATUS_FLOAT_MULTIPLE_TRAPS_;
     USHORT sw = 0;
@@ -177,7 +179,7 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
             if (service == 1 || service == 0xB) {
                 auto text = (const USHORT *)Frame->Ecx; // STRING: Length, MaximumLength, Buffer
                 if (text && text[0])
-                    KdPrintString(*(const char *const *)(text + 2), text[0]);
+                    PrintDebugString(*(const char *const *)(text + 2), text[0]);
                 Frame->Eax = 0;
             }
             Frame->Eip++;
@@ -216,13 +218,13 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
         break;
     }
     case 16:
-    case 19: record.ExceptionCode = KiFloatStatusCode((UCHAR)vector); break;
+    case 19: record.ExceptionCode = FloatStatusCode((UCHAR)vector); break;
     case 17: record.ExceptionCode = STATUS_DATATYPE_MISALIGNMENT_; break;
     default:
-        KiUnexpectedException(vector, Frame->ErrorCode, Frame->Eip); // machine check, reserved vectors
+        UnexpectedException(vector, Frame->ErrorCode, Frame->Eip); // machine check, reserved vectors
     }
-    KiDispatchDepth = KiDispatchDepth + 1;
-    if (KiDispatchDepth > 8)
+    DispatchDepth = DispatchDepth + 1;
+    if (DispatchDepth > 8)
         KiUnhandled(&record, vector, Frame->ErrorCode);
     if (Frame->EFlags & 0x200)
         sti(); // handlers run with interrupts as the faulting code had them
@@ -241,8 +243,8 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     context.EFlags = Frame->EFlags;
     context.Esp = (ULONG)(&Frame->EFlags + 1);
     context.SegSs = 0x10;
-    BOOLEAN handled = RtlpDispatchException(&record, &context);
-    KiDispatchDepth = KiDispatchDepth - 1;
+    BOOLEAN handled = DispatchException(&record, &context);
+    DispatchDepth = DispatchDepth - 1;
     if (!handled) {
         XK_SERIAL("*** unhandled exception %#lx at %#lx (vector %lu, error %#lx, address %#lx)\n", record.ExceptionCode,
                   Frame->Eip, vector, Frame->ErrorCode, record.ExceptionInformation[1]);
@@ -278,7 +280,7 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
 // Called by RtlRaiseException with the caller's context.
 extern "C" [[noreturn]] void KiRaiseException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
     Record->ExceptionAddress = (PVOID)Context->Eip;
-    if (!RtlpDispatchException(Record, Context))
+    if (!DispatchException(Record, Context))
         KiUnhandled(Record, 0xFF, 0);
     KiContinueContext(Context);
 }
@@ -293,12 +295,12 @@ extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID
         Record = &local;
     }
     Record->ExceptionFlags |= EXCEPTION_UNWINDING | (TargetFrame ? 0 : EXCEPTION_EXIT_UNWIND);
-    EXCEPTION_REGISTRATION *r = KiExceptionList();
+    EXCEPTION_REGISTRATION *r = ExceptionListHead();
     while (r && r != EXCEPTION_CHAIN_END && r != TargetFrame) {
         if (((ULONG)r & 3) || (ULONG)r < 0x10000)
             break;
         EXCEPTION_REGISTRATION *dispatcherContext = nullptr;
-        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, KiUnwindGuard);
+        ULONG disposition = KiExecuteHandler(Record, r, Context, &dispatcherContext, UnwindGuard);
         if (disposition == ExceptionCollidedUnwind) {
             r = dispatcherContext; // another unwind already ran the handlers up to there: carry on from its frame
         } else if (disposition != ExceptionContinueSearch) {
@@ -306,7 +308,7 @@ extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID
                          Record->ExceptionCode);
         }
         r = r->Next;
-        KiExceptionList() = r;
+        ExceptionListHead() = r;
     }
     if (TargetIp)
         Context->Eip = (ULONG)TargetIp;
@@ -331,14 +333,14 @@ XBAPI void NTAPI ExRaiseStatus(NTSTATUS Status) {
 
 // --- Stack walks over the EBP chain, bounded by the current thread's stack.
 
-static bool KiOnStack(ULONG p) {
+static bool OnStack(ULONG p) {
     PKTHREAD t = KeGetCurrentThread();
     return p >= (ULONG)t->StackLimit && p + 8 <= (ULONG)t->StackBase;
 }
 
 XBAPI ULONG NTAPI RtlWalkFrameChain(PVOID *Callers, ULONG Count, ULONG Flags) {
     ULONG ebp = (ULONG)__builtin_frame_address(0), n = 0;
-    while (n < Count && KiOnStack(ebp)) {
+    while (n < Count && OnStack(ebp)) {
         ULONG next = *(PULONG)ebp, ret = *(PULONG)(ebp + 4);
         if (!ret)
             break;
@@ -371,3 +373,5 @@ XBAPI void NTAPI RtlGetCallersAddress(PVOID *CallersAddress, PVOID *CallersCalle
     *CallersAddress = n > 1 ? frames[1] : nullptr;
     *CallersCaller = n > 2 ? frames[2] : nullptr;
 }
+
+} // namespace xk::core

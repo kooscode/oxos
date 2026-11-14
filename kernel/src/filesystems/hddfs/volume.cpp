@@ -5,6 +5,8 @@
 #include <xk/serial.h>
 #include <xk/io.h>
 
+namespace xk::filesystems {
+
 static KEVENT HDDFSLock;
 // Blocks mapped under the lock; unmapped when it is released (the oldest earlier if many are mapped).
 constexpr ULONG HDDFS_MAX_HELD = 12;
@@ -26,7 +28,7 @@ void HDDFSAcquireVolume(HDDFS_VOLUME *) {
 
 void HDDFSReleaseVolume(HDDFS_VOLUME *) {
     while (HDDFSHeldCount)
-        FscUnmapBuffer(HDDFSHeld[--HDDFSHeldCount].Buffer);
+        UnmapCacheBuffer(HDDFSHeld[--HDDFSHeldCount].Buffer);
     KeSetEvent(&HDDFSLock, 0, FALSE);
 }
 
@@ -47,11 +49,11 @@ NTSTATUS HDDFSMapBlock(HDDFS_VOLUME *v, LONGLONG Offset, PUCHAR *Data) {
         }
     }
     PVOID p;
-    NTSTATUS status = FscMapBuffer(v->Cache, block, TRUE, &p);
+    NTSTATUS status = MapCacheBuffer(v->Cache, block, TRUE, &p);
     if (!NT_SUCCESS(status))
         return status;
     if (HDDFSHeldCount == HDDFS_MAX_HELD) {
-        FscUnmapBuffer(HDDFSHeld[0].Buffer);
+        UnmapCacheBuffer(HDDFSHeld[0].Buffer);
         RtlMoveMemory(HDDFSHeld, HDDFSHeld + 1, (HDDFS_MAX_HELD - 1) * sizeof(HDDFSHeld[0]));
         HDDFSHeldCount--;
     }
@@ -76,14 +78,14 @@ void HDDFSInvalidateRange(HDDFS_VOLUME *v, LONGLONG Offset, ULONG Length) {
             HDDFSHeld[i].Block < Offset + Length)
             HDDFSHeld[i].Volume = nullptr;
     }
-    FscInvalidateByteRange(v->Cache, Offset, Length);
+    InvalidateCacheRange(v->Cache, Offset, Length);
 }
 
 // The volume is going away: its blocks must not match a later volume allocated at the same address. An exFAT folder
 // volume's key is the disk's, which outlives it (and its blocks stay valid: every write goes through).
 void HDDFSForgetVolume(HDDFS_VOLUME *v) {
     if (v->Cache == &v->CacheExtension)
-        FscInvalidateDevice(v->Cache);
+        InvalidateCacheDevice(v->Cache);
 }
 
 // --- FAT
@@ -416,3 +418,5 @@ NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG NewSize) {
     f->Flags |= FCB_DIRENT_DIRTY;
     return HDDFSFlushFcb(v, f);
 }
+
+} // namespace xk::filesystems

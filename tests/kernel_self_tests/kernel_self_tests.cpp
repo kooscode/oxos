@@ -7,6 +7,8 @@
 #include <xk/memory.h>
 #include <xk/objects.h>
 
+using namespace xk; // the kernel's subsystems as storage::, objects::, ...
+
 volatile ULONG KiTestDpcCount;        // expect 1
 volatile ULONG KiTestTimerTicks;      // expect ~100/s (10 ms periodic timer)
 volatile ULONG KiTestOneShotFired;    // expect 1 after 300 ms
@@ -36,12 +38,12 @@ static void NTAPI OnOneShot(PKDPC, PVOID, PVOID, PVOID) {
 }
 
 static void NTAPI OnRtcDone(PKDPC, PVOID, PVOID, PVOID) {
-    HalpCmosWrite(0x0B, HalpCmosRead(0x0B) & ~0x40); // periodic interrupt off
+    hardware::WriteCmos(0x0B, hardware::ReadCmos(0x0B) & ~0x40); // periodic interrupt off
     KiTestRtcDisconnected = KeDisconnectInterrupt(&RtcInterrupt);
 }
 
 static BOOLEAN NTAPI OnRtcInterrupt(PKINTERRUPT, PVOID) {
-    HalpCmosRead(0x0C); // acknowledge
+    hardware::ReadCmos(0x0C); // acknowledge
     if (KeGetCurrentIrql() == RtcIrql)
         KiTestRtcIrqlOk = 1;
     KiTestRtcCount = KiTestRtcCount + 1;
@@ -142,7 +144,7 @@ static void NTAPI ShortLivedThread(PVOID) {
 static void NTAPI ControllerThread(PVOID) {
     // Semaphore: consume 100 releases from a producer thread.
     KeInitializeSemaphore(&TestSemaphore, 0, 100);
-    KiCreateSystemThread(SemaphoreProducer, nullptr, 0, 8);
+    core::CreateSystemThread(SemaphoreProducer, nullptr, 0, 8);
     for (int i = 0; i < 100; i++) {
         KeWaitForSingleObject(&TestSemaphore, Executive, KernelMode, FALSE, nullptr);
         KiTestSemaphoreConsumed = KiTestSemaphoreConsumed + 1;
@@ -154,7 +156,7 @@ static void NTAPI ControllerThread(PVOID) {
     KeWaitForSingleObject(&TestMutant, Executive, KernelMode, FALSE, nullptr);
     KeWaitForSingleObject(&TestMutant, Executive, KernelMode, FALSE, nullptr);
     bool recursive = TestMutant.Header.SignalState == -1 && TestMutant.OwnerThread == KeGetCurrentThread();
-    KiCreateSystemThread(MutantWaiter, nullptr, 0, 8);
+    core::CreateSystemThread(MutantWaiter, nullptr, 0, 8);
     Sleep(10);
     KeReleaseMutant(&TestMutant, 0, FALSE, FALSE);
     bool stillOwned = TestMutant.OwnerThread == KeGetCurrentThread();
@@ -186,7 +188,7 @@ static void NTAPI ControllerThread(PVOID) {
     KiTestTimeoutStatus = KeWaitForSingleObject(&never, Executive, KernelMode, FALSE, &due);
 
     // Join: a terminated thread's object is signalled.
-    PKTHREAD child = KiCreateSystemThread(ShortLivedThread, nullptr, 0, 8);
+    PKTHREAD child = core::CreateSystemThread(ShortLivedThread, nullptr, 0, 8);
     KiTestJoinOk = KeWaitForSingleObject(child, Executive, KernelMode, FALSE, nullptr) == STATUS_WAIT_0 &&
                    child->State == Terminated;
 
@@ -306,7 +308,7 @@ static void NTAPI ApcControllerThread(PVOID) {
     // Kernel APC interrupts a non-alertable wait, which then resumes.
     KeInitializeEvent(&ApcWaitEvent, NotificationEvent, FALSE);
     KeInitializeEvent(&ApcTargetDone, NotificationEvent, FALSE);
-    PKTHREAD target = KiCreateSystemThread(ApcTargetThread, nullptr, 0, 8);
+    PKTHREAD target = core::CreateSystemThread(ApcTargetThread, nullptr, 0, 8);
     Sleep(10);
     KeInitializeApc(&TestKernelApc, target, ApcKernelRoutine, nullptr, ApcNormalRoutine, KernelMode, nullptr);
     KeInsertQueueApc(&TestKernelApc, nullptr, nullptr, 0);
@@ -320,7 +322,7 @@ static void NTAPI ApcControllerThread(PVOID) {
 
     // User APC ends an alertable user-mode wait after running.
     KeInitializeEvent(&UserApcReady, NotificationEvent, FALSE);
-    PKTHREAD userThread = KiCreateSystemThread(UserApcThread, nullptr, 0, 8);
+    PKTHREAD userThread = core::CreateSystemThread(UserApcThread, nullptr, 0, 8);
     KeWaitForSingleObject(&UserApcReady, Executive, KernelMode, FALSE, nullptr);
     Sleep(5);
     KeInitializeApc(&TestUserApc, userThread, ApcKernelRoutine, nullptr, UserApcNormal, UserMode, nullptr);
@@ -328,13 +330,13 @@ static void NTAPI ApcControllerThread(PVOID) {
     KeWaitForSingleObject(userThread, Executive, KernelMode, FALSE, nullptr);
 
     // Alert ends an alertable delay.
-    PKTHREAD alertThread = KiCreateSystemThread(AlertThreadBody, nullptr, 0, 8);
+    PKTHREAD alertThread = core::CreateSystemThread(AlertThreadBody, nullptr, 0, 8);
     Sleep(10);
     KeAlertThread(alertThread, KernelMode);
     KeWaitForSingleObject(alertThread, Executive, KernelMode, FALSE, nullptr);
 
     // Critical region defers a normal kernel APC.
-    PKTHREAD crit = KiCreateSystemThread(CriticalRegionThread, nullptr, 0, 8);
+    PKTHREAD crit = core::CreateSystemThread(CriticalRegionThread, nullptr, 0, 8);
     Sleep(10);
     KeInitializeApc(&CriticalApc, crit, ApcKernelRoutine, nullptr, CriticalApcNormal, KernelMode, nullptr);
     KeInsertQueueApc(&CriticalApc, nullptr, nullptr, 0);
@@ -344,7 +346,7 @@ static void NTAPI ApcControllerThread(PVOID) {
     // Suspend stops a spinning thread; resume restarts it. Both take effect when the spinner is next scheduled (the
     // suspend through a kernel APC), so the test waits for each, up to a second, instead of guessing how long it takes:
     // the counter has to stop, stay stopped for 30 ms, and move again after the resume.
-    PKTHREAD spinner = KiCreateSystemThread(SuspendSpinner, nullptr, 0, 2); // above the 2b spinners
+    PKTHREAD spinner = core::CreateSystemThread(SuspendSpinner, nullptr, 0, 2); // above the 2b spinners
     Sleep(20);
     KeSuspendThread(spinner);
     bool stopped = WaitForSpinnerStopped(1000);
@@ -357,8 +359,8 @@ static void NTAPI ApcControllerThread(PVOID) {
 
     // Queue with concurrency 1 feeds two workers.
     KeInitializeQueue(&TestQueue, 1);
-    KiCreateSystemThread(QueueWorker, nullptr, 0, 8);
-    KiCreateSystemThread(QueueWorker, nullptr, 0, 8);
+    core::CreateSystemThread(QueueWorker, nullptr, 0, 8);
+    core::CreateSystemThread(QueueWorker, nullptr, 0, 8);
     Sleep(5);
     for (auto &item : QueueItems)
         KeInsertQueue(&TestQueue, &item);
@@ -384,7 +386,7 @@ static void NTAPI ApcControllerThread(PVOID) {
 
     // Wake-up boost: base 8 + increment 2.
     KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
-    PKTHREAD boosted = KiCreateSystemThread(BoostWaiter, nullptr, 0, 8);
+    PKTHREAD boosted = core::CreateSystemThread(BoostWaiter, nullptr, 0, 8);
     while (boosted->State != Waiting) // set the event only once the waiter blocks (a busy boot can delay it)
         Sleep(1);
     KeSetEvent(&BoostEvent, 2, FALSE);
@@ -437,9 +439,9 @@ static void NTAPI MmControllerThread(PVOID) {
                         MmQueryAddressProtect(b) == (PAGE_READWRITE | PAGE_WRITECOMBINE);
     MmFreeContiguousMemory(b);
 
-    ULONG before = MmAvailablePages;
+    ULONG before = memory::AvailablePages;
     MmFreeContiguousMemory(a);
-    ULONG afterFree = MmAvailablePages;
+    ULONG afterFree = memory::AvailablePages;
     auto a2 = MmAllocateContiguousMemory(0x3000);
     KiTestMmReuseOk = a2 == a && afterFree == before + 3;
 
@@ -530,10 +532,10 @@ static void NTAPI MmControllerThread(PVOID) {
     ULONG baseline = 0;
     for (int i = -1; i < 150; i++) {
         if (i == 0)
-            baseline = MmAvailablePages;
+            baseline = memory::AvailablePages;
         HANDLE h;
         NTSTATUS created = PsCreateSystemThread(&h, nullptr, (PVOID)ShortThread, nullptr, FALSE);
-        XK_SERIAL("mm churn %d: created %#lx, free pages %lu\n", i, created, MmAvailablePages);
+        XK_SERIAL("mm churn %d: created %#lx, free pages %lu\n", i, created, memory::AvailablePages);
         if (NT_SUCCESS(created)) {
             NtWaitForSingleObject(h, FALSE, nullptr);
             XK_SERIAL("mm churn %d: joined\n", i);
@@ -542,11 +544,11 @@ static void NTAPI MmControllerThread(PVOID) {
     }
     // Read at once: each thread's stack is freed by the switch away from it, before its waiter runs; a sleep here
     // would let other suites' allocations into the count.
-    KiTestMmThreadChurnPages = baseline - MmAvailablePages;
+    KiTestMmThreadChurnPages = baseline - memory::AvailablePages;
 
     XK_SERIAL("mm test 8: Virtual memory.\n");
     // Virtual memory.
-    ULONG vmBaseline = MmAvailablePages;
+    ULONG vmBaseline = memory::AvailablePages;
     PVOID base = nullptr;
     SIZE_T size = 0x100000;
     NTSTATUS st = NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE);
@@ -618,11 +620,11 @@ static void NTAPI MmControllerThread(PVOID) {
     NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE);
     KiTestVmTopDownOk = ok;
 
-    KiTestVmPagesRestored = MmAvailablePages == vmBaseline;
+    KiTestVmPagesRestored = memory::AvailablePages == vmBaseline;
     MM_STATISTICS stats;
     stats.Length = sizeof(stats);
     KiTestVmStatsOk = MmQueryStatistics(&stats) == 0 && stats.TotalPhysicalPages == 0x4000 &&
-                      stats.AvailablePages == MmAvailablePages && stats.StackPagesCommitted > 0 &&
+                      stats.AvailablePages == memory::AvailablePages && stats.StackPagesCommitted > 0 &&
                       stats.PoolPagesCommitted > 0 && stats.VirtualMemoryBytesReserved == 0;
     KiTestMmDone = 1;
 }
@@ -665,7 +667,7 @@ static void NTAPI AlertableWaiter(PVOID) {
 
 static void NTAPI ObControllerThread(PVOID) {
     Sleep(50); // let the other suites create their objects first
-    ULONG poolBefore = ExpPoolBlocks;
+    ULONG poolBefore = memory::PoolBlocks;
 
     // Handles: multiples of 4, LIFO reuse.
     HANDLE h1, h2, h3;
@@ -714,7 +716,7 @@ static void NTAPI ObControllerThread(PVOID) {
     ok = NtCreateDirectoryObject(&hdir, &da) == 0 && NtCreateEvent(&he, &ea, NotificationEvent, FALSE) == 0;
     RtlInitAnsiString(&ls, "\\??\\Q:");
     RtlInitAnsiString(&ts, "\\XkDir");
-    ok &= ObpCreateSymbolicLink(&ls, &ts) == 0;
+    ok &= objects::CreateSymbolicLink(&ls, &ts) == 0;
     PVOID viaLink, direct;
     RtlInitAnsiString(&ps, "\\??\\Q:\\E1");
     ok &= ObReferenceObjectByName(&ps, 0, nullptr, nullptr, &viaLink) == 0;
@@ -789,7 +791,7 @@ static void NTAPI ObControllerThread(PVOID) {
 
     // Everything created above was released (the Q: link and its directory are permanent).
     Sleep(5);
-    KiTestObPoolBalanced = ExpPoolBlocks <= poolBefore + 6;
+    KiTestObPoolBalanced = memory::PoolBlocks <= poolBefore + 6;
     KiTestObDone = 1;
 }
 
@@ -803,23 +805,23 @@ static void KiStartThreadSelfTests() {
     KiStartSehSelfTests();
     KiStartXcSelfTests();
     KiStartMiscSelfTests();
-    KiCreateSystemThread(ObControllerThread, nullptr, 0, 9);
-    KiCreateSystemThread(MmControllerThread, nullptr, 0, 9);
-    KiCreateSystemThread(ApcControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(ObControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(MmControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(ApcControllerThread, nullptr, 0, 9);
     KeInitializeEvent(&PingEventA, SynchronizationEvent, TRUE);
     KeInitializeEvent(&PingEventB, SynchronizationEvent, FALSE);
-    KiCreateSystemThread(PingThreadA, nullptr, 0, 8);
-    KiCreateSystemThread(PingThreadB, nullptr, 0, 8);
-    KiCreateSystemThread(SleepThread, nullptr, 0, 10);
-    KiCreateSystemThread(FpuThread, (PVOID)12345, 0, 8);
-    KiCreateSystemThread(FpuThread, (PVOID)67890, 0, 8);
-    KiCreateSystemThread(ControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(PingThreadA, nullptr, 0, 8);
+    core::CreateSystemThread(PingThreadB, nullptr, 0, 8);
+    core::CreateSystemThread(SleepThread, nullptr, 0, 10);
+    core::CreateSystemThread(FpuThread, (PVOID)12345, 0, 8);
+    core::CreateSystemThread(FpuThread, (PVOID)67890, 0, 8);
+    core::CreateSystemThread(ControllerThread, nullptr, 0, 9);
     // The two equal-priority spinners never block, so they wait until start-up has become the idle loop: running
     // earlier, they kept the start-up thread (priority 0, at APC_LEVEL since 2026-10-27) from ever running again,
     // and no title started.
     KeInitializeEvent(&SpinGo, NotificationEvent, FALSE);
-    KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinA, 0, 1);
-    KiCreateSystemThread(SpinThread, (PVOID)&KiTestSpinB, 0, 1);
+    core::CreateSystemThread(SpinThread, (PVOID)&KiTestSpinA, 0, 1);
+    core::CreateSystemThread(SpinThread, (PVOID)&KiTestSpinB, 0, 1);
 }
 
 // Start-up is at DISPATCH_LEVEL and about to enter the idle loop.
@@ -850,7 +852,7 @@ void KiRunBootSelfTests() {
     ULONG vector = HalGetInterruptVector(8, &RtcIrql);
     KeInitializeInterrupt(&RtcInterrupt, OnRtcInterrupt, nullptr, vector, RtcIrql, Latched, FALSE);
     if (KeConnectInterrupt(&RtcInterrupt)) {
-        HalpCmosRead(0x0C);
-        HalpCmosWrite(0x0B, HalpCmosRead(0x0B) | 0x40);
+        hardware::ReadCmos(0x0C);
+        hardware::WriteCmos(0x0B, hardware::ReadCmos(0x0B) | 0x40);
     }
 }

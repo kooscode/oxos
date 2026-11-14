@@ -5,6 +5,8 @@
 #include <xk/disk_format.h>
 #include <xk/runtime.h>
 
+namespace xk::filesystems {
+
 constexpr NTSTATUS STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D, STATUS_NAME_INVALID_ = (NTSTATUS)0xC0000033,
                    STATUS_DISK_FULL_ = (NTSTATUS)0xC000007F;
 constexpr ULONG SCRATCH_SECTORS = DISK_FORMAT_SCRATCH / 512;
@@ -41,8 +43,8 @@ static ULONG BuildUpcase(PUCHAR Table) {
     ULONG n = 0, run = 0;
     auto flush = [&]() {
         if (run) {
-            DiskFormatPut16(Table + n, 0xFFFF);
-            DiskFormatPut16(Table + n + 2, (USHORT)run);
+            storage::StoreLittleEndian16(Table + n, 0xFFFF);
+            storage::StoreLittleEndian16(Table + n + 2, (USHORT)run);
             n += 4;
             run = 0;
         }
@@ -57,7 +59,7 @@ static ULONG BuildUpcase(PUCHAR Table) {
         if (up == c) {
             run = 1;
         } else {
-            DiskFormatPut16(Table + n, up);
+            storage::StoreLittleEndian16(Table + n, up);
             n += 2;
         }
     }
@@ -94,30 +96,30 @@ static ULONG EntrySet(PUCHAR At, const char *Name, ULONG Length, bool Folder, UL
     RtlZeroMemory(At, count * 32);
     At[0] = ENTRY_FILE;
     At[1] = (UCHAR)(count - 1);
-    DiskFormatPut16(At + 4, Folder ? 0x10 : 0x20);
-    DiskFormatPut32(At + 8, Timestamp);
-    DiskFormatPut32(At + 12, Timestamp);
-    DiskFormatPut32(At + 16, Timestamp);
+    storage::StoreLittleEndian16(At + 4, Folder ? 0x10 : 0x20);
+    storage::StoreLittleEndian32(At + 8, Timestamp);
+    storage::StoreLittleEndian32(At + 12, Timestamp);
+    storage::StoreLittleEndian32(At + 16, Timestamp);
     PUCHAR s = At + 32;
     s[0] = ENTRY_STREAM;
     s[1] = 0x01; // allocation possible, FAT chain
     s[3] = (UCHAR)Length;
-    DiskFormatPut16(s + 4, NameHash(Name, Length));
-    DiskFormatPut64(s + 8, Size);
-    DiskFormatPut32(s + 20, FirstCluster);
-    DiskFormatPut64(s + 24, Size);
+    storage::StoreLittleEndian16(s + 4, NameHash(Name, Length));
+    storage::StoreLittleEndian64(s + 8, Size);
+    storage::StoreLittleEndian32(s + 20, FirstCluster);
+    storage::StoreLittleEndian64(s + 24, Size);
     for (ULONG i = 0; i < names; i++) {
         PUCHAR e = At + 64 + 32 * i;
         e[0] = ENTRY_NAME;
         for (ULONG k = 0; k < 15 && i * 15 + k < Length; k++)
-            DiskFormatPut16(e + 2 + 2 * k, (UCHAR)Name[i * 15 + k]);
+            storage::StoreLittleEndian16(e + 2 + 2 * k, (UCHAR)Name[i * 15 + k]);
     }
     USHORT sum = 0;
     for (ULONG i = 0; i < count * 32; i++) {
         if (i != 2 && i != 3)
             sum = (USHORT)(((sum & 1) ? 0x8000 : 0) + (sum >> 1) + At[i]);
     }
-    DiskFormatPut16(At + 2, sum);
+    storage::StoreLittleEndian16(At + 2, sum);
     return count;
 }
 
@@ -264,13 +266,13 @@ static NTSTATUS WriteFatAndBitmap(const FORMAT_GEOMETRY *g, const FORMAT_RUNS *r
         ULONG n = g->FatLength - done < SCRATCH_SECTORS ? g->FatLength - done : SCRATCH_SECTORS;
         ULONG firstEntry = done * 128;
         if (firstEntry >= r->Next) { // only zeros from here
-            NTSTATUS status = IdexDiskWriteZeros(Io, Scratch, fatLba + done, g->FatLength - done);
+            NTSTATUS status = storage::WriteZeroSectors(Io, Scratch, fatLba + done, g->FatLength - done);
             if (!NT_SUCCESS(status))
                 return status;
             break;
         }
         for (ULONG i = 0; i < n * 128; i++)
-            DiskFormatPut32(Scratch + 4 * i, FatEntry(r, firstEntry + i));
+            storage::StoreLittleEndian32(Scratch + 4 * i, FatEntry(r, firstEntry + i));
         NTSTATUS status = Io->Write(Io->Context, fatLba + done, Scratch, n);
         if (!NT_SUCCESS(status))
             return status;
@@ -298,7 +300,7 @@ static NTSTATUS WriteDirectory(const FORMAT_GEOMETRY *g, ULONG Cluster, ULONG By
     ULONG sectors = (Bytes + 511) / 512;
     NTSTATUS status = Io->Write(Io->Context, ClusterLba(g, Cluster), Scratch, sectors);
     if (NT_SUCCESS(status) && sectors < g->Spc)
-        status = IdexDiskWriteZeros(Io, Scratch, ClusterLba(g, Cluster) + sectors, g->Spc - sectors);
+        status = storage::WriteZeroSectors(Io, Scratch, ClusterLba(g, Cluster) + sectors, g->Spc - sectors);
     return status;
 }
 
@@ -323,16 +325,16 @@ static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG Ro
     b[1] = 0x76;
     b[2] = 0x90;
     RtlCopyMemory(b + 3, "EXFAT   ", 8);
-    DiskFormatPut64(b + 64, g->Start);
-    DiskFormatPut64(b + 72, g->Sectors);
-    DiskFormatPut32(b + 80, g->FatOffset);
-    DiskFormatPut32(b + 84, g->FatLength);
-    DiskFormatPut32(b + 88, g->Heap);
-    DiskFormatPut32(b + 92, g->Count);
-    DiskFormatPut32(b + 96, RootCluster);
-    DiskFormatPut32(b + 100, Serial);
-    DiskFormatPut16(b + 104, 0x0100); // revision 1.00
-    b[108] = 9;             // 512-byte sectors
+    storage::StoreLittleEndian64(b + 64, g->Start);
+    storage::StoreLittleEndian64(b + 72, g->Sectors);
+    storage::StoreLittleEndian32(b + 80, g->FatOffset);
+    storage::StoreLittleEndian32(b + 84, g->FatLength);
+    storage::StoreLittleEndian32(b + 88, g->Heap);
+    storage::StoreLittleEndian32(b + 92, g->Count);
+    storage::StoreLittleEndian32(b + 96, RootCluster);
+    storage::StoreLittleEndian32(b + 100, Serial);
+    storage::StoreLittleEndian16(b + 104, 0x0100); // revision 1.00
+    b[108] = 9;                                    // 512-byte sectors
     b[109] = (UCHAR)g->SpcShift;
     b[110] = 1;    // one FAT
     b[111] = 0x80; // drive select
@@ -341,14 +343,14 @@ static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG Ro
     b[510] = 0x55;
     b[511] = 0xAA;
     for (ULONG s = 1; s <= 8; s++)
-        DiskFormatPut32(Scratch + s * 512 + 508, 0xAA550000);
+        storage::StoreLittleEndian32(Scratch + s * 512 + 508, 0xAA550000);
     ULONG sum = 0;
     for (ULONG i = 0; i < 11 * 512; i++) {
         if (i != 106 && i != 107 && i != 112)
             sum = ((sum & 1) ? 0x80000000 : 0) + (sum >> 1) + Scratch[i];
     }
     for (ULONG i = 0; i < 128; i++)
-        DiskFormatPut32(Scratch + 11 * 512 + 4 * i, sum);
+        storage::StoreLittleEndian32(Scratch + 11 * 512 + 4 * i, sum);
     return Io->Write(Io->Context, Lba, Scratch, 12);
 }
 
@@ -398,16 +400,16 @@ NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULO
         e[1] = 4;
         const char label[] = "OXOS";
         for (ULONG i = 0; i < 4; i++)
-            DiskFormatPut16(e + 2 + 2 * i, (UCHAR)label[i]);
+            storage::StoreLittleEndian16(e + 2 + 2 * i, (UCHAR)label[i]);
         e += 32;
         e[0] = ENTRY_BITMAP;
-        DiskFormatPut32(e + 20, bitmapCluster);
-        DiskFormatPut64(e + 24, bitmapBytes);
+        storage::StoreLittleEndian32(e + 20, bitmapCluster);
+        storage::StoreLittleEndian64(e + 24, bitmapBytes);
         e += 32;
         e[0] = ENTRY_UPCASE;
-        DiskFormatPut32(e + 4, upcaseSum);
-        DiskFormatPut32(e + 20, upcaseCluster);
-        DiskFormatPut64(e + 24, upcaseBytes);
+        storage::StoreLittleEndian32(e + 4, upcaseSum);
+        storage::StoreLittleEndian32(e + 20, upcaseCluster);
+        storage::StoreLittleEndian64(e + 24, upcaseBytes);
         ULONG bytes = 96 + FolderEntries(&tree, -1, Scratch + 96, Timestamp);
         status = WriteDirectory(&g, rootCluster, bytes, Io, Scratch);
     }
@@ -444,3 +446,5 @@ NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULO
     }
     return status;
 }
+
+} // namespace xk::filesystems

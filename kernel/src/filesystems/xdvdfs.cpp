@@ -5,6 +5,8 @@
 #include <xk/runtime.h>
 #include <xk/io.h>
 
+namespace xk::filesystems {
+
 constexpr ULONG XDVDFS_SECTOR = 0x800, XDVDFS_VOLUME_SECTOR = 32;
 static const char XdvdfsMagic[] = "MICROSOFT*XBOX*MEDIA";
 constexpr ULONG FILE_OPENED = 1;
@@ -84,7 +86,7 @@ static NTSTATUS XdvdfsReadDirect(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer
 
 // Directory entries: through the file system cache, as the reference.
 static NTSTATUS XdvdfsRead(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULONG length) {
-    return FscCachedRead(&v->CacheExtension, FO_RANDOM_ACCESS, offset, length, buffer, false);
+    return CachedRead(&v->CacheExtension, FO_RANDOM_ACCESS, offset, length, buffer, false);
 }
 
 // --- Directories: each is a binary tree of entries, sorted case-insensitively
@@ -352,10 +354,10 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         length = f->Size - offset.LowPart;
     LONGLONG disc = (LONGLONG)f->StartSector * XDVDFS_SECTOR + offset.LowPart;
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);
-    // Cached reads go through the file system cache (FscCachedRead decides what is copied from cache buffers).
+    // Cached reads go through the file system cache (CachedRead decides what is copied from cache buffers).
     NTSTATUS status = (fo->Flags & FO_NO_INTERMEDIATE_BUFFERING)
                           ? XdvdfsReadDirect(v, disc, Irp->UserBuffer, length)
-                          : FscCachedRead(&v->CacheExtension, fo->Flags, disc, length, Irp->UserBuffer, toEnd);
+                          : CachedRead(&v->CacheExtension, fo->Flags, disc, length, Irp->UserBuffer, toEnd);
     KeSetEvent(&v->Lock, 0, FALSE);
     if (!NT_SUCCESS(status)) {
         XK_SERIAL("xdvdfs: read %#lx at %#lx (file sector %#lx, %s): %#lx\n", length, offset.LowPart, f->StartSector,
@@ -565,7 +567,7 @@ static NTSTATUS NTAPI XdvdfsDismountVolume(PDEVICE_OBJECT DeviceObject) {
 
 static void NTAPI XdvdfsDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     XDVDFS_VOLUME *v = XdvdfsVolume(DeviceObject);
-    FscInvalidateDevice(&v->CacheExtension);
+    InvalidateCacheDevice(&v->CacheExtension);
     ExFreePool(v->Bounce);
     ObfDereferenceObject(v->TargetDevice);
 }
@@ -576,7 +578,7 @@ DRIVER_OBJECT XdvdfsDriverObject = {
     XdvdfsDismountVolume,
     {XdvdfsFsdCreate, XdvdfsFsdClose, XdvdfsFsdRead, IoInvalidDeviceRequest, XdvdfsFsdQueryInformation,
      XdvdfsFsdSetInformation, XdvdfsFsdSuccess, XdvdfsFsdQueryVolume, XdvdfsFsdDirectoryControl,
-     IoFsControlDismountOnly, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};
+     io::DismountOnlyFsControl, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};
 
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY g;
@@ -624,3 +626,5 @@ NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     TargetDevice->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::filesystems

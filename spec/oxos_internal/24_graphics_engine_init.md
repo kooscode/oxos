@@ -1,8 +1,8 @@
 # 24 — Graphics engine brought up at a cold boot
 
 OXOS addition, implemented 2026-11-01.
-- **Code:** `kernel/src/hardware/graphics.cpp` (`HalpInitGraphicsEngine`, called from `HalpInitPci` after the NV2A's PCI
-  set-up) and `kernel/include/xk/graphics.h` (`gpu::DefaultGraphicsContext`, the default context image).
+- **Code:** `kernel/src/hardware/graphics.cpp` (`hardware::InitGraphicsEngine`, called from `hardware::InitPci` after
+  the NV2A's PCI set-up) and `kernel/include/xk/graphics.h` (`gpu::DefaultGraphicsContext`, the default context image).
 - **Unit tests:** `tests/unit/test_gpu.cpp`.
 - **Background:**
   - spec/oxos_internal/10 §2 step 7 (the GPU reset at entry, tiles and Z compression);

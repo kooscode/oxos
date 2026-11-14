@@ -6,6 +6,8 @@
 #include <xk/core.h>
 #include <xk/hardware.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine,
@@ -27,7 +29,7 @@ XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE Ke
 }
 
 // At DISPATCH_LEVEL. Special APCs go after existing special APCs, normal APCs at the tail.
-bool KiInsertQueueApc(PKAPC Apc, LONG Increment) {
+bool InsertQueueApc(PKAPC Apc, LONG Increment) {
     if (Apc->Inserted)
         return false;
     PKTHREAD t = Apc->Thread;
@@ -48,11 +50,11 @@ bool KiInsertQueueApc(PKAPC Apc, LONG Increment) {
             HalRequestSoftwareInterrupt(APC_LEVEL);
         } else if (t->State == Waiting && t->WaitIrql == PASSIVE_LEVEL &&
                    (!Apc->NormalRoutine || (!t->KernelApcDisable && !t->ApcState.KernelApcInProgress))) {
-            KiUnwaitThread(t, STATUS_KERNEL_APC, Increment);
+            UnwaitThread(t, STATUS_KERNEL_APC, Increment);
         }
     } else if (t->State == Waiting && t->WaitMode == UserMode && t->Alertable) {
         t->ApcState.UserApcPending = TRUE;
-        KiUnwaitThread(t, STATUS_USER_APC, Increment);
+        UnwaitThread(t, STATUS_USER_APC, Increment);
     }
     return true;
 }
@@ -63,13 +65,13 @@ XBAPI BOOLEAN NTAPI KeInsertQueueApc(PKAPC Apc, PVOID SystemArgument1, PVOID Sys
     if (Apc->Thread->ApcState.ApcQueueable) {
         Apc->SystemArgument1 = SystemArgument1;
         Apc->SystemArgument2 = SystemArgument2;
-        inserted = KiInsertQueueApc(Apc, Increment);
+        inserted = InsertQueueApc(Apc, Increment);
     }
     KiUnlockDispatcherDatabase(old);
     return inserted;
 }
 
-static PKAPC KiDequeueApc(PLIST_ENTRY head) {
+static PKAPC DequeueApc(PLIST_ENTRY head) {
     PKAPC apc = CONTAINING_RECORD(head->Flink, KAPC, ApcListEntry);
     RemoveEntryList(&apc->ApcListEntry);
     apc->Inserted = FALSE;
@@ -77,7 +79,7 @@ static PKAPC KiDequeueApc(PLIST_ENTRY head) {
 }
 
 // APC_LEVEL software interrupt: deliver kernel-mode APCs of the current thread.
-void KiDeliverApc() {
+void DeliverApc() {
     PKTHREAD t = Prcb.CurrentThread;
     KIRQL old = KeRaiseIrqlToSynchLevel();
     t->ApcState.KernelApcPending = FALSE;
@@ -88,13 +90,13 @@ void KiDeliverApc() {
         auto normalRoutine = (PKNORMAL_ROUTINE)apc->NormalRoutine;
         PVOID ctx = apc->NormalContext, a1 = apc->SystemArgument1, a2 = apc->SystemArgument2;
         if (!normalRoutine) { // special APC: kernel routine only, at APC_LEVEL
-            KiDequeueApc(head);
+            DequeueApc(head);
             KfLowerIrql(old);
             kernelRoutine(apc, &normalRoutine, &ctx, &a1, &a2);
         } else {
             if (t->ApcState.KernelApcInProgress || t->KernelApcDisable)
                 break;
-            KiDequeueApc(head);
+            DequeueApc(head);
             KfLowerIrql(old);
             kernelRoutine(apc, &normalRoutine, &ctx, &a1, &a2);
             if (normalRoutine) {
@@ -111,13 +113,13 @@ void KiDeliverApc() {
 }
 
 // Run queued user-mode APCs after an alertable wait returned STATUS_USER_APC (PASSIVE_LEVEL).
-void KiExecuteUserApcs() {
+void ExecuteUserApcs() {
     PKTHREAD t = Prcb.CurrentThread;
     KIRQL old = KeRaiseIrqlToSynchLevel();
     t->ApcState.UserApcPending = FALSE;
     PLIST_ENTRY head = &t->ApcState.ApcListHead[UserMode];
     while (!IsListEmpty(head)) {
-        PKAPC apc = KiDequeueApc(head);
+        PKAPC apc = DequeueApc(head);
         auto kernelRoutine = (PKKERNEL_ROUTINE)apc->KernelRoutine;
         auto normalRoutine = (PKNORMAL_ROUTINE)apc->NormalRoutine;
         PVOID ctx = apc->NormalContext, a1 = apc->SystemArgument1, a2 = apc->SystemArgument2;
@@ -156,11 +158,11 @@ XBAPI BOOLEAN NTAPI KeTestAlertThread(KPROCESSOR_MODE AlertMode) {
     return alerted;
 }
 
-static void KiAlert(PKTHREAD Thread, KPROCESSOR_MODE AlertMode) {
+static void AlertThread(PKTHREAD Thread, KPROCESSOR_MODE AlertMode) {
     if (Thread->Alerted[(UCHAR)AlertMode])
         return;
     if (Thread->State == Waiting && Thread->Alertable && AlertMode <= Thread->WaitMode)
-        KiUnwaitThread(Thread, STATUS_ALERTED, 2);
+        UnwaitThread(Thread, STATUS_ALERTED, 2);
     else
         Thread->Alerted[(UCHAR)AlertMode] = TRUE;
 }
@@ -168,7 +170,7 @@ static void KiAlert(PKTHREAD Thread, KPROCESSOR_MODE AlertMode) {
 XBAPI BOOLEAN NTAPI KeAlertThread(PKTHREAD Thread, KPROCESSOR_MODE AlertMode) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     BOOLEAN previous = Thread->Alerted[(UCHAR)AlertMode];
-    KiAlert(Thread, AlertMode);
+    AlertThread(Thread, AlertMode);
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
@@ -177,19 +179,19 @@ XBAPI BOOLEAN NTAPI KeAlertThread(PKTHREAD Thread, KPROCESSOR_MODE AlertMode) {
 
 constexpr CHAR MAXIMUM_SUSPEND_COUNT = 0x7F;
 
-void NTAPI KiSuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
-    // The suspend APC's kernel routine has nothing to do: its normal routine, KiSuspendThread, waits.
+void NTAPI SuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+    // The suspend APC's kernel routine has nothing to do: its normal routine, SuspendThread, waits.
 }
 
-void NTAPI KiSuspendThread(PVOID, PVOID, PVOID) {
+void NTAPI SuspendThread(PVOID, PVOID, PVOID) {
     PKTHREAD t = Prcb.CurrentThread;
     KeWaitForSingleObject(&t->SuspendSemaphore, Suspended, KernelMode, FALSE, nullptr);
 }
 
-static void KiResume(PKTHREAD Thread) {
+static void Resume(PKTHREAD Thread) {
     if (Thread->SuspendCount && --Thread->SuspendCount == 0) {
         Thread->SuspendSemaphore.Header.SignalState++;
-        KiWaitTest(&Thread->SuspendSemaphore.Header, 0);
+        WaitTest(&Thread->SuspendSemaphore.Header, 0);
     }
 }
 
@@ -200,7 +202,7 @@ XBAPI ULONG NTAPI KeSuspendThread(PKTHREAD Thread) {
         KeBugCheckEx(0x1E, 0xC000004A /*STATUS_SUSPEND_COUNT_EXCEEDED*/, (ULONG)Thread, 0, 0);
     if (Thread->ApcState.ApcQueueable) {
         Thread->SuspendCount++;
-        if (previous == 0 && !KiInsertQueueApc(&Thread->SuspendApc, 0))
+        if (previous == 0 && !InsertQueueApc(&Thread->SuspendApc, 0))
             Thread->SuspendSemaphore.Header.SignalState--;
     }
     KiUnlockDispatcherDatabase(old);
@@ -210,16 +212,18 @@ XBAPI ULONG NTAPI KeSuspendThread(PKTHREAD Thread) {
 XBAPI ULONG NTAPI KeResumeThread(PKTHREAD Thread) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     CHAR previous = Thread->SuspendCount;
-    KiResume(Thread);
+    Resume(Thread);
     KiUnlockDispatcherDatabase(old);
     return (ULONG)previous;
 }
 
 XBAPI ULONG NTAPI KeAlertResumeThread(PKTHREAD Thread) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    KiAlert(Thread, KernelMode);
+    AlertThread(Thread, KernelMode);
     CHAR previous = Thread->SuspendCount;
-    KiResume(Thread);
+    Resume(Thread);
     KiUnlockDispatcherDatabase(old);
     return (ULONG)previous;
 }
+
+} // namespace xk::core

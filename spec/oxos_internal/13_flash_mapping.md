@@ -5,9 +5,9 @@ OXOS choice, implemented 2026-10-26. It matches the reference kernel (spec/stock
 ## 1. Behaviour
 - The 2BL maps PDE 0x3FF (0xFFC00000–0xFFFFFFFF, the flash) as a 4 MB write-back page (0xFFC000E3); the kernel
   runs on that mapping from entry until the memory manager starts.
-- `MmInitSystem` clears PDE 0x3FF, as the reference does. Nothing in the kernel reads flash through it afterwards:
-  the boot splash maps the flash bank with `MmMapIoSpace(..., PAGE_NOCACHE)`, and quick reboot uses the RAM copy
-  of `.data` that `KernelEntry` makes.
+- `memory::InitMemoryManager` clears PDE 0x3FF, as the reference does. Nothing in the kernel reads flash through it
+  afterwards: the boot splash maps the flash bank with `MmMapIoSpace(..., PAGE_NOCACHE)`, and quick reboot uses the RAM
+  copy of `.data` that `KernelEntry` makes.
 - Quick reboot's fallback (no RAM copy, `.data` larger than 4 KB) maps PDE 0x3FF again as 0xFFC000FB (uncached)
   before it reads the flash copy.
 

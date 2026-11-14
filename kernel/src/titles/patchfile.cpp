@@ -11,6 +11,8 @@
 #include <xk/title_patches.h>
 #include <xk/ini_file.h>
 
+namespace xk::titles {
+
 namespace {
 bool IsBlank(char c) {
     return c == ' ' || c == '\t' || c == '\r';
@@ -91,8 +93,8 @@ PUCHAR Reserve(PUCHAR Out, ULONG OutSize, ULONG *used, ULONG length, XE_PATCH_CO
 }
 } // namespace
 
-ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
-                   XE_PATCH_COUNTS *Counts) {
+ULONG ParsePatchFile(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
+                     XE_PATCH_COUNTS *Counts) {
     XE_PATCH_COUNTS c = {};
     ULONG used = 0;
     bool active = false;
@@ -100,7 +102,7 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
     UCHAR match[XE_PATCH_MAX_BYTES];
     INI_READER reader = {Text, Text + Length};
     INI_LINE line;
-    while (IniNextLine(&reader, &line)) {
+    while (NextIniLine(&reader, &line)) {
         if (line.Kind == INI_LINE_KIND::BAD_LINE) {
             c.Errors++;
             continue;
@@ -125,7 +127,7 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
             continue;
         }
         Cursor cur = {line.Value, line.Value + line.ValueLength};
-        if (IniKeyIs(line, "name")) {
+        if (IsIniKey(line, "name")) {
             if (!active)
                 continue;
             ULONG n = line.ValueLength;
@@ -141,7 +143,7 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
                 for (ULONG i = 0; i < n; i++)
                     r[sizeof(*h) + i] = (UCHAR)line.Value[i];
             }
-        } else if (IniKeyIs(line, "match")) {
+        } else if (IsIniKey(line, "match")) {
             // ADDRESS: CURRENT_BYTES: when they are there, the blind patches below it in the section are written
             ULONG address, n = 0;
             UCHAR bytes[XE_PATCH_MAX_BYTES];
@@ -153,7 +155,7 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
             matchLength = n;
             for (ULONG i = 0; i < n; i++)
                 match[i] = bytes[i];
-        } else if (IniKeyIs(line, "patch")) {
+        } else if (IsIniKey(line, "patch")) {
             // ADDRESS: CURRENT_BYTES > NEW_BYTES (hex bytes; spaces between bytes are optional; both sides any
             // length), or a blind patch ADDRESS: > NEW_BYTES, written when the section's `match =` bytes are there
             ULONG address;
@@ -195,3 +197,5 @@ ULONG XePatchParse(const char *Text, ULONG Length, ULONG TitleId, ULONG Version,
         *Counts = c;
     return used;
 }
+
+} // namespace xk::titles

@@ -4,7 +4,7 @@
 // the unit tests.
 #pragma once
 
-namespace vsplash {
+namespace xk::bootscreen::vsplash {
 
 constexpr unsigned W = 640, H = 480;
 
@@ -18,4 +18,4 @@ unsigned Check(const unsigned char *Scene, unsigned Size, unsigned *ScratchBytes
 // Draws a checked scene's picture for Phase into Out (W x H pixels, 0x00RRGGBB; outside the scene's area black).
 void Render(const unsigned char *Scene, unsigned Size, Phase Phase, unsigned *Out, void *Scratch);
 
-} // namespace vsplash
+} // namespace bootscreen::vsplash

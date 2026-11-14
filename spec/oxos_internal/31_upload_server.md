@@ -1,7 +1,7 @@
 # 31. The upload server: a dashboard from a browser (OXOS's own)
 
 Status: implemented 2026-11-08. Code: `kernel/src/network/` (the network card and a small IPv4 stack),
-`kernel/src/uploader/` (the HTTP server and its page), `kernel/include/xk/nic.h` (the network card's registers and
+`kernel/src/webserver/` (the HTTP server and its page), `kernel/include/xk/nic.h` (the network card's registers and
 bring-up, shared with the 2BL's netboot), `kernel/src/titles/loader.cpp` (when it runs), `kernel/src/core/fatal.cpp`
 (its screen).
 
@@ -10,9 +10,9 @@ to the disk, creates and deletes folders and files, and launches an XBE. A conso
 whose disk OXOS has just formatted (spec/oxos_internal/30), gets one without a PC tool.
 
 ## 1. When it runs
-On a cold boot with X pressed during the boot splash or on the "No Dashboard Found" screen
-(spec/oxos_internal/32), until an XBE is launched. When the network card does not start (no PCI device), the title is chosen as usual. Until 2026-11-08 it
-also ran by itself where the kernel would stop with "No Dashboard Found"; that screen now waits for X.
+On a cold boot with X pressed during the boot splash or on the "No Dashboard Found" screen (spec/oxos_internal/32),
+until an XBE is launched. When the network card does not start (no PCI device), the title is chosen as usual. Until
+2026-11-08 it also ran by itself where the kernel would stop with "No Dashboard Found"; that screen now waits for X.
 
 ## 2. The network
 - **The card:** the MCPX's NVIDIA Ethernet controller, polled (no interrupts), with the same bring-up as the 2BL's
@@ -57,28 +57,28 @@ writes; `Expect: 100-continue` (curl's large uploads) is answered. `GET /api/lis
 ## 4. The page
 One HTML page with a small script, served from the kernel image, titled "OXOS File Manager". Its header adds the disk's
 file system and size from `/api/disk`, e.g. `OXOS File Manager [exFAT, 2.0 TB]` (decimal units, as disk makers state
-them). Below it, one button for each drive or top-level folder that `/api/list?path=/` returns: on a FATX disk the
-label is `Drives:` and the buttons read `C:` `E:` ...; on an exFAT disk, which has one volume and no drives, the label
-is `Folders:` and the buttons read `/C` `/E` ... (spec/oxos_internal/05 §2). Paths are shown the same way, on the
-page and in the server's messages and status line: `E:\Apps\x.xbe` on a FATX disk (partitions), `/E/Apps/x.xbe` on an
-exFAT disk (folders off the volume's root); requests always use the `/E/...` form. Then the current folder (a path, the
-folder's entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has
-Rename (asks for the new name) and Delete (asks first); the `..` row has Create Folder, which asks for the name), "Upload files" (several at once) and "Upload a
-folder" (the browser sends every file with its path inside the folder: a whole dashboard in one go). Files go one
-at a time with `PUT` and a progress line.
+them). Below it, one button for each drive or top-level folder that `/api/list?path=/` returns: on a FATX disk the label
+is `Drives:` and the buttons read `C:` `E:` ...; on an exFAT disk, which has one volume and no drives, the label is
+`Folders:` and the buttons read `/C` `/E` ... (spec/oxos_internal/05 §2). Paths are shown the same way, on the page and
+in the server's messages and status line: `E:\Apps\x.xbe` on a FATX disk (partitions), `/E/Apps/x.xbe` on an exFAT disk
+(folders off the volume's root); requests always use the `/E/...` form. Then the current folder (a path, the folder's
+entries; folders open, an `.xbe` has a Launch button, every file and folder but `..` and the drives has Rename (asks for
+the new name) and Delete (asks first); the `..` row has Create Folder, which asks for the name), "Upload files" (several
+at once) and "Upload a folder" (the browser sends every file with its path inside the folder: a whole dashboard in one
+go). Files go one at a time with `PUT` and a progress line.
 
 ## 5. The screen
 The OXOS File Manager's screen: spec/oxos_internal/32 §5. Its status line shows the network's state, then the last
 upload, create, delete or launch.
 
 ## 6. Memory
-The network stack, the server and its page are boot-only (spec/oxos_internal/18; about 15 KB of code and data): they
-run before the first title and are freed when it starts (15 pages on the debug kit), so titles lose no memory. The
-resident kernel grows by the upload screen and the hooks only (about 1.8 KB, no new page). Their buffers (the card's
-rings and frame buffers, the connections' and the requests' buffers, about 1.3 MB) are allocated when the server
-starts and freed before the title starts; the network card is stopped first, so it does no DMA into memory the title
-gets. Ending the splash early (the format countdown, the upload screen: `HalpStopSplash`) keeps the boot-only pages;
-the title start (`HalpEndSplash`) frees them.
+The network stack, the server and its page are boot-only (spec/oxos_internal/18; about 15 KB of code and data): they run
+before the first title and are freed when it starts (15 pages on the debug kit), so titles lose no memory. The resident
+kernel grows by the upload screen and the hooks only (about 1.8 KB, no new page). Their buffers (the card's rings and
+frame buffers, the connections' and the requests' buffers, about 1.3 MB) are allocated when the server starts and freed
+before the title starts; the network card is stopped first, so it does no DMA into memory the title gets. Ending the
+splash early (the format countdown, the upload screen: `bootscreen::StopSplash`) keeps the boot-only pages; the title
+start (`bootscreen::EndSplash`) frees them.
 
 ## 7. Safety
 While the screen is up, anyone on the local network can write to the disk and start code, as with the FTP server

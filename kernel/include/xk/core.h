@@ -323,7 +323,9 @@ typedef struct _XBOX_HARDWARE_INFO {
 } XBOX_HARDWARE_INFO;
 
 extern KPCR KiPcr;
-extern KTHREAD KiIdleThread;
+namespace xk::core {
+extern KTHREAD IdleThreadObject;
+} // namespace xk::core
 
 // --- Exported data (ordinals in xboxkrnl.def)
 XBAPI volatile ULONG KeTickCount;
@@ -465,67 +467,87 @@ static inline PLIST_ENTRY RemoveHeadList(PLIST_ENTRY h) {
 #define CONTAINING_RECORD(addr, type, field) ((type *)((UCHAR *)(addr) - __builtin_offsetof(type, field)))
 
 // --- Internal
-extern volatile ULONG KiBootStage;
-extern KPROCESS KiIdleProcess, KiSystemProcess;
+namespace xk::core {
+extern volatile ULONG BootStage;
+extern KPROCESS IdleProcess, SystemProcess;
+} // namespace xk::core
 XBAPI void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys);
-void KiInitializeProcessor();
-void KiInitializeTimers();
-void KiInitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit);
-void KiIdleLoop() __attribute__((noreturn));
-void KiClockInterrupt(KIRQL interruptedIrql);
-void KiCheckTimers();
-void KiDispatchInterrupt();
-void KiRetireDpcList();
-void KiDeliverSoftwareInterrupts(); // interrupts disabled on entry and exit
+namespace xk::core {
+void InitializeProcessor();
+void InitializeTimers();
+void InitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit);
+void IdleLoop() __attribute__((noreturn));
+void ClockInterrupt(KIRQL interruptedIrql);
+void CheckTimers();
+void DispatchInterrupt();
+void RetireDpcList();
+void DeliverSoftwareInterrupts(); // interrupts disabled on entry and exit
+} // namespace xk::core
 
+namespace xk::core {
 // Scheduler (dispatcher "lock" = DISPATCH_LEVEL on this uniprocessor).
-void KiReadyThread(PKTHREAD Thread);
-void KiSetPriorityThread(PKTHREAD Thread, SCHAR Priority);
-bool KiSelectYieldThread(PKTHREAD Current);
-LONG KiSwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
+void ReadyThread(PKTHREAD Thread);
+void SetPriorityThread(PKTHREAD Thread, SCHAR Priority);
+bool SelectYieldThread(PKTHREAD Current);
+LONG SwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
+} // namespace xk::core
 XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql);
-void KiWaitTest(DISPATCHER_HEADER *Object, LONG Increment);
-void KiUnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment);
-bool KiInsertQueueApc(PKAPC Apc, LONG Increment);
-void KiDeliverApc();
-void KiExecuteUserApcs();
-void KiActivateWaiterQueue(PKQUEUE Queue);
-LONG KiInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head);
-bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime);
-void KiRemoveTimerIfInserted(PKTIMER Timer);
+namespace xk::core {
+void WaitTest(DISPATCHER_HEADER *Object, LONG Increment);
+void UnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment);
+bool InsertQueueApc(PKAPC Apc, LONG Increment);
+void DeliverApc();
+void ExecuteUserApcs();
+void ActivateWaiterQueue(PKQUEUE Queue);
+LONG InsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head);
+bool InsertTimerRelative(PKTIMER Timer, LONGLONG DueTime);
+void RemoveTimerIfInserted(PKTIMER Timer);
+} // namespace xk::core
 
 // Thread creation (Ps* exports wrap this once the object manager exists).
 typedef void(NTAPI *PKSYSTEM_ROUTINE)(PVOID StartRoutine, PVOID StartContext);
-void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
-                        PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process);
-PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
-void KeTerminateThread() __attribute__((noreturn));
+namespace xk::core {
+void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
+                      PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process);
+PKTHREAD CreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority);
+void TerminateThread() __attribute__((noreturn));
+} // namespace xk::core
 extern "C" void KiThreadReturned(); // a system thread's routine returned instead of terminating the thread
 
+namespace xk::core {
 // Terminated threads whose kernel stacks are freed after the switch away from them.
-void KiReapDeadThreads();
+void ReapDeadThreads();
+} // namespace xk::core
 
 // Entered from the interrupt and exception stubs (arch).
 XBAPI void KiDispatchHardwareInterrupt(ULONG irq);
-XBAPI void KiUnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
+XBAPI void UnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 
 // Clock, time and the performance counter (core/clock.cpp); run-time accounting (core/scheduler.cpp).
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter();
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceFrequency();
-void KiInitializeSystemTime();
-void KiPerfCounterOverflow();
+namespace xk::core {
+void InitializeSystemTime();
+void PerfCounterOverflow();
+} // namespace xk::core
 XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER PreviousTime);
-void KiUpdateRunTime(KIRQL interruptedIrql);
+namespace xk::core {
+void UpdateRunTime(KIRQL interruptedIrql);
+} // namespace xk::core
 
+namespace xk::core {
 // Suspension APCs (core/async_calls.cpp), DPC set-up (core/deferred_calls.cpp), the scheduler's helpers
 // (core/scheduler.cpp, core/event.cpp, core/thread.cpp).
-void NTAPI KiSuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *);
-void NTAPI KiSuspendThread(PVOID, PVOID, PVOID);
-void KiInitializeDpcs();
-NTSTATUS KiYieldExecution();
-extern LIST_ENTRY KiWaitInListHead;
+void NTAPI SuspendNop(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *);
+void NTAPI SuspendThread(PVOID, PVOID, PVOID);
+void InitializeDpcs();
+NTSTATUS YieldExecution();
+extern LIST_ENTRY WaitInListHead;
+} // namespace xk::core
 XBAPI void NTAPI KeSetEventBoostPriority(PKEVENT Event, PKTHREAD *Thread);
-void KiInitializeProcesses();
+namespace xk::core {
+void InitializeProcesses();
+} // namespace xk::core
 
 // The FPU: lazy switching, each thread's save area, and kernel code's use of it (core/float_state.cpp). The caller's
 // 0x18-byte block for KeSaveFloatingPointState holds {flags, ..., +8 save buffer, +0x14 thread}.
@@ -536,21 +558,27 @@ struct KFLOATING_SAVE_ {
     PKTHREAD Thread;
 };
 static_assert(sizeof(KFLOATING_SAVE_) == 0x18);
-void KiInitializeNpx();
-void KiInitializeNpxArea(PKTHREAD t);
-void KiNpxPrepareSwitch(PKTHREAD next);
-void KiNpxRelease(PKTHREAD t);
+namespace xk::core {
+void InitializeNpx();
+void InitializeNpxArea(PKTHREAD t);
+void NpxPrepareSwitch(PKTHREAD next);
+void NpxRelease(PKTHREAD t);
+} // namespace xk::core
 extern "C" void KiNpxNotAvailable(); // the device-not-available trap (#NM)
 XBAPI NTSTATUS NTAPI KeSaveFloatingPointState(KFLOATING_SAVE_ *FloatSave);
 XBAPI NTSTATUS NTAPI KeRestoreFloatingPointState(KFLOATING_SAVE_ *FloatSave);
 
+namespace xk::core {
 // Start-up (core/startup.cpp, core/processor.cpp): the keys the 2BL hands over, the boot stack, the microcode loaded.
-extern UCHAR KiCertKey[16];
-extern ULONG KiEepromKeyStates[8][10]; // open image: HMAC states of the known EEPROM keys (spec/stock/01 §5)
-extern ULONG KiEepromKeyStateCount;
-extern "C" UCHAR KiBootStack[];        // the boot thread's stack (arch/entry.S: its size there must match)
+extern UCHAR CertKey[16];
+extern ULONG EepromKeyStates[8][10]; // open image: HMAC states of the known EEPROM keys (spec/stock/01 §5)
+extern ULONG EepromKeyStateCount;
+} // namespace xk::core
+extern "C" UCHAR KiBootStack[]; // the boot thread's stack (arch/entry.S: its size there must match)
 constexpr ULONG KI_BOOT_STACK_SIZE = 0x3000;
-extern ULONG KiMicrocodeRevision;
+namespace xk::core {
+extern ULONG MicrocodeRevision;
+} // namespace xk::core
 
 // Quick reboot (spec/stock/02 §1): the flag and count, and the boot keys kept for the restart (core/startup.cpp); the
 // restart itself (arch/quick_reboot.S).
@@ -559,17 +587,25 @@ extern "C" volatile ULONG KiQuickRebootCount;
 extern "C" UCHAR KiPersistedBootKeys[32];
 extern "C" void KiQuickReboot() __attribute__((noreturn));
 
+namespace xk::core {
 // Diagnostics: the start-up marks and watchdog, the last-words records in CMOS (core/startup.cpp), the last fatal
 // exception, interrupt counts (core/interrupts.cpp), the debug output (core/debug.cpp).
-extern "C" void XkBootMarksDone(); // the title is starting: the start-up marks stop
-extern "C" void XkBootMarkWatchdog(ULONG Eip, UCHAR Irql);
-extern "C" void KiSaveBugCheckLastWords(ULONG Code, ULONG P1, ULONG Caller);
-extern "C" void KiSaveFaultTaskLastWords(ULONG vector, ULONG eip);
-extern volatile ULONG KiLastExceptionVector, KiLastExceptionCode, KiLastExceptionEip;
-extern volatile ULONG KiIrqCounts[16];
-void KdPrintString(const char *Text, ULONG Length);
+void BootMarksDone(); // the title is starting: the start-up marks stop
+void BootMarkWatchdog(ULONG Eip, UCHAR Irql);
+} // namespace xk::core
+namespace xk::core {
+void SaveBugCheckLastWords(ULONG Code, ULONG P1, ULONG Caller);
+void SaveFaultTaskLastWords(ULONG vector, ULONG eip);
+} // namespace xk::core
+namespace xk::core {
+extern volatile ULONG LastExceptionVector, LastExceptionCode, LastExceptionEip;
+extern volatile ULONG IrqCounts[16];
+void PrintDebugString(const char *Text, ULONG Length);
+} // namespace xk::core
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...);
-extern char XkDebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // the debug output's ring buffer
+namespace xk::core {
+extern char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // the debug output's ring buffer
+} // namespace xk::core
 
 // --- Locks and interlocked lists (exported)
 
@@ -644,17 +680,25 @@ struct XK_FATAL_HELP {
     const char *Title;
     const char *const *Lines;
 };
-const XK_FATAL_HELP *XkFatalHelp(ULONG Code);
+namespace xk::core {
+const XK_FATAL_HELP *FatalHelp(ULONG Code);
+} // namespace xk::core
+namespace xk::core {
 // The countdown before a blank or foreign disk is formatted (storage/disk_layout.cpp): Title and What (what the disk
 // holds) with Seconds left, redrawn with each call; Title null takes the screen down.
-void XkShowFormatCountdown(const char *Title, const char *What, ULONG Seconds);
-// The OXOS File Manager's screen (uploader/server.cpp, spec/oxos_internal/32 §5; boot-only): the server's Address
+void ShowFormatCountdown(const char *Title, const char *What, ULONG Seconds);
+} // namespace xk::core
+namespace xk::core {
+// The OXOS File Manager's screen (webserver/server.cpp, spec/oxos_internal/32 §5; boot-only): the server's Address
 // (null or "" while it has none) and a Status line, redrawn with each call; closed before the title it launches starts.
-void XkShowFileManagerScreen(const char *Address, const char *Status);
-void XkCloseFileManagerScreen();
+void ShowFileManagerScreen(const char *Address, const char *Status);
+void CloseFileManagerScreen();
+} // namespace xk::core
+namespace xk::core {
 // No Dashboard Found (13-20) on a cold boot (core/fatal.cpp, spec/oxos_internal/32 §1; boot-only): the fatal error's
 // screen, LED and history, keeping the boot-only pages and the keys, until X is pressed; then it returns, the
 // screen closed, for the File Manager.
-void XkNoDashboardError(ULONG Code);
+void NoDashboardError(ULONG Code);
 // The bug check screen, drawn into the frame buffer on screen (KeBugCheckEx, interrupts off).
-void XkShowBugCheck(ULONG Code, const ULONG_PTR *Parameters);
+void ShowBugCheck(ULONG Code, const ULONG_PTR *Parameters);
+} // namespace xk::core

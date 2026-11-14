@@ -4,12 +4,14 @@
 #include <cstdio>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as memory::, objects::, ...
+
 std::string CheckPfnDatabase() {
     char msg[200];
     uint32_t total = 0;
     std::vector<uint8_t> seen(MM_LOW_PAGES);
     for (uint32_t color = 0; color < 32; color++) {
-        USHORT packed = MmRetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, prev = 0xFFFE;
+        USHORT packed = memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnFlink, prev = 0xFFFE;
         uint32_t n = 0;
         while (packed != 0xFFFE) {
             uint32_t pfn = ((uint32_t)packed << 4) | color;
@@ -33,16 +35,16 @@ std::string CheckPfnDatabase() {
             if (++n > MM_LOW_PAGES)
                 return "a colour list loops";
         }
-        if (MmRetailPfnRegion.FreePagesByColor[color].PackedPfnBlink != prev) {
+        if (memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnBlink != prev) {
             snprintf(msg, sizeof(msg), "colour %u: tail %04x, last entry %04x", color,
-                     MmRetailPfnRegion.FreePagesByColor[color].PackedPfnBlink, prev);
+                     memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnBlink, prev);
             return msg;
         }
         total += n;
     }
-    if (total != MmAvailablePages || total != MmRetailPfnRegion.AvailablePages) {
-        snprintf(msg, sizeof(msg), "%u pages on the lists, MmAvailablePages %lu, region %lu", total, MmAvailablePages,
-                 MmRetailPfnRegion.AvailablePages);
+    if (total != memory::AvailablePages || total != memory::RetailPfnRegion.AvailablePages) {
+        snprintf(msg, sizeof(msg), "%u pages on the lists, memory::AvailablePages %lu, region %lu", total,
+                 memory::AvailablePages, memory::RetailPfnRegion.AvailablePages);
         return msg;
     }
     return "";
@@ -60,7 +62,7 @@ void NTAPI SpawnStart(PVOID p) {
 } // namespace
 
 PKTHREAD Spawn(std::function<void()> fn, LONG priority) {
-    return KiCreateSystemThread(SpawnStart, new SpawnArgs{std::move(fn)}, 0x10000, priority);
+    return core::CreateSystemThread(SpawnStart, new SpawnArgs{std::move(fn)}, 0x10000, priority);
 }
 
 void Join(PKTHREAD thread) {

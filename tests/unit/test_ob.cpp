@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, objects::, ...
+
 typedef void(NTAPI *PTIMER_APC_ROUTINE)(PVOID TimerContext, ULONG TimerLowValue, LONG TimerHighValue);
 
 namespace {
@@ -133,15 +135,15 @@ TEST(Ob, PermanentObjectsStayUntilMadeTemporary) {
 }
 
 TEST(Ob, ObjectsAreFreedWithTheirLastReference) {
-    ULONG blocks = ExpPoolBlocks;
+    ULONG blocks = memory::PoolBlocks;
     HANDLE ev = MakeEvent(nullptr); // unnamed
-    EXPECT_GT(ExpPoolBlocks, blocks);
+    EXPECT_GT(memory::PoolBlocks, blocks);
     PVOID o;
     ObReferenceObjectByHandle(ev, nullptr, &o);
     NtClose(ev);
-    EXPECT_GT(ExpPoolBlocks, blocks) << "still referenced";
+    EXPECT_GT(memory::PoolBlocks, blocks) << "still referenced";
     ObfDereferenceObject(o);
-    EXPECT_EQ(ExpPoolBlocks, blocks) << "freed with the last reference";
+    EXPECT_EQ(memory::PoolBlocks, blocks) << "freed with the last reference";
 }
 
 TEST(Ob, HandleTableGrowsAndHandlesAreReused) {
@@ -179,7 +181,7 @@ TEST(Ob, SymbolicLinksResolveAndReportTheirTarget) {
     HANDLE dir = MakeDirectory("\\ObTest5", OBJ_CASE_INSENSITIVE | OBJ_PERMANENT);
     HANDLE ev = MakeEvent("\\ObTest5\\Target", OBJ_CASE_INSENSITIVE | OBJ_PERMANENT);
     Name link("\\??\\Q:"), target("\\ObTest5");
-    ASSERT_EQ(ObpCreateSymbolicLink(&link.s, &target.s), STATUS_SUCCESS);
+    ASSERT_EQ(objects::CreateSymbolicLink(&link.s, &target.s), STATUS_SUCCESS);
     // Through the drive letter (the \?? fast path) and down into the target directory.
     Name via("\\??\\q:\\TARGET");
     PVOID o, direct;
@@ -190,7 +192,7 @@ TEST(Ob, SymbolicLinksResolveAndReportTheirTarget) {
     ObfDereferenceObject(direct);
     // A link to a link-free path that is not a drive letter.
     Name link2("\\ObTest5\\ToTarget"), target2("\\ObTest5\\Target");
-    ASSERT_EQ(ObpCreateSymbolicLink(&link2.s, &target2.s), STATUS_SUCCESS);
+    ASSERT_EQ(objects::CreateSymbolicLink(&link2.s, &target2.s), STATUS_SUCCESS);
     ASSERT_EQ(ObReferenceObjectByName(&link2.s, OBJ_CASE_INSENSITIVE, &ExEventObjectType, nullptr, &o), STATUS_SUCCESS);
     ObfDereferenceObject(o);
     HANDLE lh;
@@ -205,7 +207,7 @@ TEST(Ob, SymbolicLinksResolveAndReportTheirTarget) {
     EXPECT_EQ(NtQuerySymbolicLinkObject(lh, &tiny, &len), (NTSTATUS)0xC0000023);
     NtClose(lh);
     Name missing("\\??\\Z:"), nowhere("\\NoSuchThing");
-    EXPECT_NE(ObpCreateSymbolicLink(&missing.s, &nowhere.s), STATUS_SUCCESS);
+    EXPECT_NE(objects::CreateSymbolicLink(&missing.s, &nowhere.s), STATUS_SUCCESS);
     NtClose(ev);
     NtClose(dir);
 }

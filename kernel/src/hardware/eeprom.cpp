@@ -6,6 +6,11 @@
 #include <xk/crypto.h>
 #include <xk/titles.h>
 
+// Exported variables: outside the namespace, with the names titles import.
+XK_PERSIST UCHAR XboxHDKey[16];
+
+namespace xk::hardware {
+
 constexpr UCHAR EEPROM_ADDRESS = 0xA8;
 constexpr ULONG REG_BINARY = 3, REG_DWORD = 4;
 constexpr NTSTATUS STATUS_OBJECT_NAME_NOT_FOUND_ = (NTSTATUS)0xC0000034;
@@ -13,55 +18,54 @@ constexpr NTSTATUS STATUS_BUFFER_TOO_SMALL_ = (NTSTATUS)0xC0000023;
 constexpr NTSTATUS STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D;
 constexpr NTSTATUS STATUS_DEVICE_DATA_ERROR_ = (NTSTATUS)0xC000009C;
 
-XK_PERSIST UCHAR XboxHDKey[16];
-XK_PERSIST volatile ULONG ExpEepromSecurityValid; // 1 when the security section decrypted and authenticated
+XK_PERSIST volatile ULONG EepromSecurityValid; // 1 when the security section decrypted and authenticated
 
 // Setting descriptors {type, index, size, offset-in-section}; layout of the EEPROM format.
 struct EEPROM_SETTING {
     UCHAR Type, Index, Size, Offset;
 };
-static const EEPROM_SETTING ExpFactorySettings[] = { // section at 0x30, 0x30 bytes, index 0x100 + n
+static const EEPROM_SETTING FactorySettings[] = { // section at 0x30, 0x30 bytes, index 0x100 + n
     {3, 0x00, 0x0C, 0x04}, {3, 0x01, 0x06, 0x10}, {3, 0x02, 0x10, 0x18}, {4, 0x03, 0x04, 0x28}, {3, 0xFF, 0x30, 0x00}};
-static const EEPROM_SETTING ExpUserSettings[] = { // section at 0x60, 0x60 bytes, index < 0x100
+static const EEPROM_SETTING UserSettings[] = { // section at 0x60, 0x60 bytes, index < 0x100
     {4, 0x00, 0x04, 0x04}, {3, 0x01, 0x04, 0x08}, {3, 0x02, 0x04, 0x18}, {4, 0x03, 0x04, 0x28}, {3, 0x04, 0x04, 0x0C},
     {3, 0x05, 0x04, 0x1C}, {4, 0x06, 0x04, 0x2C}, {4, 0x07, 0x04, 0x30}, {4, 0x08, 0x04, 0x34}, {4, 0x09, 0x04, 0x38},
     {4, 0x0A, 0x04, 0x3C}, {4, 0x0B, 0x04, 0x40}, {4, 0x0C, 0x04, 0x44}, {4, 0x0D, 0x04, 0x48}, {4, 0x0E, 0x04, 0x4C},
     {4, 0x0F, 0x04, 0x50}, {4, 0x10, 0x04, 0x54}, {4, 0x11, 0x04, 0x58}, {4, 0x12, 0x04, 0x5C}, {3, 0xFF, 0x60, 0x00}};
 
-static UCHAR ExpEeprom[256];       // shadow copy
-static bool ExpEepromValid;        // the shadow copy has been read
-static KEVENT ExpEepromLock;       // one caller at a time
-static bool ExpLockReady;          // the lock's event is initialised
-volatile ULONG ExpEepromKeySource; // diagnostics: 0 = none worked, 1 = EEPROM key, 2 + n = key state n
+static UCHAR EepromImage[256];  // shadow copy
+static bool EepromValid;        // the shadow copy has been read
+static KEVENT EepromLock;       // one caller at a time
+static bool EepromLockReady;    // the lock's event is initialised
+volatile ULONG EepromKeySource; // diagnostics: 0 = none worked, 1 = EEPROM key, 2 + n = key state n
 
-static void ExpLock() {
-    if (!ExpLockReady) {
-        KeInitializeEvent(&ExpEepromLock, SynchronizationEvent, TRUE);
-        ExpLockReady = true;
+static void LockEeprom() {
+    if (!EepromLockReady) {
+        KeInitializeEvent(&EepromLock, SynchronizationEvent, TRUE);
+        EepromLockReady = true;
     }
-    KeWaitForSingleObject(&ExpEepromLock, Executive, KernelMode, FALSE, nullptr);
+    KeWaitForSingleObject(&EepromLock, Executive, KernelMode, FALSE, nullptr);
 }
 
-static void ExpUnlock() {
-    KeSetEvent(&ExpEepromLock, 0, FALSE);
+static void UnlockEeprom() {
+    KeSetEvent(&EepromLock, 0, FALSE);
 }
 
-static NTSTATUS ExpLoadEeprom() {
-    if (ExpEepromValid)
+static NTSTATUS LoadEeprom() {
+    if (EepromValid)
         return STATUS_SUCCESS;
     for (ULONG i = 0; i < 256; i++) {
         ULONG v;
         NTSTATUS status = HalReadSMBusValue(EEPROM_ADDRESS, (UCHAR)i, FALSE, &v);
         if (!NT_SUCCESS(status))
             return status;
-        ExpEeprom[i] = (UCHAR)v;
+        EepromImage[i] = (UCHAR)v;
     }
-    ExpEepromValid = true;
+    EepromValid = true;
     return STATUS_SUCCESS;
 }
 
 // 32-bit sum with end-around carry; a section is valid when it sums to 0xFFFFFFFF.
-static ULONG ExpChecksum(const UCHAR *p, ULONG n) {
+static ULONG EepromChecksum(const UCHAR *p, ULONG n) {
     ULONG sum = 0, carry = 0;
     for (ULONG i = 0; i + 4 <= n; i += 4) {
         ULONG v = *(const ULONG *)(p + i);
@@ -73,32 +77,32 @@ static ULONG ExpChecksum(const UCHAR *p, ULONG n) {
     return s + (s < sum);
 }
 
-static NTSTATUS ExpWrite(ULONG offset, ULONG length, const UCHAR *data) {
+static NTSTATUS WriteEeprom(ULONG offset, ULONG length, const UCHAR *data) {
     for (ULONG i = 0; i < length; i += 2) {
         ULONG word = data[i] | ((ULONG)data[i + 1] << 8);
-        if (ExpEepromValid && *(USHORT *)(ExpEeprom + offset + i) == word)
+        if (EepromValid && *(USHORT *)(EepromImage + offset + i) == word)
             continue;
         NTSTATUS status = HalWriteSMBusValue(EEPROM_ADDRESS, (UCHAR)(offset + i), TRUE, word);
         if (!NT_SUCCESS(status)) {
-            ExpEepromValid = false;
+            EepromValid = false;
             return status;
         }
-        *(USHORT *)(ExpEeprom + offset + i) = (USHORT)word;
+        *(USHORT *)(EepromImage + offset + i) = (USHORT)word;
         KeStallExecutionProcessor(5000); // EEPROM write cycle
     }
     return STATUS_SUCCESS;
 }
 
-static const EEPROM_SETTING *ExpFind(ULONG Index, ULONG *sectionOffset, ULONG *sectionSize) {
+static const EEPROM_SETTING *FindSetting(ULONG Index, ULONG *sectionOffset, ULONG *sectionSize) {
     const EEPROM_SETTING *table;
     ULONG count;
     if (Index < 0x100) {
-        table = ExpUserSettings;
+        table = UserSettings;
         count = 20;
         *sectionOffset = 0x60;
         *sectionSize = 0x60;
     } else if (Index < 0x200) {
-        table = ExpFactorySettings;
+        table = FactorySettings;
         count = 5;
         *sectionOffset = 0x30;
         *sectionSize = 0x30;
@@ -121,7 +125,7 @@ XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PV
         if (ValueLength < 4)
             return STATUS_BUFFER_TOO_SMALL_;
         *Type = REG_DWORD;
-        *(PULONG)Value = XeConsoleGameRegion;
+        *(PULONG)Value = titles::ConsoleGameRegion;
         return STATUS_SUCCESS;
     }
     if (ValueIndex == 0xFFFF || ValueIndex == 0xFFFE) { // the whole EEPROM / its encrypted section
@@ -131,20 +135,20 @@ XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PV
         if (ValueLength < n)
             return STATUS_BUFFER_TOO_SMALL_;
         *Type = REG_BINARY;
-        ExpLock();
-        NTSTATUS status = ExpLoadEeprom();
+        LockEeprom();
+        NTSTATUS status = LoadEeprom();
         if (NT_SUCCESS(status))
-            RtlCopyMemory(Value, ExpEeprom, n);
-        ExpUnlock();
+            RtlCopyMemory(Value, EepromImage, n);
+        UnlockEeprom();
         return status;
     }
     ULONG secOffset, secSize;
-    const EEPROM_SETTING *s = ExpFind(ValueIndex, &secOffset, &secSize);
+    const EEPROM_SETTING *s = FindSetting(ValueIndex, &secOffset, &secSize);
     if (!s)
         return STATUS_OBJECT_NAME_NOT_FOUND_;
-    ExpLock();
-    NTSTATUS status = ExpLoadEeprom();
-    if (NT_SUCCESS(status) && ExpChecksum(ExpEeprom + secOffset, secSize) != 0xFFFFFFFF)
+    LockEeprom();
+    NTSTATUS status = LoadEeprom();
+    if (NT_SUCCESS(status) && EepromChecksum(EepromImage + secOffset, secSize) != 0xFFFFFFFF)
         status = STATUS_DEVICE_DATA_ERROR_;
     if (NT_SUCCESS(status)) {
         if (ValueLength < s->Size) {
@@ -154,46 +158,46 @@ XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PV
             if (ResultLength)
                 *ResultLength = s->Size;
             RtlZeroMemory(Value, ValueLength);
-            RtlCopyMemory(Value, ExpEeprom + secOffset + s->Offset, s->Size);
+            RtlCopyMemory(Value, EepromImage + secOffset + s->Offset, s->Size);
         }
     }
-    ExpUnlock();
+    UnlockEeprom();
     return status;
 }
 
 XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOID Value, ULONG ValueLength) {
-    ExpLock();
+    LockEeprom();
     NTSTATUS status;
     if (ValueIndex == 0xFFFF) {
-        status = ValueLength == 0x100 ? ExpLoadEeprom() : STATUS_INVALID_PARAMETER_;
+        status = ValueLength == 0x100 ? LoadEeprom() : STATUS_INVALID_PARAMETER_;
         if (NT_SUCCESS(status))
-            status = ExpWrite(0, 0x100, (const UCHAR *)Value);
-        ExpUnlock();
+            status = WriteEeprom(0, 0x100, (const UCHAR *)Value);
+        UnlockEeprom();
         return status;
     }
     ULONG secOffset, secSize;
-    const EEPROM_SETTING *s = ValueIndex < 0x100 ? ExpFind(ValueIndex, &secOffset, &secSize) : nullptr;
+    const EEPROM_SETTING *s = ValueIndex < 0x100 ? FindSetting(ValueIndex, &secOffset, &secSize) : nullptr;
     if (!s) {
-        ExpUnlock();
+        UnlockEeprom();
         return STATUS_OBJECT_NAME_NOT_FOUND_;
     }
     if (ValueLength > s->Size) {
-        ExpUnlock();
+        UnlockEeprom();
         return STATUS_INVALID_PARAMETER_;
     }
     UCHAR section[0x60];
-    status = ExpLoadEeprom();
+    status = LoadEeprom();
     if (NT_SUCCESS(status)) {
-        RtlCopyMemory(section, ExpEeprom + secOffset, secSize);
-        if (ExpChecksum(section, secSize) != 0xFFFFFFFF)
+        RtlCopyMemory(section, EepromImage + secOffset, secSize);
+        if (EepromChecksum(section, secSize) != 0xFFFFFFFF)
             RtlZeroMemory(section, secSize); // a corrupt user section starts over
         RtlZeroMemory(section + s->Offset, s->Size);
         RtlCopyMemory(section + s->Offset, Value, ValueLength);
         *(ULONG *)section = 0;
-        *(ULONG *)section = ~ExpChecksum(section, secSize);
-        status = ExpWrite(secOffset, secSize, section);
+        *(ULONG *)section = ~EepromChecksum(section, secSize);
+        status = WriteEeprom(secOffset, secSize, section);
     }
-    ExpUnlock();
+    UnlockEeprom();
     return status;
 }
 
@@ -201,7 +205,7 @@ XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOI
 // HMAC(EEPROM key, digest) and authenticated by HMAC(EEPROM key, plaintext).
 // HMAC-SHA1 from precomputed states (the SHA-1 state after the key ^ ipad block, and after the key ^ opad block):
 // how the open image's key block describes the EEPROM keys (spec/stock/01 §5).
-static void ExpHmacFromStates(const ULONG *states, const UCHAR *data, ULONG length, PUCHAR digest) {
+static void HmacFromStates(const ULONG *states, const UCHAR *data, ULONG length, PUCHAR digest) {
     struct {
         ULONG State[5];
         ULONG CountLow, CountHigh;
@@ -221,43 +225,43 @@ static void ExpHmacFromStates(const ULONG *states, const UCHAR *data, ULONG leng
 }
 
 // One candidate EEPROM key (states == nullptr: XboxEEPROMKey). True when the section authenticates.
-static bool ExpDecryptSecurity(const ULONG *states, PUCHAR plain) {
+static bool DecryptEepromSecurity(const ULONG *states, PUCHAR plain) {
     UCHAR rc4Key[20], check[20], rc4[258];
     if (states)
-        ExpHmacFromStates(states, ExpEeprom, 20, rc4Key);
+        HmacFromStates(states, EepromImage, 20, rc4Key);
     else
-        XcHMAC(XboxEEPROMKey, 16, ExpEeprom, 20, nullptr, 0, rc4Key);
-    RtlCopyMemory(plain, ExpEeprom + 20, 28);
+        XcHMAC(XboxEEPROMKey, 16, EepromImage, 20, nullptr, 0, rc4Key);
+    RtlCopyMemory(plain, EepromImage + 20, 28);
     XcRC4Key(rc4, 20, rc4Key);
     XcRC4Crypt(rc4, 28, plain);
     if (states)
-        ExpHmacFromStates(states, plain, 28, check);
+        HmacFromStates(states, plain, 28, check);
     else
         XcHMAC(XboxEEPROMKey, 16, plain, 28, nullptr, 0, check);
     bool ok = true;
     for (int i = 0; i < 20; i++)
-        ok &= check[i] == ExpEeprom[i];
+        ok &= check[i] == EepromImage[i];
     return ok;
 }
 
-void ExInitEeprom() {
-    ExpLock();
-    NTSTATUS status = ExpLoadEeprom();
-    ExpUnlock();
+void InitEeprom() {
+    LockEeprom();
+    NTSTATUS status = LoadEeprom();
+    UnlockEeprom();
     if (!NT_SUCCESS(status))
         return;
     UCHAR plain[28];
-    bool ok = ExpDecryptSecurity(nullptr, plain);
-    ExpEepromKeySource = ok ? 1 : 0;
-    for (ULONG i = 0; !ok && i < KiEepromKeyStateCount; i++) {
-        if ((ok = ExpDecryptSecurity(KiEepromKeyStates[i], plain)))
-            ExpEepromKeySource = 2 + i;
+    bool ok = DecryptEepromSecurity(nullptr, plain);
+    EepromKeySource = ok ? 1 : 0;
+    for (ULONG i = 0; !ok && i < core::EepromKeyStateCount; i++) {
+        if ((ok = DecryptEepromSecurity(core::EepromKeyStates[i], plain)))
+            EepromKeySource = 2 + i;
     }
     if (!ok)
         return; // unknown EEPROM revision or key: keep the defaults
     RtlCopyMemory(XboxHDKey, plain + 8, 16);
-    XeConsoleGameRegion = *(ULONG *)(plain + 24);
-    ExpEepromSecurityValid = 1;
+    titles::ConsoleGameRegion = *(ULONG *)(plain + 24);
+    EepromSecurityValid = 1;
 }
 
 // Refurbishment record in sector 3 of the disk: {'RBRF', first-boot time (8), power cycle count}.
@@ -298,3 +302,5 @@ XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength,
     NtClose(h);
     return status;
 }
+
+} // namespace xk::hardware

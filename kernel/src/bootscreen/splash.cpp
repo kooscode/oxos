@@ -15,8 +15,10 @@
 #include <xk/jingle.h>
 #include <xk/vsplash.h>
 
+namespace xk::bootscreen {
+
 // The splash runs only during a cold boot: its code is boot-only (freed before the first title starts,
-// spec/oxos_internal/18_boot_memory.md), except HalpEndSplash, which every title start calls.
+// spec/oxos_internal/18_boot_memory.md), except EndSplash, which every title start calls.
 #pragma code_seg(".xkb")
 
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
@@ -35,52 +37,52 @@ constexpr ULONG SPLASH_LOGO_MS = 1000;  // the start picture alone (the fade inc
 // copies it into RAM for the kernel.
 constexpr ULONG SPLASH_HEADER = 20;
 
-static KEVENT HalpSplashDone;                      // the splash has finished (at once without an AV pack)
-static PKTHREAD HalpSplashThreadObject;            // waited for before the title starts, so its stack is freed by then
-static ULONG *HalpSplashScreen, *HalpSplashImage;  // the scanned-out frame; the end picture
+static KEVENT SplashDone;                      // the splash has finished (at once without an AV pack)
+static PKTHREAD SplashThreadObject;            // waited for before the title starts, so its stack is freed by then
+static ULONG *SplashScreen, *SplashImage;  // the scanned-out frame; the end picture
 static ULONG *HalpSplashStart;                     // a vector splash's start picture; else none
-volatile ULONG HalpSplashFrames;                   // frames shown (boot tests)
-volatile ULONG HalpSplashFadeMs, HalpSplashFullMs; // the fade's planned length, and when full intensity was drawn
-volatile ULONG HalpSplashSource;                   // 1 = drawn emblem, 2 = the vector scene from flash (boot tests)
-volatile ULONG HalpSplashStatus; // the scene: 0 = drawn, else why not (header 0x100+, 0x200 + vsplash::Check's step)
-// The 2BL's copy of the scene in RAM (HalpTakeSplashRecord), freed once it has been drawn.
-ULONG HalpSplashRamPhys, HalpSplashRamSize;
+volatile ULONG SplashFrames;                   // frames shown (boot tests)
+volatile ULONG SplashFadeMs, SplashFullMs; // the fade's planned length, and when full intensity was drawn
+volatile ULONG SplashSource;                   // 1 = drawn emblem, 2 = the vector scene from flash (boot tests)
+volatile ULONG SplashStatus; // the scene: 0 = drawn, else why not (header 0x100+, 0x200 + vsplash::Check's step)
+// The 2BL's copy of the scene in RAM (TakeSplashRecord), freed once it has been drawn.
+ULONG SplashRamPhysical, SplashRamSize;
 
 // Text centred on the screen's width.
-static void HalpDrawText(ULONG *img, const char *text, ULONG y, ULONG scale, ULONG color) {
-    XkDrawText(img, SPLASH_W, (SPLASH_W - XkTextWidth(text, scale)) / 2, y, text, scale, color);
+static void DrawSplashText(ULONG *img, const char *text, ULONG y, ULONG scale, ULONG color) {
+    DrawText(img, SPLASH_W, (SPLASH_W - TextWidth(text, scale)) / 2, y, text, scale, color);
 }
 
-// The hint for the File Manager and the OXOS version and video encoder (XkVersionLabel), small and grey, centred at the
+// The hint for the File Manager and the OXOS version and video encoder (VersionLabel), small and grey, centred at the
 // bottom, inside the part of the picture a TV shows: [ Hold (X) for File Manager - v0.4.2/CONEXANT ].
-static void HalpDrawSplashLabel(ULONG *img) {
-    static const char hint[] = "[ Hold  X  for File Manager - "; // the X drawn as the button (XkDrawText)
+static void DrawSplashLabel(ULONG *img) {
+    static const char hint[] = "[ Hold  X  for File Manager - "; // the X drawn as the button (DrawText)
     char label[64];
     RtlCopyMemory(label, hint, sizeof(hint));
     ULONG n = sizeof(hint) - 1;
-    XkVersionLabel(label + n, sizeof(label) - n - 3);
+    VersionLabel(label + n, sizeof(label) - n - 3);
     while (label[n])
         n++;
     label[n] = ' ';
     label[n + 1] = ']';
     label[n + 2] = 0;
     constexpr ULONG scale = 2, margin = 40;
-    HalpDrawText(img, label, SPLASH_H - margin - 7 * scale, scale, 0x707070);
+    DrawSplashText(img, label, SPLASH_H - margin - 7 * scale, scale, 0x707070);
 }
 
-static LONG HalpAbs(LONG v) {
+static LONG Abs(LONG v) {
     return v < 0 ? -v : v;
 }
 
 // The emblem, as the logo's X: two crossed bars in green, lighter towards the top, with a soft edge (coverage from
 // the distance in pixels), and a glow around them.
-static void HalpDrawEmblem(ULONG *img) {
+static void DrawEmblem(ULONG *img) {
     const LONG cx = SPLASH_W / 2, cy = 200, half = 80, bar = 15, glow = 24;
     for (LONG y = cy - half - glow; y <= cy + half + glow; y++) {
         for (LONG x = cx - half - glow; x <= cx + half + glow; x++) {
             LONG dx = x - cx, dy = y - cy;
-            LONG a = HalpAbs(dx - dy), b = HalpAbs(dx + dy), m = a < b ? a : b; // distance from a bar x sqrt(2)
-            LONG along = HalpAbs(dx) > HalpAbs(dy) ? HalpAbs(dx) : HalpAbs(dy); // how far out along it
+            LONG a = Abs(dx - dy), b = Abs(dx + dy), m = a < b ? a : b; // distance from a bar x sqrt(2)
+            LONG along = Abs(dx) > Abs(dy) ? Abs(dx) : Abs(dy);         // how far out along it
             LONG edge = bar * 141 / 100, d = (m - edge) * 100 / 141;
             LONG out = along - half > d ? along - half : d; // distance outside the X, pixels
             LONG v = out <= 0 ? 255 : out <= 2 ? 255 - out * 100 : 0;
@@ -96,7 +98,7 @@ static void HalpDrawEmblem(ULONG *img) {
 
 // A vector scene: the end picture into img, the start picture into HalpSplashStart (when there is memory for it; else
 // only the end picture is faded in). 0 = drawn.
-static ULONG HalpDrawVectorSplash(const UCHAR *Scene, ULONG Size, ULONG *img) {
+static ULONG DrawVectorSplash(const UCHAR *Scene, ULONG Size, ULONG *img) {
     unsigned scratchSize;
     if (unsigned step = vsplash::Check(Scene, Size, &scratchSize))
         return 0x200 + step;
@@ -108,12 +110,12 @@ static ULONG HalpDrawVectorSplash(const UCHAR *Scene, ULONG Size, ULONG *img) {
     if (HalpSplashStart)
         vsplash::Render(Scene, Size, vsplash::START, (unsigned *)HalpSplashStart, scratch);
     MmFreeContiguousMemory(scratch);
-    HalpSplashSource = 2;
+    SplashSource = 2;
     return 0;
 }
 
 // Draw the splash at Splash (Room bytes available after it); 0 = drawn.
-static ULONG HalpDecodeSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
+static ULONG DecodeSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
     static const char magic[8] = {'X', 'K', 'S', 'P', 'L', 'A', 'S', 'H'};
     for (int i = 0; i < 8; i++) {
         if (Splash[i] != (UCHAR)magic[i])
@@ -122,41 +124,41 @@ static ULONG HalpDecodeSplash(const UCHAR *Splash, ULONG Room, ULONG *img) {
     ULONG version = *(const ULONG *)(Splash + 8), length = *(const ULONG *)(Splash + 12);
     if (version != 2 || Room < SPLASH_HEADER || length > Room - SPLASH_HEADER)
         return 0x102;
-    return HalpDrawVectorSplash(Splash + SPLASH_HEADER, length, img);
+    return DrawVectorSplash(Splash + SPLASH_HEADER, length, img);
 }
 
 // The 2BL's copy of the splash (boot/bl.cpp BlCopySplash): drawn from RAM, then its pages are freed. Without one (an
 // older 2BL, or no splash in the image) the emblem is drawn; the kernel does not read the flash itself.
-static ULONG HalpLoadSplash(ULONG *img) {
-    if (!HalpSplashRamSize)
+static ULONG LoadSplash(ULONG *img) {
+    if (!SplashRamSize)
         return 0x100;
-    ULONG status = HalpDecodeSplash((const UCHAR *)(MM_SYSTEM_PHYSICAL_MAP | HalpSplashRamPhys), HalpSplashRamSize,
-                                    img);
-    ULONG first = HalpSplashRamPhys >> PAGE_SHIFT,
-          end = (HalpSplashRamPhys + HalpSplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT;
-    HalpSplashRamSize = 0;
+    ULONG status = DecodeSplash((const UCHAR *)(MM_SYSTEM_PHYSICAL_MAP | SplashRamPhysical), SplashRamSize,
+                                img);
+    ULONG first = SplashRamPhysical >> PAGE_SHIFT,
+          end = (SplashRamPhysical + SplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT;
+    SplashRamSize = 0;
     for (ULONG pfn = first; pfn < end; pfn++)
-        MiFreeContiguousPage(pfn);
+        memory::FreeContiguousPage(pfn);
     return status;
 }
 
-static void NTAPI HalpSplashThread(PVOID) {
-    RtlZeroMemory(HalpSplashScreen, SPLASH_PITCH * SPLASH_H);
-    HalpSplashStatus = HalpLoadSplash(HalpSplashImage);
-    XK_SERIAL("splash: image status %#lx\n", HalpSplashStatus);
-    if (HalpSplashStatus) { // no scene: the emblem and the name
-        RtlZeroMemory(HalpSplashImage, SPLASH_PITCH * SPLASH_H);
-        HalpDrawEmblem(HalpSplashImage);
-        HalpDrawText(HalpSplashImage, "OXOS", 330, 6, 0xA8B4A0);
-        HalpSplashSource = 1;
+static void NTAPI SplashThread(PVOID) {
+    RtlZeroMemory(SplashScreen, SPLASH_PITCH * SPLASH_H);
+    SplashStatus = LoadSplash(SplashImage);
+    XK_SERIAL("splash: image status %#lx\n", SplashStatus);
+    if (SplashStatus) { // no scene: the emblem and the name
+        RtlZeroMemory(SplashImage, SPLASH_PITCH * SPLASH_H);
+        DrawEmblem(SplashImage);
+        DrawSplashText(SplashImage, "OXOS", 330, 6, 0xA8B4A0);
+        SplashSource = 1;
     }
-    HalpDrawSplashLabel(HalpSplashImage);
+    DrawSplashLabel(SplashImage);
     if (HalpSplashStart)
-        HalpDrawSplashLabel(HalpSplashStart);
+        DrawSplashLabel(HalpSplashStart);
     // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
-    AvPrepareBootDisplay();
-    AvSetDisplayMode((PVOID)0xFD000000, 0, AvBootModeWord(), 0x1E, SPLASH_PITCH,
-                     MmGetPhysicalAddress(HalpSplashScreen));
+    hardware::PrepareBootDisplay();
+    AvSetDisplayMode((PVOID)0xFD000000, 0, hardware::BootModeWord(), 0x1E, SPLASH_PITCH,
+                     MmGetPhysicalAddress(SplashScreen));
     AvSendTVEncoderOption((PVOID)0xFD000000, 9, 0, nullptr);
     XK_SERIAL("splash: display mode set\n");
     {
@@ -167,22 +169,22 @@ static void NTAPI HalpSplashThread(PVOID) {
         for (ULONG ms = 0; ms < 100 && !(*pcrtc & 1); ms++)
             KeStallExecutionProcessor(1000);
         if (*pcrtc & 1) {
-            AvLoadBootGamma();
+            hardware::LoadBootGamma();
             XK_SERIAL("splash: colour table loaded\n");
         } else {
             XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
         }
     }
     const ULONG climaxMs = jingle::ClimaxMs();
-    const ULONG *from = HalpSplashStart ? HalpSplashStart : HalpSplashImage; // the start picture
-    HalpSplashFadeMs = climaxMs;
+    const ULONG *from = HalpSplashStart ? HalpSplashStart : SplashImage; // the start picture
+    SplashFadeMs = climaxMs;
     const ULONG endMs = jingle::LengthMs(); // the end picture stays until the jingle has died away
     XK_SERIAL("splash: logo for %lu ms, then the jingle and a cross-fade of %lu ms, held to %lu ms\n", SPLASH_LOGO_MS,
               climaxMs, endMs);
     // Sleeps, reading the controllers about every 10 ms meanwhile (spec/oxos_internal/32 §2).
     auto sleepMs = [](ULONG ms) {
         for (ULONG left = ms; left;) {
-            GamepadWatchPoll();
+            gamepad::PollControllers();
             ULONG step = left < 10 ? left : 10;
             LARGE_INTEGER t;
             t.QuadPart = -10000LL * step;
@@ -193,7 +195,7 @@ static void NTAPI HalpSplashThread(PVOID) {
     // Draws the mix of the start and end pictures (mix 0-256) at brightness level (0-256).
     auto draw = [&](ULONG level, ULONG mix) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
-            ULONG p = HalpSplashImage[i], q = from[i];
+            ULONG p = SplashImage[i], q = from[i];
             if (!p && !q)
                 continue;
             ULONG out = 0;
@@ -201,9 +203,9 @@ static void NTAPI HalpSplashThread(PVOID) {
                 ULONG c = ((q >> sh & 0xFF) * (256 - mix) + (p >> sh & 0xFF) * mix) >> 8;
                 out |= (c * level >> 8) << sh;
             }
-            HalpSplashScreen[i] = out;
+            SplashScreen[i] = out;
         }
-        HalpSplashFrames = HalpSplashFrames + 1;
+        SplashFrames = SplashFrames + 1;
     };
     // 1. The fade from black to the start picture, which then stays until SPLASH_LOGO_MS.
     const ULONGLONG shown = KeQueryInterruptTime(); // 100 ns units
@@ -215,18 +217,18 @@ static void NTAPI HalpSplashThread(PVOID) {
     draw(256, 0);
     // The controllers are set up while the start picture stands still (it blocks for a few hundred milliseconds),
     // then read until the jingle ends: X opens the File Manager (spec/oxos_internal/32).
-    GamepadWatchStart();
+    gamepad::StartWatchingControllers();
     if (ULONG ms = sinceMs(shown); ms < SPLASH_LOGO_MS)
         sleepMs(SPLASH_LOGO_MS - ms);
     // 2. The jingle, and the cross-fade to the end picture (smoothstep: eases in and out), there at the climax.
-    HalpBootSoundGo();
+    PlayBootSound();
     const ULONGLONG jingleStart = KeQueryInterruptTime();
     XK_SERIAL("splash: jingle started\n");
     for (;;) {
         ULONG ms = sinceMs(jingleStart);
         if (ms >= climaxMs) {
             draw(256, 256);
-            HalpSplashFullMs = ms;
+            SplashFullMs = ms;
             break;
         }
         ULONG u = ms * 256 / climaxMs;
@@ -238,34 +240,34 @@ static void NTAPI HalpSplashThread(PVOID) {
     if (ULONG ms = sinceMs(jingleStart); ms < endMs)
         sleepMs(endMs - ms);
     XK_SERIAL("splash: shown\n");
-    GamepadWatchStop();
-    KeSetEvent(&HalpSplashDone, 0, FALSE);
+    gamepad::StopWatchingControllers();
+    KeSetEvent(&SplashDone, 0, FALSE);
 }
 
 // Cold boot, with an AV pack connected.
-void HalpStartSplash() {
-    KeInitializeEvent(&HalpSplashDone, NotificationEvent, TRUE);
+void StartSplash() {
+    KeInitializeEvent(&SplashDone, NotificationEvent, TRUE);
     if (HalBootSMCVideoMode == 7)
         return;
     // Low memory, like the reference keeps its boot framebuffer (in the freed INIT section, spec/stock/05 §5): titles
     // assume the top of RAM holds only a little of the kernel's own memory when they start (an nxdk title clears a
     // framebuffer at 0x3C00000 it never allocated).
-    HalpSplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0,
-                                                             PAGE_READWRITE | PAGE_WRITECOMBINE);
-    HalpSplashImage = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
-    if (!HalpSplashScreen || !HalpSplashImage) {
-        if (HalpSplashScreen)
-            MmFreeContiguousMemory(HalpSplashScreen);
-        HalpSplashScreen = nullptr;
+    SplashScreen = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0,
+                                                         PAGE_READWRITE | PAGE_WRITECOMBINE);
+    SplashImage = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
+    if (!SplashScreen || !SplashImage) {
+        if (SplashScreen)
+            MmFreeContiguousMemory(SplashScreen);
+        SplashScreen = nullptr;
         return;
     }
-    KeResetEvent(&HalpSplashDone);
-    HalpStartBootSound(); // synthesizing before the splash thread needs it
-    HalpSplashThreadObject = KiCreateSystemThread(HalpSplashThread, nullptr, 0, 8);
+    KeResetEvent(&SplashDone);
+    StartBootSound(); // synthesizing before the splash thread needs it
+    SplashThreadObject = core::CreateSystemThread(SplashThread, nullptr, 0, 8);
 }
 
-void HalpWaitForSplash() {
-    KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
+void WaitForSplash() {
+    KeWaitForSingleObject(&SplashDone, Executive, KernelMode, FALSE, nullptr);
 }
 
 #pragma code_seg()
@@ -273,38 +275,38 @@ void HalpWaitForSplash() {
 // The boot-only pages, keeping the tables of the console's video encoder (once; quick reboots find them freed).
 static void HalpFreeBootPages() {
     ULONG_PTR start, end;
-    AvTablesInUse(&start, &end);
-    MmFreeBootPages(start, end);
+    hardware::VideoTablesInUse(&start, &end);
+    memory::FreeBootPages(start, end);
 }
 
-// Wait for the splash and the jingle to end, turn the screen off and free the splash's memory. HalpStopSplash keeps
+// Wait for the splash and the jingle to end, turn the screen off and free the splash's memory. StopSplash keeps
 // the boot-only pages: the format countdown and the upload server take the screen and still run from them
-// (spec/oxos_internal/30 §4, 31 §6). HalpEndSplash, before a title starts, frees them too, so the title gets the whole
+// (spec/oxos_internal/30 §4, 31 §6). EndSplash, before a title starts, frees them too, so the title gets the whole
 // budget (spec/stock/09 §7; the reference frees its boot animation's framebuffer, in its INIT section, too); the
 // title's display-mode change and first frame turn the screen on again.
-void HalpStopSplash() {
-    if (!HalpSplashScreen)
+void StopSplash() {
+    if (!SplashScreen)
         return;
-    KeWaitForSingleObject(&HalpSplashDone, Executive, KernelMode, FALSE, nullptr);
-    if (HalpSplashThreadObject) { // until it has exited: the next switch back frees its stack
-        KeWaitForSingleObject(HalpSplashThreadObject, Executive, KernelMode, FALSE, nullptr);
-        ObfDereferenceObject(HalpSplashThreadObject);
-        HalpSplashThreadObject = nullptr;
+    KeWaitForSingleObject(&SplashDone, Executive, KernelMode, FALSE, nullptr);
+    if (SplashThreadObject) { // until it has exited: the next switch back frees its stack
+        KeWaitForSingleObject(SplashThreadObject, Executive, KernelMode, FALSE, nullptr);
+        ObfDereferenceObject(SplashThreadObject);
+        SplashThreadObject = nullptr;
     }
-    HalpEndBootSound(); // the jingle has ended and the audio controller is stopped
+    EndBootSound(); // the jingle has ended and the audio controller is stopped
     // Screen off until the title shows its first frame: its graphics set-up writes the memory the splash is scanned
     // out of (and, freed below, may reuse it), which garbled the last splash frame on screen. A title's display-mode
     // change leaves the screen off too and turns it on itself (option 9 with 0, spec/stock/22).
     AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
     if (HalpSplashStart)
         MmFreeContiguousMemory(HalpSplashStart);
-    MmFreeContiguousMemory(HalpSplashImage);
-    MmFreeContiguousMemory(HalpSplashScreen);
-    HalpSplashScreen = HalpSplashImage = HalpSplashStart = nullptr;
+    MmFreeContiguousMemory(SplashImage);
+    MmFreeContiguousMemory(SplashScreen);
+    SplashScreen = SplashImage = HalpSplashStart = nullptr;
 }
 
-void HalpEndSplash() {
-    HalpStopSplash();
+void EndSplash() {
+    StopSplash();
     HalpFreeBootPages(); // the splash and the jingle have ended: the boot-only code goes
 }
 
@@ -312,20 +314,22 @@ void HalpEndSplash() {
 // before the memory manager starts, which keeps those pages until the splash has been decoded. Normal code: the memory
 // manager asks on quick reboots too.
 
-void HalpTakeSplashRecord(bool QuickReboot) {
-    HalpSplashRamPhys = HalpSplashRamSize = 0;
+void TakeSplashRecord(bool QuickReboot) {
+    SplashRamPhysical = SplashRamSize = 0;
     auto record = (volatile ULONG *)0x80002380;
     if (QuickReboot || record[0] != 0x5053584F)
         return;
     ULONG phys = record[1], size = record[2];
     record[0] = 0;
     if (size && size <= 0x40000 && !(phys & (PAGE_SIZE - 1)) && phys >= 0x100000 && phys + size <= 0x3000000) {
-        HalpSplashRamPhys = phys;
-        HalpSplashRamSize = size;
+        SplashRamPhysical = phys;
+        SplashRamSize = size;
     }
 }
 
-bool HalpIsSplashPage(ULONG pfn) {
-    return HalpSplashRamSize && pfn >= (HalpSplashRamPhys >> PAGE_SHIFT) &&
-           pfn < ((HalpSplashRamPhys + HalpSplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT);
+bool IsSplashPage(ULONG pfn) {
+    return SplashRamSize && pfn >= (SplashRamPhysical >> PAGE_SHIFT) &&
+           pfn < ((SplashRamPhysical + SplashRamSize + PAGE_SIZE - 1) >> PAGE_SHIFT);
 }
+
+} // namespace xk::bootscreen

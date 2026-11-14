@@ -21,6 +21,15 @@ usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs 
 import argparse, os, re, struct, subprocess, sys
 
 
+def qualified_name(symbol):
+    """A namespaced C++ symbol's name below namespace xk ("?Name@storage@xk@@..." -> "storage::Name"), else ""."""
+    m = re.match(r"\?([A-Za-z0-9_]+)@((?:[A-Za-z0-9_]+@)+)@", symbol)
+    if not m:
+        return ""
+    scopes = m[2].rstrip("@").split("@")[::-1]
+    return "::".join((scopes[1:] if scopes[0] == "xk" else scopes) + [m[1]])
+
+
 def boot_only_users(map_path, boot, entries, objects):
     sections, boot_syms = set(), {}
     for line in open(map_path):
@@ -30,7 +39,9 @@ def boot_only_users(map_path, boot, entries, objects):
             continue
         m = re.match(r"\s*([0-9a-f]{4}):[0-9a-f]{8}\s+(\S+)\s+[0-9a-f]{16}\s+(?:\S+\s+)*?(\S+\.obj)\s*$", line)
         # The plain name: C++ names start "?Name@", C ones "_Name"; string literals ("??_C@...") have none of their own.
-        if m and m[1] in sections and re.match(r"[?_]*([A-Za-z0-9_]*)", m[2])[1] not in entries:
+        # A namespaced C++ name ("?Name@storage@xk@@...") is also matched as "storage::Name".
+        if m and m[1] in sections and re.match(r"[?_]*([A-Za-z0-9_]*)", m[2])[1] not in entries and \
+                qualified_name(m[2]) not in entries:
             boot_syms[m[2]] = m[3]
     used = {}
     out = subprocess.run(["nm", "-A"] + objects, capture_output=True, text=True, check=True).stdout
@@ -90,7 +101,7 @@ def title_call_errors(exe):
     calls = found(TITLE_CALL)
     if len(calls) != 1:
         errors.append(f"{len(calls)} title-start calls (FF 15 28 01 01 00) below {TITLE_SCAN_END:#x}: "
-                      f"{[hex(c) for c in calls]}, need exactly one (src/titles/loader.cpp XepTitleThread)")
+                      f"{[hex(c) for c in calls]}, need exactly one (src/titles/loader.cpp titles::TitleThread)")
     elif any(lo <= calls[0] < hi for lo, hi in boot):
         errors.append(f"the title-start call at {calls[0]:#x} is in a boot-only section")
     for other in OTHER_CALLS:

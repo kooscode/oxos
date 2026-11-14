@@ -93,27 +93,14 @@ typedef struct _ATA_PASS_THROUGH {
 XK_SIZE(ATA_PASS_THROUGH, 0x10);
 constexpr NTSTATUS STATUS_REQUEST_ABORTED = (NTSTATUS)0xC0000240; // the drive stayed busy: the channel was reset
 
-void IdexChannelReset();                        // software reset of both devices (ide_channel.cpp)
-void IdexDiskComputePassword(PUCHAR Password); // the drive password from the IDENTIFY model and serial (disk.cpp)
-
-// The disk (spec/stock/04 §4): partition devices, size, addressing, identity, security state, cache partitions.
+// The disk's exports (spec/stock/04 §4): identity and cache partitions.
 constexpr ULONG IDE_MAX_PARTITIONS = 20; // Partition0 (the whole disk) to Partition19
-XBAPI ULONGLONG IdexDiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos_internal/04_lba48.md)
-XBAPI BOOLEAN IdexDiskLba48;             // the drive supports 48-bit addressing
 XBAPI STRING HalDiskModelNumber, HalDiskSerialNumber;
-XBAPI BOOLEAN IdexDiskSecurityUnlocked;
+XBAPI ULONG HalDiskCachePartitionCount;
 // OXOS's own exports (storage/disk_layout.cpp, spec/oxos_internal/30_disk_format.md): format the hard disk as exFAT
 // (keeping one file), and delete all partitions.
 XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath);
 XBAPI NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds);
-extern volatile UCHAR IdexDiskLastStatus; // the disk's status register at its last start-up step (diagnostics)
-XBAPI ULONG HalDiskCachePartitionCount;
-
-// exFAT layout (spec/oxos_internal/05_exfat_storage_spec.md): set before the first partition lookup.
-extern BOOLEAN IdexDiskEXFATLayout;
-extern PDEVICE_OBJECT IdexDiskEXFATVolume;    // the exFAT partition
-extern BOOLEAN IdexDiskForeignLayout; // a PC partition table without a usable exFAT volume: no partitions, no writes
-PCSZ IdexDiskFolderOf(PDEVICE_OBJECT Device); // "E", "C", ... for a folder partition, else nullptr
 
 // ATA task file.
 constexpr USHORT IDE_DATA = 0x1F0, IDE_ERROR = 0x1F1, IDE_FEATURES = 0x1F1, IDE_COUNT = 0x1F2, IDE_LBA0 = 0x1F3,
@@ -123,25 +110,47 @@ constexpr USHORT IDE_DATA = 0x1F0, IDE_ERROR = 0x1F1, IDE_FEATURES = 0x1F1, IDE_
 constexpr UCHAR IDE_STATUS_ERR = 0x01, IDE_STATUS_DRQ = 0x08, IDE_STATUS_DF = 0x20, IDE_STATUS_DRDY = 0x40,
                 IDE_STATUS_BSY = 0x80;
 
-void IdexChannelInit();
-void NTAPI IdexChannelStartPacket(PDEVICE_OBJECT DeviceObject, PIRP Irp);
-void NTAPI IdexChannelStartNextPacket();
-bool IdexWaitForStatus(UCHAR mask, UCHAR value, ULONG timeoutUs);
-bool IdexProgramDma(PVOID Buffer, ULONG Length);
-void IdexDiskInit();
-void IdexCdRomInit();
+namespace xk::storage {
+
+void ResetIdeChannel();                    // software reset of both devices (ide_channel.cpp)
+void ComputeDiskPassword(PUCHAR Password); // the drive password from the IDENTIFY model and serial (disk.cpp)
+
+// The disk (spec/stock/04 §4): size, addressing, security state.
+extern ULONGLONG DiskLengthInSectors; // 64-bit: 48-bit drives (spec/oxos_internal/04_lba48.md)
+extern BOOLEAN DiskSupportsLba48;     // the drive supports 48-bit addressing
+extern BOOLEAN DiskSecurityUnlocked;
+extern volatile UCHAR DiskLastStatus; // the disk's status register at its last start-up step (diagnostics)
+
+// exFAT layout (spec/oxos_internal/05_exfat_storage_spec.md): set before the first partition lookup.
+extern BOOLEAN DiskHasEXFATLayout;
+extern PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition
+extern BOOLEAN DiskHasForeignLayout; // a PC partition table without a usable exFAT volume: no partitions, no writes
+PCSZ FolderOfPartition(PDEVICE_OBJECT Device); // "E", "C", ... for a folder partition, else nullptr
+
+void InitIdeChannel();
+void NTAPI StartIdePacket(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+void NTAPI StartNextIdePacket();
+bool WaitForIdeStatus(UCHAR mask, UCHAR value, ULONG timeoutUs);
+bool ProgramIdeDma(PVOID Buffer, ULONG Length);
+void InitDisk();
+void InitDvdDrive();
 
 // Shared between the IDE drivers and the virtual disc driver (ide_channel.cpp, dvd_drive.cpp, disk.cpp).
-UCHAR IdexGetCompletionStatus(PUCHAR BusMasterStatus);
-extern PDEVICE_OBJECT IdexCdRomDeviceObject;
-void IdexCdRomEmulatedSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got);
-bool IdexCdRomIsSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length);
-void IdexDiskCountPowerCycle();
-[[noreturn]] void IdexFatalError(ULONG Code); // the fatal error screen (core/fatal.cpp)
+UCHAR IdeCompletionStatus(PUCHAR BusMasterStatus);
+extern PDEVICE_OBJECT DvdDeviceObject;
+void EmulatedDvdSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got);
+bool IsDvdSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length);
+void CountDiskPowerCycle();
 
 // The virtual disc driver's hooks in the DVD driver (virtual_disc.cpp), and its restart: the disc images mounted
 // before a quick reboot are mounted again (the title launcher calls it).
-bool VdServeCdRom(PIRP Irp, NTSTATUS *Status);
-bool VdDvdImageMounted();
-void VdRestoreMounts();
-void VdInitialize(); // start-up: the virtual disc control device (the IDE start-up calls it)
+bool ServeVirtualDvd(PIRP Irp, NTSTATUS *Status);
+bool IsDvdImageMounted();
+void RestoreVirtualDiscMounts();
+void InitVirtualDiscs(); // start-up: the virtual disc control device (the IDE start-up calls it)
+
+} // namespace xk::storage
+
+namespace xk::core {
+[[noreturn]] void ShowFatalError(ULONG Code); // the fatal error screen (core/fatal.cpp)
+} // namespace xk::core

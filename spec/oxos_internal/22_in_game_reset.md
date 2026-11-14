@@ -1,7 +1,8 @@
 # 22 — In-game reset (IGR)
 
-OXOS addition, implemented 2026-10-29. Code: `kernel/src/arch/in_game_reset.S` (`KeRaiseIrqlToDpcLevel`, `HalpIgrReturn`),
-`kernel/src/hardware/in_game_reset.cpp` (`HalpIgrCheck`, `HalpIgrReboot`). Background: how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
+OXOS addition, implemented 2026-10-29. Code: `kernel/src/arch/in_game_reset.S` (`KeRaiseIrqlToDpcLevel`,
+`HalpIgrReturn`), `kernel/src/hardware/in_game_reset.cpp` (`HalpIgrCheck`, `hardware::InGameResetReboot`). Background:
+how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
 
 Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title, reboots the console. The reboot is a
 cold one, a power cycle through the SMC (§6), so:
@@ -64,8 +65,8 @@ reboot (§6) uses the polled SMBus, which works at any IRQL.
   `HalReturnToFirmware(1)`, cold boot 2 s later, back to what netboot serves.
 
 ## 6. The reboot: a power cycle (2026-11-04)
-`HalpIgrReboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08), retrying
-the SMBus write up to five times; if the console is still running two seconds later, `HalReturnToFirmware(1)`.
+`hardware::InGameResetReboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08),
+retrying the SMBus write up to five times; if the console is still running two seconds later, `HalReturnToFirmware(1)`.
 - **Why not `HalReturnToFirmware(1)`** (until 2026-11-03): that is the reference reset, SMC 0x02 ← 1 and then port
   0xCF9 ← 0x0E. Pressed while a test title was running, the next boot found 29 of the X-codes' GPU and memory
   settings at their power-on values (the memory interface, the DRAM controller, pads, the GPU clock, DRAM refresh;
@@ -75,7 +76,7 @@ the SMBus write up to five times; if the console is still running two seconds la
 - A power cycle takes the GPU's power away, so the next boot is a cold boot like any other, which the 2BL's checks
   cover (spec 26).
 - **Debug build option** `make REBOOT_TEST=N`: N seconds into every boot (also inside a title started by a quick
-  reboot) the kernel calls `HalpIgrReboot`, so the reboot can be tested in a loop without a controller.
+  reboot) the kernel calls `hardware::InGameResetReboot`, so the reboot can be tested in a loop without a controller.
 - **Tests (1.4 console, Modxo, netboot, REBOOT_TEST=30):** from the dashboard, 4 power cycles, each a cold boot back
   into the dashboard about 3 s later; with a test title running (netbooted launcher, the reboot 30 s into the
   game), 10 power cycles: every next boot a normal cold boot (64 MB, 0x11448000; 3-9 X-code settings differing at 2BL
@@ -140,9 +141,9 @@ Differences from today's reset, for the user:
 1. **IRQL.** Below DISPATCH_LEVEL (game threads read pads at passive level): go on. At DISPATCH_LEVEL or above
    (a title reading its pads from a DPC): use the power cycle instead, because the shutdown notifications and the
    unmount may wait.
-2. **Disc images.** Clear the persisted slot table of spec 16 §5 (`VdSaved`), so the restarted kernel re-attaches no
-   image and the dashboard finds the real drive (or no disc). The live slots are not unmounted: the title's other
-   threads may be in the middle of reads, and the quick reboot ends them anyway.
+2. **Disc images.** Clear the persisted slot table of spec 16 §5 (`storage::SavedVirtualDiscs`), so the restarted kernel
+   re-attaches no image and the dashboard finds the real drive (or no disc). The live slots are not unmounted: the
+   title's other threads may be in the middle of reads, and the quick reboot ends them anyway.
 3. **Other threads.** As Cerbios does: suspend every other thread of the title's process, so none of them touches
    the hardware or the disk while the reboot runs. (Open: whether `KeSuspendThread` on each is enough, or the
    threads must be held at raised IRQL as Cerbios does.)

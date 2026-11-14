@@ -24,25 +24,29 @@ constexpr ULONG PAGE_READONLY = 0x02, PAGE_READWRITE = 0x04, PAGE_NOCACHE = 0x20
 constexpr ULONG PTE_PRESENT = 0x01, PTE_WRITE = 0x02, PTE_PWT = 0x08, PTE_PCD = 0x10, PTE_ACCESSED = 0x20,
                 PTE_DIRTY = 0x40, PTE_LARGE = 0x80, PTE_END_OF_ALLOCATION = 0x200, PTE_PERSIST = 0x400;
 
-static inline ULONG *MiGetPteAddress(ULONG va) {
+namespace xk::memory {
+
+inline ULONG *PteAddress(ULONG va) {
     return (ULONG *)(0xC0000000 + ((va >> 12) << 2));
 }
 
-static inline ULONG *MiGetPdeAddress(ULONG va) {
+inline ULONG *PdeAddress(ULONG va) {
     return (ULONG *)(0xC0300000 + ((va >> 22) << 2));
 }
 
-static inline void MiInvalidatePage(ULONG va) {
+inline void InvalidatePage(ULONG va) {
     __asm__ volatile("invlpg (%0)" ::"r"(va) : "memory");
 }
 
-static inline void MiFlushCaches() {
+inline void FlushCaches() {
     __asm__ volatile("wbinvd" ::: "memory");
 }
 
-void MmInitSystem(bool QuickReboot = false);
-void MiInitializeVirtualMemory();
-bool MiProtectToPte(ULONG protect, ULONG *pteBits);
+void InitMemoryManager(bool QuickReboot = false);
+void InitializeVirtualMemory();
+bool ProtectToPte(ULONG protect, ULONG *pteBits);
+
+} // namespace xk::memory
 
 // Physical pages (spec/stock/09 §7). The PTE array at 0x83FF0000 is also the page database, in the reference's format:
 // a present entry maps the page at 0x80000000|PA (kernel image, contiguous memory); a free page holds its colour
@@ -52,31 +56,35 @@ enum MMPFN_USAGE : ULONG {
     MmVirtualMemoryUsage, MmSystemMemoryUsage, MmImageUsage, MmFsCacheUsage, MmContiguousUsage, MmDebuggerUsage,
     MmMaximumUsage
 };
-extern ULONG MmAllocatedPagesByUsage[MmMaximumUsage];
-extern ULONG MmAvailablePages, MmNumberOfPhysicalPages;
-extern ULONG MmHighestPhysicalPage; // MM_LOW_PAGES - 1, or MM_MAX_PAGES - 1 with 128 MB
+namespace xk::memory {
+
+extern ULONG AllocatedPagesByUsage[MmMaximumUsage];
+extern ULONG AvailablePages, NumberOfPhysicalPages;
+extern ULONG HighestPhysicalPage; // MM_LOW_PAGES - 1, or MM_MAX_PAGES - 1 with 128 MB
 // Lets the running title's allocations use the upper 64 MB: its free pages count as available from now until the next
 // quick reboot (the XBE loader calls it for an XBE without the 64 MB limit flag). Nothing to do with 64 MB.
-void MmAllowUpperMemory();
+void AllowUpperMemory();
 // A page for `usage`, mapped by *ownerPte (or, for a user page table, by a user PDE): zeroed unless asked not to.
 // The caller writes the mapping. Returns the PFN, or 0 when no page is free.
-ULONG MiAllocatePage(ULONG usage, ULONG *ownerPte, bool zero = true);
-void MiFreePage(ULONG pfn);
+ULONG AllocatePage(ULONG usage, ULONG *ownerPte, bool zero = true);
+void FreePage(ULONG pfn);
 // Contiguous run inside [lowPfn, highPfn]: the highest one that is free or can be freed by moving pages that are in
 // use but not locked. The pages are mapped at 0x80000000|PA with pteBits, the last one marked; returns the first PFN.
-bool MiAllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits,
-                               ULONG *firstPfn);
-void MiFreeContiguousPage(ULONG pfn);
+bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits,
+                             ULONG *firstPfn);
+void FreeContiguousPage(ULONG pfn);
 // Frees the boot-only pages (the image's discardable sections) except those overlapping [KeepStart, KeepEnd), once;
 // quick reboots keep them free. Returns the number of pages freed.
-ULONG MmFreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd);
-// True until MmFreeBootPages has run: during a cold boot, before the first title starts. Code that may also run later
+ULONG FreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd);
+// True until FreeBootPages has run: during a cold boot, before the first title starts. Code that may also run later
 // asks it before it calls boot-only code (spec/oxos_internal/18 §2).
-bool MmBootPagesPresent();
+bool BootPagesPresent();
 
 // System PTE range 0xD0000000-0xEFFFFFFF
-PVOID MiReserveSystemPtes(ULONG count);
-void MiReleaseSystemPtes(PVOID va, ULONG count);
+PVOID ReserveSystemPtes(ULONG count);
+void ReleaseSystemPtes(PVOID va, ULONG count);
+
+} // namespace xk::memory
 
 XBAPI PVOID NTAPI MmAllocateContiguousMemory(ULONG NumberOfBytes);
 XBAPI PVOID NTAPI MmAllocateContiguousMemoryEx(ULONG NumberOfBytes, ULONG LowestAcceptableAddress,
@@ -103,7 +111,11 @@ XBAPI PVOID NTAPI ExAllocatePool(SIZE_T NumberOfBytes);
 XBAPI PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag);
 XBAPI void NTAPI ExFreePool(PVOID P);
 XBAPI ULONG NTAPI ExQueryPoolBlockSize(PVOID PoolBlock);
-void ExInitializePool();
+namespace xk::memory {
+
+void InitPool();
+
+} // namespace xk::memory
 
 // --- Title virtual memory (spec/stock/09 §6)
 constexpr ULONG MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_DECOMMIT = 0x4000, MEM_RELEASE = 0x8000,
@@ -145,16 +157,20 @@ XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSi
                                             PULONG OldProtect);
 XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics);
 
+namespace xk::memory {
+
 // Used outside the memory manager (memory/memory.cpp, memory/virtual.cpp, memory/pool.cpp).
-PVOID MiAllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage);
-NTSTATUS MiCommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize);
-extern volatile ULONG ExpPoolPages, ExpPoolLargePages, ExpPoolBlocks; // pool statistics (memory/pool.cpp)
-extern volatile ULONG MiPteListDamaged; // diagnostics: the system PTE free list failed its checks
-extern volatile ULONG MiPteDoubleFrees; // diagnostics: releases that overlapped free system PTEs (refused)
-extern volatile ULONG MiRelocations;    // diagnostics: pages moved for contiguous requests
-extern volatile ULONG MiCommitFailures; // diagnostics: commits refused for lack of pages
-extern "C" volatile ULONG MiRamProbe; // 1 = 64 MB, 2 = memory above 64 MB (128 MB), 3 = unclear (64 MB is used)
-extern "C" volatile ULONG MiGpuSizeBefore, MiGpuSizeAfter; // diagnostics: PFB 0x10020C before / after the set-up
+PVOID AllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usage);
+NTSTATUS CommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize);
+extern volatile ULONG PoolPages, PoolLargePages, PoolBlocks; // pool statistics (memory/pool.cpp)
+extern volatile ULONG PteListDamaged; // diagnostics: the system PTE free list failed its checks
+extern volatile ULONG PteDoubleFrees; // diagnostics: releases that overlapped free system PTEs (refused)
+extern volatile ULONG Relocations;    // diagnostics: pages moved for contiguous requests
+extern volatile ULONG CommitFailures; // diagnostics: commits refused for lack of pages
+extern volatile ULONG RamProbe; // 1 = 64 MB, 2 = memory above 64 MB (128 MB), 3 = unclear (64 MB is used)
+extern volatile ULONG GpuSizeBefore, GpuSizeAfter; // diagnostics: PFB 0x10020C before / after the set-up
+
+} // namespace xk::memory
 
 // The reference's free-page region (MmGlobalData->RetailPfnRegion, memory/init.cpp): per-colour list heads, then the
 // page count.
@@ -166,7 +182,11 @@ struct MMPFNREGION {
     MMPFNFREE FreePagesByColor[MM_COLORS];
     ULONG AvailablePages;
 };
-extern MMPFNREGION MmRetailPfnRegion;
+namespace xk::memory {
+
+extern MMPFNREGION RetailPfnRegion;
+
+} // namespace xk::memory
 
 // A range of system PTEs and its free runs (memory/init.cpp, MmGlobalData->SystemPteRange).
 struct MMPTERANGE {
@@ -175,5 +195,9 @@ struct MMPTERANGE {
     ULONG *AvailablePages;
     ULONG (*AllocatePageTable)(ULONG usage, ULONG *ownerPte, bool zero);
 };
-extern MMPTERANGE MiSystemPteRange;
+namespace xk::memory {
+
+extern MMPTERANGE SystemPteRange;
+
+} // namespace xk::memory
 

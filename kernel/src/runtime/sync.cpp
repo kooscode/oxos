@@ -2,6 +2,8 @@
 #include <xk/arch.h>
 #include <xk/core.h>
 
+namespace xk::runtime {
+
 // --- Critical sections: a synchronization event, an owner and a recursion count.
 
 XBAPI void NTAPI RtlInitializeCriticalSection(PRTL_CRITICAL_SECTION CriticalSection) {
@@ -117,3 +119,5 @@ XBAPI void NTAPI ExReleaseReadWriteLock(PERWLOCK ReadWriteLock) {
     restore_flags(flags);
     KeSetEvent(&ReadWriteLock->WriterEvent, 1, FALSE);
 }
+
+} // namespace xk::runtime

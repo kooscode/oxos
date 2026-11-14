@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+using namespace xk::bootscreen; // jingle:: and vsplash::, the kernel's boot screen code
+
 static bool WritePpm(const std::string &path, const std::vector<unsigned> &px) {
     FILE *f = fopen(path.c_str(), "wb");
     if (!f)

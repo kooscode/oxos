@@ -2,6 +2,8 @@
 #include <xk/core.h>
 #include <xk/arch.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 XBAPI void NTAPI KeInitializeQueue(PKQUEUE Queue, ULONG Count) {
@@ -16,14 +18,14 @@ XBAPI void NTAPI KeInitializeQueue(PKQUEUE Queue, ULONG Count) {
 }
 
 // Hand Entry to the most recent waiter if the concurrency limit allows, else queue it.
-LONG KiInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head) {
+LONG InsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head) {
     LONG previous = Queue->Header.SignalState;
     PKTHREAD current = Prcb.CurrentThread;
     PLIST_ENTRY waitEntry = Queue->Header.WaitListHead.Blink; // waiters are served LIFO
     if (waitEntry != &Queue->Header.WaitListHead && Queue->CurrentCount < Queue->MaximumCount &&
         (current->Queue != Queue || current->WaitReason != WrQueue)) {
         PKTHREAD t = CONTAINING_RECORD(waitEntry, KWAIT_BLOCK, WaitListEntry)->Thread;
-        KiUnwaitThread(t, (LONG)Entry, 0);
+        UnwaitThread(t, (LONG)Entry, 0);
     } else {
         Queue->Header.SignalState++;
         if (Head)
@@ -36,28 +38,28 @@ LONG KiInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head) {
 
 XBAPI LONG NTAPI KeInsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    LONG previous = KiInsertQueue(Queue, Entry, false);
+    LONG previous = InsertQueue(Queue, Entry, false);
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
 
 XBAPI LONG NTAPI KeInsertHeadQueue(PKQUEUE Queue, PLIST_ENTRY Entry) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    LONG previous = KiInsertQueue(Queue, Entry, true);
+    LONG previous = InsertQueue(Queue, Entry, true);
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
 
 // A thread associated with Queue is about to block on something else: release its concurrency
 // slot and give a queued entry to another waiter.
-void KiActivateWaiterQueue(PKQUEUE Queue) {
+void ActivateWaiterQueue(PKQUEUE Queue) {
     Queue->CurrentCount--;
     if (Queue->CurrentCount < Queue->MaximumCount && !IsListEmpty(&Queue->EntryListHead) &&
         !IsListEmpty(&Queue->Header.WaitListHead)) {
         PLIST_ENTRY entry = RemoveHeadList(&Queue->EntryListHead);
         Queue->Header.SignalState--;
         PKTHREAD t = CONTAINING_RECORD(Queue->Header.WaitListHead.Blink, KWAIT_BLOCK, WaitListEntry)->Thread;
-        KiUnwaitThread(t, (LONG)entry, 0);
+        UnwaitThread(t, (LONG)entry, 0);
     }
 }
 
@@ -170,3 +172,5 @@ XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_
     KfLowerIrql(old);
     return result;
 }
+
+} // namespace xk::core

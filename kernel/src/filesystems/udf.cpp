@@ -5,6 +5,8 @@
 #include <xk/runtime.h>
 #include <xk/io.h>
 
+namespace xk::filesystems {
+
 constexpr ULONG UDF_BLOCK = 0x800;
 constexpr ULONG FILE_OPENED = 1;
 constexpr ULONG UDF_MAX_EXTENTS = 32, UDF_MAX_DIRECTORY = 0x100000;
@@ -142,9 +144,9 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
             ULONG first = e->Block + within / UDF_BLOCK, last = e->Block + (within + run - 1) / UDF_BLOCK;
             if (first >= v->PartitionLength || last >= v->PartitionLength)
                 return STATUS_DISK_CORRUPT;
-            NTSTATUS status = FscCachedRead(&v->CacheExtension, fileFlags,
-                                            (LONGLONG)(v->PartitionStart + e->Block) * UDF_BLOCK + within, run, out,
-                                            toEnd && run == length);
+            NTSTATUS status = CachedRead(&v->CacheExtension, fileFlags,
+                                         (LONGLONG)(v->PartitionStart + e->Block) * UDF_BLOCK + within, run, out,
+                                         toEnd && run == length);
             if (!NT_SUCCESS(status))
                 return status;
         } else {
@@ -672,7 +674,7 @@ static NTSTATUS NTAPI UdfDismountVolume(PDEVICE_OBJECT DeviceObject) {
 
 static void NTAPI UdfDeleteVolume(PDEVICE_OBJECT DeviceObject) {
     UDF_VOLUME *v = UdfVolume(DeviceObject);
-    FscInvalidateDevice(&v->CacheExtension);
+    InvalidateCacheDevice(&v->CacheExtension);
     ExFreePool(v->Block);
     ObfDereferenceObject(v->TargetDevice);
 }
@@ -682,7 +684,7 @@ DRIVER_OBJECT UdfDriverObject = {
     UdfDeleteVolume,
     UdfDismountVolume,
     {UdfFsdCreate, UdfFsdClose, UdfFsdRead, IoInvalidDeviceRequest, UdfFsdQueryInformation, UdfFsdSetInformation,
-     UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, IoFsControlDismountOnly, UdfFsdPassDown,
+     UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, io::DismountOnlyFsControl, UdfFsdPassDown,
      IoInvalidDeviceRequest, IoInvalidDeviceRequest, UdfFsdSuccess}};
 
 // --- Mount (spec/stock/04d §1)
@@ -878,3 +880,5 @@ NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice) {
     TargetDevice->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::filesystems

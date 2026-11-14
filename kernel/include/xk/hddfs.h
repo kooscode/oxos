@@ -11,6 +11,8 @@
 #include <xk/storage.h>
 #include <xk/runtime.h>
 
+namespace xk::filesystems {
+
 // --- FATX's on-disk format. Its name limits apply on exFAT volumes too: titles expect them.
 
 constexpr ULONG FATX_SIGNATURE = 0x58544146; // "FATX"
@@ -304,3 +306,5 @@ extern DRIVER_OBJECT HDDFSDriverObject;
 static inline HDDFS_VOLUME *HDDFSVolume(PDEVICE_OBJECT dev) {
     return (HDDFS_VOLUME *)dev->DeviceExtension;
 }
+
+} // namespace xk::filesystems

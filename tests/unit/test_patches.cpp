@@ -8,6 +8,8 @@
 
 #include <xk/title_patches.h>
 
+using namespace xk; // the kernel's subsystems as storage::, titles::, ...
+
 namespace {
 struct Rec {
     USHORT Kind;
@@ -20,7 +22,7 @@ std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_P
                        ULONG room = 4096) {
     std::vector<UCHAR> out(room + 1, 0xCC);
     XE_PATCH_COUNTS counts;
-    ULONG used = XePatchParse(text.data(), (ULONG)text.size(), title, version, out.data(), room, &counts);
+    ULONG used = titles::ParsePatchFile(text.data(), (ULONG)text.size(), title, version, out.data(), room, &counts);
     EXPECT_LE(used, room);
     EXPECT_EQ(out[room], 0xCC) << "wrote past the output";
     if (c)
@@ -28,10 +30,10 @@ std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_P
     std::vector<Rec> recs;
     for (ULONG at = 0; at < used;) {
         auto r = (const XE_PATCH_RECORD *)(out.data() + at);
-        auto o = XePatchOriginal(r), d = XePatchData(r);
+        auto o = titles::PatchOriginal(r), d = titles::PatchData(r);
         recs.push_back({r->Kind, r->Address, std::vector<UCHAR>(o, o + r->OriginalLength),
                         std::vector<UCHAR>(d, d + r->Length), r->Check});
-        at += XePatchRecordSize(r);
+        at += titles::PatchRecordSize(r);
     }
     return recs;
 }

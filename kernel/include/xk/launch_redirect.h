@@ -14,12 +14,16 @@ struct XE_REDIRECT {
     char Name[XE_REDIRECT_MAX_NAME + 1];
 };
 
+namespace xk::titles {
+
 // Writes the device path for a path from the file (Length characters) into Out: a drive letter (C E F G X Y Z, and D
 // for the DVD drive) becomes its \Device\ path, and '/' becomes '\'. False when the drive is not one of those, or the
 // result is longer than XE_REDIRECT_MAX_PATH.
-bool XeRedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_MAX_PATH + 1]);
+bool RedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_MAX_PATH + 1]);
 
 // Looks Path (a device path) up in the file's text: true, with the target and the section's name in *Found, when a
 // section's source names Path (letters in any case); the first such section decides. Errors counts the lines that
 // could not be read and the sections without both a source and a target, in the whole file.
-bool XeRedirectLookup(const char *Text, ULONG Length, const char *Path, XE_REDIRECT *Found, ULONG *Errors);
+bool LookUpRedirect(const char *Text, ULONG Length, const char *Path, XE_REDIRECT *Found, ULONG *Errors);
+
+} // namespace xk::titles

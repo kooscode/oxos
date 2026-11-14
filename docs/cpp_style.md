@@ -33,18 +33,30 @@ describe the code directly below it.
 
 ## 2. Names
 
-- Exports, and the structures titles see, keep the reference kernel's names: `KeWaitForSingleObject`, `KTHREAD`,
-  `IRP`, `OBJECT_ATTRIBUTES`, and their parameter names.
-- Functions and file-scope variables carry their subsystem's prefix, in the NT pattern: `Ke`/`Mm`/`Io`/`Hal`/... for
-  what other subsystems call, `Ki`/`Mi`/`Iop`/`Halp`/... for what stays inside the subsystem. PascalCase after it.
-  The prefixes stay even where the folder's name differs (`Ke` code is in `core/`, `Idex` code in `storage/`): they
-  are the ABI's and the specs' names. The kernel README maps each prefix to its folder.
-- Format and standard names inside an identifier are written in capitals: `FATXLookup`, `EXFATWalk`, `HDDFSLookup`,
-  `IdexDiskEXFATLayout`. Written `Exfat...` they read like the NT executive's `Ex` prefix (`ExAllocatePoolWithTag`),
-  and `Fatx...` like an unrelated word. In comments the formats keep their proper names, FATX and exFAT.
-- Something only one file uses is `static` or in an anonymous namespace. Such a helper may drop the prefix when the
-  file makes its subsystem obvious (`Reg32` in the AC'97 player, `Sine` in the synthesizer); file-private state
-  keeps it, so a symbol listing or a debugger names its subsystem.
+- Exports, and the structures titles see, keep the Xbox kernel's names: `KeWaitForSingleObject`, `KTHREAD`, `IRP`,
+  `OBJECT_ATTRIBUTES`, and their parameter names. They are global (`XBAPI`, C names), because titles and kernel
+  extensions import them by those names; so is anything assembly uses.
+- This is OXOS's own kernel, not NT: everything else lives in a namespace per source folder, `xk::<folder>`
+  (`xk::storage`, `xk::memory`, `xk::titles`, ...), with names that say what they do, without subsystem prefixes.
+  Functions put the verb first: `storage::DescribeDisk`, `storage::InitDvdDrive`, `storage::ReadDiskSectors`; data says
+  what it holds: `storage::DiskLengthInSectors`, `storage::DvdDeviceObject`.
+  - Inside its subsystem a name is written plain (`DescribeDisk(...)`); another subsystem writes
+    `storage::DescribeDisk`; the tests outside the kernel write `using namespace xk;` and the same.
+  - A subsystem's `.cpp` files are wrapped in `namespace xk::<folder> { ... }`, its headers declare its names in the
+    same namespace. An exported variable is defined outside the namespace, so it keeps its C name; an exported function
+    may be defined inside (`XBAPI` keeps its C name).
+  - The tools that read the linker map (`tests/boot_test.py`, `tools/check_kernel_layout.py`) take these names as
+    `storage::DiskLengthInSectors`.
+  - Converted 2026-11-13, every subsystem. What keeps an NT-style name: the exports; the names assembly uses (`KiPcr`,
+    `KiQuickRebootFlag`, the trap and interrupt stubs, `HalpIgrCheck`, `XkUDivMod64`, ...); the call tracer
+    (`titles/trace.cpp`, until it becomes `oxos_tracer.xos`); the encoder tables `tools/gen_av_tables.py` generates;
+    types and enumerators (`MMPFN_USAGE`'s `MmPoolUsage`, ...). `arch/` is assembly only.
+- Format and standard names inside an identifier are written in capitals: `filesystems::FATXLookup`,
+  `filesystems::EXFATWalk`, `storage::DiskHasEXFATLayout`. Written `Exfat...` they read like the NT executive's `Ex`
+  prefix (`ExAllocatePoolWithTag`), and `Fatx...` like an unrelated word. In comments the formats keep their proper
+  names, FATX and exFAT.
+- Something only one file uses goes in an anonymous namespace (or is `static`), named for what it does in that file
+  (`DvdStartTransfer`, `Reg32` in the AC'97 player, `Sine` in the synthesizer).
 - Local variables and the parameters of internal functions: camelCase, short when the scope is short.
 - Constants and enumerators: `UPPER_SNAKE_CASE` (`SMB_STATUS_DONE`, `IDE_MAX_PARTITIONS`). A register block taken from
   a datasheet may keep the datasheet's names.

@@ -67,7 +67,8 @@ SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # comparing the set-up with a reference kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
 # REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots
-# the console the way the in-game reset does (HalpIgrReboot), so resets can be tested in a loop without a controller.
+# the console the way the in-game reset does (hardware::InGameResetReboot), so resets can be tested in a loop without a
+# controller.
 REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
 SERIAL := 1
@@ -125,18 +126,18 @@ BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj,nic.obj,ip.obj,tcp.
 BOOT_OBJS := $(BOOT_OBJS),usb_host.obj,pads.obj
 # ... and the boot-only functions kept code calls during a cold boot, before the pages are freed, or that a kept file
 # defines for the boot-only code (the File Manager's screen, in core/fatal.cpp with the other screens).
-BOOT_ENTRIES := HalpStartSplash,HalpWaitForSplash,UploadServe,UploadStop
-BOOT_ENTRIES := $(BOOT_ENTRIES),XkShowFileManagerScreen,XkCloseFileManagerScreen,XkNoDashboardError
-BOOT_ENTRIES := $(BOOT_ENTRIES),GamepadWaitForX
+BOOT_ENTRIES := bootscreen::StartSplash,bootscreen::WaitForSplash,webserver::Start,webserver::Stop
+BOOT_ENTRIES := $(BOOT_ENTRIES),core::ShowFileManagerScreen,core::CloseFileManagerScreen,core::NoDashboardError
+BOOT_ENTRIES := $(BOOT_ENTRIES),gamepad::WaitForXButton
 # The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
-BOOT_ENTRIES := $(BOOT_ENTRIES),IdexDiskBlankCountdown,IdexDiskIsBlank,IdexDiskDescribe
+BOOT_ENTRIES := $(BOOT_ENTRIES),storage::BlankDiskCountdown,storage::IsDiskBlank,storage::DescribeDisk
 # The kernel extension loader's cache, written at a cold boot from the boot-only copy
 # (extensions/extension_runtime_loader.cpp).
-BOOT_ENTRIES := $(BOOT_ENTRIES),XkExtensionsWriteCache
+BOOT_ENTRIES := $(BOOT_ENTRIES),extensions::WriteLoaderCache
 # The netboot title's installation (titles/nettitle.cpp): a package only ever comes with a cold boot.
-BOOT_ENTRIES := $(BOOT_ENTRIES),XeLaunchNetbootTitle
+BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchNetbootTitle
 # The cold boot's launch choice and the File Manager (titles/loader.cpp).
-BOOT_ENTRIES := $(BOOT_ENTRIES),XeColdBootLaunch,XeServeFileManager
+BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchAtColdBoot,titles::ServeFileManager
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 

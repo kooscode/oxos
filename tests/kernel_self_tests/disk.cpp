@@ -5,6 +5,8 @@
 #include <xk/runtime.h>
 #include <xk/core.h>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 volatile ULONG KiTestIdexPartitionSig[6][4]; // first 16 bytes of each partition (0 = whole disk sector 0)
 volatile ULONG KiTestIdexBigSum, KiTestIdexBigOk;  // 256 KB read at the start of partition 1 (E:)
 volatile ULONG KiTestIdexWriteOk, KiTestIdexIoctlOk, KiTestIdexErrorsOk, KiTestIdexNamesOk, KiTestIdexDone;
@@ -46,8 +48,9 @@ static bool IdexLba48Free(PDEVICE_OBJECT disk, PUCHAR buf, ULONGLONG lba, ULONG 
 }
 
 static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
-    ULONGLONG last = IdexDiskLengthInSectors - 1;
-    if (!IdexDiskLba48 || IdexDiskLengthInSectors < 0x20001000 || IdexDiskEXFATLayout) // needs raw Partition0
+    ULONGLONG last = storage::DiskLengthInSectors - 1;
+    // Needs the raw Partition0.
+    if (!storage::DiskSupportsLba48 || storage::DiskLengthInSectors < 0x20001000 || storage::DiskHasEXFATLayout)
         return;
     struct {
         ULONGLONG lba;
@@ -140,7 +143,7 @@ static void NTAPI IdexControllerThread(PVOID) {
 
     // exFAT disk (spec/oxos_internal/05_exfat_storage_spec.md): folder partitions have no sectors of their own, and
     // Partition0 reaches only the retail reserved area (0-0x7FFFF).
-    if (IdexDiskEXFATLayout) {
+    if (storage::DiskHasEXFATLayout) {
         KiTestIdexFolderOk = IdexTestRead(parts[1], buf, 512, 0) == STATUS_INVALID_DEVICE_REQUEST &&
                              IdexTestRead(parts[0], buf, 512, 0x80000) == STATUS_INVALID_PARAMETER &&
                              IdexTestRead(parts[0], buf, 512, 0x7FE00) == STATUS_SUCCESS;
@@ -178,7 +181,7 @@ static void NTAPI IdexControllerThread(PVOID) {
          pi.PartitionLength.QuadPart == 0x1F400000 && pi.PartitionNumber == 2;
     ok &= IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, parts[0], nullptr, 0, &g, sizeof(g),
                                               &ret, FALSE) == 0 &&
-          (ULONGLONG)g.Cylinders.QuadPart == IdexDiskLengthInSectors && g.BytesPerSector == 512;
+          (ULONGLONG)g.Cylinders.QuadPart == storage::DiskLengthInSectors && g.BytesPerSector == 512;
     KiTestIdexIoctlOk = ok;
 
     // Parameter errors: unaligned length/offset, past the end of a partition.
@@ -216,7 +219,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         KiTestIdexPassThroughOk = ok;
     }
     UCHAR password[32] = {};
-    IdexDiskComputePassword(password);
+    storage::ComputeDiskPassword(password);
     for (ULONG i = 0; i < 32; i++)
         KiTestIdexPassword[i] = password[i];
 
@@ -229,5 +232,5 @@ static void NTAPI IdexControllerThread(PVOID) {
 }
 
 void KiStartIdexSelfTests() {
-    KiCreateSystemThread(IdexControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(IdexControllerThread, nullptr, 0, 9);
 }

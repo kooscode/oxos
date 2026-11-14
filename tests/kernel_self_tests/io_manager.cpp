@@ -5,6 +5,8 @@
 #include <xk/runtime.h>
 #include <xk/memory.h>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 volatile ULONG KiTestIoOpenOk, KiTestIoSyncRwOk, KiTestIoQueryOk, KiTestIoAsyncOk, KiTestIoApcOk, KiTestIoPortOk,
     KiTestIoIoctlOk, KiTestIoRelativeOk, KiTestIoErrorsOk, KiTestIoStartIoOk, KiTestIoCloseOk, KiTestIoDeleteOk,
     KiTestIoPoolBalanced, KiTestIoDone;
@@ -177,7 +179,7 @@ static OBJECT_ATTRIBUTES Attrs(OBJECT_STRING *s, PCSZ text, HANDLE root = nullpt
 static void NTAPI IoControllerThread(PVOID) {
     while (!KiTestObDone) // after the object-manager suite: both measure pool balances
         Sleep(10);
-    ULONG poolBefore = ExpPoolBlocks;
+    ULONG poolBefore = memory::PoolBlocks;
 
     // Devices.
     for (auto &f : RamDriver.MajorFunction)
@@ -367,10 +369,10 @@ static void NTAPI IoControllerThread(PVOID) {
     KiTestIoDeleteOk = ok;
 
     Sleep(5);
-    KiTestIoPoolBalanced = ExpPoolBlocks <= poolBefore + 2;
+    KiTestIoPoolBalanced = memory::PoolBlocks <= poolBefore + 2;
     KiTestIoDone = 1;
 }
 
 void KiStartIoSelfTests() {
-    KiCreateSystemThread(IoControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(IoControllerThread, nullptr, 0, 9);
 }

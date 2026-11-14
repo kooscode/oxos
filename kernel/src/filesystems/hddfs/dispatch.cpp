@@ -2,6 +2,8 @@
 #include <xk/hddfs.h>
 #include <xk/serial.h>
 
+namespace xk::filesystems {
+
 static NTSTATUS HDDFSComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0) {
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = Information;
@@ -1059,3 +1061,5 @@ DRIVER_OBJECT HDDFSDriverObject = {
      HDDFSFsdSetInformation, HDDFSFsdFlushOrDeviceControl, HDDFSFsdQueryVolumeInformation,
      HDDFSFsdDirectoryControl, HDDFSFsdFileSystemControl, HDDFSFsdFlushOrDeviceControl, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest, HDDFSFsdCleanup}};
+
+} // namespace xk::filesystems

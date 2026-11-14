@@ -7,21 +7,23 @@
 #include <xk/runtime.h>
 #include <xk/titles.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 extern "C" void KiThreadStartup();
 
-KPROCESS KiIdleProcess, KiSystemProcess;
+KPROCESS IdleProcess, SystemProcess;
 
-static void KiInitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum);
+static void InitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum);
 
 // Reference values (spec/stock/01 §2.8): idle process base 0 / quantum 0x7F; system process base 8 / 0x3C.
-void KiInitializeProcesses() {
-    KiInitializeProcess(&KiIdleProcess, 0, 0x7F);
-    KiInitializeProcess(&KiSystemProcess, 8, 0x3C);
+void InitializeProcesses() {
+    InitializeProcess(&IdleProcess, 0, 0x7F);
+    InitializeProcess(&SystemProcess, 8, 0x3C);
 }
 
-static void KiInitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum) {
+static void InitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum) {
     InitializeListHead(&p->ReadyListHead);
     InitializeListHead(&p->ThreadListHead);
     p->StackCount = 0;
@@ -35,7 +37,7 @@ static void KiInitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum) {
 // (ExceptionList, EFLAGS, edi, esi, ebx, ebp, return) followed by KiThreadStartup's arguments.
 static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_ROUTINE systemRoutine,
                                       PVOID startRoutine, PVOID startContext) {
-    KiInitializeNpxArea(t);
+    InitializeNpxArea(t);
     ULONG tlsSize = (tlsDataSize + 3) & ~3u;
     ULONG *sp = (ULONG *)((UCHAR *)t->StackBase - NPX_FRAME_LENGTH - tlsSize);
     t->TlsData = tlsSize ? sp : nullptr;
@@ -54,8 +56,8 @@ static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_RO
     t->KernelStack = sp;
 }
 
-void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
-                        PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process) {
+void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
+                      PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process) {
     Thread->Header.Type = ThreadObject;
     Thread->Header.Size = sizeof(KTHREAD) / sizeof(ULONG);
     Thread->Header.SignalState = 0;
@@ -66,7 +68,7 @@ void KeInitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSiz
     Thread->ApcState.Process = Process;
     Thread->ApcState.ApcQueueable = TRUE;
 
-    KeInitializeApc(&Thread->SuspendApc, Thread, KiSuspendNop, nullptr, KiSuspendThread, KernelMode, nullptr);
+    KeInitializeApc(&Thread->SuspendApc, Thread, SuspendNop, nullptr, SuspendThread, KernelMode, nullptr);
     KeInitializeSemaphore(&Thread->SuspendSemaphore, 0, 2);
 
     KeInitializeTimerEx(&Thread->Timer, NotificationTimer);
@@ -97,20 +99,20 @@ XBAPI PKTHREAD NTAPI KeGetCurrentThread() {
 
 // Terminated threads: the next thread to run frees the stack and drops the thread object's
 // "running" reference (spec/stock/10 §5); the object lives on while handles or references remain.
-static LIST_ENTRY KiDeadThreadListHead = {&KiDeadThreadListHead, &KiDeadThreadListHead};
+static LIST_ENTRY DeadThreadListHead = {&DeadThreadListHead, &DeadThreadListHead};
 
-void KiReapDeadThreads() {
-    while (!IsListEmpty(&KiDeadThreadListHead)) {
-        PKTHREAD t = CONTAINING_RECORD(RemoveHeadList(&KiDeadThreadListHead), KTHREAD, ThreadListEntry);
+void ReapDeadThreads() {
+    while (!IsListEmpty(&DeadThreadListHead)) {
+        PKTHREAD t = CONTAINING_RECORD(RemoveHeadList(&DeadThreadListHead), KTHREAD, ThreadListEntry);
         MmDeleteKernelStack(t->StackBase, t->StackLimit);
         t->StackBase = t->StackLimit = t->KernelStack = nullptr;
-        if (t != &KiIdleThread)
+        if (t != &IdleThreadObject)
             ObfDereferenceObject(t);
     }
 }
 
 // Terminate the current thread: signal its object, wake joiners, switch away for good.
-void KeTerminateThread() {
+void TerminateThread() {
     KeRaiseIrqlToDpcLevel();
     PKTHREAD t = Prcb.CurrentThread;
 #if XK_TRACE_IMPORTS
@@ -122,17 +124,17 @@ void KeTerminateThread() {
     if (PKQUEUE q = t->Queue) {
         RemoveEntryList(&t->QueueListEntry);
         t->Queue = nullptr;
-        KiActivateWaiterQueue(q);
+        ActivateWaiterQueue(q);
     }
     t->State = Terminated;
     t->Header.SignalState = 1;
     if (!IsListEmpty(&t->Header.WaitListHead))
-        KiWaitTest(&t->Header, 0);
+        WaitTest(&t->Header, 0);
     RemoveEntryList(&t->ThreadListEntry);
     t->ApcState.Process->StackCount--;
-    KiNpxRelease(t);
-    InsertTailList(&KiDeadThreadListHead, &t->ThreadListEntry);
-    KiSwapThread();
+    NpxRelease(t);
+    InsertTailList(&DeadThreadListHead, &t->ThreadListEntry);
+    SwapThread();
     KeBugCheck(0x12345678); // a terminated thread was resumed
     for (;;) {
         // Not reached: KeBugCheck does not return.
@@ -145,7 +147,7 @@ XBAPI LONG NTAPI KeSetPriorityThread(PKTHREAD Thread, LONG Priority) {
     Thread->Saturation = 0;
     Thread->PriorityDecrement = 0;
     Thread->Quantum = Thread->ApcState.Process->ThreadQuantum;
-    KiSetPriorityThread(Thread, (SCHAR)Priority);
+    SetPriorityThread(Thread, (SCHAR)Priority);
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
@@ -178,7 +180,7 @@ XBAPI LONG NTAPI KeSetBasePriorityThread(PKTHREAD Thread, LONG Increment) {
     LONG priority = base >= 16 ? base : Thread->Priority - oldBase + base;
     if (priority < base)
         priority = base;
-    KiSetPriorityThread(Thread, (SCHAR)priority);
+    SetPriorityThread(Thread, (SCHAR)priority);
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
@@ -200,7 +202,7 @@ XBAPI void NTAPI KeBoostPriorityThread(PKTHREAD Thread, KPRIORITY Increment) {
             if (priority > 15)
                 priority = 15;
             Thread->PriorityDecrement = (SCHAR)(priority - Thread->BasePriority);
-            KiSetPriorityThread(Thread, (SCHAR)priority);
+            SetPriorityThread(Thread, (SCHAR)priority);
         }
     }
     KiUnlockDispatcherDatabase(old);
@@ -220,8 +222,10 @@ XBAPI KPRIORITY NTAPI KeSetPriorityProcess(PKPROCESS Process, KPRIORITY BasePrio
         t->BasePriority = (SCHAR)base;
         t->Quantum = Process->ThreadQuantum;
         t->PriorityDecrement = 0;
-        KiSetPriorityThread(t, (SCHAR)base);
+        SetPriorityThread(t, (SCHAR)base);
     }
     KiUnlockDispatcherDatabase(old);
     return previous;
 }
+
+} // namespace xk::core

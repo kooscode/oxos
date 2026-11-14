@@ -2,7 +2,7 @@
 // drive (spec/oxos_internal/16_virtual_discs.md). The device interface is the one Cerbios titles and tools use
 // (spec/cerbios/07): the control device \Device\Virtual0\Image0 (links \Device\CdRom1, \??\CdRom1:), mount and unmount
 // device controls, image slots 1 and 2 (\Device\Virtual0\Image1, Image2). OXOS design:
-// - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (VdServeCdRom, called by the drive's read
+// - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (ServeVirtualDvd, called by the drive's read
 //   and device-control routines), so D: and every title's view of the drive need no renamed devices or links.
 // - Mounts survive quick reboots (the slot table is in .persist): a launcher mounts an image, then launches
 //   \Device\CdRom0\default.xbe through a quick reboot. A cold boot (or an eject, which resets the console) forgets
@@ -17,9 +17,11 @@
 #include <xk/serial.h>
 #include <xk/titles.h>
 
-extern DRIVER_OBJECT VdDriverObject;
-ULONG VdReads, VdErrors;            // diagnostics (tests/boot_test.py): image reads, failed ones
-volatile NTSTATUS VdLastMountStatus; // the last mount or unmount request's result
+namespace xk::storage {
+
+extern DRIVER_OBJECT VirtualDiscDriverObject;
+ULONG VirtualDiscReads, VirtualDiscErrors;    // diagnostics (tests/boot_test.py): image reads, failed ones
+volatile NTSTATUS VirtualDiscLastMountStatus; // the last mount or unmount request's result
 
 namespace {
 
@@ -67,11 +69,11 @@ struct VD_SLOT {
     PUCHAR Block;       // CCI: a stored block (up to two sectors)
 };
 
-XK_PERSIST VD_SAVED VdSaved[VD_SLOTS];
-VD_SLOT VdSlot[VD_SLOTS];
-PDEVICE_OBJECT VdControl;
-volatile LONG VdDvd; // the slot (1, 2) that stands in for the drive, 0 = the drive itself
-KEVENT VdMountLock;  // mount and unmount, one at a time
+XK_PERSIST VD_SAVED SavedVirtualDiscs[VD_SLOTS];
+VD_SLOT VirtualDiscSlots[VD_SLOTS];
+PDEVICE_OBJECT VirtualDiscControl;
+volatile LONG VirtualDvdSlot; // the slot (1, 2) that stands in for the drive, 0 = the drive itself
+KEVENT VirtualDiscMountLock;  // mount and unmount, one at a time
 
 // --- Helpers
 
@@ -223,10 +225,10 @@ NTSTATUS ImageRead(VD_SLOT *s, PIRP Irp) {
     }
         return Complete(Irp, STATUS_INVALID_PARAMETER);
     }
-    VdReads++;
+    VirtualDiscReads++;
     NTSTATUS status = length ? ReadImage(s, (ULONGLONG)offset, buffer, length) : STATUS_SUCCESS;
     if (!NT_SUCCESS(status)) {
-        VdErrors++;
+        VirtualDiscErrors++;
         XK_SERIAL("vd: read %#llx+%#lx: %#lx\n", (ULONGLONG)offset, length, status);
     }
     return Complete(Irp, status, length);
@@ -285,9 +287,9 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
         // The same set as the drive emulation's: MODE SENSE / SELECT of page 0x3E and READ DVD STRUCTURE of the
         // security sector (address 0xFF02FDFF, layer 0xFE). This used to test the layer in the wrong byte, so a
         // title's own security-sector read failed ("dirty disc": Prince of Persia).
-        bool security = IdexCdRomIsSecurityCommand(cdb, data, p->DataTransferLength);
+        bool security = IsDvdSecurityCommand(cdb, data, p->DataTransferLength);
         if (security)
-            IdexCdRomEmulatedSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
+            EmulatedDvdSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
         else if (cdb[0] != 0x00) // TEST UNIT READY
             status = STATUS_INVALID_DEVICE_REQUEST;
         XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n",
@@ -306,18 +308,19 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
 // --- Mount and unmount
 
 void Unmount(ULONG n) {
-    VD_SLOT *s = &VdSlot[n - 1];
-    VdSaved[n - 1].InUse = 0;
+    VD_SLOT *s = &VirtualDiscSlots[n - 1];
+    SavedVirtualDiscs[n - 1].InUse = 0;
     if (!s->Mounted)
         return;
     s->Mounted = FALSE;
-    if (VdDvd == (LONG)n) {
+    if (VirtualDvdSlot == (LONG)n) {
         ULONG other = 3 - n;
-        VdDvd = VdSlot[other - 1].Mounted && IsDvdType(VdSlot[other - 1].Type) ? (LONG)other : 0;
-        if (IdexCdRomDeviceObject)
-            IoDismountVolume(IdexCdRomDeviceObject); // the next open mounts the drive (or the other image)
-        XeTitleDiscAuthenticated = 0;
-        XeDiscTitleId = 0;
+        const VD_SLOT &slot = VirtualDiscSlots[other - 1];
+        VirtualDvdSlot = slot.Mounted && IsDvdType(slot.Type) ? (LONG)other : 0;
+        if (DvdDeviceObject)
+            IoDismountVolume(DvdDeviceObject); // the next open mounts the drive (or the other image)
+        titles::TitleDiscAuthenticated = 0;
+        titles::DiscTitleId = 0;
     }
     if (s->Device && s->Device->MountedOrSelfDevice != s->Device)
         IoDismountVolume(s->Device);
@@ -328,7 +331,7 @@ void Unmount(ULONG n) {
     }
     if (s->LinkMade) {
         OBJECT_STRING link;
-        RtlInitAnsiString(&link, VdSaved[n - 1].Link);
+        RtlInitAnsiString(&link, SavedVirtualDiscs[n - 1].Link);
         IoDeleteSymbolicLink(&link);
         s->LinkMade = FALSE;
     }
@@ -373,10 +376,10 @@ NTSTATUS OpenPart(const CHAR *Path, HANDLE *File, ULONGLONG *Size) {
     return STATUS_SUCCESS;
 }
 
-// Bring slot n up from VdSaved[n - 1]: open the parts, read the format, create the device and the link.
+// Bring slot n up from SavedVirtualDiscs[n - 1]: open the parts, read the format, create the device and the link.
 NTSTATUS Attach(ULONG n) {
-    VD_SAVED *saved = &VdSaved[n - 1];
-    VD_SLOT *s = &VdSlot[n - 1];
+    VD_SAVED *saved = &SavedVirtualDiscs[n - 1];
+    VD_SLOT *s = &VirtualDiscSlots[n - 1];
     NTSTATUS status = STATUS_SUCCESS;
     s->Type = saved->Type;
     s->Skip = 0;
@@ -435,7 +438,7 @@ NTSTATUS Attach(ULONG n) {
         RtlSnprintf(name, sizeof(name), "\\Device\\Virtual0\\Image%lu", n);
         OBJECT_STRING os;
         RtlInitAnsiString(&os, name);
-        status = IoCreateDevice(&VdDriverObject, sizeof(ULONG), &os, FILE_DEVICE_CD_ROM, FALSE, &s->Device);
+        status = IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &os, FILE_DEVICE_CD_ROM, FALSE, &s->Device);
         if (NT_SUCCESS(status)) {
             *(PULONG)s->Device->DeviceExtension = n;
             s->Device->Flags |= DO_DIRECT_IO | 0x40;
@@ -476,11 +479,11 @@ NTSTATUS Attach(ULONG n) {
     }
     s->Mounted = TRUE;
     if (IsDvdType(s->Type)) {
-        VdDvd = (LONG)n;
-        XeTitleDiscAuthenticated = 0;
-        XeDiscTitleId = 0;
-        if (IdexCdRomDeviceObject)
-            IoDismountVolume(IdexCdRomDeviceObject); // the next open mounts the image
+        VirtualDvdSlot = (LONG)n;
+        titles::TitleDiscAuthenticated = 0;
+        titles::DiscTitleId = 0;
+        if (DvdDeviceObject)
+            IoDismountVolume(DvdDeviceObject); // the next open mounts the image
     }
     XK_SERIAL("vd: slot %lu: %c, %lu part(s), %#llx bytes%s: %s\n", n, s->Type, (ULONG)s->Parts, s->Length,
               s->Skip ? " (full dump)" : "", saved->Path[0]);
@@ -511,15 +514,15 @@ NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
     if (!IsDvdType(type))
         return STATUS_INVALID_DEVICE_REQUEST; // hard-disk and memory-unit images: not supported (yet)
     if (Slot == 0) { // the control device: the first free slot
-        for (Slot = 1; Slot <= VD_SLOTS && VdSlot[Slot - 1].Mounted; Slot++) {
+        for (Slot = 1; Slot <= VD_SLOTS && VirtualDiscSlots[Slot - 1].Mounted; Slot++) {
             // Find the first free slot.
         }
         if (Slot > VD_SLOTS)
             return STATUS_INVALID_DEVICE_REQUEST;
-    } else if (VdSlot[Slot - 1].Mounted) {
+    } else if (VirtualDiscSlots[Slot - 1].Mounted) {
         return STATUS_INVALID_DEVICE_REQUEST;
     }
-    VD_SAVED *saved = &VdSaved[Slot - 1];
+    VD_SAVED *saved = &SavedVirtualDiscs[Slot - 1];
     RtlZeroMemory(saved, sizeof(*saved));
     saved->Type = type;
     saved->Parts = In[0];
@@ -536,13 +539,13 @@ NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
 
 // --- The driver (control device and image devices)
 
-NTSTATUS NTAPI VdCreateClose(PDEVICE_OBJECT, PIRP Irp) {
+NTSTATUS NTAPI VirtualDiscCreateClose(PDEVICE_OBJECT, PIRP Irp) {
     return Complete(Irp, STATUS_SUCCESS);
 }
 
-NTSTATUS NTAPI VdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+NTSTATUS NTAPI VirtualDiscRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONG n = *(PULONG)DeviceObject->DeviceExtension;
-    VD_SLOT *s = n ? &VdSlot[n - 1] : nullptr;
+    VD_SLOT *s = n ? &VirtualDiscSlots[n - 1] : nullptr;
     if (!s)
         return Complete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     InterlockedIncrement(&s->Busy);
@@ -551,7 +554,7 @@ NTSTATUS NTAPI VdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     return status;
 }
 
-NTSTATUS NTAPI VdDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
+NTSTATUS NTAPI VirtualDiscDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONG n = *(PULONG)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION st = IoGetCurrentIrpStackLocation(Irp);
     ULONG code = st->Parameters.DeviceIoControl.IoControlCode;
@@ -559,7 +562,7 @@ NTSTATUS NTAPI VdDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return Complete(Irp, STATUS_SUCCESS);
     if (code == IOCTL_VD_MOUNT || code == IOCTL_VD_MOUNT2 || code == IOCTL_VD_UNMOUNT || code == IOCTL_VD_UNMOUNT2) {
         // As Cerbios: a mount first unmounts its target (the control device: every slot).
-        KeWaitForSingleObject(&VdMountLock, Executive, KernelMode, FALSE, nullptr);
+        KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
         if (n)
             Unmount(n);
         else
@@ -569,11 +572,11 @@ NTSTATUS NTAPI VdDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             status = MountRequest(n, (const UCHAR *)st->Parameters.DeviceIoControl.InputBuffer,
                                   st->Parameters.DeviceIoControl.InputBufferLength);
         }
-        VdLastMountStatus = status;
-        KeSetEvent(&VdMountLock, 0, FALSE);
+        VirtualDiscLastMountStatus = status;
+        KeSetEvent(&VirtualDiscMountLock, 0, FALSE);
         return Complete(Irp, status);
     }
-    VD_SLOT *s = n ? &VdSlot[n - 1] : nullptr;
+    VD_SLOT *s = n ? &VirtualDiscSlots[n - 1] : nullptr;
     if (!s)
         return Complete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     InterlockedIncrement(&s->Busy);
@@ -584,20 +587,21 @@ NTSTATUS NTAPI VdDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 } // namespace
 
-DRIVER_OBJECT VdDriverObject = {
+DRIVER_OBJECT VirtualDiscDriverObject = {
     nullptr,
     nullptr,
     nullptr,
-    {VdCreateClose, VdCreateClose, VdRead, VdRead, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, VdDeviceControl,
-     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest}};
+    {VirtualDiscCreateClose, VirtualDiscCreateClose, VirtualDiscRead, VirtualDiscRead, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, VirtualDiscDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest}};
 
 // \Device\CdRom0's read and device-control routines (dvd_drive.cpp): true when a mounted DVD image took the request.
-bool VdServeCdRom(PIRP Irp, NTSTATUS *Status) {
-    LONG n = VdDvd;
+bool ServeVirtualDvd(PIRP Irp, NTSTATUS *Status) {
+    LONG n = VirtualDvdSlot;
     if (!n)
         return false;
-    VD_SLOT *s = &VdSlot[n - 1];
+    VD_SLOT *s = &VirtualDiscSlots[n - 1];
     InterlockedIncrement(&s->Busy);
     if (!s->Mounted) { // unmounted meanwhile: the drive again
         InterlockedDecrement(&s->Busy);
@@ -610,14 +614,14 @@ bool VdServeCdRom(PIRP Irp, NTSTATUS *Status) {
 }
 
 // The loader's media check (titles/loader.cpp): a mounted image is an Xbox game disc.
-bool VdDvdImageMounted() {
-    return VdDvd != 0;
+bool IsDvdImageMounted() {
+    return VirtualDvdSlot != 0;
 }
 
 // Phase 1, after the drive (storage/ide_channel.cpp): the control device and its links.
-void VdInitialize() {
-    KeInitializeEvent(&VdMountLock, SynchronizationEvent, TRUE);
-    for (auto &s : VdSlot)
+void InitVirtualDiscs() {
+    KeInitializeEvent(&VirtualDiscMountLock, SynchronizationEvent, TRUE);
+    for (auto &s : VirtualDiscSlots)
         KeInitializeEvent(&s.Lock, SynchronizationEvent, TRUE);
     OBJECT_STRING dir, name, link;
     RtlInitAnsiString(&dir, "\\Device\\Virtual0");
@@ -627,10 +631,11 @@ void VdInitialize() {
         NtClose(h);
     RtlInitAnsiString(&name, "\\Device\\Virtual0\\Image0");
     // Not a mountable type: opening \Device\CdRom1 reaches this driver directly.
-    if (!NT_SUCCESS(IoCreateDevice(&VdDriverObject, sizeof(ULONG), &name, FILE_DEVICE_UNKNOWN, FALSE, &VdControl)))
+    if (!NT_SUCCESS(IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &name, FILE_DEVICE_UNKNOWN, FALSE,
+                                   &VirtualDiscControl)))
         return;
-    *(PULONG)VdControl->DeviceExtension = 0;
-    VdControl->Flags &= ~DO_DEVICE_INITIALIZING;
+    *(PULONG)VirtualDiscControl->DeviceExtension = 0;
+    VirtualDiscControl->Flags &= ~DO_DEVICE_INITIALIZING;
     RtlInitAnsiString(&link, "\\Device\\CdRom1");
     IoCreateSymbolicLink(&link, &name);
     RtlInitAnsiString(&link, "\\??\\CdRom1:");
@@ -638,11 +643,13 @@ void VdInitialize() {
 }
 
 // The title-launch thread, before the first title (titles/loader.cpp): mounts from before a quick reboot come back.
-void VdRestoreMounts() {
-    KeWaitForSingleObject(&VdMountLock, Executive, KernelMode, FALSE, nullptr);
+void RestoreVirtualDiscMounts() {
+    KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
     for (ULONG n = 1; n <= VD_SLOTS; n++) {
-        if (VdSaved[n - 1].InUse && !VdSlot[n - 1].Mounted)
+        if (SavedVirtualDiscs[n - 1].InUse && !VirtualDiscSlots[n - 1].Mounted)
             Attach(n);
     }
-    KeSetEvent(&VdMountLock, 0, FALSE);
+    KeSetEvent(&VirtualDiscMountLock, 0, FALSE);
 }
+
+} // namespace xk::storage

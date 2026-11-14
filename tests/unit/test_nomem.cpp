@@ -5,6 +5,8 @@
 
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 namespace {
 constexpr NTSTATUS NO_RESOURCES = (NTSTATUS)0xC000009A;
 
@@ -16,8 +18,8 @@ struct Exhaust {
     std::vector<ULONG> pages;
     std::vector<void *> blocks;
     explicit Exhaust(ULONG leave = 0, bool drainPool = true) {
-        while (MmAvailablePages > leave)
-            pages.push_back(MiAllocatePage(MmSystemMemoryUsage, nullptr, false));
+        while (memory::AvailablePages > leave)
+            pages.push_back(memory::AllocatePage(MmSystemMemoryUsage, nullptr, false));
         if (drainPool) {
             for (ULONG units = 127; units >= 1; units--) {
                 while (void *p = ExAllocatePool(units * 32 - 8))
@@ -27,7 +29,7 @@ struct Exhaust {
     }
     ~Exhaust() {
         for (ULONG p : pages)
-            MiFreePage(p);
+            memory::FreePage(p);
         for (void *b : blocks)
             ExFreePool(b);
     }
@@ -35,10 +37,10 @@ struct Exhaust {
 } // namespace
 
 TEST(NoMemory, PagesAndPool) {
-    ULONG before = MmAvailablePages;
+    ULONG before = memory::AvailablePages;
     {
         Exhaust all;
-        EXPECT_EQ(MiAllocatePage(MmSystemMemoryUsage, nullptr), 0u);
+        EXPECT_EQ(memory::AllocatePage(MmSystemMemoryUsage, nullptr), 0u);
         EXPECT_EQ(MmAllocateSystemMemory(4096, PAGE_READWRITE), nullptr);
         EXPECT_EQ(MmCreateKernelStack(0x3000, FALSE), nullptr);
         EXPECT_EQ(MmAllocateContiguousMemory(4096), nullptr);
@@ -47,7 +49,7 @@ TEST(NoMemory, PagesAndPool) {
         EXPECT_EQ(MmMapIoSpace(0x200000, 0x1000, PAGE_READWRITE) != nullptr, true)
             << "I/O mappings need no pages while the system PTE range has room";
     }
-    EXPECT_EQ(MmAvailablePages, before);
+    EXPECT_EQ(memory::AvailablePages, before);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 
@@ -57,9 +59,9 @@ TEST(NoMemory, MappedPagesUndoWhenAPageTableTakesTheLastPage) {
     std::vector<void *> fill;
     // Fill the committed system PTE range so that the next reservation commits a new page table.
     for (;;) {
-        void *p = MiReserveSystemPtes(1);
+        void *p = memory::ReserveSystemPtes(1);
         if ((ULONG)p >= 0xD0000000 + (ULONG)0x400000 * 2) { // two page tables' worth used: reached fresh ground
-            MiReleaseSystemPtes(p, 1);
+            memory::ReleaseSystemPtes(p, 1);
             break;
         }
         fill.push_back(p);
@@ -68,18 +70,18 @@ TEST(NoMemory, MappedPagesUndoWhenAPageTableTakesTheLastPage) {
     ULONG before;
     {
         Exhaust most(pages, false);
-        before = MmAvailablePages;
+        before = memory::AvailablePages;
         void *p = MmAllocateSystemMemory(pages * 4096 + 0x400000, PAGE_READWRITE); // beyond the committed range
         EXPECT_EQ(p, nullptr);
-        EXPECT_LE(MmAvailablePages, before);
+        EXPECT_LE(memory::AvailablePages, before);
     }
     for (void *p : fill)
-        MiReleaseSystemPtes(p, 1);
+        memory::ReleaseSystemPtes(p, 1);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 
 TEST(NoMemory, ObjectsHandlesAndThreads) {
-    ULONG handles = ObpObjectHandleTable.HandleCount, blocks = ExpPoolBlocks;
+    ULONG handles = ObpObjectHandleTable.HandleCount, blocks = memory::PoolBlocks;
     {
         Exhaust all;
         HANDLE h = (HANDLE)1;
@@ -95,7 +97,7 @@ TEST(NoMemory, ObjectsHandlesAndThreads) {
             << "no pool for the VAD";
     }
     EXPECT_EQ(ObpObjectHandleTable.HandleCount, handles);
-    EXPECT_EQ(ExpPoolBlocks, blocks) << "nothing leaked from the failed creations";
+    EXPECT_EQ(memory::PoolBlocks, blocks) << "nothing leaked from the failed creations";
     HANDLE h;
     EXPECT_EQ(NtCreateEvent(&h, nullptr, NotificationEvent, FALSE), STATUS_SUCCESS) << "works again";
     NtClose(h);

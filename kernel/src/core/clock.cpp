@@ -3,12 +3,16 @@
 #include <xk/arch.h>
 #include <xk/hardware.h>
 
-constexpr ULONG CLOCK_INCREMENT = 10000; // 1 ms in 100 ns units
-
+// Exported variables: outside the namespace, with the names titles import.
 volatile ULONG KeTickCount;
 volatile KSYSTEM_TIME KeInterruptTime;
 volatile KSYSTEM_TIME KeSystemTime;
-ULONG KeTimeIncrement = CLOCK_INCREMENT;
+
+namespace xk::core {
+
+constexpr ULONG CLOCK_INCREMENT = 10000; // 1 ms in 100 ns units
+
+XBAPI ULONG KeTimeIncrement = CLOCK_INCREMENT;
 
 // --- The clock interrupt: interrupt time, system time and the tick count
 
@@ -30,12 +34,12 @@ static LONGLONG ReadSystemTime(const volatile KSYSTEM_TIME &t) {
 }
 
 // IRQ0 at CLOCK_LEVEL (see KiDispatchHardwareInterrupt).
-void KiClockInterrupt(KIRQL interruptedIrql) {
+void ClockInterrupt(KIRQL interruptedIrql) {
     AdvanceSystemTime(KeInterruptTime, CLOCK_INCREMENT);
     AdvanceSystemTime(KeSystemTime, CLOCK_INCREMENT);
     KeTickCount = KeTickCount + 1;
-    KiCheckTimers();
-    KiUpdateRunTime(interruptedIrql);
+    CheckTimers();
+    UpdateRunTime(interruptedIrql);
 }
 
 XBAPI ULONGLONG NTAPI KeQueryInterruptTime() {
@@ -53,14 +57,14 @@ XBAPI void NTAPI KeQuerySystemTime(PLARGE_INTEGER CurrentTime) {
 constexpr USHORT ACPI_PM_TIMER = 0x8008;
 constexpr ULONG ACPI_PM_FREQUENCY = 3375000;
 
-static volatile ULONG KiPerfBaseLow, KiPerfHigh, KiPerfHigh2; // base (bit 31 + high part), written high2/low/high
+static volatile ULONG KiPerfBaseLow, KiPerfHigh, PerfHigh2; // base (bit 31 + high part), written high2/low/high
 
 XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter() {
     ULONG high, low;
     do {
         high = KiPerfHigh;
         low = KiPerfBaseLow;
-    } while (high != KiPerfHigh2);
+    } while (high != PerfHigh2);
     ULONG now = inl(ACPI_PM_TIMER);
     ULONGLONG value = ((ULONGLONG)high << 32) | ((now & 0x7FFFFFFF) | (low & 0x80000000));
     value += (now ^ low) & 0x80000000; // bit 31 toggled since the last overflow event
@@ -70,11 +74,11 @@ XBAPI LARGE_INTEGER NTAPI KeQueryPerformanceCounter() {
 }
 
 // From the SCI handler: timer bit 31 toggled.
-void KiPerfCounterOverflow() {
+void PerfCounterOverflow() {
     ULONG now = inl(ACPI_PM_TIMER);
     ULONGLONG base = ((ULONGLONG)KiPerfHigh << 32 | KiPerfBaseLow) + 0x80000000;
     base += (now ^ (ULONG)base) & 0x80000000;
-    KiPerfHigh2 = (ULONG)(base >> 32);
+    PerfHigh2 = (ULONG)(base >> 32);
     KiPerfBaseLow = (ULONG)base;
     KiPerfHigh = (ULONG)(base >> 32);
 }
@@ -98,7 +102,7 @@ XBAPI void NTAPI KeStallExecutionProcessor(ULONG MicroSeconds) {
 }
 
 // --- System time: initialised from the RTC, changed by NtSetSystemTime (which also sets the RTC).
-static void KiSetSystemTime(LONGLONG t) {
+static void SetSystemTime(LONGLONG t) {
     ULONG flags = save_flags_cli();
     KeSystemTime.High2Time = (LONG)(t >> 32);
     KeSystemTime.LowPart = (ULONG)t;
@@ -106,12 +110,12 @@ static void KiSetSystemTime(LONGLONG t) {
     restore_flags(flags);
 }
 
-void KiInitializeSystemTime() {
+void InitializeSystemTime() {
     TIME_FIELDS f;
-    HalpQueryRealTimeClock(&f);
+    hardware::QueryRealTimeClock(&f);
     LARGE_INTEGER t;
     if (RtlTimeFieldsToTime(&f, &t))
-        KiSetSystemTime(t.QuadPart);
+        SetSystemTime(t.QuadPart);
 }
 
 XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER PreviousTime) {
@@ -120,10 +124,12 @@ XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER P
         return (NTSTATUS)0xC000000D;
     if (PreviousTime)
         KeQuerySystemTime(PreviousTime);
-    KiSetSystemTime(t.QuadPart);
+    SetSystemTime(t.QuadPart);
     TIME_FIELDS f;
     RtlTimeToTimeFields(&t, &f);
-    HalpSetRealTimeClock(&f);
-    HalpWriteCmosSignature();
+    hardware::SetRealTimeClock(&f);
+    hardware::WriteCmosSignature();
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::core

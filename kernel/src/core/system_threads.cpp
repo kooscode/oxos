@@ -4,20 +4,22 @@
 #include <xk/serial.h>
 #include <xk/objects.h>
 
-static void NTAPI PspDeleteThread(PVOID Object) {
+namespace xk::core {
+
+static void NTAPI DeleteThread(PVOID Object) {
     auto t = (ETHREAD *)Object;
     if (t->Tcb.StackBase) // never ran / not reaped
         MmDeleteKernelStack(t->Tcb.StackBase, t->Tcb.StackLimit);
 }
 
-OBJECT_TYPE PsThreadObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, PspDeleteThread, nullptr, (PVOID)0,
+XBAPI OBJECT_TYPE PsThreadObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteThread, nullptr, (PVOID)0,
                                   'erhT'};
 
-static PCREATE_THREAD_NOTIFY_ROUTINE PspCreateThreadNotifyRoutines[8]; // registered by titles, at most 8
-static volatile LONG PspThreadCount;                                   // system threads created and not yet deleted
+static PCREATE_THREAD_NOTIFY_ROUTINE CreateThreadNotifyRoutines[8]; // registered by titles, at most 8
+static volatile LONG SystemThreadCount;                             // system threads created and not yet deleted
 
 XBAPI NTSTATUS NTAPI PsSetCreateThreadNotifyRoutine(PCREATE_THREAD_NOTIFY_ROUTINE NotifyRoutine) {
-    for (auto &slot : PspCreateThreadNotifyRoutines) {
+    for (auto &slot : CreateThreadNotifyRoutines) {
         if (!slot) {
             slot = NotifyRoutine;
             return STATUS_SUCCESS;
@@ -26,8 +28,8 @@ XBAPI NTSTATUS NTAPI PsSetCreateThreadNotifyRoutine(PCREATE_THREAD_NOTIFY_ROUTIN
     return (NTSTATUS)0xC000009A;
 }
 
-static void PspNotify(ETHREAD *t, BOOLEAN create) {
-    for (auto routine : PspCreateThreadNotifyRoutines) {
+static void NotifyThreadCreation(ETHREAD *t, BOOLEAN create) {
+    for (auto routine : CreateThreadNotifyRoutines) {
         if (routine)
             routine(t, t->UniqueThread, create);
     }
@@ -54,8 +56,8 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
         return (NTSTATUS)0xC000009A;
     }
     t->StartAddress = StartContext1;
-    KeInitializeThread(&t->Tcb, stack, stackSize, TlsDataSize, SystemRoutine, StartContext1, StartContext2,
-                       &KiSystemProcess);
+    InitializeThread(&t->Tcb, stack, stackSize, TlsDataSize, SystemRoutine, StartContext1, StartContext2,
+                     &SystemProcess);
     if (CreateSuspended)
         KeSuspendThread(&t->Tcb);
 
@@ -65,7 +67,7 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
     ObfReferenceObject(t);
     status = ObInsertObject(t, nullptr, 0, &t->UniqueThread);
     if (NT_SUCCESS(status)) {
-        PspNotify(t, TRUE);
+        NotifyThreadCreation(t, TRUE);
         status = ObOpenObjectByPointer(t, &PsThreadObjectType, ThreadHandle);
     }
     if (!NT_SUCCESS(status)) {
@@ -76,9 +78,9 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
         *ThreadId = t->UniqueThread;
     }
     KeQuerySystemTime(&t->CreateTime);
-    __atomic_add_fetch(&PspThreadCount, 1, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&SystemThreadCount, 1, __ATOMIC_SEQ_CST);
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    KiReadyThread(&t->Tcb);
+    ReadyThread(&t->Tcb);
     KiUnlockDispatcherDatabase(old);
     ObfDereferenceObject(t);
     return status;
@@ -87,7 +89,7 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
 XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus);
 
 // Calls StartRoutine(StartContext), then terminates the thread.
-static void NTAPI PspSystemThreadStartup(PVOID StartRoutine, PVOID StartContext) {
+static void NTAPI SystemThreadStartup(PVOID StartRoutine, PVOID StartContext) {
     ((void(NTAPI *)(PVOID))StartRoutine)(StartContext);
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -95,7 +97,7 @@ static void NTAPI PspSystemThreadStartup(PVOID StartRoutine, PVOID StartContext)
 XBAPI NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine,
                                           PVOID StartContext, BOOLEAN DebuggerThread) {
     return PsCreateSystemThreadEx(ThreadHandle, 0, 0x3000, 0, ThreadId, StartRoutine, StartContext, FALSE,
-                                  DebuggerThread, PspSystemThreadStartup);
+                                  DebuggerThread, SystemThreadStartup);
 }
 
 XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus) {
@@ -103,7 +105,7 @@ XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus) {
     t->Tcb.HasTerminated = TRUE;
     KfLowerIrql(PASSIVE_LEVEL);
     if (t->UniqueThread)
-        PspNotify(t, FALSE);
+        NotifyThreadCreation(t, FALSE);
     if (t->Tcb.Priority < 16)
         KeSetPriorityThread(&t->Tcb, 16);
     t->ExitStatus = ExitStatus;
@@ -113,14 +115,14 @@ XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus) {
         t->UniqueThread = nullptr;
         NtClose(h);
     }
-    __atomic_sub_fetch(&PspThreadCount, 1, __ATOMIC_SEQ_CST);
-    KeTerminateThread(); // the reaper drops the last "running" reference
+    __atomic_sub_fetch(&SystemThreadCount, 1, __ATOMIC_SEQ_CST);
+    TerminateThread(); // the reaper drops the last "running" reference
 }
 
 XBAPI NTSTATUS NTAPI PsQueryStatistics(PS_STATISTICS *ProcessStatistics) {
     if (ProcessStatistics->Length != sizeof(PS_STATISTICS))
         return (NTSTATUS)0xC000000D;
-    ProcessStatistics->ThreadCount = PspThreadCount;
+    ProcessStatistics->ThreadCount = SystemThreadCount;
     ProcessStatistics->HandleCount = ObpObjectHandleTable.HandleCount;
     return STATUS_SUCCESS;
 }
@@ -129,7 +131,7 @@ XBAPI NTSTATUS NTAPI PsQueryStatistics(PS_STATISTICS *ProcessStatistics) {
 
 // PPS_APC_ROUTINE: see objects.h
 
-static void NTAPI PspFreeApc(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
+static void NTAPI FreeApc(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *) {
     ExFreePool(Apc);
 }
 
@@ -143,7 +145,7 @@ XBAPI NTSTATUS NTAPI NtQueueApcThread(HANDLE ThreadHandle, PPS_APC_ROUTINE ApcRo
     if (!apc) {
         status = (NTSTATUS)0xC000009A;
     } else {
-        KeInitializeApc(apc, t, PspFreeApc, nullptr, (PKNORMAL_ROUTINE)ApcRoutine, UserMode, ApcArgument1);
+        KeInitializeApc(apc, t, FreeApc, nullptr, (PKNORMAL_ROUTINE)ApcRoutine, UserMode, ApcArgument1);
         if (!KeInsertQueueApc(apc, ApcArgument2, ApcArgument3, 0)) {
             ExFreePool(apc);
             status = (NTSTATUS)0xC0000001; // STATUS_UNSUCCESSFUL
@@ -179,10 +181,10 @@ XBAPI NTSTATUS NTAPI NtResumeThread(HANDLE ThreadHandle, PULONG PreviousSuspendC
 
 // Kernel-internal helper used by boot self-tests: start a system thread at a priority and keep a
 // reference to it (the pointer stays valid after the thread exits).
-PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority) {
+PKTHREAD CreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority) {
     HANDLE h;
     if (!NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, StackSize, 0, nullptr, (PVOID)StartRoutine, Context, TRUE, FALSE,
-                                           PspSystemThreadStartup)))
+                                           SystemThreadStartup)))
         return nullptr;
     PKTHREAD t;
     ObReferenceObjectByHandle(h, &PsThreadObjectType, (PVOID *)&t);
@@ -195,3 +197,4 @@ PKTHREAD KiCreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, U
     return t;
 }
 
+} // namespace xk::core

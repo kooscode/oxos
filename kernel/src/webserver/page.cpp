@@ -4,12 +4,14 @@
 // folder (Delete: a folder only when it is empty, the server refuses the others), and a Create Folder button in the
 // ".." row.
 // Boot-only data.
-#include <xk/uploader.h>
+#include <xk/webserver.h>
+
+namespace xk::webserver {
 
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 
-static const char UploadpPage[] = R"PAGE(<!doctype html>
+static const char PageHtml[] = R"PAGE(<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OXOS File Manager</title>
 <style>
@@ -199,7 +201,9 @@ start();
 </body></html>
 )PAGE";
 
-const char *UploadPage(ULONG *Length) {
-    *Length = sizeof(UploadpPage) - 1;
-    return UploadpPage;
+const char *FileManagerPage(ULONG *Length) {
+    *Length = sizeof(PageHtml) - 1;
+    return PageHtml;
 }
+
+} // namespace xk::webserver

@@ -11,6 +11,8 @@
 #include <xk/serial.h>
 #include <xk/titles.h>
 
+namespace xk::extensions {
+
 namespace {
 
 constexpr char CACHE_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_extension_loader.cache";
@@ -36,7 +38,7 @@ void ReloadCr3() {
 
 #pragma code_seg(".xkb")
 
-void XkExtensionsWriteCache() {
+void WriteLoaderCache() {
     ULONG rva = *(const ULONG *)(KERNEL_BASE + XK_EXTENSION_LOADER_HEADER_FIELD);
     if (!rva)
         return;
@@ -62,25 +64,25 @@ void XkExtensionsWriteCache() {
 
 // --- Running the loader
 
-void XkExtensionsLoad() {
-    if (XkExtensionsSafeMode) {
+void LoadExtensions() {
+    if (SafeMode) {
         XK_SERIAL("extensions: safe mode (B at boot): none loaded\n");
         return;
     }
-    if (!KiQuickRebootFlag && MmBootPagesPresent())
-        XkExtensionsWriteCache();
+    if (!KiQuickRebootFlag && memory::BootPagesPresent())
+        WriteLoaderCache();
     // Without the list there is nothing to load (and the cache is not read), unless the last launch's state pages
     // are still kept: the loader then frees them (§6).
     OBJECT_STRING listName;
     RtlInitAnsiString(&listName, LIST_PATH);
     OBJECT_ATTRIBUTES list = {nullptr, &listName, OBJ_CASE_INSENSITIVE};
     FILE_NETWORK_OPEN_INFORMATION info;
-    if (!XkExtensionsStateIndex && !NT_SUCCESS(NtQueryFullAttributesFile(&list, &info)))
+    if (!StateIndexPage && !NT_SUCCESS(NtQueryFullAttributesFile(&list, &info)))
         return;
     ULONG got;
     NTSTATUS status;
     ULONG largest = sizeof(XK_EXTENSION_LOADER_HEADER) + XK_EXTENSION_LOADER_MAX_BYTES;
-    auto cache = (PUCHAR)XeReadOxosFile(CACHE_PATH, largest, POOL_TAG, &got, &status);
+    auto cache = (PUCHAR)titles::ReadOxosFile(CACHE_PATH, largest, POOL_TAG, &got, &status);
     auto header = (const XK_EXTENSION_LOADER_HEADER *)cache;
     if (!cache || got < sizeof(*header) || header->Magic != XK_EXTENSION_LOADER_MAGIC ||
         header->Stamp != KernelStamp() || header->Base != XK_EXTENSION_LOADER_BASE ||
@@ -94,7 +96,7 @@ void XkExtensionsLoad() {
     ULONG size = header->Size, entry = header->Entry;
     auto pages = (PUCHAR)MmAllocateContiguousMemory(size);
     auto table = (ULONG *)MmAllocateContiguousMemory(PAGE_SIZE);
-    ULONG *pde = MiGetPdeAddress(XK_EXTENSION_LOADER_BASE);
+    ULONG *pde = memory::PdeAddress(XK_EXTENSION_LOADER_BASE);
     if (pages && table && !*pde) {
         RtlCopyMemory(pages, header + 1, size);
         RtlZeroMemory(table, PAGE_SIZE);
@@ -114,3 +116,5 @@ void XkExtensionsLoad() {
     if (pages)
         MmFreeContiguousMemory(pages);
 }
+
+} // namespace xk::extensions

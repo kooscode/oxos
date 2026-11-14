@@ -2,6 +2,8 @@
 #include <xk/filesystems.h>
 #include <xk/io.h>
 
+namespace xk::filesystems {
+
 struct RAW_VOLUME {
     PDEVICE_OBJECT TargetDevice;
     SHARE_ACCESS ShareAccess;
@@ -78,7 +80,7 @@ static DRIVER_OBJECT RawDriverObject = {
     RawDeleteVolume,
     RawDismountVolume,
     {RawCreate, RawSuccess, RawPassDown, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown,
-     RawQueryVolume, IoInvalidDeviceRequest, IoFsControlDismountOnly, RawPassDown, IoInvalidDeviceRequest,
+     RawQueryVolume, IoInvalidDeviceRequest, io::DismountOnlyFsControl, RawPassDown, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest, RawCleanup}};
 
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice) {
@@ -98,3 +100,5 @@ NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice) {
     TargetDevice->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::filesystems

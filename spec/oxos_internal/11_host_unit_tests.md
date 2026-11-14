@@ -51,8 +51,9 @@ coverage. Implemented 2026-10-23. User guide: `tests/unit/README.md`.
   on hardware (the stale translation stays).
 - Boot (`host/boot.cpp`) recreates what the 2BL leaves (spec/stock/01, `kernel/boot/bl.cpp`): its page directory at
   0xF000, a PE header at 0x10000 for the image extent, CR3 = 0xF000; then the kernel's own start-up:
-  `KiInitializeProcessor`, PIC and PIT, `MmInitSystem`, DPCs, timers, scheduler, `ObInitSystem`, the clock IRQ.
-  GoogleTest runs on a kernel thread (priority 8, 1 MB stack); the boot thread becomes the idle thread.
+  `core::InitializeProcessor`, PIC and PIT, `memory::InitMemoryManager`, DPCs, timers, scheduler,
+  `objects::InitObjectManager`, the clock IRQ. GoogleTest runs on a kernel thread (priority 8, 1 MB stack); the boot
+  thread becomes the idle thread.
 
 ## 4. Kernel changes for it (behaviour unchanged on the console)
 - `types.h`: GNU calling-convention attributes and 8-byte-aligned 64-bit types under `XK_HOST_TEST` (the Windows
@@ -60,8 +61,8 @@ coverage. Implemented 2026-10-23. User guide: `tests/unit/README.md`.
 - `arch.h`: host `save_flags_cli`/`restore_flags`; every flag save/restore in the kernel goes through them.
 - `runtime/memory.cpp`: the kernel's `memset`/`memcpy`/`memmove` are `Xk_*` in host builds (the C library has its own).
 - `runtime.h`: the C library's `size_t` in host builds.
-- `memory/init.cpp`: the RAM probe uses the 0x80000000 alias (the same physical addresses as the 2BL's identity map; page
-  0 cannot be mapped in a Linux process).
+- `memory/init.cpp`: the RAM probe uses the 0x80000000 alias (the same physical addresses as the 2BL's identity map;
+  page 0 cannot be mapped in a Linux process).
 - `core/processor.cpp`: no segment reload in host builds.
 - `core/bugcheck.cpp`: the harness hook (host builds only).
 

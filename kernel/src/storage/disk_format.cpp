@@ -4,7 +4,9 @@
 #include <xk/disk_format.h>
 #include <xk/runtime.h>
 
-ULONG IdexCrc32(const UCHAR *Data, ULONG Length) {
+namespace xk::storage {
+
+ULONG Crc32(const UCHAR *Data, ULONG Length) {
     ULONG crc = 0xFFFFFFFF;
     while (Length--) {
         crc ^= *Data++;
@@ -14,7 +16,7 @@ ULONG IdexCrc32(const UCHAR *Data, ULONG Length) {
     return ~crc;
 }
 
-NTSTATUS IdexDiskWriteZeros(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONGLONG Lba, ULONGLONG Count) {
+NTSTATUS WriteZeroSectors(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONGLONG Lba, ULONGLONG Count) {
     constexpr ULONG chunk = DISK_FORMAT_SCRATCH / 512;
     RtlZeroMemory(Scratch, DISK_FORMAT_SCRATCH);
     while (Count) {
@@ -32,25 +34,26 @@ NTSTATUS IdexDiskWriteZeros(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONGLONG 
 
 // The retail FATX partitions' first sectors (X:, Y:, Z:, C:, E:) and the automatic F: of a larger disk
 // (disk_layout.cpp).
-static const ULONGLONG IdexFatxStarts[] = {0x400, 0x177400, 0x2EE400, 0x465400, 0x55F400, 0xEE8AB0};
+static const ULONGLONG FatxPartitionStarts[] = {0x400, 0x177400, 0x2EE400, 0x465400, 0x55F400, 0xEE8AB0};
 
 // The blank-disk marker: this text, then the countdown in seconds (little-endian, 4 bytes).
-static const char IdexBlankMarker[16] = "OXOS BLANK DISK";
+static const char BlankDiskMarker[16] = "OXOS BLANK DISK";
 
-NTSTATUS IdexDiskDeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULONG ExtraCount,
-                                     ULONG CountdownSeconds, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
-    NTSTATUS status = IdexDiskWriteZeros(Io, Scratch, 0, DiskSectors < 4096 ? DiskSectors : 4096);
+NTSTATUS DeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULONG ExtraCount,
+                             ULONG CountdownSeconds, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+    NTSTATUS status = WriteZeroSectors(Io, Scratch, 0, DiskSectors < 4096 ? DiskSectors : 4096);
     if (NT_SUCCESS(status) && DiskSectors > 4096)
-        status = IdexDiskWriteZeros(Io, Scratch, DiskSectors - 2048, 2048);
-    for (ULONG i = 0; i < sizeof(IdexFatxStarts) / sizeof(IdexFatxStarts[0]) + ExtraCount && NT_SUCCESS(status); i++) {
-        ULONGLONG lba = i < 6 ? IdexFatxStarts[i] : Extra[i - 6];
+        status = WriteZeroSectors(Io, Scratch, DiskSectors - 2048, 2048);
+    ULONG starts = sizeof(FatxPartitionStarts) / sizeof(FatxPartitionStarts[0]);
+    for (ULONG i = 0; i < starts + ExtraCount && NT_SUCCESS(status); i++) {
+        ULONGLONG lba = i < 6 ? FatxPartitionStarts[i] : Extra[i - 6];
         if (lba + 128 <= DiskSectors)
-            status = IdexDiskWriteZeros(Io, Scratch, lba, 128);
+            status = WriteZeroSectors(Io, Scratch, lba, 128);
     }
     if (NT_SUCCESS(status)) {
         RtlZeroMemory(Scratch, 512);
-        RtlCopyMemory(Scratch, IdexBlankMarker, sizeof(IdexBlankMarker));
-        DiskFormatPut32(Scratch + 16, CountdownSeconds);
+        RtlCopyMemory(Scratch, BlankDiskMarker, sizeof(BlankDiskMarker));
+        StoreLittleEndian32(Scratch + 16, CountdownSeconds);
         status = Io->Write(Io->Context, DISK_FORMAT_MARKER, Scratch, 1);
     }
     return status;
@@ -61,18 +64,18 @@ NTSTATUS IdexDiskDeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Ext
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 
-ULONG IdexDiskBlankCountdown(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONG Default) {
+ULONG BlankDiskCountdown(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONG Default) {
     if (!NT_SUCCESS(Io->Read(Io->Context, DISK_FORMAT_MARKER, Scratch, 1)))
         return Default;
-    for (ULONG i = 0; i < sizeof(IdexBlankMarker); i++) {
-        if (Scratch[i] != (UCHAR)IdexBlankMarker[i])
+    for (ULONG i = 0; i < sizeof(BlankDiskMarker); i++) {
+        if (Scratch[i] != (UCHAR)BlankDiskMarker[i])
             return Default;
     }
     ULONG seconds = Scratch[16] | (Scratch[17] << 8) | (Scratch[18] << 16) | ((ULONG)Scratch[19] << 24);
     return seconds < DISK_FORMAT_MAX_COUNTDOWN ? seconds : DISK_FORMAT_MAX_COUNTDOWN;
 }
 
-bool IdexDiskIsBlank(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+bool IsDiskBlank(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
     if (DiskSectors < 0x55F400 + 1)
         return false;
     const ULONGLONG checked[] = {0, 1, DISK_FORMAT_PARTITION_START, DiskSectors - 1, DiskSectors - 8,
@@ -91,7 +94,7 @@ bool IdexDiskIsBlank(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scr
 // --- Naming what is on a disk
 
 // The file system whose first sectors are at Scratch (4 sectors from the partition's or the disk's start), or null.
-static const char *IdexFileSystemName(const UCHAR *b) {
+static const char *FileSystemName(const UCHAR *b) {
     auto at = [&](ULONG offset, const char *text) {
         for (ULONG i = 0; text[i]; i++) {
             if (b[offset + i] != (UCHAR)text[i])
@@ -127,7 +130,7 @@ struct IDEX_GPT_TYPE {
     const char *Name;
     bool Overrides;
 };
-static const IDEX_GPT_TYPE IdexGptTypes[] = {
+static const IDEX_GPT_TYPE GptTypes[] = {
     {{0x28, 0x73, 0x2A, 0xC1}, "EFI", true},          // C12A7328-...
     {{0x16, 0xE3, 0xC9, 0xE3}, nullptr, true},        // E3C9E316-...: Microsoft reserved, no file system
     {{0xAF, 0x3D, 0xC6, 0x0F}, "Linux", false},       // 0FC63DAF-...
@@ -136,8 +139,8 @@ static const IDEX_GPT_TYPE IdexGptTypes[] = {
     {{0x00, 0x53, 0x46, 0x48}, "Mac HFS+", false},    // 48465300-...
 };
 
-static const IDEX_GPT_TYPE *IdexGptType(const UCHAR *Guid) {
-    for (auto &t : IdexGptTypes) {
+static const IDEX_GPT_TYPE *GptType(const UCHAR *Guid) {
+    for (auto &t : GptTypes) {
         if (Guid[0] == t.Guid[0] && Guid[1] == t.Guid[1] && Guid[2] == t.Guid[2] && Guid[3] == t.Guid[3])
             return &t;
     }
@@ -145,7 +148,7 @@ static const IDEX_GPT_TYPE *IdexGptType(const UCHAR *Guid) {
 }
 
 // An MBR partition type's name, for a partition whose file system is not recognised.
-static const char *IdexMbrTypeName(UCHAR Type) {
+static const char *MbrTypeName(UCHAR Type) {
     switch (Type) {
     case 0x07:
         return "NTFS/exFAT";
@@ -171,7 +174,7 @@ static const char *IdexMbrTypeName(UCHAR Type) {
     }
 }
 
-static bool IdexSameText(const char *a, const char *b) {
+static bool SameText(const char *a, const char *b) {
     while (*a && *a == *b) {
         a++;
         b++;
@@ -179,7 +182,7 @@ static bool IdexSameText(const char *a, const char *b) {
     return *a == *b;
 }
 
-ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scratch, char *Out, ULONG Size) {
+ULONG DescribeDisk(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scratch, char *Out, ULONG Size) {
     ULONG n = 0;
     auto append = [&](const char *text) {
         for (ULONG i = 0; text[i] && n + 1 < Size; i++)
@@ -191,7 +194,7 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
     ULONG count = 0;
     auto name = [&](const char *text) {
         for (ULONG i = 0; i < count; i++) {
-            if (IdexSameText(names[i], text))
+            if (SameText(names[i], text))
                 return;
         }
         append(count ? ", " : "");
@@ -203,7 +206,7 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
         append("unreadable");
         return 0;
     }
-    if (const char *whole = IdexFileSystemName(Scratch)) { // a file system's boot sector at sector 0: no table
+    if (const char *whole = FileSystemName(Scratch)) { // a file system's boot sector at sector 0: no table
         append(whole);
         append(", no partition table");
         return DISK_FORMAT_WHOLE_DISK_FS;
@@ -228,7 +231,7 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
                     ULONGLONG start = *(const ULONGLONG *)(e + 32);
                     if (!start || start >= DiskSectors)
                         continue;
-                    const IDEX_GPT_TYPE *t = IdexGptType(e);
+                    const IDEX_GPT_TYPE *t = GptType(e);
                     typeNames[parts] = t ? t->Name : "unknown";
                     overrides[parts] = t && t->Overrides;
                     starts[parts++] = start;
@@ -241,7 +244,7 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
             const UCHAR *e = Scratch + 446 + 16 * i;
             ULONG start = *(const ULONG *)(e + 8);
             if (e[4] && start && start < DiskSectors) {
-                typeNames[parts] = IdexMbrTypeName(e[4]);
+                typeNames[parts] = MbrTypeName(e[4]);
                 overrides[parts] = false;
                 starts[parts++] = start;
             }
@@ -249,7 +252,7 @@ ULONG IdexDiskDescribe(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR S
     }
     // Each partition by its file system, unless its type says more.
     for (ULONG i = 0; i < parts; i++) {
-        const char *fs = NT_SUCCESS(Io->Read(Io->Context, starts[i], Scratch, 4)) ? IdexFileSystemName(Scratch)
+        const char *fs = NT_SUCCESS(Io->Read(Io->Context, starts[i], Scratch, 4)) ? FileSystemName(Scratch)
                                                                                    : nullptr;
         const char *label = overrides[i] || !fs ? typeNames[i] : fs;
         if (label)
@@ -290,29 +293,29 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     RtlZeroMemory(Scratch, 1024 + 32 * 512);
     RtlCopyMemory(entries, basicData, 16);
     Guid(entries + 16, &seed);
-    DiskFormatPut64(entries + 32, Start);
-    DiskFormatPut64(entries + 40, Start + Sectors - 1);
+    StoreLittleEndian64(entries + 32, Start);
+    StoreLittleEndian64(entries + 40, Start + Sectors - 1);
     const char label[] = "OXOS";
     for (ULONG i = 0; label[i]; i++)
-        DiskFormatPut16(entries + 56 + 2 * i, (UCHAR)label[i]);
-    ULONG entriesCrc = IdexCrc32(entries, 32 * 512);
+        StoreLittleEndian16(entries + 56 + 2 * i, (UCHAR)label[i]);
+    ULONG entriesCrc = Crc32(entries, 32 * 512);
     // The headers at Scratch + 512 (primary, then rewritten for the backup).
     auto header = [&](ULONGLONG self, ULONGLONG other, ULONGLONG entriesLba) {
         PUCHAR h = Scratch + 512;
         RtlZeroMemory(h, 512);
         RtlCopyMemory(h, "EFI PART", 8);
-        DiskFormatPut32(h + 8, 0x00010000);
-        DiskFormatPut32(h + 12, 92);
-        DiskFormatPut64(h + 24, self);
-        DiskFormatPut64(h + 32, other);
-        DiskFormatPut64(h + 40, 34);
-        DiskFormatPut64(h + 48, DiskSectors - 34);
+        StoreLittleEndian32(h + 8, 0x00010000);
+        StoreLittleEndian32(h + 12, 92);
+        StoreLittleEndian64(h + 24, self);
+        StoreLittleEndian64(h + 32, other);
+        StoreLittleEndian64(h + 40, 34);
+        StoreLittleEndian64(h + 48, DiskSectors - 34);
         RtlCopyMemory(h + 56, diskGuid, 16);
-        DiskFormatPut64(h + 72, entriesLba);
-        DiskFormatPut32(h + 80, 128);
-        DiskFormatPut32(h + 84, 128);
-        DiskFormatPut32(h + 88, entriesCrc);
-        DiskFormatPut32(h + 16, IdexCrc32(h, 92));
+        StoreLittleEndian64(h + 72, entriesLba);
+        StoreLittleEndian32(h + 80, 128);
+        StoreLittleEndian32(h + 84, 128);
+        StoreLittleEndian32(h + 88, entriesCrc);
+        StoreLittleEndian32(h + 16, Crc32(h, 92));
     };
     // The protective MBR at Scratch.
     PUCHAR mbr = Scratch;
@@ -321,8 +324,8 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     e[2] = 0x02;
     e[4] = 0xEE;
     e[5] = e[6] = e[7] = 0xFF;
-    DiskFormatPut32(e + 8, 1);
-    DiskFormatPut32(e + 12, DiskSectors - 1 > 0xFFFFFFFF ? 0xFFFFFFFF : (ULONG)(DiskSectors - 1));
+    StoreLittleEndian32(e + 8, 1);
+    StoreLittleEndian32(e + 12, DiskSectors - 1 > 0xFFFFFFFF ? 0xFFFFFFFF : (ULONG)(DiskSectors - 1));
     mbr[510] = 0x55;
     mbr[511] = 0xAA;
     // The backup first (entries before the last sector, then its header), the primary last.
@@ -340,17 +343,19 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     return status;
 }
 
-NTSTATUS IdexDiskFormatEXFAT(ULONGLONG DiskSectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File,
-                             const DISK_FORMAT_IO *Io, PUCHAR Scratch, DISK_FORMAT_RESULT *Result) {
+NTSTATUS FormatDiskEXFAT(ULONGLONG DiskSectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File,
+                         const DISK_FORMAT_IO *Io, PUCHAR Scratch, DISK_FORMAT_RESULT *Result) {
     if (DiskSectors < (1ull << 21)) // under 1 GiB: not a disk OXOS formats
         return (NTSTATUS)0xC000000D; // STATUS_INVALID_PARAMETER
     // The partition: from sector 2048 up to the backup GPT (32 sectors of entries and its header), in whole MiB.
     ULONGLONG start = DISK_FORMAT_PARTITION_START, sectors = (DiskSectors - 34 + 1 - start) & ~2047ull;
-    NTSTATUS status = EXFATFormatVolume(start, sectors, Serial, Timestamp, File, Io, Scratch, Result);
+    NTSTATUS status = filesystems::EXFATFormatVolume(start, sectors, Serial, Timestamp, File, Io, Scratch, Result);
     // The space before the partition (the reserved-area copy included), then the GPT.
     if (NT_SUCCESS(status))
-        status = IdexDiskWriteZeros(Io, Scratch, 34, start - 34);
+        status = WriteZeroSectors(Io, Scratch, 34, start - 34);
     if (NT_SUCCESS(status))
         status = WriteGpt(DiskSectors, start, sectors, Serial, Io, Scratch);
     return status;
 }
+
+} // namespace xk::storage

@@ -5,6 +5,8 @@
 #include <atomic>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 #define Prcb (KiPcr.PrcbData)
 
 // --- Scheduler
@@ -55,7 +57,7 @@ TEST(Sched, ABoostedBusyThreadDecaysAtItsQuantumEnd) {
 }
 
 TEST(Sched, DisableQuantumKeepsRealTimeThreadsRunning) {
-    KiSystemProcess.DisableQuantum = TRUE;
+    core::SystemProcess.DisableQuantum = TRUE;
     std::atomic<bool> stop{false};
     std::atomic<LONG> quantum{0};
     PKTHREAD t = Spawn([&] {
@@ -64,7 +66,7 @@ TEST(Sched, DisableQuantumKeepsRealTimeThreadsRunning) {
         stop = true;
     }, 16);
     Join(t);
-    KiSystemProcess.DisableQuantum = FALSE;
+    core::SystemProcess.DisableQuantum = FALSE;
     EXPECT_GT(quantum, 0x10000000) << "refilled to 0x7FFFFFFF at its first quantum end";
 }
 
@@ -270,12 +272,12 @@ TEST(VmPaths, ReleasingTheStartOrEndOfAReservation) {
 
 TEST(VmPaths, CommitBeyondTheFreePagesFails) {
     ULONG base = 0x01000000;
-    ULONG size = (MmAvailablePages + 16) << 12;
+    ULONG size = (memory::AvailablePages + 16) << 12;
     ASSERT_EQ(Alloc(&base, size, MEM_RESERVE, PAGE_READWRITE), STATUS_SUCCESS);
-    ULONG failures = MiCommitFailures;
+    ULONG failures = memory::CommitFailures;
     ULONG p = base;
     EXPECT_EQ(Alloc(&p, size, MEM_COMMIT, PAGE_READWRITE), (NTSTATUS)0xC0000017) << "STATUS_NO_MEMORY";
-    EXPECT_EQ(MiCommitFailures, failures + 1);
+    EXPECT_EQ(memory::CommitFailures, failures + 1);
     EXPECT_EQ(Release(base, 0), STATUS_SUCCESS);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
@@ -290,7 +292,7 @@ TEST(VmPaths, TopDownSkipsAnOccupiedTop) {
 }
 
 TEST(QueuePaths, ATerminatedThreadLeavesItsQueueAndFreesItsSlot) {
-    // Regression (2026-10-23): KeTerminateThread did not take the thread off its queue (spec/stock/07). Its slot
+    // Regression (2026-10-23): core::TerminateThread did not take the thread off its queue (spec/stock/07). Its slot
     // stayed taken (a one-at-a-time queue never served anyone again) and the freed thread stayed on the queue's list.
     KQUEUE q;
     KeInitializeQueue(&q, 1);
@@ -312,11 +314,11 @@ TEST(QueuePaths, ATerminatedThreadLeavesItsQueueAndFreesItsSlot) {
 
 TEST(VmPaths, APageTableIsReleasedWithItsLastPage) {
     // spec/stock/09 §6: "a page table is released when its last PTE goes".
-    ULONG before = MmAvailablePages;
+    ULONG before = memory::AvailablePages;
     ULONG base = 0x02400000; // a 4 MB region no other test uses
     ASSERT_EQ(Alloc(&base, 0x10000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE), STATUS_SUCCESS);
-    EXPECT_EQ(MmAvailablePages, before - 16 - 1) << "16 pages and their page table";
+    EXPECT_EQ(memory::AvailablePages, before - 16 - 1) << "16 pages and their page table";
     EXPECT_EQ(Release(base, 0), STATUS_SUCCESS);
-    EXPECT_EQ(MmAvailablePages, before) << "the page table came back too";
-    EXPECT_FALSE(*MiGetPdeAddress(base) & PTE_PRESENT);
+    EXPECT_EQ(memory::AvailablePages, before) << "the page table came back too";
+    EXPECT_FALSE(*memory::PdeAddress(base) & PTE_PRESENT);
 }

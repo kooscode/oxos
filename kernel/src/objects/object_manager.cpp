@@ -5,33 +5,37 @@
 #include <xk/arch.h>
 #include <xk/runtime.h>
 
-static KEVENT ObpDefaultObject; // waiting on a non-waitable object completes at once
-
-OBJECT_TYPE ObDirectoryObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr,
-                                     &ObpDefaultObject, 'eriD'};
-static void NTAPI ObpDeleteSymbolicLink(PVOID Object);
-OBJECT_TYPE ObSymbolicLinkObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, ObpDeleteSymbolicLink, nullptr,
-                                        &ObpDefaultObject, 'bmyS'};
-
+// Exported variables: outside the namespace, with the names titles import.
 OBJECT_HANDLE_TABLE ObpObjectHandleTable; // the one handle table (ordinal 245)
-static POBJECT_DIRECTORY ObpRootDirectoryObject, ObpDosDevicesDirectoryObject, ObpWin32NamedObjectsDirectoryObject;
-static PVOID ObpDosDevicesDriveLetterMap[26]; // "\??\X:" fast path
 
-volatile ULONG ObpTraceSymbolicLink; // diagnostics: step lines for one call (set by the caller)
-#define OB_STEP(...) do { if (ObpTraceSymbolicLink) XK_SERIAL(__VA_ARGS__); } while (0)
+namespace xk::objects {
 
-PVOID ObpGetWaitableObject(PVOID Object) {
+static KEVENT DefaultWaitObject; // waiting on a non-waitable object completes at once
+
+XBAPI OBJECT_TYPE ObDirectoryObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr,
+                                           &DefaultWaitObject, 'eriD'};
+static void NTAPI DeleteSymbolicLink(PVOID Object);
+XBAPI OBJECT_TYPE ObSymbolicLinkObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteSymbolicLink, nullptr,
+                                              &DefaultWaitObject, 'bmyS'};
+
+static POBJECT_DIRECTORY RootDirectoryObject, DosDevicesDirectoryObject, Win32NamedObjectsDirectoryObject;
+static PVOID DosDevicesDriveLetterMap[26]; // "\??\X:" fast path
+
+volatile ULONG TraceSymbolicLink; // diagnostics: step lines for one call (set by the caller)
+#define OB_STEP(...) do { if (TraceSymbolicLink) XK_SERIAL(__VA_ARGS__); } while (0)
+
+PVOID GetWaitableObject(PVOID Object) {
     PVOID d = OBJECT_TO_OBJECT_HEADER(Object)->Type->DefaultObject;
     return (LONG)d >= 0 ? (UCHAR *)Object + (ULONG)d : d;
 }
 
 // --- Handle table: RootTable[h >> 8][(h & 0xFC) / 4]; free entries hold the next free handle | 1.
 
-static PVOID *ObpHandleEntry(ULONG h) {
+static PVOID *HandleEntry(ULONG h) {
     return &ObpObjectHandleTable.RootTable[h >> 8][(h & 0xFC) >> 2];
 }
 
-static bool ObpExtendHandleTable() {
+static bool ExtendHandleTable() {
     auto sub = (PVOID *)ExAllocatePoolWithTag(64 * sizeof(PVOID), 'tHbO');
     if (!sub)
         return false;
@@ -64,11 +68,11 @@ static bool ObpExtendHandleTable() {
 }
 
 // At DISPATCH_LEVEL. The handle takes over one object reference from the caller.
-static HANDLE ObpCreateObjectHandle(PVOID Object) {
-    if (ObpObjectHandleTable.FirstFreeTableEntry == -1 && !ObpExtendHandleTable())
+static HANDLE CreateObjectHandle(PVOID Object) {
+    if (ObpObjectHandleTable.FirstFreeTableEntry == -1 && !ExtendHandleTable())
         return nullptr;
     ULONG h = (ULONG)ObpObjectHandleTable.FirstFreeTableEntry & ~1u;
-    PVOID *entry = ObpHandleEntry(h);
+    PVOID *entry = HandleEntry(h);
     ObpObjectHandleTable.FirstFreeTableEntry = (LONG)*entry;
     *entry = Object;
     ObpObjectHandleTable.HandleCount++;
@@ -76,19 +80,19 @@ static HANDLE ObpCreateObjectHandle(PVOID Object) {
     return (HANDLE)h;
 }
 
-static PVOID ObpLookupHandle(HANDLE Handle) {
+static PVOID LookupHandle(HANDLE Handle) {
     ULONG h = (ULONG)Handle & ~3u;
     if (h >= (ULONG)ObpObjectHandleTable.NextHandleNeedingPool)
         return nullptr;
-    PVOID o = *ObpHandleEntry(h);
+    PVOID o = *HandleEntry(h);
     return (o && !((ULONG)o & 1)) ? o : nullptr;
 }
 
-static PVOID ObpRemoveHandle(HANDLE Handle) {
-    PVOID o = ObpLookupHandle(Handle);
+static PVOID RemoveHandle(HANDLE Handle) {
+    PVOID o = LookupHandle(Handle);
     if (o) {
         ULONG h = (ULONG)Handle & ~3u;
-        *ObpHandleEntry(h) = (PVOID)ObpObjectHandleTable.FirstFreeTableEntry;
+        *HandleEntry(h) = (PVOID)ObpObjectHandleTable.FirstFreeTableEntry;
         ObpObjectHandleTable.FirstFreeTableEntry = (LONG)(h | 1);
         ObpObjectHandleTable.HandleCount--;
     }
@@ -102,7 +106,7 @@ XBAPI void FASTCALL ObfReferenceObject(PVOID Object) {
 }
 
 // Diagnostics (serial builds): name of a named object, for the integrity checks below.
-static void ObpReportObject(const char *What, PVOID Object, PVOID Caller) {
+static void ReportObject(const char *What, PVOID Object, PVOID Caller) {
 #if XK_DEBUG_SERIAL
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     const char *name = "";
@@ -123,11 +127,11 @@ XBAPI void FASTCALL ObfDereferenceObject(PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     LONG left = __atomic_sub_fetch(&h->PointerCount, 1, __ATOMIC_SEQ_CST);
     if (left < 0)
-        ObpReportObject("reference count below zero", Object, __builtin_return_address(0));
+        ReportObject("reference count below zero", Object, __builtin_return_address(0));
     if (left != 0)
         return;
     if (h->Flags & OB_FLAG_ATTACHED_OBJECT) { // still linked into a directory: freeing it corrupts the hash chain
-        ObpReportObject("freeing an object still in a directory (kept)", Object, __builtin_return_address(0));
+        ReportObject("freeing an object still in a directory (kept)", Object, __builtin_return_address(0));
         return;
     }
     if (h->Type->DeleteProcedure)
@@ -153,7 +157,7 @@ XBAPI NTSTATUS NTAPI ObReferenceObjectByHandle(HANDLE Handle, POBJECT_TYPE Objec
         return STATUS_SUCCESS;
     }
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    PVOID o = ObpLookupHandle(Handle);
+    PVOID o = LookupHandle(Handle);
     if (o)
         ObfReferenceObject(o);
     KfLowerIrql(old);
@@ -169,7 +173,7 @@ XBAPI NTSTATUS NTAPI ObReferenceObjectByHandle(HANDLE Handle, POBJECT_TYPE Objec
 
 // --- Namespace
 
-static ULONG ObpComputeHashIndex(const OBJECT_STRING *name) {
+static ULONG ComputeHashIndex(const OBJECT_STRING *name) {
     ULONG h = 0;
     for (USHORT i = 0; i < name->Length; i++) {
         UCHAR c = (UCHAR)name->Buffer[i];
@@ -179,7 +183,7 @@ static ULONG ObpComputeHashIndex(const OBJECT_STRING *name) {
     return h % OB_NUMBER_HASH_BUCKETS;
 }
 
-static int ObpDriveLetterIndex(const OBJECT_STRING *name) {
+static int DriveLetterIndex(const OBJECT_STRING *name) {
     if (name->Length != 2 || name->Buffer[1] != ':')
         return -1;
     CHAR c = RtlUpperChar(name->Buffer[0]);
@@ -187,14 +191,14 @@ static int ObpDriveLetterIndex(const OBJECT_STRING *name) {
 }
 
 // Find `element` in `dir`; with `follow`, a symbolic link resolves to its target object.
-static PVOID ObpLookupElementNameInDirectory(POBJECT_DIRECTORY dir, const OBJECT_STRING *element, bool follow) {
-    if (dir == ObpDosDevicesDirectoryObject && follow) {
-        int letter = ObpDriveLetterIndex(element);
-        if (letter >= 0 && ObpDosDevicesDriveLetterMap[letter])
-            return ObpDosDevicesDriveLetterMap[letter];
+static PVOID LookupElementNameInDirectory(POBJECT_DIRECTORY dir, const OBJECT_STRING *element, bool follow) {
+    if (dir == DosDevicesDirectoryObject && follow) {
+        int letter = DriveLetterIndex(element);
+        if (letter >= 0 && DosDevicesDriveLetterMap[letter])
+            return DosDevicesDriveLetterMap[letter];
     }
     ULONG steps = 0;
-    for (POBJECT_HEADER_NAME_INFO n = dir->HashBuckets[ObpComputeHashIndex(element)]; n; n = n->ChainLink) {
+    for (POBJECT_HEADER_NAME_INFO n = dir->HashBuckets[ComputeHashIndex(element)]; n; n = n->ChainLink) {
         if (++steps == 10000) {
             XK_SERIAL("*** ob: hash chain loops in directory %p (looking up '%.*s')\n", dir, (int)element->Length,
                       element->Buffer);
@@ -211,7 +215,7 @@ static PVOID ObpLookupElementNameInDirectory(POBJECT_DIRECTORY dir, const OBJECT
 }
 
 // Split off the first path element of `rest` (no leading '\'); `rest` becomes what follows the '\'.
-static void ObpSplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
+static void SplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
     USHORT i = 0;
     while (i < rest->Length && rest->Buffer[i] != '\\')
         i++;
@@ -225,41 +229,41 @@ static void ObpSplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
 }
 
 // Resolve the starting directory/object for a name (Root handle rules, spec/stock/10 §3). Referenced on success.
-static NTSTATUS ObpResolveRoot(HANDLE RootDirectory, OBJECT_STRING *rest, PVOID *start) {
+static NTSTATUS ResolveRoot(HANDLE RootDirectory, OBJECT_STRING *rest, PVOID *start) {
     if (!RootDirectory) {
         if (!rest->Length || rest->Buffer[0] != '\\')
             return STATUS_OBJECT_NAME_INVALID;
         rest->Buffer++;
         rest->Length--;
-        *start = ObpRootDirectoryObject;
+        *start = RootDirectoryObject;
     } else {
         if (rest->Length && rest->Buffer[0] == '\\')
             return STATUS_OBJECT_NAME_INVALID;
         if (RootDirectory == ObDosDevicesDirectory())
-            *start = ObpDosDevicesDirectoryObject;
+            *start = DosDevicesDirectoryObject;
         else if (RootDirectory == ObWin32NamedObjectsDirectory())
-            *start = ObpWin32NamedObjectsDirectoryObject;
-        else if (!(*start = ObpLookupHandle(RootDirectory)))
+            *start = Win32NamedObjectsDirectoryObject;
+        else if (!(*start = LookupHandle(RootDirectory)))
             return STATUS_INVALID_HANDLE;
     }
     ObfReferenceObject(*start);
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
-                                      POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
-                                      bool StopAtParse, OBJECT_STRING *Remaining);
+static NTSTATUS LookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
+                                   POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
+                                   bool StopAtParse, OBJECT_STRING *Remaining);
 
-static NTSTATUS ObpLookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
-                                    POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object) {
-    return ObpLookupObjectNameEx(RootDirectory, ObjectName, Attributes, ObjectType, ParseContext, Object, 0, false,
-                                 nullptr);
+static NTSTATUS LookupObjectName(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
+                                 POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object) {
+    return LookupObjectNameEx(RootDirectory, ObjectName, Attributes, ObjectType, ParseContext, Object, 0, false,
+                              nullptr);
 }
 
 // Follow a path link: look up LinkTarget + "\" + rest from the root. `separator`: the link's name was followed by
 // a '\' even if nothing comes after it ("C:\" -> "<target>\", the root directory, not the volume itself).
-static NTSTATUS ObpReparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, bool separator, ULONG Attributes,
-                           POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth) {
+static NTSTATUS Reparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, bool separator, ULONG Attributes,
+                        POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth) {
     if (Depth >= 8)
         return STATUS_OBJECT_PATH_NOT_FOUND;
     separator |= rest->Length != 0;
@@ -275,20 +279,20 @@ static NTSTATUS ObpReparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest
         RtlCopyMemory(buf + link->LinkTarget.Length + 1, rest->Buffer, rest->Length);
     }
     OBJECT_STRING name = {(USHORT)len, (USHORT)len, buf};
-    NTSTATUS status = ObpLookupObjectNameEx(nullptr, &name, Attributes, ObjectType, ParseContext, Object, Depth + 1,
-                                            false, nullptr);
+    NTSTATUS status = LookupObjectNameEx(nullptr, &name, Attributes, ObjectType, ParseContext, Object, Depth + 1,
+                                         false, nullptr);
     ExFreePool(buf);
     return status;
 }
 
-static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
-                                      POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
-                                      bool StopAtParse, OBJECT_STRING *Remaining) {
+static NTSTATUS LookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING ObjectName, ULONG Attributes,
+                                   POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object, ULONG Depth,
+                                   bool StopAtParse, OBJECT_STRING *Remaining) {
     *Object = nullptr;
     OBJECT_STRING rest = ObjectName ? *ObjectName : OBJECT_STRING{0, 0, nullptr};
     KIRQL old = KeRaiseIrqlToDpcLevel();
     PVOID current;
-    NTSTATUS status = ObpResolveRoot(RootDirectory, &rest, &current);
+    NTSTATUS status = ResolveRoot(RootDirectory, &rest, &current);
     if (!NT_SUCCESS(status)) {
         KfLowerIrql(old);
         return status;
@@ -332,13 +336,13 @@ static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING Objec
             break;
         }
         OBJECT_STRING element;
-        ObpSplitElement(&rest, &element);
+        SplitElement(&rest, &element);
         if (!element.Length) {
             status = STATUS_OBJECT_NAME_INVALID;
             break;
         }
         bool follow = rest.Length || ObjectType != &ObSymbolicLinkObjectType;
-        PVOID next = ObpLookupElementNameInDirectory((POBJECT_DIRECTORY)current, &element, false);
+        PVOID next = LookupElementNameInDirectory((POBJECT_DIRECTORY)current, &element, false);
         if (next && follow && OBJECT_TO_OBJECT_HEADER(next)->Type == &ObSymbolicLinkObjectType) {
             auto link = (POBJECT_SYMBOLIC_LINK)next;
             if (link->PathLink) {
@@ -346,7 +350,7 @@ static NTSTATUS ObpLookupObjectNameEx(HANDLE RootDirectory, POBJECT_STRING Objec
                 ObfDereferenceObject(current);
                 KfLowerIrql(old);
                 bool separator = rest.Buffer > element.Buffer + element.Length;
-                status = ObpReparse(link, &rest, separator, Attributes, ObjectType, ParseContext, Object, Depth);
+                status = Reparse(link, &rest, separator, Attributes, ObjectType, ParseContext, Object, Depth);
                 ObfDereferenceObject(link);
                 return status;
             }
@@ -409,11 +413,11 @@ XBAPI NTSTATUS NTAPI ObCreateObject(POBJECT_TYPE ObjectType, POBJECT_ATTRIBUTES 
     return STATUS_SUCCESS;
 }
 
-static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
+static void InsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     POBJECT_HEADER_NAME_INFO n = OBJECT_HEADER_TO_NAME_INFO(h);
     XK_MARK("mark: ob: into dir, hashing");
-    ULONG bucket = ObpComputeHashIndex(&n->Name);
+    ULONG bucket = ComputeHashIndex(&n->Name);
     XK_MARK("mark: ob: into dir, hashed");
     OB_STEP("ob: into dir %p bucket %lu (head %p): name '%.*s' (length %u at %p)\n", dir, bucket,
             dir->HashBuckets[bucket], (int)(n->Name.Length < 40 ? n->Name.Length : 40), n->Name.Buffer,
@@ -427,7 +431,7 @@ static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
             break;
         }
         if (e == n) {
-            ObpReportObject("inserted twice into a directory (skipped)", Object, __builtin_return_address(0));
+            ReportObject("inserted twice into a directory (skipped)", Object, __builtin_return_address(0));
             return;
         }
     }
@@ -436,10 +440,10 @@ static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
     dir->HashBuckets[bucket] = n;
     n->Directory = dir;
     h->Flags |= OB_FLAG_ATTACHED_OBJECT;
-    if (dir == ObpDosDevicesDirectoryObject) {
-        int letter = ObpDriveLetterIndex(&n->Name);
+    if (dir == DosDevicesDirectoryObject) {
+        int letter = DriveLetterIndex(&n->Name);
         if (letter >= 0) {
-            ObpDosDevicesDriveLetterMap[letter] =
+            DosDevicesDriveLetterMap[letter] =
                 h->Type != &ObSymbolicLinkObjectType          ? Object
                 : ((POBJECT_SYMBOLIC_LINK)Object)->PathLink ? nullptr
                                                               : ((POBJECT_SYMBOLIC_LINK)Object)->LinkTargetObject;
@@ -452,27 +456,27 @@ static void ObpInsertIntoDirectory(POBJECT_DIRECTORY dir, PVOID Object) {
 }
 
 // At DISPATCH_LEVEL; the caller dereferences afterwards (the directory link reference and dir reference).
-static void ObpDetachNamedObject(PVOID Object) {
+static void DetachNamedObject(PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     POBJECT_HEADER_NAME_INFO n = OBJECT_HEADER_TO_NAME_INFO(h);
     POBJECT_DIRECTORY dir = n->Directory;
-    POBJECT_HEADER_NAME_INFO *link = &dir->HashBuckets[ObpComputeHashIndex(&n->Name)];
+    POBJECT_HEADER_NAME_INFO *link = &dir->HashBuckets[ComputeHashIndex(&n->Name)];
     while (*link && *link != n)
         link = &(*link)->ChainLink;
     if (*link)
         *link = n->ChainLink;
-    if (dir == ObpDosDevicesDirectoryObject) {
-        int letter = ObpDriveLetterIndex(&n->Name);
+    if (dir == DosDevicesDirectoryObject) {
+        int letter = DriveLetterIndex(&n->Name);
         if (letter >= 0)
-            ObpDosDevicesDriveLetterMap[letter] = nullptr;
+            DosDevicesDriveLetterMap[letter] = nullptr;
     }
     n->Directory = nullptr;
     h->Flags &= ~OB_FLAG_ATTACHED_OBJECT;
 }
 
-static void ObpDetachAndRelease(PVOID Object) {
+static void DetachAndRelease(PVOID Object) {
     POBJECT_DIRECTORY dir = OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(Object))->Directory;
-    ObpDetachNamedObject(Object);
+    DetachNamedObject(Object);
     ObfDereferenceObject(Object);
     ObfDereferenceObject(dir);
 }
@@ -488,12 +492,12 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
     if (h->Flags & OB_FLAG_NAMED_OBJECT) {
         OBJECT_STRING rest = *ObjectAttributes->ObjectName;
         PVOID dir = nullptr; // stays null when the root does not resolve (released below only if set)
-        status = ObpResolveRoot(ObjectAttributes->RootDirectory, &rest, &dir);
+        status = ResolveRoot(ObjectAttributes->RootDirectory, &rest, &dir);
         OB_STEP("ob: insert root %#lx dir %p\n", status, dir);
         // Walk to the parent directory (all elements but the last).
         while (NT_SUCCESS(status)) {
             OBJECT_STRING element;
-            ObpSplitElement(&rest, &element);
+            SplitElement(&rest, &element);
             if (!element.Length) {
                 status = STATUS_OBJECT_NAME_INVALID;
                 break;
@@ -503,11 +507,11 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
                 break;
             }
             OB_STEP("ob: insert element '%.*s' in %p\n", (int)element.Length, element.Buffer, dir);
-            PVOID found = ObpLookupElementNameInDirectory((POBJECT_DIRECTORY)dir, &element, rest.Length != 0);
+            PVOID found = LookupElementNameInDirectory((POBJECT_DIRECTORY)dir, &element, rest.Length != 0);
             OB_STEP("ob: insert found %p\n", found);
             if (!rest.Length) { // final element
                 if (!found) {
-                    ObpInsertIntoDirectory((POBJECT_DIRECTORY)dir, Object);
+                    InsertIntoDirectory((POBJECT_DIRECTORY)dir, Object);
                 } else if ((ObjectAttributes->Attributes & OBJ_OPENIF) &&
                            OBJECT_TO_OBJECT_HEADER(found)->Type == h->Type) {
                     target = found;
@@ -530,11 +534,11 @@ XBAPI NTSTATUS NTAPI ObInsertObject(PVOID Object, POBJECT_ATTRIBUTES ObjectAttri
     }
     OB_STEP("ob: insert status %#lx; creating handle\n", status);
     if (NT_SUCCESS(status)) {
-        HANDLE handle = ObpCreateObjectHandle(target);
+        HANDLE handle = CreateObjectHandle(target);
         OB_STEP("ob: insert handle %p\n", handle);
         if (!handle) {
             if (target == Object && (h->Flags & OB_FLAG_ATTACHED_OBJECT))
-                ObpDetachAndRelease(Object);
+                DetachAndRelease(Object);
             status = STATUS_INSUFFICIENT_RESOURCES_OB;
         } else {
             OBJECT_TO_OBJECT_HEADER(target)->PointerCount += ObjectPointerBias + 1;
@@ -554,12 +558,12 @@ XBAPI NTSTATUS NTAPI ObOpenObjectByName(POBJECT_ATTRIBUTES ObjectAttributes, POB
                                         PVOID ParseContext, PHANDLE Handle) {
     *Handle = nullptr;
     PVOID o;
-    NTSTATUS status = ObpLookupObjectName(ObjectAttributes->RootDirectory, ObjectAttributes->ObjectName,
-                                          ObjectAttributes->Attributes, ObjectType, ParseContext, &o);
+    NTSTATUS status = LookupObjectName(ObjectAttributes->RootDirectory, ObjectAttributes->ObjectName,
+                                       ObjectAttributes->Attributes, ObjectType, ParseContext, &o);
     if (!NT_SUCCESS(status))
         return status;
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    HANDLE h = ObpCreateObjectHandle(o);
+    HANDLE h = CreateObjectHandle(o);
     KfLowerIrql(old);
     if (!h) {
         ObfDereferenceObject(o);
@@ -575,7 +579,7 @@ XBAPI NTSTATUS NTAPI ObOpenObjectByPointer(PVOID Object, POBJECT_TYPE ObjectType
     if (!NT_SUCCESS(status))
         return status;
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    HANDLE h = ObpCreateObjectHandle(Object);
+    HANDLE h = CreateObjectHandle(Object);
     KfLowerIrql(old);
     if (!h) {
         ObfDereferenceObject(Object);
@@ -587,12 +591,12 @@ XBAPI NTSTATUS NTAPI ObOpenObjectByPointer(PVOID Object, POBJECT_TYPE ObjectType
 
 XBAPI NTSTATUS NTAPI ObReferenceObjectByName(POBJECT_STRING ObjectName, ULONG Attributes, POBJECT_TYPE ObjectType,
                                              PVOID ParseContext, PVOID *Object) {
-    return ObpLookupObjectName(nullptr, ObjectName, Attributes, ObjectType, ParseContext, Object);
+    return LookupObjectName(nullptr, ObjectName, Attributes, ObjectType, ParseContext, Object);
 }
 
 XBAPI NTSTATUS NTAPI NtClose(HANDLE Handle) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    PVOID o = ObpRemoveHandle(Handle);
+    PVOID o = RemoveHandle(Handle);
     if (!o) {
         KfLowerIrql(old);
         return STATUS_INVALID_HANDLE;
@@ -605,7 +609,7 @@ XBAPI NTSTATUS NTAPI NtClose(HANDLE Handle) {
         old = KeRaiseIrqlToDpcLevel();
     }
     if (h->HandleCount == 0 && (h->Flags & OB_FLAG_ATTACHED_OBJECT) && !(h->Flags & OB_FLAG_PERMANENT_OBJECT))
-        ObpDetachAndRelease(o);
+        DetachAndRelease(o);
     KfLowerIrql(old);
     ObfDereferenceObject(o);
     return STATUS_SUCCESS;
@@ -616,7 +620,7 @@ XBAPI void NTAPI ObMakeTemporaryObject(PVOID Object) {
     POBJECT_HEADER h = OBJECT_TO_OBJECT_HEADER(Object);
     h->Flags &= ~OB_FLAG_PERMANENT_OBJECT;
     if (h->HandleCount == 0 && (h->Flags & OB_FLAG_ATTACHED_OBJECT))
-        ObpDetachAndRelease(Object);
+        DetachAndRelease(Object);
     KfLowerIrql(old);
 }
 
@@ -629,7 +633,7 @@ XBAPI NTSTATUS NTAPI NtDuplicateObject(HANDLE SourceHandle, PHANDLE TargetHandle
         return status;
     }
     KIRQL old = KeRaiseIrqlToDpcLevel();
-    HANDLE h = ObpCreateObjectHandle(o);
+    HANDLE h = CreateObjectHandle(o);
     KfLowerIrql(old);
     if (!h) {
         ObfDereferenceObject(o);
@@ -699,7 +703,7 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryObject(HANDLE DirectoryHandle, PVOID Buffer
     return status;
 }
 
-static void NTAPI ObpDeleteSymbolicLink(PVOID Object) {
+static void NTAPI DeleteSymbolicLink(PVOID Object) {
     auto link = (POBJECT_SYMBOLIC_LINK)Object;
     if (link->LinkTargetObject)
         ObfDereferenceObject(link->LinkTargetObject);
@@ -708,14 +712,14 @@ static void NTAPI ObpDeleteSymbolicLink(PVOID Object) {
 }
 
 // Permanent link LinkName -> object named TargetName (which must already exist).
-NTSTATUS ObpCreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) {
-    bool trace = ObpTraceSymbolicLink;
+NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) {
+    bool trace = TraceSymbolicLink;
     // Resolve up to the first object with a parse procedure: a target like
     // "\Device\Harddisk0\Partition1\Games\X" makes a path link into that device.
     PVOID target;
     OBJECT_STRING remaining = {};
-    NTSTATUS status = ObpLookupObjectNameEx(nullptr, TargetName, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &target, 0,
-                                            true, &remaining);
+    NTSTATUS status = LookupObjectNameEx(nullptr, TargetName, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &target, 0,
+                                         true, &remaining);
     if (trace)
         XK_SERIAL("ob: link target lookup %#lx -> %p\n", status, target);
     if (!NT_SUCCESS(status))
@@ -779,7 +783,7 @@ XBAPI NTSTATUS NTAPI NtQuerySymbolicLinkObject(HANDLE LinkHandle, POBJECT_STRING
 
 // --- Initialisation (spec/stock/02 §2.4): root, \??, \Device, \Win32NamedObjects.
 
-static POBJECT_DIRECTORY ObpCreatePermanentDirectory(PCSZ path) {
+static POBJECT_DIRECTORY CreatePermanentDirectory(PCSZ path) {
     OBJECT_STRING name;
     RtlInitAnsiString(&name, path);
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
@@ -793,8 +797,8 @@ static POBJECT_DIRECTORY ObpCreatePermanentDirectory(PCSZ path) {
     return dir;
 }
 
-void ObInitSystem() {
-    KeInitializeEvent(&ObpDefaultObject, NotificationEvent, TRUE);
+void InitObjectManager() {
+    KeInitializeEvent(&DefaultWaitObject, NotificationEvent, TRUE);
     ObpObjectHandleTable.HandleCount = 0;
     ObpObjectHandleTable.FirstFreeTableEntry = -1;
     ObpObjectHandleTable.NextHandleNeedingPool = nullptr;
@@ -804,8 +808,10 @@ void ObInitSystem() {
     if (!NT_SUCCESS(ObCreateObject(&ObDirectoryObjectType, nullptr, sizeof(OBJECT_DIRECTORY), &root)))
         KeBugCheck(0x5E);
     RtlZeroMemory(root, sizeof(OBJECT_DIRECTORY));
-    ObpRootDirectoryObject = (POBJECT_DIRECTORY)root; // holds its creation reference forever
-    ObpDosDevicesDirectoryObject = ObpCreatePermanentDirectory("\\??");
-    ObpCreatePermanentDirectory("\\Device");
-    ObpWin32NamedObjectsDirectoryObject = ObpCreatePermanentDirectory("\\Win32NamedObjects");
+    RootDirectoryObject = (POBJECT_DIRECTORY)root; // holds its creation reference forever
+    DosDevicesDirectoryObject = CreatePermanentDirectory("\\??");
+    CreatePermanentDirectory("\\Device");
+    Win32NamedObjectsDirectoryObject = CreatePermanentDirectory("\\Win32NamedObjects");
 }
+
+} // namespace xk::objects

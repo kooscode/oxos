@@ -3,10 +3,12 @@
 #include <xk/core.h>
 #include <xk/arch.h>
 
-static LIST_ENTRY KiTimerListHead; // inserted timers, earliest due first
-static KDPC KiTimerExpireDpc;      // queued by the clock interrupt when the first timer is due
+namespace xk::core {
 
-static ULONGLONG KiReadSystemTime(const volatile KSYSTEM_TIME &t) {
+static LIST_ENTRY TimerListHead; // inserted timers, earliest due first
+static KDPC TimerExpireDpc;      // queued by the clock interrupt when the first timer is due
+
+static ULONGLONG ReadKernelTime(const volatile KSYSTEM_TIME &t) {
     for (;;) {
         LONG high = t.High1Time;
         ULONG low = t.LowPart;
@@ -15,21 +17,21 @@ static ULONGLONG KiReadSystemTime(const volatile KSYSTEM_TIME &t) {
     }
 }
 
-static void KiQueueTimerDpc(PKDPC dpc) {
-    ULONGLONG now = KiReadSystemTime(KeSystemTime);
+static void QueueTimerDpc(PKDPC dpc) {
+    ULONGLONG now = ReadKernelTime(KeSystemTime);
     KeInsertQueueDpc(dpc, (PVOID)(ULONG)now, (PVOID)(ULONG)(now >> 32));
 }
 
 // Insert relative to now (DueTime < 0) or at an absolute system time. Returns FALSE when already due.
-static bool KiInsertTimer(PKTIMER Timer, LONGLONG DueTime) {
-    ULONGLONG now = KiReadSystemTime(KeInterruptTime);
+static bool InsertTimer(PKTIMER Timer, LONGLONG DueTime) {
+    ULONGLONG now = ReadKernelTime(KeInterruptTime);
     ULONGLONG due;
     if (DueTime < 0) {
         Timer->Header.Absolute = FALSE;
         due = now + (ULONGLONG)(-DueTime);
     } else {
         Timer->Header.Absolute = TRUE;
-        LONGLONG delta = DueTime - (LONGLONG)KiReadSystemTime(KeSystemTime);
+        LONGLONG delta = DueTime - (LONGLONG)ReadKernelTime(KeSystemTime);
         if (delta <= 0)
             return false;
         due = now + (ULONGLONG)delta;
@@ -39,8 +41,8 @@ static bool KiInsertTimer(PKTIMER Timer, LONGLONG DueTime) {
 
     Timer->DueTime = due;
     ULONG flags = save_flags_cli(); // the clock interrupt reads the list head
-    PLIST_ENTRY pos = KiTimerListHead.Flink;
-    while (pos != &KiTimerListHead && CONTAINING_RECORD(pos, KTIMER, TimerListEntry)->DueTime <= due)
+    PLIST_ENTRY pos = TimerListHead.Flink;
+    while (pos != &TimerListHead && CONTAINING_RECORD(pos, KTIMER, TimerListEntry)->DueTime <= due)
         pos = pos->Flink;
     InsertTailList(pos, &Timer->TimerListEntry); // inserts before `pos`
     Timer->Header.Inserted = TRUE;
@@ -48,7 +50,7 @@ static bool KiInsertTimer(PKTIMER Timer, LONGLONG DueTime) {
     return true;
 }
 
-static void KiRemoveTimer(PKTIMER Timer) {
+static void RemoveTimer(PKTIMER Timer) {
     ULONG flags = save_flags_cli();
     RemoveEntryList(&Timer->TimerListEntry);
     Timer->Header.Inserted = FALSE;
@@ -56,13 +58,13 @@ static void KiRemoveTimer(PKTIMER Timer) {
 }
 
 // Wait timeouts use the thread's own timer (spec/stock/07).
-bool KiInsertTimerRelative(PKTIMER Timer, LONGLONG DueTime) {
-    return KiInsertTimer(Timer, DueTime);
+bool InsertTimerRelative(PKTIMER Timer, LONGLONG DueTime) {
+    return InsertTimer(Timer, DueTime);
 }
 
-void KiRemoveTimerIfInserted(PKTIMER Timer) {
+void RemoveTimerIfInserted(PKTIMER Timer) {
     if (Timer->Header.Inserted)
-        KiRemoveTimer(Timer);
+        RemoveTimer(Timer);
 }
 
 XBAPI void NTAPI KeInitializeTimerEx(PKTIMER Timer, TIMER_TYPE Type) {
@@ -79,20 +81,20 @@ XBAPI BOOLEAN NTAPI KeSetTimerEx(PKTIMER Timer, LARGE_INTEGER DueTime, LONG Peri
     KIRQL old = KeRaiseIrqlToDpcLevel();
     BOOLEAN wasInserted = Timer->Header.Inserted;
     if (wasInserted)
-        KiRemoveTimer(Timer);
+        RemoveTimer(Timer);
     Timer->Header.SignalState = 0;
     Timer->Dpc = Dpc;
     Timer->Period = Period;
 
-    if (!KiInsertTimer(Timer, DueTime.QuadPart)) {
+    if (!InsertTimer(Timer, DueTime.QuadPart)) {
         // Already due: signal now, and re-arm periodic timers relative to now.
         Timer->Header.SignalState = 1;
         if (!IsListEmpty(&Timer->Header.WaitListHead))
-            KiWaitTest(&Timer->Header, 0);
+            WaitTest(&Timer->Header, 0);
         if (Dpc)
-            KiQueueTimerDpc(Dpc);
+            QueueTimerDpc(Dpc);
         if (Period) {
-            while (!KiInsertTimer(Timer, -(LONGLONG)Period * 10000)) {
+            while (!InsertTimer(Timer, -(LONGLONG)Period * 10000)) {
                 // Re-arm for the next period (a relative time, so this succeeds the first time).
             }
         }
@@ -109,21 +111,21 @@ XBAPI BOOLEAN NTAPI KeCancelTimer(PKTIMER Timer) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     BOOLEAN wasInserted = Timer->Header.Inserted;
     if (wasInserted)
-        KiRemoveTimer(Timer);
+        RemoveTimer(Timer);
     KfLowerIrql(old);
     return wasInserted;
 }
 
 // Expiry DPC: signal every due timer, queue its DPC, re-arm periodic ones.
-static void NTAPI KiTimerExpiration(PKDPC, PVOID, PVOID, PVOID) {
+static void NTAPI TimerExpiration(PKDPC, PVOID, PVOID, PVOID) {
     for (;;) {
         cli();
-        if (IsListEmpty(&KiTimerListHead)) {
+        if (IsListEmpty(&TimerListHead)) {
             sti();
             return;
         }
-        PKTIMER timer = CONTAINING_RECORD(KiTimerListHead.Flink, KTIMER, TimerListEntry);
-        if (timer->DueTime > KiReadSystemTime(KeInterruptTime)) {
+        PKTIMER timer = CONTAINING_RECORD(TimerListHead.Flink, KTIMER, TimerListEntry);
+        if (timer->DueTime > ReadKernelTime(KeInterruptTime)) {
             sti();
             return;
         }
@@ -133,11 +135,11 @@ static void NTAPI KiTimerExpiration(PKDPC, PVOID, PVOID, PVOID) {
 
         timer->Header.SignalState = 1;
         if (!IsListEmpty(&timer->Header.WaitListHead))
-            KiWaitTest(&timer->Header, 0);
+            WaitTest(&timer->Header, 0);
         if (timer->Dpc)
-            KiQueueTimerDpc(timer->Dpc);
+            QueueTimerDpc(timer->Dpc);
         if (timer->Period) {
-            while (!KiInsertTimer(timer, -(LONGLONG)timer->Period * 10000)) {
+            while (!InsertTimer(timer, -(LONGLONG)timer->Period * 10000)) {
                 // Re-arm for the next period (a relative time, so this succeeds the first time).
             }
         }
@@ -145,14 +147,16 @@ static void NTAPI KiTimerExpiration(PKDPC, PVOID, PVOID, PVOID) {
 }
 
 // Clock interrupt (CLOCK_LEVEL, interrupts enabled but every device IRQ masked).
-void KiCheckTimers() {
-    if (IsListEmpty(&KiTimerListHead) || KiTimerExpireDpc.Inserted)
+void CheckTimers() {
+    if (IsListEmpty(&TimerListHead) || TimerExpireDpc.Inserted)
         return;
-    if (CONTAINING_RECORD(KiTimerListHead.Flink, KTIMER, TimerListEntry)->DueTime <= KiReadSystemTime(KeInterruptTime))
-        KeInsertQueueDpc(&KiTimerExpireDpc, nullptr, nullptr);
+    if (CONTAINING_RECORD(TimerListHead.Flink, KTIMER, TimerListEntry)->DueTime <= ReadKernelTime(KeInterruptTime))
+        KeInsertQueueDpc(&TimerExpireDpc, nullptr, nullptr);
 }
 
-void KiInitializeTimers() {
-    InitializeListHead(&KiTimerListHead);
-    KeInitializeDpc(&KiTimerExpireDpc, KiTimerExpiration, nullptr);
+void InitializeTimers() {
+    InitializeListHead(&TimerListHead);
+    KeInitializeDpc(&TimerExpireDpc, TimerExpiration, nullptr);
 }
+
+} // namespace xk::core

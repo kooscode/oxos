@@ -1,11 +1,13 @@
 // The controllers during the boot splash (spec/oxos_internal/32 §2-4): every device on the root hub's ports is set
 // up, a hub's own ports too (each Xbox controller is a hub with the pad and its memory-unit slots on it), and each Xbox
 // pad (interface class 0x58) gets an interrupt-IN pipe. The splash then reads the pads between its frames; X
-// pressed at any time sets GamepadXPressed, B GamepadBPressed (safe mode, spec/oxos_internal/34 §3.3). Boot-only.
+// pressed at any time sets XButtonPressed, B BButtonPressed (safe mode, spec/oxos_internal/34 §3.3). Boot-only.
 #include <xk/gamepad.h>
 #include <xk/usb_host.h>
 #include <xk/core.h>
 #include <xk/serial.h>
+
+namespace xk::gamepad {
 
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
@@ -26,86 +28,87 @@ constexpr UCHAR BUTTON_PRESSED = 0x80; // pressed at least halfway
 // Hubs followed from a root port: a controller is a hub (1); xemu puts its own hub in front of the controllers (2).
 constexpr ULONG GAMEPAD_HUB_DEPTH = 3;
 
-volatile ULONG GamepadXPressed;
-volatile ULONG GamepadBPressed;
-volatile ULONG GamepadPadsFound;
-static bool GamepadpRunning;   // the controller was started (stopped again by GamepadWatchStop)
-static UCHAR GamepadpAddress;  // the last address given
+volatile ULONG XButtonPressed;
+volatile ULONG BButtonPressed;
+volatile ULONG ControllersFound;
+static bool UsbRunning;      // the controller was started (stopped again by StopWatchingControllers)
+static UCHAR LastUsbAddress; // the last address given
 
 // A report from a pad: X or B pressed?
-static void GamepadpCheck(const UCHAR *Report, LONG Length) {
+static void CheckReport(const UCHAR *Report, LONG Length) {
     if (Length <= (LONG)REPORT_X || Report[1] <= REPORT_X)
         return;
-    if (Report[REPORT_X] >= BUTTON_PRESSED && !GamepadXPressed) {
-        GamepadXPressed = 1;
+    if (Report[REPORT_X] >= BUTTON_PRESSED && !XButtonPressed) {
+        XButtonPressed = 1;
         XK_SERIAL("gamepad: X pressed: the File Manager opens after the splash\n");
     }
-    if (Report[REPORT_B] >= BUTTON_PRESSED && !GamepadBPressed) {
-        GamepadBPressed = 1;
+    if (Report[REPORT_B] >= BUTTON_PRESSED && !BButtonPressed) {
+        BButtonPressed = 1;
         XK_SERIAL("gamepad: B pressed: safe mode, no kernel extensions\n");
     }
 }
 
 // --- Setting up devices
 
-static void GamepadpSetUp(bool LowSpeed, ULONG Depth);
+static void SetUpDevice(bool LowSpeed, ULONG Depth);
 
 // A hub's ports: powered, then each connected one reset and its device set up.
-static void GamepadpSetUpHub(const USB_DEVICE &Hub, ULONG Depth) {
+static void SetUpHub(const USB_DEVICE &Hub, ULONG Depth) {
     UCHAR descriptor[9];
-    if (UsbHostControl(Hub, FROM_HUB, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_HUB, 0, sizeof(descriptor), descriptor) < 6)
+    if (UsbControlTransfer(Hub, FROM_HUB, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_HUB, 0, sizeof(descriptor),
+                           descriptor) < 6)
         return;
     ULONG ports = descriptor[2] < 8 ? descriptor[2] : 7;
     for (USHORT p = 1; p <= ports; p++)
-        UsbHostControl(Hub, TO_HUB_PORT, REQUEST_SET_FEATURE, HUB_PORT_POWER, p, 0, nullptr);
+        UsbControlTransfer(Hub, TO_HUB_PORT, REQUEST_SET_FEATURE, HUB_PORT_POWER, p, 0, nullptr);
     // The hub's power-good time (2 ms units), then 100 ms for its devices to settle.
     LARGE_INTEGER wait;
     wait.QuadPart = -10000LL * (descriptor[5] * 2 + 100);
     KeDelayExecutionThread(KernelMode, FALSE, &wait);
     for (USHORT p = 1; p <= ports; p++) {
         UCHAR status[4];
-        if (UsbHostControl(Hub, FROM_HUB_PORT, REQUEST_GET_STATUS, 0, p, 4, status) != 4 || !(status[0] & 1))
+        if (UsbControlTransfer(Hub, FROM_HUB_PORT, REQUEST_GET_STATUS, 0, p, 4, status) != 4 || !(status[0] & 1))
             continue; // nothing connected
-        UsbHostControl(Hub, TO_HUB_PORT, REQUEST_SET_FEATURE, HUB_PORT_RESET, p, 0, nullptr);
+        UsbControlTransfer(Hub, TO_HUB_PORT, REQUEST_SET_FEATURE, HUB_PORT_RESET, p, 0, nullptr);
         for (ULONG ms = 0; ms < 100; ms += 10) {
             wait.QuadPart = -10000LL * 10;
             KeDelayExecutionThread(KernelMode, FALSE, &wait);
-            if (UsbHostControl(Hub, FROM_HUB_PORT, REQUEST_GET_STATUS, 0, p, 4, status) == 4 && (status[2] & 0x10))
+            if (UsbControlTransfer(Hub, FROM_HUB_PORT, REQUEST_GET_STATUS, 0, p, 4, status) == 4 && (status[2] & 0x10))
                 break; // the reset has ended
         }
-        UsbHostControl(Hub, TO_HUB_PORT, REQUEST_CLEAR_FEATURE, HUB_C_PORT_RESET, p, 0, nullptr);
-        UsbHostControl(Hub, TO_HUB_PORT, REQUEST_CLEAR_FEATURE, HUB_C_PORT_CONNECTION, p, 0, nullptr);
+        UsbControlTransfer(Hub, TO_HUB_PORT, REQUEST_CLEAR_FEATURE, HUB_C_PORT_RESET, p, 0, nullptr);
+        UsbControlTransfer(Hub, TO_HUB_PORT, REQUEST_CLEAR_FEATURE, HUB_C_PORT_CONNECTION, p, 0, nullptr);
         if (!(status[0] & 2)) // not enabled
             continue;
         wait.QuadPart = -10000LL * 10; // reset recovery
         KeDelayExecutionThread(KernelMode, FALSE, &wait);
-        GamepadpSetUp(status[1] & 0x02, Depth + 1);
+        SetUpDevice(status[1] & 0x02, Depth + 1);
     }
 }
 
 // The device just reset at address 0 (behind Depth hubs): an address, its configuration, then a hub's
 // ports or a pad's pipe.
-static void GamepadpSetUp(bool LowSpeed, ULONG Depth) {
+static void SetUpDevice(bool LowSpeed, ULONG Depth) {
     USB_DEVICE device = {0, 8, LowSpeed};
     UCHAR head[8];
-    if (UsbHostControl(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_DEVICE, 0, 8, head) < 8)
+    if (UsbControlTransfer(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_DEVICE, 0, 8, head) < 8)
         return;
     device.MaxPacket0 = head[7] ? head[7] : 8;
-    UCHAR address = ++GamepadpAddress;
-    if (address > 127 || UsbHostControl(device, TO_DEVICE, REQUEST_SET_ADDRESS, address, 0, 0, nullptr) < 0)
+    UCHAR address = ++LastUsbAddress;
+    if (address > 127 || UsbControlTransfer(device, TO_DEVICE, REQUEST_SET_ADDRESS, address, 0, 0, nullptr) < 0)
         return;
     device.Address = address;
     LARGE_INTEGER wait;
     wait.QuadPart = -10000LL * 2; // the device takes its address
     KeDelayExecutionThread(KernelMode, FALSE, &wait);
     UCHAR config[256];
-    if (UsbHostControl(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0, 9, config) < 9)
+    if (UsbControlTransfer(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0, 9, config) < 9)
         return;
     ULONG total = config[2] | config[3] << 8;
     if (total > sizeof(config))
         total = sizeof(config);
-    LONG length = UsbHostControl(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0,
-                                 (USHORT)total, config);
+    LONG length = UsbControlTransfer(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0,
+                                     (USHORT)total, config);
     // The descriptors that follow: the first Xbox input interface's interrupt-IN endpoint; a hub interface.
     bool hub = head[4] == CLASS_HUB, inPad = false;
     UCHAR interfaceNumber = 0, endpoint = 0;
@@ -122,60 +125,62 @@ static void GamepadpSetUp(bool LowSpeed, ULONG Depth) {
             packet = (USHORT)((d[4] | d[5] << 8) & 0x7FF);
         }
     }
-    if (UsbHostControl(device, TO_DEVICE, REQUEST_SET_CONFIGURATION, config[5], 0, 0, nullptr) < 0)
+    if (UsbControlTransfer(device, TO_DEVICE, REQUEST_SET_CONFIGURATION, config[5], 0, 0, nullptr) < 0)
         return;
     XK_SERIAL("gamepad: device %u: class %02x%s%s\n", address, head[4], hub ? ", a hub" : "",
               endpoint ? ", an Xbox pad" : "");
     if (hub && Depth < GAMEPAD_HUB_DEPTH)
-        return GamepadpSetUpHub(device, Depth);
-    if (!endpoint || !UsbHostOpenPipe(GamepadPadsFound, device, endpoint, packet))
+        return SetUpHub(device, Depth);
+    if (!endpoint || !OpenUsbPipe(ControllersFound, device, endpoint, packet))
         return;
-    GamepadPadsFound = GamepadPadsFound + 1;
+    ControllersFound = ControllersFound + 1;
     // Its state now, for X already held: XID's GET_REPORT; a pad without it is read through its pipe only.
     UCHAR report[20];
-    GamepadpCheck(report, UsbHostControl(device, FROM_INTERFACE_CLASS, 1, 0x0100, interfaceNumber, sizeof(report),
-                                         report));
+    CheckReport(report, UsbControlTransfer(device, FROM_INTERFACE_CLASS, 1, 0x0100, interfaceNumber, sizeof(report),
+                                           report));
 }
 
 // --- The watch
 
-void GamepadWatchStart() {
-    GamepadPadsFound = 0;
-    GamepadpAddress = 0;
-    if (!UsbHostStart())
+void StartWatchingControllers() {
+    ControllersFound = 0;
+    LastUsbAddress = 0;
+    if (!StartUsbHost())
         return;
-    GamepadpRunning = true;
-    for (ULONG p = 0; p < UsbHostPorts(); p++) {
+    UsbRunning = true;
+    for (ULONG p = 0; p < UsbRootPorts(); p++) {
         bool lowSpeed;
-        if (UsbHostResetPort(p, &lowSpeed))
-            GamepadpSetUp(lowSpeed, 0);
+        if (ResetUsbPort(p, &lowSpeed))
+            SetUpDevice(lowSpeed, 0);
     }
-    XK_SERIAL("gamepad: %lu pads\n", GamepadPadsFound);
+    XK_SERIAL("gamepad: %lu pads\n", ControllersFound);
 }
 
-void GamepadWatchPoll() {
-    for (ULONG i = 0; i < GamepadPadsFound; i++) {
+void PollControllers() {
+    for (ULONG i = 0; i < ControllersFound; i++) {
         UCHAR report[64];
-        GamepadpCheck(report, UsbHostReadPipe(i, report, sizeof(report)));
+        CheckReport(report, ReadUsbPipe(i, report, sizeof(report)));
     }
 }
 
-void GamepadWatchStop() {
-    if (!GamepadpRunning)
+void StopWatchingControllers() {
+    if (!UsbRunning)
         return;
-    GamepadpRunning = false;
-    UsbHostStop();
+    UsbRunning = false;
+    StopUsbHost();
 }
 
-void GamepadWaitForX() {
-    while (!GamepadXPressed) {
-        GamepadWatchStart();
-        for (ULONG ms = 0; !GamepadXPressed && (GamepadPadsFound || ms < 3000); ms += 10) {
-            GamepadWatchPoll();
+void WaitForXButton() {
+    while (!XButtonPressed) {
+        StartWatchingControllers();
+        for (ULONG ms = 0; !XButtonPressed && (ControllersFound || ms < 3000); ms += 10) {
+            PollControllers();
             LARGE_INTEGER t;
             t.QuadPart = -10000LL * 10;
             KeDelayExecutionThread(KernelMode, FALSE, &t);
         }
-        GamepadWatchStop();
+        StopWatchingControllers();
     }
 }
+
+} // namespace xk::gamepad

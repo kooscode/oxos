@@ -4,6 +4,8 @@
 #include <xk/serial.h>
 #include <xk/io.h>
 
+namespace xk::filesystems {
+
 static void FATXInitFcb(HDDFS_FCB *f, ULONG Flags) {
     RtlZeroMemory(f, sizeof(*f));
     InitializeListHead(&f->SiblingLink);
@@ -106,3 +108,5 @@ NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
     TargetDevice->MountedOrSelfDevice = dev;
     return STATUS_SUCCESS;
 }
+
+} // namespace xk::filesystems

@@ -5,6 +5,8 @@
 #include <set>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 namespace {
 
 // Every test leaves the page database consistent.
@@ -13,13 +15,13 @@ protected:
     ULONG available0 = 0;
     void SetUp() override {
         ASSERT_EQ(CheckPfnDatabase(), "");
-        available0 = MmAvailablePages;
+        available0 = memory::AvailablePages;
     }
     void TearDown() override { EXPECT_EQ(CheckPfnDatabase(), "") << host::TakeLog(); }
 };
 
 uint32_t &Pte(ULONG va) {
-    return *(uint32_t *)MiGetPteAddress(va);
+    return *(uint32_t *)memory::PteAddress(va);
 }
 
 } // namespace
@@ -27,21 +29,21 @@ uint32_t &Pte(ULONG va) {
 // --- Physical pages
 
 TEST_F(Mm, AllocatePageTakesAFreePageZeroesItAndRecordsItsUse) {
-    ULONG before = MmAllocatedPagesByUsage[MmSystemMemoryUsage];
-    ULONG pfn = MiAllocatePage(MmSystemMemoryUsage, nullptr, false);
+    ULONG before = memory::AllocatedPagesByUsage[MmSystemMemoryUsage];
+    ULONG pfn = memory::AllocatePage(MmSystemMemoryUsage, nullptr, false);
     ASSERT_NE(pfn, 0u);
     memset(host::Phys(pfn << 12), 0xA5, 4096); // dirty it
-    MiFreePage(pfn);
+    memory::FreePage(pfn);
     // A freed single page goes to the head of its colour list (reused first within its colour).
-    EXPECT_EQ(MmRetailPfnRegion.FreePagesByColor[pfn & 31].PackedPfnFlink, (USHORT)((pfn >> 4) & 0xFFFE));
+    EXPECT_EQ(memory::RetailPfnRegion.FreePagesByColor[pfn & 31].PackedPfnFlink, (USHORT)((pfn >> 4) & 0xFFFE));
     // The colours are taken in turn: within 32 allocations it comes back, zeroed.
     std::vector<ULONG> taken;
     ULONG again = 0;
     for (int i = 0; i < 32 && again != pfn; i++)
-        taken.push_back(again = MiAllocatePage(MmSystemMemoryUsage, nullptr, true));
+        taken.push_back(again = memory::AllocatePage(MmSystemMemoryUsage, nullptr, true));
     ASSERT_EQ(again, pfn);
-    EXPECT_EQ(MmAvailablePages, available0 - taken.size());
-    EXPECT_EQ(MmAllocatedPagesByUsage[MmSystemMemoryUsage], before + taken.size());
+    EXPECT_EQ(memory::AvailablePages, available0 - taken.size());
+    EXPECT_EQ(memory::AllocatedPagesByUsage[MmSystemMemoryUsage], before + taken.size());
     uint8_t *p = host::Phys(again << 12);
     EXPECT_TRUE(std::all_of(p, p + 4096, [](uint8_t b) { return b == 0; })) << "page not zeroed";
     uint32_t e = PfnEntry(again);
@@ -50,45 +52,45 @@ TEST_F(Mm, AllocatePageTakesAFreePageZeroesItAndRecordsItsUse) {
     EXPECT_EQ(e >> 28, (uint32_t)MmSystemMemoryUsage);
     EXPECT_EQ((uint16_t)e, 0) << "lock count";
     for (ULONG t : taken)
-        MiFreePage(t);
-    EXPECT_EQ(MmAvailablePages, available0);
-    EXPECT_EQ(MmAllocatedPagesByUsage[MmSystemMemoryUsage], before);
+        memory::FreePage(t);
+    EXPECT_EQ(memory::AvailablePages, available0);
+    EXPECT_EQ(memory::AllocatedPagesByUsage[MmSystemMemoryUsage], before);
 }
 
 TEST_F(Mm, ConsecutivePagesTakeTheColoursInTurn) {
     std::vector<ULONG> pfns;
     for (int i = 0; i < 64; i++)
-        pfns.push_back(MiAllocatePage(MmSystemMemoryUsage, nullptr, false));
+        pfns.push_back(memory::AllocatePage(MmSystemMemoryUsage, nullptr, false));
     for (size_t i = 1; i < pfns.size(); i++)
         EXPECT_EQ(pfns[i] & 31, (pfns[i - 1] + 1) & 31) << i;
     std::set<ULONG> unique(pfns.begin(), pfns.end());
     EXPECT_EQ(unique.size(), pfns.size());
     for (ULONG p : pfns)
-        MiFreePage(p);
+        memory::FreePage(p);
 }
 
 TEST_F(Mm, ExhaustionReturnsZeroAndEverythingComesBack) {
     std::vector<ULONG> pfns;
-    while (ULONG p = MiAllocatePage(MmSystemMemoryUsage, nullptr, false))
+    while (ULONG p = memory::AllocatePage(MmSystemMemoryUsage, nullptr, false))
         pfns.push_back(p);
-    EXPECT_EQ(MmAvailablePages, 0u);
+    EXPECT_EQ(memory::AvailablePages, 0u);
     EXPECT_EQ(pfns.size(), available0);
-    EXPECT_EQ(MiAllocatePage(MmSystemMemoryUsage, nullptr, false), 0u);
+    EXPECT_EQ(memory::AllocatePage(MmSystemMemoryUsage, nullptr, false), 0u);
     EXPECT_EQ(CheckPfnDatabase(), "");
     for (ULONG p : pfns)
-        MiFreePage(p);
-    EXPECT_EQ(MmAvailablePages, available0);
+        memory::FreePage(p);
+    EXPECT_EQ(memory::AvailablePages, available0);
 }
 
 TEST_F(Mm, CorruptFreeCountIsABugCheckNotAHang) {
     // The count says pages are free but every list is empty: the allocator must stop with PFN_LIST_CORRUPT.
-    MMPFNREGION saved = MmRetailPfnRegion;
-    ULONG savedAvailable = MmAvailablePages;
-    for (auto &c : MmRetailPfnRegion.FreePagesByColor)
+    MMPFNREGION saved = memory::RetailPfnRegion;
+    ULONG savedAvailable = memory::AvailablePages;
+    for (auto &c : memory::RetailPfnRegion.FreePagesByColor)
         c = {0xFFFE, 0xFFFE};
-    EXPECT_BUGCHECK(0x4E, MiAllocatePage(MmSystemMemoryUsage, nullptr, false));
-    MmRetailPfnRegion = saved;
-    MmAvailablePages = savedAvailable;
+    EXPECT_BUGCHECK(0x4E, memory::AllocatePage(MmSystemMemoryUsage, nullptr, false));
+    memory::RetailPfnRegion = saved;
+    memory::AvailablePages = savedAvailable;
 }
 
 // --- Contiguous memory
@@ -109,9 +111,9 @@ TEST_F(Mm, ContiguousMemoryIsMappedAtThePhysicalMapAndFreedPageByPage) {
     EXPECT_EQ(MmGetPhysicalAddress(p + 0x1234), (pfn << 12) + 0x1234);
     memset(p, 0x5A, 6 * 4096); // usable through the kernel mapping
     EXPECT_EQ(host::Phys(pfn << 12)[6 * 4096 - 1], 0x5A);
-    EXPECT_EQ(MmAvailablePages, available0 - 6);
+    EXPECT_EQ(memory::AvailablePages, available0 - 6);
     MmFreeContiguousMemory(p);
-    EXPECT_EQ(MmAvailablePages, available0);
+    EXPECT_EQ(memory::AvailablePages, available0);
 }
 
 TEST_F(Mm, ContiguousMemoryHonoursTheRangeAndAlignment) {
@@ -165,9 +167,9 @@ TEST_F(Mm, ContiguousRequestsMoveUnlockedPagesAndKeepTheirContents) {
             p[w] = (uint32_t)i * 0x10001 + w;
         pages.push_back(p);
     }
-    ULONG relocations = MiRelocations;
+    ULONG relocations = memory::Relocations;
     // A large contiguous request below 16 MB that cannot be satisfied from free pages alone.
-    ULONG free = MmAvailablePages;
+    ULONG free = memory::AvailablePages;
     ULONG want = std::min<ULONG>(free / 2, 0x800); // 8 MB
     auto c = MmAllocateContiguousMemoryEx(want * 4096, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     ASSERT_NE(c, nullptr);
@@ -190,7 +192,7 @@ TEST_F(Mm, LockedPagesAreNotMoved) {
     // Allocate every free page as single system pages, lock one in the middle, then ask for a contiguous run of
     // half of memory: the locked page must stay where it is.
     std::vector<uint8_t *> pages;
-    while (MmAvailablePages > 64) {
+    while (memory::AvailablePages > 64) {
         auto p = (uint8_t *)MmAllocateSystemMemory(4096, PAGE_READWRITE);
         if (!p)
             break;
@@ -230,7 +232,7 @@ TEST_F(Mm, SystemMemoryIsMappedInTheSystemPteRange) {
     EXPECT_EQ(MmQueryAllocationSize(p), 3u * 4096);
     EXPECT_EQ(MmFreeSystemMemory(p, 3 * 4096), 3u);
     EXPECT_FALSE(MmIsAddressValid(p));
-    EXPECT_EQ(MmAvailablePages, available0);
+    EXPECT_EQ(memory::AvailablePages, available0);
     EXPECT_EQ(MmAllocateSystemMemory(0, PAGE_READWRITE), nullptr);
     EXPECT_EQ(MmAllocateSystemMemory(4096, PAGE_EXECUTE_READWRITE), nullptr) << "unsupported protection";
 }
@@ -241,11 +243,11 @@ TEST_F(Mm, FreedSystemPtesAreReusedAndDoubleFreesRefused) {
     auto b = MmAllocateSystemMemory(4096, PAGE_READWRITE);
     EXPECT_EQ(a, b) << "first fit, lowest address first";
     ULONG pfn = Pte((ULONG)b) >> 12;
-    ULONG frees = MiPteDoubleFrees;
-    MiReleaseSystemPtes(b, 1);
-    MiReleaseSystemPtes(b, 1); // overlaps the run just freed
-    EXPECT_EQ(MiPteDoubleFrees, frees + 1);
-    MiFreePage(pfn); // the page itself (its PTE was released by hand)
+    ULONG frees = memory::PteDoubleFrees;
+    memory::ReleaseSystemPtes(b, 1);
+    memory::ReleaseSystemPtes(b, 1); // overlaps the run just freed
+    EXPECT_EQ(memory::PteDoubleFrees, frees + 1);
+    memory::FreePage(pfn); // the page itself (its PTE was released by hand)
 }
 
 TEST_F(Mm, SystemPteRangeGrowsPastOnePageTable) {
@@ -258,8 +260,8 @@ TEST_F(Mm, SystemPteRangeGrowsPastOnePageTable) {
         ASSERT_EQ(p[i * 4096], (uint8_t)i);
     MmFreeSystemMemory(p, 1100 * 4096);
     // Page tables of the system PTE range are never freed: they count as used afterwards.
-    EXPECT_LE(MmAvailablePages, available0);
-    available0 = MmAvailablePages;
+    EXPECT_LE(memory::AvailablePages, available0);
+    available0 = memory::AvailablePages;
 }
 
 TEST_F(Mm, KernelStacksHaveAGuardPageBelow) {
@@ -272,7 +274,7 @@ TEST_F(Mm, KernelStacksHaveAGuardPageBelow) {
     top[-1] = 1;
     MmDeleteKernelStack(top, top - 3 * 4096);
     EXPECT_FALSE(MmIsAddressValid(top - 1));
-    EXPECT_EQ(MmAvailablePages, available0);
+    EXPECT_EQ(memory::AvailablePages, available0);
 }
 
 TEST_F(Mm, IoSpaceUsesTheIdentityWindowsOrSystemPtes) {
@@ -386,7 +388,7 @@ TEST_F(Vm, ReserveCommitUseDecommitRelease) {
     ASSERT_EQ(Free(0x00400000, 0, MEM_RELEASE), STATUS_SUCCESS);
     ASSERT_EQ(NtQueryVirtualMemory((PVOID)0x00400000, &mbi), STATUS_SUCCESS);
     EXPECT_EQ(mbi.State, MEM_FREE);
-    EXPECT_EQ(MmAvailablePages, available0) << "pages and page tables all back";
+    EXPECT_EQ(memory::AvailablePages, available0) << "pages and page tables all back";
 }
 
 TEST_F(Vm, ConflictsAndBadParameters) {
@@ -402,7 +404,7 @@ TEST_F(Vm, ConflictsAndBadParameters) {
     EXPECT_NE(Free(0x00501000, 0, MEM_RELEASE), STATUS_SUCCESS) << "release not at the base";
     EXPECT_NE(Free(0x00600000, 0x1000, MEM_RELEASE), STATUS_SUCCESS) << "nothing there";
     EXPECT_EQ(Free(0x00500000, 0, MEM_RELEASE), STATUS_SUCCESS);
-    EXPECT_EQ(MmAvailablePages, available0);
+    EXPECT_EQ(memory::AvailablePages, available0);
 }
 
 TEST_F(Vm, ProtectAndPartialRelease) {
@@ -427,7 +429,7 @@ TEST_F(Vm, ProtectAndPartialRelease) {
     EXPECT_EQ(mbi.AllocationBase, (PVOID)0x00620000) << "the split-off tail is a reservation of its own";
     EXPECT_EQ(Free(0x00600000, 0x10000, MEM_RELEASE), STATUS_SUCCESS);
     EXPECT_EQ(Free(0x00620000, 0x10000, MEM_RELEASE), STATUS_SUCCESS);
-    EXPECT_EQ(MmAvailablePages, available0);
+    EXPECT_EQ(memory::AvailablePages, available0);
 }
 
 TEST_F(Vm, AnywhereAllocationsAreGranularityAligned) {

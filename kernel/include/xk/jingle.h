@@ -3,7 +3,7 @@
 // (tools/jingle).
 #pragma once
 
-namespace jingle {
+namespace xk::bootscreen::jingle {
 
 constexpr unsigned RATE = 48000; // frames per second, 16-bit stereo
 
@@ -18,4 +18,4 @@ void Mute(State *s, unsigned mask);                 // host tool: leave instrume
                                                     // 2 drums, 3 reverb)
 void Render(State *s, short *out, unsigned frames); // the next frames, interleaved left/right
 
-} // namespace jingle
+} // namespace bootscreen::jingle

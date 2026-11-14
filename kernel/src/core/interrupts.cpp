@@ -10,30 +10,32 @@
 #include <xk/io.h>
 #include <xk/memory.h>
 
+namespace xk::core {
+
 constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 
-static volatile ULONG KiPendingSoftwareInterrupts;
-static PKINTERRUPT KiInterruptObjects[16];
-volatile ULONG KiIrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the serial log prints them)
+static volatile ULONG PendingSoftwareInterrupts;
+static PKINTERRUPT InterruptObjects[16];
+volatile ULONG IrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the serial log prints them)
 
 // Interrupts are disabled on entry and exit; enabled while a handler runs.
-void KiDeliverSoftwareInterrupts() {
+void DeliverSoftwareInterrupts() {
     for (;;) {
         KIRQL current = KiPcr.Irql;
-        if ((KiPendingSoftwareInterrupts & SWI_DISPATCH) && current < DISPATCH_LEVEL) {
-            KiPendingSoftwareInterrupts &= ~SWI_DISPATCH;
+        if ((PendingSoftwareInterrupts & SWI_DISPATCH) && current < DISPATCH_LEVEL) {
+            PendingSoftwareInterrupts &= ~SWI_DISPATCH;
             KiPcr.Irql = DISPATCH_LEVEL;
             sti();
-            KiDispatchInterrupt();
+            DispatchInterrupt();
             cli();
             KiPcr.Irql = current;
             continue;
         }
-        if ((KiPendingSoftwareInterrupts & SWI_APC) && current < APC_LEVEL) {
-            KiPendingSoftwareInterrupts &= ~SWI_APC;
+        if ((PendingSoftwareInterrupts & SWI_APC) && current < APC_LEVEL) {
+            PendingSoftwareInterrupts &= ~SWI_APC;
             KiPcr.Irql = APC_LEVEL;
             sti();
-            KiDeliverApc();
+            DeliverApc();
             cli();
             KiPcr.Irql = current;
             continue;
@@ -55,7 +57,7 @@ XBAPI KIRQL FASTCALL KfRaiseIrql(KIRQL NewIrql) {
     if (NewIrql > DISPATCH_LEVEL) {
         ULONG flags = save_flags_cli();
         KiPcr.Irql = NewIrql;
-        HalpSetIrqlMask(NewIrql);
+        hardware::SetIrqlMask(NewIrql);
         restore_flags(flags);
     } else {
         KiPcr.Irql = NewIrql;
@@ -68,9 +70,9 @@ XBAPI void FASTCALL KfLowerIrql(KIRQL NewIrql) {
     KIRQL old = KiPcr.Irql;
     KiPcr.Irql = NewIrql;
     if (old > DISPATCH_LEVEL)
-        HalpSetIrqlMask(NewIrql);
-    if (KiPendingSoftwareInterrupts)
-        KiDeliverSoftwareInterrupts();
+        hardware::SetIrqlMask(NewIrql);
+    if (PendingSoftwareInterrupts)
+        DeliverSoftwareInterrupts();
     restore_flags(flags);
 }
 
@@ -82,15 +84,15 @@ XBAPI KIRQL NTAPI KeRaiseIrqlToSynchLevel() {
 
 XBAPI void FASTCALL HalRequestSoftwareInterrupt(KIRQL RequestIrql) {
     ULONG flags = save_flags_cli();
-    KiPendingSoftwareInterrupts |= 1u << RequestIrql;
+    PendingSoftwareInterrupts |= 1u << RequestIrql;
     if (RequestIrql > KiPcr.Irql)
-        KiDeliverSoftwareInterrupts();
+        DeliverSoftwareInterrupts();
     restore_flags(flags);
 }
 
 XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
     ULONG flags = save_flags_cli();
-    KiPendingSoftwareInterrupts &= ~(1u << RequestIrql);
+    PendingSoftwareInterrupts &= ~(1u << RequestIrql);
     restore_flags(flags);
 }
 
@@ -98,8 +100,8 @@ XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
 // Hang dump (serial builds): when the sampler finds the idle thread three times in a row (15 s with nothing to run
 // at every sample), every thread's state, what it waits on, and the first return addresses into the title's image
 // found on its stack, so a title that waits for ever names its call site and the object.
-static void KiDumpThreads() {
-    PLIST_ENTRY head = &KiSystemProcess.ThreadListHead;
+static void DumpThreads() {
+    PLIST_ENTRY head = &SystemProcess.ThreadListHead;
     ULONG count = 0;
     for (PLIST_ENTRY e = head->Flink; e != head && count < 64; e = e->Flink, count++) {
         PKTHREAD t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
@@ -162,31 +164,31 @@ static void KiDumpThreads() {
 
 // Called from the IRQ entry stubs with interrupts disabled.
 extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
-    if (HalpIsSpuriousIrq(irq))
+    if (hardware::IsSpuriousIrq(irq))
         return;
     // The start-up watchdog (core/startup.cpp) gets the interrupted eip: in the IRQ stub's frame, past this function's
     // frame and the registers the stub saved.
     if (irq == 0)
-        XkBootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
+        BootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
 #if XK_DEBUG_SERIAL
     // Sampler (serial builds): every 5 s, where the processor was interrupted, so a hang names its code.
     if (irq == 0 && KeTickCount % 5000 == 0) {
         XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9],
                   (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
         static ULONG idleSamples;
-        idleSamples = KiPcr.PrcbData.CurrentThread == &KiIdleThread ? idleSamples + 1 : 0;
+        idleSamples = KiPcr.PrcbData.CurrentThread == &IdleThreadObject ? idleSamples + 1 : 0;
         if (idleSamples == 3 || idleSamples == 12)
-            KiDumpThreads();
+            DumpThreads();
     }
 #endif
     KIRQL old = KiPcr.Irql;
-    KIRQL level = HalpGetIrqLevel(irq);
+    KIRQL level = hardware::GetIrqLevel(irq);
     KiPcr.Irql = level;
-    HalpSetIrqlMask(level);
-    HalpEoi(irq);
+    hardware::SetIrqlMask(level);
+    hardware::SendEoi(irq);
     KiPcr.PrcbData.InterruptCount++;
     if (irq < 16)
-        KiIrqCounts[irq] = KiIrqCounts[irq] + 1;
+        IrqCounts[irq] = IrqCounts[irq] + 1;
 #if XK_DEBUG_SERIAL
     // Interrupt-storm detector (serial builds): more than 5000 interrupts of one line within one clock
     // tick (1 ms) freezes the console; log it once and mask the line, so the system and its log keep running.
@@ -197,10 +199,10 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
             stormCount[irq] = 0;
         }
         if (++stormCount[irq] == 5000) {
-            XK_SERIAL("*** interrupt storm on IRQ %lu (%lu taken in all): masked\n", irq, KiIrqCounts[irq]);
+            XK_SERIAL("*** interrupt storm on IRQ %lu (%lu taken in all): masked\n", irq, IrqCounts[irq]);
             HalDisableSystemInterrupt(irq);
             KiPcr.Irql = old;
-            HalpSetIrqlMask(old);
+            hardware::SetIrqlMask(old);
             return;
         }
     }
@@ -208,17 +210,17 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
 
     sti();
     if (irq == 0) {
-        KiClockInterrupt(old);
-    } else if (PKINTERRUPT obj = KiInterruptObjects[irq]) {
+        ClockInterrupt(old);
+    } else if (PKINTERRUPT obj = InterruptObjects[irq]) {
         obj->ServiceCount++;
         obj->ServiceRoutine(obj, obj->ServiceContext);
     }
     cli();
 
     KiPcr.Irql = old;
-    HalpSetIrqlMask(old);
-    if (KiPendingSoftwareInterrupts)
-        KiDeliverSoftwareInterrupts();
+    hardware::SetIrqlMask(old);
+    if (PendingSoftwareInterrupts)
+        DeliverSoftwareInterrupts();
 }
 
 // --- Interrupt objects (spec/stock/06 §3). The IDT keeps fixed per-IRQ stubs that look up the
@@ -241,10 +243,10 @@ XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt) {
     ULONG level = Interrupt->BusInterruptLevel;
     BOOLEAN connected = FALSE;
     KIRQL old = KfRaiseIrql(DISPATCH_LEVEL);
-    if (!Interrupt->Connected && level > 0 && level < 16 && !KiInterruptObjects[level]) {
-        KiInterruptObjects[level] = Interrupt;
+    if (!Interrupt->Connected && level > 0 && level < 16 && !InterruptObjects[level]) {
+        InterruptObjects[level] = Interrupt;
         Interrupt->Connected = TRUE;
-        HalpSetIrqLevel(level, (KIRQL)Interrupt->Irql);
+        hardware::SetIrqLevel(level, (KIRQL)Interrupt->Irql);
         HalEnableSystemInterrupt(level, (KINTERRUPT_MODE)Interrupt->Mode);
         connected = TRUE;
     }
@@ -258,10 +260,12 @@ XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt) {
     if (wasConnected) {
         ULONG level = Interrupt->BusInterruptLevel;
         HalDisableSystemInterrupt(level);
-        KiInterruptObjects[level] = nullptr;
-        HalpResetIrqLevel(level);
+        InterruptObjects[level] = nullptr;
+        hardware::ResetIrqLevel(level);
         Interrupt->Connected = FALSE;
     }
     KfLowerIrql(old);
     return wasConnected;
 }
+
+} // namespace xk::core

@@ -5,43 +5,45 @@
 #include <xk/hardware.h>
 #include <xk/memory.h>
 
+namespace xk::core {
+
 #define Prcb (KiPcr.PrcbData)
 
 // The context switch and the switch to another stack (arch/context_switch.S).
 extern "C" void FASTCALL KiSwapContext(PKTHREAD Old, PKTHREAD New);
 extern "C" void KiCallOnStack(void (*fn)(), PVOID stackTop);
 
-static LIST_ENTRY KiDispatcherReadyListHead[32]; // ready threads by priority
-static ULONG KiReadySummary;                     // bit n: the priority-n list is not empty
-LIST_ENTRY KiWaitInListHead;                     // waiting threads (core/wait.cpp)
+static LIST_ENTRY DispatcherReadyListHead[32]; // ready threads by priority
+static ULONG ReadySummary;                     // bit n: the priority-n list is not empty
+LIST_ENTRY WaitInListHead;                     // waiting threads (core/wait.cpp)
 
-static void KiInsertReady(PKTHREAD t, bool atHead) {
-    PLIST_ENTRY head = &KiDispatcherReadyListHead[(UCHAR)t->Priority];
+static void InsertReady(PKTHREAD t, bool atHead) {
+    PLIST_ENTRY head = &DispatcherReadyListHead[(UCHAR)t->Priority];
     if (atHead)
         InsertHeadList(head, &t->WaitListEntry);
     else
         InsertTailList(head, &t->WaitListEntry);
-    KiReadySummary |= 1u << t->Priority;
+    ReadySummary |= 1u << t->Priority;
 }
 
-static void KiRemoveReady(PKTHREAD t) {
+static void RemoveReady(PKTHREAD t) {
     RemoveEntryList(&t->WaitListEntry);
-    if (IsListEmpty(&KiDispatcherReadyListHead[(UCHAR)t->Priority]))
-        KiReadySummary &= ~(1u << t->Priority);
+    if (IsListEmpty(&DispatcherReadyListHead[(UCHAR)t->Priority]))
+        ReadySummary &= ~(1u << t->Priority);
 }
 
 // Highest-priority ready thread with priority >= MinPriority, removed from its list.
-static PKTHREAD KiFindReadyThread(LONG MinPriority) {
-    ULONG mask = KiReadySummary & ~((1u << MinPriority) - 1);
+static PKTHREAD FindReadyThread(LONG MinPriority) {
+    ULONG mask = ReadySummary & ~((1u << MinPriority) - 1);
     if (!mask)
         return nullptr;
     ULONG priority = 31 - __builtin_clz(mask);
-    PKTHREAD t = CONTAINING_RECORD(KiDispatcherReadyListHead[priority].Flink, KTHREAD, WaitListEntry);
-    KiRemoveReady(t);
+    PKTHREAD t = CONTAINING_RECORD(DispatcherReadyListHead[priority].Flink, KTHREAD, WaitListEntry);
+    RemoveReady(t);
     return t;
 }
 
-void KiReadyThread(PKTHREAD Thread) {
+void ReadyThread(PKTHREAD Thread) {
     bool preempted = Thread->Preempted;
     Thread->Preempted = FALSE;
     Thread->WaitTime = KeTickCount;
@@ -65,25 +67,25 @@ void KiReadyThread(PKTHREAD Thread) {
             continue;
         }
         Thread->State = Ready;
-        KiInsertReady(Thread, preempted);
+        InsertReady(Thread, preempted);
         return;
     }
 }
 
-void KiSetPriorityThread(PKTHREAD Thread, SCHAR Priority) {
+void SetPriorityThread(PKTHREAD Thread, SCHAR Priority) {
     SCHAR old = Thread->Priority;
     if (old == Priority)
         return;
     switch (Thread->State) {
     case Ready:
-        KiRemoveReady(Thread);
+        RemoveReady(Thread);
         Thread->Priority = Priority;
-        KiReadyThread(Thread);
+        ReadyThread(Thread);
         break;
     case Running:
         Thread->Priority = Priority;
         if (Priority < old && !Prcb.NextThread) {
-            if (PKTHREAD t = KiFindReadyThread(Priority + 1)) {
+            if (PKTHREAD t = FindReadyThread(Priority + 1)) {
                 t->State = Standby;
                 Prcb.NextThread = t;
             }
@@ -96,9 +98,9 @@ void KiSetPriorityThread(PKTHREAD Thread, SCHAR Priority) {
 }
 
 // Make a ready thread of equal or higher priority the next thread (yield). TRUE if one exists.
-bool KiSelectYieldThread(PKTHREAD Current) {
+bool SelectYieldThread(PKTHREAD Current) {
     if (!Prcb.NextThread) {
-        if (PKTHREAD t = KiFindReadyThread(Current->Priority)) {
+        if (PKTHREAD t = FindReadyThread(Current->Priority)) {
             t->State = Standby;
             Prcb.NextThread = t;
         }
@@ -108,21 +110,21 @@ bool KiSelectYieldThread(PKTHREAD Current) {
 
 // Switch from the current thread to Next. Caller is at DISPATCH_LEVEL, not in a DPC, and has
 // already set the old thread's state (Ready/Waiting/Terminated).
-static void KiSwapToThread(PKTHREAD Old, PKTHREAD Next) {
+static void SwapToThread(PKTHREAD Old, PKTHREAD Next) {
     if (Prcb.DpcRoutineActive)
         KeBugCheck(0xB8); // ATTEMPTED_SWITCH_FROM_DPC
     Prcb.CurrentThread = Next;
     Next->State = Running;
     Next->ContextSwitches++;
     Prcb.KeContextSwitches++;
-    KiNpxPrepareSwitch(Next);
+    NpxPrepareSwitch(Next);
     // Like the reference KiSwapContext: an incoming thread with kernel APCs queued (including a new thread
     // created suspended) gets the APC interrupt as soon as it drops below APC_LEVEL.
     if (Next->ApcState.KernelApcPending)
         HalRequestSoftwareInterrupt(APC_LEVEL);
     KiSwapContext(Old, Next);
     // Back on Old's stack. Free stacks of threads that terminated (we're no longer running on them).
-    KiReapDeadThreads();
+    ReapDeadThreads();
     // A kernel APC queued while it was switched out is delivered when its IRQL drops.
     if (Old->ApcState.KernelApcPending)
         HalRequestSoftwareInterrupt(APC_LEVEL);
@@ -130,12 +132,12 @@ static void KiSwapToThread(PKTHREAD Old, PKTHREAD Next) {
 
 // Block the current thread (its wait state is already set). Returns its WaitStatus when resumed;
 // the caller then lowers IRQL to WaitIrql.
-LONG KiSwapThread() {
+LONG SwapThread() {
     PKTHREAD old = Prcb.CurrentThread;
     PKTHREAD next = Prcb.NextThread;
     if (next)
         Prcb.NextThread = nullptr;
-    else if (!(next = KiFindReadyThread(0)))
+    else if (!(next = FindReadyThread(0)))
         next = Prcb.IdleThread;
     // The idle thread (the boot thread during start-up) must never block: with nothing else to run it would
     // "switch" to itself and return at once with the wait still linked (its wait block on this stack), and with
@@ -145,7 +147,7 @@ LONG KiSwapThread() {
         KeBugCheckEx(0x000000E3 /*our code: wait on the idle thread*/, (ULONG)old, old->WaitReason,
                      (ULONG)__builtin_return_address(0), 0);
     }
-    KiSwapToThread(old, next);
+    SwapToThread(old, next);
     return old->WaitStatus;
 }
 
@@ -156,8 +158,8 @@ XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
             Prcb.NextThread = nullptr;
             old->WaitIrql = OldIrql;
             if (old != Prcb.IdleThread)
-                KiReadyThread(old);
-            KiSwapToThread(old, next);
+                ReadyThread(old);
+            SwapToThread(old, next);
             KfLowerIrql(old->WaitIrql);
             return;
         }
@@ -169,15 +171,15 @@ XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
 
 // NtYieldExecution (spec/stock/07): give the processor to any ready thread above the idle priority, lower ones
 // included; STATUS_NO_YIELD_PERFORMED when there is none.
-NTSTATUS KiYieldExecution() {
+NTSTATUS YieldExecution() {
     constexpr NTSTATUS STATUS_NO_YIELD_PERFORMED = 0x40000024;
-    if (!KiReadySummary)
+    if (!ReadySummary)
         return STATUS_NO_YIELD_PERFORMED;
     PKTHREAD t = Prcb.CurrentThread;
     KIRQL old = KeRaiseIrqlToDpcLevel();
     t->WaitIrql = old;
     if (!Prcb.NextThread) {
-        PKTHREAD next = KiFindReadyThread(1);
+        PKTHREAD next = FindReadyThread(1);
         if (!next) {
             KfLowerIrql(old);
             return STATUS_NO_YIELD_PERFORMED;
@@ -192,14 +194,14 @@ NTSTATUS KiYieldExecution() {
         t->Priority = p < t->BasePriority ? t->BasePriority : p;
         t->PriorityDecrement = 0;
     }
-    KiInsertReady(t, false);
-    KiSwapThread();
+    InsertReady(t, false);
+    SwapThread();
     KfLowerIrql(t->WaitIrql);
     return STATUS_SUCCESS;
 }
 
-// Quantum expired (spec/stock/07 KiQuantumEnd): refill, decay priority, pick a same-or-higher thread.
-static void KiQuantumEnd() {
+// Quantum expired (spec/stock/07 EndQuantum): refill, decay priority, pick a same-or-higher thread.
+static void EndQuantum() {
     PKTHREAD t = Prcb.CurrentThread;
     if (t == Prcb.IdleThread || t->Quantum > 0)
         return;
@@ -217,9 +219,9 @@ static void KiQuantumEnd() {
         t->PriorityDecrement = 0;
     }
     if (newPriority != priority) {
-        KiSetPriorityThread(t, newPriority);
+        SetPriorityThread(t, newPriority);
     } else if (!Prcb.NextThread) {
-        if (PKTHREAD r = KiFindReadyThread(priority)) {
+        if (PKTHREAD r = FindReadyThread(priority)) {
             r->State = Standby;
             Prcb.NextThread = r;
         }
@@ -228,17 +230,17 @@ static void KiQuantumEnd() {
     }
 }
 
-static void KiRetireDpcListOnDpcStack() {
+static void RetireDpcListOnDpcStack() {
     PVOID exceptionList = KiPcr.NtTib.ExceptionList;
     KiPcr.NtTib.ExceptionList = (PVOID)0xFFFFFFFF;
-    KiCallOnStack(KiRetireDpcList, Prcb.DpcStack);
+    KiCallOnStack(RetireDpcList, Prcb.DpcStack);
     KiPcr.NtTib.ExceptionList = exceptionList;
 }
 
 // DISPATCH_LEVEL software interrupt: drain DPCs on the DPC stack, then reschedule if needed.
-void KiDispatchInterrupt() {
+void DispatchInterrupt() {
     if (!IsListEmpty(&Prcb.DpcListHead)) {
-        KiRetireDpcListOnDpcStack();
+        RetireDpcListOnDpcStack();
     } else {
         // The DPC that requested this interrupt was removed again (KeRemoveQueueDpc): clear the request, or every
         // later KeInsertQueueDpc would skip requesting the DISPATCH interrupt and its DPC wait for the idle loop.
@@ -249,7 +251,7 @@ void KiDispatchInterrupt() {
     }
     if (Prcb.QuantumEnd) {
         Prcb.QuantumEnd = 0;
-        KiQuantumEnd();
+        EndQuantum();
     }
     PKTHREAD next = Prcb.NextThread;
     if (!next)
@@ -257,12 +259,12 @@ void KiDispatchInterrupt() {
     PKTHREAD old = Prcb.CurrentThread;
     Prcb.NextThread = nullptr;
     if (old != Prcb.IdleThread)
-        KiReadyThread(old);
-    KiSwapToThread(old, next);
+        ReadyThread(old);
+    SwapToThread(old, next);
 }
 
 // Clock tick bookkeeping (spec/stock/07 "Clock tick"), at CLOCK_LEVEL.
-void KiUpdateRunTime(KIRQL interruptedIrql) {
+void UpdateRunTime(KIRQL interruptedIrql) {
     PKTHREAD t = Prcb.CurrentThread;
     if (interruptedIrql > DISPATCH_LEVEL)
         Prcb.InterruptTime++;
@@ -278,20 +280,20 @@ void KiUpdateRunTime(KIRQL interruptedIrql) {
 }
 
 // The idle thread runs at DISPATCH_LEVEL: it drains DPCs and switches to ready threads itself.
-void KiIdleLoop() {
+void IdleLoop() {
     PKTHREAD idle = Prcb.IdleThread;
     for (;;) {
         cli();
         if (!IsListEmpty(&Prcb.DpcListHead)) {
             HalClearSoftwareInterrupt(DISPATCH_LEVEL);
             sti();
-            KiRetireDpcListOnDpcStack();
+            RetireDpcListOnDpcStack();
             continue;
         }
         if (PKTHREAD next = Prcb.NextThread) {
             Prcb.NextThread = nullptr;
             sti();
-            KiSwapToThread(idle, next);
+            SwapToThread(idle, next);
             continue;
         }
         Prcb.QuantumEnd = 0;
@@ -305,23 +307,25 @@ void KiIdleLoop() {
 }
 
 // The boot thread becomes the idle thread (priority 0, idle process).
-void KiInitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit) {
-    for (auto &head : KiDispatcherReadyListHead)
+void InitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit) {
+    for (auto &head : DispatcherReadyListHead)
         InitializeListHead(&head);
-    InitializeListHead(&KiWaitInListHead);
+    InitializeListHead(&WaitInListHead);
 
-    KiInitializeProcesses();
+    InitializeProcesses();
 
-    PKTHREAD idle = &KiIdleThread;
-    KeInitializeThread(idle, bootStackTop, (UCHAR *)bootStackTop - (UCHAR *)bootStackLimit, 0, nullptr, nullptr,
-                       nullptr, &KiIdleProcess);
-    KiInitializeNpxArea(idle);
+    PKTHREAD idle = &IdleThreadObject;
+    InitializeThread(idle, bootStackTop, (UCHAR *)bootStackTop - (UCHAR *)bootStackLimit, 0, nullptr, nullptr,
+                     nullptr, &IdleProcess);
+    InitializeNpxArea(idle);
     idle->Priority = idle->BasePriority = 0;
     idle->State = Running;
     idle->WaitIrql = DISPATCH_LEVEL;
     Prcb.CurrentThread = Prcb.IdleThread = idle;
     Prcb.NpxThread = nullptr;
-    KiInitializeNpx();
+    InitializeNpx();
 
     Prcb.DpcStack = MmCreateKernelStack(0x3000, FALSE);
 }
+
+} // namespace xk::core

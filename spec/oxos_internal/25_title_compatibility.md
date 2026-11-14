@@ -1,9 +1,9 @@
 # 25 — Title compatibility: answers games expect
 
 OXOS addition, implemented 2026-11-03.
-- **Code:** `kernel/src/filesystems/xdvdfs.cpp` (file-system name, `XDVDFS_FCB`), `kernel/include/xk/hddfs.h` (`HDDFS_FCB`),
-  `kernel/src/filesystems/hddfs/dispatch.cpp` (`HDDFSRememberTitleFolder`, FileFsSizeInformation), `kernel/src/titles/loader.cpp` (the
-  call before the title starts).
+- **Code:** `kernel/src/filesystems/xdvdfs.cpp` (file-system name, `XDVDFS_FCB`), `kernel/include/xk/hddfs.h`
+  (`HDDFS_FCB`), `kernel/src/filesystems/hddfs/dispatch.cpp` (`filesystems::HDDFSRememberTitleFolder`,
+  FileFsSizeInformation), `kernel/src/titles/loader.cpp` (the call before the title starts).
 - **Tests:** boot self-tests `KiTestDvdSortKeyOk` (tests/kernel_self_tests/dvd_drive.cpp) and `KiTestFATXTitleFolderOk`
   (tests/kernel_self_tests/fatx.cpp), on FATX and on exFAT.
 - **Background:** spec/cerbios/13 §7, where Cerbios patches these games' code. Here the kernel gives the answers
@@ -54,7 +54,7 @@ CPUID wrapper, a display mode). For those the kernel writes patches into the loa
 title can be fixed without a new kernel.
 - **Code:** `kernel/src/titles/patchfile.cpp` (the parser, `include/xk/title_patches.h`), on the ini line reader it
   shares with the launch redirects (`kernel/src/titles/ini_file.cpp`, `include/xk/ini_file.h`, spec/oxos_internal/33);
-  `kernel/src/titles/loader.cpp` (`XepLoadPatches`, `XepApplyPatches`).
+  `kernel/src/titles/loader.cpp` (`titles::LoadPatches`, `titles::ApplyPatches`).
 - **Tests:** host unit tests `tests/unit/test_patches.cpp` (the format, and the shipped file parses without an
   error); boot self-test "title patches" (boot_test.py puts a patch file for the test title on the test disk: a
   matching section changes a variable, a section for another certificate version leaves another one alone, a patch
@@ -115,7 +115,7 @@ patch = ECD8B: > 90 90 90 90 90 90 90 90
 - **Errors:** a line that cannot be read is skipped and counted. Other keys are ignored, for later additions.
 
 ### 3.2 When patches are written
-1. **When the title is loaded** (XeLoadImage, after the certificate checks and before the sections are read), the
+1. **When the title is loaded** (titles::LoadImage, after the certificate checks and before the sections are read), the
    kernel reads the file and keeps the records of the sections that match this title and version.
    - A patch that is not entirely inside one of the title's sections is dropped and logged.
    - No file, or no matching section, means no patches.
@@ -137,8 +137,8 @@ A dashboard that plays video through the GPU's video overlay (PVIDEO) can leave 
 a buffer marked in use (NV2A 0x8700 bit 4), an overlay interrupt pending (0x8100), and the overlay's addresses
 never set. A test title's graphics set-up stops the overlay (0x8704 ← 1) and waits for 0x8700 to clear; in that
 state the overlay never finishes and the game hangs on a black screen (about one start in three from the dashboard).
-- **Code:** `kernel/src/hardware/chipset.cpp` `HalpIdleVideoOverlay`, called on a cold boot (HalpQuiesceBusMasters) and on the
-  quick reboot that starts the next title (HalInitSystemPhase0).
+- **Code:** `kernel/src/hardware/chipset.cpp` `hardware::IdleVideoOverlay`, called on a cold boot
+  (hardware::QuiesceBusMasters) and on the quick reboot that starts the next title (hardware::InitHalPhase0).
 - **What it does** when the overlay is switched on (PMC 0x200 bit 28): overlay interrupts off (0x8140 ← 0), both
   buffers stopped (0x8704 ← 0x11), 0x8700 ← 0, pending interrupts acknowledged (0x8100 ← 0xFFFFFFFF). Writing 0x8700
   does not clear an in-use bit; the stop does, at a vertical blank. The kernel waits up to 50 ms for that. A buffer
@@ -163,9 +163,10 @@ read, priority 9 against the main thread's 8) asked for the input object as well
 second set-up found `\Device\MU_0` taken (IoCreateDevice, STATUS_OBJECT_NAME_COLLISION), carried on with memory-unit
 devices it never created, and its USB interrupt code then read through a garbage device pointer (bug check 0x1E, an
 access violation at the start of the title, about 0.35 s in).
-- **Code:** `kernel/src/hardware/smbus.cpp` `KiQuickRebootQuiesce` (and the same step in `kernel/src/hardware/chipset.cpp`
-  `HalpQuiesceBusMasters`): after the reset completes (bit 0 clear, within 10 µs), HcControl ← 0: USBRESET, every list
-  off. A title then finds the controllers as after a cold boot and starts its USB library without the sleep.
+- **Code:** `kernel/src/hardware/smbus.cpp` `KiQuickRebootQuiesce` (and the same step in
+  `kernel/src/hardware/chipset.cpp` `hardware::QuiesceBusMasters`): after the reset completes (bit 0 clear, within 10
+  µs), HcControl ← 0: USBRESET, every list off. A title then finds the controllers as after a cold boot and starts its
+  USB library without the sleep.
 - **Checked:** the Modxo console, the test title started directly over netboot and from the dashboard: before, it
   stopped at start every time, and the trace showed both set-ups (`\Device\MU_0` created twice, by two threads); with
   the change it starts and plays.
@@ -179,7 +180,7 @@ catch. On the stock kernel the saved registration is the dispatcher's guard fram
 which was then linked to itself: the second exception's dispatch called that frame's handler for ever, and the
 title stayed on its loading screen.
 - **Code:** `kernel/src/core/exceptions.cpp` `KiExecuteHandler` (handlers run under the exception guard or the unwind
-  guard), `RtlpDispatchException` (nested flag and frame), `KiUnwind` (collided unwind).
+  guard), `core::DispatchException` (nested flag and frame), `KiUnwind` (collided unwind).
 - **Found with:** a serial log of each exception (code, address, thread, handler) and of the registration chain at
   each dispatch and unwind (debug code, not kept): after the first unwind the chain read
   `D0090C10 → D0090C90 → D0091528 → D0091528 → …`.

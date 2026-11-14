@@ -8,6 +8,8 @@
 
 #include <xk/extension_parser.h>
 
+using namespace xk; // the kernel's subsystems as storage::, extensions::, ...
+
 namespace {
 
 constexpr ULONG IMAGE_BASE = 0x10000000, IMAGE_SIZE = 0x2000, HEADERS = 0x400, SECTION_RVA = 0x1000;
@@ -89,7 +91,7 @@ std::vector<UCHAR> TestDll(const char *dll = "xboxkrnl.exe", bool byOrdinal = tr
 
 XK_PE_ERROR Check(const std::vector<UCHAR> &f) {
     ULONG size = 0;
-    return XkPeCheck(f.data(), (ULONG)f.size(), &size);
+    return extensions::CheckImage(f.data(), (ULONG)f.size(), &size);
 }
 
 ULONG Get32(const std::vector<UCHAR> &image, ULONG at) {
@@ -118,30 +120,30 @@ bool Resolve(PVOID Context, ULONG Ordinal, ULONG *Slot) {
 TEST(PeImage, ACheckedDllIsMappedRelocatedAndBound) {
     std::vector<UCHAR> f = TestDll();
     ULONG size = 0;
-    ASSERT_EQ(XkPeCheck(f.data(), (ULONG)f.size(), &size), XK_PE_ERROR::NONE);
+    ASSERT_EQ(extensions::CheckImage(f.data(), (ULONG)f.size(), &size), XK_PE_ERROR::NONE);
     ASSERT_EQ(size, IMAGE_SIZE);
     std::vector<UCHAR> image(size, 0xCC);
     const ULONG base = 0x80345000;
-    ASSERT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), size, base), XK_PE_ERROR::NONE);
+    ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), size, base), XK_PE_ERROR::NONE);
     EXPECT_EQ(Get32(image, POINTER_RVA), base + TARGET_RVA);
     EXPECT_EQ(Get32(image, OPTIONAL + 28), base);
     EXPECT_EQ(image[IMAGE_SIZE - 1], 0); // the rest of the image is zero
     Resolver r;
-    ASSERT_EQ(XkPeBindImports(image.data(), size, Resolve, &r), XK_PE_ERROR::NONE);
+    ASSERT_EQ(extensions::BindImports(image.data(), size, Resolve, &r), XK_PE_ERROR::NONE);
     EXPECT_EQ(r.Ordinals, (std::vector<ULONG>{190, 8}));
     EXPECT_EQ(Get32(image, SLOTS_RVA), 0x1000u * 190);
     EXPECT_EQ(Get32(image, SLOTS_RVA + 4), 0x1000u * 8);
-    EXPECT_EQ(XkPeFindExport(image.data(), size, "XosExtension"), TARGET_RVA);
-    EXPECT_EQ(XkPeFindExport(image.data(), size, "xosextension"), 0u); // export names keep their case
-    EXPECT_EQ(XkPeFindExport(image.data(), size, "Other"), 0u);
+    EXPECT_EQ(extensions::FindExport(image.data(), size, "XosExtension"), TARGET_RVA);
+    EXPECT_EQ(extensions::FindExport(image.data(), size, "xosextension"), 0u); // export names keep their case
+    EXPECT_EQ(extensions::FindExport(image.data(), size, "Other"), 0u);
 }
 
 TEST(PeImage, TheKernelsNameMatchesInAnyCase) {
     std::vector<UCHAR> f = TestDll("XBOXKRNL.EXE");
     std::vector<UCHAR> image(IMAGE_SIZE);
-    ASSERT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
+    ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
     Resolver r;
-    EXPECT_EQ(XkPeBindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::NONE);
+    EXPECT_EQ(extensions::BindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::NONE);
 }
 
 TEST(PeImage, ImagesTheLoaderCannotUseAreRefused) {
@@ -171,25 +173,26 @@ TEST(PeImage, ImagesTheLoaderCannotUseAreRefused) {
 TEST(PeImage, ImportsMustBeKernelOrdinals) {
     std::vector<UCHAR> image(IMAGE_SIZE);
     for (auto f : {TestDll("kernel32.dll"), TestDll("xboxkrnl.exe", false)}) {
-        ASSERT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
+        ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE),
+                  XK_PE_ERROR::NONE);
         Resolver r;
-        EXPECT_EQ(XkPeBindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);
+        EXPECT_EQ(extensions::BindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);
     }
     std::vector<UCHAR> f = TestDll();
-    ASSERT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
+    ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
     Resolver r;
     r.Refused = 8; // an ordinal the kernel does not have
-    EXPECT_EQ(XkPeBindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);
+    EXPECT_EQ(extensions::BindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);
 }
 
 TEST(PeImage, OnlyHighLowRelocationsAreApplied) {
     std::vector<UCHAR> f = TestDll();
     Put16(f, Raw(RELOCATIONS_RVA) + 8, (10 << 12) | 0); // a 64-bit relocation
     std::vector<UCHAR> image(IMAGE_SIZE);
-    EXPECT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
+    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
               XK_PE_ERROR::BAD_RELOCATION);
     f = TestDll();
     Put32(f, Raw(RELOCATIONS_RVA) + 4, 0x2000); // a block running past the directory
-    EXPECT_EQ(XkPeMap(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
+    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
               XK_PE_ERROR::BAD_RELOCATION);
 }

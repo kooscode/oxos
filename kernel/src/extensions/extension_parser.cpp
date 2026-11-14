@@ -3,6 +3,8 @@
 // data directories, then the section table.
 #include <xk/extension_parser.h>
 
+namespace xk::extensions {
+
 namespace {
 
 constexpr USHORT DOS_MAGIC = 0x5A4D;          // "MZ"
@@ -90,7 +92,7 @@ bool NameIs(const UCHAR *Image, ULONG ImageSize, ULONG Rva, const char *Name, bo
 
 } // namespace
 
-XK_PE_ERROR XkPeCheck(const UCHAR *File, ULONG Size, ULONG *ImageSize) {
+XK_PE_ERROR CheckImage(const UCHAR *File, ULONG Size, ULONG *ImageSize) {
     HEADERS h;
     if (!FindHeaders(File, Size, &h))
         return XK_PE_ERROR::NOT_PE;
@@ -118,7 +120,7 @@ XK_PE_ERROR XkPeCheck(const UCHAR *File, ULONG Size, ULONG *ImageSize) {
     return XK_PE_ERROR::NONE;
 }
 
-XK_PE_ERROR XkPeMap(const UCHAR *File, ULONG Size, UCHAR *Image, ULONG ImageSize, ULONG Base) {
+XK_PE_ERROR MapImage(const UCHAR *File, ULONG Size, UCHAR *Image, ULONG ImageSize, ULONG Base) {
     HEADERS h;
     if (!FindHeaders(File, Size, &h))
         return XK_PE_ERROR::NOT_PE;
@@ -161,7 +163,7 @@ XK_PE_ERROR XkPeMap(const UCHAR *File, ULONG Size, UCHAR *Image, ULONG ImageSize
     return XK_PE_ERROR::NONE;
 }
 
-XK_PE_ERROR XkPeBindImports(UCHAR *Image, ULONG ImageSize, XK_PE_IMPORT_RESOLVER Resolve, PVOID Context) {
+XK_PE_ERROR BindImports(UCHAR *Image, ULONG ImageSize, XK_PE_IMPORT_RESOLVER Resolve, PVOID Context) {
     HEADERS h;
     if (!FindHeaders(Image, ImageSize, &h))
         return XK_PE_ERROR::NOT_PE;
@@ -191,7 +193,7 @@ XK_PE_ERROR XkPeBindImports(UCHAR *Image, ULONG ImageSize, XK_PE_IMPORT_RESOLVER
     }
 }
 
-ULONG XkPeFindExport(const UCHAR *Image, ULONG ImageSize, const char *Name) {
+ULONG FindExport(const UCHAR *Image, ULONG ImageSize, const char *Name) {
     HEADERS h;
     if (!FindHeaders(Image, ImageSize, &h))
         return 0;
@@ -216,3 +218,5 @@ ULONG XkPeFindExport(const UCHAR *Image, ULONG ImageSize, const char *Name) {
     }
     return 0;
 }
+
+} // namespace xk::extensions

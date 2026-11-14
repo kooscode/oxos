@@ -25,57 +25,71 @@ XBAPI void NTAPI HalDisableSystemInterrupt(ULONG BusInterruptLevel);
 XBAPI void FASTCALL HalRequestSoftwareInterrupt(KIRQL RequestIrql);
 XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql);
 
-void HalInitSystemPhase0(bool coldBoot);
-void HalpInitPic();
-void HalpInitRtc();
-void HalpInitRtcLate();
-void HalpInitPit();
-void HalpInitPci();
-void HalpIdleVideoOverlay(); // the video overlay stopped (cold boot and quick reboot)
-void HalpInitGraphicsEngine(); // hardware/graphics.cpp: cold boot, after the GPU reset
-void HalpInitAcpiPm();
-void HalpPulse();
-void HalpDetectHardware();
+namespace xk::hardware {
+void InitHalPhase0(bool coldBoot);
+void InitPic();
+void InitRtc();
+void InitRtcLate();
+void InitPit();
+void InitPci();
+void IdleVideoOverlay();   // the video overlay stopped (cold boot and quick reboot)
+void InitGraphicsEngine(); // hardware/graphics.cpp: cold boot, after the GPU reset
+void InitAcpiPm();
+void Pulse();
+void DetectHardware();
+} // namespace xk::hardware
 
 // PIC: the effective mask is (disabled IRQs) | (IRQs whose IRQL <= current IRQL). See spec/stock/06 §1.
 constexpr ULONG HAL_IRQ_BASE_VECTOR = 0x30;
-KIRQL HalpGetIrqLevel(ULONG irq);            // IRQL an IRQ is dispatched at
-void HalpSetIrqLevel(ULONG irq, KIRQL irql); // a connected KINTERRUPT overrides the default
-void HalpResetIrqLevel(ULONG irq);
-void HalpSetIrqlMask(KIRQL irql);
-void HalpEoi(ULONG irq);
-bool HalpIsSpuriousIrq(ULONG irq);
+namespace xk::hardware {
+KIRQL GetIrqLevel(ULONG irq);            // IRQL an IRQ is dispatched at
+void SetIrqLevel(ULONG irq, KIRQL irql); // a connected KINTERRUPT overrides the default
+void ResetIrqLevel(ULONG irq);
+void SetIrqlMask(KIRQL irql);
+void SendEoi(ULONG irq);
+bool IsSpuriousIrq(ULONG irq);
+} // namespace xk::hardware
 
+namespace xk::hardware {
 // CMOS and the real-time clock (hardware/interrupts_timers.cpp); the signature that marks the clock as set.
-UCHAR HalpCmosRead(UCHAR reg);
-void HalpCmosWrite(UCHAR reg, UCHAR v);
-void HalpQueryRealTimeClock(TIME_FIELDS *t);
-void HalpSetRealTimeClock(const TIME_FIELDS *t);
-void HalpWriteCmosSignature();
-bool HalpCmosSignatureValid();
+UCHAR ReadCmos(UCHAR reg);
+void WriteCmos(UCHAR reg, UCHAR v);
+void QueryRealTimeClock(TIME_FIELDS *t);
+void SetRealTimeClock(const TIME_FIELDS *t);
+void WriteCmosSignature();
+bool CmosSignatureValid();
+} // namespace xk::hardware
 
+namespace xk::hardware {
 // Thin typed wrappers over HalReadWritePCISpace.
-UCHAR HalpPciRead8(ULONG bus, ULONG dev, ULONG reg);
-ULONG HalpPciRead32(ULONG bus, ULONG dev, ULONG reg);
-void HalpPciWrite8(ULONG bus, ULONG dev, ULONG reg, UCHAR v);
-void HalpPciWrite16(ULONG bus, ULONG dev, ULONG reg, USHORT v);
-void HalpPciWrite32(ULONG bus, ULONG dev, ULONG reg, ULONG v);
+UCHAR ReadPci8(ULONG bus, ULONG dev, ULONG reg);
+ULONG ReadPci32(ULONG bus, ULONG dev, ULONG reg);
+void WritePci8(ULONG bus, ULONG dev, ULONG reg, UCHAR v);
+void WritePci16(ULONG bus, ULONG dev, ULONG reg, USHORT v);
+void WritePci32(ULONG bus, ULONG dev, ULONG reg, ULONG v);
+} // namespace xk::hardware
 
+namespace xk::hardware {
 // AV: the video encoder, display modes and the boot display (hardware/video.cpp, spec/stock/17).
-void AvInit();
+void InitVideo();
+} // namespace xk::hardware
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
                                    ULONG FrameBuffer);
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
-ULONG AvBootModeWord();
-void AvPrepareBootDisplay();
-void AvLoadBootGamma();
-void AvTablesInUse(ULONG_PTR *Start, ULONG_PTR *End);
-void AvpSmcSetOutputs(bool Enable);
-extern volatile UCHAR AvpEncoderAddress;
+namespace xk::hardware {
+ULONG BootModeWord();
+void PrepareBootDisplay();
+void LoadBootGamma();
+void VideoTablesInUse(ULONG_PTR *Start, ULONG_PTR *End);
+void SmcSetOutputs(bool Enable);
+extern volatile UCHAR EncoderAddress;
+} // namespace xk::hardware
 XBAPI UCHAR HalBootSMCVideoMode; // the SMC's AV pack code read at boot (7 = none)
-extern volatile ULONG AvpEncoderProgrammed;  // diagnostics: the last mode word whose encoder registers were written
-extern volatile ULONG AvpEncoderMismatches;  // diagnostics: registers that read back differently after that mode set
-extern volatile ULONG AvpXcShadow[0x100];    // the Xcalibur's registers as last written
+namespace xk::hardware {
+extern volatile ULONG EncoderProgrammed; // diagnostics: the last mode word whose encoder registers were written
+extern volatile ULONG EncoderMismatches; // diagnostics: registers that read back differently after that mode set
+extern volatile ULONG XcShadow[0x100];   // the Xcalibur's registers as last written
+} // namespace xk::hardware
 
 // SMBus, the SMC and firmware return (hardware/smbus.cpp, spec/stock/12); the in-game reset
 // (hardware/in_game_reset.cpp).
@@ -85,13 +99,17 @@ XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, B
                                         ULONG DataValue);
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
-void HalpSmcInitColdBoot();
-void HalpSmcStartEvents();
-BOOLEAN HalpSmcArmEvents(BOOLEAN Dashboard);
-void HalpSmcHandleEvents(ULONG reason);
-extern volatile ULONG HalpBootFlags;
-XBAPI void NTAPI HalpIgrReboot();
-extern "C" void HalpSetBootLed(UCHAR Pattern); // the front LED's boot status (spec/oxos_internal/03 §6)
+namespace xk::hardware {
+void InitSmcColdBoot();
+void StartSmcEvents();
+BOOLEAN ArmSmcEvents(BOOLEAN Dashboard);
+void HandleSmcEvents(ULONG reason);
+extern volatile ULONG BootFlags;
+} // namespace xk::hardware
+XBAPI void NTAPI InGameResetReboot();
+namespace xk::hardware {
+void SetBootLed(UCHAR Pattern); // the front LED's boot status (spec/oxos_internal/03 §6)
+} // namespace xk::hardware
 
 // The Ethernet PHY (hardware/ethernet.cpp).
 XBAPI NTSTATUS NTAPI PhyInitialize(BOOLEAN ForceReset, PVOID Parameter2);
@@ -109,9 +127,13 @@ XBAPI void NTAPI WRITE_PORT_BUFFER_ULONG(PULONG Port, PULONG Buffer, ULONG Count
 
 XBAPI UCHAR XboxHDKey[16]; // the console's hard disk key, from the EEPROM's security section
 
-void ExInitEeprom(); // start-up: read the EEPROM, decrypt the security section, take the HD key and the game region
+namespace xk::hardware {
+void InitEeprom(); // start-up: read the EEPROM, decrypt the security section, take the HD key and the game region
+} // namespace xk::hardware
 XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
                                                PULONG ResultLength);
 XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOID Value, ULONG ValueLength);
 XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength, BOOLEAN DoWrite);
-extern volatile ULONG ExpEepromSecurityValid; // 1 when the security section decrypted and authenticated
+namespace xk::hardware {
+extern volatile ULONG EepromSecurityValid; // 1 when the security section decrypted and authenticated
+} // namespace xk::hardware

@@ -8,9 +8,11 @@
 
 #include <xk/title_call.h>
 
+using namespace xk; // the kernel's subsystems as storage::, titles::, ...
+
 // Compiled from the same header as the kernel's title thread (src/titles/loader.cpp). Never called.
 __attribute__((noinline, used)) static void TitleStartForTest() {
-    XeCallTitleEntry();
+    titles::CallTitleEntry();
 }
 
 namespace {

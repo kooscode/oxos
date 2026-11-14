@@ -2,6 +2,8 @@
 // constant shifts are used here so the compiler cannot call back into the helpers.
 #include <xk/types.h>
 
+namespace xk::runtime {
+
 extern "C" ULONGLONG XkUDivMod64(ULONGLONG n, ULONGLONG d, ULONGLONG *rem) {
     if (!(d >> 32)) {
         ULONG dl = (ULONG)d, nh = (ULONG)(n >> 32), nl = (ULONG)n;
@@ -30,3 +32,5 @@ extern "C" LONGLONG XkSDivMod64(LONGLONG n, LONGLONG d, LONGLONG *rem) {
     *rem = nn ? -(LONGLONG)r : (LONGLONG)r; // remainder takes the dividend's sign
     return nn != dn ? -(LONGLONG)q : (LONGLONG)q;
 }
+
+} // namespace xk::runtime

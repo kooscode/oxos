@@ -16,7 +16,7 @@ inline uint32_t PfnEntry(uint32_t pfn) {
 }
 
 // Walk every colour list from the physical page database: no loops, entries free and of their colour, back links
-// consistent, and the count matching MmAvailablePages. Returns a description of the first problem, or "".
+// consistent, and the count matching memory::AvailablePages. Returns a description of the first problem, or "".
 std::string CheckPfnDatabase();
 
 // Expect `statement` to bug-check with `code`; IRQL and the interrupt flag are put back afterwards.

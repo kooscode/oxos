@@ -9,6 +9,8 @@
 
 #include <xk/nic.h>
 
+using namespace xk::network; // the card helpers the kernel's network stack shares (xk/nic.h)
+
 namespace netboot {
 
 constexpr ULONG RING = 0x00300000;                    // RX_COUNT receive descriptors, then 2 transmit descriptors
@@ -41,10 +43,10 @@ static NIC_DESCRIPTOR *Tx() {
 }
 
 static bool TimerRuns() {
-    ULONG t = NicNow();
+    ULONG t = CardTicks();
     for (int i = 0; i < 1000; i++) // about 1 ms of port cycles
         BlPost(0x30);
-    return NicNow() != t;
+    return CardTicks() != t;
 }
 
 // --- Frames.
@@ -66,7 +68,7 @@ static unsigned short IpChecksum(const UCHAR *p, ULONG n) {
 // One UDP broadcast from SourceIp:5141 to 255.255.255.255:5141.
 static void Send(const Message &m, const void *data, ULONG length) {
     NIC_DESCRIPTOR &d = Tx()[TxNext & 1];
-    for (ULONG t = NicNow(); (d.Flags & NIC_TX_VALID) && NicBefore(t, 20000);) {
+    for (ULONG t = CardTicks(); (d.Flags & NIC_TX_VALID) && WithinMicroseconds(t, 20000);) {
         // Wait for the controller to finish with this descriptor, at most 20 ms.
     }
     if (d.Flags & NIC_TX_VALID)
@@ -104,7 +106,7 @@ static void Send(const Message &m, const void *data, ULONG length) {
     ULONG size = 14 + ip;
     while (size < 60)
         f[size++] = 0;
-    NicTransmit(d, (ULONG)f, size);
+    QueueTransmit(d, (ULONG)f, size);
     TxNext++;
 }
 
@@ -120,7 +122,7 @@ static const Message *Receive(ULONG Session, const UCHAR **Data) {
         bool ok = (d.Flags & NIC_RX_VALID) && !(d.Flags & NIC_RX_ERRORS) && length <= BUFFER;
         if (ok)
             memcpy(frame, (const void *)d.Buffer, length);
-        NicGiveBack(d);
+        ReturnReceiveDescriptor(d);
         RxHead = (RxHead + 1) % RX_COUNT;
         if (!ok || length < 14 + 20 + 8 + sizeof(Message) || frame[12] != 0x08 || frame[13] != 0x00 ||
             frame[14 + 9] != 17)
@@ -145,7 +147,7 @@ static bool Start() {
         Rx()[i] = {RX_BUFFERS + i * BUFFER, (unsigned short)BUFFER, NIC_RX_AVAIL};
     Tx()[0] = Tx()[1] = {0, 0, 0};
     RxHead = TxNext = 0;
-    return NicStart(Mac, RING, RX_COUNT, (ULONG)Tx(), 2, 4000000);
+    return ProgramCard(Mac, RING, RX_COUNT, (ULONG)Tx(), 2, 4000000);
 }
 
 static ULONG Crc32(const UCHAR *p, ULONG n) {
@@ -162,7 +164,7 @@ static ULONG Crc32(const UCHAR *p, ULONG n) {
 static const UCHAR *Fetch() {
     if (!Start())
         return nullptr;
-    const ULONG session = NicNow() ^ 0x4F584E42;
+    const ULONG session = CardTicks() ^ 0x4F584E42;
 #if XK_MCPX_DUMP
     // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs
     // (tools/mcpx_dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
@@ -170,7 +172,7 @@ static const UCHAR *Fetch() {
         for (int i = 0; i < 3; i++) {
             const Message dump = {MAGIC, OP_MCPX, 1, 0, session, 0, 512};
             Send(dump, (const void *)0x2000, 512);
-            NicStall(100000);
+            StallMicroseconds(100000);
         }
     }
 #endif
@@ -180,7 +182,7 @@ static const UCHAR *Fetch() {
     // 1. Ask, every 250 ms for 2 s.
     for (int i = 0; i < 8 && !r; i++) {
         Send(m, Mac, sizeof(Mac));
-        for (ULONG t = NicNow(); NicBefore(t, 250000) && !(r = Receive(session, &data));) {
+        for (ULONG t = CardTicks(); WithinMicroseconds(t, 250000) && !(r = Receive(session, &data));) {
             // Poll for the PC's answer, at most 250 ms.
         }
         if (r && r->Op != OP_OFFER)
@@ -196,7 +198,7 @@ static const UCHAR *Fetch() {
         bool got = false;
         for (int retry = 0; retry < 30 && !got; retry++) {
             Send(m, nullptr, 0);
-            for (ULONG t = NicNow(); NicBefore(t, 100000) && !got;) {
+            for (ULONG t = CardTicks(); WithinMicroseconds(t, 100000) && !got;) {
                 r = Receive(session, &data);
                 if (r && r->Op == OP_DATA && r->Offset == offset && r->Length == CHUNK) {
                     memcpy(image + offset, data, CHUNK);
@@ -212,7 +214,7 @@ static const UCHAR *Fetch() {
     bool good = Crc32(image, size) == crc && payload->Magic == PAYLOAD_MAGIC;
     m = {MAGIC, OP_BOOT, 1, 0, session, good ? 0u : 1u, 0};
     Send(m, nullptr, 0);
-    for (ULONG t = NicNow(); (Tx()[(TxNext - 1) & 1].Flags & NIC_TX_VALID) && NicBefore(t, 20000);) {
+    for (ULONG t = CardTicks(); (Tx()[(TxNext - 1) & 1].Flags & NIC_TX_VALID) && WithinMicroseconds(t, 20000);) {
         // Wait for the last packet to go out, at most 20 ms.
     }
     return good ? image : nullptr;
@@ -222,7 +224,7 @@ static const UCHAR *Boot() {
     if (!TimerRuns())
         return nullptr;
     const UCHAR *image = Fetch();
-    NicStop();
+    ResetCard();
     return image;
 }
 

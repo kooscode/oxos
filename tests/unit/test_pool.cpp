@@ -7,6 +7,8 @@
 #include <random>
 #include <vector>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 namespace {
 struct PoolHeader {
     UCHAR PreviousSize, PoolIndex, PoolType, BlockSize;
@@ -37,20 +39,20 @@ TEST(Pool, SmallBlocksCarryTheReferenceHeader) {
 }
 
 TEST(Pool, LargeRequestsGetWholePages) {
-    ULONG large = ExpPoolLargePages;
+    ULONG large = memory::PoolLargePages;
     auto p = (uint8_t *)ExAllocatePool(0xFD9);
     ASSERT_NE(p, nullptr);
     EXPECT_EQ((ULONG)p & 0xFFF, 0u);
     EXPECT_EQ(ExQueryPoolBlockSize(p), 0x1000u);
     auto q = (uint8_t *)ExAllocatePool(3 * 4096 + 5);
     EXPECT_EQ(ExQueryPoolBlockSize(q), 4u * 4096);
-    EXPECT_EQ(ExpPoolLargePages, large + 5);
+    EXPECT_EQ(memory::PoolLargePages, large + 5);
     memset(q, 1, 4 * 4096);
-    ULONG available = MmAvailablePages;
+    ULONG available = memory::AvailablePages;
     ExFreePool(q);
-    EXPECT_EQ(MmAvailablePages, available + 4);
+    EXPECT_EQ(memory::AvailablePages, available + 4);
     ExFreePool(p);
-    EXPECT_EQ(ExpPoolLargePages, large);
+    EXPECT_EQ(memory::PoolLargePages, large);
 }
 
 TEST(Pool, SmallSizesGoThroughALookasideListOfTwo) {
@@ -73,10 +75,10 @@ namespace {
 // page's remainder. Returns the new page.
 uint8_t *FreshPage(ULONG units, std::vector<void *> &keep) {
     for (;;) {
-        ULONG pages = ExpPoolPages;
+        ULONG pages = memory::PoolPages;
         auto p = (uint8_t *)ExAllocatePool(units * 32 - 8);
         keep.push_back(p);
-        if (ExpPoolPages != pages) {
+        if (memory::PoolPages != pages) {
             EXPECT_EQ((ULONG)p & 0xFFF, 8u) << "a new page's first block is at its start";
             return p - 8;
         }
@@ -104,9 +106,9 @@ TEST(Pool, BlocksSplitFromTheFrontAtAPageStartAndFromTheEndElsewhere) {
     EXPECT_EQ(rest->BlockSize, 32);
 
     // A free block of exactly the requested size is not taken: the search starts one size up.
-    ULONG pages = ExpPoolPages;
+    ULONG pages = memory::PoolPages;
     void *d = ExAllocatePool(32 * 32 - 8);
-    EXPECT_EQ(ExpPoolPages, pages + 1);
+    EXPECT_EQ(memory::PoolPages, pages + 1);
     EXPECT_NE((uint8_t *)d - page, 0x408);
     EXPECT_EQ(rest->PoolType, 0);
 
@@ -134,26 +136,26 @@ TEST(Pool, FreedNeighboursMergeAndAnEmptyPageGoesBack) {
     ExFreePool(b); // merges in front again, up to the page end
     EXPECT_EQ(free400->BlockSize, 96);
 
-    ULONG pages = ExpPoolPages, available = MmAvailablePages;
+    ULONG pages = memory::PoolPages, available = memory::AvailablePages;
     ExFreePool(a); // merges with the block behind: the whole page is free
-    EXPECT_EQ(ExpPoolPages, pages - 1);
-    EXPECT_EQ(MmAvailablePages, available + 1) << "the page went back to the memory manager";
+    EXPECT_EQ(memory::PoolPages, pages - 1);
+    EXPECT_EQ(memory::AvailablePages, available + 1) << "the page went back to the memory manager";
     EXPECT_FALSE(MmIsAddressValid(page));
     for (void *p : keep)
         ExFreePool(p);
 }
 
 TEST(Pool, FreeingEverythingGivesThePagesBack) {
-    ULONG available = MmAvailablePages;
+    ULONG available = memory::AvailablePages;
     std::vector<void *> blocks;
     for (int i = 0; i < 200; i++)
         blocks.push_back(ExAllocatePool(300 + (i % 7) * 100)); // 10-31 units: no lookaside list
-    EXPECT_LT(MmAvailablePages, available);
+    EXPECT_LT(memory::AvailablePages, available);
     for (size_t i = 0; i < blocks.size(); i += 2)
         ExFreePool(blocks[i]);
     for (size_t i = 1; i < blocks.size(); i += 2)
         ExFreePool(blocks[i]);
-    EXPECT_GE(MmAvailablePages, available) << "every page those blocks needed is back";
+    EXPECT_GE(memory::AvailablePages, available) << "every page those blocks needed is back";
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 

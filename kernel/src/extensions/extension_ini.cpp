@@ -3,6 +3,8 @@
 #include <xk/extension_ini.h>
 #include <xk/ini_file.h>
 
+namespace xk::extensions {
+
 namespace {
 
 char Lower(char c) {
@@ -67,14 +69,14 @@ void CloseSection(const SECTION &Section, XK_EXTENSION_ENTRY *Entries, ULONG *Co
 
 } // namespace
 
-ULONG XkParseExtensionList(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries,
-                           ULONG *Errors) {
+ULONG ParseExtensionIni(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries,
+                        ULONG *Errors) {
     *Errors = 0;
     ULONG count = 0;
     SECTION section = {};
     INI_READER reader = {Text, Text + Length};
     INI_LINE line;
-    while (IniNextLine(&reader, &line)) {
+    while (titles::NextIniLine(&reader, &line)) {
         if (line.Kind == INI_LINE_KIND::BAD_LINE) {
             (*Errors)++;
             continue;
@@ -97,14 +99,14 @@ ULONG XkParseExtensionList(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *E
             continue;
         }
         XK_EXTENSION_ENTRY &entry = section.Entry;
-        if (IniKeyIs(line, "extension")) {
+        if (titles::IsIniKey(line, "extension")) {
             if (section.HasFile || !IsFileName(line)) {
                 section.Bad = true;
                 continue;
             }
             section.HasFile = true;
             entry.File = {line.Value, line.ValueLength};
-        } else if (IniKeyIs(line, "enabled")) {
+        } else if (titles::IsIniKey(line, "enabled")) {
             if (ValueIs(line, "no"))
                 entry.Enabled = false;
             else if (ValueIs(line, "yes"))
@@ -122,3 +124,5 @@ ULONG XkParseExtensionList(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *E
     CloseSection(section, Entries, &count, Errors);
     return count;
 }
+
+} // namespace xk::extensions

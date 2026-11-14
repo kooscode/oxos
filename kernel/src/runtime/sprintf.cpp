@@ -2,6 +2,8 @@
 #include <xk/runtime.h>
 #include <xk/objects.h>
 
+namespace xk::runtime {
+
 #define va_start(v, l) __builtin_va_start(v, l)
 #define va_end(v) __builtin_va_end(v)
 #define va_arg(v, t) __builtin_va_arg(v, t)
@@ -16,8 +18,8 @@ struct RTLP_OUT {
     }
 };
 
-static void RtlpEmitNumber(RTLP_OUT &o, ULONGLONG v, bool negative, ULONG base, bool upper, int width, int precision,
-                           bool left, bool zero, char sign, bool alt) {
+static void EmitNumber(RTLP_OUT &o, ULONGLONG v, bool negative, ULONG base, bool upper, int width, int precision,
+                       bool left, bool zero, char sign, bool alt) {
     CHAR digits[66];
     int n = 0;
     const char *set = upper ? "0123456789ABCDEF" : "0123456789abcdef";
@@ -60,7 +62,7 @@ static void RtlpEmitNumber(RTLP_OUT &o, ULONGLONG v, bool negative, ULONG base, 
         o.Put(' ');
 }
 
-static int RtlpFormat(RTLP_OUT &o, const char *f, va_list ap) {
+static int FormatText(RTLP_OUT &o, const char *f, va_list ap) {
     for (; *f; f++) {
         if (*f != '%') {
             o.Put(*f);
@@ -139,8 +141,8 @@ static int RtlpFormat(RTLP_OUT &o, const char *f, va_list ap) {
             LONGLONG v = size == 2 ? va_arg(ap, LONGLONG) : (LONGLONG)va_arg(ap, int);
             if (size == -1)
                 v = (short)v;
-            RtlpEmitNumber(o, v < 0 ? 0 - (ULONGLONG)v : (ULONGLONG)v, v < 0, 10, false, width, precision, left, zero,
-                           sign, false);
+            EmitNumber(o, v < 0 ? 0 - (ULONGLONG)v : (ULONGLONG)v, v < 0, 10, false, width, precision, left, zero,
+                       sign, false);
             break;
         }
         case 'u':
@@ -151,11 +153,11 @@ static int RtlpFormat(RTLP_OUT &o, const char *f, va_list ap) {
             if (size == -1)
                 v = (USHORT)v;
             ULONG base = *f == 'u' ? 10 : *f == 'o' ? 8 : 16;
-            RtlpEmitNumber(o, v, false, base, *f == 'X', width, precision, left, zero, 0, alt);
+            EmitNumber(o, v, false, base, *f == 'X', width, precision, left, zero, 0, alt);
             break;
         }
         case 'p':
-            RtlpEmitNumber(o, (ULONG)va_arg(ap, void *), false, 16, true, 8, 8, left, false, 0, false);
+            EmitNumber(o, (ULONG)va_arg(ap, void *), false, 16, true, 8, 8, left, false, 0, false);
             break;
         case 'c':
         case 'C': {
@@ -226,7 +228,7 @@ static int RtlpFormat(RTLP_OUT &o, const char *f, va_list ap) {
 
 XBAPI int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args) {
     RTLP_OUT o = {Buffer, Size, 0};
-    int n = RtlpFormat(o, Format, Args);
+    int n = FormatText(o, Format, Args);
     if ((ULONG)n < Size) {
         Buffer[n] = 0;
         return n;
@@ -236,7 +238,7 @@ XBAPI int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va
 
 XBAPI int __cdecl RtlVsprintf(char *Buffer, const char *Format, va_list Args) {
     RTLP_OUT o = {Buffer, 0x7FFFFFFF, 0};
-    int n = RtlpFormat(o, Format, Args);
+    int n = FormatText(o, Format, Args);
     Buffer[n] = 0;
     return n;
 }
@@ -256,3 +258,5 @@ XBAPI int __cdecl RtlSprintf(char *Buffer, const char *Format, ...) {
     va_end(ap);
     return n;
 }
+
+} // namespace xk::runtime

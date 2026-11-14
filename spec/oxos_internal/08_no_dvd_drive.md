@@ -3,7 +3,7 @@
 Not the reference's behaviour: the retail kernel stops the boot with fatal error 10, 11 or 12 when the DVD drive
 (IDE device 1) does not come up (stock spec 04 §3). OXOS boots without one, for consoles whose drive was removed or
 disconnected. First implemented 2026-10-21, after the first run on a real console (a 1.4 with no drive). Code:
-`kernel/src/storage/dvd_drive.cpp` (`IdexCdRomStart`, `IdexCdRomInit`).
+`kernel/src/storage/dvd_drive.cpp` (`DvdStart`, `storage::InitDvdDrive`).
 
 ## 1. Detection
 At IDE initialisation the drive is brought up as the reference does (select device 1, wait while busy, SET FEATURES
@@ -16,7 +16,7 @@ PIO 4 and UDMA 2, IDENTIFY PACKET DEVICE). It counts as absent when:
    command (added 2026-10-25). With some disks (seen with two SSDs) device 0 answers status reads for an absent
    device 1 with 0x00, so the SET FEATURES of step 3 seem to pass and the 5 s wait ran out on every boot; a drive
    that is there shows BSY within microseconds of a command, then DRQ, DRDY or ERR.
-`IdexCdRomAbsentReason` records the step (0 when a drive was found). Device 0 is selected again afterwards.
+`storage::DvdAbsentReason` records the step (0 when a drive was found). Device 0 is selected again afterwards.
 
 ## 2. Behaviour without a drive
 - `\Device\CdRom0` and `\??\CdRom0:` are still created: every title's start-up code links `D:` to
@@ -30,5 +30,5 @@ PIO 4 and UDMA 2, IDENTIFY PACKET DEVICE). It counts as absent when:
 
 ## 3. Checks
 - In xemu (which always has a drive) a test build that forces step 1 boots to the stock dashboard and stays there
-  (no bug check, no reboot) with `IdexCdRomAbsentReason` = 1.
+  (no bug check, no reboot) with `storage::DvdAbsentReason` = 1.
 - With a drive present: `make test` (DVD checks), `make test_dash` and `make test_udf` pass unchanged.

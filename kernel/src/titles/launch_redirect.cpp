@@ -7,6 +7,8 @@
 #include <xk/launch_redirect.h>
 #include <xk/ini_file.h>
 
+namespace xk::titles {
+
 namespace {
 
 // The drives a path in the file may start with (spec/oxos_internal/33 §1): D: is the DVD drive, the others are the
@@ -50,7 +52,7 @@ bool CloseSection(const SECTION &Section, ULONG *Errors) {
 
 } // namespace
 
-bool XeRedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_MAX_PATH + 1]) {
+bool RedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_MAX_PATH + 1]) {
     ULONG n = 0;
     ULONG at = 0;
     if (Length >= 2 && Path[1] == ':') {
@@ -83,13 +85,13 @@ bool XeRedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIREC
     return n > 0 && Out[0] == '\\';
 }
 
-bool XeRedirectLookup(const char *Text, ULONG Length, const char *Path, XE_REDIRECT *Found, ULONG *Errors) {
+bool LookUpRedirect(const char *Text, ULONG Length, const char *Path, XE_REDIRECT *Found, ULONG *Errors) {
     *Errors = 0;
     bool found = false;
     SECTION section = {};
     INI_READER reader = {Text, Text + Length};
     INI_LINE line;
-    while (IniNextLine(&reader, &line)) {
+    while (NextIniLine(&reader, &line)) {
         if (line.Kind == INI_LINE_KIND::BAD_LINE) {
             (*Errors)++;
             continue;
@@ -112,8 +114,8 @@ bool XeRedirectLookup(const char *Text, ULONG Length, const char *Path, XE_REDIR
             section.Redirect.Name[n] = 0;
             continue;
         }
-        bool isSource = IniKeyIs(line, "source");
-        bool isTarget = IniKeyIs(line, "target");
+        bool isSource = IsIniKey(line, "source");
+        bool isTarget = IsIniKey(line, "target");
         if (!section.Open) {
             (*Errors)++;
             continue;
@@ -122,7 +124,7 @@ bool XeRedirectLookup(const char *Text, ULONG Length, const char *Path, XE_REDIR
             continue; // another key: ignored, for later additions
         char device[XE_REDIRECT_MAX_PATH + 1];
         bool twice = isSource ? section.HasSource : section.HasTarget;
-        if (twice || !XeRedirectDevicePath(line.Value, line.ValueLength, device)) {
+        if (twice || !RedirectDevicePath(line.Value, line.ValueLength, device)) {
             (*Errors)++;
             continue;
         }
@@ -141,3 +143,5 @@ bool XeRedirectLookup(const char *Text, ULONG Length, const char *Path, XE_REDIR
     }
     return found;
 }
+
+} // namespace xk::titles

@@ -2,6 +2,8 @@
 // OXOS's own ordinals 402-405 (spec/oxos_internal/34 §9.1).
 #include <xk/runtime.h>
 
+namespace xk::runtime {
+
 #ifdef XK_HOST_TEST // host unit tests link with the C library: the kernel's own versions get their own names
 #define XK_MEM(name) Xk_##name
 #else
@@ -51,3 +53,5 @@ XBAPI void NTAPI RtlFillMemory(PVOID Destination, ULONG Length, UCHAR Fill) {
 XBAPI void NTAPI RtlMoveMemory(PVOID Destination, const VOID *Source, SIZE_T Length) {
     XK_MEM(memmove)(Destination, Source, Length);
 }
+
+} // namespace xk::runtime

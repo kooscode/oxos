@@ -6,6 +6,8 @@
 #include <xk/objects.h>
 #include <xk/core.h>
 
+using namespace xk; // the kernel's subsystems as storage::, core::, ...
+
 volatile ULONG KiTestRtlSprintfOk, KiTestRtlInterlockedOk, KiTestRtlCritSecOk, KiTestRtlRwLockOk, KiTestRtlStringsOk,
     KiTestRtlMathOk, KiTestRtlRefurbOk, KiTestRtlTimeOk, KiTestRtlDbgOk, KiTestRtlBoostOk, KiTestRtlFpuOk,
     KiTestRtlDone;
@@ -113,8 +115,8 @@ static void NTAPI RtlControllerThread(PVOID) {
 
     // Critical sections
     RtlInitializeCriticalSection(&CritSec);
-    KiCreateSystemThread(CritWorker, nullptr, 0, 9);
-    KiCreateSystemThread(CritWorker, nullptr, 0, 9);
+    core::CreateSystemThread(CritWorker, nullptr, 0, 9);
+    core::CreateSystemThread(CritWorker, nullptr, 0, 9);
     for (int i = 0; i < 300 && CritCounter < 2000; i++)
         Sleep(10);
     ok = CritCounter == 2000 && !CritViolation && RtlTryEnterCriticalSection(&CritSec);
@@ -124,9 +126,9 @@ static void NTAPI RtlControllerThread(PVOID) {
     // Read/write lock
     ExInitializeReadWriteLock(&RwLock);
     for (int i = 0; i < 3; i++)
-        KiCreateSystemThread(RwReader, nullptr, 0, 9);
-    KiCreateSystemThread(RwWriter, nullptr, 0, 9);
-    KiCreateSystemThread(RwWriter, nullptr, 0, 9);
+        core::CreateSystemThread(RwReader, nullptr, 0, 9);
+    core::CreateSystemThread(RwWriter, nullptr, 0, 9);
+    core::CreateSystemThread(RwWriter, nullptr, 0, 9);
     for (int i = 0; i < 300 && RwDone < 5; i++)
         Sleep(10);
     KiTestRtlRwLockOk = RwDone == 5 && !RwViolation && RwLock.LockCount == -1;
@@ -183,13 +185,13 @@ static void NTAPI RtlControllerThread(PVOID) {
     // DbgPrint lands in the log
     DbgPrint("xk-log %d %s\n", 77, "marker");
     ok = false;
-    for (ULONG i = 0; i + 14 < sizeof(XkDebugLog) && !ok; i++)
-        ok = XkDebugLog[i] == 'x' && StrEq(XkDebugLog + i, "xk-log 77 marker\n");
+    for (ULONG i = 0; i + 14 < sizeof(core::DebugLog) && !ok; i++)
+        ok = core::DebugLog[i] == 'x' && StrEq(core::DebugLog + i, "xk-log 77 marker\n");
     KiTestRtlDbgOk = ok;
 
     // KeSetEventBoostPriority hands the event to the waiter
     KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
-    KiCreateSystemThread(BoostWaiter, nullptr, 0, 8);
+    core::CreateSystemThread(BoostWaiter, nullptr, 0, 8);
     Sleep(10);
     PKTHREAD woken = nullptr;
     KeSetEventBoostPriority(&BoostEvent, &woken);
@@ -208,5 +210,5 @@ static void NTAPI RtlControllerThread(PVOID) {
 }
 
 void KiStartRtlSelfTests() {
-    KiCreateSystemThread(RtlControllerThread, nullptr, 0, 9);
+    core::CreateSystemThread(RtlControllerThread, nullptr, 0, 9);
 }

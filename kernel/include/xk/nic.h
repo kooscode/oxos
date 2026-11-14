@@ -15,7 +15,7 @@ typedef unsigned char UCHAR;
 typedef unsigned short USHORT;
 typedef unsigned long ULONG;
 
-constexpr ULONG NIC_REGISTERS = 0xFEF00000; // BAR0, as the kernel's HalpInitPci assigns it
+constexpr ULONG NIC_REGISTERS = 0xFEF00000; // BAR0, as the kernel's xk::hardware::InitPci assigns it
 constexpr ULONG NIC_PCI_DEVICE = 4;         // bus 0, device 4, function 0
 constexpr ULONG NIC_BUFFER = 2048;          // bytes per frame buffer (a frame is at most 1514)
 
@@ -40,68 +40,70 @@ constexpr USHORT NIC_TX_VALID = 1u << 15, NIC_TX_FLAGS = (1u << 0) | (1u << 8) |
 constexpr USHORT NIC_RX_AVAIL = 1u << 15, NIC_RX_VALID = 1u << 0, NIC_RX_ERRORS = 0x1F80; // errors 1-4, CRC, overflow
 constexpr ULONG NIC_TXRX_KICK = 1, NIC_TXRX_GET = 2, NIC_TXRX_BIT2 = 4, NIC_TXRX_RESET = 0x10;
 
-inline volatile ULONG &NicRegister(ULONG Offset) {
+namespace xk::network {
+
+inline volatile ULONG &CardRegister(ULONG Offset) {
     return *(volatile ULONG *)(NIC_REGISTERS + Offset);
 }
 
 // --- Ports, time, PCI
 
-inline ULONG NicIn32(USHORT Port) {
+inline ULONG CardIn32(USHORT Port) {
     ULONG v;
     __asm__ volatile("inl %1, %0" : "=a"(v) : "Nd"(Port));
     return v;
 }
 
-inline void NicOut32(USHORT Port, ULONG Value) {
+inline void CardOut32(USHORT Port, ULONG Value) {
     __asm__ volatile("outl %0, %1" ::"a"(Value), "Nd"(Port));
 }
 
 // The ACPI PM timer: 3.375 MHz, free-running.
-inline ULONG NicNow() {
-    return NicIn32(0x8008);
+inline ULONG CardTicks() {
+    return CardIn32(0x8008);
 }
 
-// Less than Microseconds have passed since Start (a NicNow value).
-inline bool NicBefore(ULONG Start, ULONG Microseconds) {
-    return NicNow() - Start < Microseconds * 27 / 8;
+// Less than Microseconds have passed since Start (a CardTicks value).
+inline bool WithinMicroseconds(ULONG Start, ULONG Microseconds) {
+    return CardTicks() - Start < Microseconds * 27 / 8;
 }
 
-inline void NicStall(ULONG Microseconds) {
-    for (ULONG t = NicNow(); NicBefore(t, Microseconds);) {
+inline void StallMicroseconds(ULONG Microseconds) {
+    for (ULONG t = CardTicks(); WithinMicroseconds(t, Microseconds);) {
         // Spin until Microseconds have passed.
     }
 }
 
-inline ULONG NicPciRead(ULONG Register) {
-    NicOut32(0xCF8, 0x80000000 | NIC_PCI_DEVICE << 11 | Register);
-    return NicIn32(0xCFC);
+inline ULONG ReadCardPci(ULONG Register) {
+    CardOut32(0xCF8, 0x80000000 | NIC_PCI_DEVICE << 11 | Register);
+    return CardIn32(0xCFC);
 }
 
-inline void NicPciWrite(ULONG Register, ULONG Value) {
-    NicOut32(0xCF8, 0x80000000 | NIC_PCI_DEVICE << 11 | Register);
-    NicOut32(0xCFC, Value);
+inline void WriteCardPci(ULONG Register, ULONG Value) {
+    CardOut32(0xCF8, 0x80000000 | NIC_PCI_DEVICE << 11 | Register);
+    CardOut32(0xCFC, Value);
 }
 
 // --- PHY 1 over MII (as kernel/src/hardware/ethernet.cpp)
 
-inline bool NicMiiWait() {
-    for (ULONG t = NicNow(); NicBefore(t, 10000);) {
-        if (!(NicRegister(NvMiiControl) & 0x8000))
+inline bool WaitForMii() {
+    for (ULONG t = CardTicks(); WithinMicroseconds(t, 10000);) {
+        if (!(CardRegister(NvMiiControl) & 0x8000))
             return true;
     }
     return false;
 }
 
-inline ULONG NicMiiRead(ULONG Register) {
-    NicMiiWait();
-    NicRegister(NvMiiControl) = Register | 0x20;
-    NicMiiWait();
-    return NicRegister(NvMiiData);
+inline ULONG ReadMii(ULONG Register) {
+    WaitForMii();
+    CardRegister(NvMiiControl) = Register | 0x20;
+    WaitForMii();
+    return CardRegister(NvMiiData);
 }
 
 // The link is up and auto-negotiation has finished.
-inline bool NicLinkUp() {
-    return (NicMiiRead(1) & 0x24) == 0x24;
+inline bool IsLinkUp() {
+    return (ReadMii(1) & 0x24) == 0x24;
 }
 
 // --- Bring-up and shut-down
@@ -110,14 +112,14 @@ inline bool NicLinkUp() {
 // transmit descriptors at TxRing (physical addresses), already filled (receive: buffer, NIC_BUFFER, NIC_RX_AVAIL;
 // transmit: all zero). Waits up to LinkWait microseconds for the link (auto-negotiation takes about 2-3 s after
 // power-on); false without a link, or without the card.
-inline bool NicStart(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing, ULONG TxCount, ULONG LinkWait) {
-    NicPciWrite(0x10, NIC_REGISTERS);
-    NicPciWrite(0x14, 0xE001);
-    NicPciWrite(0x04, NicPciRead(0x04) | 7); // I/O, memory, bus master
-    ULONG ids = NicPciRead(0x00);
+inline bool ProgramCard(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing, ULONG TxCount, ULONG LinkWait) {
+    WriteCardPci(0x10, NIC_REGISTERS);
+    WriteCardPci(0x14, 0xE001);
+    WriteCardPci(0x04, ReadCardPci(0x04) | 7); // I/O, memory, bus master
+    ULONG ids = ReadCardPci(0x00);
     if (ids == 0xFFFFFFFF || !ids)
         return false;
-    auto nv = [](ULONG offset) -> volatile ULONG & { return NicRegister(offset); };
+    auto nv = [](ULONG offset) -> volatile ULONG & { return CardRegister(offset); };
     nv(NvMcastA) = 1;
     nv(NvMcastB) = 0;
     nv(NvMcastMaskA) = 0;
@@ -128,7 +130,7 @@ inline bool NicStart(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing
     nv(NvTxUnknown) = 0;
     nv(NvTxRxControl) = NIC_TXRX_BIT2 | NIC_TXRX_RESET;
     (void)nv(NvTxRxControl);
-    NicStall(4);
+    StallMicroseconds(4);
     nv(NvTxRxControl) = NIC_TXRX_BIT2;
     nv(NvSetup6) = 0;
     nv(NvMacA) = (ULONG)Mac[0] | Mac[1] << 8 | Mac[2] << 16 | (ULONG)Mac[3] << 24; // byte order as nxdk
@@ -137,24 +139,24 @@ inline bool NicStart(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing
     nv(NvTxRxControl) = 0;
     (void)nv(NvTxRxControl);
     nv(NvTxRxControl) = NIC_TXRX_GET;
-    for (ULONG t = NicNow(); !(nv(NvSetup5) & 1u << 31) && NicBefore(t, 50000);) {
+    for (ULONG t = CardTicks(); !(nv(NvSetup5) & 1u << 31) && WithinMicroseconds(t, 50000);) {
         // Wait for the transmit/receive engine to start (bit 31), at most 50 ms.
     }
     nv(NvSetup4) = 0;
     nv(NvMiiSpeed) = (1u << 8) | 5;
     bool link = false;
-    for (ULONG t = NicNow(); !(link = NicLinkUp()) && NicBefore(t, LinkWait);)
-        NicStall(10000);
+    for (ULONG t = CardTicks(); !(link = IsLinkUp()) && WithinMicroseconds(t, LinkWait);)
+        StallMicroseconds(10000);
     if (!link)
         return false;
-    ULONG common = NicMiiRead(4) & NicMiiRead(5);
+    ULONG common = ReadMii(4) & ReadMii(5);
     bool fast = common & 0x180, full = fast ? (common & 0x100) : (common & 0x40);
     nv(NvMisc1) = 0x3B0F3C | (full ? 0 : 2);
     nv(NvTxStatus) = nv(NvTxStatus);
     nv(NvPacketFilter) = 0x7F0020; // always + our address (broadcasts included), as nxdk
     nv(NvOffload) = 0x5EE;
     nv(NvRxStatus) = nv(NvRxStatus);
-    nv(NvRandomSeed) = 0x7F00 | (NicNow() & 0xFF);
+    nv(NvRandomSeed) = 0x7F00 | (CardTicks() & 0xFF);
     nv(NvSetup1) = 0x16070F;
     nv(NvSetup2) = 0x16;
     nv(NvPollingInterval) = 970;
@@ -168,7 +170,7 @@ inline bool NicStart(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing
     ULONG power = nv(NvPowerState);
     if (!(power & 0x8000))
         nv(NvPowerState) = power | 0x8000;
-    NicStall(10);
+    StallMicroseconds(10);
     nv(NvPowerState) = nv(NvPowerState) | 0x100;
     nv(NvAdapterControl) = 0x100000;
     nv(NvIrqMask) = 0;
@@ -184,14 +186,14 @@ inline bool NicStart(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing
 }
 
 // Leaves the card quiet: no DMA into memory that is about to be reused. A title's own driver sets it up again.
-inline void NicStop() {
-    auto nv = [](ULONG offset) -> volatile ULONG & { return NicRegister(offset); };
+inline void ResetCard() {
+    auto nv = [](ULONG offset) -> volatile ULONG & { return CardRegister(offset); };
     nv(NvRxControl) = 0;
     nv(NvTxControl) = 0;
-    NicStall(100);
+    StallMicroseconds(100);
     nv(NvTxRxControl) = NIC_TXRX_BIT2 | NIC_TXRX_RESET;
     (void)nv(NvTxRxControl);
-    NicStall(10);
+    StallMicroseconds(10);
     nv(NvTxRxControl) = NIC_TXRX_BIT2;
     nv(NvRxRing) = 0;
     nv(NvTxRing) = 0;
@@ -201,19 +203,21 @@ inline void NicStop() {
 }
 
 // Hands a filled transmit buffer (physical address, Length bytes, at least 60) to descriptor d and starts sending.
-inline void NicTransmit(NIC_DESCRIPTOR &d, ULONG Buffer, ULONG Length) {
+inline void QueueTransmit(NIC_DESCRIPTOR &d, ULONG Buffer, ULONG Length) {
     d.Buffer = Buffer;
     d.Length = (USHORT)(Length - 1);
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
     d.Flags = NIC_TX_FLAGS;
-    NicRegister(NvTxRxControl) = NIC_TXRX_KICK;
-    (void)NicRegister(NvTxRxControl);
+    CardRegister(NvTxRxControl) = NIC_TXRX_KICK;
+    (void)CardRegister(NvTxRxControl);
 }
 
 // Gives receive descriptor d back to the card, for a buffer of NIC_BUFFER bytes.
-inline void NicGiveBack(NIC_DESCRIPTOR &d) {
+inline void ReturnReceiveDescriptor(NIC_DESCRIPTOR &d) {
     d.Length = NIC_BUFFER;
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
     d.Flags = NIC_RX_AVAIL;
-    NicRegister(NvTxRxControl) = NIC_TXRX_GET;
+    CardRegister(NvTxRxControl) = NIC_TXRX_GET;
 }
+
+} // namespace xk::network

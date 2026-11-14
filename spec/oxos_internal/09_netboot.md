@@ -17,8 +17,8 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
   serial-log kernel as the flash fallback (a network-log kernel until 2026-10-28, spec 03 §7).
 
 ## 2. NIC use
-- PCI device 4: BAR0 = 0xFEF00000, BAR1 = 0xE001 (what the kernel's `HalpInitPci` assigns), command |= I/O, memory,
-  bus master.
+- PCI device 4: BAR0 = 0xFEF00000, BAR1 = 0xE001 (what the kernel's `hardware::InitPci` assigns), command |= I/O,
+  memory, bus master.
 - Set-up in XboxDev/cromwell's etherboot `forcedeth.c` order (as the removed network log did, spec 03 §7). The
   differences from that transmit-only set-up:
   - a receive ring of 32 descriptors;

@@ -15,6 +15,8 @@
 
 #include <xk/disk_format.h>
 
+using namespace xk; // the kernel's subsystems as storage::, memory::, ...
+
 namespace {
 // A disk of Sectors sectors: the partition (from sector 2048 on) in a sparse file, everything else in a map.
 struct Disk {
@@ -146,7 +148,8 @@ struct Reader {
 TEST(Format, EightGigabyteDiskPassesFsck) {
     Disk d(0x1000000); // 8 GiB
     DISK_FORMAT_RESULT r = {};
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 0x12345678, STAMP, nullptr, &d.Io, d.Scratch.data(), &r), STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0x12345678, STAMP, nullptr, &d.Io, d.Scratch.data(), &r),
+              STATUS_SUCCESS);
     EXPECT_EQ(r.PartitionStart, 2048u);
     EXPECT_EQ(r.ClusterShift, 15u); // 32 KB below 32 GB
     int rc = d.Fsck();
@@ -162,7 +165,8 @@ TEST(Format, TwoTerabyteDiskWithAFilePassesFsck) {
         data[i] = (UCHAR)(i * 7 + 3);
     DISK_FORMAT_FILE file = {"E\\ftp\\ftp.xbe", data.data(), (ULONG)data.size()};
     DISK_FORMAT_RESULT r = {};
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 0xCAFEF00D, STAMP, &file, &d.Io, d.Scratch.data(), &r), STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0xCAFEF00D, STAMP, &file, &d.Io, d.Scratch.data(), &r),
+              STATUS_SUCCESS);
     EXPECT_EQ(r.ClusterShift, 17u); // 128 KB
     int rc = d.Fsck();
     if (rc < 0)
@@ -176,7 +180,7 @@ TEST(Format, TheFoldersAndTheFileAreThere) {
     for (size_t i = 0; i < data.size(); i++)
         data[i] = (UCHAR)(i ^ (i >> 8));
     DISK_FORMAT_FILE file = {"E\\ftp\\ftp.xbe", data.data(), (ULONG)data.size()};
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
     Reader rd(d);
     ULONG first;
     ULONGLONG size;
@@ -193,7 +197,7 @@ TEST(Format, TheFoldersAndTheFileAreThere) {
 
 TEST(Format, TheGptChecksOut) {
     Disk d(0x1000000);
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 7, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 7, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
     auto mbr = d.Sector(0);
     EXPECT_EQ(mbr[446 + 4], 0xEE);
     EXPECT_EQ(mbr[510], 0x55);
@@ -203,14 +207,14 @@ TEST(Format, TheGptChecksOut) {
         ASSERT_EQ(memcmp(h.data(), "EFI PART", 8), 0) << at;
         ULONG crc = U32(&h[16]);
         memset(&h[16], 0, 4);
-        EXPECT_EQ(IdexCrc32(h.data(), 92), crc) << at;
+        EXPECT_EQ(storage::Crc32(h.data(), 92), crc) << at;
         EXPECT_EQ(U64(&h[24]), at);
         std::vector<UCHAR> entries;
         for (ULONG i = 0; i < 32; i++) {
             auto s = d.Sector(U64(&h[72]) + i);
             entries.insert(entries.end(), s.begin(), s.end());
         }
-        EXPECT_EQ(IdexCrc32(entries.data(), (ULONG)entries.size()), U32(&h[88])) << at;
+        EXPECT_EQ(storage::Crc32(entries.data(), (ULONG)entries.size()), U32(&h[88])) << at;
         EXPECT_EQ(U64(&entries[32]), 2048u);
         EXPECT_LE(U64(&entries[40]), d.Sectors - 34);
     }
@@ -220,11 +224,11 @@ TEST(Format, TheGptChecksOut) {
 
 TEST(Format, BlankFormattedAndPartitionsDeleted) {
     Disk d(0x1000000);
-    EXPECT_TRUE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data())) << "a new disk";
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 9, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
-    EXPECT_FALSE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data())) << "formatted";
-    ASSERT_EQ(IdexDiskDeleteAllPartitions(d.Sectors, nullptr, 0, 0, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
-    EXPECT_TRUE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data())) << "partitions deleted";
+    EXPECT_TRUE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data())) << "a new disk";
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 9, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
+    EXPECT_FALSE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data())) << "formatted";
+    ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, 0, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
+    EXPECT_TRUE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data())) << "partitions deleted";
 }
 
 TEST(Format, AFatxDiskIsNotBlankAndDeletingClearsIt) {
@@ -234,11 +238,11 @@ TEST(Format, AFatxDiskIsNotBlankAndDeletingClearsIt) {
     Disk::Write(&d, 0x55F400, fatx.data(), 1); // E:
     Disk::Write(&d, 0x465400, fatx.data(), 1); // C:
     Disk::Write(&d, 0x177400, fatx.data(), 1); // Y:
-    EXPECT_FALSE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data()));
+    EXPECT_FALSE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data()));
     ULONGLONG extra = 0x900000;
     Disk::Write(&d, extra, fatx.data(), 1);
-    ASSERT_EQ(IdexDiskDeleteAllPartitions(d.Sectors, &extra, 1, 7, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
-    EXPECT_TRUE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data()));
+    ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, &extra, 1, 7, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
+    EXPECT_TRUE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data()));
     for (ULONGLONG lba : {0x55F400ull, 0x465400ull, 0x177400ull, extra})
         EXPECT_EQ(d.Sector(lba)[0], 0) << std::hex << lba;
 }
@@ -246,7 +250,7 @@ TEST(Format, AFatxDiskIsNotBlankAndDeletingClearsIt) {
 TEST(Format, AFailedReadIsNotBlank) {
     Disk d(0x1000000);
     d.FailReads = true;
-    EXPECT_FALSE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data()));
+    EXPECT_FALSE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data()));
 }
 
 TEST(Format, BadFilePathsAreRefused) {
@@ -254,24 +258,27 @@ TEST(Format, BadFilePathsAreRefused) {
     UCHAR byte = 1;
     for (const char *path : {"E\\a:b", "E\\", "C", "E\\ftp\\x.xbe\\"}) {
         DISK_FORMAT_FILE file = {path, &byte, 1};
-        EXPECT_NE(IdexDiskFormatEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS)
+        EXPECT_NE(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr),
+                  STATUS_SUCCESS)
             << path;
     }
 }
 
 TEST(Format, TheMarkerSetsTheCountdown) {
     Disk d(0x1000000);
-    EXPECT_EQ(IdexDiskBlankCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN) << "no marker: the default";
+    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN)
+        << "no marker: the default";
     for (ULONG seconds : {0u, 5u, 30u}) {
-        ASSERT_EQ(IdexDiskDeleteAllPartitions(d.Sectors, nullptr, 0, seconds, &d.Io, d.Scratch.data()),
+        ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, seconds, &d.Io, d.Scratch.data()),
                   STATUS_SUCCESS);
-        EXPECT_TRUE(IdexDiskIsBlank(d.Sectors, &d.Io, d.Scratch.data())) << "the marker leaves the disk blank";
-        EXPECT_EQ(IdexDiskBlankCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), seconds);
+        EXPECT_TRUE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data())) << "the marker leaves the disk blank";
+        EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), seconds);
     }
-    ASSERT_EQ(IdexDiskDeleteAllPartitions(d.Sectors, nullptr, 0, 100000, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
-    EXPECT_EQ(IdexDiskBlankCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_MAX_COUNTDOWN);
-    ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
-    EXPECT_EQ(IdexDiskBlankCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN) << "the format clears it";
+    ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, 100000, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
+    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_MAX_COUNTDOWN);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
+    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN)
+        << "the format clears it";
 }
 
 namespace {
@@ -295,7 +302,7 @@ void Signature(Disk &d, ULONGLONG lba, ULONG offset, const char *text, size_t le
 
 std::string Describe(Disk &d, ULONG *flags = nullptr) {
     char out[64];
-    ULONG f = IdexDiskDescribe(d.Sectors, &d.Io, d.Scratch.data(), out, sizeof(out));
+    ULONG f = storage::DescribeDisk(d.Sectors, &d.Io, d.Scratch.data(), out, sizeof(out));
     if (flags)
         *flags = f;
     return out;
@@ -330,7 +337,7 @@ TEST(Format, DescribeNamesWhatIsOnTheDisk) {
     }
     {
         Disk d(0x1000000); // our own format: GPT with exFAT
-        ASSERT_EQ(IdexDiskFormatEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr),
+        ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr),
                   STATUS_SUCCESS);
         EXPECT_EQ(Describe(d), "GPT: exFAT");
     }
