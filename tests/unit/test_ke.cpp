@@ -1,5 +1,5 @@
-// Kernel dispatcher: IRQL and software interrupts, DPCs, timers, threads and scheduling, waits and dispatcher
-// objects, APCs, suspend/resume, queues, interrupt objects.
+// Kernel dispatcher: IRQL and software interrupts, DPCs, timers, threads and scheduling, waits and dispatcher objects, APCs, suspend/resume, queues, interrupt
+// objects.
 #include "kernel_test.h"
 
 #include <atomic>
@@ -43,8 +43,7 @@ namespace {
 std::vector<std::string> Events;
 KDPC DpcA, DpcB;
 void NTAPI RecordDpc(PKDPC, PVOID ctx, PVOID a1, PVOID) {
-    Events.push_back(std::string((const char *)ctx) + "@" + std::to_string(KeGetCurrentIrql()) +
-                     (KeIsExecutingDpc() ? "+dpc" : "") + (a1 ? "+arg" : ""));
+    Events.push_back(std::string((const char *)ctx) + "@" + std::to_string(KeGetCurrentIrql()) + (KeIsExecutingDpc() ? "+dpc" : "") + (a1 ? "+arg" : ""));
 }
 } // namespace
 
@@ -75,8 +74,8 @@ TEST(Dpc, RemovedDpcDoesNotRun) {
 }
 
 TEST(Dpc, AfterARemovedDpcTheNextOneStillRequestsItsInterrupt) {
-    // Regression (2026-10-23): the DISPATCH interrupt of a DPC that was removed again found an empty list and left
-    // DpcInterruptRequested set, so the next DPC never asked for its interrupt.
+    // Regression (2026-10-23): the DISPATCH interrupt of a DPC that was removed again found an empty list and left DpcInterruptRequested set, so the next DPC
+    // never asked for its interrupt.
     Events.clear();
     KeInitializeDpc(&DpcA, RecordDpc, (PVOID) "A");
     KeInitializeDpc(&DpcB, RecordDpc, (PVOID) "B");
@@ -422,8 +421,7 @@ TEST(Thread, DelayOfZeroYieldsToAnEqualPriorityThread) {
 namespace {
 std::vector<std::string> ApcLog;
 void NTAPI ApcKernel(PKAPC, PKNORMAL_ROUTINE *, PVOID *ctx, PVOID *, PVOID *) {
-    ApcLog.push_back("kernel:" + std::string(*ctx ? (const char *)*ctx : "special") + "@" +
-                     std::to_string(KeGetCurrentIrql()));
+    ApcLog.push_back("kernel:" + std::string(*ctx ? (const char *)*ctx : "special") + "@" + std::to_string(KeGetCurrentIrql()));
 }
 
 void NTAPI ApcNormal(PVOID ctx, PVOID, PVOID) {
@@ -451,8 +449,7 @@ TEST(Apc, CriticalRegionHoldsNormalApcsButNotSpecialOnes) {
     KeEnterCriticalRegion();
     KeInsertQueueApc(&normal, nullptr, nullptr, 0);
     KeInsertQueueApc(&special, nullptr, nullptr, 0);
-    // The special APC (no normal routine) ran; the normal one waits for the region to end. (A special APC's
-    // context argument is ignored: nullptr.)
+    // The special APC (no normal routine) ran; the normal one waits for the region to end. (A special APC's context argument is ignored: nullptr.)
     ASSERT_EQ(ApcLog.size(), 1u);
     KeLeaveCriticalRegion();
     ASSERT_EQ(ApcLog.size(), 3u);

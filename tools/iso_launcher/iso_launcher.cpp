@@ -1,18 +1,16 @@
-// ISO launcher (nxdk + SDL3, open source): mounts an image of an Xbox disc (made from your own disc) from the hard
-// disk as the console's disc and starts the title on it, the way a disc in the drive starts
-// (spec/oxos_internal/16_virtual_discs.md).
+// ISO launcher (nxdk + SDL3, open source): mounts an image of an Xbox disc (made from your own disc) from the hard disk as the console's disc and starts the
+// title on it, the way a disc in the drive starts (spec/oxos_internal/16_virtual_discs.md).
 //
 // Which image:
-//   - D:\iso.txt, one line: an image (F:\titles\Halo 2.iso), a folder holding one (F:\titles\Halo 2), or a \Device\...
-//     path. "none" unmounts the image and starts the dashboard.
+//   - D:\iso.txt, one line: an image (F:\titles\Halo 2.iso), a folder holding one (F:\titles\Halo 2), or a \Device\... path. "none" unmounts the image and
+//     starts the dashboard.
 //   - Without iso.txt: the image in the launcher's own folder, so a copy of the launcher next to an image starts it.
 // Images: XISO or a full disc dump (.iso), CCI (.cci), either one whole or split in two (name.1.iso + name.2.iso).
 //
-// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then
-// \Device\CdRom0\default.xbe is launched through the launch data page and a quick reboot; the mount stays for the
-// title's own reboots until the console is switched off (or the disc tray is opened). The launcher leaves the screen
-// alone, so the title's video mode change is the only one; it starts SDL (tools/sdl_screen) and shows text only when
-// something is wrong.
+// The image is mounted through the virtual disc device (\Device\CdRom1, the interface Cerbios uses too), then \Device\CdRom0\default.xbe is launched through
+// the launch data page and a quick reboot; the mount stays for the title's own reboots until the console is switched off (or the disc tray is opened). The
+// launcher leaves the screen alone, so the title's video mode change is the only one; it starts SDL (tools/sdl_screen) and shows text only when something is
+// wrong.
 #include <hal/xbox.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
@@ -35,8 +33,7 @@ NTSTATUS Open(HANDLE *h, const char *path, ULONG options, ACCESS_MASK access = G
     IO_STATUS_BLOCK iosb;
     RtlInitAnsiString(&name, path);
     InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
-    return NtOpenFile(h, access | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ,
-                      options | FILE_SYNCHRONOUS_IO_NONALERT);
+    return NtOpenFile(h, access | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ, options | FILE_SYNCHRONOUS_IO_NONALERT);
 }
 
 bool IsFile(const char *path) {
@@ -130,8 +127,7 @@ void ListImages(const char *folder, Found *found) {
     alignas(8) static char buffer[4096];
     for (BOOLEAN restart = TRUE;; restart = FALSE) {
         IO_STATUS_BLOCK iosb;
-        NTSTATUS status = NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
-                                               FileDirectoryInformation, nullptr, restart);
+        NTSTATUS status = NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, restart);
         if (!NT_SUCCESS(status))
             break;
         for (auto *e = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer);;) {
@@ -164,15 +160,13 @@ void ListFolder(const char *folder) {
     int shown = 0;
     for (BOOLEAN restart = TRUE; shown < 24; restart = FALSE) {
         IO_STATUS_BLOCK iosb;
-        if (!NT_SUCCESS(NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
-                                             FileDirectoryInformation, nullptr, restart)))
+        if (!NT_SUCCESS(NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, restart)))
             break;
         for (auto *e = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer); shown < 24; shown++) {
             if (e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 sdl_screen::Print("  %.*s\\\n", int(e->FileNameLength), e->FileName);
             } else {
-                sdl_screen::Print("  %.*s  (%lu MB)\n", int(e->FileNameLength), e->FileName,
-                           static_cast<unsigned long>(e->EndOfFile.QuadPart >> 20));
+                sdl_screen::Print("  %.*s  (%lu MB)\n", int(e->FileNameLength), e->FileName, static_cast<unsigned long>(e->EndOfFile.QuadPart >> 20));
             }
             if (!e->NextEntryOffset)
                 break;
@@ -217,10 +211,9 @@ void TitleName(char *out, std::size_t size) {
     out[n] = 0;
 }
 
-// Start the mounted disc's title through the launch data page and a quick reboot, as XLaunchXBE does, but with this
-// launcher's own title ID (nxdk's default) in the page. oxos_isonator copies the game's certificate into the
-// launcher, so XLaunchXBE would name the game itself as the launcher: a game then sees a launch "from itself" with
-// no data and may take it as a return from its own relaunch (Prince of Persia goes to the dashboard).
+// Start the mounted disc's title through the launch data page and a quick reboot, as XLaunchXBE does, but with this launcher's own title ID (nxdk's default) in
+// the page. oxos_isonator copies the game's certificate into the launcher, so XLaunchXBE would name the game itself as the launcher: a game then sees a launch
+// "from itself" with no data and may take it as a return from its own relaunch (Prince of Persia goes to the dashboard).
 [[noreturn]] void StartDisc() {
     constexpr DWORD LauncherTitleId = 0xFFFF0002;
     if (!LaunchDataPage)
@@ -301,8 +294,7 @@ int main() {
     }
     if (!NT_SUCCESS(status)) {
         Heading();
-        sdl_screen::Print("Image: %s\n\nThe mount failed: status 0x%08lx (not a disc image?)\n", path,
-                   static_cast<unsigned long>(status));
+        sdl_screen::Print("Image: %s\n\nThe mount failed: status 0x%08lx (not a disc image?)\n", path, static_cast<unsigned long>(status));
         sdl_screen::ShowForever();
     }
 

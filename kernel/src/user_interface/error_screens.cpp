@@ -1,6 +1,5 @@
-// The error screens (spec/oxos_internal/29_error_screens.md): fatal boot errors (spec/stock/05 §6: LED sequence,
-// EEPROM error history, the error screen, then halt), No Dashboard Found and the bug check screen, drawn with the
-// kernel's graphics (graphics/screen.cpp).
+// The error screens (spec/oxos_internal/29_error_screens.md): fatal boot errors (spec/stock/05 §6: LED sequence, EEPROM error history, the error screen, then
+// halt), No Dashboard Found and the bug check screen, drawn with the kernel's graphics (graphics/screen.cpp).
 #include <user_interface/user_interface.h>
 #include <graphics/graphics.h>
 #include <core/core.h>
@@ -23,8 +22,8 @@ volatile ULONG FatalSoundStopped;
 
 // --- The error history in the EEPROM
 
-// EEPROM layout used here (256-byte image, setting 0xFFFF): +0xFA last error code (manufacturing units only),
-// +0xFC 16-bit history, bit (code - 5) per code above 4.
+// EEPROM layout used here (256-byte image, setting 0xFFFF): +0xFA last error code (manufacturing units only), +0xFC 16-bit history, bit (code - 5) per code
+// above 4.
 static void RecordError(ULONG Code) {
     UCHAR eeprom[256];
     ULONG type, length;
@@ -46,8 +45,7 @@ static void RecordError(ULONG Code) {
 }
 
 // --- The error screens (spec/oxos_internal/29_error_screens.md): the OXOS version and encoder at the top, then
-// (fatal errors) the code in large digits, a title, what to try and the details, or (bug checks) the bug check code
-// and its parameters.
+// (fatal errors) the code in large digits, a title, what to try and the details, or (bug checks) the bug check code and its parameters.
 
 // The details under a fatal error's help: what the kernel knows about the cause.
 static ULONG FatalDetails(ULONG Code, char (*lines)[XK_FATAL_LINE + 1]) {
@@ -57,8 +55,7 @@ static ULONG FatalDetails(ULONG Code, char (*lines)[XK_FATAL_LINE + 1]) {
         if (lines[n][0])
             n++;
         if (Code == 9 && hardware::ide::DiskLengthInSectors) // it answered: too small
-            RtlSnprintf(lines[n++], sizeof(lines[0]), "Size: %lu GB (8 GB needed)",
-                        (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
+            RtlSnprintf(lines[n++], sizeof(lines[0]), "Size: %lu GB (8 GB needed)", (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
         else
             RtlSnprintf(lines[n++], sizeof(lines[0]), "Disk status: 0x%02X", hardware::ide::DiskLastStatus);
     } else if (Code > 13 && Code < 20) {
@@ -148,15 +145,13 @@ static void DrawBugCheck(ULONG *fb, ULONG Code, const ULONG_PTR *P) {
     RtlSnprintf(lines[n++], sizeof(lines[0]), "then turn the console off and on again.");
     ULONG y = 160;
     for (ULONG i = 0; i < n; i++, y += graphics::SCREEN_LINE)
-        graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, lines[i], 2,
-                           i < n - 2 ? graphics::COLOR_TEXT : graphics::COLOR_GREY);
+        graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, lines[i], 2, i < n - 2 ? graphics::COLOR_TEXT : graphics::COLOR_GREY);
 }
 
-// The bug check screen. Interrupts are off and nothing may be allocated, so it takes over the frame buffer on screen
-// (a title's, or the splash's): the GPU stops drawing (FIFO, graphics engine, video overlay), the memory tiles are
-// switched off so the CPU's writes appear as written, and the screen is drawn through the frame-buffer window at
-// 0xF0000000 (always mapped, write-through) and shown at 640x480 in 32 bits. Titles' frame buffers hold at least
-// 640x480 pixels; in 16 bits the screen runs past the first one into the title's next buffer, which no longer matters.
+// The bug check screen. Interrupts are off and nothing may be allocated, so it takes over the frame buffer on screen (a title's, or the splash's): the GPU
+// stops drawing (FIFO, graphics engine, video overlay), the memory tiles are switched off so the CPU's writes appear as written, and the screen is drawn
+// through the frame-buffer window at 0xF0000000 (always mapped, write-through) and shown at 640x480 in 32 bits. Titles' frame buffers hold at least 640x480
+// pixels; in 16 bits the screen runs past the first one into the title's next buffer, which no longer matters.
 void ShowBugCheck(ULONG Code, const ULONG_PTR *Parameters) {
     if (HalBootSMCVideoMode == 7)
         return;
@@ -189,10 +184,9 @@ void ShowBugCheck(ULONG Code, const ULONG_PTR *Parameters) {
     RtlZeroMemory(core::CertKey, sizeof(core::CertKey));
     RtlZeroMemory(KiPersistedBootKeys + 16, 16);
     RecordError(Code);
-    // The sound must stop: left running, the sound controller replays the jingle's last buffers in a loop. On the boot
-    // thread, which is the idle thread during start-up (the disk's errors, a title launch from it), nothing else runs
-    // once it halts and it must never wait: the controller is stopped at once. Any other thread lets the splash and the
-    // jingle finish, as before a title starts (boot_splash::EndSplash), and then blocks rather than spins.
+    // The sound must stop: left running, the sound controller replays the jingle's last buffers in a loop. On the boot thread, which is the idle thread during
+    // start-up (the disk's errors, a title launch from it), nothing else runs once it halts and it must never wait: the controller is stopped at once. Any
+    // other thread lets the splash and the jingle finish, as before a title starts (boot_splash::EndSplash), and then blocks rather than spins.
     bool idle = KeGetCurrentThread() == KiPcr.Prcb->IdleThread;
     if (idle)
         boot_splash::StopBootSound();

@@ -1,6 +1,6 @@
-// The devices on the USB ports (spec/oxos_internal/32 §2-4): every device on the root hub's ports is given an address
-// and its first configuration, a hub's own ports too (each Xbox controller is a hub with the pad and its memory-unit
-// slots on it), and every device that is not a hub is handed to the caller. Boot-only.
+// The devices on the USB ports (spec/oxos_internal/32 §2-4): every device on the root hub's ports is given an address and its first configuration, a hub's own
+// ports too (each Xbox controller is a hub with the pad and its memory-unit slots on it), and every device that is not a hub is handed to the caller.
+// Boot-only.
 #include <hardware/usb/usb.h>
 #include <core/core.h>
 #include <hardware/chipset/serial.h>
@@ -11,8 +11,8 @@ namespace xk::hardware::usb {
 #pragma const_seg(".xka$y")
 
 // USB standard requests and descriptor types (USB 2.0 chapter 9, chapter 11 for hubs).
-constexpr UCHAR REQUEST_GET_STATUS = 0, REQUEST_CLEAR_FEATURE = 1, REQUEST_SET_FEATURE = 3, REQUEST_SET_ADDRESS = 5,
-                REQUEST_GET_DESCRIPTOR = 6, REQUEST_SET_CONFIGURATION = 9;
+constexpr UCHAR REQUEST_GET_STATUS = 0, REQUEST_CLEAR_FEATURE = 1, REQUEST_SET_FEATURE = 3, REQUEST_SET_ADDRESS = 5, REQUEST_GET_DESCRIPTOR = 6,
+                REQUEST_SET_CONFIGURATION = 9;
 constexpr UCHAR TO_DEVICE = 0x00, FROM_DEVICE = 0x80, FROM_HUB = 0xA0, TO_HUB_PORT = 0x23, FROM_HUB_PORT = 0xA3;
 constexpr USHORT DESCRIPTOR_DEVICE = 0x0100, DESCRIPTOR_CONFIGURATION = 0x0200, DESCRIPTOR_HUB = 0x2900;
 constexpr UCHAR CLASS_HUB = 0x09;
@@ -60,8 +60,8 @@ static void SetUpHub(const USB_DEVICE &Hub, ULONG Depth) {
     }
 }
 
-// The device just reset at address 0 (behind Depth hubs): an address, its configuration, then a hub's ports, or (any
-// other device, or a hub too deep to follow) the device handed to the caller.
+// The device just reset at address 0 (behind Depth hubs): an address, its configuration, then a hub's ports, or (any other device, or a hub too deep to follow)
+// the device handed to the caller.
 static void SetUpDevice(bool LowSpeed, ULONG Depth) {
     USB_DEVICE device = {0, 8, LowSpeed};
     UCHAR head[8];
@@ -79,8 +79,7 @@ static void SetUpDevice(bool LowSpeed, ULONG Depth) {
     ULONG total = config[2] | config[3] << 8;
     if (total > sizeof(config))
         total = sizeof(config);
-    LONG length = ControlTransfer(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0,
-                                  (USHORT)total, config);
+    LONG length = ControlTransfer(device, FROM_DEVICE, REQUEST_GET_DESCRIPTOR, DESCRIPTOR_CONFIGURATION, 0, (USHORT)total, config);
     // A hub by its device class or by one of its interfaces.
     bool hub = head[4] == CLASS_HUB;
     for (LONG i = 0; i + 2 <= length && config[i] >= 2; i += config[i]) {

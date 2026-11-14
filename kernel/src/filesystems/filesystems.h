@@ -17,8 +17,8 @@ XBAPI NTSTATUS NTAPI FscSetCacheSize(ULONG NumberOfCachePages);
 namespace xk::filesystems {
 
 void InitCache();
-// Map the block holding `offset` (read from the device if not cached); *buffer points at `offset` itself. Every
-// map is matched by UnmapCacheBuffer, WriteCacheBuffer or DiscardCacheBuffer.
+// Map the block holding `offset` (read from the device if not cached); *buffer points at `offset` itself. Every map is matched by UnmapCacheBuffer,
+// WriteCacheBuffer or DiscardCacheBuffer.
 NTSTATUS MapCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, BOOLEAN writable, PVOID *buffer);
 NTSTATUS MapEmptyCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, PVOID *buffer);
 void UnmapCacheBuffer(PVOID buffer);
@@ -28,22 +28,19 @@ void InvalidateCacheDevice(FSCACHE_EXTENSION *ext);
 void InvalidateCacheRange(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length);
 // The PTE that maps cache element ElementIndex (the page accounting in memory/init.cpp).
 ULONG *CachePte(ULONG ElementIndex);
-NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
-                    bool toEnd);
+NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer, bool toEnd);
 
-// Mounting (filesystems/mount.cpp): the routines the I/O manager tries for a disk and for a CD-ROM, registered at
-// start-up.
+// Mounting (filesystems/mount.cpp): the routines the I/O manager tries for a disk and for a CD-ROM, registered at start-up.
 void InitFileSystems();
 
-// The file systems' set-up and mount routines (filesystems/hddfs/volume.cpp, filesystems/raw.cpp, udf.cpp,
-// xdvdfs.cpp).
+// The file systems' set-up and mount routines (filesystems/hddfs/volume.cpp, filesystems/raw.cpp, udf.cpp, xdvdfs.cpp).
 void HDDFSInitialize();
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice);
 NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice);
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
 
-// The title's D: folder on the hard disk (filesystems/hddfs/dispatch.cpp, spec/oxos_internal/25 §2): remembered
-// before the title starts, so that D: reports a DVD's 2048-byte sectors.
+// The title's D: folder on the hard disk (filesystems/hddfs/dispatch.cpp, spec/oxos_internal/25 §2): remembered before the title starts, so that D: reports a
+// DVD's 2048-byte sectors.
 void HDDFSRememberTitleFolder();
 
 } // namespace xk::filesystems
@@ -53,12 +50,10 @@ void HDDFSRememberTitleFolder();
 
 namespace xk::filesystems {
 
-// An exFAT volume of Sectors sectors at disk sector Start: 32 KB clusters below 32 GB, else 128 KB; its root holds the
-// folders C E F X Y Z OXOS and, when File is given, that file. Timestamp is an exFAT timestamp (EXFATTimestamp) for
-// the folders and the file.
-NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULONG Timestamp,
-                           const DISK_FORMAT_FILE *File, const DISK_FORMAT_IO *Io, PUCHAR Scratch,
-                           DISK_FORMAT_RESULT *Result);
+// An exFAT volume of Sectors sectors at disk sector Start: 32 KB clusters below 32 GB, else 128 KB; its root holds the folders C E F X Y Z OXOS and, when File
+// is given, that file. Timestamp is an exFAT timestamp (EXFATTimestamp) for the folders and the file.
+NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File, const DISK_FORMAT_IO *Io,
+                           PUCHAR Scratch, DISK_FORMAT_RESULT *Result);
 
 // exFAT timestamp: year (1980-2107), month, day, hour, minute, second.
 ULONG EXFATTimestamp(ULONG Year, ULONG Month, ULONG Day, ULONG Hour, ULONG Minute, ULONG Second);

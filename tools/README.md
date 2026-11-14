@@ -1,8 +1,7 @@
 # Tools
 
-Python scripts for the build machine (the `kernel/Makefile` targets call them; each script's `--help` and docstring
-give the details), and nxdk console apps (built with `make -C kernel <name>`), which draw and read the controllers
-through SDL3 and the shared text screen in `sdl_screen/`.
+Python scripts for the build machine (the `kernel/Makefile` targets call them; each script's `--help` and docstring give the details), and nxdk console apps
+(built with `make -C kernel <name>`), which draw and read the controllers through SDL3 and the shared text screen in `sdl_screen/`.
 
 ## Running and debugging in xemu
 | Tool | What it does |
@@ -45,5 +44,4 @@ through SDL3 and the shared text screen in `sdl_screen/`.
 | `check_kernel_layout.py` | Runs after every kernel link: fails when kept code uses a symbol of the boot-only sections (`.xka`, `.xkb`; an inline function or constant the linker took from a boot-only file), or when the initialised `.data` outgrows its quick-reboot copy ([`spec/oxos_internal/18_boot_memory.md`](../spec/oxos_internal/18_boot_memory.md) §5). |
 | `mkxbe.py` | Converts a PE linked at 0x10000 into an XBE (headers, certificate, section digests); used for the kernel test title (`tests/kernel_test_title`) the boot tests run. |
 
-The tests' own helpers (`tests/boot_test.py`, `tests/mkxiso.py`, `tests/mkudf.py`, `tests/qcow2.py`, ...) live in
-`tests/`.
+The tests' own helpers (`tests/boot_test.py`, `tests/mkxiso.py`, `tests/mkudf.py`, `tests/qcow2.py`, ...) live in `tests/`.

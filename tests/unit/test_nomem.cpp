@@ -1,5 +1,4 @@
-// Out of memory: every allocating entry point fails cleanly (a status or nullptr, nothing leaked, nothing half
-// built), and works again once memory is back.
+// Out of memory: every allocating entry point fails cleanly (a status or nullptr, nothing leaked, nothing half built), and works again once memory is back.
 #include "kernel_test.h"
 #include <objects/objects.h>
 
@@ -10,10 +9,9 @@ using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 namespace {
 constexpr NTSTATUS NO_RESOURCES = (NTSTATUS)0xC000009A;
 
-// Takes every free physical page (leaving `leave`), then with `drainPool` every small pool block that could still
-// be handed out (the free lists and the current page: no new pool page can be had any more); gives everything back
-// when it goes out of scope. Pages first, so that the pool cannot start a new page; pool pages that become entirely
-// free go back to the memory manager when the blocks are freed.
+// Takes every free physical page (leaving `leave`), then with `drainPool` every small pool block that could still be handed out (the free lists and the current
+// page: no new pool page can be had any more); gives everything back when it goes out of scope. Pages first, so that the pool cannot start a new page; pool
+// pages that become entirely free go back to the memory manager when the blocks are freed.
 struct Exhaust {
     std::vector<ULONG> pages;
     std::vector<void *> blocks;
@@ -46,16 +44,15 @@ TEST(NoMemory, PagesAndPool) {
         EXPECT_EQ(MmAllocateContiguousMemory(4096), nullptr);
         EXPECT_EQ(ExAllocatePool(5000), nullptr);
         EXPECT_EQ(ExAllocatePool(24), nullptr);
-        EXPECT_EQ(MmMapIoSpace(0x200000, 0x1000, PAGE_READWRITE) != nullptr, true)
-            << "I/O mappings need no pages while the system PTE range has room";
+        EXPECT_EQ(MmMapIoSpace(0x200000, 0x1000, PAGE_READWRITE) != nullptr, true) << "I/O mappings need no pages while the system PTE range has room";
     }
     EXPECT_EQ(memory::AvailablePages, before);
     EXPECT_EQ(CheckPfnDatabase(), "");
 }
 
 TEST(NoMemory, MappedPagesUndoWhenAPageTableTakesTheLastPage) {
-    // Exactly N free pages and a request for N mapped pages whose PTEs need a new page table: the table takes one
-    // page, the last data page cannot be had, and everything taken so far is given back.
+    // Exactly N free pages and a request for N mapped pages whose PTEs need a new page table: the table takes one page, the last data page cannot be had, and
+    // everything taken so far is given back.
     std::vector<void *> fill;
     // Fill the committed system PTE range so that the next reservation commits a new page table.
     for (;;) {
@@ -93,8 +90,7 @@ TEST(NoMemory, ObjectsHandlesAndThreads) {
         EXPECT_EQ(KeSaveFloatingPointState(&save), NO_RESOURCES);
         PVOID base = (PVOID)0x00C00000;
         SIZE_T size = 0x10000;
-        EXPECT_NE(NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE), STATUS_SUCCESS)
-            << "no pool for the VAD";
+        EXPECT_NE(NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE), STATUS_SUCCESS) << "no pool for the VAD";
     }
     EXPECT_EQ(ObpObjectHandleTable.HandleCount, handles);
     EXPECT_EQ(memory::PoolBlocks, blocks) << "nothing leaked from the failed creations";
@@ -140,6 +136,5 @@ TEST(NoMemory, StringsAndNames) {
     OBJECT_STRING name;
     RtlInitAnsiString(&name, "\\NoMemoryEvent");
     PVOID o;
-    EXPECT_NE(ObReferenceObjectByName(&name, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &o), STATUS_SUCCESS)
-        << "a failed creation leaves no name behind";
+    EXPECT_NE(ObReferenceObjectByName(&name, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &o), STATUS_SUCCESS) << "a failed creation leaves no name behind";
 }

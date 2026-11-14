@@ -1,6 +1,5 @@
-// What the extension loader (extension_loader.cpp) and the runtime (extension_runtime.cpp) share
-// (spec/oxos_internal/34): the loaded extensions and what they registered, and the resident code and state the loader
-// uses.
+// What the extension loader (extension_loader.cpp) and the runtime (extension_runtime.cpp) share (spec/oxos_internal/34): the loaded extensions and what they
+// registered, and the resident code and state the loader uses.
 #pragma once
 #include <core/core.h>
 #include <runtime/types.h>

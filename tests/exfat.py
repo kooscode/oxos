@@ -1,17 +1,14 @@
-"""exFAT on GPT disks for the tests (spec/oxos_internal/07_exfat_driver.md, 05_exfat_storage_spec.md): a writer that builds
-a disk image from a tree of folders and files, and a reader that checks a volume completely.
+"""exFAT on GPT disks for the tests (spec/oxos_internal/07_exfat_driver.md, 05_exfat_storage_spec.md): a writer that builds a disk image from a tree of folders
+and files, and a reader that checks a volume completely.
 
-Writer: Builder(size).add(path, data) ... .write(out.qcow2). The disk gets a protective MBR, a GPT with one
-basic-data partition from sector 2048 to the end, and an exFAT volume in it. Files are stored contiguously (NoFatChain)
-unless their name ends with ".frag", which are spread over every other cluster with a FAT chain (to exercise both
-kinds). A file named "*.stale" (at most one cluster of data) gets a FAT chain that runs two clusters past its length
-into clusters the bitmap marks free, as an old OXOS preallocation looks after a PC's check freed the rest: FAT entries
-past a file's length mean nothing, and a driver must not follow them. The retail reserved area (Partition0 bytes 0-0x7FFFF: refurb record, cache database) is kept at sectors
-1024-2047, before the partition.
+Writer: Builder(size).add(path, data) ... .write(out.qcow2). The disk gets a protective MBR, a GPT with one basic-data partition from sector 2048 to the end,
+and an exFAT volume in it. Files are stored contiguously (NoFatChain) unless their name ends with ".frag", which are spread over every other cluster with a FAT
+chain (to exercise both kinds). A file named "*.stale" (at most one cluster of data) gets a FAT chain that runs two clusters past its length into clusters the
+bitmap marks free, as an old OXOS preallocation looks after a PC's check freed the rest: FAT entries past a file's length mean nothing, and a driver must not
+follow them. The retail reserved area (Partition0 bytes 0-0x7FFFF: refurb record, cache database) is kept at sectors 1024-2047, before the partition.
 
-Reader: EXFAT(Qcow2(path)) finds the volume through the GPT (or an MBR), and .check() verifies the boot checksums,
-the up-case table checksum, every entry set's checksum and name hash, FAT chains, that no cluster is used twice,
-and that the allocation bitmap marks exactly the clusters in use.
+Reader: EXFAT(Qcow2(path)) finds the volume through the GPT (or an MBR), and .check() verifies the boot checksums, the up-case table checksum, every entry set's
+checksum and name hash, FAT chains, that no cluster is used twice, and that the allocation bitmap marks exactly the clusters in use.
 
 Shell:
   exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E;
@@ -89,8 +86,7 @@ def name_hash(name, up):
 def dos_time(t=1735689600):  # 2025-01-01 00:00 by default, so images are reproducible
     import time
     lt = time.gmtime(t)
-    return ((lt.tm_year - 1980) << 25 | lt.tm_mon << 21 | lt.tm_mday << 16 | lt.tm_hour << 11 | lt.tm_min << 5
-            | lt.tm_sec // 2)
+    return ((lt.tm_year - 1980) << 25 | lt.tm_mon << 21 | lt.tm_mday << 16 | lt.tm_hour << 11 | lt.tm_min << 5 | lt.tm_sec // 2)
 
 
 def parse_size(s):
@@ -336,9 +332,8 @@ class Builder:
         boot = bytearray(SECTOR)
         boot[0:3] = b"\xEB\x76\x90"
         boot[3:11] = b"EXFAT   "
-        struct.pack_into("<QQIIIIIIHHBBBBB", boot, 64, part_start, part_sectors, fat_off, fat_len, heap, count,
-                         self.root.clusters[0], self.serial, 0x0100, 0, 9, spc_shift, 1, 0x80,
-                         min(100, len(used) * 100 // count))
+        struct.pack_into("<QQIIIIIIHHBBBBB", boot, 64, part_start, part_sectors, fat_off, fat_len, heap, count, self.root.clusters[0], self.serial, 0x0100, 0,
+                         9, spc_shift, 1, 0x80, min(100, len(used) * 100 // count))
         boot[510:512] = b"\x55\xAA"
         region = bytearray(boot)
         for _ in range(8):
@@ -370,8 +365,8 @@ class Builder:
 
         def header(my, other, entries_lba):
             h = bytearray(92)
-            struct.pack_into("<8sIII4xQQQQ16sQIII", h, 0, b"EFI PART", 0x10000, 92, 0, my, other, 34, last_usable,
-                             bytes(range(16)), entries_lba, 128, 128, ecrc)
+            struct.pack_into("<8sIII4xQQQQ16sQIII", h, 0, b"EFI PART", 0x10000, 92, 0, my, other, 34, last_usable, bytes(range(16)), entries_lba, 128, 128,
+                             ecrc)
             struct.pack_into("<I", h, 16, crc32(bytes(h)))
             return bytes(h).ljust(SECTOR, b"\0")
 
@@ -404,8 +399,8 @@ class EXFAT:
         b = disk.read(self.lba * SECTOR, SECTOR)
         if b[3:11] != b"EXFAT   ":
             raise ValueError("not an exFAT volume")
-        (self.part_off, self.vol_len, self.fat_off, self.fat_len, self.heap, self.count, self.root_cluster,
-         self.serial, self.revision, self.flags, bps, spc, self.nfats) = struct.unpack_from("<QQIIIIIIHHBBB", b, 64)
+        (self.part_off, self.vol_len, self.fat_off, self.fat_len, self.heap, self.count, self.root_cluster, self.serial, self.revision, self.flags, bps, spc,
+         self.nfats) = struct.unpack_from("<QQIIIIIIHHBBB", b, 64)
         self.sector = 1 << bps
         self.cs = 1 << (bps + spc)
         region = disk.read(self.lba * SECTOR, 12 * self.sector)
@@ -443,8 +438,8 @@ class EXFAT:
         if s0[510:512] != b"\x55\xAA":
             raise ValueError("no partition table")
         if s0[446 + 4] == 0xEE:
-            # As the kernel reads it: headers whose entry arrays check out, then (a damaged array, e.g. a refurb record
-            # written into sector 3) any whose basic-data partition starts with an exFAT boot sector.
+            # As the kernel reads it: headers whose entry arrays check out, then (a damaged array, e.g. a refurb record written into sector 3) any whose
+            # basic-data partition starts with an exFAT boot sector.
             for lenient in (False, True):
                 for lba in (1, self.disk.size // SECTOR - 1):
                     h = bytearray(self.disk.read(lba * SECTOR, 92))
@@ -521,8 +516,7 @@ class EXFAT:
                 attrs = struct.unpack_from("<H", st, 4)[0]
                 flags, nlen, nhash = st[33], st[35], struct.unpack_from("<H", st, 36)[0]
                 valid, first, size = struct.unpack_from("<Q4xIQ", st, 40)
-                name = b"".join(st[64 + 32 * k + 2:64 + 32 * k + 32] for k in range(sec - 1)).decode(
-                    "utf-16-le", "replace")[:nlen]
+                name = b"".join(st[64 + 32 * k + 2:64 + 32 * k + 32] for k in range(sec - 1)).decode("utf-16-le", "replace")[:nlen]
                 if name_hash(name, self.up) != nhash:
                     self.problems.append(f"{where}{name}: name hash")
                 if valid > size:
@@ -637,8 +631,7 @@ if __name__ == "__main__":
         pairs = list(zip(a[3::2], a[4::2]))
         opts = dict(pairs)
         extra = [tuple(v.split("=", 1)) for k, v in pairs if k == "--add"]
-        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")), extra,
-                  whole_disk=whole)
+        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")), extra, whole_disk=whole)
         print(f"{a[2]}: written")
     elif a[:1] == ["--check"]:
         v = EXFAT(Qcow2(a[1]))

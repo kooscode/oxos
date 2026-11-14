@@ -10,8 +10,8 @@
     .globl _KernelEntry
 _KernelEntry:
     cli
-    // Keep the initialised .data (still untouched here) for quick reboots, so they do not depend on the flash copy
-    // (a network-booted kernel's flash bank holds another kernel): DOS-header fields 0x2C (bytes) and 0x34 (start).
+    // Keep the initialised .data (still untouched here) for quick reboots, so they do not depend on the flash copy (a network-booted kernel's flash bank holds
+    // another kernel): DOS-header fields 0x2C (bytes) and 0x34 (start).
     movl 0x8001002C, %ecx
     cmpl $KI_DATA_COPY_SIZE, %ecx
     ja 1f

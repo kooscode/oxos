@@ -1,6 +1,5 @@
-// The vector renderer the boot splash draws with (kernel/src/graphics/vector_renderer.cpp; scene format
-// spec/oxos_internal/00_boot_splash.md §1.1): anti-aliased fills, fill rules, phases, gradients, the glow filter, and
-// the checks that keep a bad scene from being drawn.
+// The vector renderer the boot splash draws with (kernel/src/graphics/vector_renderer.cpp; scene format spec/oxos_internal/00_boot_splash.md §1.1):
+// anti-aliased fills, fill rules, phases, gradients, the glow filter, and the checks that keep a bad scene from being drawn.
 #include "kernel_test.h"
 
 #include <cstdint>
@@ -51,8 +50,7 @@ void Layer(Bytes &b, unsigned phases, unsigned filter, unsigned sigma16, unsigne
     U8(b, phases), U8(b, filter), U16(b, sigma16), U8(b, opacity), U8(b, 0), U16(b, draws);
 }
 
-void Draw(Bytes &b, unsigned paint, const std::vector<std::vector<Pt>> &contours, bool evenOdd = false,
-          unsigned alpha = 255) {
+void Draw(Bytes &b, unsigned paint, const std::vector<std::vector<Pt>> &contours, bool evenOdd = false, unsigned alpha = 255) {
     U16(b, paint), U8(b, alpha), U8(b, evenOdd), U16(b, unsigned(contours.size()));
     for (auto &c : contours) {
         U16(b, unsigned(c.size()));
@@ -101,8 +99,7 @@ TEST(VectorSplash, NonZeroAndEvenOddRules) {
     Bytes paints, layers;
     Solid(paints, 0x00FF00);
     Layer(layers, 3, 0, 0, 2);
-    // Left: an outer square with an inner one wound the other way (non-zero: a hole). Right: both wound the same way
-    // (non-zero: filled; even-odd: a hole).
+    // Left: an outer square with an inner one wound the other way (non-zero: a hole). Right: both wound the same way (non-zero: filled; even-odd: a hole).
     Draw(layers, 0, {Square(10, 10, 50, 50), Square(20, 20, 40, 40, true)});
     Draw(layers, 0, {Square(100, 10, 140, 50), Square(110, 20, 130, 40)}, true);
     auto px = Render(Scene(paints, 1, layers, 1), vector_renderer::START);

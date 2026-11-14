@@ -56,8 +56,8 @@ void Scroll() {
     ScreenRow = ROWS - 1;
 }
 
-// A '\n' ends the row and moves the cursor below it; the grid scrolls only when something is written past the last
-// row, so a '\n' at the end of the last row keeps the screen still.
+// A '\n' ends the row and moves the cursor below it; the grid scrolls only when something is written past the last row, so a '\n' at the end of the last row
+// keeps the screen still.
 void Put(char c) {
     if (ScreenRow == ROWS)
         Scroll();
@@ -138,8 +138,8 @@ bool Open(bool gamepads) {
         return false;
     }
     SDL_SetRenderVSync(ScreenRenderer, 1);
-    // The lock and the text outlive Close, so other threads can keep printing and an app that opens the screen again
-    // (after a failed launch) still shows what it printed.
+    // The lock and the text outlive Close, so other threads can keep printing and an app that opens the screen again (after a failed launch) still shows what
+    // it printed.
     if (!ScreenLock) {
         ScreenLock = SDL_CreateMutex();
         Clear();
@@ -155,8 +155,7 @@ void Close() {
     ScreenPicture = nullptr;
     ScreenRenderer = nullptr;
     ScreenWindow = nullptr;
-    // SDL_Quit destroys the renderer (pb_kill) and the window; SDL leaves the USB host running (other code might use
-    // it), so it is stopped here.
+    // SDL_Quit destroys the renderer (pb_kill) and the window; SDL leaves the USB host running (other code might use it), so it is stopped here.
     SDL_Quit();
     if (ScreenGamepads)
         usbh_core_deinit();
@@ -213,8 +212,8 @@ void Present() {
     if (ScreenPicture)
         SDL_RenderTexture(ScreenRenderer, ScreenPicture, nullptr, &ScreenPictureWhere);
     if (ScreenHighlight >= 0 && ScreenHighlight < ROWS) {
-        const SDL_FRect bar{MARGIN - 4.0f, static_cast<float>(MARGIN + ScreenHighlight * CHAR_HEIGHT),
-                            COLUMNS * CHAR_WIDTH + 8.0f, static_cast<float>(CHAR_HEIGHT)};
+        const SDL_FRect bar{MARGIN - 4.0f, static_cast<float>(MARGIN + ScreenHighlight * CHAR_HEIGHT), COLUMNS * CHAR_WIDTH + 8.0f,
+                            static_cast<float>(CHAR_HEIGHT)};
         SDL_SetRenderDrawColor(ScreenRenderer, 0x20, 0x50, 0x20, 0xFF);
         SDL_RenderFillRect(ScreenRenderer, &bar);
     }

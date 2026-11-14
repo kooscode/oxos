@@ -26,8 +26,7 @@ std::string CheckPfnDatabase() {
                 return msg;
             }
             if ((USHORT)(e >> 16) != prev) {
-                snprintf(msg, sizeof(msg), "colour %u: pfn %#x back link %04x, expected %04x", color, pfn, e >> 16,
-                         prev);
+                snprintf(msg, sizeof(msg), "colour %u: pfn %#x back link %04x, expected %04x", color, pfn, e >> 16, prev);
                 return msg;
             }
             prev = packed;
@@ -36,15 +35,14 @@ std::string CheckPfnDatabase() {
                 return "a colour list loops";
         }
         if (memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnBlink != prev) {
-            snprintf(msg, sizeof(msg), "colour %u: tail %04x, last entry %04x", color,
-                     memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnBlink, prev);
+            snprintf(msg, sizeof(msg), "colour %u: tail %04x, last entry %04x", color, memory::RetailPfnRegion.FreePagesByColor[color].PackedPfnBlink, prev);
             return msg;
         }
         total += n;
     }
     if (total != memory::AvailablePages || total != memory::RetailPfnRegion.AvailablePages) {
-        snprintf(msg, sizeof(msg), "%u pages on the lists, memory::AvailablePages %lu, region %lu", total,
-                 memory::AvailablePages, memory::RetailPfnRegion.AvailablePages);
+        snprintf(msg, sizeof(msg), "%u pages on the lists, memory::AvailablePages %lu, region %lu", total, memory::AvailablePages,
+                 memory::RetailPfnRegion.AvailablePages);
         return msg;
     }
     return "";

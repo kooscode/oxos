@@ -6,24 +6,22 @@ README.md in this folder has the step-by-step guide; spec/oxos_internal/12_mcpx_
   mcpx_dump.py build --mcpx 1.1 --bios RETAIL.bin --out dump.bin   make a flash image from your own retail BIOS
   mcpx_dump.py receive [--bios RETAIL.bin] [--out mcpx_1.1.bin]    wait for the console's dump, check and save it
 
-Flash the built image to a modchip and power the console on with a network cable to this PC. The console sends
-its ROM within a few seconds of power-on, then boots on as an OXOS netboot image.
+Flash the built image to a modchip and power the console on with a network cable to this PC. The console sends its ROM within a few seconds of power-on, then
+boots on as an OXOS netboot image.
 
-How it gets at the ROM. The boot ROM runs the X-codes in flash, checks the next stage, jumps to it and hides itself
-later. OXOS images normally enter through the X-codes' overflow trick, which runs our code only after the ROM has
-hidden itself. Here the check passes instead, so our code runs while the ROM is still mapped:
-  - MCPX 1.1 (TEA attack): the ROM checks the first-stage loader (FBL, flash 0x3D400) with TEA used as a hash.
-    Bit 31 of key words 2 and 3 can be flipped together without changing the result, and the FBL's first dwords
-    are such key words. Flipping them turns its first instruction (a jump) into a jump to RAM 0x7FD588, where two
-    extra X-codes leave `jmp 0xFFFC1000`, our 2BL.
-  - MCPX 1.0 (RC4 attack): the ROM RC4-decrypts the 2BL (flash 0x39E00) and checks one dword deep inside it, then
-    calls the entry point stored in its first dword. RC4 is a stream cipher: XOR-ing that ciphertext dword with
-    (wanted ^ actual) sets the entry point to 0xFFFC1000 without touching the checked dword.
+How it gets at the ROM. The boot ROM runs the X-codes in flash, checks the next stage, jumps to it and hides itself later. OXOS images normally enter through
+the X-codes' overflow trick, which runs our code only after the ROM has hidden itself. Here the check passes instead, so our code runs while the ROM is still
+mapped:
+  - MCPX 1.1 (TEA attack): the ROM checks the first-stage loader (FBL, flash 0x3D400) with TEA used as a hash. Bit 31 of key words 2 and 3 can be flipped
+    together without changing the result, and the FBL's first dwords are such key words. Flipping them turns its first instruction (a jump) into a jump to RAM
+    0x7FD588, where two extra X-codes leave `jmp 0xFFFC1000`, our 2BL.
+  - MCPX 1.0 (RC4 attack): the ROM RC4-decrypts the 2BL (flash 0x39E00) and checks one dword deep inside it, then calls the entry point stored in its first
+    dword. RC4 is a stream cipher: XOR-ing that ciphertext dword with (wanted ^ actual) sets the entry point to 0xFFFC1000 without touching the checked dword.
 The attacks are those of XboxDev/mcpx-tools (mcpx-attack); this is an independent implementation in Python.
 
-The payload is an OXOS netboot image built with `make -C kernel mcpx_dump`. Its 2BL copies 0xFFFFFE00-0xFFFFFFFF
-at entry and broadcasts the copy (netboot op 6, UDP port 5141) once the link is up. The retail BIOS's X-codes, init
-tables and (1.1) first-stage loader stay as they are; everything else in the bank is the payload's.
+The payload is an OXOS netboot image built with `make -C kernel mcpx_dump`. Its 2BL copies 0xFFFFFE00-0xFFFFFFFF at entry and broadcasts the copy (netboot op 6,
+UDP port 5141) once the link is up. The retail BIOS's X-codes, init tables and (1.1) first-stage loader stay as they are; everything else in the bank is the
+payload's.
 
 Standard library only. The ROM and the retail BIOS are Microsoft code: keep them to yourself.
 """
@@ -188,8 +186,7 @@ def receive(a):
         kind = "1.1" if b"\xB9\x79\x37\x9E" in rom else "1.0"
         out = a.out or f"mcpx_{kind}.bin"
         issues = check(rom, a.bios)
-        print(f"dump from {peer[0] if not a.xemu else 'xemu'}: MCPX {kind}, md5 {hashlib.md5(rom).hexdigest()}, "
-              f"sha1 {hashlib.sha1(rom).hexdigest()}")
+        print(f"dump from {peer[0] if not a.xemu else 'xemu'}: MCPX {kind}, md5 {hashlib.md5(rom).hexdigest()}, " f"sha1 {hashlib.sha1(rom).hexdigest()}")
         for i in issues:
             print(f"  problem: {i}")
         if issues and not a.keep_bad:
@@ -204,8 +201,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="make the flash image")
-    b.add_argument("--mcpx", choices=("1.0", "1.1"), required=True,
-                   help="the console's MCPX: 1.0 (consoles 1.0) or 1.1 (consoles 1.1-1.5; not 1.6)")
+    b.add_argument("--mcpx", choices=("1.0", "1.1"), required=True, help="the console's MCPX: 1.0 (consoles 1.0) or 1.1 (consoles 1.1-1.5; not 1.6)")
     b.add_argument("--bios", required=True, help="your retail BIOS for that MCPX (any size, top 256 KiB used)")
     b.add_argument("--payload", default="build/kernel/mcpx_dump/bios_256k.bin",
                    help="the OXOS payload image (default: %(default)s, from make -C kernel mcpx_dump)")

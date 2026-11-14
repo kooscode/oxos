@@ -1,5 +1,5 @@
-// Behaviour on the less common paths: standby displacement, quantum decay and DisableQuantum, Wait=TRUE hand-off,
-// waits with held-back APCs, queue concurrency and thread association, and title VM corner cases.
+// Behaviour on the less common paths: standby displacement, quantum decay and DisableQuantum, Wait=TRUE hand-off, waits with held-back APCs, queue concurrency
+// and thread association, and title VM corner cases.
 #include "kernel_test.h"
 
 #include <atomic>
@@ -140,8 +140,7 @@ TEST(WaitPaths, MultipleWaitAlertAndAbsoluteTimeout) {
     KeInitializeEvent(&b, NotificationEvent, FALSE);
     PVOID objs[2] = {&a, &b};
     KeAlertThread(KeGetCurrentThread(), KernelMode);
-    EXPECT_EQ(KeWaitForMultipleObjects(2, objs, WaitAny, Executive, KernelMode, TRUE, nullptr, nullptr),
-              STATUS_ALERTED);
+    EXPECT_EQ(KeWaitForMultipleObjects(2, objs, WaitAny, Executive, KernelMode, TRUE, nullptr, nullptr), STATUS_ALERTED);
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);
     LARGE_INTEGER at;
@@ -292,8 +291,8 @@ TEST(VmPaths, TopDownSkipsAnOccupiedTop) {
 }
 
 TEST(QueuePaths, ATerminatedThreadLeavesItsQueueAndFreesItsSlot) {
-    // Regression (2026-10-23): core::TerminateThread did not take the thread off its queue (spec/stock/07). Its slot
-    // stayed taken (a one-at-a-time queue never served anyone again) and the freed thread stayed on the queue's list.
+    // Regression (2026-10-23): core::TerminateThread did not take the thread off its queue (spec/stock/07). Its slot stayed taken (a one-at-a-time queue never
+    // served anyone again) and the freed thread stayed on the queue's list.
     KQUEUE q;
     KeInitializeQueue(&q, 1);
     LIST_ENTRY first, second;

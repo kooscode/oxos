@@ -14,8 +14,7 @@ namespace xk::memory {
 constexpr ULONG MM_LOW_RESERVED_PFN = 0xF;          // the page directory; page 0 is reserved too
 static ULONG *const PteArray = (ULONG *)0x83FF0000; // PTEs for 0x80000000-0x83FFFFFF = the page database
 
-// The PTE bits for a PAGE_* protection (read-only or read/write, optionally uncached or write-combined); false for
-// any other combination.
+// The PTE bits for a PAGE_* protection (read-only or read/write, optionally uncached or write-combined); false for any other combination.
 bool ProtectToPte(ULONG protect, ULONG *pteBits) {
     if (protect & ~(ULONG)(PAGE_READONLY | PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE))
         return false;
@@ -36,9 +35,9 @@ bool ProtectToPte(ULONG protect, ULONG *pteBits) {
 }
 
 // --- Page database entries (not-present ones; a present entry is the page's own mapping).
-// Free: low word = next, high word = previous page of the same colour, packed as (pfn >> 5) * 2 (MM_PACKED_NULL
-// ends the list). Busy: bit 16, lock count in the low word (steps of 2, so bit 0 stays clear), bits 18-27 = index
-// of the PTE that maps the page within its page table (a page table: its PDE index), bits 28-31 = usage.
+// Free: low word = next, high word = previous page of the same colour, packed as (pfn >> 5) * 2 (MM_PACKED_NULL ends the list). Busy: bit 16, lock count in the
+// low word (steps of 2, so bit 0 stays clear), bits 18-27 = index of the PTE that maps the page within its page table (a page table: its PDE index), bits 28-31
+// = usage.
 constexpr USHORT MM_PACKED_NULL = 0xFFFE;
 constexpr ULONG MM_PFN_BUSY = 0x10000;
 static inline USHORT PackPfnLink(ULONG pfn) {
@@ -65,8 +64,8 @@ static inline ULONG BusyIndex(ULONG e) {
     return (e >> 18) & 0x3FF;
 }
 
-// The free pages of the low 64 MB, and of the upper 64 MB with 128 MB (spec/stock/09 §10). Upper pages count as
-// available only while the running title is allowed them (AllowUpperMemory).
+// The free pages of the low 64 MB, and of the upper 64 MB with 128 MB (spec/stock/09 §10). Upper pages count as available only while the running title is
+// allowed them (AllowUpperMemory).
 MMPFNREGION RetailPfnRegion;
 static MMPFNREGION UpperPfnRegion;
 static bool UpperMemoryAllowed;
@@ -127,16 +126,15 @@ static void UnlinkFreePage(ULONG pfn) {
     CountFreePage(pfn, -1);
 }
 
-// The head of the next non-empty colour list, as the reference: colours in turn, so consecutive pages differ in
-// colour, and each list in insertion order (boot-time pages ascending, freed system pages first). The low 64 MB
-// first; upper pages once it is empty (callers checked AvailablePages, which counts them only when allowed).
+// The head of the next non-empty colour list, as the reference: colours in turn, so consecutive pages differ in colour, and each list in insertion order
+// (boot-time pages ascending, freed system pages first). The low 64 MB first; upper pages once it is empty (callers checked AvailablePages, which counts them
+// only when allowed).
 static ULONG RemoveAnyPage() {
     MMPFNREGION &region = RetailPfnRegion.AvailablePages ? RetailPfnRegion : UpperPfnRegion;
     ULONG color = NextColor;
     for (ULONG tried = 0; region.FreePagesByColor[color].PackedPfnFlink == MM_PACKED_NULL; tried++) {
         if (tried == MM_COLORS) { // callers checked AvailablePages: the count and the lists disagree
-            KeBugCheckEx(0x4E /*PFN_LIST_CORRUPT*/, 0x99, AvailablePages, region.AvailablePages,
-                         (ULONG)__builtin_return_address(0));
+            KeBugCheckEx(0x4E /*PFN_LIST_CORRUPT*/, 0x99, AvailablePages, region.AvailablePages, (ULONG)__builtin_return_address(0));
         }
         color = (color + 1) & (MM_COLORS - 1);
     }
@@ -189,9 +187,8 @@ void FreeContiguousPage(ULONG pfn) {
 }
 
 // --- Boot-only pages (spec/oxos_internal/18_boot_memory.md): the image's last pages, holding its discardable sections
-// (boot-only code and data, and the tables of every video encoder). FreeBootPages frees them before the first
-// title starts; a quick reboot re-enters this image with them still free (InitMemoryManager counts them as free memory,
-// re-adopting any persisted allocation there).
+// (boot-only code and data, and the tables of every video encoder). FreeBootPages frees them before the first title starts; a quick reboot re-enters this image
+// with them still free (InitMemoryManager counts them as free memory, re-adopting any persisted allocation there).
 constexpr ULONG IMAGE_SCN_MEM_DISCARDABLE = 0x02000000;
 static ULONG BootFirstPfn, BootEndPfn;
 XK_PERSIST static ULONG BootPagesFreed[2]; // bit n: page BootFirstPfn + n has been freed
@@ -213,8 +210,7 @@ ULONG FreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd) {
         FreeContiguousPage(pfn);
         freed++;
     }
-    XK_SERIAL("mm: %lu boot-only pages freed (pages %#lx-%#lx; kept %08lx-%08lx)\n", freed, BootFirstPfn,
-              BootEndPfn - 1, KeepStart, KeepEnd);
+    XK_SERIAL("mm: %lu boot-only pages freed (pages %#lx-%#lx; kept %08lx-%08lx)\n", freed, BootFirstPfn, BootEndPfn - 1, KeepStart, KeepEnd);
     return freed;
 }
 
@@ -223,8 +219,8 @@ bool BootPagesPresent() {
 }
 
 // --- Moving a page that is in use (for a contiguous request). Its mapping is found from the busy entry: page
-// tables through the page directory, title pages through the title page tables, the rest through the system PTE
-// range. The copy and the switch run with interrupts off, so the page may be the current stack.
+// tables through the page directory, title pages through the title page tables, the rest through the system PTE range. The copy and the switch run with
+// interrupts off, so the page may be the current stack.
 
 volatile ULONG Relocations, LastRelocation[5]; // diagnostics: pages moved; the last one {from, to, pte, entry, va}
 
@@ -262,16 +258,14 @@ static ULONG *FindOwnerPte(ULONG pfn, ULONG e) {
     }
 }
 
-// Fixed registers: the compiler must not share one between the copy source (advanced by rep movsl) and the address
-// to invalidate, although they start out equal.
+// Fixed registers: the compiler must not share one between the copy source (advanced by rep movsl) and the address to invalidate, although they start out
+// equal.
 static void CopyAndSwitch(ULONG src, ULONG dst, ULONG *pte, ULONG value, bool pageTable) {
     ULONG n = PAGE_SIZE / 4, va = (ULONG)pte << 10;
     ULONG flags = save_flags_cli();
     if (pageTable) { // its self-map entries change too
-        __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tmovl %%cr3, %%eax\n\tmovl %%eax, %%cr3"
-                         : "+S"(src), "+D"(dst), "+c"(n), "+a"(va)
-                         : "b"(pte), "d"(value)
-                         : "memory");
+        __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tmovl %%cr3, %%eax\n\tmovl %%eax, %%cr3" : "+S"(src), "+D"(dst), "+c"(n), "+a"(va) : "b"(pte),
+                         "d"(value) : "memory");
     } else {
         __asm__ volatile("rep movsl\n\tmovl %%edx, (%%ebx)\n\tinvlpg (%%eax)"
                          : "+S"(src), "+D"(dst), "+c"(n)
@@ -295,8 +289,7 @@ static bool RelocatePage(ULONG pfn) {
     PteArray[to] = (to << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
     ULONG usage = MiBusyUsage(e);
     bool pageTable = usage == MmVirtualPageTableUsage || usage == MmSystemPageTableUsage;
-    CopyAndSwitch((ULONG)pte << 10, MM_SYSTEM_PHYSICAL_MAP | (to << PAGE_SHIFT), pte,
-                  (*pte & 0xFFF) | (to << PAGE_SHIFT), pageTable);
+    CopyAndSwitch((ULONG)pte << 10, MM_SYSTEM_PHYSICAL_MAP | (to << PAGE_SHIFT), pte, (*pte & 0xFFF) | (to << PAGE_SHIFT), pageTable);
     PteArray[to] = e;
     InvalidatePage(MM_SYSTEM_PHYSICAL_MAP | (to << PAGE_SHIFT));
     LastRelocation[1] = to;
@@ -309,8 +302,7 @@ static inline bool CanTake(ULONG e) {
     return !(e & PTE_PRESENT) && (!(e & MM_PFN_BUSY) || !(USHORT)e);
 }
 
-bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits,
-                             ULONG *firstPfn) {
+bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits, ULONG *firstPfn) {
     if (!count || highPfn < lowPfn || count > highPfn - lowPfn + 1)
         return false;
     KIRQL old = KeRaiseIrqlToDpcLevel();
@@ -371,16 +363,15 @@ bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG ali
 }
 
 // --- System PTE range 0xD0000000-0xEFFFFFFF, in the reference's format (MmGlobalData->SystemPteRange): free runs
-// are kept in their own not-present PTEs, in address order. The first PTE of a run holds the address of the next
-// run's first PTE (0xFFFFFFFC ends the list) and bit 1 when the run is one PTE long; otherwise the second PTE holds
-// the length << 2. Page tables are added at the end of the committed part as needed and never freed.
+// are kept in their own not-present PTEs, in address order. The first PTE of a run holds the address of the next run's first PTE (0xFFFFFFFC ends the list) and
+// bit 1 when the run is one PTE long; otherwise the second PTE holds the length << 2. Page tables are added at the end of the committed part as needed and
+// never freed.
 
 constexpr ULONG MM_PTE_LIST_END = 0xFFFFFFFC;
 volatile ULONG PteDoubleFrees; // diagnostics: releases that overlapped free system PTEs (refused)
 volatile ULONG PteListDamaged; // diagnostics: the system PTE free list failed its checks
-MMPTERANGE SystemPteRange = {MM_PTE_LIST_END, PteAddress(MM_SYSTEM_PTE_BASE),
-                               PteAddress(MM_SYSTEM_PTE_BASE), PteAddress(MM_SYSTEM_PTE_END),
-                               &AvailablePages, AllocatePage};
+MMPTERANGE SystemPteRange = {MM_PTE_LIST_END, PteAddress(MM_SYSTEM_PTE_BASE), PteAddress(MM_SYSTEM_PTE_BASE), PteAddress(MM_SYSTEM_PTE_END), &AvailablePages,
+                               AllocatePage};
 
 static inline ULONG RunLength(ULONG *run) {
     return (run[0] & 2) ? 1 : run[1] >> 2;
@@ -401,8 +392,8 @@ static inline void SetLink(ULONG *link, ULONG *to) {
 }
 
 static void InsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PVOID caller2 = nullptr) {
-    // Find the neighbours first: a range that overlaps a free run is being freed twice. Inserting it would make the
-    // list overlap itself (a search that loops, or slots handed out twice and their live PTEs zeroed): refuse it.
+    // Find the neighbours first: a range that overlaps a free run is being freed twice. Inserting it would make the list overlap itself (a search that loops,
+    // or slots handed out twice and their live PTEs zeroed): refuse it.
     ULONG *link = &SystemPteRange.Head, *prev = nullptr;
     while ((*link & ~3u) != MM_PTE_LIST_END && RunNext(*link) < start) {
         prev = RunNext(*link);
@@ -412,8 +403,7 @@ static void InsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PVOI
     if ((prev && prev + RunLength(prev) > start) ||
         (next0 != MM_PTE_LIST_END && RunNext(next0) < start + count)) {
         PteDoubleFrees = PteDoubleFrees + 1;
-        XK_SERIAL("*** mm: system PTEs %p (+%lu, va %08lx) freed while (partly) free; callers %p %p\n", start, count,
-                  (ULONG)start << 10, caller, caller2);
+        XK_SERIAL("*** mm: system PTEs %p (+%lu, va %08lx) freed while (partly) free; callers %p %p\n", start, count, (ULONG)start << 10, caller, caller2);
         return;
     }
     RtlZeroMemory(start, count * 4);
@@ -431,19 +421,18 @@ static void InsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PVOI
     SetLink(link, start);
 }
 
-// Report a damaged free list once: where the bad link was read, its value, the run before it, and the physical
-// pages behind them (the page tables of the system PTE range).
+// Report a damaged free list once: where the bad link was read, its value, the run before it, and the physical pages behind them (the page tables of the system
+// PTE range).
 static void PteListDamage(ULONG *link, ULONG *cand, ULONG *last) {
     ULONG n = PteListDamaged;
     PteListDamaged = n + 1;
     if (n >= 4)
         return;
     [[maybe_unused]] ULONG linkPa = MmGetPhysicalAddress(link);
-    XK_SERIAL("*** mm: system PTE list damaged: link at %p (pa %08lx) = %08lx -> run %p; previous run %p (len %lu)\n",
-              link, linkPa, *link, cand, last, last ? RunLength(last) : 0);
+    XK_SERIAL("*** mm: system PTE list damaged: link at %p (pa %08lx) = %08lx -> run %p; previous run %p (len %lu)\n", link, linkPa, *link, cand, last,
+              last ? RunLength(last) : 0);
     [[maybe_unused]] auto w = (const ULONG *)((ULONG)link & ~0x1Fu);
-    XK_SERIAL("    around it: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", w[0], w[1], w[2], w[3], w[4], w[5],
-              w[6], w[7]);
+    XK_SERIAL("    around it: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
 }
 
 PVOID ReserveSystemPtes(ULONG count) {
@@ -452,11 +441,11 @@ PVOID ReserveSystemPtes(ULONG count) {
     for (;;) {
         ULONG *link = &r.Head, *last = nullptr;
         while ((*link & ~3u) != MM_PTE_LIST_END) { // first fit, lowest address first
-            // A damaged list (a stray write into these page tables) must not be followed: each run lies inside the
-            // committed PTEs, after the previous one, with a sane length.
+            // A damaged list (a stray write into these page tables) must not be followed: each run lies inside the committed PTEs, after the previous one, with
+            // a sane length.
             ULONG *cand = RunNext(*link);
-            if (cand < r.FirstCommittedPte || cand >= r.LastCommittedPte || (last && cand <= last) ||
-                RunLength(cand) == 0 || cand + RunLength(cand) > r.LastCommittedPte) {
+            if (cand < r.FirstCommittedPte || cand >= r.LastCommittedPte || (last && cand <= last) || RunLength(cand) == 0 ||
+                cand + RunLength(cand) > r.LastCommittedPte) {
                 PteListDamage(link, cand, last);
                 KfLowerIrql(old);
                 return nullptr;
@@ -513,8 +502,7 @@ void ReleaseSystemPtes(PVOID va, ULONG count) {
 
 volatile ULONG PersistedPages;              // pages re-adopted by the last quick reboot
 volatile ULONG GpuSizeBefore, GpuSizeAfter; // diagnostics: PFB 0x10020C before / after the 64 MB set-up
-// The cold boot's RAM probe, kept for quick reboots: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB
-// (128 MB), 3 = unclear (used as 64 MB).
+// The cold boot's RAM probe, kept for quick reboots: 1 = 64 MB (address bit 26 aliases), 2 = memory above 64 MB (128 MB), 3 = unclear (used as 64 MB).
 XK_PERSIST volatile ULONG RamProbe;
 
 static inline void ReloadCr3() {
@@ -522,12 +510,11 @@ static inline void ReloadCr3() {
     __asm__ volatile("mov %%cr3, %0\n\tmov %0, %%cr3" : "=r"(cr3)::"memory");
 }
 
-// The cold boot's RAM set-up runs once, before the boot-only pages are freed: boot-only code
-// (spec/oxos_internal/18_boot_memory.md).
+// The cold boot's RAM set-up runs once, before the boot-only pages are freed: boot-only code (spec/oxos_internal/18_boot_memory.md).
 #pragma code_seg(".xkb")
 
-// How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0 and at
-// 0x80000000): a marker written at 64 MB + x either appears at x (only 64 MB, the address wraps) or not.
+// How much RAM answers (cold boot, before the page directory switch: the 2BL's large pages map 0-256 MB at 0 and at 0x80000000): a marker written at 64 MB + x
+// either appears at x (only 64 MB, the address wraps) or not.
 static void ProbeRamSize() {
     // Through the 2BL's 0x80000000 large pages (the same RAM as its identity mapping at 0).
     auto low = (volatile ULONG *)0x80000FF0, high = (volatile ULONG *)(0x84000000 + 0x0FF0);
@@ -540,10 +527,9 @@ static void ProbeRamSize() {
     *low = saved;
 }
 
-// The 2BL's MTRRs make only the low 64 MB write-back (variable range 0: base 0, mask 0xFC000800, as the reference 2BL
-// leaves it), so with 128 MB the upper half would be uncached. Range 0 is widened to 128 MB at a cold boot with
-// Intel's procedure: caches off and flushed, the MTRRs off while the mask is written, then a TLB flush. A 2BL that
-// already covers 128 MB (or sets the MTRRs some other way) is left as it is.
+// The 2BL's MTRRs make only the low 64 MB write-back (variable range 0: base 0, mask 0xFC000800, as the reference 2BL leaves it), so with 128 MB the upper half
+// would be uncached. Range 0 is widened to 128 MB at a cold boot with Intel's procedure: caches off and flushed, the MTRRs off while the mask is written, then
+// a TLB flush. A 2BL that already covers 128 MB (or sets the MTRRs some other way) is left as it is.
 static void CacheUpperMemory() {
     constexpr ULONG MTRR_PHYSICAL_MASK_0 = 0x201, MTRR_DEFAULT_TYPE = 0x2FF, MTRR_ENABLE = 0x800, CR0_CD = 0x40000000;
     constexpr ULONGLONG MASK_64_MB = 0xFFC000800ULL, MASK_128_MB = 0xFF8000800ULL;
@@ -566,12 +552,10 @@ static void CacheUpperMemory() {
 // Cold boot: the RAM size, and the GPU, host bridge and caches set up for it. Not inlined: it stays boot-only code.
 [[gnu::noinline]] static void SetUpRam() {
     ProbeRamSize();
-    // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it
-    // has (PFB 0x10020C); at 128 MB that is memory a 64 MB console does not have, so a title's FIFO never starts.
-    // Our 2BL sizes the DRAM as the retail X-codes do (spec/stock/22 §6.3); on a retail 64 MB console of four
-    // 128 Mbit chips that ends with 0x100200 0x03070003 and 0x100204 0x11448000 (bit 8 clear). Only an older 2BL
-    // that left 0x03070103 with 0x11448000 on a 64 MB console needs this fallback: PFB 0x100200 bit 8 clear, as
-    // the retail probe and Cromwell leave it.
+    // The GPU places its instance memory (channel contexts, hash table) at the top of the memory it believes it has (PFB 0x10020C); at 128 MB that is memory a
+    // 64 MB console does not have, so a title's FIFO never starts. Our 2BL sizes the DRAM as the retail X-codes do (spec/stock/22 §6.3); on a retail 64 MB
+    // console of four 128 Mbit chips that ends with 0x100200 0x03070003 and 0x100204 0x11448000 (bit 8 clear). Only an older 2BL that left 0x03070103 with
+    // 0x11448000 on a 64 MB console needs this fallback: PFB 0x100200 bit 8 clear, as the retail probe and Cromwell leave it.
     auto pfb = (volatile ULONG *)0xFD100200;
     GpuSizeBefore = pfb[3];
     if (RamProbe != 2 && pfb[1] != 0x11338000 && (pfb[0] & 0x100))
@@ -592,8 +576,7 @@ static void CacheUpperMemory() {
 #if XK_TRACE_IMPORTS == 2
 // TRACE_IMPORTS=2 builds: the tracer's ring and stubs (titles/title_tracer.cpp) are kept from the memory manager.
 static bool IsTraceRingPage(ULONG pfn) {
-    return pfn >= (XK_TRACE_HIGH_PHYSICAL >> PAGE_SHIFT) &&
-           pfn < ((XK_TRACE_HIGH_PHYSICAL + XK_TRACE_HIGH_BYTES + PAGE_SIZE - 1) >> PAGE_SHIFT);
+    return pfn >= (XK_TRACE_HIGH_PHYSICAL >> PAGE_SHIFT) && pfn < ((XK_TRACE_HIGH_PHYSICAL + XK_TRACE_HIGH_BYTES + PAGE_SIZE - 1) >> PAGE_SHIFT);
 }
 #else
 static bool IsTraceRingPage(ULONG) {
@@ -632,8 +615,8 @@ void InitMemoryManager(bool QuickReboot) {
     ULONG textEnd = *(ULONG *)(sections + 12) + *(ULONG *)(sections + 8); // VA + VirtualSize of .text
     ULONG imageEndPfn = (0x10000 + sizeOfImage + PAGE_SIZE - 1) >> PAGE_SHIFT;
     ULONG textEndPfn = (0x10000 + (textEnd & ~(PAGE_SIZE - 1))) >> PAGE_SHIFT;
-    // The boot-only pages (FreeBootPages): from the first page that holds only discardable sections (the linker
-    // places those last) to the end of the image. A cold boot starts with all of them in use.
+    // The boot-only pages (FreeBootPages): from the first page that holds only discardable sections (the linker places those last) to the end of the image. A
+    // cold boot starts with all of them in use.
     ULONG discardVa = sizeOfImage;
     for (USHORT i = 0, n = *(USHORT *)(image + lfanew + 6); i < n; i++) {
         UCHAR *h = sections + 40 * i;
@@ -641,9 +624,8 @@ void InitMemoryManager(bool QuickReboot) {
             discardVa = *(ULONG *)(h + 12);
     }
     BootFirstPfn = (0x10000 + discardVa + PAGE_SIZE - 1) >> PAGE_SHIFT;
-    // Titles read the kernel image up to a fixed address: XBMC4Gamers searches 0x80010000-0x8003AF90 byte by byte
-    // for an instruction of the stock kernel, so a freed page below its end is an access violation in the title
-    // (spec/oxos_internal/18 §3).
+    // Titles read the kernel image up to a fixed address: XBMC4Gamers searches 0x80010000-0x8003AF90 byte by byte for an instruction of the stock kernel, so a
+    // freed page below its end is an access violation in the title (spec/oxos_internal/18 §3).
     constexpr ULONG MI_TITLE_SCAN_END_PFN = 0x3B;
     if (BootFirstPfn < MI_TITLE_SCAN_END_PFN)
         BootFirstPfn = MI_TITLE_SCAN_END_PFN;
@@ -651,20 +633,18 @@ void InitMemoryManager(bool QuickReboot) {
     if (!QuickReboot)
         BootPagesFreed[0] = BootPagesFreed[1] = 0;
 
-    // 1. The page database (still reachable through the 2BL large pages, which map 256 MB). Pages 1-14 (below the
-    //    page directory), those between the image and the GPU memory, and with 128 MB those above the page tables
-    //    (but the second GPU instance memory) are allocatable; a quick reboot re-adopts persisted allocations
-    //    (PTE bit 10) there.
+    // 1. The page database (still reachable through the 2BL large pages, which map 256 MB). Pages 1-14 (below the page directory), those between the image and
+    //    the GPU memory, and with 128 MB those above the page tables (but the second GPU instance memory) are allocatable; a quick reboot re-adopts persisted
+    //    allocations (PTE bit 10) there.
     const ULONG rw = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
     auto allocatable = [&](ULONG pfn) {
         bool low = (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
         bool upper = pfn >= pageTablesEndPfn && !IsTraceRingPage(pfn);
-        return (low || upper || BootPageFreed(pfn)) && !titles::IsNetbootTitlePage(pfn) &&
-               !boot_splash::IsSplashPage(pfn);
+        return (low || upper || BootPageFreed(pfn)) && !titles::IsNetbootTitlePage(pfn) && !boot_splash::IsSplashPage(pfn);
     };
-    //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
-    //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
-    //    first, even briefly, unmaps the code and stack running this loop as soon as a cached translation is evicted.
+    //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own page directory), so each entry is written
+    //    once with its final value: clearing the kernel's own entries first, even briefly, unmaps the code and stack running this loop as soon as a cached
+    //    translation is evicted.
     RtlZeroMemory(AllocatedPagesByUsage, sizeof(AllocatedPagesByUsage));
     ULONG persisted = 0;
     for (ULONG pfn = 0; pfn <= HighestPhysicalPage; pfn++) {
@@ -688,9 +668,8 @@ void InitMemoryManager(bool QuickReboot) {
     }
     PersistedPages = persisted;
 
-    // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages
-    //    count as contiguous memory.
-    //    Each title starts without the upper 64 MB (AllowUpperMemory).
+    // 2. Free lists: every allocatable page, ascending, at the tails (the reference's order). The mapped pages count as contiguous memory. Each title starts
+    //    without the upper 64 MB (AllowUpperMemory).
     for (ULONG c = 0; c < MM_COLORS; c++) {
         RetailPfnRegion.FreePagesByColor[c] = {MM_PACKED_NULL, MM_PACKED_NULL};
         UpperPfnRegion.FreePagesByColor[c] = {MM_PACKED_NULL, MM_PACKED_NULL};
@@ -706,8 +685,8 @@ void InitMemoryManager(bool QuickReboot) {
     }
     NumberOfPhysicalPages = HighestPhysicalPage + 1;
 
-    // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above the RAM, no user
-    //    mappings, and the reference MMIO windows (spec/stock/02 §4).
+    // 3. Switch the page directory: 4 KB PTEs for RAM at 0x80000000, nothing above the RAM, no user mappings, and the reference MMIO windows (spec/stock/02
+    //    §4).
     ULONG *pd = (ULONG *)0xC0300000;
     ULONG pageTables = pageTablesEndPfn - MM_PAGE_TABLES_FIRST_PFN;
     for (ULONG i = 0; i < pageTables; i++)
@@ -722,10 +701,9 @@ void InitMemoryManager(bool QuickReboot) {
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_LARGE;
     for (ULONG i = 0x3E0; i < 0x3FE; i++) // 0xF8000000-0xFF7FFFFF: uncached large pages
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_PCD | PTE_LARGE;
-    // PDE 0x3FF (flash, 0xFFC00000) is cleared, as the reference does (spec/stock/09). The 2BL maps it write-back,
-    // and the top 512 KB is write-protect in the MTRRs, a type the CPU may read speculatively: left mapped, stray
-    // speculative reads reach the flash over LPC, and real consoles freeze hard at layout-dependent points
-    // (spec/oxos_internal/13). Quick reboot uses KernelEntry's RAM copy of .data.
+    // PDE 0x3FF (flash, 0xFFC00000) is cleared, as the reference does (spec/stock/09). The 2BL maps it write-back, and the top 512 KB is write-protect in the
+    // MTRRs, a type the CPU may read speculatively: left mapped, stray speculative reads reach the flash over LPC, and real consoles freeze hard at
+    // layout-dependent points (spec/oxos_internal/13). Quick reboot uses KernelEntry's RAM copy of .data.
     pd[0x3FF] = 0;
     ReloadCr3();
 

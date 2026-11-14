@@ -1,8 +1,7 @@
 """Write a CCI image (the compressed disc image format of spec/cerbios/07 §4) from an ISO, for the virtual disc tests.
 
-Each 2048-byte block is LZ4-compressed (a plain greedy compressor, block format) when that saves space, else kept as
-it is; the index after the blocks holds each block's offset / 4 (bit 31 set for a compressed block, as writers do)
-plus one entry for the end.
+Each 2048-byte block is LZ4-compressed (a plain greedy compressor, block format) when that saves space, else kept as it is; the index after the blocks holds
+each block's offset / 4 (bit 31 set for a compressed block, as writers do) plus one entry for the end.
 
 usage: mkcci.py IN.iso OUT.cci
 """

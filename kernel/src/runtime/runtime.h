@@ -1,5 +1,4 @@
-// Runtime library subset (src/runtime/): memory, strings, numbers, time, formatting, interlocked operations, and the
-// locks titles embed.
+// Runtime library subset (src/runtime/): memory, strings, numbers, time, formatting, interlocked operations, and the locks titles embed.
 #pragma once
 #include <runtime/types.h>
 #include <core/core.h>
@@ -54,10 +53,8 @@ XBAPI LONG FASTCALL InterlockedDecrement(volatile LONG *Addend);
 XBAPI LONG FASTCALL InterlockedExchange(volatile LONG *Target, LONG Value);
 XBAPI LONG FASTCALL InterlockedExchangeAdd(volatile LONG *Addend, LONG Value);
 XBAPI LONG FASTCALL InterlockedCompareExchange(volatile LONG *Destination, LONG Exchange, LONG Comparand);
-XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange,
-                                                       PLONGLONG Comparand);
-XBAPI LARGE_INTEGER NTAPI ExInterlockedAddLargeInteger(PLARGE_INTEGER Addend, LARGE_INTEGER Increment,
-                                                       PVOID /*Lock*/);
+XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange, PLONGLONG Comparand);
+XBAPI LARGE_INTEGER NTAPI ExInterlockedAddLargeInteger(PLARGE_INTEGER Addend, LARGE_INTEGER Increment, PVOID /*Lock*/);
 XBAPI void FASTCALL ExInterlockedAddLargeStatistic(PLARGE_INTEGER Addend, ULONG Increment);
 
 // S-lists: lock-free stacks. The 8-byte header: {Next, Depth:16, Sequence:16}.
@@ -98,10 +95,8 @@ XBAPI BOOLEAN NTAPI RtlEqualString(const ANSI_STRING *String1, const ANSI_STRING
 XBAPI LONG NTAPI RtlCompareString(const ANSI_STRING *String1, const ANSI_STRING *String2, BOOLEAN CaseInSensitive);
 XBAPI CHAR NTAPI RtlUpperChar(CHAR Character);
 XBAPI NTSTATUS NTAPI RtlUnicodeStringToInteger(const UNICODE_STRING *String, ULONG Base, PULONG Value);
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                            BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                            PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
+XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString);
+XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString, PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
                                             ULONG BytesInUnicodeString);
 
 XBAPI NTSTATUS NTAPI RtlCharToInteger(PCSZ String, ULONG Base, PULONG Value);
@@ -112,16 +107,12 @@ struct GENERIC_MAPPING {
 XBAPI void NTAPI RtlMapGenericMask(PULONG AccessMask, const GENERIC_MAPPING *GenericMapping);
 
 XBAPI CHAR NTAPI RtlLowerChar(CHAR Character);
-XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                         BOOLEAN CaseInSensitive);
-XBAPI BOOLEAN NTAPI RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                          BOOLEAN CaseInSensitive);
+XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2, BOOLEAN CaseInSensitive);
+XBAPI BOOLEAN NTAPI RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2, BOOLEAN CaseInSensitive);
 XBAPI void NTAPI RtlCopyString(PANSI_STRING DestinationString, const ANSI_STRING *SourceString);
 XBAPI void NTAPI RtlUpperString(PANSI_STRING DestinationString, const ANSI_STRING *SourceString);
-XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlUnicodeStringToAnsiString(PANSI_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString);
+XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString, BOOLEAN AllocateDestinationString);
+XBAPI NTSTATUS NTAPI RtlUnicodeStringToAnsiString(PANSI_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString);
 XBAPI void NTAPI RtlFreeAnsiString(PANSI_STRING AnsiString);
 XBAPI void NTAPI RtlFreeUnicodeString(PUNICODE_STRING UnicodeString);
 XBAPI NTSTATUS NTAPI RtlAppendStringToString(PSTRING Destination, const STRING *Source);
@@ -130,18 +121,14 @@ XBAPI BOOLEAN NTAPI RtlCreateUnicodeString(PUNICODE_STRING DestinationString, PC
 XBAPI void NTAPI RtlCopyUnicodeString(PUNICODE_STRING Destination, const UNICODE_STRING *Source);
 XBAPI WCHAR NTAPI RtlUpcaseUnicodeChar(WCHAR SourceCharacter);
 XBAPI WCHAR NTAPI RtlDowncaseUnicodeChar(WCHAR SourceCharacter);
-XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                              BOOLEAN AllocateDestinationString);
-XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesInUnicodeString,
-                                            PULONG BytesInUnicodeString, const CHAR *MultiByteString,
+XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString);
+XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesInUnicodeString, PULONG BytesInUnicodeString, const CHAR *MultiByteString,
                                             ULONG BytesInMultiByteString);
 XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeSize(PULONG BytesInUnicodeString, const CHAR *,
                                                ULONG BytesInMultiByteString);
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *,
-                                               ULONG BytesInUnicodeString);
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                                  PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
-                                                  ULONG BytesInUnicodeString);
+XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *, ULONG BytesInUnicodeString);
+XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString, PULONG BytesInMultiByteString,
+                                                  const WCHAR *UnicodeString, ULONG BytesInUnicodeString);
 XBAPI NTSTATUS NTAPI RtlIntegerToUnicodeString(ULONG Value, ULONG Base, PUNICODE_STRING String);
 
 // --- Locks and interlocked lists (exported)

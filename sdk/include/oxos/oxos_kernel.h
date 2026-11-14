@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
-// OXOS kernel extension SDK: the Xbox kernel's types and the functions an extension calls (spec/oxos_internal/34
-// §5.1, §7.1). C and C++.
+// OXOS kernel extension SDK: the Xbox kernel's types and the functions an extension calls (spec/oxos_internal/34 §5.1, §7.1). C and C++.
 //
 // - In C the kernel functions have their own names: NtOpenFile(...).
-// - In C++ they are in namespace oxos: oxos::NtOpenFile(...). A member function named like the kernel function (the
-//   extension class, §4.4) calls the kernel's with oxos::, not itself.
-// Either way the call goes through the extension's import of the function, so a hooked function passes the call on
-// down the chain (§7.1). This first version declares the functions the SDK and the test extensions use; the complete
-// table is generated from the kernel's exports (spec/oxos_internal/34 §9).
+// - In C++ they are in namespace oxos: oxos::NtOpenFile(...). A member function named like the kernel function (the extension class, §4.4) calls the kernel's
+//   with oxos::, not itself.
+// Either way the call goes through the extension's import of the function, so a hooked function passes the call on down the chain (§7.1). This first version
+// declares the functions the SDK and the test extensions use; the complete table is generated from the kernel's exports (spec/oxos_internal/34 §9).
 #pragma once
 #include <oxos/oxos_types.h>
 
@@ -95,28 +93,20 @@ OXOS_KERNEL_FUNCTIONS_BEGIN
 OXOS_IMPORT ULONG __cdecl DbgPrint(const char *Format, ...);
 OXOS_IMPORT PVOID NTAPI ExAllocatePoolWithTag(SIZE_T NumberOfBytes, ULONG Tag);
 OXOS_IMPORT void NTAPI ExFreePool(PVOID P);
-OXOS_IMPORT NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
-                                                  PLARGE_INTEGER Interval);
-OXOS_IMPORT NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, ULONG WaitReason, KPROCESSOR_MODE WaitMode,
-                                                 BOOLEAN Alertable, PLARGE_INTEGER Timeout);
+OXOS_IMPORT NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Interval);
+OXOS_IMPORT NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, ULONG WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Timeout);
 OXOS_IMPORT NTSTATUS NTAPI NtClose(HANDLE Handle);
-OXOS_IMPORT NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
-                                        POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
-                                        PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess,
-                                        ULONG CreateDisposition, ULONG CreateOptions);
-OXOS_IMPORT NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
-                                      POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+OXOS_IMPORT NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                                        PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions);
+OXOS_IMPORT NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
                                       ULONG ShareAccess, ULONG OpenOptions);
-OXOS_IMPORT NTSTATUS NTAPI NtQueryFullAttributesFile(POBJECT_ATTRIBUTES ObjectAttributes,
-                                                     PFILE_NETWORK_OPEN_INFORMATION FileInformation);
-OXOS_IMPORT NTSTATUS NTAPI NtQueryInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock,
-                                                  PVOID FileInformation, ULONG Length, ULONG FileInformationClass);
-OXOS_IMPORT NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
-                                      PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                      PLARGE_INTEGER ByteOffset);
-OXOS_IMPORT NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
-                                       PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                       PLARGE_INTEGER ByteOffset);
+OXOS_IMPORT NTSTATUS NTAPI NtQueryFullAttributesFile(POBJECT_ATTRIBUTES ObjectAttributes, PFILE_NETWORK_OPEN_INFORMATION FileInformation);
+OXOS_IMPORT NTSTATUS NTAPI NtQueryInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length,
+                                                  ULONG FileInformationClass);
+OXOS_IMPORT NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                      PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset);
+OXOS_IMPORT NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                       PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset);
 OXOS_IMPORT void NTAPI RtlInitAnsiString(PANSI_STRING DestinationString, PCSZ SourceString);
 OXOS_IMPORT int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args);
 OXOS_KERNEL_FUNCTIONS_END

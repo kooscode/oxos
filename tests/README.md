@@ -1,9 +1,8 @@
 # Tests
 
-`make test` (in `kernel/`) runs every phase below in xemu, on a copy of the default hard disk (the free xemu-dashboard
-image, fetched on first use; `HDD_IMAGE=...` for another). The tests make no assumptions about the disk's contents
-beyond a formatted drive with a dashboard; each prints a `[PASS]`/`[FAIL]` line per check and `RESULT: PASS` when all
-pass. Most checks come from the kernel's own boot self-tests (`tests/kernel_self_tests/*.cpp`, compiled into the
+`make test` (in `kernel/`) runs every phase below in xemu, on a copy of the default hard disk (the free xemu-dashboard image, fetched on first use;
+`HDD_IMAGE=...` for another). The tests make no assumptions about the disk's contents beyond a formatted drive with a dashboard; each prints a `[PASS]`/`[FAIL]`
+line per check and `RESULT: PASS` when all pass. Most checks come from the kernel's own boot self-tests (`tests/kernel_self_tests/*.cpp`, compiled into the
 self-test build only), which leave their results in kernel variables that `boot_test.py` reads.
 
 ## Test phases (make targets)

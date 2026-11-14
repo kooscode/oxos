@@ -1,5 +1,4 @@
-// The fatal error screen's text (spec/oxos_internal/29_error_screens.md,
-// kernel/src/user_interface/error_screen_text.cpp).
+// The fatal error screen's text (spec/oxos_internal/29_error_screens.md, kernel/src/user_interface/error_screen_text.cpp).
 #include "kernel_test.h"
 
 #include <cstring>

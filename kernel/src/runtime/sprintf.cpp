@@ -18,8 +18,7 @@ struct RTLP_OUT {
     }
 };
 
-static void EmitNumber(RTLP_OUT &o, ULONGLONG v, bool negative, ULONG base, bool upper, int width, int precision,
-                       bool left, bool zero, char sign, bool alt) {
+static void EmitNumber(RTLP_OUT &o, ULONGLONG v, bool negative, ULONG base, bool upper, int width, int precision, bool left, bool zero, char sign, bool alt) {
     CHAR digits[66];
     int n = 0;
     const char *set = upper ? "0123456789ABCDEF" : "0123456789abcdef";
@@ -141,8 +140,7 @@ static int FormatText(RTLP_OUT &o, const char *f, va_list ap) {
             LONGLONG v = size == 2 ? va_arg(ap, LONGLONG) : (LONGLONG)va_arg(ap, int);
             if (size == -1)
                 v = (short)v;
-            EmitNumber(o, v < 0 ? 0 - (ULONGLONG)v : (ULONGLONG)v, v < 0, 10, false, width, precision, left, zero,
-                       sign, false);
+            EmitNumber(o, v < 0 ? 0 - (ULONGLONG)v : (ULONGLONG)v, v < 0, 10, false, width, precision, left, zero, sign, false);
             break;
         }
         case 'u':

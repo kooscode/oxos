@@ -1,9 +1,9 @@
 // The vector renderer (graphics/vector_renderer.h; the scene format is in spec/oxos_internal/00_boot_splash.md §1.1).
-//   - Shapes: closed polygons (the host tool flattens curves and turns strokes into outlines), filled with the
-//     non-zero or even-odd rule and anti-aliased: 8 sample rows per pixel row, exact coverage along each row.
+//   - Shapes: closed polygons (the host tool flattens curves and turns strokes into outlines), filled with the non-zero or even-odd rule and anti-aliased: 8
+//     sample rows per pixel row, exact coverage along each row.
 //   - Paints: a colour, or a linear or radial gradient through up to 16 stops (a 257-entry table per shape).
-//   - Layers: drawn in order; a layer with a filter is drawn into its own buffer first and then blurred (a Gaussian
-//     approximated by three box blurs), either replacing it ("blur") or under it ("glow").
+//   - Layers: drawn in order; a layer with a filter is drawn into its own buffer first and then blurred (a Gaussian approximated by three box blurs), either
+//     replacing it ("blur") or under it ("glow").
 #include <graphics/vector_renderer.h>
 
 namespace xk::graphics {
@@ -22,8 +22,8 @@ using u32 = unsigned;
 using i32 = int;
 
 constexpr u32 SUB = 8; // sample rows per pixel row (each at 1/16-pixel resolution)
-constexpr u32 MAX_PAINTS = 64, MAX_STOPS = 16, MAX_LAYERS = 256, MAX_DRAWS = 1024, MAX_CONTOURS = 1024,
-              MAX_POINTS = 4096, MAX_EDGES = 65535, MAX_SIGMA16 = 64 * 16;
+constexpr u32 MAX_PAINTS = 64, MAX_STOPS = 16, MAX_LAYERS = 256, MAX_DRAWS = 1024, MAX_CONTOURS = 1024, MAX_POINTS = 4096, MAX_EDGES = 65535,
+              MAX_SIGMA16 = 64 * 16;
 constexpr i32 COORD_MIN = -8192, COORD_MAX = 16383;      // 1/16 pixel: products stay within 32 bits
 constexpr i32 CENTRE_MIN = -16384, CENTRE_MAX = 32767;   // radial gradient centres, 1/16 pixel
 constexpr i32 SLOPE_MAX = 1 << 20, OFFSET_MAX = 1 << 29; // linear gradients: |a| X + |b| Y + |c| < 2^31
@@ -346,13 +346,11 @@ unsigned Check(const unsigned char *Scene, unsigned Size, unsigned *ScratchBytes
             return 3;
         if (type == 1) {
             i32 a = r.I32(), b = r.I32(), c = r.I32();
-            if (a <= -SLOPE_MAX || a >= SLOPE_MAX || b <= -SLOPE_MAX || b >= SLOPE_MAX || c <= -OFFSET_MAX ||
-                c >= OFFSET_MAX)
+            if (a <= -SLOPE_MAX || a >= SLOPE_MAX || b <= -SLOPE_MAX || b >= SLOPE_MAX || c <= -OFFSET_MAX || c >= OFFSET_MAX)
                 return 4;
         } else if (type == 2) {
             i32 cx = r.I32(), cy = r.I32(), radius = r.I32();
-            if (cx < CENTRE_MIN || cx > CENTRE_MAX || cy < CENTRE_MIN || cy > CENTRE_MAX || radius < 1 ||
-                radius > (1 << 20))
+            if (cx < CENTRE_MIN || cx > CENTRE_MAX || cy < CENTRE_MIN || cy > CENTRE_MAX || radius < 1 || radius > (1 << 20))
                 return 5;
         }
         u32 last = 0;
@@ -374,8 +372,7 @@ unsigned Check(const unsigned char *Scene, unsigned Size, unsigned *ScratchBytes
         u32 phases = r.U8(), filter = r.U8(), sigma = r.U16();
         r.U8(), r.U8();
         u32 draws = r.U16();
-        if (!phases || phases > 3 || filter > GLOW || (filter && (!sigma || sigma > MAX_SIGMA16)) || !draws ||
-            draws > MAX_DRAWS)
+        if (!phases || phases > 3 || filter > GLOW || (filter && (!sigma || sigma > MAX_SIGMA16)) || !draws || draws > MAX_DRAWS)
             return 9;
         filtered |= filter != NONE;
         for (u32 d = 0; d < draws; d++) {

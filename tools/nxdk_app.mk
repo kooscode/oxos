@@ -1,10 +1,9 @@
-# The build rules every OXOS console app shares (tools/*, tests/*_title; nxdk and SDL3 with the text screen in
-# tools/sdl_screen). An app's Makefile sets XBE_TITLE, APP_SOURCES (its source files, in its folder), GEN_XISO and
-# nxdk's options (NXDK_NET, ...) when it needs them, then includes this file.
+# The build rules every OXOS console app shares (tools/*, tests/*_title; nxdk and SDL3 with the text screen in tools/sdl_screen). An app's Makefile sets
+# XBE_TITLE, APP_SOURCES (its source files, in its folder), GEN_XISO and nxdk's options (NXDK_NET, ...) when it needs them, then includes this file.
 #
-# The app builds in build/<its folder> at the repository root, e.g. build/tools/ftp_server: bin/default.xbe, the
-# .iso, main.exe, the objects and libSDL3.lib. Its own folder keeps only sources: `make` there, or `make -C` it, runs
-# the build in the build folder. nxdk and SDL3 come from third_party/ (`make -C kernel nxdk`).
+# The app builds in build/<its folder> at the repository root, e.g. build/tools/ftp_server: bin/default.xbe, the .iso, main.exe, the objects and libSDL3.lib.
+# Its own folder keeps only sources: `make` there, or `make -C` it, runs the build in the build folder. nxdk and SDL3 come from third_party/ (`make -C kernel
+# nxdk`).
 NXDK_APP_DIR := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 OXOS_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 NXDK_APP_BUILD := $(OXOS_ROOT)/build/$(patsubst $(OXOS_ROOT)/%,%,$(NXDK_APP_DIR))

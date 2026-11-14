@@ -15,13 +15,12 @@ constexpr UCHAR SMC_ADDRESS = 0x20, SMC_RESET = 0x02, SMC_TRAY_STATE = 0x03, SMC
 static volatile ULONG CurrentTrayState = 0xFFFFFFFF, TrayStateChanges; // updated by SMC events
 static volatile UCHAR ShutdownPending;                                 // a shutdown or reset is under way
 static ULONG SmcScratch;                                               // the scratch register as last written
-// Boot flags (the reference's 0x8003B138, kept across quick reboots), derived from the SMC at cold boot (spec/stock/12
-// §4): 0x08 SMC "reset on eject" off (0x19 = 1), 0x10/0x20/0x80 from the scratch register, 0x40 tray ejected at boot.
+// Boot flags (the reference's 0x8003B138, kept across quick reboots), derived from the SMC at cold boot (spec/stock/12 §4): 0x08 SMC "reset on eject" off (0x19
+// = 1), 0x10/0x20/0x80 from the scratch register, 0x40 tray ejected at boot.
 XK_PERSIST volatile ULONG BootFlags;
 
 // --- SMBus host controller (MCPX, I/O 0xC000)
-constexpr USHORT SMB_STATUS = 0xC000, SMB_CONTROL = 0xC002, SMB_ADDRESS = 0xC004, SMB_DATA = 0xC006,
-                 SMB_COMMAND = 0xC008, SMB_FIFO = 0xC009;
+constexpr USHORT SMB_STATUS = 0xC000, SMB_CONTROL = 0xC002, SMB_ADDRESS = 0xC004, SMB_DATA = 0xC006, SMB_COMMAND = 0xC008, SMB_FIFO = 0xC009;
 constexpr UCHAR SMB_STATUS_COLLISION = 0x02, SMB_STATUS_PROTOCOL = 0x04,
                 SMB_STATUS_DONE = 0x10, SMB_STATUS_TIMEOUT = 0x20;
 constexpr NTSTATUS STATUS_IO_TIMEOUT_ = (NTSTATUS)0xC00000B5, STATUS_IO_DEVICE_ERROR_ = (NTSTATUS)0xC0000185;
@@ -44,8 +43,7 @@ static void AcquireSMBus() {
         ULONG n = SMBusRaisedWhileBusy;
         SMBusRaisedWhileBusy = n + 1;
         if (n < 8) {
-            XK_SERIAL("smbus: called at IRQL %u from %p while a thread holds the bus\n", KeGetCurrentIrql(),
-                      __builtin_return_address(0));
+            XK_SERIAL("smbus: called at IRQL %u from %p while a thread holds the bus\n", KeGetCurrentIrql(), __builtin_return_address(0));
         }
     }
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
@@ -57,8 +55,8 @@ static void ReleaseSMBus() {
         KeSetEvent(&SMBusLock, 0, FALSE);
 }
 
-// Transfer size: 1 byte, or with the word flag 2 bytes, or 4 bytes for the 32-bit devices at 0xE0-0xE7 (the 1.6
-// video encoder; the 5838 kernel's rule, spec/stock/20 §1).
+// Transfer size: 1 byte, or with the word flag 2 bytes, or 4 bytes for the 32-bit devices at 0xE0-0xE7 (the 1.6 video encoder; the 5838 kernel's rule,
+// spec/stock/20 §1).
 static ULONG SMBusSize(UCHAR Address, BOOLEAN WordFlag) {
     return !WordFlag ? 1 : (Address & 0xF8) == 0xE0 ? 4 : 2;
 }
@@ -105,12 +103,10 @@ static NTSTATUS SMBusAttempt(UCHAR Address, UCHAR Command, ULONG Size, bool Read
     return SMB_TRY_AGAIN;
 }
 
-// One byte/word/block transaction, polled. The reference retries collisions/protocol errors up to 20 times, 2 ms
-// apart. A 4-byte transfer uses the block protocol: the bytes go through the FIFO (0xC009), low byte first, with the
-// byte count in the data register.
-// Each attempt runs with interrupts disabled: callers at DISPATCH_LEVEL and above (DPCs, a title's interrupt
-// routine) cannot take the lock, and one of them preempting a transaction half-way overwrote its address, command
-// and data registers (a write could reach the wrong SMC register). An attempt takes well under 1 ms.
+// One byte/word/block transaction, polled. The reference retries collisions/protocol errors up to 20 times, 2 ms apart. A 4-byte transfer uses the block
+// protocol: the bytes go through the FIFO (0xC009), low byte first, with the byte count in the data register. Each attempt runs with interrupts disabled:
+// callers at DISPATCH_LEVEL and above (DPCs, a title's interrupt routine) cannot take the lock, and one of them preempting a transaction half-way overwrote its
+// address, command and data registers (a write could reach the wrong SMC register). An attempt takes well under 1 ms.
 static NTSTATUS SMBusTransaction(UCHAR Address, UCHAR Command, ULONG Size, bool Read, ULONG *Value) {
     XK_MARK("mark: SMBus transaction");
     for (int attempt = 0; attempt < 20; attempt++) {
@@ -128,24 +124,20 @@ static NTSTATUS SMBusTransaction(UCHAR Address, UCHAR Command, ULONG Size, bool 
     return STATUS_IO_DEVICE_ERROR_;
 }
 
-XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue,
-                                       PULONG DataValue) {
+XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue, PULONG DataValue) {
     AcquireSMBus();
     ULONG v = 0;
-    NTSTATUS status = SMBusTransaction(SlaveAddress, CommandCode, SMBusSize(SlaveAddress, ReadWordValue), true,
-                                       &v);
+    NTSTATUS status = SMBusTransaction(SlaveAddress, CommandCode, SMBusSize(SlaveAddress, ReadWordValue), true, &v);
     ReleaseSMBus();
     *DataValue = v;
     return status;
 }
 
-XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue,
-                                        ULONG DataValue) {
+XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue) {
     XK_MARK("mark: SMBus write, taking the lock");
     AcquireSMBus();
     ULONG v = DataValue;
-    NTSTATUS status = SMBusTransaction(SlaveAddress, CommandCode, SMBusSize(SlaveAddress, WriteWordValue),
-                                       false, &v);
+    NTSTATUS status = SMBusTransaction(SlaveAddress, CommandCode, SMBusSize(SlaveAddress, WriteWordValue), false, &v);
     ReleaseSMBus();
     return status;
 }
@@ -231,8 +223,8 @@ XBAPI void NTAPI HalEnableSecureTrayEject() {
     }
 }
 
-// Boot status on the front LED (spec/oxos_internal/03_debug_serial.md §6): an SMC LED sequence (register 0x08: bits 7-4
-// red, 3-0 green, one bit per quarter of the cycle) in custom mode (0x07 = 1).
+// Boot status on the front LED (spec/oxos_internal/03_debug_serial.md §6): an SMC LED sequence (register 0x08: bits 7-4 red, 3-0 green, one bit per quarter of
+// the cycle) in custom mode (0x07 = 1).
 void SetBootLed(UCHAR Pattern) {
     HalWriteSMBusValue(SMC_ADDRESS, 0x08, FALSE, Pattern);
     HalWriteSMBusValue(SMC_ADDRESS, 0x07, FALSE, 1);
@@ -244,10 +236,9 @@ extern "C" void KiQuickRebootQuiesce() {
     outb(0x21, 0xFF); // mask both PICs
     outb(0xA1, 0xFF);
     outb(0xFF60, 0);  // IDE bus master off
-    // OHCI host controller resets (USB 0 and 1). A controller leaves its reset in USBSUSPEND, so put it back in
-    // USBRESET (HcControl 0), the state a title finds after a cold boot: a title's USB library that finds the
-    // controller suspended resumes it with a 20 ms sleep inside XInitDevices, and a title whose other thread asks
-    // for its input devices meanwhile initializes them twice (spec/oxos_internal/25 §5).
+    // OHCI host controller resets (USB 0 and 1). A controller leaves its reset in USBSUSPEND, so put it back in USBRESET (HcControl 0), the state a title finds
+    // after a cold boot: a title's USB library that finds the controller suspended resumes it with a 20 ms sleep inside XInitDevices, and a title whose other
+    // thread asks for its input devices meanwhile initializes them twice (spec/oxos_internal/25 §5).
     static const ULONG OHCI[] = {0xFED00000, 0xFED08000};
     for (ULONG base : OHCI) {
         auto hc = (volatile ULONG *)base;
@@ -258,32 +249,31 @@ extern "C" void KiQuickRebootQuiesce() {
         hc[1] = 0; // HcControl: USBRESET, every list off
     }
     *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
-    // NIC: transmitter off only. Resetting the whole NIC here (receiver, TxRxControl, rings: tried 2026-10-29) left it
-    // in a state the next title's network start-up waited on forever (XBMC4Gamers started by EvoX's dashboard).
+    // NIC: transmitter off only. Resetting the whole NIC here (receiver, TxRxControl, rings: tried 2026-10-29) left it in a state the next title's network
+    // start-up waited on forever (XBMC4Gamers started by EvoX's dashboard).
     *(volatile ULONG *)0xFEF00084 = 0;
 }
 
-// Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at
-// once: 4 (fatal error) first leaves scratch 2 for the next boot (spec/stock/12 §2).
+// Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at once: 4 (fatal error) first leaves scratch 2
+// for the next boot (spec/stock/12 §2).
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     XK_SERIAL("firmware: HalReturnToFirmware(%lu) from %p\n", Routine, __builtin_return_address(0));
 #if XK_DEBUG_SERIAL
     {
         auto ldp = (const ULONG *)LaunchDataPage;
         if (ldp) {
-            XK_SERIAL("firmware: launch data type %#lx title %08lx path '%.40s' data %lx %lx %lx\n", ldp[0], ldp[1],
-                      (const char *)(ldp + 2), ldp[0x100], ldp[0x101], ldp[0x102]);
+            XK_SERIAL("firmware: launch data type %#lx title %08lx path '%.40s' data %lx %lx %lx\n", ldp[0], ldp[1], (const char *)(ldp + 2), ldp[0x100],
+                      ldp[0x101], ldp[0x102]);
         }
     }
 #endif
     if (Routine != 2) {
         if (Routine == 4)
             HalWriteSMBusValue(SMC_ADDRESS, SMC_SCRATCH, FALSE, 2);
-        // OXOS: the SMC's reset alone, and port 0xCF9 only if the SMC has not reset the console within two seconds. The
-        // reference writes 0xCF9 right after the SMC request: the chipset then restarts and runs the X-codes at once,
-        // and the SMC's reset, which arrives later over the SMBus, can undo their GPU and memory set-up (1 warm reboot
-        // in 10 on the 1.4 test console: every X-code setting at its power-on value, the next boot stopped;
-        // spec/oxos_internal/22 §7). The SMBus is polled, so the request works at any IRQL.
+        // OXOS: the SMC's reset alone, and port 0xCF9 only if the SMC has not reset the console within two seconds. The reference writes 0xCF9 right after the
+        // SMC request: the chipset then restarts and runs the X-codes at once, and the SMC's reset, which arrives later over the SMBus, can undo their GPU and
+        // memory set-up (1 warm reboot in 10 on the 1.4 test console: every X-code setting at its power-on value, the next boot stopped; spec/oxos_internal/22
+        // §7). The SMBus is polled, so the request works at any IRQL.
         for (int i = 0; i < 5 && !NT_SUCCESS(HalWriteSMBusValue(SMC_ADDRESS, SMC_RESET, FALSE, 1)); i++) {
             // Retry until the SMC accepts the reset (up to five tries).
         }
@@ -303,12 +293,11 @@ XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
 // --- SMC events (spec/stock/12 §4). The SMC raises EXTSMI# (ACPI GPE0 bit 1) on the SCI, IRQ 12. The reference runs an
 // asynchronous SMBus state machine; ours runs the same register writes in a DPC (SmcDpcRoutine).
 
-constexpr UCHAR SMC_AV_PACK = 0x04, SMC_SHUTDOWN_NOTICE = 0x0B, SMC_TRAY_EJECT = 0x0C, SMC_OS_RESPONSE = 0x0D,
-                SMC_INTERRUPT_REASON = 0x11, SMC_RESET_ON_EJECT = 0x19;
+constexpr UCHAR SMC_AV_PACK = 0x04, SMC_SHUTDOWN_NOTICE = 0x0B, SMC_TRAY_EJECT = 0x0C, SMC_OS_RESPONSE = 0x0D, SMC_INTERRUPT_REASON = 0x11,
+                SMC_RESET_ON_EJECT = 0x19;
 volatile ULONG SmcEventCount, SmcLastReason, SciCount; // diagnostics (boot tests)
-// These two survive quick reboots, as in the reference (its STICKY section, 0x8003AFEC and 0x8003AFE8): a title
-// started from the dashboard still knows the cold-boot AV pack (re-plugging the same cable must not reset) and
-// counts as a running title for eject and tray events even before its image is loaded.
+// These two survive quick reboots, as in the reference (its STICKY section, 0x8003AFEC and 0x8003AFE8): a title started from the dashboard still knows the
+// cold-boot AV pack (re-plugging the same cable must not reset) and counts as a running title for eject and tray events even before its image is loaded.
 XK_PERSIST static ULONG BootAvPack = 7;            // AV pack at cold boot (7 = none)
 XK_PERSIST static volatile BOOLEAN SmcEventsArmed; // set once the first image is loaded; never cleared
 
@@ -441,9 +430,8 @@ void HandleSmcEvents(ULONG reason) {
     }
 }
 
-// SMC events and shutdown requests run in a DPC, as the reference's (no thread: its stack would cost the title
-// 3 pages, spec/stock/09 §7). The SMBus is polled, so it works at DISPATCH_LEVEL; when a passive-level caller is in the
-// middle of a transaction (its lock is taken), the DPC tries again 1 ms later.
+// SMC events and shutdown requests run in a DPC, as the reference's (no thread: its stack would cost the title 3 pages, spec/stock/09 §7). The SMBus is polled,
+// so it works at DISPATCH_LEVEL; when a passive-level caller is in the middle of a transaction (its lock is taken), the DPC tries again 1 ms later.
 static void NTAPI SmcDpcRoutine(PKDPC, PVOID, PVOID, PVOID) {
     AcquireSMBus(); // initialises the lock on first use; no wait at DISPATCH_LEVEL
     if (!SMBusLock.Header.SignalState) {
@@ -491,9 +479,8 @@ void StartSmcEvents() {
     KeConnectInterrupt(&SciInterrupt);
 }
 
-// The XBE loader, after the image is in memory (the reference's 0x80014cc9): from now on an eject resets. The
-// dashboard turns the SMC's own reset-on-eject off on cold boot. Returns TRUE when an eject was handled before
-// this launch (a disc title must then not start).
+// The XBE loader, after the image is in memory (the reference's 0x80014cc9): from now on an eject resets. The dashboard turns the SMC's own reset-on-eject off
+// on cold boot. Returns TRUE when an eject was handled before this launch (a disc title must then not start).
 BOOLEAN ArmSmcEvents(BOOLEAN Dashboard) {
     SmcEventsArmed = TRUE;
     if (!KiQuickRebootFlag && Dashboard && !(BootFlags & 8)) {

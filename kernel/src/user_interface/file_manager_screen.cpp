@@ -1,6 +1,5 @@
-// The OXOS File Manager's screen (spec/oxos_internal/32 §5): a folder with an arrow up on it (uploads), the title, the
-// server's address and a status line; drawn once, then only the address and the status. Boot-only: the server
-// (webserver/webserver.cpp) shows it before the first title starts.
+// The OXOS File Manager's screen (spec/oxos_internal/32 §5): a folder with an arrow up on it (uploads), the title, the server's address and a status line;
+// drawn once, then only the address and the status. Boot-only: the server (webserver/webserver.cpp) shows it before the first title starts.
 #include <user_interface/user_interface.h>
 #include <graphics/graphics.h>
 #include <runtime/runtime.h>

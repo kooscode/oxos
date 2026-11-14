@@ -16,8 +16,8 @@ static USHORT DisabledMask = 0xFFFF; // IRQs not enabled through HalEnableSystem
 static USHORT PicMask = 0xFFFF;      // value currently programmed into both PICs
 static USHORT Elcr;                  // bit set = level-sensitive
 
-// Dispatch IRQL per IRQ. Defaults reproduce the reference per-IRQL PIC mask table (spec/stock/07):
-// IRQ0 (clock) 28, IRQ8 26, IRQ12 27, the cascade never, every other IRQ n at 26 - n.
+// Dispatch IRQL per IRQ. Defaults reproduce the reference per-IRQL PIC mask table (spec/stock/07): IRQ0 (clock) 28, IRQ8 26, IRQ12 27, the cascade never, every
+// other IRQ n at 26 - n.
 static constexpr KIRQL DefaultIrqLevel[16] = {28, 25, 0xFF, 23, 22, 21, 20, 19,
                                                   26, 17, 16, 15, 27, 13, 12, 11};
 // The current table: the defaults, except where a connected KINTERRUPT set its own IRQL.
@@ -76,8 +76,8 @@ void InitPic() {
     PicMask = 0xFFFF;
     DisabledMask = 0xFFFF;
     Elcr = (USHORT)(inb(ELCR1) | inb(ELCR2) << 8);
-    // As the reference (0x80013F98): returns with interrupts enabled whatever the caller had. Every line is masked
-    // here, so nothing arrives until a driver enables its line.
+    // As the reference (0x80013F98): returns with interrupts enabled whatever the caller had. Every line is masked here, so nothing arrives until a driver
+    // enables its line.
     (void)flags;
     sti();
 }
@@ -216,9 +216,8 @@ void SetRealTimeClock(const TIME_FIELDS *t) {
     restore_flags(flags);
 }
 
-// The "clock has been set" signature in the second CMOS bank (spec/stock/05 §1): bytes 0x10-0x6F and 0x80-0xFF hold
-// 0x55, 0xAA, 0x55, ... Written by NtSetSystemTime; checked before the first title launch. As the reference does it:
-// the index goes to port 0x72, the data through port 0x71.
+// The "clock has been set" signature in the second CMOS bank (spec/stock/05 §1): bytes 0x10-0x6F and 0x80-0xFF hold 0x55, 0xAA, 0x55, ... Written by
+// NtSetSystemTime; checked before the first title launch. As the reference does it: the index goes to port 0x72, the data through port 0x71.
 static bool CmosPattern(UCHAR first, ULONG count, bool write) {
     ULONG flags;
     __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags));

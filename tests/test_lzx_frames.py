@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Check the BIOS packer's LZX compression (tools/lzx.py, as tools/mkbios.py streams it) across several 32 KiB
-frames, including a single byte, exact frame multiples and an odd-length final frame.
+"""Check the BIOS packer's LZX compression (tools/lzx.py, as tools/mkbios.py streams it) across several 32 KiB frames, including a single byte, exact frame
+multiples and an odd-length final frame.
 
 usage: python3 tests/test_lzx_frames.py
 
-Each test input is compressed into mkbios's stream ({u16 compressed length, u16 uncompressed length, LZX bytes} per
-frame, then four zero bytes), split back into frames the way the 2BL reads it, and decoded twice:
+Each test input is compressed into mkbios's stream ({u16 compressed length, u16 uncompressed length, LZX bytes} per frame, then four zero bytes), split back
+into frames the way the 2BL reads it, and decoded twice:
 1. with tools/lzx.py's own decoder;
-2. independently, when the system's libarchive is installed (Ubuntu: libarchive13t64, usually present): the frames
-   are wrapped in a Microsoft CAB file (one LZX folder, window 2^17, one data block per frame, as the original
-   kernel's packer uses) and libarchive's CAB reader decodes them. Without libarchive this step is skipped.
+2. independently, when the system's libarchive is installed (Ubuntu: libarchive13t64, usually present): the frames are wrapped in a Microsoft CAB file (one LZX
+   folder, window 2^17, one data block per frame, as the original kernel's packer uses) and libarchive's CAB reader decodes them. Without libarchive this step
+   is skipped.
 Exits 1 on any mismatch.
 """
 import ctypes, ctypes.util, importlib.util, os, random, struct, sys

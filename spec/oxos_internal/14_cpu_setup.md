@@ -12,18 +12,16 @@ OXOS choices, implemented 2026-10-26/27, each matching the reference kernel.
 | Idle loop | spins, no `hlt` (spec/stock/01 §3) | spins; host unit tests keep `hlt` (their fake clock advances there) | `sti; hlt` |
 
 ## Microcode
-- Source: Intel's Linux microcode repository at a pinned commit, files `intel-ucode/06-08-06` and `06-08-0a`, SHA-256
-  checked (kernel/Makefile). `tools/mkucode.py` keeps the updates for platform 4 (platform-flag bit 0x10): 0x686
-  revision 8 and 0x68A revision 1, byte for byte the same updates the reference carries.
-- `core::LoadMicrocode` (core/processor.cpp), first in `core::InitializeProcessor`: an update whose signature equals
-  cpuid(1).eax and whose platform flags include the CPU's platform (MSR 0x17 bits 50-52) goes to MSR 0x79 (address of
-  the data after the 48-byte header, 16-byte aligned); the revision is then read back (MSR 0x8B ← 0, cpuid, MSR 0x8B
-  high half) and logged as "cpu: signature …, microcode revision …".
+- Source: Intel's Linux microcode repository at a pinned commit, files `intel-ucode/06-08-06` and `06-08-0a`, SHA-256 checked (kernel/Makefile).
+  `tools/mkucode.py` keeps the updates for platform 4 (platform-flag bit 0x10): 0x686 revision 8 and 0x68A revision 1, byte for byte the same updates the
+  reference carries.
+- `core::LoadMicrocode` (core/processor.cpp), first in `core::InitializeProcessor`: an update whose signature equals cpuid(1).eax and whose platform flags
+  include the CPU's platform (MSR 0x17 bits 50-52) goes to MSR 0x79 (address of the data after the 48-byte header, 16-byte aligned); the revision is then read
+  back (MSR 0x8B ← 0, cpuid, MSR 0x8B high half) and logged as "cpu: signature …, microcode revision …".
 - Verified: the no-DVD console (0x68A, platform 4) reports revision 1 after the load (factory revision 0).
 - xemu ignores the MSR writes; make test_dash passes.
 
 ## Interrupts during start-up: results (no-DVD 1.4 console)
-The serial-only build, which had hung at "load: first page read" of xboxdash.xbe on every boot (more than 20), loaded
-the dashboard on 7 of 7 boots after this change; the netlog build 2/2; the release build (no debug output) reached the
-dashboard menu on 4 of 5 boots (one netbooted and showed no video; not diagnosed). make test_dash and the 143 host unit
-tests pass.
+The serial-only build, which had hung at "load: first page read" of xboxdash.xbe on every boot (more than 20), loaded the dashboard on 7 of 7 boots after this
+change; the netlog build 2/2; the release build (no debug output) reached the dashboard menu on 4 of 5 boots (one netbooted and showed no video; not diagnosed).
+make test_dash and the 143 host unit tests pass.

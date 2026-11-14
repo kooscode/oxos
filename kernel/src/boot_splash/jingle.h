@@ -1,6 +1,5 @@
-// The boot jingle's synthesizer (spec/oxos_internal/17_boot_jingle.md): integer arithmetic only, no kernel
-// dependencies, so the same file builds into the kernel and into the host tool that renders it to a WAV file
-// (tools/jingle).
+// The boot jingle's synthesizer (spec/oxos_internal/17_boot_jingle.md): integer arithmetic only, no kernel dependencies, so the same file builds into the
+// kernel and into the host tool that renders it to a WAV file (tools/jingle).
 #pragma once
 
 namespace xk::boot_splash::jingle {
@@ -14,8 +13,7 @@ unsigned Frames();                                  // the jingle's length in fr
 unsigned ClimaxMs();                                // when the build-up lands on the final chord (fully faded in)
 unsigned LengthMs();                                // the whole jingle, the final chord's linger included
 void Init(State *s);                                // before the first Render
-void Mute(State *s, unsigned mask);                 // host tool: leave instruments out (bit 1 cello and bass,
-                                                    // 2 drums, 3 reverb)
+void Mute(State *s, unsigned mask);                 // host tool: leave instruments out (bit 1 cello and bass, 2 drums, 3 reverb)
 void Render(State *s, short *out, unsigned frames); // the next frames, interleaved left/right
 
 } // namespace boot_splash::jingle

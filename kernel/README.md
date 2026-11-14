@@ -1,56 +1,44 @@
 # Open Xbox kernel
 
-A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with retail 1.0.4627.1.
-It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code, machine code,
-disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables are the one data taken from
-Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6: tested with
-all three video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its own X-codes:
-`MCPX16=1`). It builds on Linux with clang + lld-link.
+A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with retail 1.0.4627.1. It is built from the behavioural specs in
+`../spec/stock/` (clean-room: no Microsoft source code, machine code, disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables
+are the one data taken from Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6: tested with all three
+video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its own X-codes: `MCPX16=1`). It builds on Linux with clang +
+lld-link.
 
 ## Setting up
-Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the
-same packages under their own names.
+Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the same packages under their own names.
 
-1. **Build tools:** `sudo apt install git make clang lld llvm` (`llvm` provides `llvm-objcopy`; the build scripts use
-   the Python 3 that comes with Ubuntu).
-2. **xemu:** download the AppImage from [xemu.app](https://xemu.app) and put it at `~/.local/bin/xemu` (or anywhere
-   on `PATH` as `xemu`):
+1. **Build tools:** `sudo apt install git make clang lld llvm` (`llvm` provides `llvm-objcopy`; the build scripts use the Python 3 that comes with Ubuntu).
+2. **xemu:** download the AppImage from [xemu.app](https://xemu.app) and put it at `~/.local/bin/xemu` (or anywhere on `PATH` as `xemu`):
    ```
    mkdir -p ~/.local/bin
    mv ~/Downloads/xemu-*-x86_64.AppImage ~/.local/bin/xemu && chmod +x ~/.local/bin/xemu
    sudo apt install libfuse2t64     # AppImages need FUSE 2 on Ubuntu 24.04
    ```
-3. **The repository:** `git clone https://github.com/kooscode/oxos.git`. Nothing else needs fetching by hand: on
-   first use the build fetches into `../third_party/`, each at a pinned version (so the first build needs internet
-   access): [XboxDev/cromwell](https://github.com/XboxDev/cromwell) by `make bios`, the
-   [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk (checked by SHA-256) by `make test` and
-   `make run`, and nxdk with SDL3 by the targets that build console apps (`make nxdk`):
-   [kooscode/nxdk](https://github.com/kooscode/nxdk) branch `oxos` (XboxDev's nxdk with pbkit's graphics-context
-   fix) and [kooscode/nxdk-sdl3](https://github.com/kooscode/nxdk-sdl3) (a fork of Ryzee119's SDL3 for nxdk).
-   Intel's microcode is in the repo (`../third_party/intel_ucode`).
-4. **Optional, your own files** (git-ignored, never committed): images of your own discs (XISO) in `../xiso/`;
-   `../xbox_files/` for your own copyrighted files, e.g. a disk with the stock Microsoft dashboard as
-   `xbox_files/hdd/msdash.qcow2`, which `make run` then prefers over the default disk. No BIOS, MCPX boot ROM or
-   hard-disk image is needed.
+3. **The repository:** `git clone https://github.com/kooscode/oxos.git`. Nothing else needs fetching by hand: on first use the build fetches into
+   `../third_party/`, each at a pinned version (so the first build needs internet access): [XboxDev/cromwell](https://github.com/XboxDev/cromwell) by `make
+   bios`, the [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk (checked by SHA-256) by `make test` and `make run`, and nxdk with SDL3 by
+   the targets that build console apps (`make nxdk`): [kooscode/nxdk](https://github.com/kooscode/nxdk) branch `oxos` (XboxDev's nxdk with pbkit's
+   graphics-context fix) and [kooscode/nxdk-sdl3](https://github.com/kooscode/nxdk-sdl3) (a fork of Ryzee119's SDL3 for nxdk). Intel's microcode is in the repo
+   (`../third_party/intel_ucode`).
+4. **Optional, your own files** (git-ignored, never committed): images of your own discs (XISO) in `../xiso/`; `../xbox_files/` for your own copyrighted files,
+   e.g. a disk with the stock Microsoft dashboard as `xbox_files/hdd/msdash.qcow2`, which `make run` then prefers over the default disk. No BIOS, MCPX boot ROM
+   or hard-disk image is needed.
 5. **Build and boot:** `make bios`, `make test`, `make run` (below).
 
 Optional extras:
-- **Controller test** (`make test_controller`): `sudo apt install cmake flex bison`, and write access to
-  `/dev/uinput` (e.g. `sudo setfacl -m u:$USER:rw /dev/uinput` for the current session).
-- **Debugging** (below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an nxdk checkout
-  (`make nxdk` fetches one into `../third_party/nxdk`).
-- **256 KB flash chips:** `make bios_256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the
-  1 MB image is the same image.
-- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=../build/kernel/release_1_6 SELFTEST=0`). The
-  image then carries OXOS's own 1.6 X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings
-  read from the EEPROM) instead of Cromwell's, and the 2BL calibrates the memory pads from the EEPROM
-  ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md),
-  [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
-- **Your own boot splash:** `make bios SPLASH=my-logo.svg` turns an SVG into the animated vector splash (mark the
-  parts to fade from and to with `data-oxos-phase="start"` / `"end"`; preview with `tools/vsplash`). The default is
-  `splash/oxos_splash.svg`.
-- **Comparing with the original:** your own BIOS dump in `xbox_files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or
-  `MCPX_ROM=...` to boot OXOS through the real ROM as a console does) for `make run_stock` and `make test_mcpx`.
+- **Controller test** (`make test_controller`): `sudo apt install cmake flex bison`, and write access to `/dev/uinput` (e.g. `sudo setfacl -m u:$USER:rw
+  /dev/uinput` for the current session).
+- **Debugging** (below): `sudo apt install gdb-multiarch binutils`; for nxdk apps also an nxdk checkout (`make nxdk` fetches one into `../third_party/nxdk`).
+- **256 KB flash chips:** `make bios_256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the 1 MB image is the same image.
+- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=../build/kernel/release_1_6 SELFTEST=0`). The image then carries OXOS's own 1.6
+  X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings read from the EEPROM) instead of Cromwell's, and the 2BL calibrates the
+  memory pads from the EEPROM ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md), [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
+- **Your own boot splash:** `make bios SPLASH=my-logo.svg` turns an SVG into the animated vector splash (mark the parts to fade from and to with
+  `data-oxos-phase="start"` / `"end"`; preview with `tools/vsplash`). The default is `splash/oxos_splash.svg`.
+- **Comparing with the original:** your own BIOS dump in `xbox_files/bios/` and the MCPX boot ROM (`STOCK_MCPX`, or `MCPX_ROM=...` to boot OXOS through the real
+  ROM as a console does) for `make run_stock` and `make test_mcpx`.
 
 ## Build and test
 ```
@@ -86,108 +74,87 @@ make test_lba48                 # the self-tests on a 2 TB disk (xemu_state/oxos
 make test_controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
                                 # the tests/controller_test_title title (nxdk, fetched into ../third_party) checks each one
 ```
-Inputs: none to provide. The default hard disk (`HDD_IMAGE`) is the free xemu-dashboard image, fetched on first use
-into `../third_party/xemu_dashboard/` (`make hdd_image`); set `HDD_IMAGE=...` for another. Optional:
-`MCPX_ROM=...` boots through a real boot ROM (`make test_mcpx`); `IMAGE=base BIOS_BASE=... MCPX_ROM=...` packs
-the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run_stock`. The xemu binary is found on PATH or at
-`~/.local/bin/xemu`.
+Inputs: none to provide. The default hard disk (`HDD_IMAGE`) is the free xemu-dashboard image, fetched on first use into `../third_party/xemu_dashboard/` (`make
+hdd_image`); set `HDD_IMAGE=...` for another. Optional: `MCPX_ROM=...` boots through a real boot ROM (`make test_mcpx`); `IMAGE=base BIOS_BASE=... MCPX_ROM=...`
+packs the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run_stock`. The xemu binary is found on PATH or at `~/.local/bin/xemu`.
 
 ## Running in xemu
-`make run` starts from `xbox_files/hdd/msdash.qcow2` when you have it (a hard disk with the stock Microsoft
-dashboard, whose Settings set up video modes, clock and language), otherwise from the default xemu-dashboard disk;
-pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set). It keeps its
-hard-disk copy and EEPROM in `xemu_state/oxos-<instance>/`: `oxos_msdash`, `oxos_xemu` for the default disk, or
-`INSTANCE=name` for any other. Saves and settings survive between runs (`FRESH=1` starts over from the image, which
-is never written; `make run_stock` uses `xemu_state/stock-<instance>/`).
+`make run` starts from `xbox_files/hdd/msdash.qcow2` when you have it (a hard disk with the stock Microsoft dashboard, whose Settings set up video modes, clock
+and language), otherwise from the default xemu-dashboard disk; pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set).
+It keeps its hard-disk copy and EEPROM in `xemu_state/oxos-<instance>/`: `oxos_msdash`, `oxos_xemu` for the default disk, or `INSTANCE=name` for any other.
+Saves and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run_stock` uses `xemu_state/stock-<instance>/`).
 
-It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; titles that
-support widescreen show 16:9 and the others 4:3. Change that with `WIDE=0`, `ASPECT=16x9` (auto, native, 4x3,
-16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). With HD modes enabled in the dashboard, titles run in
-480p, 720p or 1080i (spec 17): 720p and 1080i always show at 16:9, while 480p follows the title's own widescreen
-signal as on the original kernel, so a widescreen title that leaves it off in 480p (such as Halo 2) shows 4:3 under
-`auto`; run it with `ASPECT=16x9`. Enter the Matrix in 720p or 1080i crashes xemu at render scale 2 or more (an xemu
-limitation); use `SCALE=1` or turn those modes off in the dashboard.
+It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; titles that support widescreen show 16:9 and the others
+4:3. Change that with `WIDE=0`, `ASPECT=16x9` (auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). With HD modes enabled in the
+dashboard, titles run in 480p, 720p or 1080i (spec 17): 720p and 1080i always show at 16:9, while 480p follows the title's own widescreen signal as on the
+original kernel, so a widescreen title that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`. Enter the Matrix in 720p
+or 1080i crashes xemu at render scale 2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
 
 ## Disks and disc images
-**An exFAT disk** (format it on a PC; the Xbox drives are folders `/C`, `/E`, `/F`, `/X`, `/Y`, `/Z` at its root,
-created when first used; names are not case-sensitive). Either one exFAT partition (GPT or MBR) starting at 1 MiB or
-later, or exFAT on the whole disk with its FAT at sector 2048 or later (`mkfs.exfat` does both); OXOS keeps the
-Xbox's reserved sectors in the gap before the volume. Copy the dashboard's files into `/C` and saves (`TDATA`,
-`UDATA`) into `/E`. In xemu, a small qcow2 overlay keeps a real disk untouched:
-`qemu-img create -f qcow2 -F raw -b /dev/sdX overlay.qcow2`, then use `overlay.qcow2` as the hard disk.
-`tests/exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--whole-disk]` builds such a disk from an Xbox disk image.
+**An exFAT disk** (format it on a PC; the Xbox drives are folders `/C`, `/E`, `/F`, `/X`, `/Y`, `/Z` at its root, created when first used; names are not
+case-sensitive). Either one exFAT partition (GPT or MBR) starting at 1 MiB or later, or exFAT on the whole disk with its FAT at sector 2048 or later
+(`mkfs.exfat` does both); OXOS keeps the Xbox's reserved sectors in the gap before the volume. Copy the dashboard's files into `/C` and saves (`TDATA`, `UDATA`)
+into `/E`. In xemu, a small qcow2 overlay keeps a real disk untouched: `qemu-img create -f qcow2 -F raw -b /dev/sdX overlay.qcow2`, then use `overlay.qcow2` as
+the hard disk. `tests/exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--whole-disk]` builds such a disk from an Xbox disk image.
 Design: [`../spec/oxos_internal/05_exfat_storage_spec.md`](../spec/oxos_internal/05_exfat_storage_spec.md).
 
-**Disc images** of your own discs: XISO, full disc dumps and `.cci`, whole or split in two (`name.1.iso` +
-`name.2.iso`; on FATX split below 4 GB); names of 42 characters or fewer.
+**Disc images** of your own discs: XISO, full disc dumps and `.cci`, whole or split in two (`name.1.iso` + `name.2.iso`; on FATX split below 4 GB); names of 42
+characters or fewer.
 1. Copy the image to the hard disk, e.g. `F:\titles\` (`/F/titles` on exFAT).
-2. Build the ISO launcher (`make iso_launcher`, output `../build/tools/iso_launcher/bin/default.xbe`) and put a copy
-   next to the image, or anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
-   [`../tools/oxos_isonator`](../tools/oxos_isonator) does this for you, one folder per game, with a launcher that
-   carries the game's name, title ID and artwork.
-3. Start the launcher from the dashboard: it mounts the image as the console's disc and the title starts. The image
-   stays mounted through the title's own restarts until the console is switched off or reset (LT + RT + BACK +
-   BLACK); an `iso.txt` of `none` unmounts it.
+2. Build the ISO launcher (`make iso_launcher`, output `../build/tools/iso_launcher/bin/default.xbe`) and put a copy next to the image, or anywhere with an
+   `iso.txt` naming the image (`F:\titles\Halo 2.iso`). [`../tools/oxos_isonator`](../tools/oxos_isonator) does this for you, one folder per game, with a
+   launcher that carries the game's name, title ID and artwork.
+3. Start the launcher from the dashboard: it mounts the image as the console's disc and the title starts. The image stays mounted through the title's own
+   restarts until the console is switched off or reset (LT + RT + BACK + BLACK); an `iso.txt` of `none` unmounts it.
 
 Details: [`../spec/oxos_internal/16_virtual_discs.md`](../spec/oxos_internal/16_virtual_discs.md).
 
 ## Debugging with gdb or VS Code
-xemu's GDB server and a debug build of the kernel (`DEBUG=1`: DWARF debug info, `-Og`) let you debug at source
-level: breakpoints, stepping, variables and the call stack, in your own [nxdk](https://github.com/XboxDev/nxdk)
-apps and in the kernel, in one session (step from your app into a kernel call and back). You need `gdb-multiarch`
-and GNU `objcopy` (binutils).
+xemu's GDB server and a debug build of the kernel (`DEBUG=1`: DWARF debug info, `-Og`) let you debug at source level: breakpoints, stepping, variables and the
+call stack, in your own [nxdk](https://github.com/XboxDev/nxdk) apps and in the kernel, in one session (step from your app into a kernel call and back). You
+need `gdb-multiarch` and GNU `objcopy` (binutils).
 
-**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and
-press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts xemu paused and
-runs to your breakpoint. For example, a breakpoint in `titles::LoadImageFile` (`src/titles/title_loader.cpp`) stops on
-every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and `XeImageFileName` its
-path.
+**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and press F5. It asks for a disc image
+(leave it empty for the dashboard), builds the debug kernel, starts xemu paused and runs to your breakpoint. For example, a breakpoint in
+`titles::LoadImageFile` (`src/titles/title_loader.cpp`) stops on every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and
+`XeImageFileName` its path.
 
-![Kernel debugging in VS Code: stopped in titles::LoadImageFile, with the loaded title's name in a
-watch](../docs/kernel_debugging.jpg)
+![Kernel debugging in VS Code: stopped in titles::LoadImageFile, with the loaded title's name in a watch](../docs/kernel_debugging.jpg)
 
 **An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
-1. Copy `../tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in
-   `settings.json`.
-2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug_app.py` builds the
-   debug kernel (once), packs the app's `bin/` folder as a disc, and starts xemu paused with the kernel's serial log
-   in the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your first breakpoint. Stopping
-   the debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel calls.
+1. Copy `../tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in `settings.json`.
+2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug_app.py` builds the debug kernel (once), packs the app's `bin/`
+   folder as a disc, and starts xemu paused with the kernel's serial log in the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your
+   first breakpoint. Stopping the debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel calls.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
-**From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with
-`gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`.
-For an nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then attach with `gdb-multiarch
-path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf' -ex 'target
-remote localhost:1234'`.
+**From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with `gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex
+'target remote localhost:1234'`, set breakpoints and `continue`. For an nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then
+attach with `gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf' -ex 'target remote
+localhost:1234'`.
 
-Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
-`CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to their Makefile, so that gdb shows function names (it cannot
-read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox is not implemented yet.
+Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add `CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to
+their Makefile, so that gdb shows function names (it cannot read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox is not implemented yet.
 
 ## About the BIOS image you build
-`make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0,
-and Intel's CPU microcode (unmodified, under Intel's licence; [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)).
-No Microsoft code. The one Microsoft-derived data in it is the video encoder and NV2A memory pad calibration tables,
-functional hardware constants ([`../dmca_compliance.md`](../dmca_compliance.md) §5), and the 16-byte retail
-certificate key, from which titles derive their save-signature and System Link keys: with it, saves move between
-OXOS and stock consoles and System Link works with them (interoperability only; `dmca_compliance.md` §6).
+`make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0, and Intel's CPU microcode (unmodified, under
+Intel's licence; [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)). No Microsoft code. The one Microsoft-derived data in it is the video encoder and
+NV2A memory pad calibration tables, functional hardware constants ([`../dmca_compliance.md`](../dmca_compliance.md) §5), and the 16-byte retail certificate key,
+from which titles derive their save-signature and System Link keys: with it, saves move between OXOS and stock consoles and System Link works with them
+(interoperability only; `dmca_compliance.md` §6).
 
-`IMAGE=base` packs the kernel into your own Microsoft BIOS instead, for comparisons. Such an image contains
-Microsoft's 2BL and keys: do not distribute it.
+`IMAGE=base` packs the kernel into your own Microsoft BIOS instead, for comparisons. Such an image contains Microsoft's 2BL and keys: do not distribute it.
 
 ## How it was made
-- **The kernel** (`src/`): the reference kernel was studied with Ghidra to write behavioural specifications
-  (`../spec/stock/`), and the kernel is written from those specs only. No Microsoft source code, machine code,
-  disassembly, decompiled code or keys are included.
-- **Planned features** (`../spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and
-  its features were written up as behavioural specs for OXOS.
-- **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and
-  EEPROM key handling of [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs
-  Cromwell's X-codes, whose "overflow trick" hands control to our 2BL without any Microsoft key; without a boot ROM
-  (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds read-back
-  checks to their memory set-up writes, which some consoles' GPU ignores (spec/oxos_internal/27). The hard disk unlocks
-  with Cromwell's EEPROM key states.
+- **The kernel** (`src/`): the reference kernel was studied with Ghidra to write behavioural specifications (`../spec/stock/`), and the kernel is written from
+  those specs only. No Microsoft source code, machine code, disassembly, decompiled code or keys are included.
+- **Planned features** (`../spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its features were written up as behavioural
+  specs for OXOS.
+- **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and EEPROM key handling of
+  [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs Cromwell's X-codes, whose "overflow trick" hands control to our
+  2BL without any Microsoft key; without a boot ROM (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds
+  read-back checks to their memory set-up writes, which some consoles' GPU ignores (spec/oxos_internal/27). The hard disk unlocks with Cromwell's EEPROM key
+  states.
 
 ## Layout
 | path | contents |
@@ -221,8 +188,8 @@ Microsoft's 2BL and keys: do not distribute it.
 | `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
 
-Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, the ABI titles import (`Ke`, `Mm`,
-`Io`, `Ob`, `Rtl`, `Hal`, `Av`, `Xc`, `Xe`, `Nt`, `Ex`, ...). Everything else is in a namespace per folder:
+Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, the ABI titles import (`Ke`, `Mm`, `Io`, `Ob`, `Rtl`, `Hal`, `Av`, `Xc`, `Xe`,
+`Nt`, `Ex`, ...). Everything else is in a namespace per folder:
 
 | namespace | folder | namespace | folder |
 |---|---|---|---|
@@ -239,12 +206,12 @@ Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, th
 | `xk::graphics` (and `::vector_renderer`) | `graphics/` | | |
 | C names (assembly, and `arch.h`'s inline primitives) | `arch/` | | |
 
-Names assembly uses keep their C names (`KiPcr`, `KiQuickRebootFlag`, the trap stubs, ...), and so does the call
-tracer (`titles/title_tracer.cpp`) until it becomes `oxos_tracer.xos`.
+Names assembly uses keep their C names (`KiPcr`, `KiQuickRebootFlag`, the trap stubs, ...), and so does the call tracer (`titles/title_tracer.cpp`) until it
+becomes `oxos_tracer.xos`.
 
 ## Milestones
-Specs are in `../spec/stock/` unless named otherwise (`oxos/NN` = `../spec/oxos_internal/NN`). ✅ xemu = checked by
-the boot tests; console = checked on the 1.4 console.
+Specs are in `../spec/stock/` unless named otherwise (`oxos/NN` = `../spec/oxos_internal/NN`). ✅ xemu = checked by the boot tests; console = checked on the 1.4
+console.
 
 | # | What | Spec | Checked |
 |---|---|---|---|
@@ -286,27 +253,24 @@ the boot tests; console = checked on the 1.4 console.
 | 36 | The OXOS File Manager: a web page on the local network uploads, creates and deletes files and folders and launches an XBE; the kernel's own network stack (boot-only); the 2BL's netboot shares the card's bring-up | oxos/31 | ✅ xemu (`test_upload`), console (debug kit: 11 MB/s, a 50 MB upload read back intact, a launched XBE) |
 | 37 | The X button opens the File Manager: during the boot splash, or on the No Dashboard Found screen; a boot-only USB host (OHCI, hubs, Xbox pads) | oxos/32 | ✅ xemu (`test_upload`, `test_format`, a virtual pad) |
 
-Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11,
-`DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`, are absent in the reference as well).
+Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11, `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`,
+are absent in the reference as well).
 
 ## Known deviations (tracked)
-- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1).
-  KINTERRUPT.DispatchCode isn't used: the IDT keeps fixed per-IRQ stubs.
+- IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps
+  fixed per-IRQ stubs.
 - Only 64 MB RAM is supported, like the 4627 kernel.
-- The disk's and DVD drive's start-up waits run at the caller's IRQL, not raised to the IDE interrupt's, so the boot
-  splash shows while a hard disk spins up (`../spec/oxos_internal/00_boot_splash.md`).
-- `HalReturnToFirmware` resets through the SMC alone and writes port 0xCF9 only if the console is still running two
-  seconds later; the reference writes 0xCF9 at once (`../spec/oxos_internal/22_in_game_reset.md` §7).
-- IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used
-  and the SMBus is polled.
-- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster
-  size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
-  a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters are
-  not shown to titles.
-- No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0`
-  acting as an empty drive, where the reference stops with fatal error 10, 11 or 12.
+- The disk's and DVD drive's start-up waits run at the caller's IRQL, not raised to the IDE interrupt's, so the boot splash shows while a hard disk spins up
+  (`../spec/oxos_internal/00_boot_splash.md`).
+- `HalReturnToFirmware` resets through the SMC alone and writes port 0xCF9 only if the console is still running two seconds later; the reference writes 0xCF9 at
+  once (`../spec/oxos_internal/22_in_game_reset.md` §7).
+- IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used and the SMBus is polled.
+- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster size it writes are kept across quick
+  reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so a title may format its cache again after a cold boot; exFAT names outside
+  Latin-1 or longer than 42 characters are not shown to titles.
+- No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0` acting as an empty drive, where the
+  reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
-- Video (milestone 20; `../spec/oxos_internal/02_display_modes.md`): the NV2A timing is OXOS's own (derived from each
-  encoder's row for SD, the standards for HD and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait
-  for the vertical blank phase before a mode change; Macrovision stays off; the Xcalibur is left alone on AV pack
-  events. On hardware so far: the Focus encoder (1.4) in composite.
+- Video (milestone 20; `../spec/oxos_internal/02_display_modes.md`): the NV2A timing is OXOS's own (derived from each encoder's row for SD, the standards for HD
+  and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait for the vertical blank phase before a mode change; Macrovision stays off; the Xcalibur
+  is left alone on AV pack events. On hardware so far: the Focus encoder (1.4) in composite.

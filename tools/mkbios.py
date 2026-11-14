@@ -13,17 +13,17 @@ Layout (one 256 KiB bank, see spec/stock/00):
   [kstart, dstart)              kernel: RC4(kernel key, LDI stream of LZX frames)
   [dstart, 0x39E00)             kernel .data initializer (plaintext)
   [0x39E00, 0x3FE00)            2BL, RC4(MCPX 1.0 key); boot params + digest updated here
-The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header
-fields 0x28..0x37 describe the .data copy used by quick reboot (spec/stock/02 §1).
+The kernel is flattened (file offset == RVA, .data incl. BSS stored in full) and its DOS-header fields 0x28..0x37 describe the .data copy used by quick reboot
+(spec/stock/02 §1).
 
 Boot splash (optional): the second 256 KiB bank of a 1 MiB image (flash offset 0x40000, 0xFFF40000) holds
-  "XKSPLASH", u32 version 2, u32 length, u32 CRC-32, then the vector scene tools/svg_splash.py makes from an SVG.
-  The open image also keeps a copy in each boot bank when it fits (see build_open), for 256 KiB images.
-The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is
-valid and falls back to its drawn emblem otherwise (spec/oxos_internal/00_boot_splash.md).
+  "XKSPLASH", u32 version 2, u32 length, u32 CRC-32, then the vector scene tools/svg_splash.py makes from an SVG. The open image also keeps a copy in each boot
+  bank when it fits (see build_open), for 256 KiB images.
+The boot ROM reads banks 0 (init table at 0xFF000000) and 3 only; the kernel shows the image when the header is valid and falls back to its drawn emblem
+otherwise (spec/oxos_internal/00_boot_splash.md).
 
-LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL
-stream); its own decoder checks the result before the image is written.
+LZX: tools/lzx.py compresses each 32 KiB frame as one verbatim block (window 2^17, like the stock 2BL stream); its own decoder checks the result before the
+image is written.
 """
 import argparse, hashlib, os, struct, sys, zlib
 
@@ -173,9 +173,8 @@ def splash_bank(path):
 
 
 # --- Open image (spec/stock/01 §5). Each 256 KiB bank:
-#   0x00000 MCPX header + X-codes (kernel/boot/xcodes.S: XboxDev/cromwell's table, ending in the overflow trick)
-#   0x01000 our 2BL (kernel/boot/start.S + bl.cpp), entered at 0xFFFC1000
-#   0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size,
+#   0x00000 MCPX header + X-codes (kernel/boot/xcodes.S: XboxDev/cromwell's table, ending in the overflow trick) 0x01000 our 2BL (kernel/boot/start.S + bl.cpp),
+#   entered at 0xFFFC1000 0x06000 payload header {'OXKP', kernel offset, packed size, image size, keys offset, keys size,
 #                           splash offset, splash size} (splash 0, 0 when there is none in the bank)
 #   0x06040 key block (below), then the kernel as a raw deflate stream
 #   ...     a copy of the splash ("XKSPLASH" header + vector scene) when it fits in the space left, so a 256 KiB image
@@ -206,9 +205,9 @@ def cromwell_key_states(cromwell_dir):
     return out
 
 
-# The certificate key every retail console's boot loader hands to the kernel (spec/stock/01 §1). The kernel's one use
-# for it: each title's save-signature, alternate-signature and System Link keys (spec/stock/05 §7), so saves and
-# System Link work with stock consoles. Carried for interoperability only (dmca_compliance.md §6, Legal Basis §1.1).
+# The certificate key every retail console's boot loader hands to the kernel (spec/stock/01 §1). The kernel's one use for it: each title's save-signature,
+# alternate-signature and System Link keys (spec/stock/05 §7), so saves and System Link work with stock consoles. Carried for interoperability only
+# (dmca_compliance.md §6, Legal Basis §1.1).
 CERTIFICATE_KEY = bytes.fromhex("5c0733ae0401f7e8ba7993fdcd2f1fe0")
 
 
@@ -242,8 +241,7 @@ def build_open(a):
     bank = bytearray(b"\xff" * BANK)
     bank[:len(xcodes)] = xcodes
     bank[OPEN_LOADER:OPEN_LOADER + len(loader)] = loader
-    bank[OPEN_PAYLOAD:OPEN_PAYLOAD + 24] = struct.pack("<6I", 0x504B584F, kstart, len(packed), len(image),
-                                                       OPEN_KEYS, len(keys))
+    bank[OPEN_PAYLOAD:OPEN_PAYLOAD + 24] = struct.pack("<6I", 0x504B584F, kstart, len(packed), len(image), OPEN_KEYS, len(keys))
     bank[OPEN_KEYS:OPEN_KEYS + len(keys)] = keys
     bank[kstart:kstart + len(packed)] = packed
     bank[dstart:dstart + len(data_init)] = data_init
@@ -262,8 +260,7 @@ def build_open(a):
         elif a.size == "256K":
             sys.exit(f"no room for the splash in a 256 KiB image: {size:#x} bytes, {free:#x} free")
         else:
-            print(f"warning: the splash ({size:#x} bytes) does not fit in the boot bank ({free:#x} free): "
-                  "only the 1 MiB image's bank 1 has it")
+            print(f"warning: the splash ({size:#x} bytes) does not fit in the boot bank ({free:#x} free): " "only the 1 MiB image's bank 1 has it")
 
     if a.size == "256K":
         out = bytes(bank)
@@ -291,10 +288,8 @@ def main():
     ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
-    ap.add_argument("--extension-loader", help="the kernel extension loader (tools/link_extension_loader.py), "
-                    "appended to the kernel image")
-    ap.add_argument("--splash", help="boot splash SVG: flash bank 1 of a 1 MiB image, and (open image) a copy in "
-                    "each boot bank when it fits")
+    ap.add_argument("--extension-loader", help="the kernel extension loader (tools/link_extension_loader.py), " "appended to the kernel image")
+    ap.add_argument("--splash", help="boot splash SVG: flash bank 1 of a 1 MiB image, and (open image) a copy in " "each boot bank when it fits")
     ap.add_argument("--size", choices=("256K", "1M"), default="1M", help="open image size (default 1M)")
     a = ap.parse_args()
     if a.open:
@@ -331,8 +326,7 @@ def main():
     bank[kstart:dstart] = kernel
     bank[dstart:OFF_2BL] = data_init
 
-    inner = hashlib.sha1(kkey + struct.pack("<I", ksz) + kernel + struct.pack("<I", dsz) + data_init
-                         + struct.pack("<I", itsz) + bytes(bank[:itsz])).digest()
+    inner = hashlib.sha1(kkey + struct.pack("<I", ksz) + kernel + struct.pack("<I", dsz) + data_init + struct.pack("<I", itsz) + bytes(bank[:itsz])).digest()
     struct.pack_into("<I", bl, BLDR_PARAMS, dsz)
     struct.pack_into("<I", bl, BLDR_PARAMS + 12, ksz)
     bl[BLDR_PARAMS + 16:BLDR_PARAMS + 36] = hashlib.sha1(kkey + inner).digest()

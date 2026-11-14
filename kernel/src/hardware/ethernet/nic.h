@@ -1,14 +1,11 @@
-// The MCPX's network card (NVIDIA nForce Ethernet), polled: its registers, descriptors and the bring-up and shut-down
-// sequences, shared by the 2BL's netboot (boot/netboot.cpp) and the kernel's network stack
-// (src/hardware/ethernet/nic.cpp; spec/oxos_internal/09_netboot.md, 31_upload_server.md). Header-only with plain C++
-// types, so the 2BL (built without the kernel headers) can include it.
+// The MCPX's network card (NVIDIA nForce Ethernet), polled: its registers, descriptors and the bring-up and shut-down sequences, shared by the 2BL's netboot
+// (boot/netboot.cpp) and the kernel's network stack (src/hardware/ethernet/nic.cpp; spec/oxos_internal/09_netboot.md, 31_upload_server.md). Header-only with
+// plain C++ types, so the 2BL (built without the kernel headers) can include it.
 //
-// Both see the card the same way: its registers at 0xFEF00000 (physical in the 2BL; an uncached identity mapping in
-// the kernel), PCI configuration through ports 0xCF8/0xCFC, time from the ACPI PM timer at I/O 0x8008. Only the
-// rings differ: the caller fills them and passes their physical addresses. The sequence follows XboxDev/cromwell's
-// etherboot forcedeth order; the descriptors follow nxdk's nvnetdrv (MIT): a descriptor handed to the card has flags
-// bit 15 (available) set; the card clears it and sets bit 0 (valid) and the length; the driver gives it back and
-// writes TxRxControl bit 1 (get).
+// Both see the card the same way: its registers at 0xFEF00000 (physical in the 2BL; an uncached identity mapping in the kernel), PCI configuration through
+// ports 0xCF8/0xCFC, time from the ACPI PM timer at I/O 0x8008. Only the rings differ: the caller fills them and passes their physical addresses. The sequence
+// follows XboxDev/cromwell's etherboot forcedeth order; the descriptors follow nxdk's nvnetdrv (MIT): a descriptor handed to the card has flags bit 15
+// (available) set; the card clears it and sets bit 0 (valid) and the length; the driver gives it back and writes TxRxControl bit 1 (get).
 #pragma once
 
 typedef unsigned char UCHAR;
@@ -29,8 +26,8 @@ enum : ULONG {
     NvMiiSpeed = 0x18C, NvMiiControl = 0x190, NvMiiData = 0x194, NvWakeUpFlags = 0x200, NvPowerState = 0x26C,
 };
 
-// A ring entry: the buffer's physical address, the length (transmit: bytes - 1; receive: the buffer's size, then
-// the frame's length in bits 0-13) and the flags.
+// A ring entry: the buffer's physical address, the length (transmit: bytes - 1; receive: the buffer's size, then the frame's length in bits 0-13) and the
+// flags.
 struct NIC_DESCRIPTOR {
     ULONG Buffer;
     USHORT Length;
@@ -108,10 +105,9 @@ inline bool IsLinkUp() {
 
 // --- Bring-up and shut-down
 
-// Starts the card with the console's Mac and the caller's rings: RxCount receive descriptors at RxRing and TxCount
-// transmit descriptors at TxRing (physical addresses), already filled (receive: buffer, NIC_BUFFER, NIC_RX_AVAIL;
-// transmit: all zero). Waits up to LinkWait microseconds for the link (auto-negotiation takes about 2-3 s after
-// power-on); false without a link, or without the card.
+// Starts the card with the console's Mac and the caller's rings: RxCount receive descriptors at RxRing and TxCount transmit descriptors at TxRing (physical
+// addresses), already filled (receive: buffer, NIC_BUFFER, NIC_RX_AVAIL; transmit: all zero). Waits up to LinkWait microseconds for the link (auto-negotiation
+// takes about 2-3 s after power-on); false without a link, or without the card.
 inline bool ProgramCard(const UCHAR *Mac, ULONG RxRing, ULONG RxCount, ULONG TxRing, ULONG TxCount, ULONG LinkWait) {
     WriteCardPci(0x10, NIC_REGISTERS);
     WriteCardPci(0x14, 0xE001);

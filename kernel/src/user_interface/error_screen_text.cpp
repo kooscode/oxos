@@ -1,6 +1,5 @@
-// The fatal error screen's text (spec/oxos_internal/29_error_screens.md): per code, a title and what to try. The codes
-// and when they are raised follow the reference (spec/stock/05 §6); the words are OXOS's own. Lines are at most
-// XK_FATAL_LINE characters (a unit test checks them all).
+// The fatal error screen's text (spec/oxos_internal/29_error_screens.md): per code, a title and what to try. The codes and when they are raised follow the
+// reference (spec/stock/05 §6); the words are OXOS's own. Lines are at most XK_FATAL_LINE characters (a unit test checks them all).
 #include <user_interface/user_interface.h>
 
 namespace xk::user_interface {
@@ -40,8 +39,7 @@ static const char *const HelpNoDisk[] = {
     nullptr,
 };
 
-// Codes 13-20: the dashboards tried (titles/title_loader.cpp, in its order), and the way to the File Manager
-// (error_screens.cpp, NoDashboardError).
+// Codes 13-20: the dashboards tried (titles/title_loader.cpp, in its order), and the way to the File Manager (error_screens.cpp, NoDashboardError).
 static const char *const HelpNoDashboard[] = {
     "Tried:",
     "  C:\\evoxdash.xbe",

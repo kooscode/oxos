@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Boot a BIOS in xemu (HDD copy, no disc), wait, then save the NV2A scanout surface (640x480x32) as a PNG.
 
-xemu has no QMP screendump, so the surface is read with pmemsave from the CRTC start address.
-usage: fbshot.py BIOS OUT.png [SECONDS]
+xemu has no QMP screendump, so the surface is read with pmemsave from the CRTC start address. usage: fbshot.py BIOS OUT.png [SECONDS]
 """
 import os, sys, shutil, subprocess, tempfile, time, json, socket, struct, zlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))

@@ -64,9 +64,9 @@ static const RTL_STATUS_MAP StatusToDosErrorTable[] = {
 };
 
 XBAPI ULONG NTAPI RtlNtStatusToDosError(NTSTATUS Status) {
-    // The reference's order (spec/stock/13): customer codes unchanged, Win32 warnings (0x8007xxxx) to their low word,
-    // 0xD... looked up as 0xC..., the table, then facility 0xC001 to its low word, else ERROR_MR_MID_NOT_FOUND. Small
-    // success codes that the table does not list (STATUS_TIMEOUT among them) also end there.
+    // The reference's order (spec/stock/13): customer codes unchanged, Win32 warnings (0x8007xxxx) to their low word, 0xD... looked up as 0xC..., the table,
+    // then facility 0xC001 to its low word, else ERROR_MR_MID_NOT_FOUND. Small success codes that the table does not list (STATUS_TIMEOUT among them) also end
+    // there.
     ULONG s = (ULONG)Status;
     if (s & 0x20000000)
         return s;

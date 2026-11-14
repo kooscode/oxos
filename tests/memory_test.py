@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Memory test: boot a BIOS with the memory test title (tests/memory_test_title) at 64 or 128 MB and report how much
-memory the title is given, with and without the XBE's "limit to 64 MB" init flag (0x4).
+"""Memory test: boot a BIOS with the memory test title (tests/memory_test_title) at 64 or 128 MB and report how much memory the title is given, with and without
+the XBE's "limit to 64 MB" init flag (0x4).
 
-The title keeps its results in a block with the signature "XKMEMTST"; this script finds it in a RAM dump (QMP
-pmemsave), waits until the title has finished, and prints the measurements. With --both it runs the title twice:
-as built (the flag set, like retail games) and with the flag cleared.
+The title keeps its results in a block with the signature "XKMEMTST"; this script finds it in a RAM dump (QMP pmemsave), waits until the title has finished, and
+prints the measurements. With --both it runs the title twice: as built (the flag set, like retail games) and with the flag cleared.
 
 usage: memory_test.py --bios BIOS --xbe default.xbe [--memory 64|128] [--both | --no-limit] [--mcpx-rom MCPX]
                       [--hdd HDD] [--xemu PATH]
@@ -72,8 +71,7 @@ def run(a, xbe, label):
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\ndvd_path = '{iso}'\n"
         + (f"hdd_path = '{hdd}'\n" if a.hdd else ""))
     log = open(os.path.join(work, "xemu.log"), "w")
-    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
-                            stdout=log, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"], stdout=log, stderr=subprocess.STDOUT)
     r = None
     try:
         for _ in range(100):

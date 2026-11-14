@@ -1,7 +1,6 @@
-// The boot jingle's player (spec/oxos_internal/17_boot_jingle.md): on cold boot a system thread synthesizes the jingle
-// (jingle.cpp) into a buffer and plays it through the AC'97 controller (hardware/audio/), starting with the splash's
-// fade-in. The title launcher waits for the jingle to end, and the controller is stopped and its memory freed before
-// the title starts.
+// The boot jingle's player (spec/oxos_internal/17_boot_jingle.md): on cold boot a system thread synthesizes the jingle (jingle.cpp) into a buffer and plays it
+// through the AC'97 controller (hardware/audio/), starting with the splash's fade-in. The title launcher waits for the jingle to end, and the controller is
+// stopped and its memory freed before the title starts.
 #include <boot_splash/boot_splash.h>
 #include <hardware/chipset/serial.h>
 #include <core/core.h>
@@ -17,11 +16,10 @@ namespace xk::boot_splash {
 // Boot-only code (cold boot, with the splash): freed before the first title starts (spec/oxos_internal/18).
 #pragma code_seg(".xkb")
 
-// For the boot tests: 1 synthesizing, 2 playing, 3 played to the end, 5 played with gaps (synthesis fell behind);
-// 0x10 no codec, 0x11 no memory. The controller's descriptor at the end, and the jingle's last one.
+// For the boot tests: 1 synthesizing, 2 playing, 3 played to the end, 5 played with gaps (synthesis fell behind); 0x10 no codec, 0x11 no memory. The
+// controller's descriptor at the end, and the jingle's last one.
 volatile ULONG BootSoundStatus, BootSoundPosition, BootSoundLast;
-// Descriptors synthesized before playback started, the synthesis time (ms), and the times the controller ran out
-// of samples.
+// Descriptors synthesized before playback started, the synthesis time (ms), and the times the controller ran out of samples.
 volatile ULONG BootSoundAhead, BootSoundSynthMs, BootSoundUnderruns;
 volatile ULONG BootSoundBuffer, BootSoundBytes; // the samples' physical address and size, while playing
 volatile ULONG BootSoundOn = 1;                 // boot tests may clear it (0: no jingle)
@@ -29,8 +27,7 @@ volatile ULONG BootSoundOn = 1;                 // boot tests may clear it (0: n
 namespace {
 
 constexpr ULONG DESCRIPTORS = AUDIO_DESCRIPTORS_MAX, FRAMES_PER_DESCRIPTOR = 10800; // 32 x 0.225 s
-static_assert(DESCRIPTORS * FRAMES_PER_DESCRIPTOR >= 7000 * 48,
-              "the descriptor list holds the jingle and some silence");
+static_assert(DESCRIPTORS * FRAMES_PER_DESCRIPTOR >= 7000 * 48, "the descriptor list holds the jingle and some silence");
 static_assert(2 * FRAMES_PER_DESCRIPTOR <= 0xFFFF, "a descriptor's sample count is 16 bits");
 // Synthesis runs in slices of 50 ms (48 frames a millisecond), and while playing stays 600 ms ahead of the controller.
 constexpr ULONG SLICE_FRAMES = 2400, LEAD_MS = 600;
@@ -48,8 +45,7 @@ void NTAPI BootSoundThread(PVOID) {
     const ULONG frames = jingle::Frames(), stateSize = jingle::StateSize();
     const ULONG pcmBytes = DESCRIPTORS * FRAMES_PER_DESCRIPTOR * 4;
     // Low memory, as the splash: titles assume the top of RAM is theirs.
-    auto pcm = (SHORT *)MmAllocateContiguousMemoryEx(pcmBytes + DESCRIPTORS * sizeof(AUDIO_BUFFER_DESCRIPTOR), 0,
-                                                     0xFFFFFF, 0,
+    auto pcm = (SHORT *)MmAllocateContiguousMemoryEx(pcmBytes + DESCRIPTORS * sizeof(AUDIO_BUFFER_DESCRIPTOR), 0, 0xFFFFFF, 0,
                                                      PAGE_READWRITE | PAGE_WRITECOMBINE);
     auto state = (jingle::State *)MmAllocateContiguousMemoryEx(stateSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     bool mapped = hardware::audio::MapController();
@@ -58,9 +54,8 @@ void NTAPI BootSoundThread(PVOID) {
         BootSoundStatus = !pcm || !state || !mapped ? 0x11 : 0x10;
         XK_SERIAL("bootsound: not played\n");
     } else {
-        // Every descriptor is valid from the start, over a buffer of silence that synthesis fills in ahead of the
-        // controller. The MCPX does not stop at the last valid index (it carries on around the list), so the
-        // player keeps time itself: 48 frames a millisecond from the start.
+        // Every descriptor is valid from the start, over a buffer of silence that synthesis fills in ahead of the controller. The MCPX does not stop at the
+        // last valid index (it carries on around the list), so the player keeps time itself: 48 frames a millisecond from the start.
         for (ULONG i = 0; i < pcmBytes / 4; i++)
             ((ULONG *)pcm)[i] = 0;
         auto list = (AUDIO_BUFFER_DESCRIPTOR *)((UCHAR *)pcm + pcmBytes);
@@ -79,8 +74,8 @@ void NTAPI BootSoundThread(PVOID) {
             jingle::Render(state, pcm + rendered * 2, n);
             rendered += n;
         };
-        // Until the splash's fade-in starts (at most 15 s): synthesize in the time the splash leaves free (a lower
-        // priority than its thread, so its picture comes up as soon as it would without the jingle).
+        // Until the splash's fade-in starts (at most 15 s): synthesize in the time the splash leaves free (a lower priority than its thread, so its picture
+        // comes up as soon as it would without the jingle).
         LARGE_INTEGER zero, limit;
         zero.QuadPart = 0;
         limit.QuadPart = -10000LL * 15000;
@@ -120,10 +115,8 @@ void NTAPI BootSoundThread(PVOID) {
         BootSoundPosition = hardware::audio::CurrentDescriptor();
         BootSoundLast = (frames - 1) / FRAMES_PER_DESCRIPTOR;
         BootSoundStatus = underruns ? 5 : 3;
-        XK_SERIAL("bootsound: done (synthesis %lu ms, %lu ms ahead at the start, %lu underruns, buffer %u, the "
-                  "jingle's last %lu)\n",
-                  BootSoundSynthMs & 0x7FFFFFFF, BootSoundAhead, underruns, hardware::audio::CurrentDescriptor(),
-                  BootSoundLast);
+        XK_SERIAL("bootsound: done (synthesis %lu ms, %lu ms ahead at the start, %lu underruns, buffer %u, the " "jingle's last %lu)\n",
+                  BootSoundSynthMs & 0x7FFFFFFF, BootSoundAhead, underruns, hardware::audio::CurrentDescriptor(), BootSoundLast);
         BootSoundBuffer = 0;
         hardware::audio::StopOutputs();
     }
@@ -165,8 +158,8 @@ void EndBootSound() {
     }
 }
 
-// Resident: a fatal error on the idle thread (user_interface/error_screens.cpp) stops the sound at once, as the
-// jingle's thread no longer runs to finish it; left running, the controller replays its buffers in a loop.
+// Resident: a fatal error on the idle thread (user_interface/error_screens.cpp) stops the sound at once, as the jingle's thread no longer runs to finish it;
+// left running, the controller replays its buffers in a loop.
 #pragma code_seg()
 
 void StopBootSound() {

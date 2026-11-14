@@ -1,6 +1,5 @@
-// The dispatcher's internals, shared by the files of src/core/ only (spec/stock/06, 07): thread scheduling, waits, APC
-// and DPC delivery, timers, interrupt delivery, the FPU's lazy switching and thread creation. The dispatcher "lock" is
-// DISPATCH_LEVEL on this uniprocessor. What other folders use is in core.h.
+// The dispatcher's internals, shared by the files of src/core/ only (spec/stock/06, 07): thread scheduling, waits, APC and DPC delivery, timers, interrupt
+// delivery, the FPU's lazy switching and thread creation. The dispatcher "lock" is DISPATCH_LEVEL on this uniprocessor. What other folders use is in core.h.
 #pragma once
 #include <core/core.h>
 
@@ -22,8 +21,8 @@ void SetPriorityThread(PKTHREAD Thread, SCHAR Priority);
 bool SelectYieldThread(PKTHREAD Current);
 LONG SwapThread(); // caller at DISPATCH_LEVEL with its wait state set up
 void InitializeProcesses();
-void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
-                      PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process);
+void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize, PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine,
+                      PVOID StartContext, PKPROCESS Process);
 // Terminated threads whose kernel stacks are freed after the switch away from them.
 void ReapDeadThreads();
 

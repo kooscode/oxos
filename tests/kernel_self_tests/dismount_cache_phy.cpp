@@ -58,9 +58,8 @@ static ULONG KiTestAvOptions(ULONG fb) {
     ULONG ok = 0, dummy = 0;
     AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
     AvSendTVEncoderOption(nullptr, 0x13, 1, &dummy); // widescreen: CGMS-A word 0x60001 (CRC checked against IEC 61880)
-    if (focus ? KiAvRead(0x85, FALSE) == 0x01 && KiAvRead(0x84, FALSE) == 0x00 && KiAvRead(0x83, FALSE) == 0x60 &&
-                    KiAvRead(0x88, FALSE) == 0x01 && KiAvRead(0x86, FALSE) == 0x60
-              : KiAvRead(0x60, FALSE) == 0xC1 && KiAvRead(0x62, FALSE) == 0x00 && KiAvRead(0x64, FALSE) == 0x60)
+    if (focus ? KiAvRead(0x85, FALSE) == 0x01 && KiAvRead(0x84, FALSE) == 0x00 && KiAvRead(0x83, FALSE) == 0x60 && KiAvRead(0x88, FALSE) == 0x01 &&
+                    KiAvRead(0x86, FALSE) == 0x60 : KiAvRead(0x60, FALSE) == 0xC1 && KiAvRead(0x62, FALSE) == 0x00 && KiAvRead(0x64, FALSE) == 0x60)
         ok |= 1;
     AvSendTVEncoderOption(nullptr, 0x13, 0, &dummy);
     AvSendTVEncoderOption(nullptr, 0x0B, 2, &dummy); // flicker filter level 2
@@ -88,8 +87,8 @@ static ULONG KiTestAvOptions(ULONG fb) {
     return ok;
 }
 
-volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus,
-    KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk, KiTestMiscScatterOk, KiTestMiscDone;
+volatile ULONG KiTestMiscDismountOk, KiTestMiscDiscRemountOk, KiTestMiscFscOk, KiTestMiscPhyStatus, KiTestMiscPhyLink, KiTestMiscCmosOk, KiTestMiscSmcOk,
+    KiTestMiscScatterOk, KiTestMiscDone;
 volatile ULONG KiTestMiscPmTicksPerSecond, KiTestMiscPerfOk;
 
 static NTSTATUS OpenClose(PCSZ path) {
@@ -98,8 +97,7 @@ static NTSTATUS OpenClose(PCSZ path) {
     OBJECT_ATTRIBUTES a = {nullptr, &s, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
-                                 FILE_SYNCHRONOUS_IO_NONALERT);
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT);
     if (NT_SUCCESS(status))
         NtClose(h);
     return status;
@@ -115,8 +113,8 @@ static PDEVICE_OBJECT Device(PCSZ path) {
 }
 
 static void NTAPI MiscControllerThread(PVOID) {
-    // After the FATX suite too: the scatter/gather test writes in its E:\XkTest, and E:\ must not change while that
-    // suite lists it and balances its free clusters.
+    // After the FATX suite too: the scatter/gather test writes in its E:\XkTest, and E:\ must not change while that suite lists it and balances its free
+    // clusters.
     while (!KiTestXcDone || !KiTestFATXDone) {
         LARGE_INTEGER t;
         t.QuadPart = -10 * 10000;
@@ -136,8 +134,8 @@ static void NTAPI MiscControllerThread(PVOID) {
     KiTestMiscDismountOk = ok;
 
     PDEVICE_OBJECT disc = Device("\\Device\\CdRom0");
-    ok = OpenClose("\\Device\\CdRom0\\media\\a.txt") == 0 && IoDismountVolumeByName(&cd) == 0 &&
-         disc->MountedOrSelfDevice == nullptr && OpenClose("\\Device\\CdRom0\\media\\a.txt") == 0;
+    ok = OpenClose("\\Device\\CdRom0\\media\\a.txt") == 0 && IoDismountVolumeByName(&cd) == 0 && disc->MountedOrSelfDevice == nullptr &&
+         OpenClose("\\Device\\CdRom0\\media\\a.txt") == 0;
     KiTestMiscDiscRemountOk = ok;
 
     ULONG before = FscGetCacheSize();
@@ -154,8 +152,8 @@ static void NTAPI MiscControllerThread(PVOID) {
     ok &= hardware::chipset::CmosSignatureValid();
     KiTestMiscCmosOk = ok;
 
-    // SMC tray events (spec/stock/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC
-    // is read again: 0x60 with the test disc); each one counts a change.
+    // SMC tray events (spec/stock/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC is read again: 0x60 with the test disc);
+    // each one counts a change.
     ULONG tray, count0, count1, count2;
     HalReadSMCTrayState(&tray, &count0);
     hardware::chipset::HandleSmcEvents(0x40);
@@ -164,8 +162,7 @@ static void NTAPI MiscControllerThread(PVOID) {
     ok &= NT_SUCCESS(HalReadSMCTrayState(&tray, &count2)) && tray == 0x60 && count2 == count1 + 1;
     KiTestMiscSmcOk = ok;
 
-    // FATX scatter/gather: three pages written with NtWriteFileGather, read back into pages in reverse order with
-    // NtReadFileScatter, then the file is deleted.
+    // FATX scatter/gather: three pages written with NtWriteFileGather, read back into pages in reverse order with NtReadFileScatter, then the file is deleted.
     {
         auto pages = (PUCHAR)MmAllocateContiguousMemory(6 * PAGE_SIZE);
         ok = pages != nullptr;
@@ -181,22 +178,18 @@ static void NTAPI MiscControllerThread(PVOID) {
             OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
             IO_STATUS_BLOCK iosb;
             HANDLE h;
-            ok = NT_SUCCESS(NtCreateFile(&h, GENERIC_READ | GENERIC_WRITE | DELETE | SYNCHRONIZE, &a, &iosb, nullptr,
-                                         0x80 /*FILE_ATTRIBUTE_NORMAL*/, 0, FILE_OVERWRITE_IF,
-                                         FILE_NO_INTERMEDIATE_BUFFERING | FILE_SYNCHRONOUS_IO_NONALERT));
+            ok = NT_SUCCESS(NtCreateFile(&h, GENERIC_READ | GENERIC_WRITE | DELETE | SYNCHRONIZE, &a, &iosb, nullptr, 0x80 /*FILE_ATTRIBUTE_NORMAL*/, 0,
+                                         FILE_OVERWRITE_IF, FILE_NO_INTERMEDIATE_BUFFERING | FILE_SYNCHRONOUS_IO_NONALERT));
             if (ok) {
                 LARGE_INTEGER zero;
                 zero.QuadPart = 0;
-                ok &= NtWriteFileGather(h, nullptr, nullptr, nullptr, &iosb, out, 3 * PAGE_SIZE, &zero) == 0 &&
-                      iosb.Information == 3 * PAGE_SIZE;
-                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 3 * PAGE_SIZE, &zero) == 0 &&
-                      iosb.Information == 3 * PAGE_SIZE;
+                ok &= NtWriteFileGather(h, nullptr, nullptr, nullptr, &iosb, out, 3 * PAGE_SIZE, &zero) == 0 && iosb.Information == 3 * PAGE_SIZE;
+                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 3 * PAGE_SIZE, &zero) == 0 && iosb.Information == 3 * PAGE_SIZE;
                 for (ULONG i = 0; i < 3 && ok; i++) {
                     PUCHAR page = pages + (5 - i) * PAGE_SIZE;
                     ok = page[0] == 0xA0 + i && page[PAGE_SIZE - 1] == 0xA0 + i;
                 }
-                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 100, &zero) ==
-                      STATUS_INVALID_PARAMETER;
+                ok &= NtReadFileScatter(h, nullptr, nullptr, nullptr, &iosb, in, 100, &zero) == STATUS_INVALID_PARAMETER;
                 FILE_DISPOSITION_INFORMATION del = {TRUE};
                 ok &= NtSetInformationFile(h, &iosb, &del, sizeof(del), FileDispositionInformation) == 0;
                 NtClose(h);
@@ -206,9 +199,9 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscScatterOk = ok;
     }
 
-    // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz). Up to 5
-    // seconds are measured until one is within 2%: an emulator on a busy host delivers clock interrupts late, which
-    // makes a second look longer (more counts), so one bad second is the host, while a wrong counter fails all 5.
+    // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz). Up to 5 seconds are measured until one is within
+    // 2%: an emulator on a busy host delivers clock interrupts late, which makes a second look longer (more counts), so one bad second is the host, while a
+    // wrong counter fails all 5.
     {
         LONGLONG f = KeQueryPerformanceFrequency().QuadPart, rate = 0;
         bool monotonic = true, inRange = false;
@@ -231,9 +224,9 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscPerfOk = monotonic && f == 3375000 && inRange;
     }
 
-    // TV encoder: every mode word below programs the encoder's rows (spec/stock/18-20), which read back as written on
-    // Conexant and Focus (xemu's encoder models store them; on the Xcalibur every 32-bit write must complete); then the
-    // previous mode is restored. make test_encoders: 11 SD (composite, SCART, component) and 4 HD mode words.
+    // TV encoder: every mode word below programs the encoder's rows (spec/stock/18-20), which read back as written on Conexant and Focus (xemu's encoder models
+    // store them; on the Xcalibur every 32-bit write must complete); then the previous mode is restored. make test_encoders: 11 SD (composite, SCART,
+    // component) and 4 HD mode words.
     static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
                                     0x2001010B, 0x60030307, 0x0801010D, 0x48030314, 0x08010119,
                                     0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};

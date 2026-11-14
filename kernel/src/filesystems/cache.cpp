@@ -1,7 +1,6 @@
-// File system cache (spec/stock/16 §Fsc): one pool of 4 KB buffers shared by FATX, XDVDFS and UDF, in the reference's
-// structure. Each buffer is a page of system memory counted as file-cache pages (MmQueryStatistics), mapped
-// read-only except while a caller writes it, described by a 20-byte element; the elements form one most-recently-
-// used list. 16 pages at boot; FscSetCacheSize changes it (the dashboard asks for 256).
+// File system cache (spec/stock/16 §Fsc): one pool of 4 KB buffers shared by FATX, XDVDFS and UDF, in the reference's structure. Each buffer is a page of
+// system memory counted as file-cache pages (MmQueryStatistics), mapped read-only except while a caller writes it, described by a 20-byte element; the elements
+// form one most-recently- used list. 16 pages at boot; FscSetCacheSize changes it (the dashboard asks for 256).
 #include <filesystems/filesystems.h>
 #include <io/io.h>
 #include <core/core.h>
@@ -238,8 +237,7 @@ void DiscardCacheBuffer(PVOID buffer) {
     Unlock();
 }
 
-// Write the sectors covering [offset, offset + length) of a mapped buffer to the device, then unmap it (discard it
-// if the write fails).
+// Write the sectors covering [offset, offset + length) of a mapped buffer to the device, then unmap it (discard it if the write fails).
 NTSTATUS WriteCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length, PVOID buffer) {
     ULONG mask = ext->SectorSize - 1;
     LONGLONG first = offset & ~(LONGLONG)mask, end = (offset + length + mask) & ~(LONGLONG)mask;
@@ -261,10 +259,8 @@ static void InvalidateCacheBlocks(FSCACHE_EXTENSION *ext, ULONG firstBlock, ULON
         if (!e->CacheExtension)
             break;
         // A mapped block is taken out of lookups too (its holders keep the memory; it is free once unmapped).
-        // Deviation: the reference skips mapped blocks, but its file systems unmap at once; our FATX holds blocks
-        // while its lock is held.
-        if (e->CacheExtension == ext && e->BlockNumber >= firstBlock && e->BlockNumber <= lastBlock &&
-            !(e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
+        // Deviation: the reference skips mapped blocks, but its file systems unmap at once; our FATX holds blocks while its lock is held.
+        if (e->CacheExtension == ext && e->BlockNumber >= firstBlock && e->BlockNumber <= lastBlock && !(e->CacheBuffer & FSC_READ_IN_PROGRESS)) {
             e->CacheExtension = nullptr;
             MoveToCacheHead(e);
         }
@@ -282,12 +278,10 @@ void InvalidateCacheRange(FSCACHE_EXTENSION *ext, LONGLONG offset, ULONG length)
         InvalidateCacheBlocks(ext, (ULONG)(offset >> PAGE_SHIFT), (ULONG)((offset + length - 1) >> PAGE_SHIFT));
 }
 
-// Cached read into a caller's buffer (XDVDFS, UDF). As the reference: a read whose offset and buffer meet the
-// device's alignment goes straight to the device for its whole pages, with the unaligned head and the short tail
-// through the cache; anything else (and every read of a random-access file) is copied out of cache buffers.
-// `toEnd` = the read runs to the end of the file: then the direct part may be rounded up to whole sectors.
-static bool UseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
-                     bool toEnd) {
+// Cached read into a caller's buffer (XDVDFS, UDF). As the reference: a read whose offset and buffer meet the device's alignment goes straight to the device
+// for its whole pages, with the unaligned head and the short tail through the cache; anything else (and every read of a random-access file) is copied out of
+// cache buffers. `toEnd` = the read runs to the end of the file: then the direct part may be rounded up to whole sectors.
+static bool UseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer, bool toEnd) {
     ULONG align = device->AlignmentRequirement, off = (ULONG)offset;
     if ((fileFlags & FO_RANDOM_ACCESS) || (off & align) || ((ULONG)buffer & align & 0xFFF))
         return true;
@@ -303,8 +297,7 @@ static bool UseCache(PDEVICE_OBJECT device, UCHAR fileFlags, LONGLONG offset, UL
     return !(((off + length) ^ off) & ~0xFFFu); // within one page
 }
 
-NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer,
-                    bool toEnd) {
+NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, ULONG length, PVOID buffer, bool toEnd) {
     auto out = (PUCHAR)buffer;
     if (UseCache(ext->TargetDeviceObject, fileFlags, offset, length, buffer, toEnd)) {
         while (length) {

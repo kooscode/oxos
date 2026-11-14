@@ -1,9 +1,8 @@
 #!/bin/sh
 # Flash a .uf2 to the Modxo's Pico without touching the board (README.md in this folder).
 #   flash_uf2.sh FILE.uf2 [SERIAL-PORT]      (default /dev/ttyACM0)
-# A 1200-baud "touch" of the serial port restarts the Pico into its USB bootloader (BOOTSEL); the RPI-RP2 drive that
-# appears (auto-mounted, or mounted here with udisksctl) gets the file, and the Pico restarts with it. Repeated if
-# the Pico comes back still in BOOTSEL. A running `console.py log` reconnects by itself.
+# A 1200-baud "touch" of the serial port restarts the Pico into its USB bootloader (BOOTSEL); the RPI-RP2 drive that appears (auto-mounted, or mounted here with
+# udisksctl) gets the file, and the Pico restarts with it. Repeated if the Pico comes back still in BOOTSEL. A running `console.py log` reconnects by itself.
 # Firmware and BIOS are separate .uf2 files (a merged one lost the BIOS half): flash them one at a time.
 set -u
 uf2="${1:-}"; dev="${2:-/dev/ttyACM0}"

@@ -1,51 +1,43 @@
 # 28. The 1.6 console: bring-up status
 
-OXOS addition. Started 2026-11-07 on a 1.6 console (NV2A revision D3, MCPX D5, Xcalibur encoder) with an RP2040
-Modxo on a rebuilt LPC header (LFRAME on the Pico's GPIO 5, two grounds, short wires: longer wires gave corrupted
-LPC cycles and FRAG even with Cerbios). Images: `make bios MCPX16=1` (separate 1.6 build; one hybrid image for
-1.0-1.6 is the plan after it, §4.5 step 6).
+OXOS addition. Started 2026-11-07 on a 1.6 console (NV2A revision D3, MCPX D5, Xcalibur encoder) with an RP2040 Modxo on a rebuilt LPC header (LFRAME on the
+Pico's GPIO 5, two grounds, short wires: longer wires gave corrupted LPC cycles and FRAG even with Cerbios). Images: `make bios MCPX16=1` (separate 1.6 build;
+one hybrid image for 1.0-1.6 is the plan after it, §4.5 step 6).
 
 ## 1. Status (2026-11-07)
-The 1.6 boots OXOS to the dashboard from OXOS's own code, 3 of 3 cold boots (POST 0x20 → 0x32 → 0x23 → 0x21 → 0x22,
-then the kernel to idle 0x30):
-- **X-codes:** `kernel/boot/xcodes_1_6.inc`, written from spec/stock/24 on the layout of Cromwell's table. The
-  1.0-1.5 images keep Cromwell's `Xcodes.h` unchanged. The program, with its write checks, is 406 X-codes and ends at
-  0xEC6. The pad table moved to 0xECB-0xFFF (header 0x7C).
-- **2BL:** the EEPROM pad calibration (spec/stock/21 §3.7); the X-code check list and the memory interface repair
-  hold the 1.6 values (0x10D4 0x0F included, 0x10B8 left alone).
+The 1.6 boots OXOS to the dashboard from OXOS's own code, 3 of 3 cold boots (POST 0x20 → 0x32 → 0x23 → 0x21 → 0x22, then the kernel to idle 0x30):
+- **X-codes:** `kernel/boot/xcodes_1_6.inc`, written from spec/stock/24 on the layout of Cromwell's table. The 1.0-1.5 images keep Cromwell's `Xcodes.h`
+  unchanged. The program, with its write checks, is 406 X-codes and ends at 0xEC6. The pad table moved to 0xECB-0xFFF (header 0x7C).
+- **2BL:** the EEPROM pad calibration (spec/stock/21 §3.7); the X-code check list and the memory interface repair hold the 1.6 values (0x10D4 0x0F included,
+  0x10B8 left alone).
 - **Checks:**
-  - A scratch X-code simulator gives the same final register values as the 5838 program for this console's EEPROM
-    bytes and for 300 random ones, with the same register write order. The differences: the memory test (start.S
-    makes it), the overflow-trick jump, and the lane masks.
-  - On the console, the 2BL's snapshot of the memory set-up (serial builds, log lines `xcode snapshot:`) reads the
-    same as with the 5838 X-codes, register for register, except the lane masks.
+  - A scratch X-code simulator gives the same final register values as the 5838 program for this console's EEPROM bytes and for 300 random ones, with the same
+    register write order. The differences: the memory test (start.S makes it), the overflow-trick jump, and the lane masks.
+  - On the console, the 2BL's snapshot of the memory set-up (serial builds, log lines `xcode snapshot:`) reads the same as with the 5838 X-codes, register for
+    register, except the lane masks.
 
 ## 2. Measured on this console
-- EEPROM 0xC0-0xC3: 0x68, 0xAA, 0xDD, 0x42. So 0x1214 = 0x68686868, 0x122C = 0xAAAAAAAA, 0x10B8 = 0xDDDD0000, strap
-  0x801D4401 (bits 18 and 19 set).
-- Memory test: large mask 0x0F, faulty mask 0xF0 → the third row of spec/stock/24 §4.3 (0x100200 0x03070003, 0x100204
-  0x11448000, 64 MB), the same result as on 1.0-1.5. With the 5838 X-codes, OXOS's start.S then tests again (the
-  geometry is still 0x11448000) and comes to the same result.
+- EEPROM 0xC0-0xC3: 0x68, 0xAA, 0xDD, 0x42. So 0x1214 = 0x68686868, 0x122C = 0xAAAAAAAA, 0x10B8 = 0xDDDD0000, strap 0x801D4401 (bits 18 and 19 set).
+- Memory test: large mask 0x0F, faulty mask 0xF0 → the third row of spec/stock/24 §4.3 (0x100200 0x03070003, 0x100204 0x11448000, 64 MB), the same result as on
+  1.0-1.5. With the 5838 X-codes, OXOS's start.S then tests again (the geometry is still 0x11448000) and comes to the same result.
 - PFB 0x1002C4 and 0x1002CC read back 0x00100042 after a write of 0x00100000, with the 5838 X-codes and with OXOS's.
-- **The SMC report is required:** without the writes of SMC registers 0x13 and 0x12 (spec/stock/24 §4.4) the console
-  resets about 0.4 s after power-on, every time (the 2BL had reached POST 0x23). OXOS sends Cromwell's fixed values
-  0x0F and 0xF0 from the X-codes (the memory test comes later, in start.S); they equal this console's result.
-- Before (Cromwell's 1.6 values): the RAM was unreliable (POST 0xE1, or the kernel stopping in HAL phase 0), because
-  Cromwell's table sets the memory up as on 1.0-1.5. Writing the 1.6 interface values from the 2BL on top of it made it
-  worse (the 2BL hung): they belong with the rest of the X-code set-up.
+- **The SMC report is required:** without the writes of SMC registers 0x13 and 0x12 (spec/stock/24 §4.4) the console resets about 0.4 s after power-on, every
+  time (the 2BL had reached POST 0x23). OXOS sends Cromwell's fixed values 0x0F and 0xF0 from the X-codes (the memory test comes later, in start.S); they equal
+  this console's result.
+- Before (Cromwell's 1.6 values): the RAM was unreliable (POST 0xE1, or the kernel stopping in HAL phase 0), because Cromwell's table sets the memory up as on
+  1.0-1.5. Writing the 1.6 interface values from the 2BL on top of it made it worse (the 2BL hung): they belong with the rest of the X-code set-up.
 
 ## 3. Open
-- §4 rows not done yet: G7/B5 (real lane masks to the SMC instead of the fixed values), H3 (the 1.6 power-on value of
-  0x10B0), K1 (kernel flag 0x10 on a 1.6), B3 (128 MB MTRR), the cold/warm boot loop of spec 27 §3 on the 1.6.
-- The check list's masks for PCI 0:1:0 0x04 (reads 0x000F, written 3) and 1:0:0 0x14 (reads 0xF0000008, bit 3 is the
-  prefetchable flag) report two settings as "differ" on every boot.
+- §4 rows not done yet: G7/B5 (real lane masks to the SMC instead of the fixed values), H3 (the 1.6 power-on value of 0x10B0), K1 (kernel flag 0x10 on a 1.6),
+  B3 (128 MB MTRR), the cold/warm boot loop of spec 27 §3 on the 1.6.
+- The check list's masks for PCI 0:1:0 0x04 (reads 0x000F, written 3) and 1:0:0 0x14 (reads 0xF0000008, bit 3 is the prefetchable flag) report two settings as
+  "differ" on every boot.
 
 ## 4. Gap list (2026-11-07)
-Spec/stock/24 (the retail 1.6 path) compared with OXOS's code: `kernel/boot/xcodes.S` (MCPXREVD5 = Cromwell's
-boot_rom/Xcodes.h), `tools/harden_xcodes.py`, `kernel/boot/start.S`, `kernel/boot/bl.cpp` (including the uncommitted
-1.6 repair table), `kernel/src/hardware/`, `kernel/src/memory/init.cpp`. Each row: what OXOS must do, where, and how
-the hardware side can check it. "Snapshot" = the start.S entry snapshot (spec 27 §4, log line `xcodes at entry`),
-extended as listed in G0.
+Spec/stock/24 (the retail 1.6 path) compared with OXOS's code: `kernel/boot/xcodes.S` (MCPXREVD5 = Cromwell's boot_rom/Xcodes.h), `tools/harden_xcodes.py`,
+`kernel/boot/start.S`, `kernel/boot/bl.cpp` (including the uncommitted 1.6 repair table), `kernel/src/hardware/`, `kernel/src/memory/init.cpp`. Each row: what
+OXOS must do, where, and how the hardware side can check it. "Snapshot" = the start.S entry snapshot (spec 27 §4, log line `xcodes at entry`), extended as
+listed in G0.
 
 ### 4.1 X-codes (`kernel/boot/xcodes.S`, MCPXREVD5)
 | # | Gap | What OXOS must do | Check |
@@ -87,20 +79,18 @@ extended as listed in G0.
 | K4 | Encoder detection by probe | Keep (OXOS's image is not the retail one); the retail kernel sends nothing to the Xcalibur before the first mode set either (spec 24 §6.3) | Serial `av:` line: encoder 0xE0 |
 
 ### 4.5 Implementation plan (in order)
-1. **Replace the 5838 X-code bytes with OXOS's own 1.6 program** (G1-G6, G8, G9), written in `kernel/boot/xcodes.S`
-   for MCPXREVD5 from spec 24 (the Cromwell include stays for 1.0-1.5). Keep the memory test where it is easiest to
-   fit (G7, H2) and the overflow-trick jump to 0xFFFC1000 before the exit. Before switching, take the reference
-   snapshot with the current temporary image (G0 below); after, the same snapshot must match it register for
-   register, and the console must reach the dashboard on 3 of 3 cold boots (POST 0x20 → 0x32 → 0x23 → 0x21 → 0x22).
-   Then delete the scratch `swap_xcodes.py` from the build flow.
+1. **Replace the 5838 X-code bytes with OXOS's own 1.6 program** (G1-G6, G8, G9), written in `kernel/boot/xcodes.S` for MCPXREVD5 from spec 24 (the Cromwell
+   include stays for 1.0-1.5). Keep the memory test where it is easiest to fit (G7, H2) and the overflow-trick jump to 0xFFFC1000 before the exit. Before
+   switching, take the reference snapshot with the current temporary image (G0 below); after, the same snapshot must match it register for register, and the
+   console must reach the dashboard on 3 of 3 cold boots (POST 0x20 → 0x32 → 0x23 → 0x21 → 0x22). Then delete the scratch `swap_xcodes.py` from the build flow.
 2. Write checks for the 1.6 program (H1-H5), then the cold/warm boot loop of spec 27 §3 on the 1.6.
-3. 2BL: the 1.6 X-code check list (B2), then the repair table (B1: complete it, or drop it if the loop of step 2 shows
-   no losses), and the SMC report if the test stays in start.S (B5).
+3. 2BL: the 1.6 X-code check list (B2), then the repair table (B1: complete it, or drop it if the loop of step 2 shows no losses), and the SMC report if the
+   test stays in start.S (B5).
 4. Kernel flag 0x10 on a 1.6 (K1).
 5. Optional: 128 MB MTRR (B3). Done in the kernel (spec/stock/09 §10).
-6. Future (decided 2026-11-07, after steps 1-4): one hybrid image for 1.0-1.6, the X-codes detecting a 1.6 at run
-   time (as Cerbios does with an SMBus read of 0xE1, spec 24 §7) instead of the MCPX16 build switch.
+6. Future (decided 2026-11-07, after steps 1-4): one hybrid image for 1.0-1.6, the X-codes detecting a 1.6 at run time (as Cerbios does with an SMBus read of
+   0xE1, spec 24 §7) instead of the MCPX16 build switch.
 
-G0 (reference snapshot, for step 1): extend the serial build's entry snapshot with 0x101000, 0x10B8, 0x10D4, 0x10C4,
-0x10C8, 0x10DC, 0x1210, 0x1214, 0x1218, 0x122C, 0x1250, 0x1002C4, 0x100204, host 0x84, 0:0:3 0x344/0x35C, PCI 0:2:0 and
-0:3:0 0x3C (the masks); and log EEPROM 0xC0-0xC3 and PCI 0:1:0 0x08 from the kernel. Record it with the 5838 bytes.
+G0 (reference snapshot, for step 1): extend the serial build's entry snapshot with 0x101000, 0x10B8, 0x10D4, 0x10C4, 0x10C8, 0x10DC, 0x1210, 0x1214, 0x1218,
+0x122C, 0x1250, 0x1002C4, 0x100204, host 0x84, 0:0:3 0x344/0x35C, PCI 0:2:0 and 0:3:0 0x3C (the masks); and log EEPROM 0xC0-0xC3 and PCI 0:1:0 0x08 from the
+kernel. Record it with the 5838 bytes.

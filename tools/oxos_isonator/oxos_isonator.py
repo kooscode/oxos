@@ -8,19 +8,18 @@ For every game it makes a folder a dashboard (XBMC4Gamers, EvoX, the OXOS title 
         default.xbe      the launcher: OXOS's ISO launcher, carrying the game's title ID, name, region, version and
                          title image, so the dashboard shows the game itself
 
-Starting default.xbe mounts the image in its folder as the console's disc and starts the game, through the virtual
-disc device that Cerbios and OXOS share (spec/oxos_internal/16_virtual_discs.md, spec/cerbios/07).
+Starting default.xbe mounts the image in its folder as the console's disc and starts the game, through the virtual disc device that Cerbios and OXOS share
+(spec/oxos_internal/16_virtual_discs.md, spec/cerbios/07).
 
 Sources:
   - an extracted game folder (default.xbe at its top): an XISO is built from it, in OUT/<name>/;
   - a disc image (.iso, XISO or full dump; a split one by its .1.iso part): only the launcher is made, next to it;
   - a folder of images, or of game folders: each one in turn.
 
-Images are one file by default: exFAT (OXOS) has no file size limit. --split cuts an image over 4 GB into two parts
-for a FATX disk (Cerbios, stock partitions), named NAME.1.iso and NAME.2.iso.
+Images are one file by default: exFAT (OXOS) has no file size limit. --split cuts an image over 4 GB into two parts for a FATX disk (Cerbios, stock partitions),
+named NAME.1.iso and NAME.2.iso.
 
-Python 3.8+, standard library only. The launcher template is build/tools/iso_launcher/bin/default.xbe
-(make -C kernel iso_launcher), or --launcher.
+Python 3.8+, standard library only. The launcher template is build/tools/iso_launcher/bin/default.xbe (make -C kernel iso_launcher), or --launcher.
 """
 import argparse
 import hashlib
@@ -38,8 +37,7 @@ FULL_DUMP_MIN = 0x18310800        # a full dump's first part is larger than this
 PART_MAX = 0xFFF00000             # one part of a split image: under FATX's 4 GB file limit, whole sectors
 ATTR_DIR, ATTR_FILE = 0x10, 0x80  # as on retail discs
 CHUNK = 8 << 20
-LAUNCHER_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "tools", "iso_launcher", "bin",
-                                "default.xbe")
+LAUNCHER_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "tools", "iso_launcher", "bin", "default.xbe")
 IMAGE_EXTS = (".iso", ".cci")
 
 
@@ -176,8 +174,7 @@ class Xbe:
             flags, va, vsize, raw, rsize, name_va = struct.unpack_from("<IIIIII", data, at)
             end = data.index(b"\0", name_va - self.base)
             name = data[name_va - self.base:end].decode("latin-1")
-            self.sections.append({"name": name, "flags": flags, "va": va, "vsize": vsize, "raw": raw,
-                                  "rsize": rsize, "header": at})
+            self.sections.append({"name": name, "flags": flags, "va": va, "vsize": vsize, "raw": raw, "rsize": rsize, "header": at})
 
     def section(self, name):
         for s in self.sections:
@@ -227,8 +224,8 @@ class Xbe:
         va = (va + 0xFFF) & ~0xFFF
         raw = (len(d) + 0xFFF) & ~0xFFF
         digest = hashlib.sha1(struct.pack("<I", len(payload)) + payload).digest()
-        entry = struct.pack("<IIIIIIIII", flags, va, len(payload), raw, len(payload), self.base + names,
-                            self.base + counters, self.base + counters, self.base + counters + 2) + digest
+        entry = struct.pack("<IIIIIIIII", flags, va, len(payload), raw, len(payload), self.base + names, self.base + counters, self.base + counters,
+                            self.base + counters + 2) + digest
         d[table + self.count * 0x38:table + (self.count + 1) * 0x38] = entry
         d += bytes(raw - len(d)) + payload
         d += bytes(((len(d) + 0xFFF) & ~0xFFF) - len(d))
@@ -239,8 +236,8 @@ class Xbe:
         struct.pack_into("<II", d, 0x11C, self.count, self.base + table)
 
 
-# Certificate fields copied from the game: title ID, title name, alternate title IDs, region, ratings, disc number,
-# version. The launcher keeps its own media types (it runs from the hard disk) and keys.
+# Certificate fields copied from the game: title ID, title name, alternate title IDs, region, ratings, disc number, version. The launcher keeps its own media
+# types (it runs from the hard disk) and keys.
 CERT_COPY = ((0x08, 4), (0x0C, 80), (0x5C, 64), (0xA0, 4), (0xA4, 4), (0xA8, 4), (0xAC, 4))
 TITLE_IMAGE = "$$XTIMAGE"
 
@@ -356,8 +353,8 @@ def dir_table(d, sector_of):
         child, left, right = node
         sec, size = sector_of(child)
         raw = child.name.encode("latin-1")
-        entry = struct.pack("<HHIIBB", offs[id(left)] // 4 if left else 0, offs[id(right)] // 4 if right else 0,
-                            sec, size, ATTR_DIR if isinstance(child, Dir) else ATTR_FILE, len(raw)) + raw
+        entry = struct.pack("<HHIIBB", offs[id(left)] // 4 if left else 0, offs[id(right)] // 4 if right else 0, sec, size, ATTR_DIR if isinstance(child,
+                            Dir) else ATTR_FILE, len(raw)) + raw
         entry += b"\xff" * (((len(entry) + 3) & ~3) - len(entry))
         o = offs[id(node)]
         table[o:o + len(entry)] = entry
@@ -624,8 +621,7 @@ def do_info(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
-                                 formatter_class=argparse.RawDescriptionHelpFormatter,
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="\n\n".join(__doc__.split("\n\n")[1:]))
     ap.add_argument("sources", nargs="+", help="game folders, images, or folders of either")
     ap.add_argument("-o", "--output", default=".", help="where games built from folders go (default: here)")

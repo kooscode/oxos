@@ -1,20 +1,17 @@
 # 29. Error screens (OXOS's own)
 
-Status: implemented 2026-11-07. Code: `kernel/src/user_interface/error_screens.cpp`,
-`kernel/src/user_interface/error_screen_text.cpp`, `kernel/src/graphics/` (`text.cpp`, `screen.cpp`).
+Status: implemented 2026-11-07. Code: `kernel/src/user_interface/error_screens.cpp`, `kernel/src/user_interface/error_screen_text.cpp`, `kernel/src/graphics/`
+(`text.cpp`, `screen.cpp`).
 
-The reference kernel shows a fatal error as a two-digit number and nothing else, and a bug check shows nothing at
-all (spec/stock/05 §6). OXOS keeps the codes and what goes with them (LED sequence, EEPROM error history, the halt)
-and draws a screen that says what happened and what to try.
+The reference kernel shows a fatal error as a two-digit number and nothing else, and a bug check shows nothing at all (spec/stock/05 §6). OXOS keeps the codes
+and what goes with them (LED sequence, EEPROM error history, the halt) and draws a screen that says what happened and what to try.
 
 ## 1. Text
-- One font for every OXOS screen: `text.cpp`, the OXOS 5x8 font (drawn for OXOS), printable ASCII 0x20–0x7E, one
-  byte per row. Rows 0–6 hold capitals and digits (row 6 is the baseline), row 7 descenders. A glyph is drawn as
-  `Scale x Scale` squares, glyphs `6 * Scale` apart (`graphics::DrawText`, `graphics::TextWidth`).
-- The boot splash's caption and its `[ Hold X for File Manager - v0.4.2/CONEXANT ]` label use the same code
-  (`graphics::VersionLabel`).
-- `text.cpp` is resident (not boot-only, not `-O2`): fatal errors 13, 20 and 21 and bug checks come after the
-  boot-only pages are freed (spec/oxos_internal/18).
+- One font for every OXOS screen: `text.cpp`, the OXOS 5x8 font (drawn for OXOS), printable ASCII 0x20–0x7E, one byte per row. Rows 0–6 hold capitals and digits
+  (row 6 is the baseline), row 7 descenders. A glyph is drawn as `Scale x Scale` squares, glyphs `6 * Scale` apart (`graphics::DrawText`,
+  `graphics::TextWidth`).
+- The boot splash's caption and its `[ Hold X for File Manager - v0.4.2/CONEXANT ]` label use the same code (`graphics::VersionLabel`).
+- `text.cpp` is resident (not boot-only, not `-O2`): fatal errors 13, 20 and 21 and bug checks come after the boot-only pages are freed (spec/oxos_internal/18).
 
 ## 2. Fatal error screen
 640x480 X8R8G8B8 in its own contiguous frame buffer, only with an AV pack connected (as before):
@@ -30,9 +27,8 @@ and draws a screen that says what happened and what to try.
 An `X` with two spaces on each side in any text (`Press  X  to`) is drawn as the controller's X button: a bold blue
 X in a blue ring (`graphics::DrawText`; the splash's label uses it too).
 
-Lines are at most 45 characters (`XK_FATAL_LINE`, 45 x 12 px fits between 48 px margins); at most seven help lines so
-the details stay inside the part of the picture a TV shows. A unit test (`tests/unit/test_fatal.cpp`) checks every
-code's title and lines.
+Lines are at most 45 characters (`XK_FATAL_LINE`, 45 x 12 px fits between 48 px margins); at most seven help lines so the details stay inside the part of the
+picture a TV shows. A unit test (`tests/unit/test_fatal.cpp`) checks every code's title and lines.
 
 | Code | Title | Raised when | Details |
 |---|---|---|---|
@@ -48,32 +44,27 @@ code's title and lines.
 OXOS never raises 5 (non-secure disk, spec/stock/05 "Policy differences") or 10–12 (no DVD drive is allowed).
 
 ## 3. Bug check screen
-`KeBugCheckEx` records the bug check (CMOS, serial, `KiBugCheckData`) and then calls `user_interface::ShowBugCheck`,
-with interrupts off. Nothing can be allocated then, so it takes over the frame buffer being scanned out (the CRTC start,
-NV2A 0x600800), which is a title's or the splash's:
+`KeBugCheckEx` records the bug check (CMOS, serial, `KiBugCheckData`) and then calls `user_interface::ShowBugCheck`, with interrupts off. Nothing can be
+allocated then, so it takes over the frame buffer being scanned out (the CRTC start, NV2A 0x600800), which is a title's or the splash's:
 1. No AV pack, no scan-out address, or 640x480x4 bytes from it would pass the end of RAM: nothing is drawn.
-2. The GPU stops drawing into it: PFIFO caches (0x2500), push buffer fetch (0x3220) and puller (0x3250) off,
-   PGRAPH FIFO (0x400720) off, the video overlay stopped (PVIDEO 0x8704 = 0x11).
+2. The GPU stops drawing into it: PFIFO caches (0x2500), push buffer fetch (0x3220) and puller (0x3250) off, PGRAPH FIFO (0x400720) off, the video overlay
+   stopped (PVIDEO 0x8704 = 0x11).
 3. The eight PFB tile regions (0x100240 + 16 i) are switched off, so the screen is linear as written.
-4. The screen is drawn through the frame-buffer window at 0xF0000000 + address (mapped at all times, write-through)
-   and shown as 640x480 X8R8G8B8 with `AvSetDisplayMode` and the screen-on option.
+4. The screen is drawn through the frame-buffer window at 0xF0000000 + address (mapped at all times, write-through) and shown as 640x480 X8R8G8B8 with
+   `AvSetDisplayMode` and the screen-on option.
 
-Titles' frame buffers hold at least 640x480 pixels; a 16-bit one is half the size, so the screen runs into the
-title's next buffer, which no longer matters.
+Titles' frame buffers hold at least 640x480 pixels; a 16-bit one is half the size, so the screen runs into the title's next buffer, which no longer matters.
 
-Content: `Kernel Stopped`; the bug check code; for 0x1E (unhandled exception) the exception code and address; the
-four parameters; the running title's ID (its XBE header at 0x10000, certificate +8) when there is one; and "Take a
-photo of this screen for a bug report, then turn the console off and on again."
+Content: `Kernel Stopped`; the bug check code; for 0x1E (unhandled exception) the exception code and address; the four parameters; the running title's ID (its
+XBE header at 0x10000, certificate +8) when there is one; and "Take a photo of this screen for a bug report, then turn the console off and on again."
 
 ## 4. Cost and checks
-- Resident code and data: about 4 KB more (release `.text` 0x23840 → 0x247FC, one page); the boot-only section
-  is 0x2A0 bytes smaller (the font moved out of it).
+- Resident code and data: about 4 KB more (release `.text` 0x23840 → 0x247FC, one page); the boot-only section is 0x2A0 bytes smaller (the font moved out of
+  it).
 - `make test_fatal` (xemu, no disk): code 9, the digits, the title drawn, the EEPROM history bit.
-- Bug check: checked in xemu with a temporary build that bug-checks at the title launcher (over the splash's frame
-  buffer) and 25 s into the dashboard (over the dashboard's frame buffer, title FFFF0002 shown); and on a console
-  (debug kit, Conexant, 2026-11-07): 25 s into the EvoX dashboard, the screen drawn cleanly over its frame buffer,
-  title 9E115330 shown.
+- Bug check: checked in xemu with a temporary build that bug-checks at the title launcher (over the splash's frame buffer) and 25 s into the dashboard (over the
+  dashboard's frame buffer, title FFFF0002 shown); and on a console (debug kit, Conexant, 2026-11-07): 25 s into the EvoX dashboard, the screen drawn cleanly
+  over its frame buffer, title 9E115330 shown.
 - Fatal error screen on the same console: a temporary build raising 13 at the title launcher showed the full screen.
-- After a bug check the console stays on until its power button is pressed (the SMC then turns it off itself);
-  powering it on again at once (8 s later) gave a reset loop before the kernel on the debug kit, held in reset with
-  an orange LED; a power-on after it had been off for 10 s booted normally.
+- After a bug check the console stays on until its power button is pressed (the SMC then turns it off itself); powering it on again at once (8 s later) gave a
+  reset loop before the kernel on the debug kit, held in reset with an orange LED; a power-on after it had been off for 10 s booted normally.

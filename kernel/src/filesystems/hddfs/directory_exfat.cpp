@@ -1,6 +1,5 @@
-// exFAT directories: entry sets (a file entry, a stream entry and name entries, 32 bytes each, with a checksum)
-// (spec/oxos_internal/07_exfat_driver.md), and the walks over a folder's tree that count or empty it. An exFAT volume
-// reaches its directory operations through EXFATFormat (at the end).
+// exFAT directories: entry sets (a file entry, a stream entry and name entries, 32 bytes each, with a checksum) (spec/oxos_internal/07_exfat_driver.md), and
+// the walks over a folder's tree that count or empty it. An exFAT volume reaches its directory operations through EXFATFormat (at the end).
 #include <filesystems/hddfs/hddfs.h>
 #include <hardware/chipset/serial.h>
 
@@ -89,9 +88,8 @@ static NTSTATUS EXFATWriteSet(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, EXFAT
     return STATUS_SUCCESS;
 }
 
-// A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set). Files
-// of 4 GB or more (disc images) keep their size's high dword in FileSizeHigh; directories must stay below 4 GB. Other
-// sets stay on the disk untouched and are invisible.
+// A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set). Files of 4 GB or more (disc images) keep their
+// size's high dword in FileSizeHigh; directories must stay below 4 GB. Other sets stay on the disk untouched and are invisible.
 static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *Out) {
     const UCHAR *f = s->e[0], *st = s->e[1];
     ULONG nameLength = st[3];
@@ -103,8 +101,7 @@ static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *
         return false;
 #if XK_DEBUG_SERIAL
     if (ULONGLONG valid = *(const ULONGLONG *)(st + 8); valid != length && length >= 0x4000000) {
-        XK_SERIAL("exfat: file at cluster %#lx: valid data length %#llx of %#llx\n", *(const ULONG *)(st + 20), valid,
-                  length);
+        XK_SERIAL("exfat: file at cluster %#lx: valid data length %#llx of %#llx\n", *(const ULONG *)(st + 20), valid, length);
     }
 #endif
     RtlZeroMemory(Out, sizeof(*Out));
@@ -139,8 +136,8 @@ static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *
 }
 
 // A complete entry set for a name (file, stream, name entries); the checksum is filled in when it is written.
-static void EXFATBuildSet(EXFAT_SET *Set, const CHAR *Name, ULONG NameLength, UCHAR Attributes, ULONG Created,
-                          ULONG Written, ULONG Accessed, ULONG First, ULONGLONG Length, bool NoFatChain) {
+static void EXFATBuildSet(EXFAT_SET *Set, const CHAR *Name, ULONG NameLength, UCHAR Attributes, ULONG Created, ULONG Written, ULONG Accessed, ULONG First,
+                          ULONGLONG Length, bool NoFatChain) {
     ULONG names = (NameLength + 14) / 15;
     Set->Count = 2 + names;
     RtlZeroMemory(Set->e, Set->Count * 32);
@@ -293,8 +290,7 @@ NTSTATUS EXFATReadEntry(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, HDDFS_ENTR
     return status;
 }
 
-NTSTATUS EXFATCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                           ULONG FirstCluster, ULONG *Index) {
+NTSTATUS EXFATCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index) {
     EXFAT_SET set;
     ULONG now = HDDFSCurrentTimestamp();
     ULONGLONG length = (Attributes & FILE_ATTRIBUTE_DIRECTORY) && FirstCluster ? v->BytesPerCluster : 0;
@@ -327,8 +323,8 @@ NTSTATUS EXFATFlushFcb(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     HDDFS_FCB *parent = EXFATParentOf(v, f);
     bool isDir = f->Flags & FCB_DIRECTORY;
     EXFAT_SET set;
-    EXFATBuildSet(&set, f->Name, f->NameLength, f->Attributes, f->CreationTime, f->LastWriteTime, f->LastAccessTime,
-                  f->FirstCluster, isDir ? f->EXFATDirLength : HDDFSFileSize64(f), f->EXFATFlags & EXFAT_NOFATCHAIN);
+    EXFATBuildSet(&set, f->Name, f->NameLength, f->Attributes, f->CreationTime, f->LastWriteTime, f->LastAccessTime, f->FirstCluster,
+                  isDir ? f->EXFATDirLength : HDDFSFileSize64(f), f->EXFATFlags & EXFAT_NOFATCHAIN);
     NTSTATUS status = STATUS_SUCCESS;
     if (set.Count != f->EXFATEntries) { // the name needs another number of entries: move the set
         status = EXFATRemoveDirent(v, f);
@@ -461,7 +457,7 @@ NTSTATUS EXFATCountFolder(HDDFS_VOLUME *v) {
 }
 
 // The directory operations of an exFAT volume (HDDFS_VOLUME::Format).
-const HDDFS_FORMAT EXFATFormat = {EXFATLookup, EXFATReadEntry, EXFATNextEntry, EXFATInitDirectory, EXFATRemoveDirent,
-                                   EXFATCreateDirent, EXFATFlushFcb, EXFATDeleteDirent, EXFATIsDirectoryEmpty};
+const HDDFS_FORMAT EXFATFormat = {EXFATLookup, EXFATReadEntry, EXFATNextEntry, EXFATInitDirectory, EXFATRemoveDirent, EXFATCreateDirent, EXFATFlushFcb,
+                                   EXFATDeleteDirent, EXFATIsDirectoryEmpty};
 
 } // namespace xk::filesystems

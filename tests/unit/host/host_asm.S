@@ -1,6 +1,6 @@
-// Host versions of the kernel's context switch and thread start-up (kernel/src/arch/context_switch.S): the same logic
-// with ELF symbol names, the PCR's NT_TIB through KiPcr instead of %fs, and the fake CPU's interrupt flag (HostIf)
-// saved in the switch frame where the kernel saves EFLAGS (user mode cannot change the real IF).
+// Host versions of the kernel's context switch and thread start-up (kernel/src/arch/context_switch.S): the same logic with ELF symbol names, the PCR's NT_TIB
+// through KiPcr instead of %fs, and the fake CPU's interrupt flag (HostIf) saved in the switch frame where the kernel saves EFLAGS (user mode cannot change the
+// real IF).
 
 #define KTHREAD_STACK_BASE   0x1C
 #define KTHREAD_STACK_LIMIT  0x20

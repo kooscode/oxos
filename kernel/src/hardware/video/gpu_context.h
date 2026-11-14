@@ -3,8 +3,8 @@
 
 namespace xk::hardware::video {
 
-// A channel's graphics context image in GPU instance memory: the engine saves its state there when it leaves the
-// channel and loads it back when it returns to it.
+// A channel's graphics context image in GPU instance memory: the engine saves its state there when it leaves the channel and loads it back when it returns to
+// it.
 constexpr unsigned GR_CTX_SIZE = 0x36B0;    // bytes
 constexpr unsigned GR_CTX_3D = 0x33C;       // the 3D (Kelvin) part starts here; before it, state the engine fills
 constexpr unsigned GR_CTX_BLOCKS = 0x1A9C;  // 136 blocks of 4 dwords
@@ -13,9 +13,8 @@ constexpr unsigned GR_CTX_PIPE = 0x2F1C;    // 0x68 + 0xD0 dwords
 constexpr unsigned GR_CTX_4DWORDS = 0x33FC; // 4 dwords
 constexpr unsigned GR_CTX_20DWORDS = 0x340C;
 
-// Calls put(offset, value) for each dword of the default image that is not zero (the rest of the image is zero).
-// These are the defaults the stock graphics library and Direct3D write before a channel's first context load;
-// they are measured and listed in spec 24 §3.
+// Calls put(offset, value) for each dword of the default image that is not zero (the rest of the image is zero). These are the defaults the stock graphics
+// library and Direct3D write before a channel's first context load; they are measured and listed in spec 24 §3.
 template <class Put> constexpr void DefaultGraphicsContext(Put put) {
     put(0x000, 0x00000001);
     put(GR_CTX_3D, 0xFFFF0000);

@@ -1,5 +1,4 @@
-// HAL phase 0, cold path (spec/stock/02_executive_init.md §3). Order matches the reference kernel;
-// the 0x80CF pulse runs between steps.
+// HAL phase 0, cold path (spec/stock/02_executive_init.md §3). Order matches the reference kernel; the 0x80CF pulse runs between steps.
 #include <hardware/chipset/chipset.h>
 #include <arch/arch.h>
 #include <core/core.h>
@@ -10,12 +9,12 @@ XK_PERSIST XBOX_HARDWARE_INFO XboxHardwareInfo;
 
 namespace xk::hardware::chipset {
 
-// Filled at cold boot only and kept across quick reboots, as in the reference (0x8003B150 lies past the .data/BSS
-// range the quick reboot re-initializes). Titles launched by another title read it too: Half-Life 2's USB library
-// reserves its descriptors by Flags bit 0 and, with the flags zeroed, ran out of them and never found the pad.
+// Filled at cold boot only and kept across quick reboots, as in the reference (0x8003B150 lies past the .data/BSS range the quick reboot re-initializes).
+// Titles launched by another title read it too: Half-Life 2's USB library reserves its descriptors by Flags bit 0 and, with the flags zeroed, ran out of them
+// and never found the pad.
 
-// Purpose unknown (spec 02 §3): writes 5 then 4 to MCPX I/O 0x80CF with 5 us stalls. The reference skips it when bit 0
-// of its boot flags (0x8003B138, BootFlags in hardware/chipset/smbus.cpp) is set; OXOS never sets that bit.
+// Purpose unknown (spec 02 §3): writes 5 then 4 to MCPX I/O 0x80CF with 5 us stalls. The reference skips it when bit 0 of its boot flags (0x8003B138, BootFlags
+// in hardware/chipset/smbus.cpp) is set; OXOS never sets that bit.
 void Pulse() {
     outb(0x80CF, 5);
     KeStallExecutionProcessor(5);
@@ -31,8 +30,7 @@ static void DisableLocalApic() {
 
 void InitHalPhase0(bool coldBoot) {
     if (!coldBoot) {
-        // Quick reboot: the interrupt controller is reprogrammed, and the video overlay the last title may have left
-        // running is stopped.
+        // Quick reboot: the interrupt controller is reprogrammed, and the video overlay the last title may have left running is stopped.
         Pulse();
         InitPic();
         IdleVideoOverlay();
@@ -61,8 +59,7 @@ void InitHalPhase0(bool coldBoot) {
     post(post_code::AcpiPm);
 }
 
-// XboxHardwareInfo at cold boot (spec/stock/02 §5, confirmed from the assembly, 0x80055081): the flash and strap flags,
-// the MCPX and NV2A revisions.
+// XboxHardwareInfo at cold boot (spec/stock/02 §5, confirmed from the assembly, 0x80055081): the flash and strap flags, the MCPX and NV2A revisions.
 void DetectHardware() {
     auto flash = (volatile UCHAR *)MmMapIoSpace(0xFFF00078, 4, PAGE_READWRITE | PAGE_NOCACHE);
     if (flash) {
@@ -73,8 +70,7 @@ void DetectHardware() {
         }
         MmUnmapIoSpace((PVOID)flash, 4);
     }
-    // NV2A straps, bits 25-26: 0 → 0x40. (The reference also tests the masked value against 1 for 0x80, which can
-    // never match; 0x80 is therefore never set.)
+    // NV2A straps, bits 25-26: 0 → 0x40. (The reference also tests the masked value against 1 for 0x80, which can never match; 0x80 is therefore never set.)
     if (!(*(volatile ULONG *)0xFD101000 & 0x06000000))
         XboxHardwareInfo.Flags |= 0x40;
     XboxHardwareInfo.McpRevision = ReadPci8(0, 1, 0x08);

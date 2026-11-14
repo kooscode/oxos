@@ -13,8 +13,7 @@ static void NTAPI DeleteThread(PVOID Object) {
         MmDeleteKernelStack(t->Tcb.StackBase, t->Tcb.StackLimit);
 }
 
-XBAPI OBJECT_TYPE PsThreadObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteThread, nullptr, (PVOID)0,
-                                  'erhT'};
+XBAPI OBJECT_TYPE PsThreadObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteThread, nullptr, (PVOID)0, 'erhT'};
 
 static PCREATE_THREAD_NOTIFY_ROUTINE CreateThreadNotifyRoutines[8]; // registered by titles, at most 8
 static volatile LONG SystemThreadCount;                             // system threads created and not yet deleted
@@ -36,9 +35,8 @@ static void NotifyThreadCreation(ETHREAD *t, BOOLEAN create) {
     }
 }
 
-XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadExtensionSize, ULONG KernelStackSize,
-                                            ULONG TlsDataSize, PHANDLE ThreadId, PVOID StartContext1,
-                                            PVOID StartContext2, BOOLEAN CreateSuspended, BOOLEAN DebuggerThread,
+XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadExtensionSize, ULONG KernelStackSize, ULONG TlsDataSize, PHANDLE ThreadId,
+                                            PVOID StartContext1, PVOID StartContext2, BOOLEAN CreateSuspended, BOOLEAN DebuggerThread,
                                             PKSYSTEM_ROUTINE SystemRoutine) {
     ETHREAD *t;
     ULONG size = sizeof(ETHREAD) + ThreadExtensionSize;
@@ -57,13 +55,11 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
         return (NTSTATUS)0xC000009A;
     }
     t->StartAddress = StartContext1;
-    InitializeThread(&t->Tcb, stack, stackSize, TlsDataSize, SystemRoutine, StartContext1, StartContext2,
-                     &SystemProcess);
+    InitializeThread(&t->Tcb, stack, stackSize, TlsDataSize, SystemRoutine, StartContext1, StartContext2, &SystemProcess);
     if (CreateSuspended)
         KeSuspendThread(&t->Tcb);
 
-    // References: one for UniqueThread's handle, one for the caller's handle, one released when the
-    // thread's stack is reaped after termination.
+    // References: one for UniqueThread's handle, one for the caller's handle, one released when the thread's stack is reaped after termination.
     ObfReferenceObject(t);
     ObfReferenceObject(t);
     status = ObInsertObject(t, nullptr, 0, &t->UniqueThread);
@@ -95,10 +91,8 @@ static void NTAPI SystemThreadStartup(PVOID StartRoutine, PVOID StartContext) {
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
-XBAPI NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine,
-                                          PVOID StartContext, BOOLEAN DebuggerThread) {
-    return PsCreateSystemThreadEx(ThreadHandle, 0, 0x3000, 0, ThreadId, StartRoutine, StartContext, FALSE,
-                                  DebuggerThread, SystemThreadStartup);
+XBAPI NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine, PVOID StartContext, BOOLEAN DebuggerThread) {
+    return PsCreateSystemThreadEx(ThreadHandle, 0, 0x3000, 0, ThreadId, StartRoutine, StartContext, FALSE, DebuggerThread, SystemThreadStartup);
 }
 
 XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus) {
@@ -136,8 +130,7 @@ static void NTAPI FreeApc(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID
     ExFreePool(Apc);
 }
 
-XBAPI NTSTATUS NTAPI NtQueueApcThread(HANDLE ThreadHandle, PPS_APC_ROUTINE ApcRoutine, PVOID ApcArgument1,
-                                      PVOID ApcArgument2, PVOID ApcArgument3) {
+XBAPI NTSTATUS NTAPI NtQueueApcThread(HANDLE ThreadHandle, PPS_APC_ROUTINE ApcRoutine, PVOID ApcArgument1, PVOID ApcArgument2, PVOID ApcArgument3) {
     PKTHREAD t;
     NTSTATUS status = ObReferenceObjectByHandle(ThreadHandle, &PsThreadObjectType, (PVOID *)&t);
     if (!NT_SUCCESS(status))
@@ -180,12 +173,11 @@ XBAPI NTSTATUS NTAPI NtResumeThread(HANDLE ThreadHandle, PULONG PreviousSuspendC
     return STATUS_SUCCESS;
 }
 
-// Kernel-internal helper used by boot self-tests: start a system thread at a priority and keep a
-// reference to it (the pointer stays valid after the thread exits).
+// Kernel-internal helper used by boot self-tests: start a system thread at a priority and keep a reference to it (the pointer stays valid after the thread
+// exits).
 PKTHREAD CreateSystemThread(void(NTAPI *StartRoutine)(PVOID), PVOID Context, ULONG StackSize, LONG Priority) {
     HANDLE h;
-    if (!NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, StackSize, 0, nullptr, (PVOID)StartRoutine, Context, TRUE, FALSE,
-                                           SystemThreadStartup)))
+    if (!NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, StackSize, 0, nullptr, (PVOID)StartRoutine, Context, TRUE, FALSE, SystemThreadStartup)))
         return nullptr;
     PKTHREAD t;
     ObReferenceObjectByHandle(h, &PsThreadObjectType, (PVOID *)&t);

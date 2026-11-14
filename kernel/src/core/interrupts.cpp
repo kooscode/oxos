@@ -1,8 +1,7 @@
 // IRQL, software interrupts and hardware interrupt dispatch (spec/stock/06 §1-3).
 //
-// Device interrupts are masked in the PIC as soon as IRQL reaches their level (eager masking), so
-// a hardware interrupt never arrives at or below the current IRQL and nothing has to be replayed.
-// APC/DISPATCH software interrupts are pending bits delivered when IRQL drops below them.
+// Device interrupts are masked in the PIC as soon as IRQL reaches their level (eager masking), so a hardware interrupt never arrives at or below the current
+// IRQL and nothing has to be replayed. APC/DISPATCH software interrupts are pending bits delivered when IRQL drops below them.
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <diagnostics/diagnostics.h>
@@ -52,8 +51,8 @@ XBAPI KIRQL NTAPI KeGetCurrentIrql() {
 
 XBAPI KIRQL FASTCALL KfRaiseIrql(KIRQL NewIrql) {
     KIRQL old = KiPcr.Irql;
-    // Never lower (NT's rule; checked builds bug-check): the boot runs at HIGH_LEVEL, and the IDE driver's "raise to
-    // the channel IRQL" would otherwise drop to 12 for a whole device probe, with the PIC mask and the IRQL apart.
+    // Never lower (NT's rule; checked builds bug-check): the boot runs at HIGH_LEVEL, and the IDE driver's "raise to the channel IRQL" would otherwise drop to
+    // 12 for a whole device probe, with the PIC mask and the IRQL apart.
     if (NewIrql < old)
         return old;
     if (NewIrql > DISPATCH_LEVEL) {
@@ -78,8 +77,7 @@ XBAPI void FASTCALL KfLowerIrql(KIRQL NewIrql) {
     restore_flags(flags);
 }
 
-// KeRaiseIrqlToDpcLevel is in src/in_game_reset/xinput_hook.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game
-// reset hook.
+// KeRaiseIrqlToDpcLevel is in src/in_game_reset/xinput_hook.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game reset hook.
 
 XBAPI KIRQL NTAPI KeRaiseIrqlToSynchLevel() {
     return KfRaiseIrql(SYNCH_LEVEL);
@@ -100,24 +98,21 @@ XBAPI void FASTCALL HalClearSoftwareInterrupt(KIRQL RequestIrql) {
 }
 
 #if XK_DEBUG_SERIAL
-// Hang dump (serial builds): when the sampler finds the idle thread three times in a row (15 s with nothing to run
-// at every sample), every thread's state, what it waits on, and the first return addresses into the title's image
-// found on its stack, so a title that waits for ever names its call site and the object.
+// Hang dump (serial builds): when the sampler finds the idle thread three times in a row (15 s with nothing to run at every sample), every thread's state, what
+// it waits on, and the first return addresses into the title's image found on its stack, so a title that waits for ever names its call site and the object.
 static void DumpThreads() {
     PLIST_ENTRY head = &SystemProcess.ThreadListHead;
     ULONG count = 0;
     for (PLIST_ENTRY e = head->Flink; e != head && count < 64; e = e->Flink, count++) {
         PKTHREAD t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
-        XK_SERIAL("hang: thread %p state %u reason %u priority %d wait status %08lx alertable %u\n", t,
-                  (unsigned)t->State, (unsigned)t->WaitReason, (int)t->Priority, (ULONG)t->WaitStatus,
-                  (unsigned)t->Alertable);
+        XK_SERIAL("hang: thread %p state %u reason %u priority %d wait status %08lx alertable %u\n", t, (unsigned)t->State, (unsigned)t->WaitReason,
+                  (int)t->Priority, (ULONG)t->WaitStatus, (unsigned)t->Alertable);
         if (t->State == Waiting) {
             PKWAIT_BLOCK first = t->WaitBlockList, b = first;
             for (ULONG i = 0; b && i < 8; i++) {
                 auto object = (DISPATCHER_HEADER *)b->Object;
-                XK_SERIAL("hang:   waits on %p type %u signal %ld (wait type %d)\n", object,
-                          object ? (unsigned)object->Type : 0u, object ? (long)object->SignalState : 0L,
-                          (int)b->WaitType);
+                XK_SERIAL("hang:   waits on %p type %u signal %ld (wait type %d)\n", object, object ? (unsigned)object->Type : 0u,
+                          object ? (long)object->SignalState : 0L, (int)b->WaitType);
                 b = b->NextWaitBlock;
                 if (b == first)
                     break;
@@ -145,8 +140,8 @@ static void DumpThreads() {
             continue;
         ULONG found = 0;
         XK_SERIAL("hang:   title return addresses:");
-        // Only values that follow a call instruction in a mapped page: call rel32 (E8), call [abs] (FF 15), or a
-        // register / memory call (FF /2, 2 to 7 bytes long).
+        // Only values that follow a call instruction in a mapped page: call rel32 (E8), call [abs] (FF 15), or a register / memory call (FF /2, 2 to 7 bytes
+        // long).
         for (; sp < top && found < 24; sp++) {
             ULONG r = *sp;
             if (r < 0x11000 || r >= 0x800000 || !MmIsAddressValid((PVOID)(r - 7)) || !MmIsAddressValid((PVOID)r))
@@ -169,15 +164,14 @@ static void DumpThreads() {
 extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (hardware::chipset::IsSpuriousIrq(irq))
         return;
-    // The start-up watchdog (diagnostics/boot_marks.cpp) gets the interrupted eip: in the IRQ stub's frame, past this
-    // function's frame and the registers the stub saved.
+    // The start-up watchdog (diagnostics/boot_marks.cpp) gets the interrupted eip: in the IRQ stub's frame, past this function's frame and the registers the
+    // stub saved.
     if (irq == 0)
         diagnostics::BootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
 #if XK_DEBUG_SERIAL
     // Sampler (serial builds): every 5 s, where the processor was interrupted, so a hang names its code.
     if (irq == 0 && KeTickCount % 5000 == 0) {
-        XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9],
-                  (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
+        XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9], (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
         static ULONG idleSamples;
         idleSamples = KiPcr.PrcbData.CurrentThread == &IdleThreadObject ? idleSamples + 1 : 0;
         if (idleSamples == 3 || idleSamples == 12)
@@ -193,8 +187,8 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     if (irq < 16)
         IrqCounts[irq] = IrqCounts[irq] + 1;
 #if XK_DEBUG_SERIAL
-    // Interrupt-storm detector (serial builds): more than 5000 interrupts of one line within one clock
-    // tick (1 ms) freezes the console; log it once and mask the line, so the system and its log keep running.
+    // Interrupt-storm detector (serial builds): more than 5000 interrupts of one line within one clock tick (1 ms) freezes the console; log it once and mask
+    // the line, so the system and its log keep running.
     if (irq) {
         static ULONG stormTick[16], stormCount[16];
         if (stormTick[irq] != KeTickCount) {
@@ -229,8 +223,8 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
 // --- Interrupt objects (spec/stock/06 §3). The IDT keeps fixed per-IRQ stubs that look up the
 // connected object, so DispatchCode is only filled with a recognisable marker.
 
-XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext,
-                                       ULONG Vector, KIRQL Irql, KINTERRUPT_MODE InterruptMode, BOOLEAN ShareVector) {
+XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext, ULONG Vector, KIRQL Irql,
+                                       KINTERRUPT_MODE InterruptMode, BOOLEAN ShareVector) {
     Interrupt->ServiceRoutine = ServiceRoutine;
     Interrupt->ServiceContext = ServiceContext;
     Interrupt->BusInterruptLevel = Vector - HAL_IRQ_BASE_VECTOR;

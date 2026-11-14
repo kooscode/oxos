@@ -1,6 +1,5 @@
-// The network card for the kernel's network stack (spec/oxos_internal/31_upload_server.md §2): its rings in contiguous
-// memory, frames in and out by polling, and the bring-up and shut-down hardware/ethernet/nic.h shares with the 2BL.
-// Boot-only.
+// The network card for the kernel's network stack (spec/oxos_internal/31_upload_server.md §2): its rings in contiguous memory, frames in and out by polling,
+// and the bring-up and shut-down hardware/ethernet/nic.h shares with the 2BL. Boot-only.
 #include <network/network_stack.h>
 #include <core/core.h>
 #include <hardware/chipset/chipset.h>
@@ -14,11 +13,10 @@
 
 namespace xk::hardware::ethernet {
 
-// The descriptors (RX_COUNT receive, then TX_COUNT transmit) in one uncached page: the card and the processor both
-// change them. The frame buffers, NIC_BUFFER bytes for each descriptor, in ordinary cached memory: the MCPX's DMA
-// keeps the processor's cache coherent, and an uncached buffer made every byte the stack reads a trip to RAM (the
-// upload ran at a tenth of its speed). 64 receive buffers hold 64 full frames: more than the 64 KB a TCP sender may
-// have in flight (tcp.cpp), so frames that arrive while the caller writes to the disk are not lost.
+// The descriptors (RX_COUNT receive, then TX_COUNT transmit) in one uncached page: the card and the processor both change them. The frame buffers, NIC_BUFFER
+// bytes for each descriptor, in ordinary cached memory: the MCPX's DMA keeps the processor's cache coherent, and an uncached buffer made every byte the stack
+// reads a trip to RAM (the upload ran at a tenth of its speed). 64 receive buffers hold 64 full frames: more than the 64 KB a TCP sender may have in flight
+// (tcp.cpp), so frames that arrive while the caller writes to the disk are not lost.
 constexpr ULONG RX_COUNT = 64, TX_COUNT = 32;
 constexpr ULONG BUFFERS_SIZE = (RX_COUNT + TX_COUNT) * NIC_BUFFER;
 static_assert((RX_COUNT + TX_COUNT) * sizeof(NIC_DESCRIPTOR) <= PAGE_SIZE, "the descriptors fit one page");
@@ -48,15 +46,13 @@ ULONG Milliseconds() {
 
 bool StartCard(ULONG LinkWait) {
     if (!DescriptorRing) {
-        DescriptorRing = (PUCHAR)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, 0x3FFFFFF, PAGE_SIZE,
-                                                              PAGE_READWRITE | PAGE_NOCACHE);
+        DescriptorRing = (PUCHAR)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, 0x3FFFFFF, PAGE_SIZE, PAGE_READWRITE | PAGE_NOCACHE);
         FrameBuffers = (PUCHAR)MmAllocateContiguousMemoryEx(BUFFERS_SIZE, 0, 0x3FFFFFF, PAGE_SIZE, PAGE_READWRITE);
         if (!DescriptorRing || !FrameBuffers) {
             StopCard();
             return false;
         }
-        // The console's own address, so DHCP gives the server the address its titles get; a locally administered
-        // one when the EEPROM has none.
+        // The console's own address, so DHCP gives the server the address its titles get; a locally administered one when the EEPROM has none.
         ULONG type, length;
         static const UCHAR fallback[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31};
         if (!NT_SUCCESS(ExQueryNonVolatileSetting(0x101, &type, MacAddress, sizeof(MacAddress), &length)) ||
@@ -67,8 +63,7 @@ bool StartCard(ULONG LinkWait) {
     for (ULONG i = 0; i < RX_COUNT; i++)
         ReceiveDescriptor()[i] = {MmGetPhysicalAddress(FrameBufferAt(i)), (USHORT)NIC_BUFFER, NIC_RX_AVAIL};
     ReceiveHead = TransmitNext = 0;
-    return ProgramCard(MacAddress, MmGetPhysicalAddress(ReceiveDescriptor()), RX_COUNT,
-                       MmGetPhysicalAddress(TransmitDescriptor()), TX_COUNT, LinkWait);
+    return ProgramCard(MacAddress, MmGetPhysicalAddress(ReceiveDescriptor()), RX_COUNT, MmGetPhysicalAddress(TransmitDescriptor()), TX_COUNT, LinkWait);
 }
 
 void StopCard() {

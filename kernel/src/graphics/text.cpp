@@ -1,5 +1,5 @@
-// Text for OXOS's own screens: the boot splash's caption and label (boot_splash/splash.cpp) and the kernel's screens
-// (screen.cpp and their users). Resident, as those screens can come up after the boot-only code is freed.
+// Text for OXOS's own screens: the boot splash's caption and label (boot_splash/splash.cpp) and the kernel's screens (screen.cpp and their users). Resident, as
+// those screens can come up after the boot-only code is freed.
 #include <graphics/graphics.h>
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
@@ -7,8 +7,8 @@
 
 namespace xk::graphics {
 
-// The OXOS 5x8 font (drawn for OXOS): printable ASCII 0x20-0x7E, one byte per row, bit 4 = the leftmost column. Rows
-// 0-6 hold capitals and digits (row 6 is the baseline); row 7 holds descenders.
+// The OXOS 5x8 font (drawn for OXOS): printable ASCII 0x20-0x7E, one byte per row, bit 4 = the leftmost column. Rows 0-6 hold capitals and digits (row 6 is the
+// baseline); row 7 holds descenders.
 static const UCHAR Font[95][8] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, //  
     {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04, 0x00}, // !
@@ -133,8 +133,8 @@ static void DrawGlyph(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, UCHAR Char, U
 
 constexpr ULONG XK_X_BUTTON_BLUE = 0x3C8CFF; // the controller's X button
 
-// The controller's X button in the place of the letter at (X, Y): the letter bold in blue, in a blue ring around the
-// glyph's centre (radii 4.75 and 5.75 glyph pixels; computed in half pixels, so the edge is round).
+// The controller's X button in the place of the letter at (X, Y): the letter bold in blue, in a blue ring around the glyph's centre (radii 4.75 and 5.75 glyph
+// pixels; computed in half pixels, so the edge is round).
 static void DrawXButton(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, ULONG Scale) {
     const LONG cx = 2 * X + 5 * Scale, cy = 2 * Y + 7 * Scale, outer = 23 * Scale, inner = 19 * Scale;
     const LONG reach = 6 * Scale;
@@ -158,9 +158,8 @@ void DrawText(ULONG *Image, ULONG Pitch, ULONG X, ULONG Y, const char *Text, ULO
     }
 }
 
-// The OXOS version and the video encoder the kernel found (hardware/video/video.cpp, by its SMBus address):
-// v0.3.16/CONEXANT (1.0-1.3), .../FOCUS (1.4-1.5), .../XCALIBUR (1.6); v0.3.16 alone when no encoder answered. Builds
-// made without a release version say DEV.
+// The OXOS version and the video encoder the kernel found (hardware/video/video.cpp, by its SMBus address): v0.3.16/CONEXANT (1.0-1.3), .../FOCUS (1.4-1.5),
+// .../XCALIBUR (1.6); v0.3.16 alone when no encoder answered. Builds made without a release version say DEV.
 void VersionLabel(char *Buffer, ULONG Size) {
     const char *encoder = hardware::video::EncoderAddress == 0x8A   ? "CONEXANT"
                           : hardware::video::EncoderAddress == 0xD4 ? "FOCUS"

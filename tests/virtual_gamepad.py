@@ -6,8 +6,7 @@ import fcntl, os, struct, time
 
 # Linux input events: event types, then the pad's buttons (key codes) and axes.
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
-BUTTONS = {"A": 0x130, "B": 0x131, "X": 0x133, "Y": 0x134, "LB": 0x136, "RB": 0x137, "BACK": 0x13A,
-           "START": 0x13B, "GUIDE": 0x13C, "LS": 0x13D, "RS": 0x13E}
+BUTTONS = {"A": 0x130, "B": 0x131, "X": 0x133, "Y": 0x134, "LB": 0x136, "RB": 0x137, "BACK": 0x13A, "START": 0x13B, "GUIDE": 0x13C, "LS": 0x13D, "RS": 0x13E}
 # axis: (code, min, max)
 AXES = {"LX": (0x00, -32768, 32767), "LY": (0x01, -32768, 32767), "LT": (0x02, 0, 255),
         "RX": (0x03, -32768, 32767), "RY": (0x04, -32768, 32767), "RT": (0x05, 0, 255),

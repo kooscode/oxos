@@ -1,9 +1,8 @@
 # netboot: boot OXOS kernels over the network
 
-Flash a console once, then boot every new kernel build from your PC over Ethernet. No reflashing between builds.
-At each power-on the console's boot loader (our 2BL) asks the local network for a boot image. If `netboot.py` is
-running on a PC, the console downloads the image (256 KiB, well under a second on 100 Mbit/s) and boots the kernel
-inside it. If no PC answers, it boots the kernel in its own flash, exactly as a normal OXOS image does.
+Flash a console once, then boot every new kernel build from your PC over Ethernet. No reflashing between builds. At each power-on the console's boot loader (our
+2BL) asks the local network for a boot image. If `netboot.py` is running on a PC, the console downloads the image (256 KiB, well under a second on 100 Mbit/s)
+and boots the kernel inside it. If no PC answers, it boots the kernel in its own flash, exactly as a normal OXOS image does.
 
 Design and protocol: [spec/oxos_internal/09_netboot.md](../../spec/oxos_internal/09_netboot.md).
 
@@ -13,13 +12,11 @@ Design and protocol: [spec/oxos_internal/09_netboot.md](../../spec/oxos_internal
 make -C kernel netboot          # -> build/kernel/netboot/bios_256k.bin (256 KiB) and bios.bin (1 MiB)
 ```
 
-Flash `bios_256k.bin` or `bios.bin` to your modchip like any OXOS image. Its own kernel is a serial-log build
-(`SERIAL=1`), so even a boot without a PC is visible on the debug serial port (on the Modxo rig:
-`tools/modxo/console.py log`).
+Flash `bios_256k.bin` or `bios.bin` to your modchip like any OXOS image. Its own kernel is a serial-log build (`SERIAL=1`), so even a boot without a PC is
+visible on the debug serial port (on the Modxo rig: `tools/modxo/console.py log`).
 
-The console uses the address `NETBOOT_IP` (default `192.168.1.222`) in its packets. It needs no DHCP and does not
-answer ARP; both sides use UDP broadcasts. If your LAN uses another subnet, build with
-`make -C kernel netboot NETBOOT_IP=10.0.0.222`. Delete `build/kernel/netboot` first, because the 2BL is not rebuilt
+The console uses the address `NETBOOT_IP` (default `192.168.1.222`) in its packets. It needs no DHCP and does not answer ARP; both sides use UDP broadcasts. If
+your LAN uses another subnet, build with `make -C kernel netboot NETBOOT_IP=10.0.0.222`. Delete `build/kernel/netboot` first, because the 2BL is not rebuilt
 when only a variable changes.
 
 ## 2. Serve a kernel
@@ -41,8 +38,7 @@ Power the console on. You should see:
 
 The kernel's own log is on the debug serial port (`SERIAL=1` builds).
 
-`netboot.py` reads the image again for every boot. Leave it running, rebuild, and power-cycle the console to boot
-the new build.
+`netboot.py` reads the image again for every boot. Leave it running, rebuild, and power-cycle the console to boot the new build.
 
 | Option | Meaning |
 |---|---|
@@ -63,12 +59,11 @@ the new build.
 | slow green blink | the 2BL is unpacking the kernel (downloaded, or its own) |
 | fast green blink | the kernel is starting; steady green once the title runs (spec/oxos_internal/03_debug_serial.md §6) |
 
-- **The link:** the 2BL waits up to 4 s for the Ethernet link (auto-negotiation takes 2–3 s after power-on), then
-  asks every 250 ms for 2 s. With no cable, or no answer, it boots from flash.
-- **A broken download:** a request not answered within 100 ms is repeated, up to 30 times. If the image's CRC-32 or
-  header is wrong, the console boots from flash. `netboot.py` says which happened.
-- **Quick reboots** (the dashboard launching a game) re-enter the downloaded kernel without asking the network
-  again. A power-cycle asks again.
+- **The link:** the 2BL waits up to 4 s for the Ethernet link (auto-negotiation takes 2–3 s after power-on), then asks every 250 ms for 2 s. With no cable, or
+  no answer, it boots from flash.
+- **A broken download:** a request not answered within 100 ms is repeated, up to 30 times. If the image's CRC-32 or header is wrong, the console boots from
+  flash. `netboot.py` says which happened.
+- **Quick reboots** (the dashboard launching a game) re-enter the downloaded kernel without asking the network again. A power-cycle asks again.
 
 ## 4. Trying it in xemu
 
@@ -77,15 +72,13 @@ python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin --xemu 9130 &
 python3 tools/run.py build/kernel/netboot/bios.bin --net-udp 9130
 ```
 
-xemu's `udp` network backend sends the console's Ethernet frames to `127.0.0.1:9130` and takes frames for it on
-port 9131. `netboot.py --xemu` answers there.
+xemu's `udp` network backend sends the console's Ethernet frames to `127.0.0.1:9130` and takes frames for it on port 9131. `netboot.py --xemu` answers there.
 
 ## Troubleshooting
 
-- **No "asks for a kernel" line:** check the cable and that the PC is on the same LAN segment (broadcasts do not
-  cross routers). Check the PC's firewall allows inbound UDP 5141; with ufw: `sudo ufw allow 5141/udp`.
-- **"asks" but no "downloaded":** the replies are not reaching the console. Try `--to` with the LAN's broadcast
-  address.
+- **No "asks for a kernel" line:** check the cable and that the PC is on the same LAN segment (broadcasts do not cross routers). Check the PC's firewall allows
+  inbound UDP 5141; with ufw: `sudo ufw allow 5141/udp`.
+- **"asks" but no "downloaded":** the replies are not reaching the console. Try `--to` with the LAN's broadcast address.
 - **It always boots the flash kernel:** the console's flash does not hold a netboot image (`make netboot`).
 
 ## 5. Running a test title on the console
@@ -96,5 +89,5 @@ make -C kernel image_test        # build/tests/image_test_title/bin: default.xbe
 python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin --title build/tests/image_test_title/bin
 ```
 
-At power-on the console downloads the kernel and the title, installs the title as `E:\imgtest\imgtest.xbe` (with its
-files beside it; D: is that folder) and runs it.
+At power-on the console downloads the kernel and the title, installs the title as `E:\imgtest\imgtest.xbe` (with its files beside it; D: is that folder) and
+runs it.

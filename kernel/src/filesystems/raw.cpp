@@ -26,8 +26,7 @@ static NTSTATUS NTAPI RawCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (disposition != FILE_OPEN && disposition != FILE_OPEN_IF)
         return RawComplete(Irp, STATUS_ACCESS_DENIED);
     KeWaitForSingleObject(&v->Lock, Executive, KernelMode, FALSE, nullptr);
-    NTSTATUS status = IoCheckShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess,
-                                         s->FileObject, &v->ShareAccess, TRUE);
+    NTSTATUS status = IoCheckShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess, s->FileObject, &v->ShareAccess, TRUE);
     KeSetEvent(&v->Lock, 0, FALSE);
     return RawComplete(Irp, status, NT_SUCCESS(status) ? 1 /*FILE_OPENED*/ : 0);
 }
@@ -52,8 +51,7 @@ static NTSTATUS NTAPI RawPassDown(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 static NTSTATUS NTAPI RawQueryVolume(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     auto out = (PULONG)Irp->UserBuffer;
-    if (s->Parameters.QueryVolume.FsInformationClass == FileFsDeviceInformation &&
-        s->Parameters.QueryVolume.Length >= 8) {
+    if (s->Parameters.QueryVolume.FsInformationClass == FileFsDeviceInformation && s->Parameters.QueryVolume.Length >= 8) {
         out[0] = ((RAW_VOLUME *)DeviceObject->DeviceExtension)->TargetDevice->DeviceType;
         out[1] = 0;
         return RawComplete(Irp, STATUS_SUCCESS, 8);
@@ -79,9 +77,8 @@ static DRIVER_OBJECT RawDriverObject = {
     nullptr,
     RawDeleteVolume,
     RawDismountVolume,
-    {RawCreate, RawSuccess, RawPassDown, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown,
-     RawQueryVolume, IoInvalidDeviceRequest, io::DismountOnlyFsControl, RawPassDown, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, RawCleanup}};
+    {RawCreate, RawSuccess, RawPassDown, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawPassDown, RawQueryVolume, IoInvalidDeviceRequest,
+     io::DismountOnlyFsControl, RawPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, RawCleanup}};
 
 NTSTATUS RawMountVolume(PDEVICE_OBJECT TargetDevice) {
     PDEVICE_OBJECT dev;

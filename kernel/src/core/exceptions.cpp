@@ -6,17 +6,13 @@
 
 namespace xk::core {
 
-constexpr ULONG EXCEPTION_NONCONTINUABLE = 1, EXCEPTION_UNWINDING = 2, EXCEPTION_EXIT_UNWIND = 4,
-                EXCEPTION_NESTED_CALL = 0x10;
-constexpr ULONG STATUS_BREAKPOINT_ = 0x80000003, STATUS_SINGLE_STEP_ = 0x80000004,
-                STATUS_DATATYPE_MISALIGNMENT_ = 0x80000002, STATUS_ACCESS_VIOLATION_ = 0xC0000005,
-                STATUS_ILLEGAL_INSTRUCTION_ = 0xC000001D, STATUS_NONCONTINUABLE_EXCEPTION_ = 0xC0000025,
-                STATUS_INVALID_DISPOSITION_ = 0xC0000026, STATUS_UNWIND_ = 0xC0000027,
-                STATUS_ARRAY_BOUNDS_EXCEEDED_ = 0xC000008C, STATUS_FLOAT_DENORMAL_OPERAND_ = 0xC000008D,
-                STATUS_FLOAT_DIVIDE_BY_ZERO_ = 0xC000008E, STATUS_FLOAT_INEXACT_RESULT_ = 0xC000008F,
-                STATUS_FLOAT_INVALID_OPERATION_ = 0xC0000090, STATUS_FLOAT_OVERFLOW_ = 0xC0000091,
-                STATUS_FLOAT_STACK_CHECK_ = 0xC0000092, STATUS_FLOAT_UNDERFLOW_ = 0xC0000093,
-                STATUS_INTEGER_DIVIDE_BY_ZERO_ = 0xC0000094, STATUS_INTEGER_OVERFLOW_ = 0xC0000095,
+constexpr ULONG EXCEPTION_NONCONTINUABLE = 1, EXCEPTION_UNWINDING = 2, EXCEPTION_EXIT_UNWIND = 4, EXCEPTION_NESTED_CALL = 0x10;
+constexpr ULONG STATUS_BREAKPOINT_ = 0x80000003, STATUS_SINGLE_STEP_ = 0x80000004, STATUS_DATATYPE_MISALIGNMENT_ = 0x80000002,
+                STATUS_ACCESS_VIOLATION_ = 0xC0000005, STATUS_ILLEGAL_INSTRUCTION_ = 0xC000001D, STATUS_NONCONTINUABLE_EXCEPTION_ = 0xC0000025,
+                STATUS_INVALID_DISPOSITION_ = 0xC0000026, STATUS_UNWIND_ = 0xC0000027, STATUS_ARRAY_BOUNDS_EXCEEDED_ = 0xC000008C,
+                STATUS_FLOAT_DENORMAL_OPERAND_ = 0xC000008D, STATUS_FLOAT_DIVIDE_BY_ZERO_ = 0xC000008E, STATUS_FLOAT_INEXACT_RESULT_ = 0xC000008F,
+                STATUS_FLOAT_INVALID_OPERATION_ = 0xC0000090, STATUS_FLOAT_OVERFLOW_ = 0xC0000091, STATUS_FLOAT_STACK_CHECK_ = 0xC0000092,
+                STATUS_FLOAT_UNDERFLOW_ = 0xC0000093, STATUS_INTEGER_DIVIDE_BY_ZERO_ = 0xC0000094, STATUS_INTEGER_OVERFLOW_ = 0xC0000095,
                 STATUS_FLOAT_MULTIPLE_TRAPS_ = 0xC00002B5;
 constexpr ULONG KMODE_EXCEPTION_NOT_HANDLED = 0x1E;
 
@@ -61,12 +57,11 @@ static EXCEPTION_REGISTRATION *&ExceptionListHead() {
     return *(EXCEPTION_REGISTRATION **)&KiPcr.NtTib.ExceptionList;
 }
 
-// A handler runs with a guard frame of the dispatcher on top of the chain (spec/stock/14, "Dispatch"): {Next, guard
-// handler, the frame whose handler runs}. An exception raised inside the handler meets the guard, which answers
-// NestedException (an unwind meeting it during dispatch passes on); an unwind started inside an unwind handler
-// meets the unwind guard, which answers CollidedUnwind. Both hand back the guarded frame. The guard is also the
-// frame a title's C++ runtime saves before it calls RtlUnwind from a handler and links back on top afterwards
-// (with Next = the unwind's target): without it, that runtime links the target frame to itself.
+// A handler runs with a guard frame of the dispatcher on top of the chain (spec/stock/14, "Dispatch"): {Next, guard handler, the frame whose handler runs}. An
+// exception raised inside the handler meets the guard, which answers NestedException (an unwind meeting it during dispatch passes on); an unwind started inside
+// an unwind handler meets the unwind guard, which answers CollidedUnwind. Both hand back the guarded frame. The guard is also the frame a title's C++ runtime
+// saves before it calls RtlUnwind from a handler and links back on top afterwards (with Next = the unwind's target): without it, that runtime links the target
+// frame to itself.
 struct EXCEPTION_GUARD {
     EXCEPTION_REGISTRATION Registration;
     EXCEPTION_REGISTRATION *Establisher;
@@ -87,8 +82,7 @@ static ULONG __cdecl UnwindGuard(PEXCEPTION_RECORD Record, PVOID Frame, PCONTEXT
 }
 
 // Call Frame's handler under a guard frame; the guard is unlinked again from the top of the chain afterwards.
-[[gnu::noinline]] static ULONG KiExecuteHandler(PEXCEPTION_RECORD Record, EXCEPTION_REGISTRATION *Frame,
-                                                PCONTEXT Context, PVOID DispatcherContext,
+[[gnu::noinline]] static ULONG KiExecuteHandler(PEXCEPTION_RECORD Record, EXCEPTION_REGISTRATION *Frame, PCONTEXT Context, PVOID DispatcherContext,
                                                 ULONG(__cdecl *Guard)(PEXCEPTION_RECORD, PVOID, PCONTEXT, PVOID)) {
     volatile EXCEPTION_GUARD guard;
     guard.Registration.Next = ExceptionListHead();
@@ -115,10 +109,8 @@ static BOOLEAN DispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
         }
         if (disposition == ExceptionContinueExecution) {
             if (Record->ExceptionFlags & EXCEPTION_NONCONTINUABLE) {
-                EXCEPTION_RECORD nested = {STATUS_NONCONTINUABLE_EXCEPTION_, EXCEPTION_NONCONTINUABLE, Record,
-                                           Record->ExceptionAddress, 0, {}};
-                KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, nested.ExceptionCode, (ULONG)nested.ExceptionAddress,
-                             Record->ExceptionCode, 0);
+                EXCEPTION_RECORD nested = {STATUS_NONCONTINUABLE_EXCEPTION_, EXCEPTION_NONCONTINUABLE, Record, Record->ExceptionAddress, 0, {}};
+                KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, nested.ExceptionCode, (ULONG)nested.ExceptionAddress, Record->ExceptionCode, 0);
             }
             return TRUE;
         }
@@ -129,8 +121,7 @@ static BOOLEAN DispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
             continue;
         }
         if (disposition != ExceptionContinueSearch) {
-            KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, STATUS_INVALID_DISPOSITION_, (ULONG)r->Handler, disposition,
-                         Record->ExceptionCode);
+            KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, STATUS_INVALID_DISPOSITION_, (ULONG)r->Handler, disposition, Record->ExceptionCode);
         }
     }
     return FALSE;
@@ -140,8 +131,8 @@ static BOOLEAN DispatchException(PEXCEPTION_RECORD Record, PCONTEXT Context) {
     LastExceptionVector = vector;
     LastExceptionCode = errorCode;
     LastExceptionEip = (ULONG)Record->ExceptionAddress;
-    KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, Record->ExceptionCode, (ULONG)Record->ExceptionAddress,
-                 Record->ExceptionInformation[0], Record->ExceptionInformation[1]);
+    KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, Record->ExceptionCode, (ULONG)Record->ExceptionAddress, Record->ExceptionInformation[0],
+                 Record->ExceptionInformation[1]);
 }
 
 static ULONG FloatStatusCode(UCHAR vector) {
@@ -170,10 +161,9 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     record.ExceptionAddress = (PVOID)Frame->Eip;
     ULONG vector = Frame->Vector;
     if (vector == 0x2D) {
-        // Debug service (spec/stock/14): "mov eax, service; int 2Dh; int 3". Eip is at the int3. With no kernel
-        // debugger the reference takes services 1, 3, 4, 7, 8 and 0xB itself: a print (1, 0xB) writes the counted
-        // string at ECX and returns 0 in EAX, and every one resumes after the int3. Others are STATUS_BREAKPOINT
-        // at the int3, parameters {service, ECX, EDX}.
+        // Debug service (spec/stock/14): "mov eax, service; int 2Dh; int 3". Eip is at the int3. With no kernel debugger the reference takes services 1, 3, 4,
+        // 7, 8 and 0xB itself: a print (1, 0xB) writes the counted string at ECX and returns 0 in EAX, and every one resumes after the int3. Others are
+        // STATUS_BREAKPOINT at the int3, parameters {service, ECX, EDX}.
         ULONG service = Frame->Eax;
         if (service == 1 || service == 3 || service == 4 || service == 7 || service == 8 || service == 0xB) {
             if (service == 1 || service == 0xB) {
@@ -246,21 +236,19 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     BOOLEAN handled = DispatchException(&record, &context);
     DispatchDepth = DispatchDepth - 1;
     if (!handled) {
-        XK_SERIAL("*** unhandled exception %#lx at %#lx (vector %lu, error %#lx, address %#lx)\n", record.ExceptionCode,
-                  Frame->Eip, vector, Frame->ErrorCode, record.ExceptionInformation[1]);
-        XK_SERIAL("    eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx efl %08lx\n",
-                  Frame->Eax, Frame->Ebx, Frame->Ecx, Frame->Edx, Frame->Esi, Frame->Edi, Frame->Ebp, context.Esp,
-                  Frame->EFlags);
+        XK_SERIAL("*** unhandled exception %#lx at %#lx (vector %lu, error %#lx, address %#lx)\n", record.ExceptionCode, Frame->Eip, vector, Frame->ErrorCode,
+                  record.ExceptionInformation[1]);
+        XK_SERIAL("    eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx efl %08lx\n", Frame->Eax, Frame->Ebx, Frame->Ecx,
+                  Frame->Edx, Frame->Esi, Frame->Edi, Frame->Ebp, context.Esp, Frame->EFlags);
         [[maybe_unused]] auto code = (const UCHAR *)Frame->Eip;
         ULONG cr0, cr4;
         __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
         __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
-        XK_SERIAL("    code %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x; cr0 %08lx cr4 %08lx\n",
-                  code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7], code[8], code[9], code[10],
-                  code[11], cr0, cr4);
+        XK_SERIAL("    code %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x; cr0 %08lx cr4 %08lx\n", code[0], code[1], code[2], code[3], code[4],
+                  code[5], code[6], code[7], code[8], code[9], code[10], code[11], cr0, cr4);
         [[maybe_unused]] auto stack = (const ULONG *)context.Esp;
-        XK_SERIAL("    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", stack[0], stack[1], stack[2], stack[3],
-                  stack[4], stack[5], stack[6], stack[7]);
+        XK_SERIAL("    stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n", stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6],
+                  stack[7]);
         KiUnhandled(&record, vector, Frame->ErrorCode);
     }
     cli();
@@ -285,10 +273,9 @@ extern "C" [[noreturn]] void KiRaiseException(PEXCEPTION_RECORD Record, PCONTEXT
     KiContinueContext(Context);
 }
 
-// Called by RtlUnwind: run the handlers between the top of the chain and TargetFrame with EXCEPTION_UNWINDING,
-// unlink them, then resume at TargetIp (or the RtlUnwind caller) with Eax = ReturnValue.
-extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD Record,
-                                      PVOID ReturnValue, PCONTEXT Context) {
+// Called by RtlUnwind: run the handlers between the top of the chain and TargetFrame with EXCEPTION_UNWINDING, unlink them, then resume at TargetIp (or the
+// RtlUnwind caller) with Eax = ReturnValue.
+extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID TargetIp, PEXCEPTION_RECORD Record, PVOID ReturnValue, PCONTEXT Context) {
     EXCEPTION_RECORD local;
     if (!Record) {
         local = {STATUS_UNWIND_, 0, nullptr, (PVOID)Context->Eip, 0, {}};
@@ -304,8 +291,7 @@ extern "C" [[noreturn]] void KiUnwind(EXCEPTION_REGISTRATION *TargetFrame, PVOID
         if (disposition == ExceptionCollidedUnwind) {
             r = dispatcherContext; // another unwind already ran the handlers up to there: carry on from its frame
         } else if (disposition != ExceptionContinueSearch) {
-            KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, STATUS_INVALID_DISPOSITION_, (ULONG)r->Handler, disposition,
-                         Record->ExceptionCode);
+            KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED, STATUS_INVALID_DISPOSITION_, (ULONG)r->Handler, disposition, Record->ExceptionCode);
         }
         r = r->Next;
         ExceptionListHead() = r;
@@ -352,8 +338,7 @@ XBAPI ULONG NTAPI RtlWalkFrameChain(PVOID *Callers, ULONG Count, ULONG Flags) {
     return n;
 }
 
-XBAPI USHORT NTAPI RtlCaptureStackBackTrace(ULONG FramesToSkip, ULONG FramesToCapture, PVOID *BackTrace,
-                                            PULONG BackTraceHash) {
+XBAPI USHORT NTAPI RtlCaptureStackBackTrace(ULONG FramesToSkip, ULONG FramesToCapture, PVOID *BackTrace, PULONG BackTraceHash) {
     PVOID frames[64];
     ULONG total = RtlWalkFrameChain(frames, 64, 0);
     ULONG first = FramesToSkip + 1; // not this function's caller frame of the walker itself

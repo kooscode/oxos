@@ -6,8 +6,8 @@
 XBAPI void NTAPI XcSHAInit(PUCHAR pbSHAContext);
 XBAPI void NTAPI XcSHAUpdate(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLength);
 XBAPI void NTAPI XcSHAFinal(PUCHAR pbSHAContext, PUCHAR pbDigest);
-XBAPI void NTAPI XcHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
-                        const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData);
+XBAPI void NTAPI XcHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData, const UCHAR *pbData2, ULONG cbData2,
+                        PUCHAR HmacData);
 XBAPI void NTAPI XcRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey);
 XBAPI void NTAPI XcRC4Crypt(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput);
 
@@ -22,8 +22,7 @@ XBAPI ULONG NTAPI XcModExp(PULONG pA, PULONG pB, PULONG pC, PULONG pD, ULONG dwN
 XBAPI void NTAPI XcDESKeyParity(PUCHAR pbKey, ULONG dwKeyLength);
 XBAPI void NTAPI XcKeyTable(ULONG dwCipher, PUCHAR pbKeyTable, PUCHAR pbKey);
 XBAPI void NTAPI XcBlockCrypt(ULONG dwCipher, PUCHAR pbOutput, PUCHAR pbInput, PUCHAR pbKeyTable, ULONG dwOp);
-XBAPI void NTAPI XcBlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput,
-                                 PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback);
+XBAPI void NTAPI XcBlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput, PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback);
 XBAPI ULONG NTAPI XcCryptService(ULONG dwOp, PVOID pArgs);
 
 // The implementations behind the exports above (crypto/crypto.cpp), which XcUpdateCrypto can replace.
@@ -33,8 +32,8 @@ void NTAPI UpdateSHA(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLen
 void NTAPI FinishSHA(PUCHAR pbSHAContext, PUCHAR pbDigest);
 void NTAPI InitRC4Key(PUCHAR pbKeyStruct, ULONG dwKeyLength, const UCHAR *pbKey);
 void NTAPI CryptRC4(PUCHAR pbKeyStruct, ULONG dwInputLength, PUCHAR pbInput);
-void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
-                       const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData);
+void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData, const UCHAR *pbData2, ULONG cbData2,
+                       PUCHAR HmacData);
 } // namespace xk::crypto
 
 // The crypto vector: the exports above call through it; XcUpdateCrypto replaces its non-null entries.

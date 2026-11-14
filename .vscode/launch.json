@@ -2,8 +2,8 @@
     "version": "0.2.0",
     "configurations": [
         {
-            // F5: build the debug kernel, start xemu paused, attach, run to the first breakpoint in the kernel.
-            // Needs the C/C++ extension (ms-vscode.cpptools) and gdb-multiarch. nxdk apps: tools/vscode/.
+            // F5: build the debug kernel, start xemu paused, attach, run to the first breakpoint in the kernel. Needs the C/C++ extension (ms-vscode.cpptools)
+            // and gdb-multiarch. nxdk apps: tools/vscode/.
             "name": "OXOS kernel: debug in xemu",
             "type": "cppdbg",
             "request": "launch",

@@ -18,8 +18,7 @@ struct Rec {
     ULONG Check;
 };
 
-std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_PATCH_COUNTS *c = nullptr,
-                       ULONG room = 4096) {
+std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_PATCH_COUNTS *c = nullptr, ULONG room = 4096) {
     std::vector<UCHAR> out(room + 1, 0xCC);
     XE_PATCH_COUNTS counts;
     ULONG used =
@@ -32,8 +31,7 @@ std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_P
     for (ULONG at = 0; at < used;) {
         auto r = (const XE_PATCH_RECORD *)(out.data() + at);
         auto o = ini_file::PatchOriginal(r), d = ini_file::PatchData(r);
-        recs.push_back({r->Kind, r->Address, std::vector<UCHAR>(o, o + r->OriginalLength),
-                        std::vector<UCHAR>(d, d + r->Length), r->Check});
+        recs.push_back({r->Kind, r->Address, std::vector<UCHAR>(o, o + r->OriginalLength), std::vector<UCHAR>(d, d + r->Length), r->Check});
         at += ini_file::PatchRecordSize(r);
     }
     return recs;
@@ -122,9 +120,8 @@ TEST(Patches, OutputThatDoesNotFitIsAnError) {
 TEST(Patches, LongestPatchAndName) {
     std::string bytes(2 * XE_PATCH_MAX_BYTES, 'A');
     std::string name(200, 'n');
-    auto r = Parse("[1]\nname = " + name + "\npatch = 10: " + bytes + " > " + bytes + "\npatch = 10: " + bytes +
-                       "AA > 90\npatch = 10: 90 > " + bytes + "AA\n",
-                   1, 0, nullptr, 1 << 16);
+    auto r = Parse("[1]\nname = " + name + "\npatch = 10: " + bytes + " > " + bytes + "\npatch = 10: " + bytes + "AA > 90\npatch = 10: 90 > " + bytes + "AA\n",
+                       1, 0, nullptr, 1 << 16);
     ASSERT_EQ(r.size(), 2u);
     EXPECT_EQ(r[0].Data.size(), XE_PATCH_MAX_NAME) << "names are cut";
     EXPECT_EQ(r[1].Original.size(), XE_PATCH_MAX_BYTES);
@@ -134,8 +131,7 @@ TEST(Patches, LongestPatchAndName) {
 TEST(Patches, SpacesAndTabsBetweenBytesDoNotMatter) {
     auto want = B({0xF0, 0xF4, 0xB7, 0xC9});
     for (const char *line : {"patch = 10: F0 F4 B7 C9 > F0F4B7C9", "patch = 10: F0F4B7C9>F0 F4 B7 C9",
-                             "patch\t=\t10:\tF0\tF4  \t B7C9   >   F0F4 B7\t\tC9\t; comment",
-                             "patch=0x10:f0f4b7c9>f0f4b7c9\r"}) {
+                             "patch\t=\t10:\tF0\tF4  \t B7C9   >   F0F4 B7\t\tC9\t; comment", "patch=0x10:f0f4b7c9>f0f4b7c9\r"}) {
         XE_PATCH_COUNTS c;
         auto r = Parse(std::string("[1]\n") + line + "\n", 1, 0, &c);
         ASSERT_EQ(r.size(), 1u) << line;
@@ -183,9 +179,8 @@ TEST(Patches, NoNewlineAtTheEnd) {
     EXPECT_EQ(r[0].Data, B({0x90}));
 }
 
-// The file shipped in kernel/title_patches parses without a single bad line, checks 4 bytes or more, and never has
-// fewer new bytes than original ones (shorter NEW is allowed, but not used there, for readability; longer only where
-// the rest of the original is not known).
+// The file shipped in kernel/title_patches parses without a single bad line, checks 4 bytes or more, and never has fewer new bytes than original ones (shorter
+// NEW is allowed, but not used there, for readability; longer only where the rest of the original is not known).
 TEST(Patches, ShippedFileParses) {
     std::string path = XK_KERNEL_DIR "/title_patches/title_patches.ini";
     FILE *f = fopen(path.c_str(), "rb");
@@ -207,9 +202,8 @@ TEST(Patches, ShippedFileParses) {
             if (p.Kind == XE_PATCH_BYTES) {
                 EXPECT_GE(p.Original.size(), 4u) << std::hex << title << " " << p.Address << ": check 4 bytes or more";
                 if (!p.Check) { // a patch checked against its section's match line has no bytes of its own
-                    EXPECT_GE(p.Data.size(), p.Original.size())
-                        << std::hex << title << " " << p.Address
-                        << ": the shipped file spells out every byte on both sides";
+                    EXPECT_GE(p.Data.size(),
+                        p.Original.size()) << std::hex << title << " " << p.Address << ": the shipped file spells out every byte on both sides";
                 }
             }
         }

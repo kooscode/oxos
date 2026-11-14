@@ -1,5 +1,4 @@
-// Executive pool: block format, sizes, lookaside lists, splitting, merging, page release, and the page hand-over
-// race.
+// Executive pool: block format, sizes, lookaside lists, splitting, merging, page release, and the page hand-over race.
 #include "kernel_test.h"
 #include <memory/memory.h>
 
@@ -70,9 +69,8 @@ TEST(Pool, SmallSizesGoThroughALookasideListOfTwo) {
 }
 
 namespace {
-// Allocates blocks of `units` units into `keep` until one comes from a new pool page. The free lists then hold no
-// block of more than `units` units (an allocation takes any such block before starting a page), except the new
-// page's remainder. Returns the new page.
+// Allocates blocks of `units` units into `keep` until one comes from a new pool page. The free lists then hold no block of more than `units` units (an
+// allocation takes any such block before starting a page), except the new page's remainder. Returns the new page.
 uint8_t *FreshPage(ULONG units, std::vector<void *> &keep) {
     for (;;) {
         ULONG pages = memory::PoolPages;

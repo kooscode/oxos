@@ -5,8 +5,7 @@
 
 using namespace xk; // the kernel's subsystems as storage::, hardware::, ...
 
-volatile ULONG KiTestHalEepromOk, KiTestHalSettingsOk, KiTestHalSaveOk, KiTestHalTrayState, KiTestHalRegion,
-    KiTestHalDone;
+volatile ULONG KiTestHalEepromOk, KiTestHalSettingsOk, KiTestHalSaveOk, KiTestHalTrayState, KiTestHalRegion, KiTestHalDone;
 
 static void NTAPI HalControllerThread(PVOID) {
     while (!KiTestMmDone || !KiTestIoDone || !KiTestObDone) { // those suites measure pool/page balances

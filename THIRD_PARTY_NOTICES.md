@@ -1,15 +1,13 @@
 # Third-party notices
 
-The OXOS BIOS images (`bios_*.bin`) contain the third-party material below. Everything else in them is OXOS's own
-code (GPL-2.0, see `LICENSE`).
+The OXOS BIOS images (`bios_*.bin`) contain the third-party material below. Everything else in them is OXOS's own code (GPL-2.0, see `LICENSE`).
 
 ## Intel CPU microcode
 
-The kernel carries two of Intel's microcode updates for the Xbox's Pentium III (signatures 0x686 and 0x68A,
-platform 4), unmodified, and loads the matching one at start-up. They come from
-[Intel's microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files)
-(`intel-ucode/06-08-06` and `06-08-0a`) and are kept unmodified in this repository in `third_party/intel_ucode/`,
-with Intel's licence and their source commit. They are not covered by OXOS's licence. Intel's licence:
+The kernel carries two of Intel's microcode updates for the Xbox's Pentium III (signatures 0x686 and 0x68A, platform 4), unmodified, and loads the matching one
+at start-up. They come from [Intel's microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files) (`intel-ucode/06-08-06` and
+`06-08-0a`) and are kept unmodified in this repository in `third_party/intel_ucode/`, with Intel's licence and their source commit. They are not covered by
+OXOS's licence. Intel's licence:
 
 ```
 Copyright (c) 2018-2021 Intel Corporation.
@@ -55,19 +53,18 @@ Intel does not endorse OXOS.
 
 ## XboxDev/cromwell
 
-The X-code table and the EEPROM key states come from [XboxDev/cromwell](https://github.com/XboxDev/cromwell)
-(GPL-2.0, the same licence as OXOS), at the commit pinned in `kernel/Makefile`.
+The X-code table and the EEPROM key states come from [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0, the same licence as OXOS), at the commit
+pinned in `kernel/Makefile`.
 
 ## Hardware tables
 
-The video encoder and NV2A memory pad calibration tables are functional hardware constants taken from retail BIOS
-images; see [`dmca_compliance.md`](dmca_compliance.md).
+The video encoder and NV2A memory pad calibration tables are functional hardware constants taken from retail BIOS images; see
+[`dmca_compliance.md`](dmca_compliance.md).
 
 ## Game trainers (in this repository, not in the BIOS images)
 
-`third_party/xbox_trainers/` holds 998 game trainers (.etm) for XBMC4Gamers, from the Internet Archive's
-"Xbox Original ETM Trainers" collection (https://archive.org/details/ETMTrainers). They are de-duplicated and
-renamed, with their contents unmodified. They were written by members of the Xbox scene (each trainer names its authors) and
-carry no licence terms; they are not covered by OXOS's licence. An author who wants a trainer removed can open an
-issue. Details: `third_party/xbox_trainers/README.md`.
+`third_party/xbox_trainers/` holds 998 game trainers (.etm) for XBMC4Gamers, from the Internet Archive's "Xbox Original ETM Trainers" collection
+(https://archive.org/details/ETMTrainers). They are de-duplicated and renamed, with their contents unmodified. They were written by members of the Xbox scene
+(each trainer names its authors) and carry no licence terms; they are not covered by OXOS's licence. An author who wants a trainer removed can open an issue.
+Details: `third_party/xbox_trainers/README.md`.
 

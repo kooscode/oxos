@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-// OXOS kernel extension SDK runtime (part of lib/oxos_sdk.lib): the helpers of oxos_sdk.h, built on the
-// kernel's exports. Its functions have C names, so C and C++ extensions link the same library. memcpy and the other
-// functions the compiler calls come from the kernel (OXOS's own exports 402-415), not from here.
+// OXOS kernel extension SDK runtime (part of lib/oxos_sdk.lib): the helpers of oxos_sdk.h, built on the kernel's exports. Its functions have C names, so C and
+// C++ extensions link the same library. memcpy and the other functions the compiler calls come from the kernel (OXOS's own exports 402-415), not from here.
 #include <oxos_sdk.h>
 
 extern "C" void oxos_log(const OXOS_CONTEXT *Context, const char *Format, ...) {
@@ -43,8 +42,7 @@ extern "C" char *oxos_read_file(const char *Path, ULONG MaxSize, ULONG *Size) {
         return nullptr;
     ULONG info[6] = {}; // FILE_STANDARD_INFORMATION: EndOfFile at +8
     char *text = nullptr;
-    if (NT_SUCCESS(oxos::NtQueryInformationFile(file, &iosb, info, sizeof(info), FileStandardInformation)) &&
-        !info[3] && info[2] && info[2] <= MaxSize) {
+    if (NT_SUCCESS(oxos::NtQueryInformationFile(file, &iosb, info, sizeof(info), FileStandardInformation)) && !info[3] && info[2] && info[2] <= MaxSize) {
         text = static_cast<char *>(oxos::ExAllocatePoolWithTag(info[2], 'drxo'));
     }
     if (text) {

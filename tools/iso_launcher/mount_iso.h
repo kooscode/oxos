@@ -1,14 +1,12 @@
-// Mount an Xbox disc image as the console's disc (OXOS virtual discs, spec/oxos_internal/16_virtual_discs.md).
-// Header-only, for nxdk titles such as dashboards:
+// Mount an Xbox disc image as the console's disc (OXOS virtual discs, spec/oxos_internal/16_virtual_discs.md). Header-only, for nxdk titles such as dashboards:
 //
 //     #include "mount_iso.h"
 //     if (NT_SUCCESS(MountISO("F:\\titles\\Halo 2.iso")))
 //         XLaunchXBE("\\Device\\CdRom0\\default.xbe");
 //
-// MountISO takes a drive path (C E F G X Y Z) or a \Device\ path to an .iso (XISO or full dump) or .cci image. For a
-// split image, pass the first part (name.1.iso): name.2.iso is added. A mount replaces the one before it and stays
-// through quick reboots until the console is switched off or UnmountISO is called. The same device interface works
-// on Cerbios.
+// MountISO takes a drive path (C E F G X Y Z) or a \Device\ path to an .iso (XISO or full dump) or .cci image. For a split image, pass the first part
+// (name.1.iso): name.2.iso is added. A mount replaces the one before it and stays through quick reboots until the console is switched off or UnmountISO is
+// called. The same device interface works on Cerbios.
 #pragma once
 #include <xboxkrnl/xboxkrnl.h>
 
@@ -55,8 +53,7 @@ inline bool FileExists(const char *path) {
     HANDLE h;
     RtlInitAnsiString(&name, path);
     InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
-    if (!NT_SUCCESS(NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ,
-                               FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+    if (!NT_SUCCESS(NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
         return false;
     NtClose(h);
     return true;
@@ -69,8 +66,7 @@ inline NTSTATUS Control(ULONG code, MountRequest *request) {
     HANDLE h;
     RtlInitAnsiString(&name, "\\Device\\CdRom1");
     InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ,
-                                 FILE_SYNCHRONOUS_IO_NONALERT);
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT);
     if (!NT_SUCCESS(status))
         return status; // STATUS_OBJECT_NAME_NOT_FOUND: this BIOS has no virtual discs
     status = NtDeviceIoControlFile(h, nullptr, nullptr, nullptr, &iosb, code, request,

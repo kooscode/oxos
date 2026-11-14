@@ -1,14 +1,12 @@
-// Executive pool (spec/stock/09 §5), the reference's allocator (ExAllocatePoolWithTag 0x80012e11, ExFreePool
-// 0x80012fc8, initialisation 0x80012dc2). Requests above 0xFD8 bytes get whole pages; smaller ones get a block with
-// an 8-byte header inside a pool page, sized in 32-byte units (header included), so ExQueryPoolBlockSize is
-// units * 32 - 8.
+// Executive pool (spec/stock/09 §5), the reference's allocator (ExAllocatePoolWithTag 0x80012e11, ExFreePool 0x80012fc8, initialisation 0x80012dc2). Requests
+// above 0xFD8 bytes get whole pages; smaller ones get a block with an 8-byte header inside a pool page, sized in 32-byte units (header included), so
+// ExQueryPoolBlockSize is units * 32 - 8.
 //
 // - Sizes of 1-8 units first use a per-size lookaside list (an S-list holding at most 2 freed blocks).
-// - Free blocks sit on doubly linked lists by size: list i holds blocks of i + 1 units. An allocation of n units
-//   takes the first block from list n upwards (so a block larger than n), or else a new page, which starts as one
-//   free 128-unit block. The block is split: at a page start the allocation takes the front, elsewhere the end.
-// - Freeing merges the block with free neighbours (PreviousSize finds the one in front) and returns the page to
-//   the memory manager once the whole page is free.
+// - Free blocks sit on doubly linked lists by size: list i holds blocks of i + 1 units. An allocation of n units takes the first block from list n upwards (so
+//   a block larger than n), or else a new page, which starts as one free 128-unit block. The block is split: at a page start the allocation takes the front,
+//   elsewhere the end.
+// - Freeing merges the block with free neighbours (PreviousSize finds the one in front) and returns the page to the memory manager once the whole page is free.
 // - Everything except the lookaside lists runs at DISPATCH_LEVEL, page allocation included.
 #include <memory/memory.h>
 #include <core/core.h>
@@ -32,9 +30,9 @@ struct POOL_FREE_BLOCK {
     LIST_ENTRY Links;
 };
 
-// The reference's 0x18-byte lookaside descriptor (table at 0x80036328, indexed by units). The S-list header is
-// 8-byte aligned, as one must be: the push/pop is a locked cmpxchg8b, and a misaligned one is a split lock when it
-// crosses a cache line (very slow on a console; a modern Linux host throttles the unit tests to a crawl on it).
+// The reference's 0x18-byte lookaside descriptor (table at 0x80036328, indexed by units). The S-list header is 8-byte aligned, as one must be: the push/pop is
+// a locked cmpxchg8b, and a misaligned one is a split lock when it crosses a cache line (very slow on a console; a modern Linux host throttles the unit tests
+// to a crawl on it).
 struct POOL_LOOKASIDE {
     SLIST_HEADER List;
     USHORT MaximumDepth;
@@ -86,8 +84,7 @@ void InitPool() {
 }
 
 static PVOID AllocatePoolPages(ULONG bytes) {
-    return AllocateMappedPages((bytes + PAGE_SIZE - 1) >> PAGE_SHIFT,
-                               PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, false, MmPoolUsage);
+    return AllocateMappedPages((bytes + PAGE_SIZE - 1) >> PAGE_SHIFT, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, false, MmPoolUsage);
 }
 
 // Returns the number of pages freed.

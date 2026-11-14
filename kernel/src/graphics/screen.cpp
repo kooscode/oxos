@@ -1,6 +1,5 @@
-// The kernel's own screens' frame buffer and shapes (spec/oxos_internal/29_error_screens.md): a 640x480 X8R8G8B8 frame
-// buffer of its own, shown in the boot display mode, with the OXOS version at the top; rectangles, centred text, the
-// title and seven-segment digits.
+// The kernel's own screens' frame buffer and shapes (spec/oxos_internal/29_error_screens.md): a 640x480 X8R8G8B8 frame buffer of its own, shown in the boot
+// display mode, with the OXOS version at the top; rectangles, centred text, the title and seven-segment digits.
 #include <graphics/graphics.h>
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
@@ -10,8 +9,7 @@
 
 namespace xk::graphics {
 
-// Seven-segment digits, our own layout: bit 0 top, 1 upper right, 2 lower right, 3 bottom, 4 lower left,
-// 5 upper left, 6 middle.
+// Seven-segment digits, our own layout: bit 0 top, 1 upper right, 2 lower right, 3 bottom, 4 lower left, 5 upper left, 6 middle.
 static const UCHAR DigitSegments[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
 
 void FillRectangle(ULONG *Screen, ULONG X, ULONG Y, ULONG Width, ULONG Height, ULONG Color) {
@@ -68,8 +66,7 @@ void DrawScreenTitle(ULONG *Screen, ULONG Y, const char *Title) {
 ULONG *OpenScreen() {
     if (HalBootSMCVideoMode == 7)
         return nullptr;
-    auto screen = (ULONG *)MmAllocateContiguousMemoryEx(SCREEN_WIDTH * SCREEN_HEIGHT * 4, 0, 0x3FFFFFF, 0x1000,
-                                                        PAGE_READWRITE | PAGE_WRITECOMBINE);
+    auto screen = (ULONG *)MmAllocateContiguousMemoryEx(SCREEN_WIDTH * SCREEN_HEIGHT * 4, 0, 0x3FFFFFF, 0x1000, PAGE_READWRITE | PAGE_WRITECOMBINE);
     if (screen)
         StartScreen(screen);
     return screen;

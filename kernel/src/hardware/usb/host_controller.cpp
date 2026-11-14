@@ -1,7 +1,6 @@
-// The first OHCI controller, driven by polling for the boot's controller read (spec/oxos_internal/32 §3): its
-// registers (OpenHCI 1.0a), the root hub's ports, and the endpoint and transfer descriptors the controller follows,
-// all in one uncached page. Control transfers wait for their end; interrupt-IN pipes are read without waiting.
-// Boot-only.
+// The first OHCI controller, driven by polling for the boot's controller read (spec/oxos_internal/32 §3): its registers (OpenHCI 1.0a), the root hub's ports,
+// and the endpoint and transfer descriptors the controller follows, all in one uncached page. Control transfers wait for their end; interrupt-IN pipes are read
+// without waiting. Boot-only.
 #include <hardware/usb/usb.h>
 #include <core/core.h>
 #include <memory/memory.h>
@@ -15,10 +14,9 @@ namespace xk::hardware::usb {
 
 // OHCI registers (32-bit words; the controller at the address the kernel's PCI set-up gives USB 0).
 constexpr ULONG OHCI_BASE = 0xFED00000;
-constexpr ULONG HC_REVISION = 0x00, HC_CONTROL = 0x04, HC_COMMAND_STATUS = 0x08, HC_INTERRUPT_STATUS = 0x0C,
-                HC_INTERRUPT_DISABLE = 0x14, HC_HCCA = 0x18, HC_CONTROL_HEAD_ED = 0x20, HC_BULK_HEAD_ED = 0x28,
-                HC_FM_INTERVAL = 0x34, HC_PERIODIC_START = 0x40, HC_LS_THRESHOLD = 0x44, HC_RH_DESCRIPTOR_A = 0x48,
-                HC_RH_STATUS = 0x50, HC_RH_PORT_STATUS = 0x54;
+constexpr ULONG HC_REVISION = 0x00, HC_CONTROL = 0x04, HC_COMMAND_STATUS = 0x08, HC_INTERRUPT_STATUS = 0x0C, HC_INTERRUPT_DISABLE = 0x14, HC_HCCA = 0x18,
+                HC_CONTROL_HEAD_ED = 0x20, HC_BULK_HEAD_ED = 0x28, HC_FM_INTERVAL = 0x34, HC_PERIODIC_START = 0x40, HC_LS_THRESHOLD = 0x44,
+                HC_RH_DESCRIPTOR_A = 0x48, HC_RH_STATUS = 0x50, HC_RH_PORT_STATUS = 0x54;
 // HcControl: control-bulk ratio 4:1, the periodic and control lists on, the controller running (USBOPERATIONAL).
 constexpr ULONG HC_CONTROL_RUN = 0x03 | 0x04 | 0x10 | 0x80;
 constexpr ULONG HC_RESET = 0x01, HC_CONTROL_LIST_FILLED = 0x02; // HcCommandStatus
@@ -44,10 +42,10 @@ static_assert(sizeof(OHCI_ED) == 16 && sizeof(OHCI_TD) == 16);
 
 constexpr ULONG ED_IN = 2 << 11, ED_LOW_SPEED = 1 << 13, ED_SKIP = 1 << 14;
 constexpr ULONG ED_HALTED = 1;
-// TD Info: buffer rounding (a short packet ends the TD without an error), the direction (SETUP / OUT / IN), no
-// interrupt, the data toggle (from the TD: DATA0, DATA1; or 0: carried in the ED), condition code "not accessed".
-constexpr ULONG TD_ROUNDING = 1 << 18, TD_SETUP = 0 << 19, TD_OUT = 1 << 19, TD_IN = 2 << 19, TD_NO_INTERRUPT = 7 << 21,
-                TD_DATA0 = 2 << 24, TD_DATA1 = 3 << 24, TD_NOT_ACCESSED = 0xFu << 28;
+// TD Info: buffer rounding (a short packet ends the TD without an error), the direction (SETUP / OUT / IN), no interrupt, the data toggle (from the TD: DATA0,
+// DATA1; or 0: carried in the ED), condition code "not accessed".
+constexpr ULONG TD_ROUNDING = 1 << 18, TD_SETUP = 0 << 19, TD_OUT = 1 << 19, TD_IN = 2 << 19, TD_NO_INTERRUPT = 7 << 21, TD_DATA0 = 2 << 24, TD_DATA1 = 3 << 24,
+                TD_NOT_ACCESSED = 0xFu << 28;
 
 // The page: the HCCA (its 32 interrupt-table entries first), the EDs, the TDs and the buffers.
 struct USB_HOST_PAGE {
@@ -89,8 +87,7 @@ static void SleepMs(ULONG Ms) {
 bool Start() {
     if ((Register(HC_REVISION) & 0xFF) != 0x10) // OHCI 1.0
         return false;
-    HostPage = (USB_HOST_PAGE *)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, 0x3FFFFFF, PAGE_SIZE,
-                                                             PAGE_READWRITE | PAGE_NOCACHE);
+    HostPage = (USB_HOST_PAGE *)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, 0x3FFFFFF, PAGE_SIZE, PAGE_READWRITE | PAGE_NOCACHE);
     if (!HostPage)
         return false;
     RtlZeroMemory(HostPage, PAGE_SIZE);
@@ -129,8 +126,8 @@ bool Start() {
 void Stop() {
     if (!HostPage)
         return;
-    // A reset stops every list (no more DMA into the page) and leaves USBSUSPEND; USBRESET resets the bus as at
-    // power-on, the state a title's USB driver expects (as hardware/chipset/chipset.cpp leaves it).
+    // A reset stops every list (no more DMA into the page) and leaves USBSUSPEND; USBRESET resets the bus as at power-on, the state a title's USB driver
+    // expects (as hardware/chipset/chipset.cpp leaves it).
     Register(HC_COMMAND_STATUS) = HC_RESET;
     for (ULONG us = 0; us < 1000 && (Register(HC_COMMAND_STATUS) & HC_RESET); us += 10)
         KeStallExecutionProcessor(10);
@@ -172,14 +169,12 @@ static void FillTd(OHCI_TD &Td, ULONG Info, const void *Buffer, ULONG Length, co
     Td.NextTD = Next ? PhysicalAddress(Next) : 0;
 }
 
-LONG ControlTransfer(const USB_DEVICE &Device, UCHAR RequestType, UCHAR Request, USHORT Value, USHORT Index,
-                    USHORT Length, PVOID Data) {
+LONG ControlTransfer(const USB_DEVICE &Device, UCHAR RequestType, UCHAR Request, USHORT Value, USHORT Index, USHORT Length, PVOID Data) {
     if (!HostPage || Length > sizeof(HostPage->ControlData))
         return -1;
     USB_HOST_PAGE &page = *HostPage;
     bool in = RequestType & 0x80;
-    UCHAR setup[8] = {RequestType, Request, (UCHAR)Value, (UCHAR)(Value >> 8), (UCHAR)Index, (UCHAR)(Index >> 8),
-                      (UCHAR)Length, (UCHAR)(Length >> 8)};
+    UCHAR setup[8] = {RequestType, Request, (UCHAR)Value, (UCHAR)(Value >> 8), (UCHAR)Index, (UCHAR)(Index >> 8), (UCHAR)Length, (UCHAR)(Length >> 8)};
     RtlCopyMemory(page.Setup, setup, sizeof(setup));
     if (!in && Length)
         RtlCopyMemory(page.ControlData, Data, Length);
@@ -229,13 +224,11 @@ bool OpenPipe(ULONG Pipe, const USB_DEVICE &Device, UCHAR Endpoint, USHORT MaxPa
     USB_HOST_PAGE &page = *HostPage;
     PipePacketSize[Pipe] = MaxPacket < 64 ? MaxPacket : 64;
     OHCI_ED &ed = page.Pipes[Pipe];
-    ed.Info = Device.Address | (ULONG)(Endpoint & 0xF) << 7 | ED_IN | (Device.LowSpeed ? ED_LOW_SPEED : 0) |
-              (ULONG)PipePacketSize[Pipe] << 16;
+    ed.Info = Device.Address | (ULONG)(Endpoint & 0xF) << 7 | ED_IN | (Device.LowSpeed ? ED_LOW_SPEED : 0) | (ULONG)PipePacketSize[Pipe] << 16;
     ed.NextED = 0;
     QueueRead(Pipe, 0);
     ed.HeadP = PhysicalAddress(&page.PipeTds[Pipe][0]); // toggle carry 0: DATA0 first, as after SET_CONFIGURATION
-    // Linked into the periodic list last, once complete: the first pipe from every interrupt-table entry, the others
-    // after the one before.
+    // Linked into the periodic list last, once complete: the first pipe from every interrupt-table entry, the others after the one before.
     ULONG physical = PhysicalAddress(&ed);
     if (Pipe == 0) {
         for (ULONG &entry : page.InterruptTable)

@@ -1,6 +1,5 @@
-// Lazy FPU/SSE context switching (spec/stock/07): each thread's FXSAVE area is the 0x210 bytes below its
-// StackBase. CR0.TS is set whenever the running thread doesn't own the FPU, so its first FPU/SSE
-// instruction raises #NM and the state is swapped here. Kernel C code is built without x87/SSE.
+// Lazy FPU/SSE context switching (spec/stock/07): each thread's FXSAVE area is the 0x210 bytes below its StackBase. CR0.TS is set whenever the running thread
+// doesn't own the FPU, so its first FPU/SSE instruction raises #NM and the state is swapped here. Kernel C code is built without x87/SSE.
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <arch/arch.h>
@@ -70,8 +69,7 @@ void InitializeNpx() {
     WriteCr0(ReadCr0() | CR0_TS);
 }
 
-// Kernel code that wants the FPU (DPCs, drivers) brackets it with these; the FPU state is kept in an FXSAVE buffer
-// from pool.
+// Kernel code that wants the FPU (DPCs, drivers) brackets it with these; the FPU state is kept in an FXSAVE buffer from pool.
 XBAPI NTSTATUS NTAPI KeSaveFloatingPointState(KFLOATING_SAVE_ *FloatSave) {
     auto buf = (UCHAR *)ExAllocatePoolWithTag(NPX_FRAME_LENGTH + 16, ' XPN');
     if (!buf)

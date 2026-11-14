@@ -23,8 +23,8 @@ bool WaitForIdeStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
 
 // --- Bus-master DMA
 
-// Physical region descriptor table: 33 entries cover 128 KB starting at any page offset. 512-byte alignment keeps
-// it inside one 64 KB region as the bus master requires.
+// Physical region descriptor table: 33 entries cover 128 KB starting at any page offset. 512-byte alignment keeps it inside one 64 KB region as the bus master
+// requires.
 struct IDE_PRD {
     ULONG Physical;
     ULONG Count; // bytes in bits 0-15 (0 = 64 KB), bit 31 = end of table
@@ -33,9 +33,9 @@ alignas(512) static IDE_PRD PrdTable[33];
 
 volatile ULONG BadDmaPages; // diagnostics: transfers refused because a page was not valid RAM
 
-// The pages of the chunk being transferred stay where they are until it is over: an unlocked page can be moved by a
-// contiguous allocation (memory::RelocatePage), and the bus master would then write into its old frame, which by then
-// belongs to someone else (a hardware transfer takes milliseconds; xemu finishes it at once).
+// The pages of the chunk being transferred stay where they are until it is over: an unlocked page can be moved by a contiguous allocation
+// (memory::RelocatePage), and the bus master would then write into its old frame, which by then belongs to someone else (a hardware transfer takes
+// milliseconds; xemu finishes it at once).
 static PVOID LockedDmaBuffer;
 static ULONG LockedDmaLength;
 
@@ -51,8 +51,8 @@ void UnlockDmaBuffer() {
 static bool ProgramDmaPages(PVOID Buffer, ULONG Length) {
     ULONG va = (ULONG)Buffer, n = 0;
     while (Length) {
-        // Real hardware hangs the bus on a transfer to an address that is not RAM (xemu ignores it): check each
-        // page is mapped and inside the RAM (64 or 128 MB) before the engine sees it.
+        // Real hardware hangs the bus on a transfer to an address that is not RAM (xemu ignores it): check each page is mapped and inside the RAM (64 or 128
+        // MB) before the engine sees it.
         if (!MmIsAddressValid((PVOID)va)) {
             BadDmaPages = BadDmaPages + 1;
             XK_SERIAL("*** ide: DMA buffer %p (%lu bytes left) is not mapped; transfer refused\n", (PVOID)va, Length);
@@ -67,8 +67,7 @@ static bool ProgramDmaPages(PVOID Buffer, ULONG Length) {
         ULONG piece = 0x1000 - (va & 0xFFF);
         if (piece > Length)
             piece = Length;
-        if (n && PrdTable[n - 1].Physical + (PrdTable[n - 1].Count & 0x1FFFF) == phys &&
-            ((phys ^ PrdTable[n - 1].Physical) & 0xFFFF0000) == 0 &&
+        if (n && PrdTable[n - 1].Physical + (PrdTable[n - 1].Count & 0x1FFFF) == phys && ((phys ^ PrdTable[n - 1].Physical) & 0xFFFF0000) == 0 &&
             (PrdTable[n - 1].Count & 0x1FFFF) + piece <= 0x10000) {
             PrdTable[n - 1].Count += piece;
         } else {
@@ -204,8 +203,7 @@ void InitIdeChannel() {
     KeInitializeDpc(&ch->FinishDpc, IdeFinishDpc, nullptr);
     outb(IDE_CONTROL, 0); // interrupts on
     ULONG vector = HalGetInterruptVector(14, &ch->InterruptIrql);
-    KeInitializeInterrupt(&ch->InterruptObject, IdeInterruptService, nullptr, vector, ch->InterruptIrql, Latched,
-                          FALSE);
+    KeInitializeInterrupt(&ch->InterruptObject, IdeInterruptService, nullptr, vector, ch->InterruptIrql, Latched, FALSE);
     if (!KeConnectInterrupt(&ch->InterruptObject))
         KeBugCheckEx(0x2066B, (ULONG_PTR)(NTSTATUS)0xC0000001, 0, 0, 0);
     ch->PhysicalRegionDescriptorTablePhysical = MmGetPhysicalAddress(PrdTable);

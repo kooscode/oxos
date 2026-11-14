@@ -18,14 +18,14 @@ bool InterruptsEnabled();
 
 // Interrupts: raise an IRQ line (delivered when unmasked in the fake PIC and interrupts are on).
 void RaiseIrq(unsigned irq);
-// Fake time: advance by `ms` milliseconds, one clock interrupt (IRQ 0) per millisecond, delivered as they fall due
-// (the caller must be able to take interrupts, i.e. run with them enabled).
+// Fake time: advance by `ms` milliseconds, one clock interrupt (IRQ 0) per millisecond, delivered as they fall due (the caller must be able to take interrupts,
+// i.e. run with them enabled).
 void AdvanceTime(uint32_t ms);
 uint64_t NowMs();
 // Move the fake time on without clock interrupts (the ACPI PM timer jumps; KeTickCount does not).
 void SkipTime(uint64_t ms);
-// Asynchronous clock interrupts at any kernel instruction, every `periodUs` microseconds of real time (0: off), as the
-// PIT does on hardware; statistics: taken at once, left pending (IF off), skipped (outside kernel code).
+// Asynchronous clock interrupts at any kernel instruction, every `periodUs` microseconds of real time (0: off), as the PIT does on hardware; statistics: taken
+// at once, left pending (IF off), skipped (outside kernel code).
 void SetAsyncInterrupts(uint32_t periodUs);
 extern volatile uint64_t AsyncDelivered, AsyncPended, AsyncSkipped;
 // Number of clock interrupts the kernel has taken.
@@ -48,8 +48,8 @@ extern volatile uint32_t LastBugCheck[5];
 // Kernel log lines (XK_SERIAL) captured since the last call; printed by failing tests.
 const char *TakeLog();
 
-// Boot the kernel core (MM, scheduler, object manager) and run `body` on a kernel thread at PASSIVE_LEVEL;
-// returns its result. The main thread becomes the idle thread.
+// Boot the kernel core (MM, scheduler, object manager) and run `body` on a kernel thread at PASSIVE_LEVEL; returns its result. The main thread becomes the idle
+// thread.
 int BootAndRun(int (*body)(void *), void *context);
 
 // The running test's name, for the message of a fatal kernel error (set in boot.cpp).

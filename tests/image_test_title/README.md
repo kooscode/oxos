@@ -1,10 +1,9 @@
 # Image test title
 
-The simplest check that a console (or xemu) runs the OXOS kernel and a title: an nxdk title that starts SDL3 (a
-640x480 video mode and the GPU renderer), loads `D:\picture.jpg` from its disc, and decodes it on the console with
-libjpeg (file I/O, memory). It shows the picture as a texture with a status panel below it. The picture keeps its shape on the TV: when the console's video
-setting is widescreen, it is drawn 3/4 as wide, because a 16:9 TV stretches the 640-pixel width. Once a second the
-panel updates and the front LED changes pattern: a frozen console is obvious at a glance.
+The simplest check that a console (or xemu) runs the OXOS kernel and a title: an nxdk title that starts SDL3 (a 640x480 video mode and the GPU renderer), loads
+`D:\picture.jpg` from its disc, and decodes it on the console with libjpeg (file I/O, memory). It shows the picture as a texture with a status panel below it.
+The picture keeps its shape on the TV: when the console's video setting is widescreen, it is drawn 3/4 as wide, because a 16:9 TV stretches the 640-pixel width.
+Once a second the panel updates and the front LED changes pattern: a frozen console is obvious at a glance.
 
 ```sh
 make -C kernel image_test              # -> build/tests/image_test_title/image_test.iso (fetches nxdk the first time)
@@ -18,7 +17,7 @@ The panel shows:
 - free memory;
 - the picture's path (and why it failed, if it did).
 
-For automated runs the same state is in RAM as `XkImageTest` (signature `XKIMGTS1`): seconds, frames, picture
-status (1 = shown), size, load time, free pages, widescreen (1) or not.
+For automated runs the same state is in RAM as `XkImageTest` (signature `XKIMGTS1`): seconds, frames, picture status (1 = shown), size, load time, free pages,
+widescreen (1) or not.
 
 `picture.jpg` is a picture contributed for this title, stored at the size it is shown (361x330, 39 KB).

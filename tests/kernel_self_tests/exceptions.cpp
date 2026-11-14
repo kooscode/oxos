@@ -1,7 +1,6 @@
-// Boot self-tests for structured exception handling (milestone 5b). Registration frames are built by hand, the
-// way compiler-generated SEH prologues do: {Next, Handler} pushed on the stack and linked at FS:[0]. The exception
-// record and context below are the test's own copies of the ABI layouts, and the exports are declared with them, so
-// the test checks those layouts independently of core/core.h.
+// Boot self-tests for structured exception handling (milestone 5b). Registration frames are built by hand, the way compiler-generated SEH prologues do: {Next,
+// Handler} pushed on the stack and linked at FS:[0]. The exception record and context below are the test's own copies of the ABI layouts, and the exports are
+// declared with them, so the test checks those layouts independently of core/core.h.
 #include <kernel_self_tests.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
@@ -23,8 +22,7 @@ XBAPI void NTAPI RtlRaiseException(XK_RECORD *);
 XBAPI void NTAPI RtlUnwind(PVOID, PVOID, XK_RECORD *, PVOID);
 XBAPI void NTAPI RtlCaptureContext(XK_CONTEXT *);
 
-volatile ULONG KiTestSehDivideOk, KiTestSehPageFaultOk, KiTestSehRaiseOk, KiTestSehUnwindOk, KiTestSehNestedOk,
-    KiTestSehCaptureOk, KiTestSehDone;
+volatile ULONG KiTestSehDivideOk, KiTestSehPageFaultOk, KiTestSehRaiseOk, KiTestSehUnwindOk, KiTestSehNestedOk, KiTestSehCaptureOk, KiTestSehDone;
 
 struct REGISTRATION {
     REGISTRATION *Next;
@@ -110,8 +108,7 @@ static void NTAPI SehControllerThread(PVOID) {
     KiTestSehRaiseOk = LastCode == 0xE0001234;
     Head() = reg2.Next;
 
-    // 4. RtlRaiseStatus is noncontinuable: the outer handler unwinds (the inner frame sees the unwind pass, 5.)
-    //    and jumps back here.
+    // 4. RtlRaiseStatus is noncontinuable: the outer handler unwinds (the inner frame sees the unwind pass, 5.) and jumps back here.
     REGISTRATION outer = {Head(), (PVOID)UnwindHandler};
     REGISTRATION inner = {&outer, (PVOID)InnerSearchHandler};
     volatile ULONG reached = 0;
@@ -148,8 +145,8 @@ static void NTAPI SehControllerThread(PVOID) {
     RtlCaptureContext(&ctx);
     PVOID frames[8];
     USHORT n = RtlCaptureStackBackTrace(0, 8, frames, nullptr);
-    KiTestSehCaptureOk = ctx.Eip >= 0x80010000 && ctx.Esp <= (ULONG)&ctx && ctx.Esp + 0x1000 > (ULONG)&ctx &&
-                         ctx.SegCs == 8 && n >= 1 && (ULONG)frames[0] >= 0x80010000;
+    KiTestSehCaptureOk = ctx.Eip >= 0x80010000 && ctx.Esp <= (ULONG)&ctx && ctx.Esp + 0x1000 > (ULONG)&ctx && ctx.SegCs == 8 && n >= 1 &&
+                         (ULONG)frames[0] >= 0x80010000;
     KiTestSehDone = 1;
 }
 

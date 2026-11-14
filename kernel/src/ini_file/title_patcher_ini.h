@@ -1,12 +1,11 @@
-// Title patches from a file (spec/oxos_internal/25 §3): the parser. It makes no kernel calls, so the host unit tests
-// run it unchanged (tests/unit/test_title_patcher_ini.cpp).
+// Title patches from a file (spec/oxos_internal/25 §3): the parser. It makes no kernel calls, so the host unit tests run it unchanged
+// (tests/unit/test_title_patcher_ini.cpp).
 #pragma once
 #include <runtime/types.h>
 
-// The parser's output, for one title: records one after another, each a header and its data, padded to 4 bytes.
-// A name record (Kind 1) holds a section's `name =` text in Length bytes. A patch record (Kind 0) holds the bytes
-// that must be present (OriginalLength: the line's CURRENT_BYTES), then the bytes written at Address when they are
-// (Length: NEW_BYTES). They must be at Address, or, for a blind patch, at Check: the section's `match =` line.
+// The parser's output, for one title: records one after another, each a header and its data, padded to 4 bytes. A name record (Kind 1) holds a section's `name
+// =` text in Length bytes. A patch record (Kind 0) holds the bytes that must be present (OriginalLength: the line's CURRENT_BYTES), then the bytes written at
+// Address when they are (Length: NEW_BYTES). They must be at Address, or, for a blind patch, at Check: the section's `match =` line.
 struct XE_PATCH_RECORD {
     ULONG Address;
     UCHAR Length;
@@ -26,10 +25,9 @@ struct XE_PATCH_COUNTS {
 
 namespace xk::ini_file {
 
-// Reads the patch file text and writes the records of every section that names TitleId, without a version or with
-// Version. Returns the number of bytes of records written.
-ULONG ParseTitlePatches(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
-                        XE_PATCH_COUNTS *Counts);
+// Reads the patch file text and writes the records of every section that names TitleId, without a version or with Version. Returns the number of bytes of
+// records written.
+ULONG ParseTitlePatches(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize, XE_PATCH_COUNTS *Counts);
 
 inline ULONG PatchRecordSize(const XE_PATCH_RECORD *r) {
     return (sizeof(XE_PATCH_RECORD) + r->OriginalLength + r->Length + 3) & ~3u;
@@ -43,8 +41,7 @@ inline const UCHAR *PatchData(const XE_PATCH_RECORD *r) {
     return (const UCHAR *)(r + 1) + r->OriginalLength;
 }
 
-// The bytes a patch touches at Address: it writes Length bytes there, and compares OriginalLength bytes there too
-// unless they are checked at Check.
+// The bytes a patch touches at Address: it writes Length bytes there, and compares OriginalLength bytes there too unless they are checked at Check.
 inline ULONG PatchSpan(const XE_PATCH_RECORD *r) {
     return !r->Check && r->OriginalLength > r->Length ? r->OriginalLength : r->Length;
 }

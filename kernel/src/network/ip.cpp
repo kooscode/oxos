@@ -1,9 +1,7 @@
-// Ethernet, ARP, IPv4, ICMP echo and DHCP for the kernel's network stack, and its entry points
-// (spec/oxos_internal/31_upload_server.md §2). Boot-only.
+// Ethernet, ARP, IPv4, ICMP echo and DHCP for the kernel's network stack, and its entry points (spec/oxos_internal/31_upload_server.md §2). Boot-only.
 //
-// Only what a server on the local network needs: ARP answers requests for our address (we never ask: every reply
-// goes to the MAC address the request came from, a router's for a browser on another subnet), IPv4 without options
-// or fragments, ping, and a DHCP client without renewals (the server runs for minutes).
+// Only what a server on the local network needs: ARP answers requests for our address (we never ask: every reply goes to the MAC address the request came from,
+// a router's for a browser on another subnet), IPv4 without options or fragments, ping, and a DHCP client without renewals (the server runs for minutes).
 #include <network/network_stack.h>
 #include <runtime/runtime.h>
 
@@ -75,8 +73,7 @@ void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Proto
 // --- ARP: a request for our address gets a reply
 
 static void ArpReceived(const UCHAR *a, ULONG Length) {
-    bool request = Length >= 28 && LoadBigEndian16(a) == 1 && LoadBigEndian16(a + 2) == ETHERTYPE_IP && a[4] == 6 &&
-                   a[5] == 4 && LoadBigEndian16(a + 6) == 1;
+    bool request = Length >= 28 && LoadBigEndian16(a) == 1 && LoadBigEndian16(a + 2) == ETHERTYPE_IP && a[4] == 6 && a[5] == 4 && LoadBigEndian16(a + 6) == 1;
     if (!request || AddressState < NetLeased || RtlCompareMemory(a + 24, IpAddress, 4) != 4)
         return;
     PUCHAR reply = hardware::ethernet::NextFrameBuffer();
@@ -174,8 +171,7 @@ static const UCHAR *DhcpOption(const UCHAR *o, ULONG Length, UCHAR Code, UCHAR S
 }
 
 static void DhcpReceived(const UCHAR *b, ULONG Length) {
-    if (AddressState != NetAsking || Length < 240 || b[0] != 2 || LoadBigEndian32(b + 4) != DhcpXid ||
-        LoadBigEndian32(b + 236) != 0x63825363)
+    if (AddressState != NetAsking || Length < 240 || b[0] != 2 || LoadBigEndian32(b + 4) != DhcpXid || LoadBigEndian32(b + 236) != 0x63825363)
         return;
     const UCHAR *type = DhcpOption(b + 240, Length - 240, 53, 1);
     const UCHAR *server = DhcpOption(b + 240, Length - 240, 54, 4);
@@ -216,8 +212,8 @@ void FrameReceived(const UCHAR *Frame, ULONG Length) {
     const UCHAR *h = Frame + 14;
     ULONG headerLength = (h[0] & 0x0F) * 4, total = LoadBigEndian16(h + 2);
     // IPv4, a whole packet (no fragments), its header intact.
-    if ((h[0] >> 4) != 4 || headerLength < NET_IP_HEADER || total < headerLength || 14 + total > Length ||
-        (LoadBigEndian16(h + 6) & 0x3FFF) || FoldChecksum(Checksum(h, headerLength, 0)))
+    if ((h[0] >> 4) != 4 || headerLength < NET_IP_HEADER || total < headerLength || 14 + total > Length || (LoadBigEndian16(h + 6) & 0x3FFF) ||
+        FoldChecksum(Checksum(h, headerLength, 0)))
         return;
     bool forUs = AddressState >= NetLeased && RtlCompareMemory(h + 16, IpAddress, 4) == 4;
     bool broadcast = RtlCompareMemory(h + 16, BroadcastIp, 4) == 4;

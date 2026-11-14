@@ -36,8 +36,7 @@ static void InitializeProcess(PKPROCESS p, SCHAR basePriority, LONG quantum) {
 
 // Stack below StackBase: NPX area, TLS, then the switch frame KiSwapContext pops
 // (ExceptionList, EFLAGS, edi, esi, ebx, ebp, return) followed by KiThreadStartup's arguments.
-static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_ROUTINE systemRoutine,
-                                      PVOID startRoutine, PVOID startContext) {
+static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_ROUTINE systemRoutine, PVOID startRoutine, PVOID startContext) {
     InitializeNpxArea(t);
     ULONG tlsSize = (tlsDataSize + 3) & ~3u;
     ULONG *sp = (ULONG *)((UCHAR *)t->StackBase - NPX_FRAME_LENGTH - tlsSize);
@@ -57,8 +56,8 @@ static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_RO
     t->KernelStack = sp;
 }
 
-void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize,
-                      PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine, PVOID StartContext, PKPROCESS Process) {
+void InitializeThread(PKTHREAD Thread, PVOID KernelStack, ULONG KernelStackSize, ULONG TlsDataSize, PKSYSTEM_ROUTINE SystemRoutine, PVOID StartRoutine,
+                      PVOID StartContext, PKPROCESS Process) {
     Thread->Header.Type = ThreadObject;
     Thread->Header.Size = sizeof(KTHREAD) / sizeof(ULONG);
     Thread->Header.SignalState = 0;
@@ -98,8 +97,8 @@ XBAPI PKTHREAD NTAPI KeGetCurrentThread() {
     return Prcb.CurrentThread;
 }
 
-// Terminated threads: the next thread to run frees the stack and drops the thread object's
-// "running" reference (spec/stock/10 §5); the object lives on while handles or references remain.
+// Terminated threads: the next thread to run frees the stack and drops the thread object's "running" reference (spec/stock/10 §5); the object lives on while
+// handles or references remain.
 static LIST_ENTRY DeadThreadListHead = {&DeadThreadListHead, &DeadThreadListHead};
 
 void ReapDeadThreads() {
@@ -120,8 +119,7 @@ void TerminateThread() {
     XkTraceThreadExit(t); // it may have ended inside a traced call that will never return
 #endif
     t->HasTerminated = TRUE;
-    // Leave its queue (spec/stock/07): release the concurrency slot, and do not stay on the queue's thread list after
-    // the thread object is freed.
+    // Leave its queue (spec/stock/07): release the concurrency slot, and do not stay on the queue's thread list after the thread object is freed.
     if (PKQUEUE q = t->Queue) {
         RemoveEntryList(&t->QueueListEntry);
         t->Queue = nullptr;

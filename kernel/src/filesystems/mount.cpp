@@ -5,8 +5,7 @@
 
 namespace xk::filesystems {
 
-// CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/stock/04c §2,
-// spec/stock/04d).
+// CD-ROM: XDVDFS first, then UDF (DVD-video) when XDVDFS does not recognise the media (spec/stock/04c §2, spec/stock/04d).
 static NTSTATUS MountDvdVolume(PDEVICE_OBJECT TargetDevice) {
     NTSTATUS status = XdvdfsMountVolume(TargetDevice);
     return status == STATUS_UNRECOGNIZED_VOLUME ? UdfMountVolume(TargetDevice) : status;

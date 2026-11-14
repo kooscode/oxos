@@ -1,5 +1,5 @@
-// Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/stock/09 §6).
-// One address space (0x00010000-0x7FFDFFFF); reservations are VADs kept in an address-sorted list.
+// Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/stock/09 §6). One address space (0x00010000-0x7FFDFFFF);
+// reservations are VADs kept in an address-sorted list.
 #include <memory/memory.h>
 #include <arch/arch.h>
 #include <hardware/chipset/serial.h>
@@ -10,10 +10,8 @@ namespace xk::memory {
 
 constexpr NTSTATUS STATUS_INVALID_PARAMETER = (NTSTATUS)0xC000000D, STATUS_NO_MEMORY = (NTSTATUS)0xC0000017,
                    STATUS_CONFLICTING_ADDRESSES = (NTSTATUS)0xC0000018, STATUS_UNABLE_TO_FREE_VM = (NTSTATUS)0xC000001A,
-                   STATUS_INVALID_PAGE_PROTECTION = (NTSTATUS)0xC0000045,
-                   STATUS_INSUFFICIENT_RESOURCES = (NTSTATUS)0xC000009A,
-                   STATUS_FREE_VM_NOT_AT_BASE = (NTSTATUS)0xC000009F,
-                   STATUS_MEMORY_NOT_ALLOCATED = (NTSTATUS)0xC00000A0;
+                   STATUS_INVALID_PAGE_PROTECTION = (NTSTATUS)0xC0000045, STATUS_INSUFFICIENT_RESOURCES = (NTSTATUS)0xC000009A,
+                   STATUS_FREE_VM_NOT_AT_BASE = (NTSTATUS)0xC000009F, STATUS_MEMORY_NOT_ALLOCATED = (NTSTATUS)0xC00000A0;
 
 struct MMVAD {
     ULONG StartVpn, EndVpn; // inclusive page numbers
@@ -29,8 +27,7 @@ volatile ULONG VmFailures, VmLastFailure[5]; // diagnostics: status, base, size,
 
 // --- Page tables, the address-space lock, protections
 
-// Committed PTEs of a title page table, kept in bits 17-27 of the page table's page database entry (unused for that
-// usage): no resident table for it.
+// Committed PTEs of a title page table, kept in bits 17-27 of the page table's page database entry (unused for that usage): no resident table for it.
 static ULONG &PageTableEntry(ULONG va) {
     return ((ULONG *)0x83FF0000)[*PdeAddress(va) >> PAGE_SHIFT];
 }
@@ -189,11 +186,9 @@ static void DecommitRange(ULONG start, ULONG end) { // [start, end] page-aligned
 
 // --- Allocate, free, query, protect
 
-static NTSTATUS AllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
-                                      ULONG AllocationType, ULONG Protect, ULONG Usage);
+static NTSTATUS AllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize, ULONG AllocationType, ULONG Protect, ULONG Usage);
 
-XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
-                                             ULONG AllocationType, ULONG Protect) {
+XBAPI NTSTATUS NTAPI NtAllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize, ULONG AllocationType, ULONG Protect) {
     ULONG base = (ULONG)*BaseAddress, size = *RegionSize;
     NTSTATUS status =
         AllocateVirtualMemory(BaseAddress, ZeroBits, RegionSize, AllocationType, Protect, MmVirtualMemoryUsage);
@@ -213,12 +208,10 @@ NTSTATUS CommitImageMemory(PVOID *BaseAddress, PSIZE_T RegionSize) {
     return AllocateVirtualMemory(BaseAddress, 0, RegionSize, MEM_COMMIT, PAGE_READWRITE, MmImageUsage);
 }
 
-static NTSTATUS AllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize,
-                                      ULONG AllocationType, ULONG Protect, ULONG Usage) {
+static NTSTATUS AllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_T RegionSize, ULONG AllocationType, ULONG Protect, ULONG Usage) {
     constexpr ULONG ALLOCATION_TYPES = MEM_COMMIT | MEM_RESERVE | MEM_RESET | MEM_TOP_DOWN | MEM_NOZERO | 0x400000;
-    if (ZeroBits > 21 || (AllocationType & ~ALLOCATION_TYPES) ||
-        !(AllocationType & (MEM_COMMIT | MEM_RESERVE | MEM_RESET)) ||
-        ((AllocationType & MEM_RESET) && AllocationType != MEM_RESET))
+    if (ZeroBits > 21 || (AllocationType & ~ALLOCATION_TYPES) || !(AllocationType & (MEM_COMMIT | MEM_RESERVE | MEM_RESET)) || ((AllocationType & MEM_RESET) &&
+        AllocationType != MEM_RESET))
         return STATUS_INVALID_PARAMETER;
     ULONG pteBits;
     if (!VmProtectToPte(Protect, &pteBits))
@@ -284,8 +277,8 @@ static NTSTATUS AllocateVirtualMemory(PVOID *BaseAddress, ULONG ZeroBits, PSIZE_
     } else if (AllocationType == MEM_RESET) {
         status = STATUS_SUCCESS;
     } else {
-        // Pages to allocate: every uncommitted page plus each page table that has to be created. The reference
-        // fails only when that exceeds the free pages (no reserve kept back: Halo 2 commits down to the last few).
+        // Pages to allocate: every uncommitted page plus each page table that has to be created. The reference fails only when that exceeds the free pages (no
+        // reserve kept back: Halo 2 commits down to the last few).
         ULONG needed = 0;
         for (ULONG va = start; va <= end; va += PAGE_SIZE) {
             ULONG *pde = PdeAddress(va);
@@ -456,8 +449,7 @@ XBAPI NTSTATUS NTAPI NtQueryVirtualMemory(PVOID BaseAddress, PMEMORY_BASIC_INFOR
     return STATUS_SUCCESS;
 }
 
-XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG NewProtect,
-                                            PULONG OldProtect) {
+XBAPI NTSTATUS NTAPI NtProtectVirtualMemory(PVOID *BaseAddress, PSIZE_T RegionSize, ULONG NewProtect, PULONG OldProtect) {
     ULONG pteBits;
     if (!VmProtectToPte(NewProtect, &pteBits))
         return STATUS_INVALID_PAGE_PROTECTION;
@@ -504,8 +496,7 @@ XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics) {
         return STATUS_INVALID_PARAMETER;
     Statistics->TotalPhysicalPages = NumberOfPhysicalPages;
     Statistics->AvailablePages = AvailablePages;
-    Statistics->VirtualMemoryBytesCommitted =
-        (AllocatedPagesByUsage[MmVirtualMemoryUsage] + AllocatedPagesByUsage[MmImageUsage]) << PAGE_SHIFT;
+    Statistics->VirtualMemoryBytesCommitted = (AllocatedPagesByUsage[MmVirtualMemoryUsage] + AllocatedPagesByUsage[MmImageUsage]) << PAGE_SHIFT;
     Statistics->VirtualMemoryBytesReserved = VirtualMemoryBytesReserved;
     Statistics->CachePagesCommitted = AllocatedPagesByUsage[MmFsCacheUsage];
     Statistics->PoolPagesCommitted = AllocatedPagesByUsage[MmPoolUsage];
@@ -514,16 +505,14 @@ XBAPI NTSTATUS NTAPI MmQueryStatistics(PMM_STATISTICS Statistics) {
     return STATUS_SUCCESS;
 }
 
-// Exported pointer table (ordinal 102), read by debug tools (spec/stock/09 §9). The first five entries point at
-// structures in the reference's formats; our VADs are a list, not the reference's address-node tree, so the three VAD
-// entries point at an empty tree.
+// Exported pointer table (ordinal 102), read by debug tools (spec/stock/09 §9). The first five entries point at structures in the reference's formats; our VADs
+// are a list, not the reference's address-node tree, so the three VAD entries point at an empty tree.
 struct MM_GLOBAL_DATA {
-    PVOID RetailPfnRegion, SystemPteRange, AvailablePages, AllocatedPagesByUsage, AddressSpaceLock,
-        VadRoot, VadHint, VadFreeHint;
+    PVOID RetailPfnRegion, SystemPteRange, AvailablePages, AllocatedPagesByUsage, AddressSpaceLock, VadRoot, VadHint, VadFreeHint;
 };
 static PVOID NoVadTree;
 extern "C" MM_GLOBAL_DATA MmGlobalData;
-XBAPI MM_GLOBAL_DATA MmGlobalData = {&RetailPfnRegion, &SystemPteRange, &AvailablePages, AllocatedPagesByUsage,
-                               &AddressSpaceLock, &NoVadTree, &NoVadTree, &NoVadTree};
+XBAPI MM_GLOBAL_DATA MmGlobalData = {&RetailPfnRegion, &SystemPteRange, &AvailablePages, AllocatedPagesByUsage, &AddressSpaceLock, &NoVadTree, &NoVadTree,
+                               &NoVadTree};
 
 } // namespace xk::memory

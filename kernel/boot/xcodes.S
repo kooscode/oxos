@@ -1,17 +1,14 @@
 // Open BIOS image, bytes 0x000-0xFFF of each 256 KB bank: the MCPX header and the X-code table (spec/stock/01 §5).
 //
-// The X-codes are XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0, https://github.com/XboxDev/cromwell), included
-// from the copy the build fetches into third_party/cromwell. They set up the memory controller, chipset and SMBus
-// devices, then end with Cromwell's "overflow trick": they write `mov eax, 0xFFFC1000; jmp eax` to RAM address 0
-// and exit. On a retail console the MCPX boot ROM then fails its check of the (absent) Microsoft 2BL, hides itself,
-// and the CPU runs on from address 0 into our 2BL at bank offset 0x1000. Without a boot ROM (MCPX X2, xemu) our
-// reset code (reset.S) runs this table and jumps to the 2BL itself. The header values below are also Cromwell's
-// (boot_rom/2bBootStartup.S); MCPXREVD5 selects the values for the 1.6 console's MCPX and OXOS's own 1.6 program,
-// boot/xcodes_1_6.inc (spec/stock/24).
+// The X-codes are XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0, https://github.com/XboxDev/cromwell), included from the copy the build fetches into
+// third_party/cromwell. They set up the memory controller, chipset and SMBus devices, then end with Cromwell's "overflow trick": they write `mov eax,
+// 0xFFFC1000; jmp eax` to RAM address 0 and exit. On a retail console the MCPX boot ROM then fails its check of the (absent) Microsoft 2BL, hides itself, and
+// the CPU runs on from address 0 into our 2BL at bank offset 0x1000. Without a boot ROM (MCPX X2, xemu) our reset code (reset.S) runs this table and jumps to
+// the 2BL itself. The header values below are also Cromwell's (boot_rom/2bBootStartup.S); MCPXREVD5 selects the values for the 1.6 console's MCPX and OXOS's
+// own 1.6 program, boot/xcodes_1_6.inc (spec/stock/24).
 //
-// X-code encoding (9 bytes each): opcode, operand 1, operand 2. Jump offsets are relative to the next X-code. The
-// macros are Cromwell's (boot_rom/2bBootStartup.S). What each op does: spec/stock/24 §1.3 (MCPX ROM) and
-// spec/oxos_internal/27 §5.3 (our reset code).
+// X-code encoding (9 bytes each): opcode, operand 1, operand 2. Jump offsets are relative to the next X-code. The macros are Cromwell's
+// (boot_rom/2bBootStartup.S). What each op does: spec/stock/24 §1.3 (MCPX ROM) and spec/oxos_internal/27 §5.3 (our reset code).
 
 // 0x02: accumulator = 32-bit read of a.
 #define xcode_peek(a) .byte 0x02; .long a; .long 0;
@@ -40,9 +37,8 @@
 // 0xEE: end of the program; v = the MTRR default type the ROM sets at exit (0x806, unused by reset.S).
 #define xcode_END(v) .byte 0xEE; .long v; .long 0;
 
-// The SMBus host controller's I/O base, and a byte write to an SMBus device: register (base + 8) and value (+ 6),
-// start a byte-data cycle (+ 2 = 0x0A), wait until the status (+ 0) reads exactly 0x10 (done), then clear it. The
-// device address (+ 4) is set by the program before.
+// The SMBus host controller's I/O base, and a byte write to an SMBus device: register (base + 8) and value (+ 6), start a byte-data cycle (+ 2 = 0x0A), wait
+// until the status (+ 0) reads exactly 0x10 (done), then clear it. The device address (+ 4) is set by the program before.
 #define SMBUS 0x0000c000
 #define SMB_xcode_Write(reg, value) \
     xcode_outb(SMBUS + 8, reg);     \
@@ -54,9 +50,8 @@
 
     .section .xcodes, "a"
     .org 0x00
-    // 0x00-0x2F, "MCPX magic values: clock timings" (Cromwell). No known CPU code reads them; at power-on the Modxo
-    // sees 0x00-0x2B read before the CPU's first fetch (2026-11-10). Their meaning is not determined (spec/stock/21
-    // §4).
+    // 0x00-0x2F, "MCPX magic values: clock timings" (Cromwell). No known CPU code reads them; at power-on the Modxo sees 0x00-0x2B read before the CPU's first
+    // fetch (2026-11-10). Their meaning is not determined (spec/stock/21 §4).
     // MCPXREVD5: the 1.6 console's values.
     .long 0xff000009
     .long 0xff000008
@@ -78,15 +73,15 @@
 #endif
     .long 0xffffffff
     .long 0xffffffff
-    // 0x6C-0x7F (spec/stock/21 §4). 0x70-0x77 are also read at power-on before the CPU's first fetch (2026-11-10);
-    // 0x6C, 0x70, 0x74 and 0x78's upper bytes have no known CPU reader.
+    // 0x6C-0x7F (spec/stock/21 §4). 0x70-0x77 are also read at power-on before the CPU's first fetch (2026-11-10); 0x6C, 0x70, 0x74 and 0x78's upper bytes have
+    // no known CPU reader.
     .org 0x6c
     .long 0x00000107
     .org 0x70 // MCPX configuration area
     .long 0x0000000f
     .long 0x40004400
-    // 0x78: its low byte is the flash byte the kernel reads for its encoder flags (0x90 = 1.6, spec/stock/24 §6.1).
-    // 0x7C: the offset of the pad calibration table below, read by the 2BL.
+    // 0x78: its low byte is the flash byte the kernel reads for its encoder flags (0x90 = 1.6, spec/stock/24 §6.1). 0x7C: the offset of the pad calibration
+    // table below, read by the 2BL.
 #ifndef MCPXREVD5
     .long 0x12d10070
     .long 0x00000c90
@@ -94,16 +89,16 @@
     .long 0x16ce0090
     .long 0x00000ecb
 #endif
-    // 0x80: the X-code program, run by the MCPX ROM or our reset code (reset.S): Cromwell's for 1.0-1.5, ours for
-    // the 1.6 (spec/oxos_internal/28). tools/harden_xcodes.py adds write checks after assembly (spec/oxos_internal/27).
+    // 0x80: the X-code program, run by the MCPX ROM or our reset code (reset.S): Cromwell's for 1.0-1.5, ours for the 1.6 (spec/oxos_internal/28).
+    // tools/harden_xcodes.py adds write checks after assembly (spec/oxos_internal/27).
     .org 0x80
 #ifndef MCPXREVD5
 #include "Xcodes.h"
 #else
 #include "xcodes_1_6.inc"
 #endif
-    // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.7a).
-    // On the 1.6 it follows a longer program (with its write checks), so it fills the end of the bank: 0xECB-0xFFF.
+    // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.7a). On the 1.6 it follows a longer program
+    // (with its write checks), so it fills the end of the bank: 0xECB-0xFFF.
 #ifndef MCPXREVD5
     .org 0xc90
 #else

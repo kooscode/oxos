@@ -1,6 +1,5 @@
-// Audio (src/hardware/audio/): the MCPX's AC'97 controller and its codec (ac97.cpp), played through the PCM and
-// S/PDIF outputs together from one list of buffer descriptors. The APU is not used. Boot-only, for the boot jingle
-// (boot_splash/bootsound.cpp), except StopNow.
+// Audio (src/hardware/audio/): the MCPX's AC'97 controller and its codec (ac97.cpp), played through the PCM and S/PDIF outputs together from one list of buffer
+// descriptors. The APU is not used. Boot-only, for the boot jingle (boot_splash/bootsound.cpp), except StopNow.
 #pragma once
 #include <runtime/types.h>
 
@@ -25,8 +24,8 @@ void StartOutputs();
 UCHAR CurrentDescriptor(); // the PCM output's current descriptor
 void StopOutputs();        // both outputs reset and their lists cleared
 
-// Resident: both outputs stopped at once (a fatal error on the idle thread, where the player no longer runs); left
-// running, the controller replays its buffers in a loop.
+// Resident: both outputs stopped at once (a fatal error on the idle thread, where the player no longer runs); left running, the controller replays its buffers
+// in a loop.
 void StopNow();
 
 } // namespace xk::hardware::audio

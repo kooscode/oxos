@@ -1,6 +1,6 @@
-// Formatting the hard disk, the disk-level half (spec/oxos_internal/30_disk_format.md): the GPT around the exFAT
-// volume (filesystems/hddfs/format_exfat.cpp writes the volume), deleting all partitions, recognising a blank disk.
-// Every sector goes out through the caller's DISK_FORMAT_IO (storage/disk_layout.cpp: the whole-disk device).
+// Formatting the hard disk, the disk-level half (spec/oxos_internal/30_disk_format.md): the GPT around the exFAT volume (filesystems/hddfs/format_exfat.cpp
+// writes the volume), deleting all partitions, recognising a blank disk. Every sector goes out through the caller's DISK_FORMAT_IO (storage/disk_layout.cpp:
+// the whole-disk device).
 #include <storage/disk_format.h>
 #include <filesystems/filesystems.h>
 #include <runtime/runtime.h>
@@ -33,15 +33,14 @@ NTSTATUS WriteZeroSectors(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONGLONG Lb
 
 // --- Deleting all partitions, recognising a blank disk
 
-// The retail FATX partitions' first sectors (X:, Y:, Z:, C:, E:) and the automatic F: of a larger disk
-// (disk_layout.cpp).
+// The retail FATX partitions' first sectors (X:, Y:, Z:, C:, E:) and the automatic F: of a larger disk (disk_layout.cpp).
 static const ULONGLONG FatxPartitionStarts[] = {0x400, 0x177400, 0x2EE400, 0x465400, 0x55F400, 0xEE8AB0};
 
 // The blank-disk marker: this text, then the countdown in seconds (little-endian, 4 bytes).
 static const char BlankDiskMarker[16] = "OXOS BLANK DISK";
 
-NTSTATUS DeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULONG ExtraCount,
-                             ULONG CountdownSeconds, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+NTSTATUS DeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULONG ExtraCount, ULONG CountdownSeconds, const DISK_FORMAT_IO *Io,
+                             PUCHAR Scratch) {
     NTSTATUS status = WriteZeroSectors(Io, Scratch, 0, DiskSectors < 4096 ? DiskSectors : 4096);
     if (NT_SUCCESS(status) && DiskSectors > 4096)
         status = WriteZeroSectors(Io, Scratch, DiskSectors - 2048, 2048);
@@ -60,8 +59,8 @@ NTSTATUS DeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULON
     return status;
 }
 
-// Recognising a blank disk and naming what a disk holds is boot-only code: the kernel looks at the disk only on a cold
-// boot, while the boot-only pages are present (storage/disk_layout.cpp, spec/oxos_internal/18 §2).
+// Recognising a blank disk and naming what a disk holds is boot-only code: the kernel looks at the disk only on a cold boot, while the boot-only pages are
+// present (storage/disk_layout.cpp, spec/oxos_internal/18 §2).
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 
@@ -124,8 +123,8 @@ static const char *FileSystemName(const UCHAR *b) {
     return nullptr;
 }
 
-// A GPT partition type's name: Overrides when it says more than the file system on it would (an EFI system partition
-// holds FAT32); otherwise it names a partition whose file system is not recognised. Name null: no name of its own.
+// A GPT partition type's name: Overrides when it says more than the file system on it would (an EFI system partition holds FAT32); otherwise it names a
+// partition whose file system is not recognised. Name null: no name of its own.
 struct IDEX_GPT_TYPE {
     UCHAR Guid[4]; // the first bytes of the type GUID, as stored
     const char *Name;
@@ -253,8 +252,7 @@ ULONG DescribeDisk(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scrat
     }
     // Each partition by its file system, unless its type says more.
     for (ULONG i = 0; i < parts; i++) {
-        const char *fs = NT_SUCCESS(Io->Read(Io->Context, starts[i], Scratch, 4)) ? FileSystemName(Scratch)
-                                                                                   : nullptr;
+        const char *fs = NT_SUCCESS(Io->Read(Io->Context, starts[i], Scratch, 4)) ? FileSystemName(Scratch) : nullptr;
         const char *label = overrides[i] || !fs ? typeNames[i] : fs;
         if (label)
             name(label);
@@ -282,8 +280,7 @@ static void Guid(PUCHAR Out, ULONG *Seed) {
 }
 
 // The protective MBR, both GPT headers and both entry arrays (128 entries of 128 bytes), one basic-data partition.
-static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Sectors, ULONG Serial,
-                         const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
     static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
                                         0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
     ULONG seed = Serial | 1;
@@ -344,8 +341,8 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     return status;
 }
 
-NTSTATUS FormatDiskEXFAT(ULONGLONG DiskSectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File,
-                         const DISK_FORMAT_IO *Io, PUCHAR Scratch, DISK_FORMAT_RESULT *Result) {
+NTSTATUS FormatDiskEXFAT(ULONGLONG DiskSectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File, const DISK_FORMAT_IO *Io, PUCHAR Scratch,
+                         DISK_FORMAT_RESULT *Result) {
     if (DiskSectors < (1ull << 21)) // under 1 GiB: not a disk OXOS formats
         return (NTSTATUS)0xC000000D; // STATUS_INVALID_PARAMETER
     // The partition: from sector 2048 up to the backup GPT (32 sectors of entries and its header), in whole MiB.

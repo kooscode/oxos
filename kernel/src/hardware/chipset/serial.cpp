@@ -1,6 +1,5 @@
-// Debug serial port (spec/oxos_internal/03_debug_serial.md): an SMSC LPC47M15x-compatible SuperIO on the LPC bus
-// (XboxDev serial-usb-adapter, Modxo, xemu's lpc47m157), serial port 1 at 0x3F8, polled 16550. Only in SERIAL=1
-// builds.
+// Debug serial port (spec/oxos_internal/03_debug_serial.md): an SMSC LPC47M15x-compatible SuperIO on the LPC bus (XboxDev serial-usb-adapter, Modxo, xemu's
+// lpc47m157), serial port 1 at 0x3F8, polled 16550. Only in SERIAL=1 builds.
 #include <arch/arch.h>
 #include <diagnostics/diagnostics.h>
 #include <hardware/chipset/serial.h>
@@ -13,8 +12,8 @@ namespace xk::hardware::chipset {
 #define va_end(v) __builtin_va_end(v)
 
 constexpr USHORT SIO_INDEX = 0x2E, SIO_DATA = 0x2F, COM1 = 0x3F8;
-constexpr USHORT UART_THR = COM1, UART_DLL = COM1, UART_IER = COM1 + 1, UART_DLM = COM1 + 1, UART_FCR = COM1 + 2,
-                 UART_LCR = COM1 + 3, UART_MCR = COM1 + 4, UART_LSR = COM1 + 5;
+constexpr USHORT UART_THR = COM1, UART_DLL = COM1, UART_IER = COM1 + 1, UART_DLM = COM1 + 1, UART_FCR = COM1 + 2, UART_LCR = COM1 + 3, UART_MCR = COM1 + 4,
+                 UART_LSR = COM1 + 5;
 constexpr ULONG SERIAL_TIMEOUT = 200000; // LSR polls (about 1 us each on the LPC bus) before giving up on a byte
 
 volatile BOOLEAN SerialPresent; // a UART answered at set-up and has not timed out since

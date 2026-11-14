@@ -1,7 +1,6 @@
-// exFAT volumes: the folder partitions of an exFAT disk (spec/oxos_internal/07_exfat_driver.md,
-// 05_exfat_storage_spec.md). Each folder partition mounts as its own volume whose root is that folder; they share one
-// EXFAT_DISK (geometry, up-case table, free count, block cache key). Here: the allocation bitmap, the volume handle
-// and size, and the mount.
+// exFAT volumes: the folder partitions of an exFAT disk (spec/oxos_internal/07_exfat_driver.md, 05_exfat_storage_spec.md). Each folder partition mounts as its
+// own volume whose root is that folder; they share one EXFAT_DISK (geometry, up-case table, free count, block cache key). Here: the allocation bitmap, the
+// volume handle and size, and the mount.
 #include <filesystems/hddfs/hddfs.h>
 #include <hardware/chipset/serial.h>
 
@@ -92,13 +91,12 @@ NTSTATUS EXFATFreeFile(HDDFS_VOLUME *v, HDDFS_FCB *f) {
 
 // --- Volume handle and size (spec §5-6 of the storage spec)
 
-// A title formats its cache partition (X/Y/Z) through the volume handle: a FATX header written at offset 0, then the
-// allocation table and the root directory, then a dismount. A folder partition has no sectors of its own, so the
-// header write empties the folder and the metadata writes are dropped; reads show a freshly formatted FATX volume.
-// E:, C: and F: refuse to be formatted this way.
+// A title formats its cache partition (X/Y/Z) through the volume handle: a FATX header written at offset 0, then the allocation table and the root directory,
+// then a dismount. A folder partition has no sectors of its own, so the header write empties the folder and the metadata writes are dropped; reads show a
+// freshly formatted FATX volume. E:, C: and F: refuse to be formatted this way.
 
-// The serial and sectors per cluster of the last header written to X/Y/Z, shown by later mounts and kept across
-// quick reboots (a title formats, starts another title or the dashboard, and is started again).
+// The serial and sectors per cluster of the last header written to X/Y/Z, shown by later mounts and kept across quick reboots (a title formats, starts another
+// title or the dashboard, and is started again).
 XK_PERSIST static ULONG EXFATFormatSerial[7];
 XK_PERSIST static ULONG EXFATFormatSpc[7];
 
@@ -108,8 +106,8 @@ static ULONG EXFATFormattedClusterBytes(HDDFS_VOLUME *v) {
     return (spc ? spc : 32) * 512;
 }
 
-// The layout of a freshly formatted FATX volume of the reported length (as FATX mounts it: a 4 KB header, the
-// allocation table rounded to 4 KB, then the clusters, the first holding the root directory).
+// The layout of a freshly formatted FATX volume of the reported length (as FATX mounts it: a 4 KB header, the allocation table rounded to 4 KB, then the
+// clusters, the first holding the root directory).
 static void EXFATFormattedLayout(HDDFS_VOLUME *v, ULONG *EntrySize, ULONG *RootAt, ULONG *Clusters = nullptr) {
     ULONG bytes = EXFATFormattedClusterBytes(v);
     ULONG entries = (ULONG)(v->ReportedLength / bytes) + 1;
@@ -136,9 +134,7 @@ NTSTATUS EXFATVolumeTransfer(HDDFS_VOLUME *v, PIRP Irp) {
             LONGLONG at = offset + i;
             UCHAR b = 0;
             if (at < 16) {
-                ULONG header[4] = {FATX_SIGNATURE,
-                                   EXFATFormatSerial[v->PartitionNumber] ? EXFATFormatSerial[v->PartitionNumber]
-                                                                         : v->SerialNumber,
+                ULONG header[4] = {FATX_SIGNATURE, EXFATFormatSerial[v->PartitionNumber] ? EXFATFormatSerial[v->PartitionNumber] : v->SerialNumber,
                                    EXFATFormattedClusterBytes(v) / 512, 1};
                 b = ((PUCHAR)header)[at];
             } else if (at >= 0x1000 && at < 0x1000 + 2 * entrySize) {
@@ -172,9 +168,9 @@ NTSTATUS EXFATVolumeTransfer(HDDFS_VOLUME *v, PIRP Irp) {
     return status;
 }
 
-// E: and C: in 16 KB units, the volume capped at 2 TB; F: everything. X/Y/Z as a FATX volume of their retail 750 MB
-// with the cluster size of their last format (16 KB until formatted): its clusters, less the root directory's and
-// those the folder's files take (the exFAT folder's own directory clusters are not counted).
+// E: and C: in 16 KB units, the volume capped at 2 TB; F: everything. X/Y/Z as a FATX volume of their retail 750 MB with the cluster size of their last format
+// (16 KB until formatted): its clusters, less the root directory's and those the folder's files take (the exFAT folder's own directory clusters are not
+// counted).
 void EXFATVolumeSize(HDDFS_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit) {
     constexpr ULONGLONG unit = 0x4000, cap = 2ull << 40;
     ULONGLONG total = (ULONGLONG)v->EXFATDisk->ClusterCount << v->ClusterShift;
@@ -209,8 +205,8 @@ static void EXFATInitFcb(HDDFS_FCB *f, ULONG Flags) {
     f->ReferenceCount = 1; // permanent
 }
 
-// A boot region (12 sectors at Base: the main one at 0, the backup at sector 12) whose boot sector is exFAT's and
-// whose checksum (sector 11) is right: its boot sector copied to Boot.
+// A boot region (12 sectors at Base: the main one at 0, the backup at sector 12) whose boot sector is exFAT's and whose checksum (sector 11) is right: its boot
+// sector copied to Boot.
 static bool EXFATReadBootRegion(HDDFS_VOLUME *v, ULONG Base, PUCHAR Boot, NTSTATUS *Status) {
     ULONG sum = 0;
     for (ULONG i = 0; i < 12 * 512; i++) {
@@ -232,8 +228,8 @@ static bool EXFATReadBootRegion(HDDFS_VOLUME *v, ULONG Base, PUCHAR Boot, NTSTAT
 // Read the boot sector, the root's bitmap and up-case entries, and count the free clusters (the lock is held).
 static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
     EXFAT_DISK *x = v->EXFATDisk;
-    // The main boot region, else the backup: a kernel that takes a whole-disk exFAT drive for a FATX disk writes its
-    // refurbishment record into sector 3 (spec/oxos_internal/05 §2).
+    // The main boot region, else the backup: a kernel that takes a whole-disk exFAT drive for a FATX disk writes its refurbishment record into sector 3
+    // (spec/oxos_internal/05 §2).
     UCHAR b[512];
     NTSTATUS status;
     if (!EXFATReadBootRegion(v, 0, b, &status)) {
@@ -242,8 +238,8 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
         XK_SERIAL("exfat: the main boot region is damaged; using the backup\n");
         if (!EXFATReadBootRegion(v, 12 * 512, b, &status))
             return NT_SUCCESS(status) ? STATUS_UNRECOGNIZED_VOLUME : status;
-        // Repair the main region from the backup, as fsck.exfat does, so a PC mounts the disk again. The backup is
-        // never written: an interrupted repair leaves a main region that fails its checksum and is repaired again.
+        // Repair the main region from the backup, as fsck.exfat does, so a PC mounts the disk again. The backup is never written: an interrupted repair leaves
+        // a main region that fails its checksum and is repaired again.
         for (ULONG sector = 0; sector < 12 && NT_SUCCESS(status); sector++) {
             UCHAR copy[512];
             PUCHAR data;
@@ -255,8 +251,7 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
             if (!NT_SUCCESS(status))
                 break;
             RtlCopyMemory(data, copy, 512);
-            status = HDDFSWriteBlockRange(v, sector * 512 & ~(HDDFS_BLOCK_SIZE - 1),
-                                          sector * 512 & (HDDFS_BLOCK_SIZE - 1), 512);
+            status = HDDFSWriteBlockRange(v, sector * 512 & ~(HDDFS_BLOCK_SIZE - 1), sector * 512 & (HDDFS_BLOCK_SIZE - 1), 512);
         }
         XK_SERIAL("exfat: main boot region restored from the backup: %#lx\n", status);
         status = STATUS_SUCCESS; // a failed repair still mounts from the backup
@@ -268,8 +263,7 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
     ULONG count = *(ULONG *)(b + 92), root = *(ULONG *)(b + 96), serial = *(ULONG *)(b + 100);
     USHORT flags = *(USHORT *)(b + 106);
     UCHAR fats = b[110];
-    if (!count || (fats != 1 && fats != 2) ||
-        ((ULONGLONG)heap << 9) + ((ULONGLONG)count << clusterShift) > (ULONGLONG)v->PartitionLength)
+    if (!count || (fats != 1 && fats != 2) || ((ULONGLONG)heap << 9) + ((ULONGLONG)count << clusterShift) > (ULONGLONG)v->PartitionLength)
         return STATUS_UNRECOGNIZED_VOLUME;
     x->ClusterShift = clusterShift;
     x->BytesPerCluster = 1u << clusterShift;
@@ -382,21 +376,17 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
 NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     PDEVICE_OBJECT disk = storage::EXFATVolumeDevice;
     PARTITION_INFORMATION volume, target;
-    NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, disk, nullptr, 0, &volume,
-                                                          sizeof(volume), nullptr, FALSE);
+    NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, disk, nullptr, 0, &volume, sizeof(volume), nullptr, FALSE);
     if (NT_SUCCESS(status)) {
-        status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, Target, nullptr, 0, &target,
-                                                     sizeof(target), nullptr, FALSE);
+        status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, Target, nullptr, 0, &target, sizeof(target), nullptr, FALSE);
     }
     if (!NT_SUCCESS(status))
         return status;
     PDEVICE_OBJECT dev;
-    status = IoCreateDevice(&HDDFSDriverObject, sizeof(HDDFS_VOLUME), nullptr, 8 /*FILE_DEVICE_DISK_FILE_SYSTEM*/,
-                            FALSE, &dev);
+    status = IoCreateDevice(&HDDFSDriverObject, sizeof(HDDFS_VOLUME), nullptr, 8 /*FILE_DEVICE_DISK_FILE_SYSTEM*/, FALSE, &dev);
     if (!NT_SUCCESS(status))
         return status;
-    dev->StackSize = (CHAR)(dev->StackSize +
-                            (disk->StackSize > Target->StackSize ? disk->StackSize : Target->StackSize));
+    dev->StackSize = (CHAR)(dev->StackSize + (disk->StackSize > Target->StackSize ? disk->StackSize : Target->StackSize));
     if (dev->AlignmentRequirement < disk->AlignmentRequirement)
         dev->AlignmentRequirement = disk->AlignmentRequirement;
     dev->Flags |= disk->Flags & 0x40;

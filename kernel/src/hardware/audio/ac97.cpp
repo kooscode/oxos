@@ -1,5 +1,5 @@
-// The MCPX's AC'97 controller (spec/oxos_internal/17_boot_jingle.md §2): its codec started, and its PCM and S/PDIF
-// outputs played together from one list of buffer descriptors. Boot-only, except StopNow.
+// The MCPX's AC'97 controller (spec/oxos_internal/17_boot_jingle.md §2): its codec started, and its PCM and S/PDIF outputs played together from one list of
+// buffer descriptors. Boot-only, except StopNow.
 #include <hardware/audio/audio.h>
 #include <hardware/chipset/serial.h>
 #include <core/core.h>
@@ -11,10 +11,9 @@ namespace xk::hardware::audio {
 
 namespace {
 
-// The AC'97 controller's registers in memory space (PCI BAR2): the primary codec's registers at 0x000, the
-// bus-master channels at 0x100 + 0x10 n in the ICH layout (descriptor list base, current index, last valid index,
-// status, position, prefetch index, control), PCM out at 0x110 and S/PDIF out at 0x170, global control 0x12C and
-// global status 0x130.
+// The AC'97 controller's registers in memory space (PCI BAR2): the primary codec's registers at 0x000, the bus-master channels at 0x100 + 0x10 n in the ICH
+// layout (descriptor list base, current index, last valid index, status, position, prefetch index, control), PCM out at 0x110 and S/PDIF out at 0x170, global
+// control 0x12C and global status 0x130.
 constexpr ULONG AC97_BASE = 0xFEC00000, AC97_SIZE = 0x200;
 constexpr ULONG PCM_OUT = 0x110, SPDIF_OUT = 0x170;
 constexpr ULONG BDBAR = 0x0, CIV = 0x4, LVI = 0x5, SR = 0x6, CR = 0xB;

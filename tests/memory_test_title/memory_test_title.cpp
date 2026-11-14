@@ -1,17 +1,17 @@
-// OXOS memory test title (nxdk + SDL3): measures how much memory a title is given, for the 64/128 MB comparison between
-// kernels (tests/memory_test.py runs it and reads the results). The same XBE is run twice: as built (nxdk sets the
-// XBE init flag 0x4, "limit to 64 MB", like retail games) and with that flag cleared.
+// OXOS memory test title (nxdk + SDL3): measures how much memory a title is given, for the 64/128 MB comparison between kernels (tests/memory_test.py runs it
+// and reads the results). The same XBE is run twice: as built (nxdk sets the XBE init flag 0x4, "limit to 64 MB", like retail games) and with that flag
+// cleared.
 //
 // Measurements, in order (results in XkMemoryTest, also shown on screen):
 //   1. the XBE's init flags, as loaded at 0x10000 (header offset 0x124)
 //   2. MmQueryStatistics at the start: total and available physical pages
-//   3. a contiguous page requested from the upper 64 MB only (MmAllocateContiguousMemoryEx, 0x4000000-0x7FFFFFF):
-//      its physical address, or 0 when the kernel has no memory there or refuses it
-//   4. ordinary title memory: 1 MB blocks (NtAllocateVirtualMemory, committed) until the kernel says no; every page
-//      is touched and looked up (MmGetPhysicalAddress): total bytes, pages above 64 MB, highest physical address
+//   3. a contiguous page requested from the upper 64 MB only (MmAllocateContiguousMemoryEx, 0x4000000-0x7FFFFFF): its physical address, or 0 when the kernel
+//      has no memory there or refuses it
+//   4. ordinary title memory: 1 MB blocks (NtAllocateVirtualMemory, committed) until the kernel says no; every page is touched and looked up
+//      (MmGetPhysicalAddress): total bytes, pages above 64 MB, highest physical address
 //   5. MmQueryStatistics at the end
-// SDL (tools/sdl_screen) starts only after the measurements, once the title memory of step 4 is freed again, so it
-// takes nothing from what is measured; the XBE itself is larger with SDL in it (about 1 MB).
+// SDL (tools/sdl_screen) starts only after the measurements, once the title memory of step 4 is freed again, so it takes nothing from what is measured; the XBE
+// itself is larger with SDL in it (about 1 MB).
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
 

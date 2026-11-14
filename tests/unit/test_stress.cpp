@@ -1,7 +1,6 @@
-// Stress under asynchronous interrupts: the clock interrupt lands on any kernel instruction (as the PIT does on a
-// console), while threads hammer the pool, system memory, contiguous memory (page moves), thread creation and waits,
-// and check every byte they wrote. Races that synchronous delivery never exposes show up here as corruption, a kernel
-// page fault, a bug check or a deadlock. OXOS_STRESS_SECONDS sets the length (default 5 s of real time).
+// Stress under asynchronous interrupts: the clock interrupt lands on any kernel instruction (as the PIT does on a console), while threads hammer the pool,
+// system memory, contiguous memory (page moves), thread creation and waits, and check every byte they wrote. Races that synchronous delivery never exposes show
+// up here as corruption, a kernel page fault, a bug check or a deadlock. OXOS_STRESS_SECONDS sets the length (default 5 s of real time).
 #include "kernel_test.h"
 
 #include <atomic>
@@ -100,9 +99,8 @@ void RunStress(unsigned loads, const char *what) {
     Join(a);
     Join(b);
     host::SetAsyncInterrupts(0);
-    printf("  [%s] %lu rounds, %lu short threads; clock interrupts at a kernel instruction %llu, left pending %llu\n",
-           what, Rounds.load(), ShortThreads.load(), (unsigned long long)(host::AsyncDelivered - delivered),
-           (unsigned long long)(host::AsyncPended - pended));
+    printf("  [%s] %lu rounds, %lu short threads; clock interrupts at a kernel instruction %llu, left pending %llu\n", what, Rounds.load(), ShortThreads.load(),
+           (unsigned long long)(host::AsyncDelivered - delivered), (unsigned long long)(host::AsyncPended - pended));
     EXPECT_EQ(Errors.load(), 0u) << "memory written by the load came back different";
     EXPECT_GT(Rounds.load(), 0u);
     EXPECT_GT(host::AsyncDelivered - delivered, 0u) << "no interrupt landed inside kernel code";

@@ -1,15 +1,13 @@
-// Formatting an exFAT volume (spec/oxos_internal/30_disk_format.md): the boot regions, the FAT, the allocation bitmap,
-// the up-case table and the root with the folders C E F X Y Z OXOS (and one file), laid out as the exFAT specification
-// describes; the code and the up-case table's rules are OXOS's own. storage/disk_format.cpp puts the GPT around it.
-// Every sector goes out through the caller's DISK_FORMAT_IO.
+// Formatting an exFAT volume (spec/oxos_internal/30_disk_format.md): the boot regions, the FAT, the allocation bitmap, the up-case table and the root with the
+// folders C E F X Y Z OXOS (and one file), laid out as the exFAT specification describes; the code and the up-case table's rules are OXOS's own.
+// storage/disk_format.cpp puts the GPT around it. Every sector goes out through the caller's DISK_FORMAT_IO.
 #include <storage/disk_format.h>
 #include <filesystems/filesystems.h>
 #include <runtime/runtime.h>
 
 namespace xk::filesystems {
 
-constexpr NTSTATUS STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D, STATUS_NAME_INVALID_ = (NTSTATUS)0xC0000033,
-                   STATUS_DISK_FULL_ = (NTSTATUS)0xC000007F;
+constexpr NTSTATUS STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D, STATUS_NAME_INVALID_ = (NTSTATUS)0xC0000033, STATUS_DISK_FULL_ = (NTSTATUS)0xC000007F;
 constexpr ULONG SCRATCH_SECTORS = DISK_FORMAT_SCRATCH / 512;
 
 ULONG EXFATTimestamp(ULONG Year, ULONG Month, ULONG Day, ULONG Hour, ULONG Minute, ULONG Second) {
@@ -21,8 +19,8 @@ ULONG EXFATTimestamp(ULONG Year, ULONG Month, ULONG Day, ULONG Hour, ULONG Minut
 // --- The up-case table (OXOS's rules: Basic Latin, Latin-1, Latin Extended-A, Greek, Cyrillic, full-width Latin)
 
 static USHORT Upcase(USHORT c) {
-    if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7) || (c >= 0x3B1 && c <= 0x3CB && c != 0x3C2) ||
-        (c >= 0x430 && c <= 0x44F) || (c >= 0xFF41 && c <= 0xFF5A))
+    if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7) || (c >= 0x3B1 && c <= 0x3CB && c != 0x3C2) || (c >= 0x430 && c <= 0x44F) ||
+        (c >= 0xFF41 && c <= 0xFF5A))
         return (USHORT)(c - 0x20);
     if (c == 0xFF)
         return 0x178;
@@ -77,8 +75,7 @@ static ULONG TableChecksum(const UCHAR *p, ULONG n) {
 
 // --- Directory entries
 
-constexpr UCHAR ENTRY_BITMAP = 0x81, ENTRY_UPCASE = 0x82, ENTRY_LABEL = 0x83, ENTRY_FILE = 0x85, ENTRY_STREAM = 0xC0,
-                ENTRY_NAME = 0xC1;
+constexpr UCHAR ENTRY_BITMAP = 0x81, ENTRY_UPCASE = 0x82, ENTRY_LABEL = 0x83, ENTRY_FILE = 0x85, ENTRY_STREAM = 0xC0, ENTRY_NAME = 0xC1;
 
 static USHORT NameHash(const char *Name, ULONG Length) {
     USHORT hash = 0;
@@ -91,8 +88,7 @@ static USHORT NameHash(const char *Name, ULONG Length) {
 }
 
 // A file or folder's entry set (File, Stream extension, Name entries) at At; returns the number of entries.
-static ULONG EntrySet(PUCHAR At, const char *Name, ULONG Length, bool Folder, ULONG FirstCluster,
-                         ULONGLONG Size, ULONG Timestamp) {
+static ULONG EntrySet(PUCHAR At, const char *Name, ULONG Length, bool Folder, ULONG FirstCluster, ULONGLONG Size, ULONG Timestamp) {
     ULONG names = (Length + 14) / 15, count = 2 + names;
     RtlZeroMemory(At, count * 32);
     At[0] = ENTRY_FILE;
@@ -161,8 +157,7 @@ static LONG AddNode(FORMAT_TREE *t, LONG Parent, const char *Name, ULONG Length,
         return -1;
     for (ULONG i = 0; i < Length; i++) {
         char c = Name[i];
-        if (c < 0x20 || c > 0x7E || c == '"' || c == '*' || c == '/' || c == ':' || c == '<' || c == '>' ||
-            c == '?' || c == '\\' || c == '|')
+        if (c < 0x20 || c > 0x7E || c == '"' || c == '*' || c == '/' || c == ':' || c == '<' || c == '>' || c == '?' || c == '\\' || c == '|')
             return -1;
     }
     FORMAT_NODE *n = &t->Nodes[t->Count];
@@ -174,8 +169,7 @@ static LONG AddNode(FORMAT_TREE *t, LONG Parent, const char *Name, ULONG Length,
     return (LONG)t->Count++;
 }
 
-// Root, folders and the file in one directory cluster each (a folder's entries: at most 16 sets of up to 7 entries,
-// 3.5 KB, less than any cluster).
+// Root, folders and the file in one directory cluster each (a folder's entries: at most 16 sets of up to 7 entries, 3.5 KB, less than any cluster).
 static bool BuildTree(FORMAT_TREE *t, const DISK_FORMAT_FILE *File) {
     static const char *const folders[] = {"C", "E", "F", "X", "Y", "Z", "OXOS"};
     t->Count = 0;
@@ -260,8 +254,7 @@ static ULONG FatEntry(const FORMAT_RUNS *r, ULONG Cluster) {
 }
 
 // The FAT (entries for the runs, zeros after them) and the allocation bitmap (clusters 2 to Next - 1 in use).
-static NTSTATUS WriteFatAndBitmap(const FORMAT_GEOMETRY *g, const FORMAT_RUNS *r, ULONG BitmapCluster,
-                                     const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+static NTSTATUS WriteFatAndBitmap(const FORMAT_GEOMETRY *g, const FORMAT_RUNS *r, ULONG BitmapCluster, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
     ULONGLONG fatLba = g->Start + g->FatOffset;
     for (ULONG done = 0; done < g->FatLength;) {
         ULONG n = g->FatLength - done < SCRATCH_SECTORS ? g->FatLength - done : SCRATCH_SECTORS;
@@ -296,8 +289,7 @@ static NTSTATUS WriteFatAndBitmap(const FORMAT_GEOMETRY *g, const FORMAT_RUNS *r
 }
 
 // One directory cluster: Entries bytes from Scratch, the rest zeros.
-static NTSTATUS WriteDirectory(const FORMAT_GEOMETRY *g, ULONG Cluster, ULONG Bytes, const DISK_FORMAT_IO *Io,
-                                  PUCHAR Scratch) {
+static NTSTATUS WriteDirectory(const FORMAT_GEOMETRY *g, ULONG Cluster, ULONG Bytes, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
     ULONG sectors = (Bytes + 511) / 512;
     NTSTATUS status = Io->Write(Io->Context, ClusterLba(g, Cluster), Scratch, sectors);
     if (NT_SUCCESS(status) && sectors < g->Spc)
@@ -316,10 +308,8 @@ static ULONG FolderEntries(const FORMAT_TREE *t, LONG Parent, PUCHAR At, ULONG T
     return n * 32;
 }
 
-// The boot region (12 sectors) at Lba: boot sector, 8 extended boot sectors, OEM parameters, a reserved sector and
-// the checksum sector.
-static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG RootCluster, ULONGLONG Lba,
-                                   const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
+// The boot region (12 sectors) at Lba: boot sector, 8 extended boot sectors, OEM parameters, a reserved sector and the checksum sector.
+static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG RootCluster, ULONGLONG Lba, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
     RtlZeroMemory(Scratch, 12 * 512);
     PUCHAR b = Scratch;
     b[0] = 0xEB;
@@ -355,9 +345,8 @@ static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG Ro
     return Io->Write(Io->Context, Lba, Scratch, 12);
 }
 
-NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULONG Timestamp,
-                           const DISK_FORMAT_FILE *File, const DISK_FORMAT_IO *Io, PUCHAR Scratch,
-                           DISK_FORMAT_RESULT *Result) {
+NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULONG Timestamp, const DISK_FORMAT_FILE *File, const DISK_FORMAT_IO *Io,
+                           PUCHAR Scratch, DISK_FORMAT_RESULT *Result) {
     if (Sectors < (1ull << 20)) // under 512 MiB
         return STATUS_INVALID_PARAMETER_;
     FORMAT_GEOMETRY g;

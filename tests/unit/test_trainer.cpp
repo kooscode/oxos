@@ -1,6 +1,6 @@
-// Game-trainer support (spec/oxos_internal/23_trainer_hook.md): the title-start call has the exact bytes dashboards
-// search for, their patch round-trips on it, and the low memory their trainer stub uses stays the dashboard's.
-// The kernel image itself is checked at link time too (tools/check_kernel_layout.py, check 3).
+// Game-trainer support (spec/oxos_internal/23_trainer_hook.md): the title-start call has the exact bytes dashboards search for, their patch round-trips on it,
+// and the low memory their trainer stub uses stays the dashboard's. The kernel image itself is checked at link time too (tools/check_kernel_layout.py, check
+// 3).
 #include "kernel_test.h"
 
 #include <algorithm>
@@ -48,8 +48,8 @@ TEST(Trainer, DashboardHookAndUnhookRoundTrip) {
 }
 
 TEST(Trainer, PageZeroIsMappedPersistentAndNeverAllocated) {
-    // The stub pointer lives at physical 0xC, the stub's own slots at 0x10 and 0x14; all must survive the quick
-    // reboot into the game, so page 0 stays mapped read-write and persistent and is never handed out.
+    // The stub pointer lives at physical 0xC, the stub's own slots at 0x10 and 0x14; all must survive the quick reboot into the game, so page 0 stays mapped
+    // read-write and persistent and is never handed out.
     uint32_t pte = PfnEntry(0);
     EXPECT_EQ(pte & (PTE_PRESENT | PTE_WRITE | PTE_PERSIST), PTE_PRESENT | PTE_WRITE | PTE_PERSIST);
     EXPECT_EQ(pte & ~0xFFFu, 0u);

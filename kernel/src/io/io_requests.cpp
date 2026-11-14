@@ -77,8 +77,8 @@ static void QueueToPort(PIRP Irp, PIO_COMPLETION_CONTEXT Context) {
     KeInsertQueue((PKQUEUE)Context->Port, &Irp->Tail.Overlay.ListEntry);
 }
 
-// Final stage of I/O completion, in the context of the thread that issued the request (APC_LEVEL).
-// Runs as the IRP's kernel APC, or inline for deferred completions.
+// Final stage of I/O completion, in the context of the thread that issued the request (APC_LEVEL). Runs as the IRP's kernel APC, or inline for deferred
+// completions.
 void NTAPI CompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *SystemArgument1, PVOID *) {
     PIRP irp = CONTAINING_RECORD(Apc, IRP, Tail.Apc);
     auto fo = (PFILE_OBJECT)*SystemArgument1;
@@ -87,8 +87,7 @@ void NTAPI CompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *System
 
     if (((ULONG)status & 0xC0000000) == 0xC0000000 &&
         (!irp->PendingReturned || syncApi || (fo && (fo->Flags & FO_SYNCHRONOUS_IO)))) {
-        // Errors returned synchronously are reported by the service's return value only. A pended error for a
-        // synchronous caller still wakes the waiter.
+        // Errors returned synchronously are reported by the service's return value only. A pended error for a synchronous caller still wakes the waiter.
         if (irp->PendingReturned && fo) {
             if (syncApi) {
                 *irp->UserIosb = irp->IoStatus;
@@ -134,8 +133,7 @@ void NTAPI CompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *System
     PIO_APC_ROUTINE apcRoutine = irp->Overlay.AsynchronousParameters.UserApcRoutine;
     PVOID apcContext = irp->Overlay.AsynchronousParameters.UserApcContext;
     if (apcRoutine) {
-        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), UserApcKernelRoutine, UserApcRundown,
-                        (PKNORMAL_ROUTINE)apcRoutine,
+        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), UserApcKernelRoutine, UserApcRundown, (PKNORMAL_ROUTINE)apcRoutine,
                         apcRoutine == NtUserIoApcDispatcher ? UserMode : KernelMode, apcContext);
         KeInsertQueueApc(&irp->Tail.Apc, irp->UserIosb, nullptr, 2);
     } else if (port && apcContext) {
@@ -165,8 +163,8 @@ XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost) {
         Irp->Tail.Overlay.CurrentStackLocation++;
         Irp->PendingReturned = stack->Control & SL_PENDING_RETURNED;
         bool ok = NT_SUCCESS(Irp->IoStatus.Status);
-        if ((ok && (stack->Control & SL_INVOKE_ON_SUCCESS)) || (!ok && (stack->Control & SL_INVOKE_ON_ERROR)) ||
-            (Irp->Cancel && (stack->Control & SL_INVOKE_ON_CANCEL))) {
+        if ((ok && (stack->Control & SL_INVOKE_ON_SUCCESS)) || (!ok && (stack->Control & SL_INVOKE_ON_ERROR)) || (Irp->Cancel &&
+            (stack->Control & SL_INVOKE_ON_CANCEL))) {
             PDEVICE_OBJECT upper = Irp->CurrentLocation == Irp->StackCount + 1 ? nullptr : (stack + 1)->DeviceObject;
             PIO_COMPLETION_ROUTINE routine = stack->CompletionRoutine;
             PVOID context = stack->Context;
@@ -204,8 +202,7 @@ XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost) {
 
 // --- Request builders
 
-XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                               ULONG Length, PLARGE_INTEGER StartingOffset,
+XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset,
                                                PIO_STATUS_BLOCK IoStatusBlock) {
     PIRP irp = IoAllocateIrp(DeviceObject->StackSize);
     if (!irp)
@@ -224,11 +221,9 @@ XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJE
     return irp;
 }
 
-XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                              ULONG Length, PLARGE_INTEGER StartingOffset, PKEVENT Event,
-                                              PIO_STATUS_BLOCK IoStatusBlock) {
-    PIRP irp = IoBuildAsynchronousFsdRequest(MajorFunction, DeviceObject, Buffer, Length, StartingOffset,
-                                             IoStatusBlock);
+XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset,
+                                              PKEVENT Event, PIO_STATUS_BLOCK IoStatusBlock) {
+    PIRP irp = IoBuildAsynchronousFsdRequest(MajorFunction, DeviceObject, Buffer, Length, StartingOffset, IoStatusBlock);
     if (irp) {
         irp->UserEvent = Event;
         QueueThreadIrp(irp);
@@ -236,10 +231,8 @@ XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJEC
     return irp;
 }
 
-XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer,
-                                               ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength,
-                                               BOOLEAN InternalDeviceIoControl, PKEVENT Event,
-                                               PIO_STATUS_BLOCK IoStatusBlock) {
+XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer,
+                                               ULONG OutputBufferLength, BOOLEAN InternalDeviceIoControl, PKEVENT Event, PIO_STATUS_BLOCK IoStatusBlock) {
     PIRP irp = IoAllocateIrp(DeviceObject->StackSize);
     if (!irp)
         return nullptr;
@@ -260,13 +253,11 @@ XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJE
     return irp;
 }
 
-XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                             ULONG Length, PLARGE_INTEGER StartingOffset) {
+XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset) {
     KEVENT event;
     KeInitializeEvent(&event, NotificationEvent, FALSE);
     IO_STATUS_BLOCK iosb;
-    PIRP irp = IoBuildSynchronousFsdRequest(MajorFunction, DeviceObject, Buffer, Length, StartingOffset, &event,
-                                            &iosb);
+    PIRP irp = IoBuildSynchronousFsdRequest(MajorFunction, DeviceObject, Buffer, Length, StartingOffset, &event, &iosb);
     if (!irp)
         return STATUS_INSUFFICIENT_RESOURCES;
     NTSTATUS status = IofCallDriver(DeviceObject, irp);
@@ -277,18 +268,15 @@ XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT
     return status;
 }
 
-XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject,
-                                                         PVOID InputBuffer, ULONG InputBufferLength,
-                                                         PVOID OutputBuffer, ULONG OutputBufferLength,
-                                                         PULONG ReturnedOutputBufferLength,
+XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer, ULONG InputBufferLength,
+                                                         PVOID OutputBuffer, ULONG OutputBufferLength, PULONG ReturnedOutputBufferLength,
                                                          BOOLEAN InternalDeviceIoControl) {
     KEVENT event;
     KeInitializeEvent(&event, NotificationEvent, FALSE);
     IO_STATUS_BLOCK iosb;
     iosb.Information = 0;
-    PIRP irp = IoBuildDeviceIoControlRequest(IoControlCode, DeviceObject, InputBuffer, InputBufferLength,
-                                             OutputBuffer, OutputBufferLength, InternalDeviceIoControl, &event,
-                                             &iosb);
+    PIRP irp = IoBuildDeviceIoControlRequest(IoControlCode, DeviceObject, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength,
+                                             InternalDeviceIoControl, &event, &iosb);
     if (!irp)
         return STATUS_INSUFFICIENT_RESOURCES;
     NTSTATUS status = IofCallDriver(DeviceObject, irp);

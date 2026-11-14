@@ -1,5 +1,5 @@
-// Kernel timers (spec/stock/06 §5). Inserted timers sit in one list sorted by due interrupt time; the clock
-// interrupt queues an expiry DPC when the head is due.
+// Kernel timers (spec/stock/06 §5). Inserted timers sit in one list sorted by due interrupt time; the clock interrupt queues an expiry DPC when the head is
+// due.
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <arch/arch.h>

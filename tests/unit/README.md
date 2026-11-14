@@ -1,7 +1,7 @@
 # Core runtime unit tests
 
-GoogleTest tests for the kernel's core runtime (memory manager, dispatcher, object manager, executive objects, RTL),
-built from the kernel's own sources as a 32-bit Linux program. How it works: `spec/oxos_internal/11_host_unit_tests.md`.
+GoogleTest tests for the kernel's core runtime (memory manager, dispatcher, object manager, executive objects, RTL), built from the kernel's own sources as a
+32-bit Linux program. How it works: `spec/oxos_internal/11_host_unit_tests.md`.
 
 ## Run
 
@@ -12,10 +12,9 @@ built from the kernel's own sources as a 32-bit Linux program. How it works: `sp
     OXOS_STRESS_SECONDS=120 tools/unit_tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
     OXOS_KERNEL_OPT=-O2 tools/unit_tests.sh      # kernel sources at the console build's optimisation
 
-Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`, make)
-or Docker: without the toolchain the script builds the image from `Dockerfile` here and runs inside it. The build is
-the plain `Makefile` in this folder (`make -C tests/unit`; `COVERAGE=1`, `KERNEL_OPT=-O2` and `BUILD=dir` as the
-script passes them); it compiles GoogleTest from those sources itself.
+Needs either a local 32-bit toolchain (clang, `g++-multilib`, `googletest` sources in `/usr/src/googletest`, make) or Docker: without the toolchain the script
+builds the image from `Dockerfile` here and runs inside it. The build is the plain `Makefile` in this folder (`make -C tests/unit`; `COVERAGE=1`,
+`KERNEL_OPT=-O2` and `BUILD=dir` as the script passes them); it compiles GoogleTest from those sources itself.
 
 ## Layout
 
@@ -33,9 +32,8 @@ script passes them); it compiles GoogleTest from those sources itself.
 
 ## Writing tests
 
-- Tests run on a kernel thread at PASSIVE_LEVEL (priority 8) and may block, create threads (`Spawn`), raise IRQL and
-  queue DPCs/APCs like kernel code.
-- Time only moves when the CPU idles (every thread blocked) or a test calls `host::AdvanceTime(ms)`; interrupts are
-  raised with `host::RaiseIrq(n)` and delivered as soon as the IRQL allows.
+- Tests run on a kernel thread at PASSIVE_LEVEL (priority 8) and may block, create threads (`Spawn`), raise IRQL and queue DPCs/APCs like kernel code.
+- Time only moves when the CPU idles (every thread blocked) or a test calls `host::AdvanceTime(ms)`; interrupts are raised with `host::RaiseIrq(n)` and
+  delivered as soon as the IRQL allows.
 - Leave the kernel as you found it: free pages, pool, handles; run down queues the test thread used.
 - A kernel page fault, an unhandled bug check or a deadlock ends the run with a report naming the test.

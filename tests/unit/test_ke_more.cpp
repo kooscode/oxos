@@ -1,5 +1,5 @@
-// More of the kernel core: alerts, boosts and priorities, time keeping, FPU state, process-level thread APIs, the
-// RTC, and the rarer memory-manager entry points.
+// More of the kernel core: alerts, boosts and priorities, time keeping, FPU state, process-level thread APIs, the RTC, and the rarer memory-manager entry
+// points.
 #include "kernel_test.h"
 #include <core/core.h>
 #include <memory/memory.h>
@@ -299,8 +299,8 @@ TEST(MmMore, ImageMemoryCommitsIntoAReservation) {
 }
 
 TEST(MmMore, DamagedSystemPteListIsReportedNotFollowed) {
-    // An isolated 8-PTE free run (the page after it stays allocated), its link corrupted, then a request for more
-    // than it holds: the search must stop at the bad link, report it and fail, not follow it.
+    // An isolated 8-PTE free run (the page after it stays allocated), its link corrupted, then a request for more than it holds: the search must stop at the
+    // bad link, report it and fail, not follow it.
     auto a = (uint8_t *)MmAllocateSystemMemory(8 * 4096, PAGE_READWRITE);
     auto b = (uint8_t *)MmAllocateSystemMemory(4096, PAGE_READWRITE);
     if (b != a + 8 * 4096) {

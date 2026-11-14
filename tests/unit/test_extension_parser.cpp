@@ -1,6 +1,5 @@
-// PE images for kernel extensions (spec/oxos_internal/34 §8, kernel/src/extensions/extension_parser.cpp), on a small
-// DLL the test lays out itself: one section with a relocated pointer, the kernel imports, the descriptor export and the
-// relocation block.
+// PE images for kernel extensions (spec/oxos_internal/34 §8, kernel/src/extensions/extension_parser.cpp), on a small DLL the test lays out itself: one section
+// with a relocated pointer, the kernel imports, the descriptor export and the relocation block.
 #include "kernel_test.h"
 
 #include <cstring>
@@ -173,8 +172,7 @@ TEST(PeImage, ImagesTheLoaderCannotUseAreRefused) {
 TEST(PeImage, ImportsMustBeKernelOrdinals) {
     std::vector<UCHAR> image(IMAGE_SIZE);
     for (auto f : {TestDll("kernel32.dll"), TestDll("xboxkrnl.exe", false)}) {
-        ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE),
-                  XK_PE_ERROR::NONE);
+        ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
         Resolver r;
         EXPECT_EQ(extensions::BindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);
     }
@@ -189,10 +187,8 @@ TEST(PeImage, OnlyHighLowRelocationsAreApplied) {
     std::vector<UCHAR> f = TestDll();
     Put16(f, Raw(RELOCATIONS_RVA) + 8, (10 << 12) | 0); // a 64-bit relocation
     std::vector<UCHAR> image(IMAGE_SIZE);
-    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
-              XK_PE_ERROR::BAD_RELOCATION);
+    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000), XK_PE_ERROR::BAD_RELOCATION);
     f = TestDll();
     Put32(f, Raw(RELOCATIONS_RVA) + 4, 0x2000); // a block running past the directory
-    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000),
-              XK_PE_ERROR::BAD_RELOCATION);
+    EXPECT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE + 0x1000), XK_PE_ERROR::BAD_RELOCATION);
 }

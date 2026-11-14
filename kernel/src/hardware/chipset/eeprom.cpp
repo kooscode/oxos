@@ -118,8 +118,7 @@ static const EEPROM_SETTING *FindSetting(ULONG Index, ULONG *sectionOffset, ULON
     return nullptr;
 }
 
-XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
-                                               PULONG ResultLength) {
+XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength, PULONG ResultLength) {
     if (ValueIndex == 0x104) { // game region (from the security section)
         if (ResultLength)
             *ResultLength = 4;
@@ -202,10 +201,9 @@ XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOI
     return status;
 }
 
-// Security section (0x00-0x2F): {HMAC-SHA1[20], confounder[8], HD key[16], game region[4]}, RC4-encrypted with
-// HMAC(EEPROM key, digest) and authenticated by HMAC(EEPROM key, plaintext).
-// HMAC-SHA1 from precomputed states (the SHA-1 state after the key ^ ipad block, and after the key ^ opad block):
-// how the open image's key block describes the EEPROM keys (spec/stock/01 §5).
+// Security section (0x00-0x2F): {HMAC-SHA1[20], confounder[8], HD key[16], game region[4]}, RC4-encrypted with HMAC(EEPROM key, digest) and authenticated by
+// HMAC(EEPROM key, plaintext). HMAC-SHA1 from precomputed states (the SHA-1 state after the key ^ ipad block, and after the key ^ opad block): how the open
+// image's key block describes the EEPROM keys (spec/stock/01 §5).
 static void HmacFromStates(const ULONG *states, const UCHAR *data, ULONG length, PUCHAR digest) {
     struct {
         ULONG State[5];
@@ -274,8 +272,8 @@ XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength,
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, (DoWrite ? GENERIC_WRITE : 0) | GENERIC_READ | SYNCHRONIZE, &attrs, &iosb,
-                                 FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_ALERT);
+    NTSTATUS status = NtOpenFile(&h, (DoWrite ? GENERIC_WRITE : 0) | GENERIC_READ | SYNCHRONIZE, &attrs, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                 FILE_SYNCHRONOUS_IO_ALERT);
     if (!NT_SUCCESS(status))
         return status;
     auto sector = (PULONG)ExAllocatePoolWithTag(512, 'frxE');

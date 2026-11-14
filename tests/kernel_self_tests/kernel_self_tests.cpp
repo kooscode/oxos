@@ -1,5 +1,5 @@
-// Boot self-tests for milestone checks. Results are plain globals that tests/boot_test.py reads
-// over the emulator monitor; nothing here is part of the kernel ABI.
+// Boot self-tests for milestone checks. Results are plain globals that tests/boot_test.py reads over the emulator monitor; nothing here is part of the kernel
+// ABI.
 #include <kernel_self_tests.h>
 #include <hardware/chipset/chipset.h>
 #include <hardware/chipset/serial.h>
@@ -173,15 +173,13 @@ static void NTAPI ControllerThread(PVOID) {
     due.QuadPart = -20 * 10000;
     KeSetTimer(&timer, due, nullptr);
     PVOID anyObjects[2] = {&never, &timer};
-    KiTestWaitAnyIndex = KeWaitForMultipleObjects(2, anyObjects, WaitAny, Executive, KernelMode, FALSE, nullptr,
-                                                  nullptr);
+    KiTestWaitAnyIndex = KeWaitForMultipleObjects(2, anyObjects, WaitAny, Executive, KernelMode, FALSE, nullptr, nullptr);
 
     // WaitAll on two signalled notification events -> STATUS_WAIT_0.
     KeInitializeEvent(&e1, NotificationEvent, TRUE);
     KeInitializeEvent(&e2, NotificationEvent, TRUE);
     PVOID allObjects[2] = {&e1, &e2};
-    KiTestWaitAllStatus = KeWaitForMultipleObjects(2, allObjects, WaitAll, Executive, KernelMode, FALSE, nullptr,
-                                                   nullptr);
+    KiTestWaitAllStatus = KeWaitForMultipleObjects(2, allObjects, WaitAll, Executive, KernelMode, FALSE, nullptr, nullptr);
 
     // Timeout on a never-signalled event.
     due.QuadPart = -30 * 10000;
@@ -189,8 +187,7 @@ static void NTAPI ControllerThread(PVOID) {
 
     // Join: a terminated thread's object is signalled.
     PKTHREAD child = core::CreateSystemThread(ShortLivedThread, nullptr, 0, 8);
-    KiTestJoinOk = KeWaitForSingleObject(child, Executive, KernelMode, FALSE, nullptr) == STATUS_WAIT_0 &&
-                   child->State == Terminated;
+    KiTestJoinOk = KeWaitForSingleObject(child, Executive, KernelMode, FALSE, nullptr) == STATUS_WAIT_0 && child->State == Terminated;
 
     KiTestThreadsDone = 1;
 }
@@ -343,9 +340,8 @@ static void NTAPI ApcControllerThread(PVOID) {
     KeWaitForSingleObject(crit, Executive, KernelMode, FALSE, nullptr);
     KiTestCriticalRegionOk = CriticalApcRan == 2;
 
-    // Suspend stops a spinning thread; resume restarts it. Both take effect when the spinner is next scheduled (the
-    // suspend through a kernel APC), so the test waits for each, up to a second, instead of guessing how long it takes:
-    // the counter has to stop, stay stopped for 30 ms, and move again after the resume.
+    // Suspend stops a spinning thread; resume restarts it. Both take effect when the spinner is next scheduled (the suspend through a kernel APC), so the test
+    // waits for each, up to a second, instead of guessing how long it takes: the counter has to stop, stay stopped for 30 ms, and move again after the resume.
     PKTHREAD spinner = core::CreateSystemThread(SuspendSpinner, nullptr, 0, 2); // above the 2b spinners
     Sleep(20);
     KeSuspendThread(spinner);
@@ -365,8 +361,8 @@ static void NTAPI ApcControllerThread(PVOID) {
     for (auto &item : QueueItems)
         KeInsertQueue(&TestQueue, &item);
     Sleep(20);
-    // Static: KeRemoveQueue leaves this thread associated with the queue (as NT does) until the thread ends, and the
-    // waits below and the thread's exit still update it (a stack queue would be overwritten by then).
+    // Static: KeRemoveQueue leaves this thread associated with the queue (as NT does) until the thread ends, and the waits below and the thread's exit still
+    // update it (a stack queue would be overwritten by then).
     static KQUEUE emptyQueue;
     KeInitializeQueue(&emptyQueue, 1);
     LARGE_INTEGER t;
@@ -425,8 +421,8 @@ static void NTAPI MmControllerThread(PVOID) {
     // Contiguous memory.
     auto a = (ULONG *)MmAllocateContiguousMemory(0x3000);
     KiTestMmContiguousVa = (ULONG)a;
-    bool ok = a && ((ULONG)a & 0xFFF) == 0 && (ULONG)a >= 0x83000000 &&
-              MmGetPhysicalAddress(a) == ((ULONG)a & 0x7FFFFFFF) && MmQueryAllocationSize(a) == 0x3000;
+    bool ok = a && ((ULONG)a & 0xFFF) == 0 && (ULONG)a >= 0x83000000 && MmGetPhysicalAddress(a) == ((ULONG)a & 0x7FFFFFFF) &&
+              MmQueryAllocationSize(a) == 0x3000;
     for (ULONG i = 0; ok && i < 0x3000 / 4; i++)
         a[i] = i * 2654435761u;
     for (ULONG i = 0; ok && i < 0x3000 / 4; i++)
@@ -435,8 +431,7 @@ static void NTAPI MmControllerThread(PVOID) {
 
     auto b = MmAllocateContiguousMemoryEx(0x1000, 0, 0x00FFFFFF, 0x10000, PAGE_READWRITE | PAGE_WRITECOMBINE);
     PHYSICAL_ADDRESS pb = MmGetPhysicalAddress(b);
-    KiTestMmAlignedOk = b && pb < 0x01000000 && (pb & 0xFFFF) == 0 &&
-                        MmQueryAddressProtect(b) == (PAGE_READWRITE | PAGE_WRITECOMBINE);
+    KiTestMmAlignedOk = b && pb < 0x01000000 && (pb & 0xFFFF) == 0 && MmQueryAddressProtect(b) == (PAGE_READWRITE | PAGE_WRITECOMBINE);
     MmFreeContiguousMemory(b);
 
     ULONG before = memory::AvailablePages;
@@ -457,8 +452,7 @@ static void NTAPI MmControllerThread(PVOID) {
         ok = !MmAllocateContiguousMemoryEx(PAGE_SIZE, old, old + PAGE_SIZE - 1, 0, PAGE_READWRITE);
         MmLockUnlockBufferPages(sp, PAGE_SIZE, TRUE);
         PVOID c = MmAllocateContiguousMemoryEx(PAGE_SIZE, old, old + PAGE_SIZE - 1, 0, PAGE_READWRITE);
-        ok = ok && c && MmGetPhysicalAddress(c) == old && MmGetPhysicalAddress(sp) != old && sp[0] == 0x12345678 &&
-             sp[1023] == 0x9ABCDEF0;
+        ok = ok && c && MmGetPhysicalAddress(c) == old && MmGetPhysicalAddress(sp) != old && sp[0] == 0x12345678 && sp[1023] == 0x9ABCDEF0;
         if (c)
             MmFreeContiguousMemory(c);
         MmFreeSystemMemory(sp, PAGE_SIZE);
@@ -468,8 +462,7 @@ static void NTAPI MmControllerThread(PVOID) {
     XK_SERIAL("mm test 3: System memory.\n");
     // System memory.
     auto s = (ULONG *)MmAllocateSystemMemory(0x5000, PAGE_READWRITE);
-    ok = s && (ULONG)s >= MM_SYSTEM_PTE_BASE && (ULONG)s < MM_SYSTEM_PTE_END && MmQueryAllocationSize(s) == 0x5000 &&
-         MmGetPhysicalAddress(s) != 0;
+    ok = s && (ULONG)s >= MM_SYSTEM_PTE_BASE && (ULONG)s < MM_SYSTEM_PTE_END && MmQueryAllocationSize(s) == 0x5000 && MmGetPhysicalAddress(s) != 0;
     for (ULONG i = 0; ok && i < 0x5000 / 4; i++)
         s[i] = ~i;
     for (ULONG i = 0; ok && i < 0x5000 / 4; i++)
@@ -521,14 +514,12 @@ static void NTAPI MmControllerThread(PVOID) {
     XK_SERIAL("mm test 6: Layout: no user mappings, read-only kern\n");
     // Layout: no user mappings, read-only kernel code, guard page under our stack.
     PKTHREAD self = KeGetCurrentThread();
-    KiTestMmLayoutOk = !MmIsAddressValid((PVOID)0x10000) &&
-                       MmQueryAddressProtect((PVOID)&KiRunBootSelfTests) == PAGE_READONLY &&
+    KiTestMmLayoutOk = !MmIsAddressValid((PVOID)0x10000) && MmQueryAddressProtect((PVOID)&KiRunBootSelfTests) == PAGE_READONLY &&
                        !MmIsAddressValid((UCHAR *)self->StackLimit - 1) && MmIsAddressValid(self->StackLimit);
 
     XK_SERIAL("mm test 7: Thread churn through the real lifecycle:\n");
-    // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return. The
-    // baseline is taken after one lifetime: the first thread's one-time costs (pool growth; other suites allocating
-    // meanwhile) are not a per-thread leak.
+    // Thread churn through the real lifecycle: create, wait on the handle, close. Stacks and objects return. The baseline is taken after one lifetime: the
+    // first thread's one-time costs (pool growth; other suites allocating meanwhile) are not a per-thread leak.
     ULONG baseline = 0;
     for (int i = -1; i < 150; i++) {
         if (i == 0)
@@ -542,8 +533,8 @@ static void NTAPI MmControllerThread(PVOID) {
             NtClose(h);
         }
     }
-    // Read at once: each thread's stack is freed by the switch away from it, before its waiter runs; a sleep here
-    // would let other suites' allocations into the count.
+    // Read at once: each thread's stack is freed by the switch away from it, before its waiter runs; a sleep here would let other suites' allocations into the
+    // count.
     KiTestMmThreadChurnPages = baseline - memory::AvailablePages;
 
     XK_SERIAL("mm test 8: Virtual memory.\n");
@@ -565,8 +556,7 @@ static void NTAPI MmControllerThread(PVOID) {
     NtQueryVirtualMemory(base, &mbi);
     ok &= mbi.State == MEM_RESERVE && mbi.RegionSize == 0x20000 && mbi.AllocationBase == base;
     NtQueryVirtualMemory(commit, &mbi);
-    ok &= mbi.State == MEM_COMMIT && mbi.RegionSize == 0x10000 && mbi.Protect == PAGE_READWRITE &&
-          mbi.Type == MEM_PRIVATE;
+    ok &= mbi.State == MEM_COMMIT && mbi.RegionSize == 0x10000 && mbi.Protect == PAGE_READWRITE && mbi.Type == MEM_PRIVATE;
     KiTestVmReserveCommitOk = ok;
 
     XK_SERIAL("mm test 9: Protect RW -> RO.\n");
@@ -598,8 +588,8 @@ static void NTAPI MmControllerThread(PVOID) {
     // XBE-style image: reserve + commit at 0x10000; a second reservation over it conflicts.
     PVOID img = (PVOID)0x10000;
     SIZE_T imgSize = 0x30000;
-    ok = NtAllocateVirtualMemory(&img, 0, &imgSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE) == 0 &&
-         img == (PVOID)0x10000 && MmIsAddressValid((PVOID)0x3F000);
+    ok = NtAllocateVirtualMemory(&img, 0, &imgSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE) == 0 && img == (PVOID)0x10000 &&
+         MmIsAddressValid((PVOID)0x3F000);
     *(volatile ULONG *)0x10000 = 0x48454258; // 'XBEH'
     PVOID img2 = (PVOID)0x20000;
     SIZE_T img2Size = 0x1000;
@@ -613,8 +603,8 @@ static void NTAPI MmControllerThread(PVOID) {
     // Top-down reservation.
     PVOID top = nullptr;
     SIZE_T topSize = 0x10000;
-    ok = NtAllocateVirtualMemory(&top, 0, &topSize, MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE) == 0 &&
-         (ULONG)top >= 0x7FF00000 && (ULONG)top + topSize <= 0x7FFE0000;
+    ok = NtAllocateVirtualMemory(&top, 0, &topSize, MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE) == 0 && (ULONG)top >= 0x7FF00000 &&
+         (ULONG)top + topSize <= 0x7FFE0000;
     fbase = top;
     fsize = 0;
     NtFreeVirtualMemory(&fbase, &fsize, MEM_RELEASE);
@@ -623,9 +613,8 @@ static void NTAPI MmControllerThread(PVOID) {
     KiTestVmPagesRestored = memory::AvailablePages == vmBaseline;
     MM_STATISTICS stats;
     stats.Length = sizeof(stats);
-    KiTestVmStatsOk = MmQueryStatistics(&stats) == 0 && stats.TotalPhysicalPages == 0x4000 &&
-                      stats.AvailablePages == memory::AvailablePages && stats.StackPagesCommitted > 0 &&
-                      stats.PoolPagesCommitted > 0 && stats.VirtualMemoryBytesReserved == 0;
+    KiTestVmStatsOk = MmQueryStatistics(&stats) == 0 && stats.TotalPhysicalPages == 0x4000 && stats.AvailablePages == memory::AvailablePages &&
+                      stats.StackPagesCommitted > 0 && stats.PoolPagesCommitted > 0 && stats.VirtualMemoryBytesReserved == 0;
     KiTestMmDone = 1;
 }
 
@@ -675,8 +664,7 @@ static void NTAPI ObControllerThread(PVOID) {
     NtCreateEvent(&h2, nullptr, NotificationEvent, FALSE);
     NtClose(h1);
     NtCreateEvent(&h3, nullptr, NotificationEvent, FALSE);
-    KiTestObHandlesOk = ((ULONG)h2 & 3) == 0 && (ULONG)h2 >= 4 && h3 == h1 &&
-                        NtClose((HANDLE)0x7FFC) == STATUS_INVALID_HANDLE;
+    KiTestObHandlesOk = ((ULONG)h2 & 3) == 0 && (ULONG)h2 >= 4 && h3 == h1 && NtClose((HANDLE)0x7FFC) == STATUS_INVALID_HANDLE;
     NtClose(h2);
     NtClose(h3);
 
@@ -728,8 +716,7 @@ static void NTAPI ObControllerThread(PVOID) {
     OBJECT_ATTRIBUTES la = {nullptr, &ls, OBJ_CASE_INSENSITIVE};
     char target[32];
     OBJECT_STRING tgt = {0, sizeof(target), target};
-    ok &= NtOpenSymbolicLinkObject(&hl, &la) == 0 && NtQuerySymbolicLinkObject(hl, &tgt, nullptr) == 0 &&
-          RtlEqualString(&tgt, &ts, TRUE);
+    ok &= NtOpenSymbolicLinkObject(&hl, &la) == 0 && NtQuerySymbolicLinkObject(hl, &tgt, nullptr) == 0 && RtlEqualString(&tgt, &ts, TRUE);
     NtClose(hl);
     ULONG ctx = 0, ret;
     UCHAR buf[64];
@@ -746,16 +733,15 @@ static void NTAPI ObControllerThread(PVOID) {
     RtlInitAnsiString(&n1, "\\XkDir\\Missing\\X");
     RtlInitAnsiString(&n2, "\\XkDir\\Missing");
     RtlInitAnsiString(&n3, "relative");
-    KiTestObNameErrorsOk = ObReferenceObjectByName(&n1, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_PATH_NOT_FOUND &&
-                           ObReferenceObjectByName(&n2, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_NOT_FOUND &&
-                           ObReferenceObjectByName(&n3, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_INVALID;
+    KiTestObNameErrorsOk = ObReferenceObjectByName(&n1, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_PATH_NOT_FOUND && ObReferenceObjectByName(&n2, 0, nullptr,
+                           nullptr, &gone) == STATUS_OBJECT_NAME_NOT_FOUND && ObReferenceObjectByName(&n3, 0, nullptr, nullptr,
+                           &gone) == STATUS_OBJECT_NAME_INVALID;
     NtClose(hdir);
 
     // Ps: TLS, extension, ids, notify routines, exit status.
     PsSetCreateThreadNotifyRoutine(CountNotify);
     HANDLE ht, tid;
-    ok = PsCreateSystemThreadEx(&ht, 32, 0x4000, 64, &tid, (PVOID)64, nullptr, FALSE, FALSE,
-                                (PKSYSTEM_ROUTINE)TlsThreadBody) == 0;
+    ok = PsCreateSystemThreadEx(&ht, 32, 0x4000, 64, &tid, (PVOID)64, nullptr, FALSE, FALSE, (PKSYSTEM_ROUTINE)TlsThreadBody) == 0;
     ok &= NtWaitForSingleObject(ht, FALSE, nullptr) == 0;
     PVOID to;
     ObReferenceObjectByHandle(ht, &PsThreadObjectType, &to);
@@ -816,9 +802,8 @@ static void KiStartThreadSelfTests() {
     core::CreateSystemThread(FpuThread, (PVOID)12345, 0, 8);
     core::CreateSystemThread(FpuThread, (PVOID)67890, 0, 8);
     core::CreateSystemThread(ControllerThread, nullptr, 0, 9);
-    // The two equal-priority spinners never block, so they wait until start-up has become the idle loop: running
-    // earlier, they kept the start-up thread (priority 0, at APC_LEVEL since 2026-10-27) from ever running again,
-    // and no title started.
+    // The two equal-priority spinners never block, so they wait until start-up has become the idle loop: running earlier, they kept the start-up thread
+    // (priority 0, at APC_LEVEL since 2026-10-27) from ever running again, and no title started.
     KeInitializeEvent(&SpinGo, NotificationEvent, FALSE);
     core::CreateSystemThread(SpinThread, (PVOID)&KiTestSpinA, 0, 1);
     core::CreateSystemThread(SpinThread, (PVOID)&KiTestSpinB, 0, 1);

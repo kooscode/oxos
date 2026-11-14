@@ -1,11 +1,9 @@
-// HDDFS, the hard disk's file system driver (src/filesystems/hddfs/; the files named below are there): one driver for
-// FATX volumes (spec/stock/04 §6, spec/stock/04b) and the folder partitions of an exFAT disk
-// (spec/oxos_internal/07_exfat_driver.md). Titles see every volume as "FATX".
+// HDDFS, the hard disk's file system driver (src/filesystems/hddfs/; the files named below are there): one driver for FATX volumes (spec/stock/04 §6,
+// spec/stock/04b) and the folder partitions of an exFAT disk (spec/oxos_internal/07_exfat_driver.md). Titles see every volume as "FATX".
 //
-// Names say which format code serves: HDDFS for what both share (HDDFSLookup, HDDFS_VOLUME; dispatch.cpp, volume.cpp,
-// open_files.cpp), FATX for FATX only (FATXLookup, *_fatx.cpp), EXFAT for exFAT only (EXFATWalk, EXFATFlags,
-// *_exfat.cpp). The format names are in capitals so they cannot be read as the NT executive's Ex prefix
-// (ExAllocatePoolWithTag).
+// Names say which format code serves: HDDFS for what both share (HDDFSLookup, HDDFS_VOLUME; dispatch.cpp, volume.cpp, open_files.cpp), FATX for FATX only
+// (FATXLookup, *_fatx.cpp), EXFAT for exFAT only (EXFATWalk, EXFATFlags, *_exfat.cpp). The format names are in capitals so they cannot be read as the NT
+// executive's Ex prefix (ExAllocatePoolWithTag).
 #pragma once
 #include <filesystems/filesystems.h>
 #include <storage/storage.h>
@@ -52,8 +50,7 @@ struct HDDFS_ENTRY : FATX_DIRENT {
     ULONG FileSizeHigh;       // exFAT files of 4 GB or more: the size's high dword
 };
 
-constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40,
-                FCB_DIRENT_DIRTY = 0x80,
+constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40, FCB_DIRENT_DIRTY = 0x80,
                 FCB_EXFAT_DISK_ROOT = 0x100; // the exFAT root directory: no length, its FAT chain ends it
 
 struct HDDFS_FCB {
@@ -62,8 +59,8 @@ struct HDDFS_FCB {
     HDDFS_FCB *Parent;
     ULONG Flags;
     LONG ReferenceCount; // file objects not yet closed, plus open children
-    // Titles' XGetFilePhysicalSortKey reads the first cluster at FsContext + 0x1C on a "FATX" volume (and returns 0
-    // when bit 0 of the first byte is set: SiblingLink is a pointer, so it never is). spec/oxos_internal/25.
+    // Titles' XGetFilePhysicalSortKey reads the first cluster at FsContext + 0x1C on a "FATX" volume (and returns 0 when bit 0 of the first byte is set:
+    // SiblingLink is a pointer, so it never is). spec/oxos_internal/25.
     ULONG FirstCluster;
     LONG CleanupCount; // file objects not yet cleaned up
     SHARE_ACCESS ShareAccess;
@@ -107,8 +104,7 @@ struct HDDFS_FORMAT {
     NTSTATUS (*NextEntry)(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG *Index, HDDFS_ENTRY *Entry);
     NTSTATUS (*InitDirectory)(HDDFS_VOLUME *v, ULONG *First);
     NTSTATUS (*RemoveDirent)(HDDFS_VOLUME *v, HDDFS_FCB *f);
-    NTSTATUS (*CreateDirent)(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                             ULONG FirstCluster, ULONG *Index);
+    NTSTATUS (*CreateDirent)(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index);
     NTSTATUS (*FlushFcb)(HDDFS_VOLUME *v, HDDFS_FCB *f);
     NTSTATUS (*DeleteDirent)(HDDFS_VOLUME *v, HDDFS_FCB *f);
     NTSTATUS (*IsDirectoryEmpty)(HDDFS_VOLUME *v, HDDFS_FCB *dir);
@@ -140,9 +136,9 @@ struct HDDFS_VOLUME {
     HDDFS_FCB RootFcb;
     HDDFS_FCB VolumeFcb;              // opens of the volume itself
     FSCACHE_EXTENSION CacheExtension; // a FATX partition's key in the file system cache
-    // The key its blocks are cached under: &CacheExtension on FATX; on exFAT one key for the whole disk, shared by
-    // every folder volume (C:, E:, X:, ...), so a block (the allocation bitmap, the FAT) has one cached copy. With
-    // a key each, a folder volume wrote back its stale copy of a bitmap sector over another's change.
+    // The key its blocks are cached under: &CacheExtension on FATX; on exFAT one key for the whole disk, shared by every folder volume (C:, E:, X:, ...), so a
+    // block (the allocation bitmap, the FAT) has one cached copy. With a key each, a folder volume wrote back its stale copy of a bitmap sector over another's
+    // change.
     FSCACHE_EXTENSION *Cache;
 };
 
@@ -188,8 +184,7 @@ void HDDFSDereferenceFcb(HDDFS_FCB *f);
 // --- Directory layer: each operation goes to the volume's format (HDDFS_VOLUME::Format).
 
 // An entry by name; STATUS_OBJECT_NAME_NOT_FOUND if there is none.
-inline NTSTATUS HDDFSLookup(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, HDDFS_ENTRY *Found,
-                            ULONG *Index) {
+inline NTSTATUS HDDFSLookup(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, HDDFS_ENTRY *Found, ULONG *Index) {
     return v->Format->Lookup(v, dir, Name, Found, Index);
 }
 
@@ -214,8 +209,7 @@ inline NTSTATUS HDDFSRemoveDirent(HDDFS_VOLUME *v, HDDFS_FCB *f) {
 }
 
 // A new entry; *Index is where it is.
-inline NTSTATUS HDDFSCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                                  ULONG FirstCluster, ULONG *Index) {
+inline NTSTATUS HDDFSCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index) {
     return v->Format->CreateDirent(v, dir, Name, Attributes, FirstCluster, Index);
 }
 
@@ -241,8 +235,7 @@ NTSTATUS FATXReadEntry(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, HDDFS_ENTRY
 NTSTATUS FATXNextEntry(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG *Index, HDDFS_ENTRY *Entry);
 NTSTATUS FATXInitDirectory(HDDFS_VOLUME *v, ULONG *First);
 NTSTATUS FATXRemoveDirent(HDDFS_VOLUME *v, HDDFS_FCB *f);
-NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                          ULONG FirstCluster, ULONG *Index);
+NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index);
 NTSTATUS FATXFlushFcb(HDDFS_VOLUME *v, HDDFS_FCB *f);
 NTSTATUS FATXDeleteDirent(HDDFS_VOLUME *v, HDDFS_FCB *f);
 NTSTATUS FATXIsDirectoryEmpty(HDDFS_VOLUME *v, HDDFS_FCB *dir);
@@ -265,8 +258,8 @@ struct EXFAT_DISK {
 extern EXFAT_DISK EXFATDisk;
 
 // Directory entry types and an entry set as read from the disk.
-constexpr UCHAR EXFAT_ENTRY_END = 0x00, EXFAT_ENTRY_BITMAP = 0x81, EXFAT_ENTRY_UPCASE = 0x82, EXFAT_ENTRY_FILE = 0x85,
-                EXFAT_ENTRY_STREAM = 0xC0, EXFAT_ENTRY_NAME = 0xC1;
+constexpr UCHAR EXFAT_ENTRY_END = 0x00, EXFAT_ENTRY_BITMAP = 0x81, EXFAT_ENTRY_UPCASE = 0x82, EXFAT_ENTRY_FILE = 0x85, EXFAT_ENTRY_STREAM = 0xC0,
+                EXFAT_ENTRY_NAME = 0xC1;
 constexpr ULONG EXFAT_MAX_SET = 19; // file + stream + 17 name entries (255 characters)
 struct EXFAT_SET {
     UCHAR e[EXFAT_MAX_SET][32];
@@ -278,8 +271,7 @@ NTSTATUS EXFATReadEntry(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, HDDFS_ENTR
 NTSTATUS EXFATNextEntry(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG *Index, HDDFS_ENTRY *Entry);
 NTSTATUS EXFATInitDirectory(HDDFS_VOLUME *v, ULONG *First);
 NTSTATUS EXFATRemoveDirent(HDDFS_VOLUME *v, HDDFS_FCB *f);
-NTSTATUS EXFATCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                           ULONG FirstCluster, ULONG *Index);
+NTSTATUS EXFATCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index);
 NTSTATUS EXFATFlushFcb(HDDFS_VOLUME *v, HDDFS_FCB *f);
 NTSTATUS EXFATDeleteDirent(HDDFS_VOLUME *v, HDDFS_FCB *f);
 NTSTATUS EXFATIsDirectoryEmpty(HDDFS_VOLUME *v, HDDFS_FCB *dir);

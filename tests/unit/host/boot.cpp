@@ -17,9 +17,8 @@ using namespace xk; // the kernel's subsystems as memory::, objects::, ...
 namespace host {
 std::string CurrentTestName;
 
-// What the 2BL leaves (kernel/boot/bl.cpp): its page directory at 0xF000 (identity and 0x80000000 large pages for
-// 256 MB, the self-map, the GPU window, flash) and the kernel image at 0x10000 (here only its PE header, which the
-// memory manager reads for the image extent).
+// What the 2BL leaves (kernel/boot/bl.cpp): its page directory at 0xF000 (identity and 0x80000000 large pages for 256 MB, the self-map, the GPU window, flash)
+// and the kernel image at 0x10000 (here only its PE header, which the memory manager reads for the image extent).
 static void Make2blState() {
     memset(Phys(0), 0, PHYS_SIZE);
     auto pd = (uint32_t *)Phys(0xF000);

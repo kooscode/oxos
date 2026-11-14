@@ -1,5 +1,5 @@
-// Test extension for the kernel extension loader (spec/oxos_internal/34 §9.3), run by tests/boot_test.py
-// --extensions: it records in its state page what the kernel did, for the test to read back after quick reboots.
+// Test extension for the kernel extension loader (spec/oxos_internal/34 §9.3), run by tests/boot_test.py --extensions: it records in its state page what the
+// kernel did, for the test to read back after quick reboots.
 #include <oxos_sdk.h>
 
 namespace {
@@ -28,8 +28,8 @@ struct SAVED {
 SAVED *Saved;
 decltype(&oxos::NtOpenFile) NextNtOpenFile;
 
-NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
-                              PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions) {
+NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                              ULONG ShareAccess, ULONG OpenOptions) {
     __atomic_add_fetch(&Saved->OpenCalls, 1, __ATOMIC_RELAXED);
     return NextNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
 }
@@ -78,8 +78,7 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
     for (ULONG event = OXOS_EVENT_TITLE_LOADING; event <= OXOS_EVENT_TITLE_EXITING; event++)
         Context->Api->RegisterEvent(Context, event, reinterpret_cast<PVOID>(OnEvent), reinterpret_cast<PVOID>(event));
     oxos_log(Context, "launch %lu, generation %lu", Saved->Launches, Context->Generation);
-    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile),
-                                    reinterpret_cast<PVOID *>(&NextNtOpenFile));
+    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
 }
 
 void NTAPI Main(OXOS_CONTEXT *Context) {

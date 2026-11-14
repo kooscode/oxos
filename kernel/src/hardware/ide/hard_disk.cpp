@@ -1,5 +1,5 @@
-// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5), 48-bit
-// addressing for disks over 128 GiB (spec/oxos_internal/04_lba48.md).
+// IDE hard disk: identification, partition devices, DMA transfers, IOCTLs (spec/stock/04 §2, §4, §5), 48-bit addressing for disks over 128 GiB
+// (spec/oxos_internal/04_lba48.md).
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
 #include <hardware/chipset/serial.h>
@@ -40,9 +40,8 @@ struct IDE_DISK_DEVICE {
     UCHAR Kind;
 };
 
-// On an exFAT disk (disk_layout.cpp), Partition1-6 are folders of the exFAT volume (the file system mounts them through
-// FolderOfPartition), and Partition0's retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at
-// sectors 1024-2047, before the volume.
+// On an exFAT disk (disk_layout.cpp), Partition1-6 are folders of the exFAT volume (the file system mounts them through FolderOfPartition), and Partition0's
+// retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at sectors 1024-2047, before the volume.
 constexpr LONGLONG IDE_RESERVED_LENGTH = 0x80000, IDE_RESERVED_AT = 1024 * 512;
 static const char *const DiskFolders[] = {nullptr, "E", "C", "X", "Y", "Z", "F"}; // folder of Partition1-6
 
@@ -63,8 +62,8 @@ static PIDE_DISK_EXTENSION DiskExtension(PDEVICE_OBJECT dev) {
     return (PIDE_DISK_EXTENSION)dev->DeviceExtension;
 }
 
-// READ/WRITE: sector-aligned, inside the partition. The stack location is rewritten for the transfer:
-// Read.ByteOffset.QuadPart = absolute LBA, Read.CacheBuffer = current buffer address.
+// READ/WRITE: sector-aligned, inside the partition. The stack location is rewritten for the transfer: Read.ByteOffset.QuadPart = absolute LBA, Read.CacheBuffer
+// = current buffer address.
 static NTSTATUS NTAPI DiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     PPARTITION_INFORMATION part = &DiskExtension(DeviceObject)->PartitionInformation;
@@ -74,10 +73,9 @@ static NTSTATUS NTAPI DiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     UCHAR kind = DiskKind(DeviceObject);
     // Partition0 on an exFAT disk: the reserved area only.
     bool remap = storage::DiskHasEXFATLayout && kind == IDE_KIND_PARTITION;
-    // Writes refused on a foreign disk, and after a format or a partition delete until the next boot (the old
-    // partitions' file systems would write into the new layout); the whole-disk device writes the new layout.
-    bool foreignWrite = (storage::DiskHasForeignLayout || storage::DiskReformatted) &&
-                        s->MajorFunction == IRP_MJ_WRITE && kind != IDE_KIND_PHYSICAL;
+    // Writes refused on a foreign disk, and after a format or a partition delete until the next boot (the old partitions' file systems would write into the new
+    // layout); the whole-disk device writes the new layout.
+    bool foreignWrite = (storage::DiskHasForeignLayout || storage::DiskReformatted) && s->MajorFunction == IRP_MJ_WRITE && kind != IDE_KIND_PHYSICAL;
     if (kind == IDE_KIND_FOLDER || (remap && offset + len > IDE_RESERVED_LENGTH) || foreignWrite) {
         Irp->IoStatus.Status = kind == IDE_KIND_FOLDER ? STATUS_INVALID_DEVICE_REQUEST
                                : foreignWrite          ? (NTSTATUS)0xC00000A2 // STATUS_MEDIA_WRITE_PROTECTED
@@ -90,8 +88,7 @@ static NTSTATUS NTAPI DiskReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (remap)
         offset += IDE_RESERVED_AT;
     if (((ULONG)buffer & 1) || (len & 0x1FF) || (offset & 0x1FF) || offset < 0 ||
-        offset + len > (remap ? (LONGLONG)DiskLengthInSectors << 9 : part->PartitionLength.QuadPart) ||
-        Irp->SegmentArray) {
+        offset + len > (remap ? (LONGLONG)DiskLengthInSectors << 9 : part->PartitionLength.QuadPart) || Irp->SegmentArray) {
         Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
         Irp->IoStatus.Information = 0;
         IofCompleteRequest(Irp, 0);
@@ -130,8 +127,7 @@ static void DiskStartTransfer(PIRP Irp) {
     bool ext = DiskSupportsLba48 && lba + count > 0x0FFFFFFF;
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
-    if (!WaitForIdeStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000) ||
-        !ProgramIdeDma(s->Parameters.Read.CacheBuffer, chunk)) {
+    if (!WaitForIdeStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000) || !ProgramIdeDma(s->Parameters.Read.CacheBuffer, chunk)) {
         KfLowerIrql(old);
         DiskCompleteIrp(Irp, STATUS_IO_DEVICE_ERROR);
         return;
@@ -239,8 +235,7 @@ static NTSTATUS NTAPI DiskDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             return CompleteIrpWith(Irp, STATUS_INFO_LENGTH_MISMATCH, 0);
         auto v = (VERIFY_INFORMATION *)s->Parameters.DeviceIoControl.InputBuffer;
         PPARTITION_INFORMATION p = &DiskExtension(DeviceObject)->PartitionInformation;
-        bool inside = v->StartingOffset.QuadPart >= 0 &&
-                      v->StartingOffset.QuadPart + v->Length <= p->PartitionLength.QuadPart;
+        bool inside = v->StartingOffset.QuadPart >= 0 && v->StartingOffset.QuadPart + v->Length <= p->PartitionLength.QuadPart;
         return CompleteIrpWith(Irp, inside ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER, 0);
     }
     case IOCTL_IDE_PASS_THROUGH: {
@@ -257,9 +252,9 @@ static NTSTATUS NTAPI DiskDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     }
 }
 
-// IDE pass-through (spec/stock/04 §5): the task file is written as given (the drive select is ours), PIO data follows
-// in the direction HostSendsData says, and the returned registers are copied back. The command itself may fail
-// (status ERR): the IRP still succeeds. Ours polls at the channel IRQL, up to 10 s like the reference timeout.
+// IDE pass-through (spec/stock/04 §5): the task file is written as given (the drive select is ours), PIO data follows in the direction HostSendsData says, and
+// the returned registers are copied back. The command itself may fail (status ERR): the IRP still succeeds. Ours polls at the channel IRQL, up to 10 s like the
+// reference timeout.
 static NTSTATUS DiskExecutePassThrough(ATA_PASS_THROUGH *p) {
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
@@ -332,16 +327,14 @@ DRIVER_OBJECT DiskDriverObject = {
     DiskStartIo,
     nullptr,
     nullptr,
-    {DiskCreateClose, DiskCreateClose, DiskReadWrite, DiskReadWrite, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, DiskFlush, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
-     DiskDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest}};
+    {DiskCreateClose, DiskCreateClose, DiskReadWrite, DiskReadWrite, IoInvalidDeviceRequest, IoInvalidDeviceRequest, DiskFlush, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, IoInvalidDeviceRequest, DiskDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest}};
 
 // --- Partition devices
 
 NTSTATUS CreateDiskDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE_OBJECT *Out, UCHAR Kind) {
     PDEVICE_OBJECT dev;
-    NTSTATUS status = IoCreateDevice(&DiskDriverObject, sizeof(IDE_DISK_DEVICE), nullptr, FILE_DEVICE_DISK,
-                                     FALSE, &dev);
+    NTSTATUS status = IoCreateDevice(&DiskDriverObject, sizeof(IDE_DISK_DEVICE), nullptr, FILE_DEVICE_DISK, FALSE, &dev);
     if (!NT_SUCCESS(status))
         return status;
     dev->Flags |= 0x44;
@@ -361,8 +354,8 @@ NTSTATUS CreateDiskDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE
     return STATUS_SUCCESS;
 }
 
-// The folder partitions of an exFAT disk report the retail places and sizes (F: after E:, the whole volume), so
-// partition queries look as on a retail disk (spec §6 of the storage spec).
+// The folder partitions of an exFAT disk report the retail places and sizes (F: after E:, the whole volume), so partition queries look as on a retail disk
+// (spec §6 of the storage spec).
 static void DiskFolderGeometry(ULONG Number, LONGLONG *Start, LONGLONG *Length) {
     static const ULONG starts[] = {0, 0x55F400, 0x465400, 0x400, 0x177400, 0x2EE400, 0xEE8AB0};
     *Start = (LONGLONG)starts[Number] << 9;
@@ -392,8 +385,7 @@ static NTSTATUS DiskCreatePartitionDevice(ULONG Number) {
         if (!NT_SUCCESS(status))
             return status;
         PDEVICE_OBJECT expected = nullptr;
-        if (!__atomic_compare_exchange_n(&DiskPartitionTable[Number], &expected, dev, false, __ATOMIC_SEQ_CST,
-                                         __ATOMIC_SEQ_CST))
+        if (!__atomic_compare_exchange_n(&DiskPartitionTable[Number], &expected, dev, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
             IoDeleteDevice(dev);
         return STATUS_SUCCESS;
     }
@@ -404,17 +396,15 @@ static NTSTATUS DiskCreatePartitionDevice(ULONG Number) {
     if (!NT_SUCCESS(status))
         return status;
     PDEVICE_OBJECT expected = nullptr;
-    if (__atomic_compare_exchange_n(&DiskPartitionTable[Number], &expected, dev, false, __ATOMIC_SEQ_CST,
-                                    __ATOMIC_SEQ_CST))
+    if (__atomic_compare_exchange_n(&DiskPartitionTable[Number], &expected, dev, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
         return STATUS_SUCCESS;
     IoDeleteDevice(dev); // somebody else created it first
     return STATUS_SUCCESS;
 }
 
 // \Device\Harddisk0 parses "PartitionN[\rest]" and hands the rest to the partition device.
-static NTSTATUS NTAPI DiskParseDirectory(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
-                                         POBJECT_STRING CompleteName, POBJECT_STRING RemainingName,
-                                         PVOID Context, PVOID *Object) {
+static NTSTATUS NTAPI DiskParseDirectory(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
+                                         POBJECT_STRING RemainingName, PVOID Context, PVOID *Object) {
     *Object = nullptr;
     if (!RemainingName->Length)
         return STATUS_ACCESS_DENIED;
@@ -444,12 +434,10 @@ static NTSTATUS NTAPI DiskParseDirectory(PVOID ParseObject, POBJECT_TYPE ObjectT
         if (!NT_SUCCESS(status))
             return status;
     }
-    return io::ParseDevice(DiskPartitionTable[number], ObjectType, Attributes, CompleteName, &rest, Context,
-                           Object);
+    return io::ParseDevice(DiskPartitionTable[number], ObjectType, Attributes, CompleteName, &rest, Context, Object);
 }
 
-static OBJECT_TYPE DiskDirectoryObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr,
-                                                  DiskParseDirectory, nullptr, 'xedI'};
+static OBJECT_TYPE DiskDirectoryObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, DiskParseDirectory, nullptr, 'xedI'};
 
 // --- Initialisation (PIO commands, polled)
 
@@ -479,16 +467,15 @@ static void CopyIdentifyString(const USHORT *words, ULONG count, char *out, STRI
 
 // The drive password: HMAC-SHA1(XboxHDKey, model, serial) over the trimmed IDENTIFY strings, zero-padded to 32.
 void ComputeDiskPassword(PUCHAR Password) {
-    XcHMAC(XboxHDKey, 16, (PUCHAR)HalDiskModelNumber.Buffer, HalDiskModelNumber.Length,
-           (PUCHAR)HalDiskSerialNumber.Buffer, HalDiskSerialNumber.Length, Password);
+    XcHMAC(XboxHDKey, 16, (PUCHAR)HalDiskModelNumber.Buffer, HalDiskModelNumber.Length, (PUCHAR)HalDiskSerialNumber.Buffer, HalDiskSerialNumber.Length,
+           Password);
 }
 
 static NTSTATUS DiskExecutePassThrough(ATA_PASS_THROUGH *p);
 
-// SECURITY UNLOCK (0xF2, user password) with the pass-through code (the reference sends the IOCTL to Partition0;
-// ours runs on the boot thread, which cannot own IRPs), then IDENTIFY again and
-// INITIALIZE DEVICE PARAMETERS (16 heads, 63 sectors). Failures: fatal error 6 (unlock, except on manufacturing
-// units) or 8 (the follow-up commands).
+// SECURITY UNLOCK (0xF2, user password) with the pass-through code (the reference sends the IOCTL to Partition0; ours runs on the boot thread, which cannot own
+// IRPs), then IDENTIFY again and INITIALIZE DEVICE PARAMETERS (16 heads, 63 sectors). Failures: fatal error 6 (unlock, except on manufacturing units) or 8 (the
+// follow-up commands).
 static void DiskUnlock(const UCHAR *Password) {
     UCHAR block[512]; // on the boot stack: a static buffer would cost a resident image page (spec/stock/09 §7)
     RtlZeroMemory(block, sizeof(block));
@@ -522,13 +509,13 @@ static void DiskUnlock(const UCHAR *Password) {
         user_interface::ShowFatalError(8);
 }
 
-// End of disk init (cold boot, retail units): count the power cycle in the refurb record (on the disk, so it runs
-// on a system thread: the title launcher calls it).
+// End of disk init (cold boot, retail units): count the power cycle in the refurb record (on the disk, so it runs on a system thread: the title launcher calls
+// it).
 void CountDiskPowerCycle() {
     if (titles::ConsoleGameRegion & 0x80000000)
         return;
-    // Only on a disk known to be ours: exFAT (the record goes to the reserved-area copy), or FATX with a FATX volume
-    // on C: or E:. A disk taken for FATX by mistake (its layout could not be read) keeps sector 3 untouched.
+    // Only on a disk known to be ours: exFAT (the record goes to the reserved-area copy), or FATX with a FATX volume on C: or E:. A disk taken for FATX by
+    // mistake (its layout could not be read) keeps sector 3 untouched.
     storage::DetectDiskLayout();
     if (storage::DiskHasForeignLayout)
         return;
@@ -536,8 +523,7 @@ void CountDiskPowerCycle() {
         auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'cpLI');
         bool foundFATX = false;
         for (ULONG n = 1; sector && n <= 2 && !foundFATX; n++) {
-            foundFATX = storage::DiskPartitions[n].Length &&
-                        NT_SUCCESS(storage::ReadDiskSectors(storage::DiskPartitions[n].Start, sector, 512)) &&
+            foundFATX = storage::DiskPartitions[n].Length && NT_SUCCESS(storage::ReadDiskSectors(storage::DiskPartitions[n].Start, sector, 512)) &&
                         RtlCompareMemory(sector, "FATX", 4) == 4;
         }
         if (sector)
@@ -557,12 +543,11 @@ void CountDiskPowerCycle() {
 void InitDisk() {
     outb(IDE_DRIVE, 0xA0);
     // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviations:
-    // - a disk that is no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as
-    //   XboxDev/cromwell does; some drives and SATA bridges only set DRDY once they have seen a command. Only a disk
-    //   still busy after 30 s is fatal error 7;
-    // - the wait runs at the caller's IRQL (the reference raises first), so the boot splash and jingle keep running
-    //   while a hard disk spins up; it only reads the alternate status, and the interrupt handler only acknowledges
-    //   an interrupt nobody expects. Its limits follow the clock, as other threads take the processor meanwhile.
+    // - a disk that is no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as XboxDev/cromwell does; some drives and SATA
+    //   bridges only set DRDY once they have seen a command. Only a disk still busy after 30 s is fatal error 7;
+    // - the wait runs at the caller's IRQL (the reference raises first), so the boot splash and jingle keep running while a hard disk spins up; it only reads
+    //   the alternate status, and the interrupt handler only acknowledges an interrupt nobody expects. Its limits follow the clock, as other threads take the
+    //   processor meanwhile.
     const ULONGLONG start = KeQueryInterruptTime();
     for (;;) {
         UCHAR st = inb(IDE_ALT_STATUS);
@@ -607,16 +592,15 @@ void InitDisk() {
     if (DiskLengthInSectors < 0xEE8AB0)
         user_interface::ShowFatalError((DiskLastStatus = inb(IDE_ALT_STATUS), 9));
     DiskSecurityWord = id[128];
-    XK_SERIAL("disk: %.40s, %lu sectors%s, security %#x, status %#x\n", DiskModel, (ULONG)DiskLengthInSectors,
-              DiskSupportsLba48 ? " (LBA48)" : "", DiskSecurityWord, DiskLastStatus);
+    XK_SERIAL("disk: %.40s, %lu sectors%s, security %#x, status %#x\n", DiskModel, (ULONG)DiskLengthInSectors, DiskSupportsLba48 ? " (LBA48)" : "",
+              DiskSecurityWord, DiskLastStatus);
 
     OBJECT_STRING name;
     RtlInitAnsiString(&name, "\\Device\\Harddisk0");
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     PVOID dir;
     HANDLE h;
-    if (NT_SUCCESS(ObCreateObject(&DiskDirectoryObjectType, &attrs, sizeof(ULONG), &dir)) &&
-        NT_SUCCESS(ObInsertObject(dir, &attrs, 0, &h)))
+    if (NT_SUCCESS(ObCreateObject(&DiskDirectoryObjectType, &attrs, sizeof(ULONG), &dir)) && NT_SUCCESS(ObInsertObject(dir, &attrs, 0, &h)))
         NtClose(h);
     CreateDiskDevice(0, 0, (LONGLONG)DiskLengthInSectors << 9, &DiskPartitionTable[0]);
     storage::InitDiskLayout();

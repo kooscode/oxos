@@ -1,6 +1,5 @@
-// The boot splash (src/boot_splash/): the splash (spec/oxos_internal/00_boot_splash.md) and the jingle
-// (spec/oxos_internal/17_boot_jingle.md). Boot-only code, freed before the first title starts, except EndSplash
-// and StopBootSound. The splash draws with the kernel's graphics (graphics/graphics.h).
+// The boot splash (src/boot_splash/): the splash (spec/oxos_internal/00_boot_splash.md) and the jingle (spec/oxos_internal/17_boot_jingle.md). Boot-only code,
+// freed before the first title starts, except EndSplash and StopBootSound. The splash draws with the kernel's graphics (graphics/graphics.h).
 #pragma once
 #include <runtime/types.h>
 

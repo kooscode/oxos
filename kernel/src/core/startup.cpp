@@ -19,23 +19,21 @@
 #include "../../../tools/statedump/statedump.h"
 #endif
 
-// The quick reboot's state (spec/stock/02 §1: flag, count, and the boot keys kept for the restart), which the assembly
-// in arch/ reads: outside the namespace, C names.
+// The quick reboot's state (spec/stock/02 §1: flag, count, and the boot keys kept for the restart), which the assembly in arch/ reads: outside the namespace, C
+// names.
 XK_PERSIST volatile UCHAR KiQuickRebootFlag;
 XK_PERSIST volatile ULONG KiQuickRebootCount;
 XK_PERSIST UCHAR KiPersistedBootKeys[32];
 
 namespace xk::core {
 
-// Open BIOS image (spec/stock/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from
-// XboxDev/cromwell) that hardware::chipset::InitEeprom tries in turn. Kept across quick reboots, which re-enter with
-// arg0 = 0.
+// Open BIOS image (spec/stock/01 §1, §5): no EEPROM key, but HMAC states of the known EEPROM keys (from XboxDev/cromwell) that hardware::chipset::InitEeprom
+// tries in turn. Kept across quick reboots, which re-enter with arg0 = 0.
 constexpr ULONG XK_OPEN_BOOT_MAGIC = 0x534F584F, XK_KEY_STATES_MAGIC = 0x4B42584F; // 'OXOS', 'OXBK'
 XK_PERSIST ULONG EepromKeyStates[8][10];
 XK_PERSIST ULONG EepromKeyStateCount;
 
-// The certificate key handed over by the 2BL (spec 01 §1): the per-title keys are derived from it
-// (titles/title_loader.cpp).
+// The certificate key handed over by the 2BL (spec 01 §1): the per-title keys are derived from it (titles/title_loader.cpp).
 XK_PERSIST UCHAR CertKey[16];
 
 // Boot progress, readable from the emulator monitor (tests/boot_test.py).
@@ -66,8 +64,8 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     XK_SERIAL("\nOXOS kernel (" __DATE__ " " __TIME__ "): %s boot\n", KiQuickRebootFlag ? "quick" : "cold");
 #endif
 
-    // Take the keys, then erase the 2BL image (0x6000 bytes at 0x80400000), as the stock kernel does. A quick
-    // reboot keeps memory: the keys come from the persisted copy and nothing is erased.
+    // Take the keys, then erase the 2BL image (0x6000 bytes at 0x80400000), as the stock kernel does. A quick reboot keeps memory: the keys come from the
+    // persisted copy and nothing is erased.
     bool quick = KiQuickRebootFlag;
     RtlCopyMemory(XboxEEPROMKey, bootKeys, 16);
     RtlCopyMemory(CertKey, bootKeys + 16, 16);
@@ -86,9 +84,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiBootStep("processor");
     InitializeProcessor();
 
-    // As the reference (KfLowerIrql(1) at 0x8001C838, before its executive init): the start-up runs at APC_LEVEL, and
-    // with interrupts enabled from the PIC set-up on, so the clock, timers and DPCs run while the drivers start.
-    // (The PIC is not set up yet: only the IRQL value changes here; hardware::chipset::InitPic masks every line.)
+    // As the reference (KfLowerIrql(1) at 0x8001C838, before its executive init): the start-up runs at APC_LEVEL, and with interrupts enabled from the PIC
+    // set-up on, so the clock, timers and DPCs run while the drivers start. (The PIC is not set up yet: only the IRQL value changes here;
+    // hardware::chipset::InitPic masks every line.)
     KiPcr.Irql = APC_LEVEL;
     SetStage(post_code::HalPhase0);
     KiBootStep("HAL phase 0");
@@ -107,12 +105,11 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     diagnostics::ReportLastWords();
     XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
     {
-        [[maybe_unused]] static const char *what[] = {"not run", "64 MB (64 MB + x reads back at x)", "more than 64 MB",
-                                     "unclear"};
+        [[maybe_unused]] static const char *what[] = {"not run", "64 MB (64 MB + x reads back at x)", "more than 64 MB", "unclear"};
         [[maybe_unused]] ULONG top;
         HalReadWritePCISpace(0, 0, 0x84, &top, 4, FALSE);
-        XK_SERIAL("ram: %s; GPU memory size %08lx -> %08lx (PFB 0x100200 %08lx); host top of memory %08lx\n",
-                  what[memory::RamProbe & 3], memory::GpuSizeBefore, memory::GpuSizeAfter,
+        XK_SERIAL("ram: %s; GPU memory size %08lx -> %08lx (PFB 0x100200 %08lx); host top of memory %08lx\n", what[memory::RamProbe & 3], memory::GpuSizeBefore,
+                  memory::GpuSizeAfter,
                   *(volatile ULONG *)0xFD100200, top);
     }
     if (!quick)
@@ -121,10 +118,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     InitializeTimers();
     KiBootStep("scheduler");
     InitializeScheduler(KiBootStack + KI_BOOT_STACK_SIZE, KiBootStack);
-    // The reference enables its system interrupts here (0x80031876, called at 0x80015907, after the memory manager
-    // and the hardware detection, before the object and I/O managers): the clock (IRQ 0, latched) first. Its IRQ 8
-    // (RTC, whose interrupts stay off) and IRQ 11 (SMBus) handlers have no counterpart here yet (our SMBus polls);
-    // IRQ 12 (SMC events) is enabled by hardware::chipset::StartSmcEvents below.
+    // The reference enables its system interrupts here (0x80031876, called at 0x80015907, after the memory manager and the hardware detection, before the
+    // object and I/O managers): the clock (IRQ 0, latched) first. Its IRQ 8 (RTC, whose interrupts stay off) and IRQ 11 (SMBus) handlers have no counterpart
+    // here yet (our SMBus polls); IRQ 12 (SMC events) is enabled by hardware::chipset::StartSmcEvents below.
     HalEnableSystemInterrupt(0, Latched); // PIT clock
     XK_SERIAL("boot: clock interrupt on\n");
     KiBootStep("object manager");
@@ -139,8 +135,8 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     hardware::video::InitVideo();
     if (!quick)
         hardware::chipset::InitSmcColdBoot();
-    // The splash (and its jingle) before the IDE set-up: a hard disk or DVD drive can take seconds to spin up after
-    // power-on, and the drive waits run at this thread's IRQL, so the splash shows meanwhile (spec/oxos_internal/00).
+    // The splash (and its jingle) before the IDE set-up: a hard disk or DVD drive can take seconds to spin up after power-on, and the drive waits run at this
+    // thread's IRQL, so the splash shows meanwhile (spec/oxos_internal/00).
     if (!quick)
         boot_splash::StartSplash();
     XK_SERIAL("boot: splash started\n");

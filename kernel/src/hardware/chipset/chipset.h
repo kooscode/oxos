@@ -1,6 +1,6 @@
-// The chipset (src/hardware/chipset/; spec/stock/02_executive_init.md §3, spec/stock/06, spec/stock/12): PCI set-up and
-// HAL phase 0 (chipset.cpp, init.cpp), the PIC, PIT and CMOS clock (interrupts_timers.cpp), SMBus and the SMC
-// (smbus.cpp), the EEPROM (eeprom.cpp), string port I/O (port_io.cpp); the debug serial port is in serial.h.
+// The chipset (src/hardware/chipset/; spec/stock/02_executive_init.md §3, spec/stock/06, spec/stock/12): PCI set-up and HAL phase 0 (chipset.cpp, init.cpp),
+// the PIC, PIT and CMOS clock (interrupts_timers.cpp), SMBus and the SMC (smbus.cpp), the EEPROM (eeprom.cpp), string port I/O (port_io.cpp); the debug serial
+// port is in serial.h.
 #pragma once
 #include <core/core.h>
 #include <runtime/runtime.h>
@@ -17,8 +17,7 @@ typedef struct _PCI_SLOT_NUMBER {
     } u;
 } PCI_SLOT_NUMBER;
 
-XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG RegisterNumber, PVOID Buffer,
-                                      ULONG Length, BOOLEAN WritePCISpace);
+XBAPI void NTAPI HalReadWritePCISpace(ULONG BusNumber, ULONG SlotNumber, ULONG RegisterNumber, PVOID Buffer, ULONG Length, BOOLEAN WritePCISpace);
 
 XBAPI ULONG NTAPI HalGetInterruptVector(ULONG BusInterruptLevel, PKIRQL Irql);
 XBAPI void NTAPI HalEnableSystemInterrupt(ULONG BusInterruptLevel, KINTERRUPT_MODE InterruptMode);
@@ -68,10 +67,8 @@ void WritePci32(ULONG bus, ULONG dev, ULONG reg, ULONG v);
 } // namespace xk::hardware::chipset
 
 // SMBus, the SMC and firmware return (smbus.cpp, spec/stock/12).
-XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue,
-                                       PULONG DataValue);
-XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue,
-                                        ULONG DataValue);
+XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue, PULONG DataValue);
+XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
 namespace xk::hardware::chipset {
@@ -103,8 +100,7 @@ XBAPI UCHAR XboxHDKey[16]; // the console's hard disk key, from the EEPROM's sec
 namespace xk::hardware::chipset {
 void InitEeprom(); // start-up: read the EEPROM, decrypt the security section, take the HD key and the game region
 } // namespace xk::hardware::chipset
-XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength,
-                                               PULONG ResultLength);
+XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PVOID Value, ULONG ValueLength, PULONG ResultLength);
 XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOID Value, ULONG ValueLength);
 XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength, BOOLEAN DoWrite);
 namespace xk::hardware::chipset {

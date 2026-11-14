@@ -1,11 +1,10 @@
-// Network boot in the 2BL (NETBOOT=1 images; spec/oxos_internal/09_netboot.md; PC side: tools/netboot/netboot.py),
-// linked into the 2BL with bl.cpp, which calls Boot (bl.h). Before the kernel in flash is unpacked, the 2BL brings up
-// the NIC, asks the network for a boot image (UDP broadcasts to port 5141) and, if a PC answers, downloads a 256 KiB
-// open image into RAM and boots the kernel and key block from it instead. No answer, no link, or a bad download: the
-// flash image boots as usual.
+// Network boot in the 2BL (NETBOOT=1 images; spec/oxos_internal/09_netboot.md; PC side: tools/netboot/netboot.py), linked into the 2BL with bl.cpp, which calls
+// Boot (bl.h). Before the kernel in flash is unpacked, the 2BL brings up the NIC, asks the network for a boot image (UDP broadcasts to port 5141) and, if a PC
+// answers, downloads a 256 KiB open image into RAM and boots the kernel and key block from it instead. No answer, no link, or a bad download: the flash image
+// boots as usual.
 //
-// Runs with paging off (physical addresses), interrupts off, polled. The card's registers, bring-up and shut-down are
-// shared with the kernel's network stack (hardware/ethernet/nic.h); here: the rings, the frames and the protocol.
+// Runs with paging off (physical addresses), interrupts off, polled. The card's registers, bring-up and shut-down are shared with the kernel's network stack
+// (hardware/ethernet/nic.h); here: the rings, the frames and the protocol.
 
 #include "bl.h"
 #include <hardware/ethernet/nic.h>
@@ -18,8 +17,8 @@ constexpr ULONG RING = 0x00300000;                    // RX_COUNT receive descri
 constexpr ULONG RX_BUFFERS = 0x00301000, TX_BUFFERS = 0x00320000;
 constexpr ULONG IMAGE = 0x00800000;                   // the downloaded bank
 constexpr ULONG RX_COUNT = 32, BUFFER = NIC_BUFFER, BANK_SIZE = 0x40000, CHUNK = 1024;
-// A download is one bank or more (a kernel too large for one bank, a netbooted title's files after it), at most
-// 4 MiB: 0x800000-0xBFFFFF, free RAM while the 2BL runs (the kernel keeps a title's pages: titles/title_netboot.cpp).
+// A download is one bank or more (a kernel too large for one bank, a netbooted title's files after it), at most 4 MiB: 0x800000-0xBFFFFF, free RAM while the
+// 2BL runs (the kernel keeps a title's pages: titles/title_netboot.cpp).
 constexpr ULONG MAX_IMAGE = 0x400000;
 
 // The protocol (tools/netboot/netboot.py): its UDP port, the packet magic and the operations.
@@ -125,16 +124,14 @@ static const Message *Receive(ULONG Session, const UCHAR **Data) {
             memcpy(frame, (const void *)d.Buffer, length);
         ReturnReceiveDescriptor(d);
         RxHead = (RxHead + 1) % RX_COUNT;
-        if (!ok || length < 14 + 20 + 8 + sizeof(Message) || frame[12] != 0x08 || frame[13] != 0x00 ||
-            frame[14 + 9] != 17)
+        if (!ok || length < 14 + 20 + 8 + sizeof(Message) || frame[12] != 0x08 || frame[13] != 0x00 || frame[14 + 9] != 17)
             continue;
         ULONG ihl = (frame[14] & 0x0F) * 4;
         const UCHAR *u = frame + 14 + ihl;
         if (14 + ihl + 8 + sizeof(Message) > length || (u[2] << 8 | u[3]) != PORT)
             continue;
         auto m = (const Message *)(u + 8);
-        if (m->Magic != MAGIC || m->Session != Session || m->Op == OP_HELLO || m->Op == OP_READ ||
-            m->Op == OP_BOOT)
+        if (m->Magic != MAGIC || m->Session != Session || m->Op == OP_HELLO || m->Op == OP_READ || m->Op == OP_BOOT)
             continue; // not for us, or our own broadcast looped back
         *Data = u + 8 + sizeof(Message);
         return m;
@@ -168,8 +165,8 @@ static const UCHAR *Fetch() {
         return nullptr;
     const ULONG session = CardTicks() ^ 0x4F584E42;
 #if XK_MCPX_DUMP
-    // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs
-    // (tools/mcpx_dump/mcpx_dump.py receive). Offset 0, Length 512, the 512 bytes as data.
+    // The MCPX boot ROM copied by the entry code (start.S): sent three times, 100 ms apart, before the HELLOs (tools/mcpx_dump/mcpx_dump.py receive). Offset 0,
+    // Length 512, the 512 bytes as data.
     if (*(volatile ULONG *)0x2200 == 0x5850434D) {
         for (int i = 0; i < 3; i++) {
             const Message dump = {MAGIC, OP_MCPX, 1, 0, session, 0, 512};

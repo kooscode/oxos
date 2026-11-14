@@ -17,15 +17,14 @@ PDEVICE_OBJECT DvdDeviceObject;
 static LONGLONG DvdLength;      // media size in bytes (READ CAPACITY), 0 = unknown
 volatile UCHAR DvdLastSense[3]; // key, ASC, ASCQ of the last failed command
 
-constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C,
-                IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014, IOCTL_DVD_READ_STRUCTURE = 0x335140;
+constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C, IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014,
+                IOCTL_DVD_READ_STRUCTURE = 0x335140;
 constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE = (NTSTATUS)0xC0000013;
 
 // --- Polled ATAPI packet command (PIO data phase). Called with the channel owned (StartIo) or at init.
 
-// Sense mapping and retries (spec/stock/04c §1, as the reference's): UNIT ATTENTION (the disc changed) and NOT READY
-// with ASC 04 (becoming ready) are retried, the latter after 100 ms; a status is reported only once the retries are
-// used.
+// Sense mapping and retries (spec/stock/04c §1, as the reference's): UNIT ATTENTION (the disc changed) and NOT READY with ASC 04 (becoming ready) are retried,
+// the latter after 100 ms; a status is reported only once the retries are used.
 enum IDEX_RETRY { NoRetry, RetryNow, RetryLater };
 
 static IDEX_RETRY DvdSenseRetry() {
@@ -227,8 +226,8 @@ static void DvdFinish(PIRP Irp, NTSTATUS Status, ULONG_PTR Information) {
     StartNextIdePacket();
 }
 
-// SCSI_PASS_THROUGH_DIRECT (Xbox layout): {Length, ScsiStatus, PathId, TargetId, Lun, CdbLength, SenseInfoLength,
-// DataIn, DataTransferLength, TimeOutValue, DataBuffer, SenseInfoOffset, Cdb[16]}.
+// SCSI_PASS_THROUGH_DIRECT (Xbox layout): {Length, ScsiStatus, PathId, TargetId, Lun, CdbLength, SenseInfoLength, DataIn, DataTransferLength, TimeOutValue,
+// DataBuffer, SenseInfoOffset, Cdb[16]}.
 struct SCSI_PASS_THROUGH_DIRECT_ {
     USHORT Length;
     UCHAR ScsiStatus, PathId, TargetId, Lun, CdbLength, SenseInfoLength, DataIn;
@@ -241,14 +240,12 @@ struct SCSI_PASS_THROUGH_DIRECT_ {
 };
 
 // --- Xbox drive security for titles (spec/stock/04 §3a). Titles built with later XDKs check the disc themselves:
-// MODE SENSE page 0x3E must report an authenticated Xbox disc, and the security sector's timestamp (+0x4AB, against the
-// certificate's), SHA-1 (+0x4CF) and RSA signature (+0x4E3, under XePublicKeyData) must all hold.
-// - XePublicKeyData is an open exponent-1 key (src/titles/title_loader.cpp), so every security sector handed to a
-//   title gets the signature block of its own digest in place of Microsoft's signature, which this kernel cannot
-//   check.
-// - A drive without the Xbox security commands (emulators: xemu rejects page 0x3E and answers the security read with
-//   the ordinary physical-format block) gets them emulated: an authenticated page, and a security sector built for the
-//   running title.
+// MODE SENSE page 0x3E must report an authenticated Xbox disc, and the security sector's timestamp (+0x4AB, against the certificate's), SHA-1 (+0x4CF) and RSA
+// signature (+0x4E3, under XePublicKeyData) must all hold.
+// - XePublicKeyData is an open exponent-1 key (src/titles/title_loader.cpp), so every security sector handed to a title gets the signature block of its own
+//   digest in place of Microsoft's signature, which this kernel cannot check.
+// - A drive without the Xbox security commands (emulators: xemu rejects page 0x3E and answers the security read with the ordinary physical-format block) gets
+//   them emulated: an authenticated page, and a security sector built for the running title.
 constexpr ULONG SECURITY_SECTOR_SIZE = 0x664;
 static UCHAR DvdSecurityMode; // 0 = not probed yet, 1 = the drive implements page 0x3E, 2 = emulated
 
@@ -270,8 +267,8 @@ static bool DvdEmulatingSecurity() {
     return DvdSecurityMode == 2;
 }
 
-// The PKCS#1 block of the digest at +0x4CF, little-endian as XcVerifyPKCS1Signature decodes it with the exponent-1 key:
-// digest reversed | SHA-1 DigestInfo reversed | 00 | FF.. | 01 | 00 (256 bytes).
+// The PKCS#1 block of the digest at +0x4CF, little-endian as XcVerifyPKCS1Signature decodes it with the exponent-1 key: digest reversed | SHA-1 DigestInfo
+// reversed | 00 | FF.. | 01 | 00 (256 bytes).
 static void DvdSignSecuritySector(PUCHAR sector) {
     static const UCHAR sha1Prefix[] = {0x14, 0x04, 0x00, 0x05, 0x1A, 0x02, 0x03, 0x0E,
                                        0x2B, 0x05, 0x06, 0x09, 0x30, 0x21, 0x30};
@@ -285,8 +282,8 @@ static void DvdSignSecuritySector(PUCHAR sector) {
     sig[255] = 0;
 }
 
-// An emulated security sector for the running title: its certificate timestamp at +0x4AB, the SHA-1 of the length
-// (dword 0x4CB) and the 0x4CB bytes at +4 at +0x4CF (as titles compute it), no challenge table.
+// An emulated security sector for the running title: its certificate timestamp at +0x4AB, the SHA-1 of the length (dword 0x4CB) and the 0x4CB bytes at +4 at
+// +0x4CF (as titles compute it), no challenge table.
 static void DvdBuildSecuritySector(PUCHAR sector) {
     RtlZeroMemory(sector, SECURITY_SECTOR_SIZE);
     sector[4] = 1; // the disc's id byte, as in the emulated mode page (byte 13)
@@ -311,8 +308,8 @@ bool IsDvdSecurityCommand(const UCHAR *cdb, const UCHAR *data, ULONG length) {
            DvdIsSecurityRead(cdb);
 }
 
-// The emulated answer to a security command (IsDvdSecurityCommand), without the drive. Disc images use it too
-// (storage/virtual_disc.cpp): the security sector comes back signed for the open key, as from an emulating drive.
+// The emulated answer to a security command (IsDvdSecurityCommand), without the drive. Disc images use it too (storage/virtual_disc.cpp): the security sector
+// comes back signed for the open key, as from an emulating drive.
 void EmulatedDvdSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTATUS *status, ULONG *got) {
     *status = STATUS_SUCCESS;
     *got = 0;
@@ -338,9 +335,8 @@ static bool DvdEmulateSecurity(const UCHAR *cdb, PUCHAR data, ULONG length, NTST
     if (!IsDvdSecurityCommand(cdb, data, length) || !DvdEmulatingSecurity())
         return false;
     if (cdb[0] == 0x5A) {
-        // The drive still gets the command, as with a drive that has the page: its answer is dropped. After a disc
-        // change the first command reports it (xemu: "no media" once, then UNIT ATTENTION), and the mount's
-        // authentication is the command that takes it, as on the reference.
+        // The drive still gets the command, as with a drive that has the page: its answer is dropped. After a disc change the first command reports it (xemu:
+        // "no media" once, then UNIT ATTENTION), and the mount's authentication is the command that takes it, as on the reference.
         UCHAR scratch[28];
         ULONG ignored;
         AtapiPio(cdb, scratch, sizeof(scratch), false, &ignored);
@@ -421,8 +417,8 @@ static void DvdControl(PIRP Irp) {
 }
 
 // --- Xbox game disc authentication (spec/stock/04 §3a). The drive's security mode page (0x3E) and the disc's security
-// sector (READ DVD STRUCTURE 0xFF02FDFF, layer 0xFE) provide a challenge table; replaying it proves a pressed Xbox
-// disc. Success marks the media as "title disc" (XBE media type 2) and pins the disc's title.
+// sector (READ DVD STRUCTURE 0xFF02FDFF, layer 0xFE) provide a challenge table; replaying it proves a pressed Xbox disc. Success marks the media as "title
+// disc" (XBE media type 2) and pins the disc's title.
 
 constexpr NTSTATUS STATUS_TOO_MANY_SECRETS = (NTSTATUS)0xC0000156, STATUS_UNRECOGNIZED_MEDIA_ = (NTSTATUS)0xC0000014;
 volatile ULONG DvdAuthStage, DvdAuthStatus; // diagnostics: how far the last authentication got
@@ -436,8 +432,7 @@ static NTSTATUS DvdPassThrough(const UCHAR *cdb, PVOID data, ULONG length, bool 
     p.DataTransferLength = length;
     p.DataBuffer = data;
     RtlCopyMemory(p.Cdb, cdb, 12);
-    return IoSynchronousDeviceIoControlRequest(IOCTL_SCSI_PASS_THROUGH_DIRECT, DvdDeviceObject, &p, sizeof(p),
-                                               nullptr, 0, nullptr, FALSE);
+    return IoSynchronousDeviceIoControlRequest(IOCTL_SCSI_PASS_THROUGH_DIRECT, DvdDeviceObject, &p, sizeof(p), nullptr, 0, nullptr, FALSE);
 }
 
 // MODE SENSE(10), the 28-byte security page; byte 11 must be 1.
@@ -502,8 +497,8 @@ static NTSTATUS DvdAuthenticate() {
         XcSHAInit(sha);
         XcSHAUpdate(sha, sector + 4, 0x4CB);
         XcSHAFinal(sha, digest);
-        // The digest must match; the reference also checks an RSA signature over it with Microsoft's public key,
-        // which this open kernel does not carry (spec/stock/04 §3a).
+        // The digest must match; the reference also checks an RSA signature over it with Microsoft's public key, which this open kernel does not carry
+        // (spec/stock/04 §3a).
         if (page[13] == sector[4] && RtlCompareMemory(digest, sector + 0x4CF, 20) == 20) {
             XcSHAInit(sha);
             XcSHAUpdate(sha, sector + 0x4A3, 0x2C);
@@ -549,8 +544,7 @@ static void DvdStartTransfer(PIRP Irp) {
     PIO_STACK_LOCATION s = IoGetCurrentIrpStackLocation(Irp);
     ULONG chunk = s->Parameters.Read.Length < 0x20000 ? s->Parameters.Read.Length : 0x20000;
     ULONG lba = s->Parameters.Read.ByteOffset.LowPart, blocks = chunk >> 11;
-    UCHAR cdb[12] = {0x28, 0, (UCHAR)(lba >> 24), (UCHAR)(lba >> 16), (UCHAR)(lba >> 8), (UCHAR)lba, 0,
-                     (UCHAR)(blocks >> 8), (UCHAR)blocks};
+    UCHAR cdb[12] = {0x28, 0, (UCHAR)(lba >> 24), (UCHAR)(lba >> 16), (UCHAR)(lba >> 8), (UCHAR)lba, 0, (UCHAR)(blocks >> 8), (UCHAR)blocks};
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
     if (!ProgramIdeDma(s->Parameters.Read.CacheBuffer, chunk) || !AtapiIssue(cdb, true, 0)) {
@@ -635,18 +629,15 @@ DRIVER_OBJECT DvdDriverObject = {
     DvdStartIo,
     nullptr,
     nullptr,
-    {DvdCreateClose, DvdCreateClose, DvdRead, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, DvdDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+    {DvdCreateClose, DvdCreateClose, DvdRead, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, DvdDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest}};
 
-// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
-// 4 IDENTIFY PACKET). Called at the channel's IRQL.
-// One attempt at bringing device 1 up (SET FEATURES PIO 4, UDMA 2; IDENTIFY PACKET DEVICE): 0, or the failing step.
-// Wait for (status & mask) == value, as WaitForIdeStatus, but give up early when nothing answers: a command
-// written with device 1 selected and no device 1 on the cable leaves the status register at 0 (device 0 answers
-// the read for it; seen with SSDs), while a device that is there shows BSY within microseconds and then DRQ, DRDY
-// or ERR. 1 = the status was reached, 0 = timed out, -1 = the status stayed 0 for 100 ms (no device 1).
+// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode, 4 IDENTIFY PACKET). Called at the channel's
+// IRQL. One attempt at bringing device 1 up (SET FEATURES PIO 4, UDMA 2; IDENTIFY PACKET DEVICE): 0, or the failing step. Wait for (status & mask) == value, as
+// WaitForIdeStatus, but give up early when nothing answers: a command written with device 1 selected and no device 1 on the cable leaves the status register at
+// 0 (device 0 answers the read for it; seen with SSDs), while a device that is there shows BSY within microseconds and then DRQ, DRDY or ERR. 1 = the status
+// was reached, 0 = timed out, -1 = the status stayed 0 for 100 ms (no device 1).
 static int DvdWaitForStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
     ULONG quiet = 0;
     for (ULONG i = 0; i < timeoutUs; i += 10) {
@@ -677,8 +668,7 @@ static ULONG DvdIdentify() {
         return 4;
     for (int i = 0; i < 256; i++)
         inw(IDE_DATA);
-    // A drive that offers more than one block (DRQ still up) holds the channel, and the disk on the same cable with
-    // it: read until it lets go (bounded).
+    // A drive that offers more than one block (DRQ still up) holds the channel, and the disk on the same cable with it: read until it lets go (bounded).
     for (int i = 0; i < 65536 && (inb(IDE_ALT_STATUS) & IDE_STATUS_DRQ); i++)
         inw(IDE_DATA);
     inb(IDE_STATUS);
@@ -692,13 +682,11 @@ static void DvdReset() {
     WaitForIdeStatus(IDE_STATUS_BSY, 0, 5000000);
 }
 
-// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode,
-// 4 IDENTIFY PACKET). Called at the channel's IRQL. A drive that answers but is not ready yet (a DVD drive still
-// starting up when the boot is fast) is reset and tried again, for about 30 s in all (the reference's busy wait).
-// Waits for device 1 to be ready for its first command: 0, or why there is no drive (1 nothing on the bus, 2 still
-// busy after 30 s). Runs at the caller's IRQL (OXOS: the reference waits raised), so the boot splash and jingle keep
-// running while a drive starts up; it only reads the alternate status. Its limits follow the clock, as other threads
-// take the processor meanwhile.
+// Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode, 4 IDENTIFY PACKET). Called at the channel's
+// IRQL. A drive that answers but is not ready yet (a DVD drive still starting up when the boot is fast) is reset and tried again, for about 30 s in all (the
+// reference's busy wait). Waits for device 1 to be ready for its first command: 0, or why there is no drive (1 nothing on the bus, 2 still busy after 30 s).
+// Runs at the caller's IRQL (OXOS: the reference waits raised), so the boot splash and jingle keep running while a drive starts up; it only reads the alternate
+// status. Its limits follow the clock, as other threads take the processor meanwhile.
 static ULONG DvdWaitReady() {
     outb(IDE_DRIVE, 0xB0);
     KeStallExecutionProcessor(1);
@@ -712,9 +700,8 @@ static ULONG DvdWaitReady() {
             return 2;
         KeStallExecutionProcessor(10);
     }
-    // A drive still starting up (a fast boot: the DVD drive spins up for seconds after power-on) reads back a
-    // status without DRDY, or a floating pattern (0x3F / 0x7F / 0xFF): wait up to 10 s for it to be ready before
-    // the first command, instead of failing the transfer-mode command and taking the no-drive path.
+    // A drive still starting up (a fast boot: the DVD drive spins up for seconds after power-on) reads back a status without DRDY, or a floating pattern (0x3F
+    // / 0x7F / 0xFF): wait up to 10 s for it to be ready before the first command, instead of failing the transfer-mode command and taking the no-drive path.
     for (const ULONG ready = elapsedMs(); elapsedMs() - ready < 10000;) {
         UCHAR s = inb(IDE_ALT_STATUS);
         if (s == 0) // nothing answers (device 0 reads back 0 for an absent device 1)
@@ -744,16 +731,16 @@ static ULONG DvdStart() {
     return step;
 }
 
-// A console without a DVD drive (OXOS deviation: the reference stops with fatal error 10, 11 or 12) still gets
-// \Device\CdRom0, because every title's start-up links D: to it, but the device acts as an empty drive: reads and
-// drive commands fail with STATUS_NO_MEDIA_IN_DEVICE without touching the bus, so the dashboard starts.
+// A console without a DVD drive (OXOS deviation: the reference stops with fatal error 10, 11 or 12) still gets \Device\CdRom0, because every title's start-up
+// links D: to it, but the device acts as an empty drive: reads and drive commands fail with STATUS_NO_MEDIA_IN_DEVICE without touching the bus, so the
+// dashboard starts.
 void InitDvdDrive() {
     ULONG reason = DvdWaitReady();
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     DvdAbsentReason = reason ? reason : DvdStart();
     if (DvdAbsentReason) {
-        // The disk again. A busy device ignores the device-select register, so device 1 was reset (and waited for)
-        // above; wait for the disk to be idle too before the next request (bounded).
+        // The disk again. A busy device ignores the device-select register, so device 1 was reset (and waited for) above; wait for the disk to be idle too
+        // before the next request (bounded).
         outb(IDE_DRIVE, 0xA0);
         KeStallExecutionProcessor(1);
         WaitForIdeStatus(IDE_STATUS_BSY, 0, 5000000);

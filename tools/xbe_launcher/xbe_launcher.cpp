@@ -1,8 +1,6 @@
-// XBE launcher (nxdk + SDL3, open source). Reads D:\launch.txt (one path: a drive letter path such as
-// F:\apps\demo\default.xbe, or a \Device\... path) and launches that XBE through the launch data page and a quick
-// reboot, the way a dashboard does. It leaves the screen alone (black after the kernel's splash), so the title starts
-// with no video mode change of its own; only when something is wrong does it start SDL (tools/sdl_screen), say why
-// and stay there.
+// XBE launcher (nxdk + SDL3, open source). Reads D:\launch.txt (one path: a drive letter path such as F:\apps\demo\default.xbe, or a \Device\... path) and
+// launches that XBE through the launch data page and a quick reboot, the way a dashboard does. It leaves the screen alone (black after the kernel's splash), so
+// the title starts with no video mode change of its own; only when something is wrong does it start SDL (tools/sdl_screen), say why and stay there.
 #include <hal/xbox.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
@@ -100,8 +98,7 @@ int main() {
     NTSTATUS status = OpenStatus(path);
     if (!NT_SUCCESS(status)) {
         Heading();
-        sdl_screen::Print("%s\n= %s\n\nCannot open it: status 0x%08lx\n", start, path,
-                          static_cast<unsigned long>(status));
+        sdl_screen::Print("%s\n= %s\n\nCannot open it: status 0x%08lx\n", start, path, static_cast<unsigned long>(status));
         sdl_screen::ShowForever();
     }
     XLaunchXBE(path);

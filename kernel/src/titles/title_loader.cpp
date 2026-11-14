@@ -32,8 +32,7 @@ constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
 // The XOR keys of the header's entry point (+0x128) and kernel thunk table address (+0x158): retail and debug XBEs.
 constexpr ULONG XBE_ENTRY_KEY_RETAIL = 0xA8FC57AB, XBE_THUNK_KEY_RETAIL = 0x5B6D40B6;
 constexpr ULONG XBE_ENTRY_KEY_DEBUG = 0x94859D4B, XBE_THUNK_KEY_DEBUG = 0xEFB1F152;
-constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10,
-                XBE_SECTION_TAIL_RO = 0x20;
+constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_HEAD_RO = 0x10, XBE_SECTION_TAIL_RO = 0x20;
 constexpr ULONG XBE_INIT_LIMIT_64_MB = 4; // header +0x124 (init flags): the title keeps to 64 MB on a 128 MB console
 constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_ORDINAL_NOT_FOUND = (NTSTATUS)0xC0000138,
                    STATUS_REGION_MISMATCH = (NTSTATUS)0xC0050001, STATUS_MEDIA_MISMATCH = (NTSTATUS)0xC0050002;
@@ -60,9 +59,9 @@ XK_PERSIST UCHAR TitleDiscAuthenticated; // set by the DVD authentication (src/h
 XBAPI UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
 XBAPI UCHAR XePublicKeyData[284];
 UCHAR XboxSignatureKey[16], XboxLANKey[16], XboxAlternateSignatureKeys[16][16];
-// No Microsoft key: an open BSAFE key with public exponent 1 (2048 bits, modulus unused), so a valid signature is the
-// PKCS#1 block of the digest itself. The CD-ROM driver signs the disc security sectors titles read this way
-// (spec/stock/04 §3a); anything signed by Microsoft does not verify, as with no key at all (spec/stock/05 §4.5).
+// No Microsoft key: an open BSAFE key with public exponent 1 (2048 bits, modulus unused), so a valid signature is the PKCS#1 block of the digest itself. The
+// CD-ROM driver signs the disc security sectors titles read this way (spec/stock/04 §3a); anything signed by Microsoft does not verify, as with no key at all
+// (spec/stock/05 §4.5).
 UCHAR XePublicKeyData[284] = {'R', 'S', 'A', '1', 0x08, 0x01, 0, 0, 0, 0x08, 0, 0, 0xFF, 0, 0, 0, 1, 0, 0, 0};
 
 XK_PERSIST ULONG ConsoleGameRegion = 0x7FFFFFFF; // all regions until the EEPROM is read
@@ -85,16 +84,14 @@ static NTSTATUS ReadWholeFile(HANDLE h, PVOID buffer, ULONG length, ULONG offset
 static NTSTATUS OpenImage(HANDLE *h) {
     OBJECT_ATTRIBUTES a = {nullptr, &XeImageFileName, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
-    return NtOpenFile(h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
-                      FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    return NtOpenFile(h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
 // --- Kernel files in C:\OXOS (title_patches.ini, oxos_launch_redirect.ini): C: on a FATX disk, /C/OXOS on an
 // exFAT disk
 
-// A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does
-// not open (*Status says why: STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be
-// read.
+// A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
+// STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be read.
 char *ReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
     *Got = 0;
     OBJECT_STRING name;
@@ -102,8 +99,7 @@ char *ReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *St
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
-                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
     *Status = status;
     if (!NT_SUCCESS(status))
         return nullptr;
@@ -139,8 +135,7 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
     constexpr ULONG MAX_PATCH_FILE = 0x100000;
     ULONG got;
     NTSTATUS status;
-    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE,
-                              'tPeX', &got, &status);
+    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
             XK_SERIAL("patches: title_patches.ini not read: %#lx\n", status);
@@ -152,8 +147,8 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
     XE_PATCH_COUNTS counts = {};
     ULONG used = out ? ini_file::ParseTitlePatches(text, got, TitleId, Version, out, room, &counts) : 0;
     ExFreePool(text);
-    XK_SERIAL("patches: title %08lx version %lu: %lu sections, %lu patches, %lu lines not understood\n", TitleId,
-              Version, counts.Sections, counts.Patches, counts.Errors);
+    XK_SERIAL("patches: title %08lx version %lu: %lu sections, %lu patches, %lu lines not understood\n", TitleId, Version, counts.Sections, counts.Patches,
+              counts.Errors);
     if (!used) {
         if (out)
             ExFreePool(out);
@@ -169,17 +164,16 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
             XK_SERIAL("patches: %s\n", line);
             continue;
         }
-        // The patch, and the match bytes it is checked against, inside one section (so both are loaded when the
-        // patch is applied).
+        // The patch, and the match bytes it is checked against, inside one section (so both are loaded when the patch is applied).
         bool inside = false;
         for (ULONG i = 0; i < Count && !inside; i++) {
             ULONG va = Sections[i].VirtualAddress, size = Sections[i].VirtualSize;
-            inside = r->Address >= va && r->Address - va + ini_file::PatchSpan(r) <= size &&
-                     (!r->Check || (r->Check >= va && r->Check - va + r->OriginalLength <= size));
+            inside = r->Address >= va && r->Address - va + ini_file::PatchSpan(r) <= size && (!r->Check || (r->Check >= va &&
+                     r->Check - va + r->OriginalLength <= size));
         }
         if (!inside) {
-            XK_SERIAL("patches: %#lx (%lu bytes) is not inside one section of the title%s: skipped\n", r->Address,
-                      ini_file::PatchSpan(r), r->Check ? " with its match bytes" : "");
+            XK_SERIAL("patches: %#lx (%lu bytes) is not inside one section of the title%s: skipped\n", r->Address, ini_file::PatchSpan(r),
+                      r->Check ? " with its match bytes" : "");
             r->Kind = 0xFFFF;
         }
     }
@@ -187,10 +181,9 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
     PatchFileSize = used;
 }
 
-// A patch is written only where its current bytes are: so never into another build of the title, nor into a
-// launcher that carries the title's identity (spec/oxos_internal/25 §3.2).
-// The patches checked against a section's `match =` bytes go first: another patch of the section may change those
-// bytes (a section's first patch can sit at its match address).
+// A patch is written only where its current bytes are: so never into another build of the title, nor into a launcher that carries the title's identity
+// (spec/oxos_internal/25 §3.2). The patches checked against a section's `match =` bytes go first: another patch of the section may change those bytes (a
+// section's first patch can sit at its match address).
 static void ApplyPatches(const XBE_SECTION_HEADER *s) {
     for (ULONG pass = 0; pass < 2; pass++) {
         for (ULONG at = 0; at < PatchFileSize;) {
@@ -201,16 +194,15 @@ static void ApplyPatches(const XBE_SECTION_HEADER *s) {
                 continue;
             auto target = (PUCHAR)r->Address;
             auto check = (PUCHAR)(r->Check ? r->Check : r->Address);
-            // Already there first: a patch checked against another place must not be written twice (its match bytes
-            // may still be there when an earlier patch of the section has not changed them).
+            // Already there first: a patch checked against another place must not be written twice (its match bytes may still be there when an earlier patch of
+            // the section has not changed them).
             if (RtlCompareMemory(target, ini_file::PatchData(r), r->Length) == r->Length) {
                 XK_SERIAL("patches: %#lx: already there\n", r->Address);
             } else if (RtlCompareMemory(check, ini_file::PatchOriginal(r), r->OriginalLength) == r->OriginalLength) {
                 RtlCopyMemory(target, ini_file::PatchData(r), r->Length);
                 XK_SERIAL("patches: %#lx: %u bytes written\n", r->Address, r->Length);
             } else {
-                XK_SERIAL("patches: %#lx: the %s bytes differ: not written\n", r->Address,
-                          r->Check ? "match" : "current");
+                XK_SERIAL("patches: %#lx: the %s bytes differ: not written\n", r->Address, r->Check ? "match" : "current");
             }
         }
     }
@@ -237,8 +229,7 @@ static NTSTATUS LoadXbeSection(HANDLE file, XBE_SECTION_HEADER *s) {
         XcSHAUpdate(ctx, (PUCHAR)&raw, 4);
         XcSHAUpdate(ctx, (PUCHAR)s->VirtualAddress, raw);
         XcSHAFinal(ctx, digest);
-        // Homebrew images carry no valid digests; like the header signature this is not enforced (policy,
-        // spec/stock/05).
+        // Homebrew images carry no valid digests; like the header signature this is not enforced (policy, spec/stock/05).
         for (int i = 0; i < 20; i++) {
             if (digest[i] != s->SectionDigest[i]) {
                 DigestMismatches = DigestMismatches + 1;
@@ -349,8 +340,7 @@ static NTSTATUS MediaFlags(HANDLE file, ULONG *flags) {
         return STATUS_SUCCESS;
     }
     ULONG in[6] = {}, out[6] = {};
-    status = NtDeviceIoControlFile(file, nullptr, nullptr, nullptr, &iosb, 0x335140 /*IOCTL_DVD_READ_STRUCTURE*/,
-                                   in, sizeof(in), out, sizeof(out));
+    status = NtDeviceIoControlFile(file, nullptr, nullptr, nullptr, &iosb, 0x335140 /*IOCTL_DVD_READ_STRUCTURE*/, in, sizeof(in), out, sizeof(out));
     if (status == (NTSTATUS)0xC0000014) { // not a DVD
         *flags = 0xC;
         return STATUS_SUCCESS;
@@ -396,8 +386,8 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
     XK_SERIAL("load: first page read %#lx (%lu bytes)\n", status, got);
     ULONG sizeOfHeaders = *(ULONG *)(head + 0x108), sizeOfImage = *(ULONG *)(head + 0x10C);
     bool reserved = false;
-    if (NT_SUCCESS(status) && (got < 0x178 || *(ULONG *)head != XBE_MAGIC || sizeOfHeaders < 0x179 ||
-                               sizeOfImage < sizeOfHeaders || *(ULONG *)(head + 0x104) != XBE_BASE))
+    if (NT_SUCCESS(status) && (got < 0x178 || *(ULONG *)head != XBE_MAGIC || sizeOfHeaders < 0x179 || sizeOfImage < sizeOfHeaders ||
+                               *(ULONG *)(head + 0x104) != XBE_BASE))
         status = STATUS_INVALID_IMAGE_FORMAT;
     if (NT_SUCCESS(status)) {
         PVOID base = (PVOID)XBE_BASE;
@@ -420,15 +410,14 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
     XK_SERIAL("load: headers %#lx\n", status);
     // The header fields only once the headers are in memory: a file that failed the first-page checks reserved nothing.
     bool loaded = NT_SUCCESS(status);
-    ULONG cert = loaded ? XbeField(0x118) : 0, sections = loaded ? XbeField(0x120) : 0,
-          count = loaded ? XbeField(0x11C) : 0;
+    ULONG cert = loaded ? XbeField(0x118) : 0, sections = loaded ? XbeField(0x120) : 0, count = loaded ? XbeField(0x11C) : 0;
     if (NT_SUCCESS(status) && (cert < XBE_BASE || cert + 0x1D0 > XBE_BASE + sizeOfHeaders || sections < XBE_BASE ||
                                sections + count * 0x38 > XBE_BASE + sizeOfHeaders || XbeField(0x15C)))
         status = STATUS_INVALID_IMAGE_FORMAT;
     if (NT_SUCCESS(status)) {
-        // Entry point and thunk table are XOR-encoded: the retail keys when they give an entry point and thunk table
-        // inside the image, else the debug keys. A thunk table at 0 is an XBE with no kernel imports for the loader
-        // (packed XBEs such as EvolutionX's dashboard resolve their own), and is left unresolved.
+        // Entry point and thunk table are XOR-encoded: the retail keys when they give an entry point and thunk table inside the image, else the debug keys. A
+        // thunk table at 0 is an XBE with no kernel imports for the loader (packed XBEs such as EvolutionX's dashboard resolve their own), and is left
+        // unresolved.
         ULONG entry = XbeField(0x128), thunk = XbeField(0x158);
         auto inside = [&](ULONG va) {
             return va >= XBE_BASE && va < XBE_BASE + sizeOfImage;
@@ -448,9 +437,9 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         if (!usable(entry, thunk))
             status = STATUS_INVALID_IMAGE_FORMAT;
     }
-    // Media/region policy: XK_RETAIL_MEDIA_POLICY=1 enforces both like a retail kernel; the default behaves like a
-    // modded BIOS (which patches the stock kernel to allow any media and region), so discs that cannot be
-    // authenticated (backups, XISOs in emulators) still start. Authenticated discs are pinned either way.
+    // Media/region policy: XK_RETAIL_MEDIA_POLICY=1 enforces both like a retail kernel; the default behaves like a modded BIOS (which patches the stock kernel
+    // to allow any media and region), so discs that cannot be authenticated (backups, XISOs in emulators) still start. Authenticated discs are pinned either
+    // way.
     ULONG region = NT_SUCCESS(status) ? *(ULONG *)(cert + 0xA0) : 0;
     if (NT_SUCCESS(status) && !(region & ConsoleGameRegion) && XK_RETAIL_MEDIA_POLICY)
         status = STATUS_REGION_MISMATCH;
@@ -477,17 +466,15 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         }
     }
     XK_SERIAL("load: sections %#lx\n", status);
-    // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard), as the
-    // reference does (spec/stock/05 §4.16). A title on the hard disk still starts: a console without a DVD drive
-    // reports an eject at every boot.
+    // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard), as the reference does (spec/stock/05 §4.16). A title on
+    // the hard disk still starts: a console without a DVD drive reports an eject at every boot.
     if (NT_SUCCESS(status) && hardware::chipset::ArmSmcEvents(Dashboard) && !Dashboard && media != 1)
         status = (NTSTATUS)0xC000003A;
     XK_SERIAL("load: SMC events armed\n");
-    // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on
-    // non-secure media, boot flag 4 and manufacturing units; turned back on for everything else.
+    // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on non-secure media, boot flag 4 and
+    // manufacturing units; turned back on for everything else.
     if (NT_SUCCESS(status)) {
-        bool keepOff = Dashboard || (*(ULONG *)(cert + 0x9C) & 0x80000000) || (hardware::chipset::BootFlags & 4) ||
-                       (ConsoleGameRegion & 0x80000000);
+        bool keepOff = Dashboard || (*(ULONG *)(cert + 0x9C) & 0x80000000) || (hardware::chipset::BootFlags & 4) || (ConsoleGameRegion & 0x80000000);
         if (!keepOff && (!KiQuickRebootFlag || (hardware::chipset::BootFlags & 8))) {
             hardware::chipset::BootFlags &= ~8;
             while (!NT_SUCCESS(HalWriteSMBusValue(0x20, 0x19, FALSE, 0))) {
@@ -559,10 +546,8 @@ volatile ULONG TitleLaunched; // 1 = disc title, 2 = dashboard, 3 = from the Lau
 volatile ULONG LaunchReason;           // the cold-boot pre-launch check result (§1)
 volatile ULONG DashboardLaunchData[3]; // diagnostics: {type, reason, code} as last written for the dashboard
 
-// The dashboard: EvoX's when it is installed (C:\evoxdash.xbe, or E:\evoxdash.xbe), else the Xbox dashboard
-// (C:\xboxdash.xbe), else C:\Dashboard\default.xbe (where the XBL Dashboard installs its loader). The first that
-// loads is started
-// (spec/oxos_internal/19_dashboard_choice.md).
+// The dashboard: EvoX's when it is installed (C:\evoxdash.xbe, or E:\evoxdash.xbe), else the Xbox dashboard (C:\xboxdash.xbe), else C:\Dashboard\default.xbe
+// (where the XBL Dashboard installs its loader). The first that loads is started (spec/oxos_internal/19_dashboard_choice.md).
 static const char *const Dashboards[] = {
     "\\Device\\Harddisk0\\Partition2\\evoxdash.xbe",
     "\\Device\\Harddisk0\\Partition1\\evoxdash.xbe",
@@ -596,8 +581,7 @@ static void LaunchDashboard() {
             code += ldp->DashboardReason;
         else if (TitleDiscAuthenticated)
             code = 20;
-        // The error's screen until X is pressed, then the File Manager (spec/oxos_internal/32 §1); the fatal
-        // error without a network card.
+        // The error's screen until X is pressed, then the File Manager (spec/oxos_internal/32 §1); the fatal error without a network card.
         user_interface::NoDashboardError(code);
         if (ServeFileManager())
             return;
@@ -630,13 +614,12 @@ static void FreeLaunchDataPage() {
 }
 
 static bool ShowPlainDashboardError(NTSTATUS s) {
-    return s == (NTSTATUS)0xC0000010 || s == (NTSTATUS)0xC0000013 || s == (NTSTATUS)0xC0000015 ||
-           s == (NTSTATUS)0xC0000034 || s == (NTSTATUS)0xC000003A || s == (NTSTATUS)0xC00000A3 ||
-           s == (NTSTATUS)0xC000014F;
+    return s == (NTSTATUS)0xC0000010 || s == (NTSTATUS)0xC0000013 || s == (NTSTATUS)0xC0000015 || s == (NTSTATUS)0xC0000034 || s == (NTSTATUS)0xC000003A ||
+           s == (NTSTATUS)0xC00000A3 || s == (NTSTATUS)0xC000014F;
 }
 
-// Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0);
-// the link is removed again when the image does not load.
+// Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0); the link is removed again when the image
+// does not load.
 static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength) {
     OBJECT_STRING link;
     RtlInitAnsiString(&link, "\\??\\D:");
@@ -650,15 +633,13 @@ static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength) {
 
 // --- Launch redirects from C:\OXOS\oxos_launch_redirect.ini (spec/oxos_internal/33)
 
-// Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names
-// it: true once the target is loaded. False when there is no file or no section for Path, or the target does not load
-// (the caller then starts Path as asked, §4).
+// Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names it: true once the target is loaded. False
+// when there is no file or no section for Path, or the target does not load (the caller then starts Path as asked, §4).
 static bool RedirectLaunch(PCSZ Path) {
     constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
     ULONG got;
     NTSTATUS status;
-    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE,
-                              'rLeX', &got, &status);
+    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE, 'rLeX', &got, &status);
     if (!text)
         return false;
     XE_REDIRECT redirect;
@@ -722,9 +703,8 @@ static void LaunchTitle(ULONG Reason) {
             return;
         }
     } else {
-        // B. A title delivered by netboot (titles/title_netboot.cpp), else the disc, else the dashboard. The netbooted
-        // title runs whatever the dashboard would be asked to do (a console without a clock backup always has a reason:
-        // the clock is not set).
+        // B. A title delivered by netboot (titles/title_netboot.cpp), else the disc, else the dashboard. The netbooted title runs whatever the dashboard would
+        // be asked to do (a console without a clock backup always has a reason: the clock is not set).
         if (memory::BootPagesPresent() && LaunchNetbootTitle()) {
             TitleLaunched = 1;
             return;
@@ -751,8 +731,7 @@ static void LaunchTitle(ULONG Reason) {
     LaunchDashboardWithReason(1, status == STATUS_REGION_MISMATCH ? 3 : status == STATUS_MEDIA_MISMATCH ? 5 : 1);
 }
 
-// Just before the title runs: the splash ends, and the LaunchDataPage moves below the kernel, out of the title's way
-// (spec/stock/05 §5).
+// Just before the title runs: the splash ends, and the LaunchDataPage moves below the kernel, out of the title's way (spec/stock/05 §5).
 static void PrepareToEnterTitle() {
     boot_splash::EndSplash();
     if (!LaunchDataPage)
@@ -774,8 +753,8 @@ static void PrepareToEnterTitle() {
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 
-// §1: bit 0 the clock was never set (CMOS signature, see NtSetSystemTime) or is outside [2001, 2101);
-// bits 1/2 the user settings are unreadable or lack a language (+0x08) / time zone (+0x30).
+// §1: bit 0 the clock was never set (CMOS signature, see NtSetSystemTime) or is outside [2001, 2101); bits 1/2 the user settings are unreadable or lack a
+// language (+0x08) / time zone (+0x30).
 static ULONG CheckFirstBoot() {
     ULONG reason = 0;
     if (hardware::chipset::CmosSignatureValid()) {
@@ -797,8 +776,7 @@ static ULONG CheckFirstBoot() {
     return reason;
 }
 
-// The OXOS File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads: true then. False when the
-// network card cannot be used.
+// The OXOS File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads: true then. False when the network card cannot be used.
 bool ServeFileManager() {
     char path[260];
     for (NTSTATUS last = STATUS_SUCCESS; webserver::Start(last, path, sizeof(path));) {
@@ -813,8 +791,8 @@ bool ServeFileManager() {
     return false;
 }
 
-// Boot flag 0x40 (the tray was opened during boot, spec/stock/05 §3): wait while the tray is closing or settling, then
-// the disc if one is in, otherwise the dashboard.
+// Boot flag 0x40 (the tray was opened during boot, spec/stock/05 §3): wait while the tray is closing or settling, then the disc if one is in, otherwise the
+// dashboard.
 static void WaitForTray() {
     ULONG state;
     for (;;) {
@@ -839,8 +817,8 @@ static void WaitForTray() {
     }
 }
 
-// Cold boot with X pressed during the splash (spec/oxos_internal/32): the File Manager instead of a title. False
-// without the press, or when the network card cannot be used (the title is then chosen as usual).
+// Cold boot with X pressed during the splash (spec/oxos_internal/32): the File Manager instead of a title. False without the press, or when the network card
+// cannot be used (the title is then chosen as usual).
 static bool RunFileManager() {
     boot_splash::WaitForSplash();
     return gamepad::XButtonPressed && ServeFileManager();
@@ -860,8 +838,7 @@ void LaunchAtColdBoot() {
     LaunchReason = CheckFirstBoot();
     if (LaunchReason)
         return LaunchTitle(LaunchReason);
-    // A title delivered by netboot runs instead of the dashboard the boot flags would choose
-    // (spec/oxos_internal/09_netboot.md §7).
+    // A title delivered by netboot runs instead of the dashboard the boot flags would choose (spec/oxos_internal/09_netboot.md §7).
     if (LaunchNetbootTitle()) {
         TitleLaunched = 1;
         return;
@@ -905,8 +882,7 @@ static void NTAPI TitleThread(PVOID, PVOID) {
 
 void StartTitleLauncher() {
     HANDLE h;
-    if (NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, 0x3000, 0, nullptr, nullptr, nullptr, FALSE, FALSE,
-                                          TitleThread)))
+    if (NT_SUCCESS(PsCreateSystemThreadEx(&h, 0, 0x3000, 0, nullptr, nullptr, nullptr, FALSE, FALSE, TitleThread)))
         NtClose(h);
 }
 

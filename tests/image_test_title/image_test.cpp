@@ -1,8 +1,7 @@
-// Image test title (nxdk + SDL3, open source): the simplest title that shows the kernel, a title and video all work.
-// It starts SDL (tools/sdl_screen: video mode, GPU renderer), loads a JPEG from its disc (D:\picture.jpg) and decodes
-// it on the console with libjpeg (file I/O, memory allocation), shows it as a texture, and then keeps a status panel
-// and the front LED changing once a second, so a frozen console is obvious (README.md in this folder). The same state
-// is kept in XkImageTest for automated runs (found in RAM by its signature).
+// Image test title (nxdk + SDL3, open source): the simplest title that shows the kernel, a title and video all work. It starts SDL (tools/sdl_screen: video
+// mode, GPU renderer), loads a JPEG from its disc (D:\picture.jpg) and decodes it on the console with libjpeg (file I/O, memory allocation), shows it as a
+// texture, and then keeps a status panel and the front LED changing once a second, so a frozen console is obvious (README.md in this folder). The same state is
+// kept in XkImageTest for automated runs (found in RAM by its signature).
 #include <hal/video.h>
 extern "C" {
 #include <hal/led.h> // no C++ linkage guard of its own
@@ -79,8 +78,8 @@ volatile struct {
 
 namespace {
 
-// libjpeg reports a fatal error by calling error_exit, which must not return: it jumps back to DecodeJpeg's setjmp.
-// DecodeJpeg holds no objects with destructors, so the jump skips nothing.
+// libjpeg reports a fatal error by calling error_exit, which must not return: it jumps back to DecodeJpeg's setjmp. DecodeJpeg holds no objects with
+// destructors, so the jump skips nothing.
 struct JpegError {
     jpeg_error_mgr Manager; // first: libjpeg passes &Manager as cinfo->err
     std::jmp_buf Jump;
@@ -90,10 +89,9 @@ void JpegErrorExit(j_common_ptr cinfo) {
     std::longjmp(reinterpret_cast<JpegError *>(cinfo->err)->Jump, 1);
 }
 
-// Decodes a JPEG into 32-bit pixels in the byte order B, G, R, x (SDL_PIXELFORMAT_XRGB8888). The pixels are
-// allocated with new[] and handed to *pixels as soon as they exist, so the caller frees them on every path.
-PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned char **pixels, unsigned int &width,
-                         unsigned int &height) {
+// Decodes a JPEG into 32-bit pixels in the byte order B, G, R, x (SDL_PIXELFORMAT_XRGB8888). The pixels are allocated with new[] and handed to *pixels as soon
+// as they exist, so the caller frees them on every path.
+PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned char **pixels, unsigned int &width, unsigned int &height) {
     jpeg_decompress_struct cinfo;
     JpegError error;
     cinfo.err = jpeg_std_error(&error.Manager);
@@ -126,9 +124,9 @@ PictureStatus DecodeJpeg(const unsigned char *data, std::size_t size, unsigned c
     return PictureStatus::Shown;
 }
 
-// Decodes the JPEG into a texture and sets it as the screen's picture, scaled (keeping its aspect on the TV) and
-// centred in the picture band. In widescreen the TV stretches the 640-pixel width over 16:9 instead of 4:3, so every
-// pixel shows 4/3 as wide: the picture is drawn 3/4 as wide to come out right. The texture stays for the title's life.
+// Decodes the JPEG into a texture and sets it as the screen's picture, scaled (keeping its aspect on the TV) and centred in the picture band. In widescreen the
+// TV stretches the 640-pixel width over 16:9 instead of 4:3, so every pixel shows 4/3 as wide: the picture is drawn 3/4 as wide to come out right. The texture
+// stays for the title's life.
 PictureStatus ShowPicture(const char *path, bool widescreen) {
     DWORD start = GetTickCount();
     std::size_t size;
@@ -142,8 +140,8 @@ PictureStatus ShowPicture(const char *path, bool widescreen) {
     if (status != PictureStatus::Shown)
         return status;
     file.reset();
-    SDL_Texture *picture = SDL_CreateTexture(sdl_screen::Renderer(), SDL_PIXELFORMAT_XRGB8888,
-                                             SDL_TEXTUREACCESS_STATIC, static_cast<int>(w), static_cast<int>(h));
+    SDL_Texture *picture = SDL_CreateTexture(sdl_screen::Renderer(), SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STATIC, static_cast<int>(w),
+                                             static_cast<int>(h));
     if (!picture || !SDL_UpdateTexture(picture, nullptr, pixels.get(), static_cast<int>(w * 4)))
         return PictureStatus::OutOfMemory;
     SDL_SetTextureScaleMode(picture, SDL_SCALEMODE_LINEAR);
@@ -153,8 +151,7 @@ PictureStatus ShowPicture(const char *path, bool widescreen) {
         dh = PictureHeight;
         dw = static_cast<unsigned int>(w * PictureHeight * pixelH / (h * pixelW));
     }
-    const SDL_FRect where{static_cast<float>((Width - dw) / 2), static_cast<float>((PictureHeight - dh) / 2),
-                          static_cast<float>(dw), static_cast<float>(dh)};
+    const SDL_FRect where{static_cast<float>((Width - dw) / 2), static_cast<float>((PictureHeight - dh) / 2), static_cast<float>(dw), static_cast<float>(dh)};
     sdl_screen::SetPicture(picture, where);
     XkImageTest.PictureWidth = w;
     XkImageTest.PictureHeight = h;
@@ -204,10 +201,8 @@ int main() {
         const unsigned int frames = XkImageTest.Frames;
         using sdl_screen::Print;
         sdl_screen::SetCursor(TextRow);
-        Print("OXOS image test - kernel %u.%u.%u.%u\n", XboxKrnlVersion.Major, XboxKrnlVersion.Minor,
-              XboxKrnlVersion.Build, XboxKrnlVersion.Qfe & 0x7FFF);
-        Print("Uptime: %u s, %u frames (%u per s)\n", static_cast<unsigned int>(seconds), frames,
-              seconds ? frames / static_cast<unsigned int>(seconds) : 0);
+        Print("OXOS image test - kernel %u.%u.%u.%u\n", XboxKrnlVersion.Major, XboxKrnlVersion.Minor, XboxKrnlVersion.Build, XboxKrnlVersion.Qfe & 0x7FFF);
+        Print("Uptime: %u s, %u frames (%u per s)\n", static_cast<unsigned int>(seconds), frames, seconds ? frames / static_cast<unsigned int>(seconds) : 0);
         Print("Free memory %u KB\n", XkImageTest.FreePages * 4);
         if (status == PictureStatus::Shown)
             Print("Image: %s\n", PicturePath);

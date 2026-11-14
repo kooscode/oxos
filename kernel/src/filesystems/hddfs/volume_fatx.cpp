@@ -1,5 +1,4 @@
-// FATX volumes: reading the boot sector and the FAT size at mount (spec/stock/04 §6), and counting the free
-// clusters.
+// FATX volumes: reading the boot sector and the FAT size at mount (spec/stock/04 §6), and counting the free clusters.
 #include <filesystems/hddfs/hddfs.h>
 #include <hardware/chipset/serial.h>
 #include <io/io.h>
@@ -17,18 +16,15 @@ static void FATXInitFcb(HDDFS_FCB *f, ULONG Flags) {
 NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY geometry;
     PARTITION_INFORMATION partition;
-    NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, TargetDevice, nullptr, 0,
-                                                          &geometry, sizeof(geometry), nullptr, FALSE);
+    NTSTATUS status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, TargetDevice, nullptr, 0, &geometry, sizeof(geometry), nullptr, FALSE);
     if (NT_SUCCESS(status)) {
-        status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, TargetDevice, nullptr, 0,
-                                                     &partition, sizeof(partition), nullptr, FALSE);
+        status = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, TargetDevice, nullptr, 0, &partition, sizeof(partition), nullptr, FALSE);
     }
     if (!NT_SUCCESS(status))
         return status;
 
     PDEVICE_OBJECT dev;
-    status = IoCreateDevice(&HDDFSDriverObject, sizeof(HDDFS_VOLUME), nullptr, 8 /*FILE_DEVICE_DISK_FILE_SYSTEM*/,
-                            FALSE, &dev);
+    status = IoCreateDevice(&HDDFSDriverObject, sizeof(HDDFS_VOLUME), nullptr, 8 /*FILE_DEVICE_DISK_FILE_SYSTEM*/, FALSE, &dev);
     if (!NT_SUCCESS(status))
         return status;
     dev->StackSize = (CHAR)(dev->StackSize + TargetDevice->StackSize);
@@ -84,8 +80,8 @@ NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
     // Count free clusters (FileFsSizeInformation) and find the first free one.
     [[maybe_unused]] ULONG scanStart = KeTickCount;
     if (NT_SUCCESS(status)) {
-        XK_SERIAL("fatx: mount %#llx bytes, cluster %#lx, %#lx clusters, FAT%u\n", v->PartitionLength,
-                  v->BytesPerCluster, v->NumberOfClusters, 8u << v->FatEntryShift);
+        XK_SERIAL("fatx: mount %#llx bytes, cluster %#lx, %#lx clusters, FAT%u\n", v->PartitionLength, v->BytesPerCluster, v->NumberOfClusters,
+                  8u << v->FatEntryShift);
     }
     for (ULONG c = 1; NT_SUCCESS(status) && c <= v->NumberOfClusters; c++) {
         ULONG e;

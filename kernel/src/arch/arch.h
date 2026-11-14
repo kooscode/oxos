@@ -67,8 +67,8 @@ static inline void halt() {
 }
 
 #ifdef XK_HOST_TEST
-// Host unit tests: user mode cannot change the interrupt flag, so the test harness keeps it (tests/unit/host);
-// cli/sti/hlt and the other privileged instructions fault and are emulated there.
+// Host unit tests: user mode cannot change the interrupt flag, so the test harness keeps it (tests/unit/host); cli/sti/hlt and the other privileged
+// instructions fault and are emulated there.
 extern "C" ULONG HostSaveFlagsCli();
 extern "C" void HostRestoreFlags(ULONG Flags);
 static inline ULONG save_flags_cli() {
@@ -112,8 +112,7 @@ enum : UCHAR {
 };
 }
 
-// Defined in assembly: the boot thread's stack (entry.S: its size there must match) and the quick reboot's restart
-// (quick_reboot.S, spec/stock/02 §1).
+// Defined in assembly: the boot thread's stack (entry.S: its size there must match) and the quick reboot's restart (quick_reboot.S, spec/stock/02 §1).
 extern "C" UCHAR KiBootStack[];
 constexpr ULONG KI_BOOT_STACK_SIZE = 0x3000;
 extern "C" void KiQuickReboot() __attribute__((noreturn));

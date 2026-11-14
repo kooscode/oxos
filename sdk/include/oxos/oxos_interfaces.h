@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-// OXOS kernel extensions: the structures the kernel and a .xos extension exchange (spec/oxos_internal/34 §4-§7): the
-// descriptor, the context, the loader's functions and the events. The kernel and the SDK both include this file, so
-// the layout has one definition. Plain C, also valid C++. It needs the NT base types (ULONG, PVOID, NTSTATUS, NTAPI,
-// ...) declared before it: the kernel's runtime/types.h or the SDK's oxos/oxos_types.h.
+// OXOS kernel extensions: the structures the kernel and a .xos extension exchange (spec/oxos_internal/34 §4-§7): the descriptor, the context, the loader's
+// functions and the events. The kernel and the SDK both include this file, so the layout has one definition. Plain C, also valid C++. It needs the NT base
+// types (ULONG, PVOID, NTSTATUS, NTAPI, ...) declared before it: the kernel's runtime/types.h or the SDK's oxos/oxos_types.h.
 #pragma once
 
 #ifdef __cplusplus
@@ -28,8 +27,8 @@ typedef struct OXOS_SETTING {
 // The loader's functions (§5.1): only during Load; the kernel clears OXOS_CONTEXT::Api afterwards.
 typedef struct OXOS_API {
     ULONG Size; // sizeof(OXOS_API) of the kernel that filled it
-    // Hooks a kernel function (Ordinal, as in xboxkrnl.exe) for the title's calls (§7.1). *Next receives the function
-    // the replacement passes calls on to, once every extension's Load has returned.
+    // Hooks a kernel function (Ordinal, as in xboxkrnl.exe) for the title's calls (§7.1). *Next receives the function the replacement passes calls on to, once
+    // every extension's Load has returned.
     NTSTATUS(NTAPI *HookExport)(OXOS_CONTEXT *Context, ULONG Ordinal, PVOID Replacement, PVOID *Next);
     // Registers Callback (an OXOS_EVENT_CALLBACK) for Event (OXOS_EVENT_*, §7.2).
     NTSTATUS(NTAPI *RegisterEvent)(OXOS_CONTEXT *Context, ULONG Event, PVOID Callback, PVOID CallbackContext);
@@ -112,8 +111,7 @@ typedef struct OXOS_TITLE_LOADED {
     PVOID Certificate;
 } OXOS_TITLE_LOADED;
 
-// The title asked for a quick reboot (HalReturnToFirmware(2)) to start another XBE or the dashboard; it is still in
-// memory.
+// The title asked for a quick reboot (HalReturnToFirmware(2)) to start another XBE or the dashboard; it is still in memory.
 typedef struct OXOS_TITLE_EXITING {
     ULONG Size;
     PVOID LaunchDataPage; // what the title wrote, or null

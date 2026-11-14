@@ -2,14 +2,12 @@
 # Builds the SDK for its maintainers (extensions only include oxos_extension.mk), into ../build/sdk/:
 #
 #   make                     ../build/sdk/oxos_sdk/: the SDK as it ships: include/oxos_sdk.h (one header, the parts
-#                            in include/ merged), lib/oxos_sdk.lib (one library: the runtime from src/ and the kernel's
-#                            import library from src/xboxkrnl.def), oxos_extension.mk, examples/, README.md, LICENSE;
-#                            then each example built with that package, as a user builds it, into
+#                            in include/ merged), lib/oxos_sdk.lib (one library: the runtime from src/ and the kernel's import library from src/xboxkrnl.def),
+#                            oxos_extension.mk, examples/, README.md, LICENSE; then each example built with that package, as a user builds it, into
 #                            ../build/sdk/examples/NAME/ (NAME.xos)
 #   make VERSION=X.Y.Z       also ../build/sdk/oxos_sdk_vX.Y.Z.zip, the release file
 #
-# src/xboxkrnl.def is generated from the kernel's exports by tools/gen_oxos_sdk.py. Needs clang, lld-link, python3
-# and a POSIX shell (mkdir, rm).
+# src/xboxkrnl.def is generated from the kernel's exports by tools/gen_oxos_sdk.py. Needs clang, lld-link, python3 and a POSIX shell (mkdir, rm).
 include oxos_extension.mk
 
 BUILD_DIR := ../build/sdk

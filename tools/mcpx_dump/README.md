@@ -1,8 +1,8 @@
 # mcpx_dump: read your Xbox's MCPX boot ROM over the network
 
-Every original Xbox has a 512-byte secret boot ROM inside its southbridge (the MCPX). Emulators such as xemu need a
-copy of it to run Microsoft BIOS images, and the copy has to come from your own console. This tool gets it out with a
-modchip and a network cable. You don't need a soldered serial port, a logic analyser or a screen.
+Every original Xbox has a 512-byte secret boot ROM inside its southbridge (the MCPX). Emulators such as xemu need a copy of it to run Microsoft BIOS images, and
+the copy has to come from your own console. This tool gets it out with a modchip and a network cable. You don't need a soldered serial port, a logic analyser or
+a screen.
 
 It works on consoles with:
 
@@ -48,8 +48,7 @@ Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_du
    dump from 192.168.1.222: MCPX 1.1, md5 ..., sha1 ...
    saved mcpx_1.1.bin
    ```
-   The console then carries on booting. It boots the OXOS kernel in the image, or one served by
-   `tools/netboot/netboot.py` if one is running.
+   The console then carries on booting. It boots the OXOS kernel in the image, or one served by `tools/netboot/netboot.py` if one is running.
 6. Flash your normal BIOS back.
 
 ## How the dump is checked
@@ -57,8 +56,7 @@ Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_du
 - With `--bios`, the receiver also checks a value the ROM stores against the BIOS you built the image from:
   - MCPX 1.1: the loader hash at ROM offset 0x1A8 must equal the TEA hash of that BIOS's first-stage loader.
   - MCPX 1.0: the check dword the ROM compares must match that BIOS's decrypted boot loader.
-- A dump that fails is not saved, and the receiver waits for the next copy (the console sends three).
-  `--keep-bad` saves it anyway.
+- A dump that fails is not saved, and the receiver waits for the next copy (the console sends three). `--keep-bad` saves it anyway.
 
 ## Options
 | Command | Option | Meaning |
@@ -77,15 +75,13 @@ Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_du
   - Check the cable, and that no firewall drops UDP port 5141 (`sudo ufw allow 5141/udp`).
   - Don't run `netboot.py` at the same time: both listen on port 5141.
   - On a PC with several networks, the console's broadcasts may arrive on another interface.
-- **"does not start with 33 C0":** the ROM was already hidden. The image was flashed for the wrong MCPX, or the
-  console booted something else.
-- **The console resets or blinks red/green:** the image was built for the other MCPX, or the retail BIOS is not
-  one for this MCPX.
-- **Testing in xemu:** only the 1.0 path can be tested there (xemu needs `mcpx_1.0.bin` for it). The 4xxx X-codes
-  expect a Conexant encoder, so start xemu with `--encoder conexant`.
+- **"does not start with 33 C0":** the ROM was already hidden. The image was flashed for the wrong MCPX, or the console booted something else.
+- **The console resets or blinks red/green:** the image was built for the other MCPX, or the retail BIOS is not one for this MCPX.
+- **Testing in xemu:** only the 1.0 path can be tested there (xemu needs `mcpx_1.0.bin` for it). The 4xxx X-codes expect a Conexant encoder, so start xemu with
+  `--encoder conexant`.
 
 ## Credits
-The attacks are those of [XboxDev/mcpx-tools](https://github.com/XboxDev/mcpx-tools) (`mcpx-attack`); this is an
-independent implementation. Background: [xboxdevwiki: Exploits](https://xboxdevwiki.net/Exploits).
+The attacks are those of [XboxDev/mcpx-tools](https://github.com/XboxDev/mcpx-tools) (`mcpx-attack`); this is an independent implementation. Background:
+[xboxdevwiki: Exploits](https://xboxdevwiki.net/Exploits).
 
 The ROM is Microsoft code. Keep your copy to yourself.

@@ -7,9 +7,8 @@
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 
-volatile ULONG KiTestIoOpenOk, KiTestIoSyncRwOk, KiTestIoQueryOk, KiTestIoAsyncOk, KiTestIoApcOk, KiTestIoPortOk,
-    KiTestIoIoctlOk, KiTestIoRelativeOk, KiTestIoErrorsOk, KiTestIoStartIoOk, KiTestIoCloseOk, KiTestIoDeleteOk,
-    KiTestIoPoolBalanced, KiTestIoDone;
+volatile ULONG KiTestIoOpenOk, KiTestIoSyncRwOk, KiTestIoQueryOk, KiTestIoAsyncOk, KiTestIoApcOk, KiTestIoPortOk, KiTestIoIoctlOk, KiTestIoRelativeOk,
+    KiTestIoErrorsOk, KiTestIoStartIoOk, KiTestIoCloseOk, KiTestIoDeleteOk, KiTestIoPoolBalanced, KiTestIoDone;
 
 constexpr ULONG RAM_SIZE = 0x1000, PEND_OFFSET = 0x800; // reads at/after PEND_OFFSET complete from a DPC
 constexpr ULONG IOCTL_XK_INCREMENT = 0x00220000 | (0x801 << 2); // METHOD_BUFFERED
@@ -67,8 +66,7 @@ static NTSTATUS NTAPI RamDispatch(PDEVICE_OBJECT dev, PIRP irp) {
     irp->IoStatus.Information = 0;
     switch (s->MajorFunction) {
     case IRP_MJ_CREATE: {
-        status = IoCheckShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess,
-                                    s->FileObject, &RamShare, TRUE);
+        status = IoCheckShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess, s->FileObject, &RamShare, TRUE);
         if (!NT_SUCCESS(status))
             break;
         POBJECT_STRING n = s->Parameters.Create.RemainingName;
@@ -89,8 +87,7 @@ static NTSTATUS NTAPI RamDispatch(PDEVICE_OBJECT dev, PIRP irp) {
         break;
     case IRP_MJ_READ:
     case IRP_MJ_WRITE:
-        if (s->Parameters.Read.ByteOffset.QuadPart >= PEND_OFFSET &&
-            s->Parameters.Read.ByteOffset.QuadPart < RAM_SIZE) {
+        if (s->Parameters.Read.ByteOffset.QuadPart >= PEND_OFFSET && s->Parameters.Read.ByteOffset.QuadPart < RAM_SIZE) {
             IoMarkIrpPending(irp);
             RamPendingIrp = irp;
             KeInsertQueueDpc(&RamDpc, nullptr, nullptr);
@@ -101,8 +98,7 @@ static NTSTATUS NTAPI RamDispatch(PDEVICE_OBJECT dev, PIRP irp) {
         IofCompleteRequest(irp, 0);
         return status;
     case IRP_MJ_DEVICE_CONTROL:
-        if (s->Parameters.DeviceIoControl.IoControlCode == IOCTL_XK_INCREMENT &&
-            s->Parameters.DeviceIoControl.InputBufferLength >= 4 &&
+        if (s->Parameters.DeviceIoControl.IoControlCode == IOCTL_XK_INCREMENT && s->Parameters.DeviceIoControl.InputBufferLength >= 4 &&
             s->Parameters.DeviceIoControl.OutputBufferLength >= 4) {
             *(PULONG)irp->UserBuffer = *(PULONG)s->Parameters.DeviceIoControl.InputBuffer + 1;
             irp->IoStatus.Information = 4;
@@ -155,8 +151,7 @@ static NTSTATUS NTAPI QueueDispatch(PDEVICE_OBJECT dev, PIRP irp) {
         return STATUS_PENDING;
     }
     if (s->MajorFunction == IRP_MJ_CREATE) {
-        IoSetShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess, s->FileObject,
-                         &QueueShare);
+        IoSetShareAccess(s->Parameters.Create.DesiredAccess, s->Parameters.Create.ShareAccess, s->FileObject, &QueueShare);
     }
     irp->IoStatus.Status = STATUS_SUCCESS;
     irp->IoStatus.Information = 0;
@@ -204,8 +199,7 @@ static void NTAPI IoControllerThread(PVOID) {
     OBJECT_ATTRIBUTES a1 = Attrs(&n1, "\\??\\R:\\foo\\bar.txt");
     HANDLE hs;
     IO_STATUS_BLOCK iosb;
-    ok &= NtOpenFile(&hs, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, &a1, &iosb, FILE_SHARE_READ,
-                     FILE_SYNCHRONOUS_IO_NONALERT) == 0;
+    ok &= NtOpenFile(&hs, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, &a1, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT) == 0;
     OBJECT_STRING want, got;
     RtlInitAnsiString(&want, "\\foo\\bar.txt");
     RtlInitAnsiString(&got, LastRemaining);
@@ -224,19 +218,16 @@ static void NTAPI IoControllerThread(PVOID) {
     pend.QuadPart = PEND_OFFSET;
     RamData()[PEND_OFFSET] = 0x5A;
     in[0] = 0;
-    ok &= NtReadFile(hs, nullptr, nullptr, nullptr, &iosb, in, 1, &pend) == 0 && in[0] == 0x5A &&
-          iosb.Information == 1;
+    ok &= NtReadFile(hs, nullptr, nullptr, nullptr, &iosb, in, 1, &pend) == 0 && in[0] == 0x5A && iosb.Information == 1;
     KiTestIoSyncRwOk = ok;
 
     // Queries: position/mode/alignment in the I/O manager, standard info from the driver.
     FILE_POSITION_INFORMATION pos;
     ULONG mode = 0;
     ULONG standard[6];
-    ok = NtQueryInformationFile(hs, &iosb, &pos, sizeof(pos), FilePositionInformation) == 0 &&
-         pos.CurrentByteOffset.QuadPart == PEND_OFFSET + 1;
+    ok = NtQueryInformationFile(hs, &iosb, &pos, sizeof(pos), FilePositionInformation) == 0 && pos.CurrentByteOffset.QuadPart == PEND_OFFSET + 1;
     ok &= NtQueryInformationFile(hs, &iosb, &mode, 4, FileModeInformation) == 0 && mode == FILE_SYNCHRONOUS_IO_NONALERT;
-    ok &= NtQueryInformationFile(hs, &iosb, standard, sizeof(standard), FileStandardInformation) == 0 &&
-          standard[2] == RAM_SIZE && iosb.Information == 24;
+    ok &= NtQueryInformationFile(hs, &iosb, standard, sizeof(standard), FileStandardInformation) == 0 && standard[2] == RAM_SIZE && iosb.Information == 24;
     ok &= NtQueryInformationFile(hs, &iosb, standard, 4, FileStandardInformation) == STATUS_INFO_LENGTH_MISMATCH;
     ok &= NtQueryInformationFile(hs, &iosb, standard, 64, FileAccessInformation) == STATUS_INVALID_INFO_CLASS;
     pos.CurrentByteOffset.QuadPart = 2;
@@ -249,15 +240,14 @@ static void NTAPI IoControllerThread(PVOID) {
     OBJECT_ATTRIBUTES a2 = Attrs(&n2, "\\Device\\XkRam\\async");
     HANDLE ha, he, hx0;
     ok = NtOpenFile(&ha, GENERIC_READ, &a2, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE, 0) == 0;
-    ok &= NtOpenFile(&hx0, GENERIC_WRITE, &a2, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE, 0) ==
-          STATUS_SHARING_VIOLATION; // the first opener does not share writing
+    ok &= NtOpenFile(&hx0, GENERIC_WRITE, &a2, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
+          0) == STATUS_SHARING_VIOLATION; // the first opener does not share writing
     NtCreateEvent(&he, nullptr, NotificationEvent, FALSE);
     ok &= NtReadFile(ha, nullptr, nullptr, nullptr, &iosb, in, 1, nullptr) == STATUS_INVALID_PARAMETER;
     IO_STATUS_BLOCK aiosb = {{(NTSTATUS)0x12345}, 0};
     in[0] = 0;
     ok &= NtReadFile(ha, he, nullptr, nullptr, &aiosb, in, 1, &pend) == STATUS_PENDING;
-    ok &= NtWaitForSingleObject(he, FALSE, nullptr) == 0 && aiosb.Status == 0 && aiosb.Information == 1 &&
-          in[0] == 0x5A;
+    ok &= NtWaitForSingleObject(he, FALSE, nullptr) == 0 && aiosb.Status == 0 && aiosb.Information == 1 && in[0] == 0x5A;
     KiTestIoAsyncOk = ok;
 
     // Kernel-mode APC completion routine with its context and the caller's IO_STATUS_BLOCK.
@@ -277,24 +267,19 @@ static void NTAPI IoControllerThread(PVOID) {
     ok &= NtReadFile(ha, nullptr, nullptr, (PVOID)0x55, &piosb, in, 1, &pend) == STATUS_PENDING;
     PVOID key = nullptr, ctx = nullptr;
     IO_STATUS_BLOCK riosb;
-    ok &= NtRemoveIoCompletion(hp, &key, &ctx, &riosb, nullptr) == 0 && key == (PVOID)0x77 && ctx == (PVOID)0x55 &&
-          riosb.Status == 0 && riosb.Information == 1;
+    ok &= NtRemoveIoCompletion(hp, &key, &ctx, &riosb, nullptr) == 0 && key == (PVOID)0x77 && ctx == (PVOID)0x55 && riosb.Status == 0 && riosb.Information == 1;
     ok &= NtSetIoCompletion(hp, (PVOID)1, (PVOID)2, 3, 4) == 0;
-    ok &= NtRemoveIoCompletion(hp, &key, &ctx, &riosb, &zero) == 0 && key == (PVOID)1 && ctx == (PVOID)2 &&
-          riosb.Status == 3 && riosb.Information == 4;
+    ok &= NtRemoveIoCompletion(hp, &key, &ctx, &riosb, &zero) == 0 && key == (PVOID)1 && ctx == (PVOID)2 && riosb.Status == 3 && riosb.Information == 4;
     ok &= NtRemoveIoCompletion(hp, &key, &ctx, &riosb, &zero) == STATUS_TIMEOUT;
     NtSetIoCompletion(hp, nullptr, nullptr, 0, 0); // left queued: freed when the port is deleted
     KiTestIoPortOk = ok;
 
     // IOCTLs through a handle and directly to the device.
     ULONG inV = 41, outV = 0, ret = 0;
-    ok = NtDeviceIoControlFile(hs, nullptr, nullptr, nullptr, &iosb, IOCTL_XK_INCREMENT, &inV, 4, &outV, 4) == 0 &&
-         outV == 42 && iosb.Information == 4;
+    ok = NtDeviceIoControlFile(hs, nullptr, nullptr, nullptr, &iosb, IOCTL_XK_INCREMENT, &inV, 4, &outV, 4) == 0 && outV == 42 && iosb.Information == 4;
     inV = 99;
-    ok &= IoSynchronousDeviceIoControlRequest(IOCTL_XK_INCREMENT, RamDevice, &inV, 4, &outV, 4, &ret, FALSE) == 0 &&
-          outV == 100 && ret == 4;
-    ok &= NtDeviceIoControlFile(hs, nullptr, nullptr, nullptr, &iosb, 0x1234, nullptr, 0, nullptr, 0) ==
-          STATUS_INVALID_DEVICE_REQUEST;
+    ok &= IoSynchronousDeviceIoControlRequest(IOCTL_XK_INCREMENT, RamDevice, &inV, 4, &outV, 4, &ret, FALSE) == 0 && outV == 100 && ret == 4;
+    ok &= NtDeviceIoControlFile(hs, nullptr, nullptr, nullptr, &iosb, 0x1234, nullptr, 0, nullptr, 0) == STATUS_INVALID_DEVICE_REQUEST;
     KiTestIoIoctlOk = ok;
 
     // Relative open: the root is a file handle; the driver gets the bare name and the related file.
@@ -303,8 +288,7 @@ static void NTAPI IoControllerThread(PVOID) {
     HANDLE hr;
     PFILE_OBJECT fs;
     ObReferenceObjectByHandle(hs, &IoFileObjectType, (PVOID *)&fs);
-    ok = NtOpenFile(&hr, GENERIC_READ, &a3, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                    FILE_SYNCHRONOUS_IO_NONALERT) == 0;
+    ok = NtOpenFile(&hr, GENERIC_READ, &a3, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT) == 0;
     RtlInitAnsiString(&want, "child");
     RtlInitAnsiString(&got, LastRemaining);
     ok &= RtlEqualString(&want, &got, FALSE) && LastRelated == fs;
@@ -316,11 +300,9 @@ static void NTAPI IoControllerThread(PVOID) {
     LARGE_INTEGER past;
     past.QuadPart = 0x2000;
     IO_STATUS_BLOCK eiosb = {{(NTSTATUS)0x5555}, 0x6666};
-    ok = NtReadFile(hs, nullptr, nullptr, nullptr, &eiosb, in, 1, &past) == STATUS_END_OF_FILE &&
-         eiosb.Status == 0x5555 && eiosb.Information == 0x6666;
+    ok = NtReadFile(hs, nullptr, nullptr, nullptr, &eiosb, in, 1, &past) == STATUS_END_OF_FILE && eiosb.Status == 0x5555 && eiosb.Information == 0x6666;
     OBJECT_STRING n4, n5, n6;
-    OBJECT_ATTRIBUTES a4 = Attrs(&n4, "\\Device\\XkMissing"), a5 = Attrs(&n5, "\\Device\\XkQueue"),
-                      a6 = Attrs(&n6, "\\Win32NamedObjects");
+    OBJECT_ATTRIBUTES a4 = Attrs(&n4, "\\Device\\XkMissing"), a5 = Attrs(&n5, "\\Device\\XkQueue"), a6 = Attrs(&n6, "\\Win32NamedObjects");
     HANDLE hx, hq, hq2;
     ok &= NtOpenFile(&hx, GENERIC_READ, &a4, &iosb, 0, 0) == STATUS_OBJECT_NAME_NOT_FOUND;
     ok &= NtOpenFile(&hx, GENERIC_READ, &a6, &iosb, 0, 0) == STATUS_OBJECT_TYPE_MISMATCH;
@@ -355,8 +337,7 @@ static void NTAPI IoControllerThread(PVOID) {
     NtClose(he);
     NtClose(hp);
     NtClose(hq);
-    KiTestIoCloseOk = Cleanups == opens && Closes == opens && RamDevice->ReferenceCount == 0 &&
-                      QueueDevice->ReferenceCount == 0;
+    KiTestIoCloseOk = Cleanups == opens && Closes == opens && RamDevice->ReferenceCount == 0 && QueueDevice->ReferenceCount == 0;
 
     // Deleting: names disappear, opens fail.
     IoDeleteSymbolicLink(&ln);

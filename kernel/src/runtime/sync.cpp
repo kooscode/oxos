@@ -1,5 +1,4 @@
-// RTL critical sections and executive read/write locks (spec/stock/13). Their layouts, the Xbox ABI, are in
-// runtime/runtime.h.
+// RTL critical sections and executive read/write locks (spec/stock/13). Their layouts, the Xbox ABI, are in runtime/runtime.h.
 #include <arch/arch.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
@@ -41,8 +40,7 @@ XBAPI void NTAPI RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSection) 
 XBAPI BOOLEAN NTAPI RtlTryEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection) {
     PKTHREAD self = KeGetCurrentThread();
     LONG expected = -1;
-    if (__atomic_compare_exchange_n(&CriticalSection->LockCount, &expected, 0, false, __ATOMIC_SEQ_CST,
-                                    __ATOMIC_SEQ_CST)) {
+    if (__atomic_compare_exchange_n(&CriticalSection->LockCount, &expected, 0, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
         CriticalSection->OwningThread = self;
         CriticalSection->RecursionCount = 1;
         return TRUE;

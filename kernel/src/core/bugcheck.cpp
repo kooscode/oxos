@@ -1,5 +1,5 @@
-// Bug checks: record the code (in memory, in CMOS for the next boot, and on the serial port) and halt. The reference
-// also reports through the fatal-error path (spec/stock/05 §6); OXOS's bug check does not.
+// Bug checks: record the code (in memory, in CMOS for the next boot, and on the serial port) and halt. The reference also reports through the fatal-error path
+// (spec/stock/05 §6); OXOS's bug check does not.
 #include <core/core.h>
 #include <diagnostics/diagnostics.h>
 #include <user_interface/user_interface.h>
@@ -24,9 +24,8 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     HostBugCheck(BugCheckCode, P1, P2, P3, P4);
 #endif
     cli();
-    // CMOS first (needs no log; reported at the next boot): a release build otherwise halts without a trace.
-    // An unhandled exception (0x1E) is always raised from the dispatcher: record where it happened instead, the
-    // faulting instruction (P2) and, for an access violation, the address it touched (P4).
+    // CMOS first (needs no log; reported at the next boot): a release build otherwise halts without a trace. An unhandled exception (0x1E) is always raised
+    // from the dispatcher: record where it happened instead, the faulting instruction (P2) and, for an access violation, the address it touched (P4).
     if (BugCheckCode == 0x1E)
         diagnostics::SaveBugCheckLastWords(BugCheckCode, P4, P2);
     else
@@ -39,8 +38,7 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
         ULONG count = XkTraceCount;
         for (ULONG k = count > 30 ? count - 30 : 0; k < count; k++) {
             volatile ULONG *e = XkTraceRing[k % XK_TRACE_RING];
-            XK_SERIAL("    call %lu: ordinal %lu -> %#lx, from %#lx args %#lx %#lx %#lx\n", k, e[0], e[6], e[1], e[3],
-                      e[4], e[5]);
+            XK_SERIAL("    call %lu: ordinal %lu -> %#lx, from %#lx args %#lx %#lx %#lx\n", k, e[0], e[6], e[1], e[3], e[4], e[5]);
         }
     }
 #endif

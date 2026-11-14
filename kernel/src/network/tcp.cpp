@@ -1,16 +1,14 @@
-// TCP for the kernel's network stack: a server on port 80 with NET_TCP_CONNECTIONS connections
-// (spec/oxos_internal/31_upload_server.md §2). Boot-only.
+// TCP for the kernel's network stack: a server on port 80 with NET_TCP_CONNECTIONS connections (spec/oxos_internal/31_upload_server.md §2). Boot-only.
 //
 // Kept simple, as one HTTP request per connection on the local network allows:
-// - receiving: in-order data only. A segment past a gap is dropped and the expected one asked for again (a duplicate
-//   ACK). One ACK per connection after each batch of received frames (PollTcp), not one per segment: a full window
-//   is some 45 segments, and an ACK each would queue behind the card's transmit ring. The window is the receive
-//   buffer's free space, at most 64 KB less one byte (the field's limit), so a sender never has more in flight than
-//   the card's receive ring holds (hardware/ethernet/nic.cpp).
-// - sending: what is queued stays in the send buffer until acknowledged. Nothing acknowledged for 1 s: everything
-//   from the oldest unacknowledged byte is sent again ("go back N"), 8 times at most, then the connection is reset.
-// - ending: our FIN after the queued data; the connection ends once both sides' FINs are acknowledged, or 2 s after
-//   ours with no FIN from the peer. Nothing heard for 30 s: reset.
+// - receiving: in-order data only. A segment past a gap is dropped and the expected one asked for again (a duplicate ACK). One ACK per connection after each
+//   batch of received frames (PollTcp), not one per segment: a full window is some 45 segments, and an ACK each would queue behind the card's transmit ring.
+//   The window is the receive buffer's free space, at most 64 KB less one byte (the field's limit), so a sender never has more in flight than the card's
+//   receive ring holds (hardware/ethernet/nic.cpp).
+// - sending: what is queued stays in the send buffer until acknowledged. Nothing acknowledged for 1 s: everything from the oldest unacknowledged byte is sent
+//   again ("go back N"), 8 times at most, then the connection is reset.
+// - ending: our FIN after the queued data; the connection ends once both sides' FINs are acknowledged, or 2 s after ours with no FIN from the peer. Nothing
+//   heard for 30 s: reset.
 #include <network/network_stack.h>
 #include <memory/memory.h>
 #include <runtime/runtime.h>
@@ -115,10 +113,8 @@ void StopTcp() {
 
 // --- Segments out
 
-// One segment with Flags, sequence number Seq and Length bytes of Data, to the connection's peer (or, for a reset
-// of an unknown connection, to the given peer).
-static void SendSegment(const UCHAR *Mac, const UCHAR *Ip, USHORT PeerPort, ULONG Seq, ULONG Ack, UCHAR Flags,
-                        ULONG Window, const UCHAR *Data, ULONG Length) {
+// One segment with Flags, sequence number Seq and Length bytes of Data, to the connection's peer (or, for a reset of an unknown connection, to the given peer).
+static void SendSegment(const UCHAR *Mac, const UCHAR *Ip, USHORT PeerPort, ULONG Seq, ULONG Ack, UCHAR Flags, ULONG Window, const UCHAR *Data, ULONG Length) {
     PUCHAR t = IpPayload();
     if (!t)
         return; // the card is busy: the retransmission timer sends it again
@@ -209,8 +205,7 @@ static void NewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t, ULO
     }
     if (!(flags & SYN) || (flags & ACK) || !c || LoadBigEndian16(t + 2) != HTTP_PORT) {
         ULONG ack = (flags & ACK) ? LoadBigEndian32(t + 8) : 0;
-        SendSegment(Mac, Ip, port, ack, seq + Length - HeaderLength + ((flags & SYN) ? 1 : 0), RST | ACK, 0, nullptr,
-                    0);
+        SendSegment(Mac, Ip, port, ack, seq + Length - HeaderLength + ((flags & SYN) ? 1 : 0), RST | ACK, 0, nullptr, 0);
         return;
     }
     UCHAR generation = c->Generation;
@@ -382,8 +377,8 @@ ULONG ReceiveTcp(LONG Id, PVOID Buffer, ULONG Size) {
         return 0;
     ULONG n = Size < c->RxCount ? Size : c->RxCount;
     RingTake(c, (PUCHAR)Buffer, n);
-    // The window has grown by two segments or more since we last told the peer: tell it now (a window update), or it
-    // keeps sending into the smaller window it knows, or waits for its own timer when that one had closed.
+    // The window has grown by two segments or more since we last told the peer: tell it now (a window update), or it keeps sending into the smaller window it
+    // knows, or waits for its own timer when that one had closed.
     if (n && ReceiveWindow(c) >= c->Advertised + 2 * MSS)
         SendAck(c);
     return n;

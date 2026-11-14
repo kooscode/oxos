@@ -1,8 +1,7 @@
 // Asynchronous procedure calls, alerts, suspend/resume (spec/stock/08).
 //
-// Kernel APCs (ApcListHead[KernelMode]) are delivered by the APC_LEVEL software interrupt. "User"
-// APCs (ApcListHead[UserMode]) only run when an alertable user-mode wait returns STATUS_USER_APC:
-// the Xbox has no user mode, so the wait routine itself runs them at PASSIVE_LEVEL before returning.
+// Kernel APCs (ApcListHead[KernelMode]) are delivered by the APC_LEVEL software interrupt. "User" APCs (ApcListHead[UserMode]) only run when an alertable
+// user-mode wait returns STATUS_USER_APC: the Xbox has no user mode, so the wait routine itself runs them at PASSIVE_LEVEL before returning.
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <hardware/chipset/chipset.h>
@@ -11,8 +10,7 @@ namespace xk::core {
 
 #define Prcb (KiPcr.PrcbData)
 
-XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine,
-                                 PKRUNDOWN_ROUTINE RundownRoutine, PKNORMAL_ROUTINE NormalRoutine,
+XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine, PKRUNDOWN_ROUTINE RundownRoutine, PKNORMAL_ROUTINE NormalRoutine,
                                  KPROCESSOR_MODE ApcMode, PVOID NormalContext) {
     Apc->Type = ApcObject;
     Apc->Thread = Thread;

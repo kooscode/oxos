@@ -1,7 +1,6 @@
-// Controller test title (nxdk + SDL3, open source): shows every Xbox controller input live, with a checklist of the
-// inputs seen so far, and keeps the same state in XkControllerTest for tests/controller_test.py (found in RAM by its
-// signature). The controllers are read through SDL's gamepad API (nxdk-sdl3's Xbox driver on the kernel's USB host);
-// each slot keeps the last state as an Xbox controller input report (xid_gamepad_in), the layout the test decodes.
+// Controller test title (nxdk + SDL3, open source): shows every Xbox controller input live, with a checklist of the inputs seen so far, and keeps the same
+// state in XkControllerTest for tests/controller_test.py (found in RAM by its signature). The controllers are read through SDL's gamepad API (nxdk-sdl3's Xbox
+// driver on the kernel's USB host); each slot keeps the last state as an Xbox controller input report (xid_gamepad_in), the layout the test decodes.
 #include <windows.h>
 
 #include <array>
@@ -34,14 +33,14 @@ namespace {
 
 // --- The input report
 
-// The report's fixed header (bReportId 0, bLength 20) and its type for a game controller (XID_TYPE_GAMECONTROLLER in
-// the high byte, as nxdk's usbh_xid_get_type gives it).
+// The report's fixed header (bReportId 0, bLength 20) and its type for a game controller (XID_TYPE_GAMECONTROLLER in the high byte, as nxdk's usbh_xid_get_type
+// gives it).
 constexpr unsigned char REPORT_LENGTH = 20;
 constexpr unsigned int GAME_CONTROLLER_TYPE = 0x0100;
 constexpr unsigned char ANALOG_DOWN = 0xFF;
 
-// The report's digital buttons (dButtons, bits 0-7) and analog buttons (bytes 4-9), as SDL names them. SDL maps the
-// controller's Black button to the right shoulder and White to the left one.
+// The report's digital buttons (dButtons, bits 0-7) and analog buttons (bytes 4-9), as SDL names them. SDL maps the controller's Black button to the right
+// shoulder and White to the left one.
 constexpr std::array<SDL_GamepadButton, 8> DIGITAL_BUTTONS{
     SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT,
     SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_BUTTON_LEFT_STICK,
@@ -74,10 +73,8 @@ void FillReport(SDL_Gamepad *pad, unsigned char (&report)[REPORT_LENGTH]) {
         report[4 + i] = SDL_GetGamepadButton(pad, ANALOG_BUTTONS[i]) ? ANALOG_DOWN : 0;
     report[10] = TriggerByte(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
     report[11] = TriggerByte(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
-    const std::array<short, 4> sticks{SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX),
-                                      ReportY(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY)),
-                                      SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX),
-                                      ReportY(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY))};
+    const std::array<short, 4> sticks{SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX), ReportY(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY)),
+                                      SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX), ReportY(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTY))};
     std::memcpy(&report[12], sticks.data(), sizeof(sticks));
 }
 
@@ -187,11 +184,10 @@ void Show() {
             Print(" %s%s", ANALOG_NAMES[i], p.AnalogMax[i] >= 0x80 ? "+" : "-");
         for (int i = 0; i < 8; i++)
             Print(" %s%s", DIGITAL_NAMES[i], p.DigitalSeen & (1 << i) ? "+" : "-");
-        Print("\n  seen: sticks L%s%s%s%s R%s%s%s%s (+ = reached, - = not yet)\n\n",
-              Mark(p.AxisMin[0] < -STICK_REACHED, "<"), Mark(p.AxisMax[0] > STICK_REACHED, ">"),
-              Mark(p.AxisMax[1] > STICK_REACHED, "^"), Mark(p.AxisMin[1] < -STICK_REACHED, "v"),
-              Mark(p.AxisMin[2] < -STICK_REACHED, "<"), Mark(p.AxisMax[2] > STICK_REACHED, ">"),
-              Mark(p.AxisMax[3] > STICK_REACHED, "^"), Mark(p.AxisMin[3] < -STICK_REACHED, "v"));
+        Print("\n  seen: sticks L%s%s%s%s R%s%s%s%s (+ = reached, - = not yet)\n\n", Mark(p.AxisMin[0] < -STICK_REACHED, "<"),
+              Mark(p.AxisMax[0] > STICK_REACHED, ">"), Mark(p.AxisMax[1] > STICK_REACHED, "^"), Mark(p.AxisMin[1] < -STICK_REACHED, "v"),
+              Mark(p.AxisMin[2] < -STICK_REACHED, "<"), Mark(p.AxisMax[2] > STICK_REACHED, ">"), Mark(p.AxisMax[3] > STICK_REACHED, "^"),
+              Mark(p.AxisMin[3] < -STICK_REACHED, "v"));
     }
 }
 

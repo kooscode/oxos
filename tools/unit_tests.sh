@@ -7,9 +7,8 @@
 #   OXOS_KERNEL_OPT=-O2 tools/unit_tests.sh   the kernel sources at the console build's optimisation (own build dir)
 #   OXOS_STRESS_SECONDS=N               length of each Stress.* test (default 5)
 #
-# The tests are a 32-bit (i386) build with plain make (tests/unit/Makefile). Without a local multilib toolchain
-# (g++-multilib, googletest sources in /usr/src/googletest) the script builds and runs them in a Docker image
-# (tests/unit/Dockerfile).
+# The tests are a 32-bit (i386) build with plain make (tests/unit/Makefile). Without a local multilib toolchain (g++-multilib, googletest sources in
+# /usr/src/googletest) the script builds and runs them in a Docker image (tests/unit/Dockerfile).
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COVERAGE=OFF

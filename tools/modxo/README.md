@@ -1,35 +1,29 @@
 # modxo: a boot-debugging rig built from a Modxo modchip
 
-An RP2040 [Modxo](https://github.com/Shalx/Modxo) modchip on the console's LPC header, with the **oxos_debug**
-firmware module, turns one USB cable into a console debug rig:
+An RP2040 [Modxo](https://github.com/Shalx/Modxo) modchip on the console's LPC header, with the **oxos_debug** firmware module, turns one USB cable into a
+console debug rig:
 - **COM1:** the emulated serial port (an OXOS kernel's boot log; `SERIAL=1` builds).
 - **POST codes:** every write to I/O port 0x80, as it happens (the 2BL's and kernel's progress codes).
-- **Status lines:** LPC power and reset pins, LPC cycle counts and last addresses, the first memory reads after
-  power-up (the boot ROM fetching X-codes).
+- **Status lines:** LPC power and reset pins, LPC cycle counts and last addresses, the first memory reads after power-up (the boot ROM fetching X-codes).
 - **The power button:** pressed from the PC, so test boots run unattended.
 - **Reflashing over USB:** BIOS or firmware, without touching the board.
 
 These scripts are the PC side.
 
 ## Hardware
-- An RP2040 Modxo board on the LPC header, flashed with Modxo built from the **`oxos-debug` branch** of
-  [kooscode/modxo](https://github.com/kooscode/modxo). The module is `modxo_modules/oxos_debug`; its README has the
-  stream format. Build as Modxo (`cmake` for your board, then `ninja`), and flash the firmware .uf2 with
-  `flash_uf2.sh`.
-- Power button: GPIO 28 (`OXOS_POWER_PIN`) → 1 kΩ → base of an NPN transistor (e.g. 2N2222). Emitter to Xbox ground,
-  collector to the power switch's signal side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the
-  SERIRQ module unregistered.
-- **1.6 board without the transistor** (e.g. an RP2040-Zero on the ModXo-RP2040-Zero PCB): build Modxo with
-  `-DMODXO_PINOUT=rp2040_zero_1_6` and wire GPIO 9 straight to the power switch line; D0 stays on GPIO 6 as on the
-  standard pinout. The pin stays high and is pulled low for a press. The switch line has its own pull-up on the
-  console, so the pin not being driven while the Pico restarts does not press it (checked: reflashing the firmware
-  with the console off left it off).
-- **1.6 console:** it has no LPC header, so the LPC lines are wired to the board (a rebuilt header). LFRAME goes to
-  the Pico's LFRAME pin (GPIO 5 on the RP2040-Tiny), not to ground. Use two ground
-  wires and keep every wire short: with long wires the LPC cycles were corrupted and the console showed FRAG (red and
-  green), even with Cerbios.
-- The BIOS goes into Modxo's flash bank as its own .uf2: `flashbin_to_uf2.py` from Modxo's `tools/` (default base
-  0x10040000).
+- An RP2040 Modxo board on the LPC header, flashed with Modxo built from the **`oxos-debug` branch** of [kooscode/modxo](https://github.com/kooscode/modxo). The
+  module is `modxo_modules/oxos_debug`; its README has the stream format. Build as Modxo (`cmake` for your board, then `ninja`), and flash the firmware .uf2
+  with `flash_uf2.sh`.
+- Power button: GPIO 28 (`OXOS_POWER_PIN`) → 1 kΩ → base of an NPN transistor (e.g. 2N2222). Emitter to Xbox ground, collector to the power switch's signal
+  side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the SERIRQ module unregistered.
+- **1.6 board without the transistor** (e.g. an RP2040-Zero on the ModXo-RP2040-Zero PCB): build Modxo with `-DMODXO_PINOUT=rp2040_zero_1_6` and wire GPIO 9
+  straight to the power switch line; D0 stays on GPIO 6 as on the standard pinout. The pin stays high and is pulled low for a press. The switch line has its own
+  pull-up on the console, so the pin not being driven while the Pico restarts does not press it (checked: reflashing the firmware with the console off left it
+  off).
+- **1.6 console:** it has no LPC header, so the LPC lines are wired to the board (a rebuilt header). LFRAME goes to the Pico's LFRAME pin (GPIO 5 on the
+  RP2040-Tiny), not to ground. Use two ground wires and keep every wire short: with long wires the LPC cycles were corrupted and the console showed FRAG (red
+  and green), even with Cerbios.
+- The BIOS goes into Modxo's flash bank as its own .uf2: `flashbin_to_uf2.py` from Modxo's `tools/` (default base 0x10040000).
 - Python 3 with pyserial (`pip install pyserial`).
 
 ## Commands
@@ -66,15 +60,13 @@ python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image build/kernel/s
 ```
 
 ## Notes
-- The console's Super I/O probe and COM1 work only while the logger holds DTR (stock Modxo behaviour); without a
-  logger running, an OXOS console fails to boot (red/green FRAG).
-- 0xFE and 0xFC mark POST codes and status lines in the stream. Binary COM1 output (a kernel debugger's packets)
-  can contain them; read such output from `--raw`.
-- A press is ignored while some kernels run (e.g. Microsoft's debug kernel). `on` / `off` retry once and report a
-  failure.
+- The console's Super I/O probe and COM1 work only while the logger holds DTR (stock Modxo behaviour); without a logger running, an OXOS console fails to boot
+  (red/green FRAG).
+- 0xFE and 0xFC mark POST codes and status lines in the stream. Binary COM1 output (a kernel debugger's packets) can contain them; read such output from
+  `--raw`.
+- A press is ignored while some kernels run (e.g. Microsoft's debug kernel). `on` / `off` retry once and report a failure.
 
 ## Troubleshooting
-- **`state` says `no pico`, and `lsusb` shows `2e8a:0003 Raspberry Pi RP2 Boot`:** the Pico is in its USB
-  bootloader (BOOTSEL), with its flash intact. Copy the firmware .uf2 to the RPI-RP2 drive (or run `flash_uf2.sh
-  FIRMWARE.uf2`), and it restarts. The BIOS bank is not touched.
+- **`state` says `no pico`, and `lsusb` shows `2e8a:0003 Raspberry Pi RP2 Boot`:** the Pico is in its USB bootloader (BOOTSEL), with its flash intact. Copy the
+  firmware .uf2 to the RPI-RP2 drive (or run `flash_uf2.sh FIRMWARE.uf2`), and it restarts. The BIOS bank is not touched.
 - **`no logger answers`:** start `console.py log` first. Only one logger can own the port.

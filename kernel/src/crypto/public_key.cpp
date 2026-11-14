@@ -1,5 +1,5 @@
-// Xc public-key and block ciphers: BSAFE-format RSA keys, modular exponentiation, PKCS#1 signature check, DES/3DES
-// (FIPS 46-3), and the replaceable crypto vector (spec/stock/15). Numbers are little-endian arrays of 32-bit words.
+// Xc public-key and block ciphers: BSAFE-format RSA keys, modular exponentiation, PKCS#1 signature check, DES/3DES (FIPS 46-3), and the replaceable crypto
+// vector (spec/stock/15). Numbers are little-endian arrays of 32-bit words.
 #include <crypto/crypto.h>
 #include <core/core.h>
 #include <memory/memory.h>
@@ -197,8 +197,7 @@ static ULONG NTAPI PKDecPrivate(PUCHAR pbPrvKey, PUCHAR pbInput, PUCHAR pbOutput
     }
     // modulus, prime1, prime2, exponent1, exponent2, coefficient (keylen/2 each), private exponent.
     const UCHAR *privateExponent = k->Modulus + k->KeyLength + 5 * (k->KeyLength / 2);
-    return BnModExp((ULONG *)pbOutput, (const ULONG *)pbInput, (const ULONG *)privateExponent,
-                    (const ULONG *)k->Modulus, n);
+    return BnModExp((ULONG *)pbOutput, (const ULONG *)pbInput, (const ULONG *)privateExponent, (const ULONG *)k->Modulus, n);
 }
 
 static ULONG NTAPI PKGetKeyLen(PUCHAR pbPubKey) {
@@ -369,8 +368,7 @@ static void NTAPI BlockCrypt(ULONG dwCipher, PUCHAR pbOutput, PUCHAR pbInput, PU
     }
 }
 
-static void NTAPI BlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput,
-                                PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback) {
+static void NTAPI BlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOutput, PUCHAR pbInput, PUCHAR pbKeyTable, ULONG dwOp, PUCHAR pbFeedback) {
     for (ULONG off = 0; off + 8 <= dwInputLength; off += 8) {
         UCHAR block[8];
         if (dwOp) {

@@ -1,5 +1,4 @@
-// The extension list file's parser (spec/oxos_internal/34 §3.1), on the ini line reader the kernel's other files use
-// (ini_file/ini_file.cpp).
+// The extension list file's parser (spec/oxos_internal/34 §3.1), on the ini line reader the kernel's other files use (ini_file/ini_file.cpp).
 #include <ini_file/extensions_ini.h>
 #include <ini_file/ini_file.h>
 
@@ -69,8 +68,7 @@ void CloseSection(const SECTION &Section, XK_EXTENSION_ENTRY *Entries, ULONG *Co
 
 } // namespace
 
-ULONG ParseExtensions(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries,
-                      ULONG *Errors) {
+ULONG ParseExtensions(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries, ULONG *Errors) {
     *Errors = 0;
     ULONG count = 0;
     SECTION section = {};

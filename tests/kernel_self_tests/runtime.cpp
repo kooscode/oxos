@@ -8,12 +8,11 @@
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
-volatile ULONG KiTestRtlSprintfOk, KiTestRtlInterlockedOk, KiTestRtlCritSecOk, KiTestRtlRwLockOk, KiTestRtlStringsOk,
-    KiTestRtlMathOk, KiTestRtlRefurbOk, KiTestRtlTimeOk, KiTestRtlDbgOk, KiTestRtlBoostOk, KiTestRtlFpuOk,
-    KiTestRtlDone;
+volatile ULONG KiTestRtlSprintfOk, KiTestRtlInterlockedOk, KiTestRtlCritSecOk, KiTestRtlRwLockOk, KiTestRtlStringsOk, KiTestRtlMathOk, KiTestRtlRefurbOk,
+    KiTestRtlTimeOk, KiTestRtlDbgOk, KiTestRtlBoostOk, KiTestRtlFpuOk, KiTestRtlDone;
 volatile char KiTestRtlSprintfOut[64];
-// The Refurb test's steps, for boot_test.py to print when it fails: the first read's status, the signature read last,
-// the write-and-read-again status (0x103 when not needed), the short-length call's status.
+// The Refurb test's steps, for boot_test.py to print when it fails: the first read's status, the signature read last, the write-and-read-again status (0x103
+// when not needed), the short-length call's status.
 volatile ULONG KiTestRtlRefurbSteps[4];
 
 static void Sleep(LONG ms) {
@@ -106,14 +105,14 @@ static void NTAPI RtlControllerThread(PVOID) {
 
     // Interlocked + S-list
     volatile LONG v = 5;
-    ok = InterlockedIncrement(&v) == 6 && InterlockedCompareExchange(&v, 9, 6) == 6 && v == 9 &&
-         InterlockedCompareExchange(&v, 1, 6) == 9 && InterlockedExchangeAdd(&v, 3) == 9 && v == 12;
+    ok = InterlockedIncrement(&v) == 6 && InterlockedCompareExchange(&v, 9, 6) == 6 && v == 9 && InterlockedCompareExchange(&v, 1, 6) == 9 &&
+         InterlockedExchangeAdd(&v, 3) == 9 && v == 12;
     SLIST_HEADER head = {};
     SINGLE_LIST_ENTRY items[3];
     for (auto &it : items)
         InterlockedPushEntrySList(&head, &it);
-    ok &= head.Depth == 3 && InterlockedPopEntrySList(&head) == &items[2] &&
-          InterlockedFlushSList(&head) == &items[1] && InterlockedPopEntrySList(&head) == nullptr;
+    ok &= head.Depth == 3 && InterlockedPopEntrySList(&head) == &items[2] && InterlockedFlushSList(&head) == &items[1] &&
+          InterlockedPopEntrySList(&head) == nullptr;
     KiTestRtlInterlockedOk = ok;
 
     // Critical sections
@@ -163,8 +162,8 @@ static void NTAPI RtlControllerThread(PVOID) {
     ok &= RtlCompareMemory("abcdef", "abcxef", 6) == 3 && RtlUlongByteSwap(0x11223344) == 0x44332211;
     KiTestRtlMathOk = ok;
 
-    // Refurb record (sector 3): read it; a disk without a valid one (an invalid signature reads as zeros) gets one
-    // written first, as on a console's first boot (the tests only ever use a copy of the disk image).
+    // Refurb record (sector 3): read it; a disk without a valid one (an invalid signature reads as zeros) gets one written first, as on a console's first boot
+    // (the tests only ever use a copy of the disk image).
     ULONG refurb[4] = {};
     NTSTATUS first = ExReadWriteRefurbInfo(refurb, 16, FALSE), again = STATUS_PENDING;
     if (first == 0 && refurb[0] != 0x52465242) {
@@ -178,8 +177,7 @@ static void NTAPI RtlControllerThread(PVOID) {
     KiTestRtlRefurbSteps[1] = refurb[0];
     KiTestRtlRefurbSteps[2] = (ULONG)again;
     KiTestRtlRefurbSteps[3] = (ULONG)shortLength;
-    KiTestRtlRefurbOk = first == 0 && (again == STATUS_PENDING || again == 0) && refurb[0] == 0x52465242 &&
-                        shortLength == (NTSTATUS)0xC000000D;
+    KiTestRtlRefurbOk = first == 0 && (again == STATUS_PENDING || again == 0) && refurb[0] == 0x52465242 && shortLength == (NTSTATUS)0xC000000D;
 
     // System time comes from the RTC; setting it updates the RTC.
     LARGE_INTEGER now, old, set, after;
@@ -199,8 +197,8 @@ static void NTAPI RtlControllerThread(PVOID) {
         ok = core::DebugLog[i] == 'x' && StrEq(core::DebugLog + i, "xk-log 77 marker\n");
     KiTestRtlDbgOk = ok;
 
-    // KeSetEventBoostPriority hands the event to the waiter. The test waits for the real state, at most 1 s each:
-    // the waiter in its wait (on the event's wait list), then the waiter run after the hand-off.
+    // KeSetEventBoostPriority hands the event to the waiter. The test waits for the real state, at most 1 s each: the waiter in its wait (on the event's wait
+    // list), then the waiter run after the hand-off.
     KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
     core::CreateSystemThread(BoostWaiter, nullptr, 0, 8);
     for (ULONG ms = 0; ms < 1000 && IsListEmpty(&BoostEvent.Header.WaitListHead); ms++)

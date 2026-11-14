@@ -1,9 +1,8 @@
-// A title delivered by netboot (OXOS addition; spec/oxos_internal/09_netboot.md §7). tools/netboot/netboot.py
-// --title DIR appends the title's files (a package) to the image it serves and leaves a marker in the downloaded
-// bank. At entry the kernel notes where the package is; the memory manager keeps those pages off the free lists; the
-// title-launch thread writes the files to E:\<name>\ (the XBE as <name>.xbe), gives the pages back, and launches
-// that XBE (D: = its folder) instead of the disc or the dashboard. A quick reboot finds no package (the marker is
-// cleared once read), so a title's own reboots and launches behave as usual.
+// A title delivered by netboot (OXOS addition; spec/oxos_internal/09_netboot.md §7). tools/netboot/netboot.py --title DIR appends the title's files (a package)
+// to the image it serves and leaves a marker in the downloaded bank. At entry the kernel notes where the package is; the memory manager keeps those pages off
+// the free lists; the title-launch thread writes the files to E:\<name>\ (the XBE as <name>.xbe), gives the pages back, and launches that XBE (D: = its folder)
+// instead of the disc or the dashboard. A quick reboot finds no package (the marker is cleared once read), so a title's own reboots and launches behave as
+// usual.
 #include <titles/titles.h>
 #include <io/io.h>
 #include <core/core.h>
@@ -79,8 +78,7 @@ static NTSTATUS OpenOrCreate(HANDLE *h, const char *path, ULONG disposition, ULO
     RtlInitAnsiString(&name, path);
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
-    return NtCreateFile(h, GENERIC_WRITE | SYNCHRONIZE, &a, &iosb, nullptr, 0, 0, disposition,
-                        FILE_SYNCHRONOUS_IO_NONALERT | options);
+    return NtCreateFile(h, GENERIC_WRITE | SYNCHRONIZE, &a, &iosb, nullptr, 0, 0, disposition, FILE_SYNCHRONOUS_IO_NONALERT | options);
 }
 
 static void PackageTitleName(char *out, const char *in, ULONG max) { // a NUL-padded name, '\\' and ':' refused
@@ -90,14 +88,13 @@ static void PackageTitleName(char *out, const char *in, ULONG max) { // a NUL-pa
     out[i] = 0;
 }
 
-// The title-launch thread, cold boot: install the package's files and launch its XBE. FALSE when there is no
-// package or the launch failed (the usual disc / dashboard selection follows).
+// The title-launch thread, cold boot: install the package's files and launch its XBE. FALSE when there is no package or the launch failed (the usual disc /
+// dashboard selection follows).
 bool LaunchNetbootTitle() {
     if (!NetbootPackageSize) {
         if (NetbootMarkerSeen[1] == MARKER_MAGIC) { // a title was sent but not taken: say why
-            XK_SERIAL("netboot title: refused (payload %08lx, marker %08lx, offset %#lx, size %#lx, package %08lx)\n",
-                      NetbootMarkerSeen[0], NetbootMarkerSeen[1], NetbootMarkerSeen[2], NetbootMarkerSeen[3],
-                      NetbootMarkerSeen[4]);
+            XK_SERIAL("netboot title: refused (payload %08lx, marker %08lx, offset %#lx, size %#lx, package %08lx)\n", NetbootMarkerSeen[0],
+                      NetbootMarkerSeen[1], NetbootMarkerSeen[2], NetbootMarkerSeen[3], NetbootMarkerSeen[4]);
         }
         return false;
     }
@@ -111,8 +108,7 @@ bool LaunchNetbootTitle() {
     NTSTATUS status = OpenOrCreate(&h, dir, FILE_OPEN_IF, FILE_DIRECTORY_FILE);
     if (NT_SUCCESS(status))
         NtClose(h);
-    XK_SERIAL("netboot title: %s, %lu files, %lu bytes -> E:\\%s (folder %#lx)\n", title, header->Count,
-              NetbootPackageSize, title, status);
+    XK_SERIAL("netboot title: %s, %lu files, %lu bytes -> E:\\%s (folder %#lx)\n", title, header->Count, NetbootPackageSize, title, status);
     bool written = NT_SUCCESS(status);
     for (ULONG i = 0; written && i < header->Count; i++) {
         const PackageEntry &e = entries[i];
@@ -127,8 +123,7 @@ bool LaunchNetbootTitle() {
         if (NT_SUCCESS(status)) {
             IO_STATUS_BLOCK iosb;
             LARGE_INTEGER at = {};
-            status = e.Size ? NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, (PVOID)(base + e.Offset), e.Size, &at)
-                            : STATUS_SUCCESS;
+            status = e.Size ? NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, (PVOID)(base + e.Offset), e.Size, &at) : STATUS_SUCCESS;
             NtClose(h);
         }
         XK_SERIAL("netboot title: E:\\%s\\%s, %lu bytes: %#lx\n", title, name, e.Size, status);

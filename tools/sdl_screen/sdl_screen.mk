@@ -1,5 +1,5 @@
-# SDL3 for an OXOS nxdk app (Ryzee119's nxdk-sdl3, fetched into third_party/nxdk-sdl3 by `make -C kernel nxdk`), with
-# the shared text screen (sdl_screen.h). Included by tools/nxdk_app.mk after nxdk's Makefile, which every app uses.
+# SDL3 for an OXOS nxdk app (Ryzee119's nxdk-sdl3, fetched into third_party/nxdk-sdl3 by `make -C kernel nxdk`), with the shared text screen (sdl_screen.h).
+# Included by tools/nxdk_app.mk after nxdk's Makefile, which every app uses.
 SDL_SCREEN_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 NXDK_SDL3_DIR ?= $(abspath $(SDL_SCREEN_DIR)/../../third_party/nxdk-sdl3)
 

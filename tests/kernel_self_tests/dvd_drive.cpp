@@ -1,5 +1,4 @@
-// Boot self-tests for the DVD drive, XDVDFS and the RAW file system (milestone 3c-3). boot_test.py attaches an
-// XISO built by tests/mkxiso.py and compares.
+// Boot self-tests for the DVD drive, XDVDFS and the RAW file system (milestone 3c-3). boot_test.py attaches an XISO built by tests/mkxiso.py and compares.
 #include <kernel_self_tests.h>
 #include <storage/storage.h>
 #include <runtime/runtime.h>
@@ -7,24 +6,21 @@
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
-volatile ULONG KiTestDvdDeviceOk, KiTestDvdBigSum, KiTestDvdBigLength, KiTestDvdReadOk, KiTestDvdDirOk,
-    KiTestDvdErrorsOk, KiTestDvdRawOk, KiTestDvdSortKeyOk, KiTestDvdDone;
+volatile ULONG KiTestDvdDeviceOk, KiTestDvdBigSum, KiTestDvdBigLength, KiTestDvdReadOk, KiTestDvdDirOk, KiTestDvdErrorsOk, KiTestDvdRawOk, KiTestDvdSortKeyOk,
+    KiTestDvdDone;
 volatile char KiTestDvdDirNames[64];
 volatile NTSTATUS KiTestDvdStatus[8];
 
-static NTSTATUS DvdOpen(HANDLE *h, PCSZ path, ACCESS_MASK access = GENERIC_READ, ULONG disposition = FILE_OPEN,
-                        ULONG options = 0) {
+static NTSTATUS DvdOpen(HANDLE *h, PCSZ path, ACCESS_MASK access = GENERIC_READ, ULONG disposition = FILE_OPEN, ULONG options = 0) {
     OBJECT_STRING s;
     RtlInitAnsiString(&s, path);
     OBJECT_ATTRIBUTES a = {nullptr, &s, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
-    return NtCreateFile(h, access | SYNCHRONIZE, &a, &iosb, nullptr, 0, FILE_SHARE_READ, disposition,
-                        options | FILE_SYNCHRONOUS_IO_NONALERT);
+    return NtCreateFile(h, access | SYNCHRONIZE, &a, &iosb, nullptr, 0, FILE_SHARE_READ, disposition, options | FILE_SYNCHRONOUS_IO_NONALERT);
 }
 
 // UDF disc (milestone 8, boot_test.py --udf with tests/mkudf.py): fragmented, embedded and 16-bit-name files.
-volatile ULONG KiTestUdfVolumeOk, KiTestUdfVobSum, KiTestUdfVobLength, KiTestUdfIfoSum, KiTestUdfSmallOk,
-    KiTestUdfWideOk, KiTestUdfDirOk, KiTestUdfErrorsOk;
+volatile ULONG KiTestUdfVolumeOk, KiTestUdfVobSum, KiTestUdfVobLength, KiTestUdfIfoSum, KiTestUdfSmallOk, KiTestUdfWideOk, KiTestUdfDirOk, KiTestUdfErrorsOk;
 volatile char KiTestUdfDirNames[64];
 
 static ULONG DvdReadAll(PCSZ path, PUCHAR buf, ULONG size, ULONG *got) {
@@ -62,8 +58,7 @@ static void UdfSuite(PUCHAR buf) {
               *(PULONG)(attr + 8) == 3 && RtlCompareMemory(attr + 12, "UDF", 3) == 3;
         LARGE_INTEGER off;
         off.QuadPart = 4;
-        ok &= NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 9 &&
-              buf[0] == 'r' && buf[8] == 'e';
+        ok &= NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 9 && buf[0] == 'r' && buf[8] == 'e';
         NtClose(h);
     }
     KiTestUdfVolumeOk = ok;
@@ -73,8 +68,7 @@ static void UdfSuite(PUCHAR buf) {
         UCHAR e[0x40 + 64];
         ULONG n = 0;
         BOOLEAN restart = TRUE;
-        while (NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, e, sizeof(e), FileDirectoryInformation,
-                                    nullptr, restart) == 0) {
+        while (NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, e, sizeof(e), FileDirectoryInformation, nullptr, restart) == 0) {
             restart = FALSE;
             for (ULONG i = 0; i < *(PULONG)(e + 0x3C) && n < 62; i++)
                 KiTestUdfDirNames[n++] = e[0x40 + i];
@@ -87,8 +81,7 @@ static void UdfSuite(PUCHAR buf) {
     ok = DvdOpen(&hx, "\\Device\\CdRom0\\nofile") == STATUS_OBJECT_NAME_NOT_FOUND;
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\nodir\\x") == STATUS_OBJECT_PATH_NOT_FOUND;
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\readme.txt", GENERIC_WRITE) == (NTSTATUS)0xC00000A2;
-    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\VIDEO_TS", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) ==
-          (NTSTATUS)0xC00000BA;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\VIDEO_TS", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) == (NTSTATUS)0xC00000BA;
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\readme.txt\\", GENERIC_READ) == (NTSTATUS)0xC0000103;
     KiTestUdfErrorsOk = ok;
 }
@@ -104,8 +97,7 @@ static void NTAPI DvdControllerThread(PVOID) {
     RtlInitAnsiString(&name, "\\Device\\CdRom0");
     PVOID dev = nullptr;
     bool ok = ObReferenceObjectByName(&name, 0, nullptr, nullptr, &dev) == 0;
-    ok &= ok && IoSynchronousDeviceIoControlRequest(IOCTL_CDROM_CHECK_VERIFY, (PDEVICE_OBJECT)dev, nullptr, 0,
-                                                    nullptr, 0, nullptr, FALSE) == 0;
+    ok &= ok && IoSynchronousDeviceIoControlRequest(IOCTL_CDROM_CHECK_VERIFY, (PDEVICE_OBJECT)dev, nullptr, 0, nullptr, 0, nullptr, FALSE) == 0;
     if (dev)
         ObfDereferenceObject(dev);
     KiTestDvdDeviceOk = ok;
@@ -116,8 +108,8 @@ static void NTAPI DvdControllerThread(PVOID) {
         HANDLE hr;
         UCHAR attr[32];
         if (buf && DvdOpen(&hr, "\\Device\\CdRom0\\", FILE_READ_DATA, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
-            bool udf = NtQueryVolumeInformationFile(hr, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
-                       RtlCompareMemory(attr + 12, "UDF", 3) == 3;
+            bool udf = NtQueryVolumeInformationFile(hr, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 && RtlCompareMemory(attr + 12, "UDF",
+                       3) == 3;
             NtClose(hr);
             if (udf) {
                 UdfSuite(buf);
@@ -146,10 +138,9 @@ static void NTAPI DvdControllerThread(PVOID) {
         ok &= DvdOpen(&h2, "\\Device\\CdRom0\\MEDIA\\a.txt") == 0;
         LARGE_INTEGER off;
         off.QuadPart = 6;
-        ok &= NtReadFile(h2, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 3 &&
-              buf[0] == 'd' && buf[2] == 'd';
-        // The physical sort key as titles' libraries read it (spec/oxos_internal/25 §1): volume name "GDFX", then
-        // the start sector at FsContext + 0, which must be the file's sector (FileInternalInformation).
+        ok &= NtReadFile(h2, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 3 && buf[0] == 'd' && buf[2] == 'd';
+        // The physical sort key as titles' libraries read it (spec/oxos_internal/25 §1): volume name "GDFX", then the start sector at FsContext + 0, which must
+        // be the file's sector (FileInternalInformation).
         {
             UCHAR attr[32];
             ULONG internal[2] = {};
@@ -178,8 +169,7 @@ static void NTAPI DvdControllerThread(PVOID) {
         ULONG n = 0;
         BOOLEAN restart = TRUE;
         for (;;) {
-            NTSTATUS qs = NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, e, sizeof(e),
-                                               FileDirectoryInformation, nullptr, restart);
+            NTSTATUS qs = NtQueryDirectoryFile(hd, nullptr, nullptr, nullptr, &iosb, e, sizeof(e), FileDirectoryInformation, nullptr, restart);
             KiTestDvdStatus[4 + (restart ? 0 : 1)] = qs;
             if (qs)
                 break;
@@ -199,8 +189,7 @@ static void NTAPI DvdControllerThread(PVOID) {
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\nodir\\x") == STATUS_OBJECT_PATH_NOT_FOUND;
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\new.txt", GENERIC_READ, FILE_CREATE) == WRITE_PROTECTED;
     ok &= DvdOpen(&hx, "\\Device\\CdRom0\\AAA.txt", GENERIC_WRITE) == WRITE_PROTECTED;
-    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\media", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) ==
-          (NTSTATUS)0xC00000BA;
+    ok &= DvdOpen(&hx, "\\Device\\CdRom0\\media", GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) == (NTSTATUS)0xC00000BA;
     KiTestDvdErrorsOk = ok;
 
     // RAW: the whole disk (Partition0) never carries a file system; read the sector the IDE suite wrote.

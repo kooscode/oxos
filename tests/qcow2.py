@@ -1,11 +1,9 @@
-"""Minimal qcow2 reader for checking disk contents in tests (plain, zero and deflate-compressed clusters; the
-xemu-dashboard disk image is compressed), with copy-with-changes writing: write() keeps changes in memory, save()
-writes a new image. The source image is never modified.
+"""Minimal qcow2 reader for checking disk contents in tests (plain, zero and deflate-compressed clusters; the xemu-dashboard disk image is compressed), with
+copy-with-changes writing: write() keeps changes in memory, save() writes a new image. The source image is never modified.
 
-save() writes a fresh qcow2 version 2 image with the same cluster size and virtual size: header, L1 table,
-reference-count table and blocks (every used cluster counted once), L2 tables and the data clusters, uncompressed;
-clusters that are entirely zero are left out. grow() raises the virtual size first, so save() makes a bigger disk:
-the added space is unallocated and costs nothing on the host (`qcow2.py --grow SRC DST SIZE` from the shell)."""
+save() writes a fresh qcow2 version 2 image with the same cluster size and virtual size: header, L1 table, reference-count table and blocks (every used cluster
+counted once), L2 tables and the data clusters, uncompressed; clusters that are entirely zero are left out. grow() raises the virtual size first, so save()
+makes a bigger disk: the added space is unallocated and costs nothing on the host (`qcow2.py --grow SRC DST SIZE` from the shell)."""
 import struct, zlib
 
 
@@ -140,8 +138,7 @@ class Qcow2:
             l1[t] = ((l2_at + n) * cs) | copied
         for n, idx in enumerate(sorted(data)):
             l2[idx // l2n][idx % l2n] = ((data_at + n) * cs) | copied
-        header = struct.pack(">4sIQIIQIIQQIIQ", b"QFI\xfb", 2, 0, 0, self.cluster_bits, self.size, 0, l1_size,
-                             l1_at * cs, rt_at * cs, rt_clusters, 0, 0)
+        header = struct.pack(">4sIQIIQIIQQIIQ", b"QFI\xfb", 2, 0, 0, self.cluster_bits, self.size, 0, l1_size, l1_at * cs, rt_at * cs, rt_clusters, 0, 0)
         refcounts = bytearray(rb_count * cs)
         for c in range(total):
             struct.pack_into(">H", refcounts, 2 * c, 1)

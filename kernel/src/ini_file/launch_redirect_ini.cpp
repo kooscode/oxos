@@ -11,8 +11,8 @@ namespace xk::ini_file {
 
 namespace {
 
-// The drives a path in the file may start with (spec/oxos_internal/33 §1): D: is the DVD drive, the others are the
-// hard disk's partitions, PARTITIONS[i] for DRIVES[i].
+// The drives a path in the file may start with (spec/oxos_internal/33 §1): D: is the DVD drive, the others are the hard disk's partitions, PARTITIONS[i] for
+// DRIVES[i].
 constexpr char DVD_DRIVE[] = "\\Device\\CdRom0";
 constexpr char PARTITION[] = "\\Device\\Harddisk0\\Partition";
 constexpr char DRIVES[] = "CEFGXYZ";

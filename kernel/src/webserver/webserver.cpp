@@ -1,11 +1,9 @@
-// The upload server (spec/oxos_internal/31_upload_server.md §3): HTTP/1.1 on the kernel's network stack, one request
-// per connection: the page, folder listings, uploads written to the disk as they arrive, creating a folder, renaming
-// and deleting a file or folder (a folder only when empty), and launching an XBE.
+// The upload server (spec/oxos_internal/31_upload_server.md §3): HTTP/1.1 on the kernel's network stack, one request per connection: the page, folder listings,
+// uploads written to the disk as they arrive, creating a folder, renaming and deleting a file or folder (a folder only when empty), and launching an XBE.
 // Boot-only.
 //
-// Each connection's request moves through phases: its head (request line and headers), then an upload's body, then
-// the reply, queued to the connection as its send buffer has room. Everything the server keeps is in one block,
-// allocated when it starts and freed by Stop.
+// Each connection's request moves through phases: its head (request line and headers), then an upload's body, then the reply, queued to the connection as its
+// send buffer has room. Everything the server keeps is in one block, allocated when it starts and freed by Stop.
 #include <webserver/webserver.h>
 #include <user_interface/user_interface.h>
 #include <network/network.h>
@@ -25,8 +23,7 @@ namespace xk::webserver {
 
 constexpr ULONG HEAD_SIZE = 4096, CHUNK_SIZE = 0x20000, JSON_SIZE = 0x8000, PATH_SIZE = 260, STATUS_SIZE = 64;
 constexpr NTSTATUS STATUS_NO_MORE_FILES_ = (NTSTATUS)0x80000006, STATUS_NO_SUCH_FILE_ = (NTSTATUS)0xC000000F,
-                   STATUS_DIRECTORY_NOT_EMPTY_ = (NTSTATUS)0xC0000101,
-                   STATUS_OBJECT_NAME_COLLISION_ = (NTSTATUS)0xC0000035;
+                   STATUS_DIRECTORY_NOT_EMPTY_ = (NTSTATUS)0xC0000101, STATUS_OBJECT_NAME_COLLISION_ = (NTSTATUS)0xC0000035;
 
 enum UPLOADP_PHASE : ULONG {
     Idle,       // no request
@@ -96,8 +93,7 @@ static void UpdateScreen() {
     char address[20];
     network::IpAddressText(address, sizeof(address));
     const char *network = network::NetworkState() == NetNoLink   ? "Connect a network cable."
-                          : network::NetworkState() == NetAsking ? "Asking the network for an address..."
-                                                    : nullptr;
+                          : network::NetworkState() == NetAsking ? "Asking the network for an address..." : nullptr;
     const char *status = Server->Status[0] ? Server->Status : network;
     char shown[sizeof(Server->Shown)];
     RtlSnprintf(shown, sizeof(shown), "%s|%s", address, status ? status : "Waiting for a browser.");
@@ -159,12 +155,11 @@ static bool QueryValue(const char *Target, const char *Key, char *Out, ULONG Siz
 
 // A character FATX allows in a name (exFAT allows a few more; FATX's rule holds on both).
 static bool NameCharacter(char c) {
-    return (UCHAR)c >= 0x20 && c != '"' && c != '*' && c != '/' && c != ':' && c != '<' && c != '>' && c != '?' &&
-           c != '\\' && c != '|';
+    return (UCHAR)c >= 0x20 && c != '"' && c != '*' && c != '/' && c != ':' && c != '<' && c != '>' && c != '?' && c != '\\' && c != '|';
 }
 
-// The NT path of a page path ("/E/Apps/x.xbe" -> "\Device\Harddisk0\Partition1\Apps\x.xbe"); false for an unknown
-// drive, an empty part, "." or "..", or a character FATX does not allow. "/" alone is the list of drives.
+// The NT path of a page path ("/E/Apps/x.xbe" -> "\Device\Harddisk0\Partition1\Apps\x.xbe"); false for an unknown drive, an empty part, "." or "..", or a
+// character FATX does not allow. "/" alone is the list of drives.
 static bool NtPathOf(const char *Path, char *Out, ULONG Size) {
     static const char drives[] = "CEFGXYZ";
     static const UCHAR partitions[] = {2, 1, 6, 7, 3, 4, 5};
@@ -203,18 +198,17 @@ static bool NtPathOf(const char *Path, char *Out, ULONG Size) {
     return true;
 }
 
-// Opens or creates NtPath; Size, when not 0, is the allocation a new file starts with (an upload's length: its
-// clusters are allocated once, not with every write).
-static NTSTATUS OpenFile(const char *NtPath, ACCESS_MASK Access, ULONG Disposition, ULONG Options, HANDLE *h,
-                         ULONGLONG Size = 0) {
+// Opens or creates NtPath; Size, when not 0, is the allocation a new file starts with (an upload's length: its clusters are allocated once, not with every
+// write).
+static NTSTATUS OpenFile(const char *NtPath, ACCESS_MASK Access, ULONG Disposition, ULONG Options, HANDLE *h, ULONGLONG Size = 0) {
     ANSI_STRING name;
     RtlInitAnsiString(&name, NtPath);
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     LARGE_INTEGER allocation;
     allocation.QuadPart = (LONGLONG)Size;
-    return NtCreateFile(h, Access | SYNCHRONIZE, &a, &iosb, Size ? &allocation : nullptr, FILE_ATTRIBUTE_NORMAL,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE, Disposition, Options | FILE_SYNCHRONOUS_IO_NONALERT);
+    return NtCreateFile(h, Access | SYNCHRONIZE, &a, &iosb, Size ? &allocation : nullptr, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        Disposition, Options | FILE_SYNCHRONOUS_IO_NONALERT);
 }
 
 // The folders on the way to NtPath's last part, created where missing.
@@ -284,8 +278,7 @@ static void HandleList(UPLOADP_REQUEST *r) {
             return;
         n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "%s{\"name\":\"", n > 1 ? "," : "");
         JsonName(r, &n, name, length);
-        n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "\",\"dir\":%s,\"size\":%llu}",
-                                folder ? "true" : "false", size);
+        n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "\",\"dir\":%s,\"size\":%llu}", folder ? "true" : "false", size);
     };
     r->Json[n++] = '[';
     if (r->Path[0] == '/' && !r->Path[1]) { // the drives that exist
@@ -293,8 +286,7 @@ static void HandleList(UPLOADP_REQUEST *r) {
         for (ULONG i = 0; drives[i]; i++) {
             char path[3] = {'/', drives[i], 0}, nt[64];
             HANDLE h;
-            if (NtPathOf(path, nt, sizeof(nt)) && NT_SUCCESS(OpenFile(nt, GENERIC_READ, FILE_OPEN,
-                                                                      FILE_DIRECTORY_FILE, &h))) {
+            if (NtPathOf(path, nt, sizeof(nt)) && NT_SUCCESS(OpenFile(nt, GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE, &h))) {
                 NtClose(h);
                 entry(path + 1, 1, true, 0);
             }
@@ -307,14 +299,12 @@ static void HandleList(UPLOADP_REQUEST *r) {
         UCHAR buffer[2048];
         for (bool first = true;; first = false) {
             IO_STATUS_BLOCK iosb;
-            status = NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
-                                          FileDirectoryInformation, nullptr, first);
+            status = NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, first);
             if (first && status == STATUS_NO_SUCH_FILE_) // an empty folder: NT's answer to the first query
                 status = STATUS_NO_MORE_FILES_;
             if (!NT_SUCCESS(status))
                 break;
-            // FILE_DIRECTORY_INFORMATION: next entry at 0, size at 0x28, attributes at 0x38, name length at 0x3C,
-            // the name at 0x40.
+            // FILE_DIRECTORY_INFORMATION: next entry at 0, size at 0x28, attributes at 0x38, name length at 0x3C, the name at 0x40.
             for (PUCHAR e = buffer;; e += *(PULONG)e) {
                 bool folder = *(PULONG)(e + 0x38) & FILE_ATTRIBUTE_DIRECTORY;
                 entry((const char *)(e + 0x40), *(PULONG)(e + 0x3C), folder, *(ULONGLONG *)(e + 0x28));
@@ -332,8 +322,8 @@ static void HandleList(UPLOADP_REQUEST *r) {
 
 // --- The disk
 
-// A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\Apps" ("/E" reads "E:\"); an
-// exFAT disk has one volume whose top-level folders stand for the drives, so its paths stay as they are.
+// A page path as messages show it: a FATX disk has partitions, so "/E/Apps" reads "E:\Apps" ("/E" reads "E:\"); an exFAT disk has one volume whose top-level
+// folders stand for the drives, so its paths stay as they are.
 static void ShowPath(const char *Path, char *Out, ULONG Size) {
     ULONG i = 0, o = 0;
     if (!storage::DiskHasEXFATLayout && Path[0] == '/' && Path[1] && Path[1] != '/' &&
@@ -351,12 +341,11 @@ static void ShowPath(const char *Path, char *Out, ULONG Size) {
     Out[o] = 0;
 }
 
-// The disk's file system and size, for the page's header and its folder buttons (spec/oxos_internal/31 §4):
-// {"fs":"exFAT","bytes":2000398934016}. "fs" is "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
+// The disk's file system and size, for the page's header and its folder buttons (spec/oxos_internal/31 §4): {"fs":"exFAT","bytes":2000398934016}. "fs" is
+// "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
 static void HandleDiskInfo(UPLOADP_REQUEST *r) {
     const char *fs = storage::DiskHasEXFATLayout ? "exFAT" : storage::DiskHasForeignLayout ? "none" : "FATX";
-    ULONG n = (ULONG)RtlSnprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs,
-                                 hardware::ide::DiskLengthInSectors * 512);
+    ULONG n = (ULONG)RtlSnprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs, hardware::ide::DiskLengthInSectors * 512);
     Reply(r, 200, "application/json", r->Json, n);
 }
 
@@ -386,8 +375,7 @@ static void HandleCreateFolder(UPLOADP_REQUEST *r) {
 
 // --- Renaming
 
-// Renames the file or folder at the request's path to Name, in the same folder. A drive is refused (403), a name in use
-// too (409).
+// Renames the file or folder at the request's path to Name, in the same folder. A drive is refused (403), a name in use too (409).
 static void HandleRename(UPLOADP_REQUEST *r, const char *Target) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
         return ReplyText(r, 403, "Cannot rename %s (%s)", r->Shown, TopName());
@@ -418,8 +406,8 @@ static void HandleRename(UPLOADP_REQUEST *r, const char *Target) {
 
 // --- Deleting
 
-// Deletes the file or empty folder at the request's path. A drive's own folder is refused, and a folder with
-// anything in it is left as it is (409): the page deletes nothing recursively.
+// Deletes the file or empty folder at the request's path. A drive's own folder is refused, and a folder with anything in it is left as it is (409): the page
+// deletes nothing recursively.
 static void HandleDelete(UPLOADP_REQUEST *r) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
         return ReplyText(r, 403, "Cannot delete %s (%s)", r->Shown, TopName());
@@ -506,8 +494,7 @@ static void DispatchRequest(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
         target++;
     while (*target == ' ')
         target++;
-    bool get = IsWord(r->Head, "GET "), put = IsWord(r->Head, "PUT "), post = IsWord(r->Head, "POST "),
-         remove = IsWord(r->Head, "DELETE ");
+    bool get = IsWord(r->Head, "GET "), put = IsWord(r->Head, "PUT "), post = IsWord(r->Head, "POST "), remove = IsWord(r->Head, "DELETE ");
     if (get && (IsWord(target, "/ ") || IsWord(target, "/index.html"))) {
         ULONG length;
         const char *page = FileManagerPage(&length);
@@ -515,9 +502,8 @@ static void DispatchRequest(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
     }
     if (get && IsWord(target, "/api/disk "))
         return HandleDiskInfo(r);
-    bool list = IsWord(target, "/api/list?"), file = IsWord(target, "/api/file?"),
-         folder = IsWord(target, "/api/folder?"), rename = IsWord(target, "/api/rename?"),
-         launch = IsWord(target, "/api/launch?");
+    bool list = IsWord(target, "/api/list?"), file = IsWord(target, "/api/file?"), folder = IsWord(target, "/api/folder?"), rename = IsWord(target,
+         "/api/rename?"), launch = IsWord(target, "/api/launch?");
     if (!list && !file && !folder && !rename && !launch)
         return ReplyText(r, 404, "No such page");
     if ((list && !get) || (file && !put && !remove) || (folder && !put) || ((rename || launch) && !post))
@@ -593,8 +579,7 @@ static void StepRequest(UPLOADP_REQUEST *r) {
     if (r->Phase == ReadBody) {
         while (r->Remaining) {
             ULONG room = CHUNK_SIZE - r->ChunkUsed;
-            ULONG n = network::ReceiveTcp(r->Connection, r->Chunk + r->ChunkUsed,
-                                              room < r->Remaining ? room : (ULONG)r->Remaining);
+            ULONG n = network::ReceiveTcp(r->Connection, r->Chunk + r->ChunkUsed, room < r->Remaining ? room : (ULONG)r->Remaining);
             if (!n)
                 break;
             r->ChunkUsed += n;

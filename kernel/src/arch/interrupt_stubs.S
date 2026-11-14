@@ -1,5 +1,5 @@
-// Interrupt and exception entry stubs. IDT layout (spec/stock/02 §3.3): 0x00-0x1F CPU exceptions,
-// 0x30-0x37 master PIC (IRQ0-7), 0x38-0x3F slave PIC (IRQ8-15), 64 vectors total.
+// Interrupt and exception entry stubs. IDT layout (spec/stock/02 §3.3): 0x00-0x1F CPU exceptions, 0x30-0x37 master PIC (IRQ0-7), 0x38-0x3F slave PIC (IRQ8-15),
+// 64 vectors total.
 
     .text
 
@@ -60,9 +60,8 @@ EXC_NOERR 31
     .globl _KiTrap45
 EXC_NOERR 45                        // int 0x2D: debug service (spec/stock/14)
 
-// Trap frame (KTRAP_FRAME_XK): edi esi ebp esp ebx edx ecx eax | vector error | eip cs eflags.
-// KiDispatchTrap returns when execution resumes with the (possibly edited) frame; a context with a different
-// stack pointer is resumed through KiContinueContext instead.
+// Trap frame (KTRAP_FRAME_XK): edi esi ebp esp ebx edx ecx eax | vector error | eip cs eflags. KiDispatchTrap returns when execution resumes with the (possibly
+// edited) frame; a context with a different stack pointer is resumed through KiContinueContext instead.
 KiTrapCommon:
     pushal
     cld

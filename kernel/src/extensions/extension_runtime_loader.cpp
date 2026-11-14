@@ -1,9 +1,7 @@
-// Runs the kernel extension loader (spec/oxos_internal/34 §8.1). The loader (extension_loader.cpp and
-// extension_parser.cpp in this folder, ini_file/extensions_ini.cpp) is not part of the resident kernel:
-// tools/link_extension_loader.py links it at XK_EXTENSION_LOADER_BASE against this kernel's addresses and
-// tools/mkbios.py appends it to the kernel image, in the boot-only pages. A cold boot writes it to the cache file;
-// every launch reads it from there into temporary pages, maps them at XK_EXTENSION_LOADER_BASE, runs it, and frees them
-// before the title loads.
+// Runs the kernel extension loader (spec/oxos_internal/34 §8.1). The loader (extension_loader.cpp and extension_parser.cpp in this folder,
+// ini_file/extensions_ini.cpp) is not part of the resident kernel: tools/link_extension_loader.py links it at XK_EXTENSION_LOADER_BASE against this kernel's
+// addresses and tools/mkbios.py appends it to the kernel image, in the boot-only pages. A cold boot writes it to the cache file; every launch reads it from
+// there into temporary pages, maps them at XK_EXTENSION_LOADER_BASE, runs it, and frees them before the title loads.
 #include <extensions/extensions.h>
 #include <extensions/extension_loader.h>
 #include <extensions/extension_state.h>
@@ -52,8 +50,8 @@ void WriteLoaderCache() {
     IO_STATUS_BLOCK iosb;
     HANDLE file;
     // No extensions folder: no extensions, and nothing to write.
-    NTSTATUS status = NtCreateFile(&file, GENERIC_WRITE | SYNCHRONIZE, &attributes, &iosb, nullptr, 0, 0,
-                                   FILE_OVERWRITE_IF, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = NtCreateFile(&file, GENERIC_WRITE | SYNCHRONIZE, &attributes, &iosb, nullptr, 0, 0, FILE_OVERWRITE_IF,
+                                   FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
     if (!NT_SUCCESS(status))
         return;
     LARGE_INTEGER at;
@@ -74,8 +72,8 @@ void LoadExtensions() {
     }
     if (!KiQuickRebootFlag && memory::BootPagesPresent())
         WriteLoaderCache();
-    // Without the list there is nothing to load (and the cache is not read), unless the last launch's state pages
-    // are still kept: the loader then frees them (§6).
+    // Without the list there is nothing to load (and the cache is not read), unless the last launch's state pages are still kept: the loader then frees them
+    // (§6).
     OBJECT_STRING listName;
     RtlInitAnsiString(&listName, LIST_PATH);
     OBJECT_ATTRIBUTES list = {nullptr, &listName, OBJ_CASE_INSENSITIVE};
@@ -87,10 +85,9 @@ void LoadExtensions() {
     ULONG largest = sizeof(XK_EXTENSION_LOADER_HEADER) + XK_EXTENSION_LOADER_MAX_BYTES;
     auto cache = (PUCHAR)titles::ReadOxosFile(CACHE_PATH, largest, POOL_TAG, &got, &status);
     auto header = (const XK_EXTENSION_LOADER_HEADER *)cache;
-    if (!cache || got < sizeof(*header) || header->Magic != XK_EXTENSION_LOADER_MAGIC ||
-        header->Stamp != KernelStamp() || header->Base != XK_EXTENSION_LOADER_BASE ||
-        header->Size > XK_EXTENSION_LOADER_MAX_BYTES ||
-        got != sizeof(*header) + header->Size || header->Entry >= header->Size) {
+    if (!cache || got < sizeof(*header) || header->Magic != XK_EXTENSION_LOADER_MAGIC || header->Stamp != KernelStamp() ||
+        header->Base != XK_EXTENSION_LOADER_BASE || header->Size > XK_EXTENSION_LOADER_MAX_BYTES || got != sizeof(*header) + header->Size ||
+        header->Entry >= header->Size) {
         XK_SERIAL("extensions: no loader cache for this kernel (%#lx): none loaded\n", status);
         if (cache)
             ExFreePool(cache);

@@ -1,16 +1,15 @@
 // X-code program for the 1.6 console (MCPXREVD5 builds), included by boot/xcodes.S at bank offset 0x80.
 //
-// Written from spec/stock/24_1_6_bringup.md (the 1.6 console's memory and chipset set-up) on the layout of
-// XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0), which the 1.0-1.5 images use. The 1.6 differs from Cromwell's
-// table in (spec/stock/24 §7):
+// Written from spec/stock/24_1_6_bringup.md (the 1.6 console's memory and chipset set-up) on the layout of XboxDev/cromwell's boot_rom/Xcodes.h (GPL-2.0),
+// which the 1.0-1.5 images use. The 1.6 differs from Cromwell's table in (spec/stock/24 §7):
 // - the SMBus is enabled first: the memory interface takes four of its settings from EEPROM bytes 0xC0-0xC3;
 // - the memory interface, pad defaults and DRAM controller values of the 1.6;
 // - the SMC version check; no writes to a video encoder.
-// The memory test and size decision are not here: boot/start.S makes them (the same rule, spec/stock/24 §4). For
-// that the program leaves the test set-up: PFB 0x100200 0x03070103, 0x100204 0x11448000, top of memory 128 MB.
+// The memory test and size decision are not here: boot/start.S makes them (the same rule, spec/stock/24 §4). For that the program leaves the test set-up: PFB
+// 0x100200 0x03070103, 0x100204 0x11448000, top of memory 128 MB.
 //
-// Register numbers are written as the program uses them: the NV2A at 0x0F000000 until the end, PCI configuration
-// addresses 0x80000000 | bus << 16 | device << 11 | function << 8 | register.
+// Register numbers are written as the program uses them: the NV2A at 0x0F000000 until the end, PCI configuration addresses 0x80000000 | bus << 16 | device <<
+// 11 | function << 8 | register.
 
 // Jumps to a label: the offset counts from the next X-code (`.` is 4 bytes before it while operand 2 is assembled).
 #define xcode_ifgoto_to(v, label) .byte 0x08; .long v; .long (label) - (. + 4);
@@ -19,10 +18,9 @@
 #define NV(offset) (0x0F000000 + (offset))
 #define STRAP NV(0x101000)
 
-// One byte read of the EEPROM (SMBus slave 0x54, address byte 0xA9) at offset `off`: the byte ends in the
-// accumulator. Done (status exactly 0x10): clear it and read the data. An error bit (collision 0x02, error 0x04,
-// time-out 0x20): clear it and start again. Neither: still busy, read the status again. Like the reference, it waits
-// for ever: a 1.6 cannot set up its memory without these bytes.
+// One byte read of the EEPROM (SMBus slave 0x54, address byte 0xA9) at offset `off`: the byte ends in the accumulator. Done (status exactly 0x10): clear it and
+// read the data. An error bit (collision 0x02, error 0x04, time-out 0x20): clear it and start again. Neither: still busy, read the status again. Like the
+// reference, it waits for ever: a 1.6 cannot set up its memory without these bytes.
 #define EEPROM_READ(off)                 \
 1:  xcode_outb(SMBUS + 4, 0x000000A9)    \
     xcode_outb(SMBUS + 8, off)           \
@@ -39,8 +37,8 @@
     xcode_goto_to(1b)                    \
 4:
 
-// Bit k of the byte in the low byte of `reg`: if set, OR `pattern` into `reg`. Eight of these copy the byte into the
-// bytes `pattern` names (the X-codes have no shift).
+// Bit k of the byte in the low byte of `reg`: if set, OR `pattern` into `reg`. Eight of these copy the byte into the bytes `pattern` names (the X-codes have no
+// shift).
 #define COPY_BIT(reg, k, pattern)                 \
     xcode_peek(reg)                               \
     xcode_bittoggle(1 << (k), 0)                  \
@@ -62,8 +60,8 @@
     COPY_BIT(reg, 6, 0x01010100)      \
     COPY_BIT(reg, 7, 0x01010100)
 
-    // Bridge, chipset and bus set-up (spec/stock/24 §2.2): power-management I/O at 0x8000, AGP bridge windows, the
-    // NV2A's registers at 0x0F000000, then the SMBus (I/O 0xC000).
+    // Bridge, chipset and bus set-up (spec/stock/24 §2.2): power-management I/O at 0x8000, AGP bridge windows, the NV2A's registers at 0x0F000000, then the
+    // SMBus (I/O 0xC000).
     xcode_pciout(0x80000884, 0x00008001)
     xcode_pciout(0x80000804, 0x00000003)
     xcode_outb(0x00008049, 0x00000008)
@@ -87,8 +85,8 @@
     xcode_poke(NV(0x10B0), 0x01000010)
     xcode_poke(NV(0x10CC), 0x66660000)
 
-    // EEPROM 0xC3 → strap bits 18/19 (§3.3): 0x42 both, 0x40 bit 19, 0x02 bit 18, anything else neither. The strap's
-    // bits 18, 19 and 25-28 are cleared and bit 31 set.
+    // EEPROM 0xC3 → strap bits 18/19 (§3.3): 0x42 both, 0x40 bit 19, 0x02 bit 18, anything else neither. The strap's bits 18, 19 and 25-28 are cleared and bit
+    // 31 set.
     EEPROM_READ(0x000000C3)
     xcode_ifgoto_to(0x00000042, 1f)
     xcode_peek(STRAP)
@@ -129,8 +127,8 @@
     xcode_poke(NV(0x100328), 0x00000001)
     xcode_poke(NV(0x100338), 0x000000DF)
 
-    // SMC version check (§2.5): SMC register 1 ← 0 restarts its version string; if the first character is not 'P',
-    // host function 3 register 0x6C ← 0x01000000. Either way the program goes on.
+    // SMC version check (§2.5): SMC register 1 ← 0 restarts its version string; if the first character is not 'P', host function 3 register 0x6C ← 0x01000000.
+    // Either way the program goes on.
     xcode_outb(SMBUS + 4, 0x00000020)
     SMB_xcode_Write(0x01, 0x00)
     xcode_outb(SMBUS + 4, 0x00000021)
@@ -153,8 +151,8 @@
     xcode_poke(NV(0x1264), 0x00000000)
     xcode_poke(NV(0x1210), 0x00000000)
 
-    // EEPROM 0xC1 → pad register 0x122C, EEPROM 0xC0 → 0x1214, the byte in all four bytes (§3.3), each assembled in
-    // 0x1248 first so that the two registers only ever hold their final value.
+    // EEPROM 0xC1 → pad register 0x122C, EEPROM 0xC0 → 0x1214, the byte in all four bytes (§3.3), each assembled in 0x1248 first so that the two registers only
+    // ever hold their final value.
     EEPROM_READ(0x000000C1)
     BYTE_TO_ALL(NV(0x1248))
     xcode_peek(NV(0x1248))
@@ -210,10 +208,9 @@
     xcode_poke(NV(0x100200), 0x03070103)
     xcode_poke(NV(0x100204), 0x11448000)
 
-    // The memory test's result to the SMC (§4.4): register 0x13 the lanes with the larger chips, 0x12 the faulty
-    // lanes. Without these writes the 1.6 console resets about 0.4 s after power-on. boot/start.S tests the memory
-    // only later, so the values are the result of a 64 MB console (lanes 0-3 larger, 4-7 absent), as Cromwell sends
-    // them (boot_rom/Xcodes.h, "We emulate Good memory result to PIC").
+    // The memory test's result to the SMC (§4.4): register 0x13 the lanes with the larger chips, 0x12 the faulty lanes. Without these writes the 1.6 console
+    // resets about 0.4 s after power-on. boot/start.S tests the memory only later, so the values are the result of a 64 MB console (lanes 0-3 larger, 4-7
+    // absent), as Cromwell sends them (boot_rom/Xcodes.h, "We emulate Good memory result to PIC").
     xcode_outb(SMBUS + 4, 0x00000020)
     SMB_xcode_Write(0x13, 0x0F)
     SMB_xcode_Write(0x12, 0xF0)
@@ -222,8 +219,8 @@
     xcode_pciout(0x8000F020, 0xFDF0FD00)
     xcode_pciout(0x80010010, 0xFD000000)
 
-    // Cromwell's overflow trick (spec/stock/24 §1.4): `mov eax, 0xFFFC1000; jmp eax` at RAM address 0, where the
-    // boot ROM's exit continues; boot/start.S runs at bank offset 0x1000.
+    // Cromwell's overflow trick (spec/stock/24 §1.4): `mov eax, 0xFFFC1000; jmp eax` at RAM address 0, where the boot ROM's exit continues; boot/start.S runs
+    // at bank offset 0x1000.
     xcode_poke(0x00000000, 0xFC1000B8)
     xcode_poke(0x00000004, 0x90E0FFFF)
     xcode_END(0x806)

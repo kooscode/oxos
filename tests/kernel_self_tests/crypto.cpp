@@ -99,16 +99,16 @@ static void NTAPI XcControllerThread(PVOID) {
     UCHAR msg[72] = {}, ct[72], pt[72];
     for (int i = 0; i < 40; i++)
         msg[i] = (UCHAR)(i + 1);
-    ok = XcPKGetKeyLen((PUCHAR)TestPubKey) == 72 && XcPKEncPublic((PUCHAR)TestPubKey, msg, ct) &&
-         XcPKDecPrivate((PUCHAR)TestPrvKey, ct, pt) && RtlCompareMemory(pt, msg, 72) == 72;
+    ok = XcPKGetKeyLen((PUCHAR)TestPubKey) == 72 && XcPKEncPublic((PUCHAR)TestPubKey, msg, ct) && XcPKDecPrivate((PUCHAR)TestPrvKey, ct, pt) &&
+         RtlCompareMemory(pt, msg, 72) == 72;
     KiTestXcRsaOk = ok;
 
     // PKCS#1 signature: valid for the digest, invalid for another one.
     UCHAR wrong[20];
     RtlCopyMemory(wrong, TestDigest, 20);
     wrong[0] ^= 1;
-    KiTestXcPkcs1Ok = XcVerifyPKCS1Signature((PUCHAR)TestSignature, (PUCHAR)TestPubKey, (PUCHAR)TestDigest) &&
-                      !XcVerifyPKCS1Signature((PUCHAR)TestSignature, (PUCHAR)TestPubKey, wrong);
+    KiTestXcPkcs1Ok = XcVerifyPKCS1Signature((PUCHAR)TestSignature, (PUCHAR)TestPubKey, (PUCHAR)TestDigest) && !XcVerifyPKCS1Signature((PUCHAR)TestSignature,
+                      (PUCHAR)TestPubKey, wrong);
 
     // XcUpdateCrypto replaces only the non-NULL entries.
     CRYPTO_VECTOR vector = {};

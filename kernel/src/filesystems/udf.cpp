@@ -1,5 +1,4 @@
-// UDF 1.0x (ECMA-167, OSTA UDF 1.02/1.50), read-only, for DVD-video discs (spec/stock/04d). The CD-ROM mount tries
-// this file system before XDVDFS.
+// UDF 1.0x (ECMA-167, OSTA UDF 1.02/1.50), read-only, for DVD-video discs (spec/stock/04d). The CD-ROM mount tries this file system before XDVDFS.
 #include <filesystems/filesystems.h>
 #include <storage/storage.h>
 #include <runtime/runtime.h>
@@ -11,8 +10,7 @@ constexpr ULONG UDF_BLOCK = 0x800;
 constexpr ULONG FILE_OPENED = 1;
 constexpr ULONG UDF_MAX_EXTENTS = 32, UDF_MAX_DIRECTORY = 0x100000;
 constexpr NTSTATUS STATUS_MEDIA_WRITE_PROTECTED = (NTSTATUS)0xC00000A2, STATUS_DISK_CORRUPT = (NTSTATUS)0xC0000032;
-constexpr USHORT TAG_PVD = 1, TAG_AVDP = 2, TAG_PD = 5, TAG_LVD = 6, TAG_TERMINATOR = 8, TAG_FSD = 256,
-                 TAG_FID = 257, TAG_FILE_ENTRY = 261;
+constexpr USHORT TAG_PVD = 1, TAG_AVDP = 2, TAG_PD = 5, TAG_LVD = 6, TAG_TERMINATOR = 8, TAG_FSD = 256, TAG_FID = 257, TAG_FILE_ENTRY = 261;
 
 struct UDF_EXTENT {
     ULONG Block; // partition-relative
@@ -62,8 +60,7 @@ static NTSTATUS UdfReadSector(PDEVICE_OBJECT target, ULONG sector, PVOID buffer)
     return IoSynchronousFsdRequest(IRP_MJ_READ, target, buffer, UDF_BLOCK, &o);
 }
 
-// Descriptor tag: version 2, the expected identifier and recorded location (no checksum or CRC check, like the
-// reference).
+// Descriptor tag: version 2, the expected identifier and recorded location (no checksum or CRC check, like the reference).
 static bool UdfTagOk(const UCHAR *d, USHORT id, ULONG location) {
     return *(USHORT *)(d + 2) == 2 && *(USHORT *)d == id && *(ULONG *)(d + 12) == location;
 }
@@ -119,10 +116,9 @@ static NTSTATUS UdfLoadFileEntry(UDF_VOLUME *v, UDF_FCB *f) {
     return STATUS_SUCCESS;
 }
 
-// File data. Cached reads (fileFlags without FO_NO_INTERMEDIATE_BUFFERING) go through the file system cache per
-// extent; `toEnd` = the read runs to the end of the file.
-static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out, ULONG length,
-                            UCHAR fileFlags = FO_RANDOM_ACCESS, bool toEnd = false) {
+// File data. Cached reads (fileFlags without FO_NO_INTERMEDIATE_BUFFERING) go through the file system cache per extent; `toEnd` = the read runs to the end of
+// the file.
+static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out, ULONG length, UCHAR fileFlags = FO_RANDOM_ACCESS, bool toEnd = false) {
     bool cached = !(fileFlags & FO_NO_INTERMEDIATE_BUFFERING);
     if (f->Embedded) {
         NTSTATUS status = UdfReadSector(v->TargetDevice, v->PartitionStart + f->IcbBlock, v->Block);
@@ -144,9 +140,8 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
             ULONG first = e->Block + within / UDF_BLOCK, last = e->Block + (within + run - 1) / UDF_BLOCK;
             if (first >= v->PartitionLength || last >= v->PartitionLength)
                 return STATUS_DISK_CORRUPT;
-            NTSTATUS status = CachedRead(&v->CacheExtension, fileFlags,
-                                         (LONGLONG)(v->PartitionStart + e->Block) * UDF_BLOCK + within, run, out,
-                                         toEnd && run == length);
+            NTSTATUS status = CachedRead(&v->CacheExtension, fileFlags, (LONGLONG)(v->PartitionStart + e->Block) * UDF_BLOCK + within, run, out, toEnd &&
+                                         run == length);
             if (!NT_SUCCESS(status))
                 return status;
         } else {
@@ -450,8 +445,8 @@ static NTSTATUS NTAPI UdfFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return UdfComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     LARGE_INTEGER offset = s->Parameters.Read.ByteOffset;
     ULONG length = s->Parameters.Read.Length;
-    // As the reference (and XDVDFS): end of file first; a non-cached read's length need not be whole blocks (the
-    // reference rounds the transfer up and reports the clipped length), only its offset must be block-aligned.
+    // As the reference (and XDVDFS): end of file first; a non-cached read's length need not be whole blocks (the reference rounds the transfer up and reports
+    // the clipped length), only its offset must be block-aligned.
     if (offset.HighPart || offset.LowPart >= f->Size)
         return UdfComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
     if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (UDF_BLOCK - 1)))
@@ -683,9 +678,8 @@ DRIVER_OBJECT UdfDriverObject = {
     nullptr,
     UdfDeleteVolume,
     UdfDismountVolume,
-    {UdfFsdCreate, UdfFsdClose, UdfFsdRead, IoInvalidDeviceRequest, UdfFsdQueryInformation, UdfFsdSetInformation,
-     UdfFsdSuccess, UdfFsdQueryVolume, UdfFsdDirectoryControl, io::DismountOnlyFsControl, UdfFsdPassDown,
-     IoInvalidDeviceRequest, IoInvalidDeviceRequest, UdfFsdSuccess}};
+    {UdfFsdCreate, UdfFsdClose, UdfFsdRead, IoInvalidDeviceRequest, UdfFsdQueryInformation, UdfFsdSetInformation, UdfFsdSuccess, UdfFsdQueryVolume,
+     UdfFsdDirectoryControl, io::DismountOnlyFsControl, UdfFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, UdfFsdSuccess}};
 
 // --- Mount (spec/stock/04d §1)
 
@@ -737,10 +731,9 @@ static bool UdfIsCs0(const UCHAR *c) {
     return true;
 }
 
-// The main volume descriptor sequence: the PVD, partition descriptor and LVD with the highest sequence numbers;
-// they must agree on the partition. Returns the partition and the file set descriptor extent.
-static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, PUCHAR b, ULONG *partStart,
-                           ULONG *partLength, ULONG fsd[4]) {
+// The main volume descriptor sequence: the PVD, partition descriptor and LVD with the highest sequence numbers; they must agree on the partition. Returns the
+// partition and the file set descriptor extent.
+static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, PUCHAR b, ULONG *partStart, ULONG *partLength, ULONG fsd[4]) {
     if (!length || (length & (UDF_BLOCK - 1)))
         return STATUS_DISK_CORRUPT;
     bool pvdOk = false, pdOk = false, lvdOk = false;
@@ -756,8 +749,7 @@ static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, 
         ULONG seq = *(ULONG *)(b + 16);
         if (id == TAG_PVD && seq >= pvdSeq) {
             pvdSeq = seq;
-            pvdOk = *(USHORT *)(b + 56) < 2 && *(ULONG *)(b + 64) == 1 && *(ULONG *)(b + 68) == 1 &&
-                    UdfIsCs0(b + 200) && UdfIsCs0(b + 264);
+            pvdOk = *(USHORT *)(b + 56) < 2 && *(ULONG *)(b + 64) == 1 && *(ULONG *)(b + 68) == 1 && UdfIsCs0(b + 200) && UdfIsCs0(b + 264);
         } else if (id == TAG_PD && seq >= pdSeq) {
             pdSeq = seq;
             pdOk = RtlCompareMemory(b + 25, "+NSR02", 6) == 6;
@@ -770,10 +762,9 @@ static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, 
             lvdSeq = seq;
             ULONG mapTable = *(ULONG *)(b + 264);
             USHORT revision = *(USHORT *)(b + 240);
-            lvdOk = ((mapTable + 0x1BB) & ~3u) <= UDF_BLOCK && *(ULONG *)(b + 212) == UDF_BLOCK &&
-                    RtlCompareMemory(b + 217, "*OSTA UDF Compliant", 19) == 19 && revision >= 0x100 &&
-                    revision <= 0x150 && UdfIsCs0(b + 20) && *(ULONG *)(b + 268) < 2 && mapTable > 5 &&
-                    b[440] == 1 && b[441] == 6 && *(USHORT *)(b + 442) < 2;
+            lvdOk = ((mapTable + 0x1BB) & ~3u) <= UDF_BLOCK && *(ULONG *)(b + 212) == UDF_BLOCK && RtlCompareMemory(b + 217, "*OSTA UDF Compliant", 19) == 19 &&
+                    revision >= 0x100 && revision <= 0x150 && UdfIsCs0(b + 20) && *(ULONG *)(b + 268) < 2 && mapTable > 5 && b[440] == 1 && b[441] == 6 &&
+                    *(USHORT *)(b + 442) < 2;
             if (lvdOk) {
                 RtlCopyMemory(fsd, b + 248, 16);
                 lvdNumber = *(USHORT *)(b + 444);
@@ -785,10 +776,9 @@ static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, 
     return STATUS_UNRECOGNIZED_VOLUME;
 }
 
-// File set descriptors (in the partition): the highest file set number gives the root directory ICB; the scan
-// follows "next extent" links and must end at a terminating descriptor.
-static NTSTATUS UdfFindRoot(PDEVICE_OBJECT target, ULONG partStart, ULONG partLength, const ULONG fsd[4],
-                            PUCHAR b, ULONG *root) {
+// File set descriptors (in the partition): the highest file set number gives the root directory ICB; the scan follows "next extent" links and must end at a
+// terminating descriptor.
+static NTSTATUS UdfFindRoot(PDEVICE_OBJECT target, ULONG partStart, ULONG partLength, const ULONG fsd[4], PUCHAR b, ULONG *root) {
     ULONG length = fsd[0], block = fsd[1], best = 0;
     bool found = false;
     for (ULONG extents = 0; extents < 64; extents++) {
@@ -828,8 +818,7 @@ static NTSTATUS UdfFindRoot(PDEVICE_OBJECT target, ULONG partStart, ULONG partLe
 
 NTSTATUS UdfMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY g;
-    NTSTATUS status = IoSynchronousDeviceIoControlRequest(0x2404C, TargetDevice, nullptr, 0, &g, sizeof(g), nullptr,
-                                                          FALSE);
+    NTSTATUS status = IoSynchronousDeviceIoControlRequest(0x2404C, TargetDevice, nullptr, 0, &g, sizeof(g), nullptr, FALSE);
     if (!NT_SUCCESS(status))
         return status;
     auto b = (PUCHAR)ExAllocatePoolWithTag(UDF_BLOCK, 'bfdU');

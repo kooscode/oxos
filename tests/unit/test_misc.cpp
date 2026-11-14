@@ -1,5 +1,4 @@
-// The remaining entry points: Nt query calls, timer APCs, path links through a parse procedure, link deletion, and
-// the rarer run-time helpers.
+// The remaining entry points: Nt query calls, timer APCs, path links through a parse procedure, link deletion, and the rarer run-time helpers.
 #include "kernel_test.h"
 #include <hardware/chipset/chipset.h>
 #include <core/core.h>
@@ -63,8 +62,7 @@ TEST(Query, TimerApcRunsInTheSettingThread) {
     SleepMs(10); // the kernel-mode APC runs in this thread when the timer's DPC queues it
     EXPECT_EQ(TimerApcs, 1);
     EXPECT_EQ(TimerApcContext, (PVOID)0x1234);
-    EXPECT_NE(NtSetTimerEx(t, &due, nullptr, KernelMode, nullptr, FALSE, -1, nullptr), STATUS_SUCCESS)
-        << "negative period";
+    EXPECT_NE(NtSetTimerEx(t, &due, nullptr, KernelMode, nullptr, FALSE, -1, nullptr), STATUS_SUCCESS) << "negative period";
     NtClose(t);
 }
 
@@ -73,8 +71,7 @@ TEST(Query, TimerApcRunsInTheSettingThread) {
 namespace {
 std::string Parsed;
 PVOID ParseResult;
-NTSTATUS NTAPI RecordingParse(PVOID, POBJECT_TYPE, ULONG, POBJECT_STRING, POBJECT_STRING Remaining, PVOID,
-                              PVOID *Object) {
+NTSTATUS NTAPI RecordingParse(PVOID, POBJECT_TYPE, ULONG, POBJECT_STRING, POBJECT_STRING Remaining, PVOID, PVOID *Object) {
     Parsed.assign(Remaining->Buffer, Remaining->Length);
     ObfReferenceObject(ParseResult);
     *Object = ParseResult;

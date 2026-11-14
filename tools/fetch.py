@@ -3,8 +3,8 @@
 
 usage: fetch.py URL SHA256 OUT
 
-The file is written to OUT only when its SHA-256 matches, so an interrupted or changed download never leaves a
-bad file behind. Uses only the Python standard library (no curl or wget needed).
+The file is written to OUT only when its SHA-256 matches, so an interrupted or changed download never leaves a bad file behind. Uses only the Python standard
+library (no curl or wget needed).
 """
 import hashlib, os, sys, tempfile, urllib.request
 

@@ -57,8 +57,7 @@ struct Cursor {
         *v = value;
         return digits > 0;
     }
-    // Hex byte pairs, spaces between them optional, up to the end of the line, a comment or '>'. At least one byte,
-    // at most XE_PATCH_MAX_BYTES.
+    // Hex byte pairs, spaces between them optional, up to the end of the line, a comment or '>'. At least one byte, at most XE_PATCH_MAX_BYTES.
     bool HexBytes(UCHAR *Out, ULONG *Count) {
         ULONG n = 0;
         for (SkipBlanks(); p < end && *p != '>' && *p != ';' && *p != '#'; SkipBlanks()) {
@@ -93,8 +92,7 @@ PUCHAR Reserve(PUCHAR Out, ULONG OutSize, ULONG *used, ULONG length, XE_PATCH_CO
 }
 } // namespace
 
-ULONG ParseTitlePatches(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize,
-                        XE_PATCH_COUNTS *Counts) {
+ULONG ParseTitlePatches(const char *Text, ULONG Length, ULONG TitleId, ULONG Version, PUCHAR Out, ULONG OutSize, XE_PATCH_COUNTS *Counts) {
     XE_PATCH_COUNTS c = {};
     ULONG used = 0;
     bool active = false;
@@ -156,16 +154,15 @@ ULONG ParseTitlePatches(const char *Text, ULONG Length, ULONG TitleId, ULONG Ver
             for (ULONG i = 0; i < n; i++)
                 match[i] = bytes[i];
         } else if (IsKey(line, "patch")) {
-            // ADDRESS: CURRENT_BYTES > NEW_BYTES (hex bytes; spaces between bytes are optional; both sides any
-            // length), or a blind patch ADDRESS: > NEW_BYTES, written when the section's `match =` bytes are there
+            // ADDRESS: CURRENT_BYTES > NEW_BYTES (hex bytes; spaces between bytes are optional; both sides any length), or a blind patch ADDRESS: > NEW_BYTES,
+            // written when the section's `match =` bytes are there
             ULONG address;
             UCHAR original[XE_PATCH_MAX_BYTES], bytes[XE_PATCH_MAX_BYTES];
             ULONG on = 0, n = 0;
             bool ok = cur.Number(&address, true) && cur.Expect(':');
             cur.SkipBlanks();
             bool byMatch = ok && cur.p < cur.end && *cur.p == '>';
-            ok = ok && (byMatch || cur.HexBytes(original, &on)) && cur.Expect('>') && cur.HexBytes(bytes, &n) &&
-                 cur.AtEnd();
+            ok = ok && (byMatch || cur.HexBytes(original, &on)) && cur.Expect('>') && cur.HexBytes(bytes, &n) && cur.AtEnd();
             if (ok && byMatch && !matchLength)
                 ok = false; // a blind patch without a `match =` line above it in this section
             if (!ok) {

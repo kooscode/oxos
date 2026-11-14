@@ -1,12 +1,11 @@
-// The boot jingle (spec/oxos_internal/17_boot_jingle.md): an original 4-second cue, synthesized at 48 kHz in integer
-// arithmetic. The score (SCORE): a swoosh rises while cellos swell in one after another, into a single full chord on
-// D for the cello section and the bass, with one hit of kick, taiko and crash, which rings out to the end. The
-// synthesizer's instruments (the score uses some of them):
-//   - cello: three slightly detuned sawtooth waves with a bow envelope and delayed vibrato, plus bow noise that
-//     scratches once a cycle (the rasp), through a resonant low-pass (a state-variable filter) and a clipper;
+// The boot jingle (spec/oxos_internal/17_boot_jingle.md): an original 4-second cue, synthesized at 48 kHz in integer arithmetic. The score (SCORE): a swoosh
+// rises while cellos swell in one after another, into a single full chord on D for the cello section and the bass, with one hit of kick, taiko and crash, which
+// rings out to the end. The synthesizer's instruments (the score uses some of them):
+//   - cello: three slightly detuned sawtooth waves with a bow envelope and delayed vibrato, plus bow noise that scratches once a cycle (the rasp), through a
+//     resonant low-pass (a state-variable filter) and a clipper;
 //   - bass: a sawtooth and a sine an octave below, through a low-pass;
-//   - drums: sine bodies whose pitch falls (kick, taiko, toms), filtered noise (snare), noise through a band-pass
-//     sweeping upwards (the swoosh), six square waves at unrelated pitches through a high-pass (cymbals);
+//   - drums: sine bodies whose pitch falls (kick, taiko, toms), filtered noise (snare), noise through a band-pass sweeping upwards (the swoosh), six square
+//     waves at unrelated pitches through a high-pass (cymbals);
 //   - the chime: a square wave, two notes a fourth apart;
 //   - a stereo reverb (four damped comb filters and two all-pass filters per side).
 #include <boot_splash/jingle.h>
@@ -26,9 +25,9 @@ using i32 = int;
 using i64 = long long;
 
 constexpr u32 MS = RATE / 1000;
-// The climax (FINALE, 2.6 s) and then 1.4 s of the chord lingering, as a film logo's sound does: full for 0.2 s,
-// then the last FADE_MS fade out (a curve between linear and squared: it keeps its body, then eases out), the
-// reverb ringing on under it. The splash holds its end picture until the end (kernel/src/boot_splash/splash.cpp).
+// The climax (FINALE, 2.6 s) and then 1.4 s of the chord lingering, as a film logo's sound does: full for 0.2 s, then the last FADE_MS fade out (a curve
+// between linear and squared: it keeps its body, then eases out), the reverb ringing on under it. The splash holds its end picture until the end
+// (kernel/src/boot_splash/splash.cpp).
 constexpr u32 LENGTH_MS = 4000, FADE_MS = 1200;
 
 // --- Basics
@@ -74,8 +73,8 @@ struct Rng {
     }
 };
 
-// One-pole low-pass coefficient (Q16) for a cut-off in Hz: about 2π fc / RATE. Also the state-variable filter's
-// frequency coefficient (2 sin(π fc / RATE)), to the same approximation.
+// One-pole low-pass coefficient (Q16) for a cut-off in Hz: about 2π fc / RATE. Also the state-variable filter's frequency coefficient (2 sin(π fc / RATE)), to
+// the same approximation.
 i32 Coef(u32 hz) {
     u32 c = (hz * 8785u) >> 10;
     return c > 65535 ? 65535 : i32(c);
@@ -193,8 +192,7 @@ struct Bow {
         ph2 += i + i / 280;
         ph3 += i - i / 230;
         i32 saw = (Saw(ph1) + Saw(ph2) + Saw(ph3)) / 3;
-        // The rasp: bow noise that scratches once a cycle, as the string slips under the hair (loudest as the
-        // sawtooth jumps), on top of a steady hiss.
+        // The rasp: bow noise that scratches once a cycle, as the string slips under the hair (loudest as the sawtooth jumps), on top of a steady hiss.
         i32 slip = Saw(ph1) + 32768; // 0 .. 65535 over the cycle
         i32 scratch = Q16(rng.Next(), (slip * slip) >> 16) / 3 + rng.Next() / 24;
         // Resonant low-pass at 3.2 kHz, Q 2.5; the band-pass output adds body; clipping adds grit.
@@ -415,8 +413,8 @@ constexpr unsigned short FINALE = 2600;
         {at, CELLO, (unsigned char)(root + 12), len, (unsigned char)(vel - 8)},                                      \
         {at, BASS, (unsigned char)(root - 12), len, (unsigned char)(vel - 10)}
 
-// One lead-in and one climax, no beat: the swoosh rises while the cellos swell in one after another (each fading in
-// over 1.7 s), into a single full chord with one hit that rings out to the end.
+// One lead-in and one climax, no beat: the swoosh rises while the cellos swell in one after another (each fading in over 1.7 s), into a single full chord with
+// one hit that rings out to the end.
 const Event SCORE[] = {
     // 1. The lead-in: the swoosh rises to the climax; the low D, its fifth and its octave swell in under it.
     {0, SWOOSH, 0, FINALE, 100},

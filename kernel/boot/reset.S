@@ -1,10 +1,10 @@
 // Open BIOS image, the top 512 bytes of each 256 KB bank (0xFFFFFE00-0xFFFFFFFF): our own reset code for when no
-// MCPX boot ROM is present: debug kits with the MCPX X2 (the CPU starts in flash, 2026-11-10) and xemu without a
-// boot-ROM file. On a retail console the MCPX ROM covers this range, runs the X-codes itself and reaches the 2BL
-// through the overflow trick, so this code never runs there (spec/stock/01 §5, spec/oxos_internal/27 §5).
+// MCPX boot ROM is present: debug kits with the MCPX X2 (the CPU starts in flash, 2026-11-10) and xemu without a boot-ROM file. On a retail console the MCPX
+// ROM covers this range, runs the X-codes itself and reaches the 2BL through the overflow trick, so this code never runs there (spec/stock/01 §5,
+// spec/oxos_internal/27 §5).
 //
-// It does what the boot ROM does for us: real mode -> flat 32-bit protected mode, run the X-code table at bank
-// offset 0x80 (the same table the ROM would run), then jump to the 2BL at 0xFFFC1000.
+// It does what the boot ROM does for us: real mode -> flat 32-bit protected mode, run the X-code table at bank offset 0x80 (the same table the ROM would run),
+// then jump to the 2BL at 0xFFFC1000.
 
 #define BANK 0xFFFC0000
 #define STUB 0xFFFFFE00
@@ -34,9 +34,8 @@ pm32:
     movl %eax, %fs
     movl %eax, %gs
 
-    // X-code interpreter (spec/oxos_internal/27 §5.3). %esi = next X-code, %edi = accumulator. Each X-code is
-    // 9 bytes, {u8 op, u32 a, u32 b}, with Cromwell's op numbers. The table starts at bank offset 0x80, where the
-    // MCPX ROM reads it too.
+    // X-code interpreter (spec/oxos_internal/27 §5.3). %esi = next X-code, %edi = accumulator. Each X-code is 9 bytes, {u8 op, u32 a, u32 b}, with Cromwell's
+    // op numbers. The table starts at bank offset 0x80, where the MCPX ROM reads it too.
     movl $(BANK + 0x80), %esi
     xorl %edi, %edi
 next:

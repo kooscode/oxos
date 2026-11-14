@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Convert a PE image linked at 0x10000 into an XBE (headers, certificate, section digests, encoded entry point
-and kernel thunk address). For our test titles; signature fields are left zero.
+"""Convert a PE image linked at 0x10000 into an XBE (headers, certificate, section digests, encoded entry point and kernel thunk address). For our test titles;
+signature fields are left zero.
 
 usage: mkxbe.py --pe title.exe --map title.map --thunks _XkThunks --out title.xbe [--title-id 0x584B0001]
                 [--name NAME] [--no-preload .extra]
@@ -24,8 +24,8 @@ def pe_sections(pe):
         name = pe[o:o + 8].rstrip(b"\0").decode()
         vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", pe, o + 8)
         chars = struct.unpack_from("<I", pe, o + 36)[0]
-        out.append(dict(name=name, va=image_base + va, vsize=max(vsize, rawsize if rawsize < vsize else vsize),
-                        data=pe[rawptr:rawptr + min(rawsize, vsize)], chars=chars))
+        out.append(dict(name=name, va=image_base + va, vsize=max(vsize, rawsize if rawsize < vsize else vsize), data=pe[rawptr:rawptr + min(rawsize, vsize)],
+                        chars=chars))
     return image_base, image_base + entry_rva, out
 
 
@@ -85,8 +85,7 @@ def main():
         body += bytes((-len(body)) % 16)
         digest = hashlib.sha1(struct.pack("<I", len(s["data"])) + s["data"]).digest()
         head_ref, tail_ref = BASE + ref_off + 4 * i, BASE + ref_off + 4 * i + 2
-        sec_headers += struct.pack("<IIIIIIIII", flags, s["va"], s["vsize"], ptr, len(s["data"]), name_addr[i], 0,
-                                   head_ref, tail_ref) + digest
+        sec_headers += struct.pack("<IIIIIIIII", flags, s["va"], s["vsize"], ptr, len(s["data"]), name_addr[i], 0, head_ref, tail_ref) + digest
 
     title_name = a.name.encode("utf-16-le")[:80].ljust(80, b"\0")
     cert = struct.pack("<III", 0x1D0, 0, a.title_id) + title_name + bytes(64)
@@ -95,8 +94,8 @@ def main():
 
     hdr = bytearray(0x178)
     hdr[0:4] = b"XBEH"
-    struct.pack_into("<IIIIIIIIIIIIII", hdr, 0x104, BASE, size_of_headers, size_of_image, 0x178, 0,
-                     BASE + cert_off, n, BASE + sec_off, 0, entry ^ XOR_ENTRY_RETAIL, 0, 0x10000, 0x100000, 0x1000)
+    struct.pack_into("<IIIIIIIIIIIIII", hdr, 0x104, BASE, size_of_headers, size_of_image, 0x178, 0, BASE + cert_off, n, BASE + sec_off, 0,
+                     entry ^ XOR_ENTRY_RETAIL, 0, 0x10000, 0x100000, 0x1000)
     struct.pack_into("<I", hdr, 0x158, thunks ^ XOR_THUNK_RETAIL)
     headers = bytes(hdr) + cert + sec_headers + bytes(4 * n) + names
     headers += bytes(raw_off - len(headers))

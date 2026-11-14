@@ -1,6 +1,6 @@
-// Formatting, deleting all partitions and recognising a blank disk (spec/oxos_internal/30_disk_format.md;
-// kernel/src/storage/disk_format.cpp, kernel/src/filesystems/hddfs/format_exfat.cpp), against image files: the exFAT
-// volume in one file (checked with the host's fsck.exfat), the sectors around it in memory.
+// Formatting, deleting all partitions and recognising a blank disk (spec/oxos_internal/30_disk_format.md; kernel/src/storage/disk_format.cpp,
+// kernel/src/filesystems/hddfs/format_exfat.cpp), against image files: the exFAT volume in one file (checked with the host's fsck.exfat), the sectors around it
+// in memory.
 #include "kernel_test.h"
 
 #include <cstdio>
@@ -149,8 +149,7 @@ struct Reader {
 TEST(Format, EightGigabyteDiskPassesFsck) {
     Disk d(0x1000000); // 8 GiB
     DISK_FORMAT_RESULT r = {};
-    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0x12345678, STAMP, nullptr, &d.Io, d.Scratch.data(), &r),
-              STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0x12345678, STAMP, nullptr, &d.Io, d.Scratch.data(), &r), STATUS_SUCCESS);
     EXPECT_EQ(r.PartitionStart, 2048u);
     EXPECT_EQ(r.ClusterShift, 15u); // 32 KB below 32 GB
     int rc = d.Fsck();
@@ -166,8 +165,7 @@ TEST(Format, TwoTerabyteDiskWithAFilePassesFsck) {
         data[i] = (UCHAR)(i * 7 + 3);
     DISK_FORMAT_FILE file = {"E\\ftp\\ftp.xbe", data.data(), (ULONG)data.size()};
     DISK_FORMAT_RESULT r = {};
-    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0xCAFEF00D, STAMP, &file, &d.Io, d.Scratch.data(), &r),
-              STATUS_SUCCESS);
+    ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 0xCAFEF00D, STAMP, &file, &d.Io, d.Scratch.data(), &r), STATUS_SUCCESS);
     EXPECT_EQ(r.ClusterShift, 17u); // 128 KB
     int rc = d.Fsck();
     if (rc < 0)
@@ -259,27 +257,22 @@ TEST(Format, BadFilePathsAreRefused) {
     UCHAR byte = 1;
     for (const char *path : {"E\\a:b", "E\\", "C", "E\\ftp\\x.xbe\\"}) {
         DISK_FORMAT_FILE file = {path, &byte, 1};
-        EXPECT_NE(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr),
-                  STATUS_SUCCESS)
-            << path;
+        EXPECT_NE(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, &file, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS) << path;
     }
 }
 
 TEST(Format, TheMarkerSetsTheCountdown) {
     Disk d(0x1000000);
-    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN)
-        << "no marker: the default";
+    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN) << "no marker: the default";
     for (ULONG seconds : {0u, 5u, 30u}) {
-        ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, seconds, &d.Io, d.Scratch.data()),
-                  STATUS_SUCCESS);
+        ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, seconds, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
         EXPECT_TRUE(storage::IsDiskBlank(d.Sectors, &d.Io, d.Scratch.data())) << "the marker leaves the disk blank";
         EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), seconds);
     }
     ASSERT_EQ(storage::DeleteAllPartitions(d.Sectors, nullptr, 0, 100000, &d.Io, d.Scratch.data()), STATUS_SUCCESS);
     EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_MAX_COUNTDOWN);
     ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
-    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN)
-        << "the format clears it";
+    EXPECT_EQ(storage::BlankDiskCountdown(&d.Io, d.Scratch.data(), DISK_FORMAT_COUNTDOWN), DISK_FORMAT_COUNTDOWN) << "the format clears it";
 }
 
 namespace {
@@ -338,8 +331,7 @@ TEST(Format, DescribeNamesWhatIsOnTheDisk) {
     }
     {
         Disk d(0x1000000); // our own format: GPT with exFAT
-        ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr),
-                  STATUS_SUCCESS);
+        ASSERT_EQ(storage::FormatDiskEXFAT(d.Sectors, 1, STAMP, nullptr, &d.Io, d.Scratch.data(), nullptr), STATUS_SUCCESS);
         EXPECT_EQ(Describe(d), "GPT: exFAT");
     }
     {

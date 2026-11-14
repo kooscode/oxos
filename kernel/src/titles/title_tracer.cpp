@@ -11,8 +11,7 @@ ULONG XkTraceTargets[XK_TRACE_MAX_IMPORTS];
 USHORT XkTraceOrdinals[XK_TRACE_MAX_IMPORTS];
 // The ring (entries of XK_TRACE_WORDS: titles/titles.h).
 volatile ULONG (*XkTraceRing)[XK_TRACE_WORDS]; // allocated at the top of RAM (not in the image)
-// Entries written. Persisted: with TRACE_IMPORTS=2 the ring outside the memory manager keeps the calls from before a
-// quick reboot too.
+// Entries written. Persisted: with TRACE_IMPORTS=2 the ring outside the memory manager keeps the calls from before a quick reboot too.
 XK_PERSIST volatile ULONG XkTraceCount;
 
 // The stubs a traced import enters and returns through (arch/trace.S).
@@ -21,8 +20,8 @@ void XkTraceReturn();
 
 // --- Calls in flight
 
-// Calls in flight per thread (title APCs can nest calls), to find the original return address again. Titles keep
-// dozens of threads blocked in a wait call, each holding a slot until its thread exits.
+// Calls in flight per thread (title APCs can nest calls), to find the original return address again. Titles keep dozens of threads blocked in a wait call, each
+// holding a slot until its thread exits.
 struct XK_TRACE_SLOT {
     ULONG Thread, Depth, Return[8], Entry[8];
 };
@@ -71,9 +70,9 @@ static void XkTraceName(volatile ULONG *e, ULONG p, bool string) {
 }
 
 #if XK_DEBUG_SERIAL
-// On a console the ring cannot be read (no QMP): calls that return an error status (0xC0xxxxxx) are also printed on
-// the serial port as they return - "t fail ordinal N -> status from ADDR args A B C [name]" - with runs of the same
-// call from the same place counted instead of repeated. tools/modxo logs show them; kernel/exports.tsv names N.
+// On a console the ring cannot be read (no QMP): calls that return an error status (0xC0xxxxxx) are also printed on the serial port as they return - "t fail
+// ordinal N -> status from ADDR args A B C [name]" - with runs of the same call from the same place counted instead of repeated. tools/modxo logs show them;
+// kernel/exports.tsv names N.
 static ULONG XkFailOrdinal, XkFailFrom, XkFailResult, XkFailRepeats;
 static void XkTraceReportFailure(volatile ULONG *e, ULONG result) {
     ULONG ordinal = e[0], from = e[1];
@@ -95,16 +94,13 @@ static void XkTraceReportFailure(volatile ULONG *e, ULONG result) {
     for (int i = 0; i < n; i++)
         name[i] = ((volatile char *)(e + 7))[i];
     if (ordinal == 219) { // NtReadFile: handle, length, byte offset
-        XK_SERIAL("t fail NtReadFile(%#lx, %#lx bytes at %#lx'%08lx) -> %#lx from %#lx\n", e[3], e[11], e[13], e[12],
-                  result, from);
+        XK_SERIAL("t fail NtReadFile(%#lx, %#lx bytes at %#lx'%08lx) -> %#lx from %#lx\n", e[3], e[11], e[13], e[12], result, from);
     } else {
-        XK_SERIAL("t fail ordinal %lu -> %#lx from %#lx args %#lx %#lx %#lx %s\n", ordinal, result, from, e[3], e[4],
-                  e[5], name);
+        XK_SERIAL("t fail ordinal %lu -> %#lx from %#lx args %#lx %#lx %#lx %s\n", ordinal, result, from, e[3], e[4], e[5], name);
     }
 }
 
-// Successful reads, the first 30 of each handle: "t read HANDLE LENGTH at OFFSET -> BYTES" (offset -1: the current
-// position).
+// Successful reads, the first 30 of each handle: "t read HANDLE LENGTH at OFFSET -> BYTES" (offset -1: the current position).
 static ULONG XkTraceReadHandles[64], XkTraceReadCounts[64];
 static void XkTraceReportRead(volatile ULONG *e) {
     ULONG i = 0;
@@ -117,13 +113,11 @@ static void XkTraceReportRead(volatile ULONG *e) {
         return;
     auto iosb = (PIO_STATUS_BLOCK)e[9];
     ULONG got = (ULONG)iosb >= 0x10000 ? (ULONG)iosb->Information : 0xFFFFFFFF;
-    XK_SERIAL("t read %#lx %#lx at %#lx'%08lx -> %#lx bytes, status %#lx (event %#lx apc %#lx)\n", e[3], e[11],
-              e[13], e[12], got, e[6], e[4], e[5]);
+    XK_SERIAL("t read %#lx %#lx at %#lx'%08lx -> %#lx bytes, status %#lx (event %#lx apc %#lx)\n", e[3], e[11], e[13], e[12], got, e[6], e[4], e[5]);
     auto data = (const UCHAR *)e[10];
     if (got != 0xFFFFFFFF && got && (ULONG)data >= 0x10000) {
-        XK_SERIAL("t   data %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", data[0],
-                  data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
-                  data[12], data[13], data[14], data[15]);
+        XK_SERIAL("t   data %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", data[0], data[1], data[2], data[3], data[4],
+                  data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15]);
     }
 }
 
@@ -140,8 +134,7 @@ static void XkTraceReportOpen(volatile ULONG *e) {
 
 // --- Entering and leaving a traced import (from the stubs in arch/trace.S)
 
-// A traced call returns: its result goes into its ring entry (and to the serial reports); returns the caller's own
-// return address, which the stub jumps to.
+// A traced call returns: its result goes into its ring entry (and to the serial reports); returns the caller's own return address, which the stub jumps to.
 ULONG __cdecl XkTraceLeave(ULONG result) {
     ULONG flags;
     __asm__ volatile("pushfl; popl %0; cli" : "=r"(flags));
@@ -153,8 +146,7 @@ ULONG __cdecl XkTraceLeave(ULONG result) {
         ret = s->Return[s->Depth];
         volatile ULONG *e = XkTraceRing[s->Entry[s->Depth] % XK_TRACE_RING];
         e[6] = result;
-        if ((result & 0xFF000000) == 0xC0000000 || (!result && (e[0] == 190 || e[0] == 202)) ||
-            (e[0] == 219 && (result & 0xFF000000) != 0xC0000000) ||
+        if ((result & 0xFF000000) == 0xC0000000 || (!result && (e[0] == 190 || e[0] == 202)) || (e[0] == 219 && (result & 0xFF000000) != 0xC0000000) ||
             (result & 0xFF000000) == 0x80000000 || result == 0x102 || result == 0x103) // warnings, timeouts, pending
             failed = e;
     }
@@ -170,8 +162,8 @@ ULONG __cdecl XkTraceLeave(ULONG result) {
     return ret;
 }
 
-// A traced call starts: a ring entry with the ordinal, caller, thread, first three arguments and, for the file and
-// link calls, the name. The most frequent calls are left out.
+// A traced call starts: a ring entry with the ordinal, caller, thread, first three arguments and, for the file and link calls, the name. The most frequent
+// calls are left out.
 void __cdecl XkTraceRecord(ULONG index, PULONG frame) {
     switch (XkTraceOrdinals[index]) { // too frequent to be useful
     case 103: case 104: case 119: case 125: case 126: case 128: case 129: case 160: case 161:
@@ -249,8 +241,8 @@ ULONG XkTraceWrap(USHORT ordinal, ULONG target) {
     static ULONG used;
     if (!stubs) {
 #if XK_TRACE_IMPORTS == 2
-        // TRACE_IMPORTS=2 needs 128 MB (xemu mem_limit = '128'): ring and stubs live near the top of the upper 64 MB,
-        // which a title limited to 64 MB never uses, so it sees exactly the memory of a release build.
+        // TRACE_IMPORTS=2 needs 128 MB (xemu mem_limit = '128'): ring and stubs live near the top of the upper 64 MB, which a title limited to 64 MB never
+        // uses, so it sees exactly the memory of a release build.
         ULONG ringBytes = XK_TRACE_RING * XK_TRACE_WORDS * 4;
         auto high = (PUCHAR)MmMapIoSpace(XK_TRACE_HIGH_PHYSICAL, XK_TRACE_HIGH_BYTES, PAGE_READWRITE);
         XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])high;

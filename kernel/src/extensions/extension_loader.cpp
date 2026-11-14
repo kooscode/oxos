@@ -1,8 +1,7 @@
-// The kernel extension loader (spec/oxos_internal/34 §3-§8): before each title, reads C:\OXOS\oxos_extensions.ini,
-// loads each listed .xos from C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook
-// chains and starts the Main threads. Not part of the resident kernel: linked on its own at XK_EXTENSION_LOADER_BASE
-// against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp (§8.1). What
-// runs while the title runs is in extensions/extension_runtime.cpp.
+// The kernel extension loader (spec/oxos_internal/34 §3-§8): before each title, reads C:\OXOS\oxos_extensions.ini, loads each listed .xos from
+// C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook chains and starts the Main threads. Not part of the resident kernel:
+// linked on its own at XK_EXTENSION_LOADER_BASE against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp
+// (§8.1). What runs while the title runs is in extensions/extension_runtime.cpp.
 #include <extensions/extension_state.h>
 #include <extensions/extension_loader.h>
 #include <core/core.h>
@@ -77,16 +76,15 @@ bool SameName(const char *A, const char *B) {
 } // namespace
 
 
-// Checks the state index at the start of a launch: none after a cold boot, a new one when its contents are not intact
-// (the pages it named stay lost until the next cold boot).
+// Checks the state index at the start of a launch: none after a cold boot, a new one when its contents are not intact (the pages it named stay lost until the
+// next cold boot).
 static void CheckStateIndex() {
     STATE_INDEX *index = StateIndex();
     if (!KiQuickRebootFlag || !index) {
         StateIndex() = nullptr;
         return;
     }
-    if (index->Magic != STATE_INDEX_MAGIC || index->Count > STATE_INDEX_ENTRIES ||
-        index->Checksum != IndexChecksum(index)) {
+    if (index->Magic != STATE_INDEX_MAGIC || index->Count > STATE_INDEX_ENTRIES || index->Checksum != IndexChecksum(index)) {
         XK_SERIAL("extensions: state index damaged: every state page starts new\n");
         StateIndex() = nullptr;
         return;
@@ -222,8 +220,7 @@ NTSTATUS NTAPI RegisterEvent(OXOS_CONTEXT *Context, ULONG Event, PVOID Callback,
         return STATUS_INVALID_PARAMETER;
     if (state->EventCount == XK_EXTENSION_EVENTS_MAX)
         return STATUS_INSUFFICIENT_RESOURCES;
-    state->Events[state->EventCount++] = {Event, ExtensionIndex(Context), (OXOS_EVENT_CALLBACK)Callback,
-                                          CallbackContext};
+    state->Events[state->EventCount++] = {Event, ExtensionIndex(Context), (OXOS_EVENT_CALLBACK)Callback, CallbackContext};
     return STATUS_SUCCESS;
 }
 
@@ -298,8 +295,8 @@ OXOS_SETTING *PoolSettings(const XK_EXTENSION_ENTRY &Entry) {
 
 } // namespace
 
-// Loads the extension Entry names as LoadedExtensions->Extensions[Count] and calls its Load; true when it stays.
-// *ImagesBytes counts the loaded images' sizes against IMAGES_MAX_BYTES.
+// Loads the extension Entry names as LoadedExtensions->Extensions[Count] and calls its Load; true when it stays. *ImagesBytes counts the loaded images' sizes
+// against IMAGES_MAX_BYTES.
 static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, ULONG *ImagesBytes) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
     char *section = PoolText(Entry.Section);
@@ -382,15 +379,15 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     }
     *ImagesBytes += imageSize;
     state->Count++;
-    XK_SERIAL("extensions: [%s] %s %s at %p, %lu KB\n", name, descriptor->Name ? descriptor->Name : "?",
-              descriptor->Version ? descriptor->Version : "?", image, imageSize / 1024);
+    XK_SERIAL("extensions: [%s] %s %s at %p, %lu KB\n", name, descriptor->Name ? descriptor->Name : "?", descriptor->Version ? descriptor->Version : "?", image,
+              imageSize / 1024);
     return true;
 }
 
 // --- After every Load (§4.3 step 3)
 
-// Links the hook chains: each hook's Next is the next extension's hook of its ordinal, else the kernel's function;
-// each extension's own import of a hooked ordinal goes to the first hook of an extension loaded after it.
+// Links the hook chains: each hook's Next is the next extension's hook of its ordinal, else the kernel's function; each extension's own import of a hooked
+// ordinal goes to the first hook of an extension loaded after it.
 static void LinkChains(const IMPORT_SLOTS *Slots) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
     for (ULONG i = 0; i < state->HookCount; i++) {
@@ -473,9 +470,8 @@ extern "C" void XkExtensionLoaderEntry() {
         XK_EXTENSION &extension = state->Extensions[i];
         if (!extension.Descriptor->Main)
             continue;
-        if (!NT_SUCCESS(PsCreateSystemThreadEx(&extension.MainThread, 0, MAIN_STACK_BYTES, 0, nullptr,
-                                               (PVOID)extension.Descriptor->Main, &extension.Context, FALSE, FALSE,
-                                               MainThreadRoutine))) {
+        if (!NT_SUCCESS(PsCreateSystemThreadEx(&extension.MainThread, 0, MAIN_STACK_BYTES, 0, nullptr, (PVOID)extension.Descriptor->Main, &extension.Context,
+                                               FALSE, FALSE, MainThreadRoutine))) {
             extension.MainThread = nullptr;
             XK_SERIAL("extensions: [%s] Main not started\n", extension.Context.SectionName);
         }

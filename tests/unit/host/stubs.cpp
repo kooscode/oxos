@@ -1,5 +1,5 @@
-// What the core sources reference outside the files under test: boot-time data from entry.S / interrupt_stubs.S, the
-// serial log, and the HAL and executive pieces the tests do not cover. Each stub is the smallest correct behaviour.
+// What the core sources reference outside the files under test: boot-time data from entry.S / interrupt_stubs.S, the serial log, and the HAL and executive
+// pieces the tests do not cover. Each stub is the smallest correct behaviour.
 #include "host.h"
 
 #include <cstdarg>
@@ -88,8 +88,8 @@ ULONG *CachePte(ULONG) {
 }
 } // namespace xk::filesystems
 
-// in_game_reset/xinput_hook.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset
-// combination); here it is what it does for kernel callers.
+// in_game_reset/xinput_hook.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination); here it is what it does for kernel
+// callers.
 XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
     return KfRaiseIrql(DISPATCH_LEVEL);
 }

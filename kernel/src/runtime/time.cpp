@@ -42,9 +42,8 @@ XBAPI void NTAPI RtlTimeToTimeFields(PLARGE_INTEGER Time, PTIME_FIELDS TimeField
 
 XBAPI BOOLEAN NTAPI RtlTimeFieldsToTime(PTIME_FIELDS TimeFields, PLARGE_INTEGER Time) {
     TIME_FIELDS f = *TimeFields;
-    if (f.Year < 1601 || f.Month < 1 || f.Month > 12 || f.Day < 1 ||
-        f.Day > MonthDays[IsLeapYear(f.Year)][f.Month - 1] || f.Hour < 0 || f.Hour > 23 || f.Minute < 0 ||
-        f.Minute > 59 || f.Second < 0 || f.Second > 59 || f.Milliseconds < 0 || f.Milliseconds > 999)
+    if (f.Year < 1601 || f.Month < 1 || f.Month > 12 || f.Day < 1 || f.Day > MonthDays[IsLeapYear(f.Year)][f.Month - 1] || f.Hour < 0 || f.Hour > 23 ||
+        f.Minute < 0 || f.Minute > 59 || f.Second < 0 || f.Second > 59 || f.Milliseconds < 0 || f.Milliseconds > 999)
         return FALSE;
     LONG y = f.Year - 1601;
     ULONG days = y * 365 + y / 4 - y / 100 + y / 400;

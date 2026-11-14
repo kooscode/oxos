@@ -1,7 +1,6 @@
-// The gamepads during the boot splash (spec/oxos_internal/32 §2-4): USB sets up the devices (hardware/usb/devices.cpp),
-// and each Xbox pad (interface class 0x58) gets an interrupt-IN pipe. The splash then reads the pads between its
-// frames; X pressed at any time sets XButtonPressed, B BButtonPressed (safe mode, spec/oxos_internal/34 §3.3).
-// Boot-only.
+// The gamepads during the boot splash (spec/oxos_internal/32 §2-4): USB sets up the devices (hardware/usb/devices.cpp), and each Xbox pad (interface class
+// 0x58) gets an interrupt-IN pipe. The splash then reads the pads between its frames; X pressed at any time sets XButtonPressed, B BButtonPressed (safe mode,
+// spec/oxos_internal/34 §3.3). Boot-only.
 #include <gamepad/gamepad.h>
 #include <hardware/usb/usb.h>
 #include <core/core.h>
@@ -16,8 +15,8 @@ namespace xk::gamepad {
 constexpr UCHAR CLASS_XBOX_INPUT = 0x58;
 constexpr UCHAR FROM_INTERFACE_CLASS = 0xA1, REQUEST_GET_REPORT = 1;
 constexpr USHORT REPORT_INPUT = 0x0100;
-// The Xbox pad's input report: 0, its length (20), the digital buttons (16 bits), then the eight analog buttons
-// A, B, X, Y, BLACK, WHITE, LT, RT (0-255), then the sticks.
+// The Xbox pad's input report: 0, its length (20), the digital buttons (16 bits), then the eight analog buttons A, B, X, Y, BLACK, WHITE, LT, RT (0-255), then
+// the sticks.
 constexpr ULONG REPORT_B = 5, REPORT_X = 6;
 constexpr UCHAR BUTTON_PRESSED = 0x80; // pressed at least halfway
 
@@ -40,8 +39,8 @@ static void CheckReport(const UCHAR *Report, LONG Length) {
     }
 }
 
-// A device USB set up: an Xbox pad when it has an Xbox input interface with an interrupt-IN endpoint (the first such
-// interface); its pipe is opened and its state read now, for X already held.
+// A device USB set up: an Xbox pad when it has an Xbox input interface with an interrupt-IN endpoint (the first such interface); its pipe is opened and its
+// state read now, for X already held.
 static void FoundDevice(const USB_DEVICE &Device, const UCHAR *Config, LONG Length) {
     bool inPad = false;
     UCHAR interfaceNumber = 0, endpoint = 0;
@@ -63,8 +62,8 @@ static void FoundDevice(const USB_DEVICE &Device, const UCHAR *Config, LONG Leng
     ControllersFound = ControllersFound + 1;
     // XID's GET_REPORT; a pad without it is read through its pipe only.
     UCHAR report[20];
-    CheckReport(report, hardware::usb::ControlTransfer(Device, FROM_INTERFACE_CLASS, REQUEST_GET_REPORT, REPORT_INPUT,
-                                             interfaceNumber, sizeof(report), report));
+    CheckReport(report, hardware::usb::ControlTransfer(Device, FROM_INTERFACE_CLASS, REQUEST_GET_REPORT, REPORT_INPUT, interfaceNumber, sizeof(report),
+                                             report));
 }
 
 // --- The watch

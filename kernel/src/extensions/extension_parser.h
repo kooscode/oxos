@@ -1,6 +1,5 @@
-// PE images for kernel extensions (spec/oxos_internal/34 §8): checking, mapping, relocating, binding imports and
-// finding an export. It makes no kernel calls, so the host unit tests run it unchanged
-// (tests/unit/test_extension_parser.cpp).
+// PE images for kernel extensions (spec/oxos_internal/34 §8): checking, mapping, relocating, binding imports and finding an export. It makes no kernel calls,
+// so the host unit tests run it unchanged (tests/unit/test_extension_parser.cpp).
 #pragma once
 #include <runtime/types.h>
 
@@ -16,18 +15,17 @@ enum class XK_PE_ERROR {
     BAD_IMPORT,      // an import from another DLL than xboxkrnl.exe, by name, or an ordinal the resolver refuses
 };
 
-// Resolves one import: Ordinal of xboxkrnl.exe for the import address table entry at *Slot (an address in Image).
-// Returns false to refuse it.
+// Resolves one import: Ordinal of xboxkrnl.exe for the import address table entry at *Slot (an address in Image). Returns false to refuse it.
 typedef bool (*XK_PE_IMPORT_RESOLVER)(PVOID Context, ULONG Ordinal, ULONG *Slot);
 
 namespace xk::extensions {
 
-// Checks that File (Size bytes) is an i386 PE DLL with relocations and no TLS, whose headers and sections lie inside
-// the file; *ImageSize receives its SizeOfImage.
+// Checks that File (Size bytes) is an i386 PE DLL with relocations and no TLS, whose headers and sections lie inside the file; *ImageSize receives its
+// SizeOfImage.
 XK_PE_ERROR CheckImage(const UCHAR *File, ULONG Size, ULONG *ImageSize);
 
-// Lays a checked File out in Image (ImageSize bytes, as CheckImage returned): headers and sections at their RVAs, the
-// rest zero, then relocated to run at Base (Image's address in the kernel; another one in the host tests).
+// Lays a checked File out in Image (ImageSize bytes, as CheckImage returned): headers and sections at their RVAs, the rest zero, then relocated to run at Base
+// (Image's address in the kernel; another one in the host tests).
 XK_PE_ERROR MapImage(const UCHAR *File, ULONG Size, UCHAR *Image, ULONG ImageSize, ULONG Base);
 
 

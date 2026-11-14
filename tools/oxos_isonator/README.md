@@ -1,7 +1,7 @@
 # oxos_isonator
 
-Makes game folders that dashboards list and start as games, from images of your own discs or from extracted game
-folders. It runs on any platform with Python 3.8 or later and uses only the standard library.
+Makes game folders that dashboards list and start as games, from images of your own discs or from extracted game folders. It runs on any platform with Python
+3.8 or later and uses only the standard library.
 
 ```
 Halo 2/
@@ -9,13 +9,12 @@ Halo 2/
     default.xbe      the launcher
 ```
 
-The launcher is the OXOS [ISO launcher](../iso_launcher) with the game's identity copied in: title ID, title name,
-alternate title IDs, region, ratings, disc number, version, and the title image (`$$XTIMAGE`). Dashboards such as
-XBMC4Gamers, EvoX and the OXOS title launcher therefore show the game itself, with its name, artwork and save data.
-Starting it mounts the image in its folder as the console's disc through the virtual disc device that OXOS and Cerbios
-share (`\Device\CdRom1`, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md),
-[`spec/cerbios/07_virtual_discs.md`](../../spec/cerbios/07_virtual_discs.md)). It then starts the game the way a disc
-in the drive starts. The same folder works on OXOS and on Cerbios.
+The launcher is the OXOS [ISO launcher](../iso_launcher) with the game's identity copied in: title ID, title name, alternate title IDs, region, ratings, disc
+number, version, and the title image (`$$XTIMAGE`). Dashboards such as XBMC4Gamers, EvoX and the OXOS title launcher therefore show the game itself, with its
+name, artwork and save data. Starting it mounts the image in its folder as the console's disc through the virtual disc device that OXOS and Cerbios share
+(`\Device\CdRom1`, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md),
+[`spec/cerbios/07_virtual_discs.md`](../../spec/cerbios/07_virtual_discs.md)). It then starts the game the way a disc in the drive starts. The same folder works
+on OXOS and on Cerbios.
 
 ## Usage
 ```
@@ -45,20 +44,17 @@ tools/oxos_isonator/oxos_isonator.py --info xiso/                 # what each im
 | `--info` | only print each image's kind, size, title and whether it has a title image |
 
 ## Details
-- **Images read:** XISO, and full disc dumps (the game partition at 0x18300000, recognised as Cerbios and OXOS do it),
-  whole or split. CCI images are read by the consoles, not by this tool; `tools/mkcci` makes them.
-- **Images written:** XDVDFS with the volume descriptor at sector 32. Each directory is a balanced binary tree of
-  entries in case-insensitive name order, with no entry crossing a sector and 0xFF as padding. Files are written after
-  the directories, each starting on a sector. File attributes are as on retail discs (0x80 files, 0x10 folders).
-  Only the files themselves are stored, so an image built from a folder is the smallest XISO of that game.
-- **Folders read:** a folder whose `default.xbe` (any letter case) is the game itself is built as a game, even when
-  it holds `.iso` data files of its own; a folder with no `default.xbe`, or only a launcher, is a folder of images.
-- **Names:** XDVDFS names are 8-bit characters, up to 255 bytes. On FATX the folder and image names must be 42
-  characters or fewer.
-- **The launcher template** must be a plain ISO launcher with no title image. A `default.xbe` already in a game folder
-  is replaced only when it is an OXOS ISO launcher (any build, so running the tool again updates the launchers), so a
-  game's own `default.xbe` is never overwritten without `--force`.
-- **On start** the launcher mounts the image and starts the game without touching the screen. It shows text only
-  when something is wrong (no image, a failed mount).
-- Repackinator (Team Resurgent) does the same job for Cerbios with its own launcher. This tool is a separate
-  implementation (OXOS is GPL-2.0, Repackinator GPL-3.0), and its launcher is the OXOS one.
+- **Images read:** XISO, and full disc dumps (the game partition at 0x18300000, recognised as Cerbios and OXOS do it), whole or split. CCI images are read by
+  the consoles, not by this tool; `tools/mkcci` makes them.
+- **Images written:** XDVDFS with the volume descriptor at sector 32. Each directory is a balanced binary tree of entries in case-insensitive name order, with
+  no entry crossing a sector and 0xFF as padding. Files are written after the directories, each starting on a sector. File attributes are as on retail discs
+  (0x80 files, 0x10 folders). Only the files themselves are stored, so an image built from a folder is the smallest XISO of that game.
+- **Folders read:** a folder whose `default.xbe` (any letter case) is the game itself is built as a game, even when it holds `.iso` data files of its own; a
+  folder with no `default.xbe`, or only a launcher, is a folder of images.
+- **Names:** XDVDFS names are 8-bit characters, up to 255 bytes. On FATX the folder and image names must be 42 characters or fewer.
+- **The launcher template** must be a plain ISO launcher with no title image. A `default.xbe` already in a game folder is replaced only when it is an OXOS ISO
+  launcher (any build, so running the tool again updates the launchers), so a game's own `default.xbe` is never overwritten without `--force`.
+- **On start** the launcher mounts the image and starts the game without touching the screen. It shows text only when something is wrong (no image, a failed
+  mount).
+- Repackinator (Team Resurgent) does the same job for Cerbios with its own launcher. This tool is a separate implementation (OXOS is GPL-2.0, Repackinator
+  GPL-3.0), and its launcher is the OXOS one.

@@ -1,15 +1,13 @@
 // The fake CPU, MMU and devices of the host unit tests (tests/unit/README.md).
 //
 // The kernel's core sources run unchanged in a 32-bit Linux process. Two things make that work:
-//  - Privileged instructions (cli, sti, hlt, in/out, invlpg, wbinvd, mov to/from CR and DR registers, rdmsr/wrmsr,
-//    lgdt/lidt/ltr) fault with SIGSEGV in user mode. The handler decodes the instruction, applies it to the fake
-//    CPU state below and resumes after it.
-//  - The kernel's address windows (identity/title space, the 0x80000000 physical map, the page-table self-map, the
-//    system PTE range, the GPU registers) are reserved PROT_NONE. An access faults; the handler walks the kernel's
-//    own page tables from the fake CR3 and maps the physical page there (a TLB fill). invlpg and CR3 writes unmap
-//    again (a TLB flush), so a missing invalidation behaves as on real hardware: the stale translation stays.
-// Interrupts are delivered synchronously, when the fake interrupt flag turns on with an IRQ pending, at hlt, and
-// when a test advances the fake time; the kernel's dispatcher then runs on the interrupted stack via a trampoline.
+//  - Privileged instructions (cli, sti, hlt, in/out, invlpg, wbinvd, mov to/from CR and DR registers, rdmsr/wrmsr, lgdt/lidt/ltr) fault with SIGSEGV in user
+//    mode. The handler decodes the instruction, applies it to the fake CPU state below and resumes after it.
+//  - The kernel's address windows (identity/title space, the 0x80000000 physical map, the page-table self-map, the system PTE range, the GPU registers) are
+//    reserved PROT_NONE. An access faults; the handler walks the kernel's own page tables from the fake CR3 and maps the physical page there (a TLB fill).
+//    invlpg and CR3 writes unmap again (a TLB flush), so a missing invalidation behaves as on real hardware: the stale translation stays.
+// Interrupts are delivered synchronously, when the fake interrupt flag turns on with an IRQ pending, at hlt, and when a test advances the fake time; the
+// kernel's dispatcher then runs on the interrupted stack via a trampoline.
 #include "host.h"
 
 #include <cerrno>
@@ -356,9 +354,8 @@ static bool ReadWord(uint32_t a, uint32_t *v) {
         write(2, msg, m);
     }
     uint32_t esp = (uint32_t)uc->uc_mcontext.gregs[REG_ESP];
-    int n = snprintf(msg, sizeof(msg), "\n*** host CPU: %s at eip %08x (address %08x, esp %08x, ebp %08x)\n    stack:",
-                     what, (uint32_t)uc->uc_mcontext.gregs[REG_EIP], addr, esp,
-                     (uint32_t)uc->uc_mcontext.gregs[REG_EBP]);
+    int n = snprintf(msg, sizeof(msg), "\n*** host CPU: %s at eip %08x (address %08x, esp %08x, ebp %08x)\n    stack:", what,
+                     (uint32_t)uc->uc_mcontext.gregs[REG_EIP], addr, esp, (uint32_t)uc->uc_mcontext.gregs[REG_EBP]);
     for (int i = 0; i < 12; i++) {
         uint32_t v;
         if (ReadWord(esp + 4 * i, &v))
@@ -513,8 +510,7 @@ static void OnFault(int sig, siginfo_t *si, void *ctx) {
             return;
         KernelFaultAddress = addr;
         Cr2 = addr;
-        Die(uc, write ? "kernel page fault (write to an unmapped or read-only page)" : "kernel page fault (read)",
-            addr);
+        Die(uc, write ? "kernel page fault (write to an unmapped or read-only page)" : "kernel page fault (read)", addr);
     }
     auto eip = (uint32_t)uc->uc_mcontext.gregs[REG_EIP];
     if (!InText(eip))
@@ -525,9 +521,8 @@ static void OnFault(int sig, siginfo_t *si, void *ctx) {
 }
 
 // --- Asynchronous interrupts (stress tests): a real-time signal stands for the PIT. When it lands on a kernel
-// instruction with the fake IF on, the clock interrupt is taken right there, on the interrupted stack, as the CPU
-// would; with IF off it stays pending until the kernel enables interrupts. Elsewhere (the C library, the tests, the
-// harness) the tick is skipped, so non-kernel code is never re-entered.
+// instruction with the fake IF on, the clock interrupt is taken right there, on the interrupted stack, as the CPU would; with IF off it stays pending until the
+// kernel enables interrupts. Elsewhere (the C library, the tests, the harness) the tick is skipped, so non-kernel code is never re-entered.
 extern "C" char __oxos_kernel_text_start[], __oxos_kernel_text_end[];
 static volatile bool AsyncOn;
 volatile uint64_t AsyncDelivered, AsyncPended, AsyncSkipped;
@@ -567,11 +562,9 @@ void SetAsyncInterrupts(uint32_t periodUs) {
 // Before anything else maps memory into the kernel's windows.
 __attribute__((constructor(101))) static void HostInit() {
     for (auto &w : Windows) {
-        void *r = mmap((void *)w.start, w.end - w.start, PROT_NONE,
-                       MAP_FIXED_NOREPLACE | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        void *r = mmap((void *)w.start, w.end - w.start, PROT_NONE, MAP_FIXED_NOREPLACE | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
         if (r != (void *)w.start) {
-            fprintf(stderr, "host: cannot reserve %08x-%08x (%s); /proc/self/maps:\n", w.start, w.end,
-                    strerror(errno));
+            fprintf(stderr, "host: cannot reserve %08x-%08x (%s); /proc/self/maps:\n", w.start, w.end, strerror(errno));
             FILE *f = fopen("/proc/self/maps", "r");
             char line[256];
             while (f && fgets(line, sizeof(line), f))
@@ -603,8 +596,7 @@ jmp_buf *BugCheckCatcher;
 volatile uint32_t LastBugCheck[5];
 }
 
-extern "C" void HostBugCheck(unsigned long code, unsigned long p1, unsigned long p2, unsigned long p3,
-                             unsigned long p4) {
+extern "C" void HostBugCheck(unsigned long code, unsigned long p1, unsigned long p2, unsigned long p3, unsigned long p4) {
     host::LastBugCheck[0] = code, host::LastBugCheck[1] = p1, host::LastBugCheck[2] = p2;
     host::LastBugCheck[3] = p3, host::LastBugCheck[4] = p4;
     if (jmp_buf *c = host::BugCheckCatcher) {

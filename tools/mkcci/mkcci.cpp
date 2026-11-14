@@ -1,12 +1,11 @@
-// mkcci: convert an Xbox disc image (.iso, XISO or full dump) to CCI, the LZ4-compressed format OXOS and Cerbios
-// mount (spec/cerbios/07 §4, spec/oxos_internal/16_virtual_discs.md).
+// mkcci: convert an Xbox disc image (.iso, XISO or full dump) to CCI, the LZ4-compressed format OXOS and Cerbios mount (spec/cerbios/07 §4,
+// spec/oxos_internal/16_virtual_discs.md).
 //
 //   mkcci IN.iso OUT [--split] [--no-verify]
 //
-// OUT names the image without its extension. One part is written as OUT.cci. When the CCI would not fit in one FATX
-// file (4 GB), or with --split, the image is written as two parts, OUT.1.cci and OUT.2.cci. --split cuts at the middle
-// sector. Each part is a whole CCI file for its own run of sectors, and part 1 holds the first ones. Afterwards every
-// part is read back, decoded and compared with the input, unless --no-verify is given.
+// OUT names the image without its extension. One part is written as OUT.cci. When the CCI would not fit in one FATX file (4 GB), or with --split, the image is
+// written as two parts, OUT.1.cci and OUT.2.cci. --split cuts at the middle sector. Each part is a whole CCI file for its own run of sectors, and part 1 holds
+// the first ones. Afterwards every part is read back, decoded and compared with the input, unless --no-verify is given.
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -159,8 +158,8 @@ std::size_t Store(const std::uint8_t *raw, std::uint8_t *out, bool *packed) {
     return BLOCK;
 }
 
-// Writes sectors [first, first + count) of the input as one CCI file. Stops early (returns the sectors written) when
-// the next block would take the file past PART_LIMIT.
+// Writes sectors [first, first + count) of the input as one CCI file. Stops early (returns the sectors written) when the next block would take the file past
+// PART_LIMIT.
 std::uint64_t WritePart(std::FILE *in, std::uint64_t first, std::uint64_t count, const std::string &path) {
     File out(path, "wb");
     if (!out.f) {
@@ -198,8 +197,7 @@ std::uint64_t WritePart(std::FILE *in, std::uint64_t first, std::uint64_t count,
         if (k < want)
             break;
         if (done % (512 * 64) == 0) {
-            std::fprintf(stderr, "\r  %s: %llu / %llu MB", path.c_str(), (unsigned long long)(done >> 9),
-                         (unsigned long long)(count >> 9));
+            std::fprintf(stderr, "\r  %s: %llu / %llu MB", path.c_str(), (unsigned long long)(done >> 9), (unsigned long long)(count >> 9));
         }
     }
     index.push_back(std::uint32_t(at >> 2));
@@ -207,8 +205,8 @@ std::uint64_t WritePart(std::FILE *in, std::uint64_t first, std::uint64_t count,
     Header(header, done * BLOCK, at);
     std::fseek(out.f, 0, SEEK_SET);
     std::fwrite(header, 1, 32, out.f);
-    std::fprintf(stderr, "\r  %s: %llu sectors (%llu compressed), %llu MB\n", path.c_str(), (unsigned long long)done,
-                 (unsigned long long)compressed, (unsigned long long)((at + index.size() * 4) >> 20));
+    std::fprintf(stderr, "\r  %s: %llu sectors (%llu compressed), %llu MB\n", path.c_str(), (unsigned long long)done, (unsigned long long)compressed,
+                 (unsigned long long)((at + index.size() * 4) >> 20));
     return done;
 }
 
@@ -244,8 +242,7 @@ bool Verify(std::FILE *in, std::uint64_t first, const std::string &path, std::ui
         if (std::fread(want, 1, BLOCK, in) < BLOCK) {
         } // a short last sector: zeros
         if (!ok || std::memcmp(got, want, BLOCK)) {
-            std::fprintf(stderr, "mkcci: %s: block %llu differs from the input\n", path.c_str(),
-                         (unsigned long long)b);
+            std::fprintf(stderr, "mkcci: %s: block %llu differs from the input\n", path.c_str(), (unsigned long long)b);
             return false;
         }
     }
@@ -268,8 +265,7 @@ int main(int argc, char **argv) {
             names.emplace_back(argv[i]);
     }
     if (names.size() != 2) {
-        std::fprintf(stderr,
-                     "usage: mkcci IN.iso OUT [--split] [--no-verify]  (writes OUT.cci or OUT.1.cci + OUT.2.cci)\n");
+        std::fprintf(stderr, "usage: mkcci IN.iso OUT [--split] [--no-verify]  (writes OUT.cci or OUT.1.cci + OUT.2.cci)\n");
         return 2;
     }
     File in(names[0], "rb");
@@ -315,8 +311,7 @@ int main(int argc, char **argv) {
             at += n;
         }
         if (at != sectors) {
-            std::fprintf(stderr, "mkcci: the parts hold %llu of %llu sectors\n", (unsigned long long)at,
-                         (unsigned long long)sectors);
+            std::fprintf(stderr, "mkcci: the parts hold %llu of %llu sectors\n", (unsigned long long)at, (unsigned long long)sectors);
             return 1;
         }
     }

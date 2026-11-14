@@ -1,5 +1,5 @@
-// The volume layer both formats share: the lock, the block cache, FAT access, cluster allocation, file sizes, names
-// and timestamps (spec/stock/04 §6, spec/stock/04b).
+// The volume layer both formats share: the lock, the block cache, FAT access, cluster allocation, file sizes, names and timestamps (spec/stock/04 §6,
+// spec/stock/04b).
 #include <filesystems/hddfs/hddfs.h>
 #include <filesystems/filesystems.h>
 #include <hardware/chipset/serial.h>
@@ -74,15 +74,14 @@ NTSTATUS HDDFSWriteBlockRange(HDDFS_VOLUME *v, LONGLONG BlockOffset, ULONG Start
 
 void HDDFSInvalidateRange(HDDFS_VOLUME *v, LONGLONG Offset, ULONG Length) {
     for (ULONG i = 0; i < HDDFSHeldCount; i++) { // held blocks of the range are not reused either
-        if (HDDFSHeld[i].Volume == v && HDDFSHeld[i].Block + HDDFS_BLOCK_SIZE > Offset &&
-            HDDFSHeld[i].Block < Offset + Length)
+        if (HDDFSHeld[i].Volume == v && HDDFSHeld[i].Block + HDDFS_BLOCK_SIZE > Offset && HDDFSHeld[i].Block < Offset + Length)
             HDDFSHeld[i].Volume = nullptr;
     }
     InvalidateCacheRange(v->Cache, Offset, Length);
 }
 
-// The volume is going away: its blocks must not match a later volume allocated at the same address. An exFAT folder
-// volume's key is the disk's, which outlives it (and its blocks stay valid: every write goes through).
+// The volume is going away: its blocks must not match a later volume allocated at the same address. An exFAT folder volume's key is the disk's, which outlives
+// it (and its blocks stay valid: every write goes through).
 void HDDFSForgetVolume(HDDFS_VOLUME *v) {
     if (v->Cache == &v->CacheExtension)
         InvalidateCacheDevice(v->Cache);
@@ -220,9 +219,8 @@ NTSTATUS HDDFSChainLength(HDDFS_VOLUME *v, ULONG First, ULONG *Count, ULONG *Las
     return STATUS_SUCCESS;
 }
 
-// exFAT: a file's or directory's allocation is its DataLength rounded up to clusters (EXFATAllocClusters); FAT entries
-// past it mean nothing (another file may own those clusters now), so a chain is never followed beyond it. Only the
-// root directory has no length: its chain ends at the end-of-chain mark, as on FATX.
+// exFAT: a file's or directory's allocation is its DataLength rounded up to clusters (EXFATAllocClusters); FAT entries past it mean nothing (another file may
+// own those clusters now), so a chain is never followed beyond it. Only the root directory has no length: its chain ends at the end-of-chain mark, as on FATX.
 static bool HDDFSChainIsBounded(HDDFS_VOLUME *v, const HDDFS_FCB *f) {
     return v->IsEXFAT && !(f->Flags & FCB_EXFAT_DISK_ROOT);
 }
@@ -375,8 +373,8 @@ ULONG HDDFSCurrentTimestamp() {
 
 // --- File size
 
-// Grow or shrink the cluster chain to cover NewSize bytes. FATX sizes are 32-bit; exFAT files may be 4 GB or more
-// (spec/oxos_internal/07_exfat_driver.md §2). STATUS_DISK_FULL for a size the format or the volume cannot hold.
+// Grow or shrink the cluster chain to cover NewSize bytes. FATX sizes are 32-bit; exFAT files may be 4 GB or more (spec/oxos_internal/07_exfat_driver.md §2).
+// STATUS_DISK_FULL for a size the format or the volume cannot hold.
 NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONGLONG NewSize) {
     ULONGLONG clusters = (NewSize + v->BytesPerCluster - 1) >> v->ClusterShift;
     if ((!v->IsEXFAT && NewSize > 0xFFFFFFFFull) || clusters > v->NumberOfClusters)

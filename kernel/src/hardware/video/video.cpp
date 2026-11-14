@@ -1,6 +1,6 @@
-// Audio/video: AV pack, encoder detection, display mode programming (spec/stock/12 §4, spec/stock/17).
-// The video encoders (Conexant, Focus, Xcalibur) are programmed from their register maps (spec/stock/18-20); the NV2A
-// timing follows each encoder's settings, or the standards for HD and VGA (spec/oxos_internal/02_display_modes.md).
+// Audio/video: AV pack, encoder detection, display mode programming (spec/stock/12 §4, spec/stock/17). The video encoders (Conexant, Focus, Xcalibur) are
+// programmed from their register maps (spec/stock/18-20); the NV2A timing follows each encoder's settings, or the standards for HD and VGA
+// (spec/oxos_internal/02_display_modes.md).
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
 #include <hardware/chipset/serial.h>
@@ -8,9 +8,9 @@
 #include <core/core.h>
 #include <titles/titles.h>
 
-// Each encoder's tables have their own part of the boot-only data (spec/oxos_internal/18_boot_memory.md), first in it
-// (right after the kept image, so the Conexant's share its last page), each after a marker: the pages of the two
-// encoders the console does not have are freed before the first title starts (VideoTablesInUse).
+// Each encoder's tables have their own part of the boot-only data (spec/oxos_internal/18_boot_memory.md), first in it (right after the kept image, so the
+// Conexant's share its last page), each after a marker: the pages of the two encoders the console does not have are freed before the first title starts
+// (VideoTablesInUse).
 #define AVP_CX __attribute__((section(".xka$c1")))
 #define AVP_FO __attribute__((section(".xka$f1")))
 #define AVP_XC __attribute__((section(".xka$x1")))
@@ -29,13 +29,11 @@ namespace xk::hardware::video {
 constexpr UCHAR AV_ENCODER_CONEXANT = 0x8A, AV_ENCODER_FOCUS = 0xD4, AV_ENCODER_XCALIBUR = 0xE0; // SMBus addresses
 
 XK_PERSIST static ULONG CurrentMode;   // the mode word of the last full mode change (0: none, or the null mode)
-// The encoder's output control register 0xBA as the last mode change set it: the low four bits are the DAC enables
-// of the mode word (bits 24-27).
+// The encoder's output control register 0xBA as the last mode change set it: the low four bits are the DAC enables of the mode word (bits 24-27).
 static UCHAR OutputControl = 0x0F;
 
 // --- Encoder detection and the AV pack (spec/stock/17 §1.2, spec/stock/12 §4)
-// The video encoder, found by probing the bus at every boot (spec/stock/17 §1.2): 0x8A Conexant,
-// 0xD4 Focus, 0xE0 Xcalibur (1.6 consoles), 0 = none found.
+// The video encoder, found by probing the bus at every boot (spec/stock/17 §1.2): 0x8A Conexant, 0xD4 Focus, 0xE0 Xcalibur (1.6 consoles), 0 = none found.
 volatile UCHAR EncoderAddress;
 volatile ULONG EncoderWideStatus;         // Xcalibur: status of a 32-bit read of its register 0 (the 4-byte SMBus form)
 XK_PERSIST static PVOID SavedDataAddress; // a title's AvSetSavedDataAddress, kept across quick reboots
@@ -45,9 +43,8 @@ void InitVideo() {
     ULONG v;
     if (NT_SUCCESS(HalReadSMBusValue(0x20, 0x04, FALSE, &v)))
         HalBootSMCVideoMode = (UCHAR)v;
-    // The retail kernels decide from a byte of their own BIOS image (spec/stock/02 §5, spec/stock/17 §1.2); OXOS's
-    // image does not carry it, so the encoder is probed (a byte read of register 0, as Cerbios does) and
-    // XboxHardwareInfo reports it the way the reference would: 0x20 Focus, 0x400 Xcalibur.
+    // The retail kernels decide from a byte of their own BIOS image (spec/stock/02 §5, spec/stock/17 §1.2); OXOS's image does not carry it, so the encoder is
+    // probed (a byte read of register 0, as Cerbios does) and XboxHardwareInfo reports it the way the reference would: 0x20 Focus, 0x400 Xcalibur.
     static const UCHAR encoders[] = {AV_ENCODER_CONEXANT, AV_ENCODER_FOCUS, AV_ENCODER_XCALIBUR};
     EncoderAddress = 0;
     for (UCHAR a : encoders) {
@@ -82,8 +79,8 @@ void VideoTablesInUse(ULONG_PTR *Start, ULONG_PTR *End) {
 
 // AV pack unplugged / plugged back (SMC events): the encoder's outputs off, or back on with the current mode's DACs.
 void SmcSetOutputs(bool Enable) {
-    // As the reference (spec/stock/12 §4) on Conexant and Focus; for the Xcalibur (32-bit registers) the 4627 rule
-    // does not apply and no 5838 behaviour is documented, so it is left alone.
+    // As the reference (spec/stock/12 §4) on Conexant and Focus; for the Xcalibur (32-bit registers) the 4627 rule does not apply and no 5838 behaviour is
+    // documented, so it is left alone.
     if (EncoderAddress && EncoderAddress != AV_ENCODER_XCALIBUR && (!Enable || CurrentMode))
         HalWriteSMBusValue(EncoderAddress, 0xBA, FALSE, Enable ? (OutputControl & 0x0F) | 0x20 : 0x3F);
 }
@@ -122,8 +119,8 @@ static ULONG Capabilities() {
 // the driver steps follow spec/stock/17 §5 and the [E] steps of each encoder's spec.
 
 volatile ULONG EncoderWriteErrors; // diagnostics: encoder writes that did not complete on the bus
-// Xcalibur: the last value written to each register. A read-modify-write uses it when the 4-byte read fails (xemu
-// models the Xcalibur as byte registers, so only the writes complete there).
+// Xcalibur: the last value written to each register. A read-modify-write uses it when the 4-byte read fails (xemu models the Xcalibur as byte registers, so
+// only the writes complete there).
 volatile ULONG XcShadow[0x100];
 
 static bool IsJapanRegion() {
@@ -216,8 +213,7 @@ static ULONG XcVariant(ULONG Mode) {
     return ((Mode >> 28) & 2) | (XcLuma ? 1 : 0);
 }
 
-// spec/stock/20 §3: the encoder row through the SD or HD map (Japan maps for region 2); HD row 1 with CRTC row 7 is
-// looked up as row 4.
+// spec/stock/20 §3: the encoder row through the SD or HD map (Japan maps for region 2); HD row 1 with CRTC row 7 is looked up as row 4.
 static UCHAR XcRowFor(ULONG Mode) {
     ULONG row = Mode & 0x7F, japan = IsJapanRegion() ? 1 : 0;
     if (IsHd(Mode)) {
@@ -291,9 +287,8 @@ static bool EncoderMode(ULONG Mode) {
 // --- WSS / CGMS-A (spec/stock/17 §5a)
 static ULONG Cgms; // option 0x12: the CGMS copy-control bits sent in the WSS/CGMS word
 
-// The 20-bit CGMS-A word for 525 lines (IEC 61880: 14 data bits, 6-bit CRC x^6 + x + 1 with all-ones preset, data
-// from bit 0) or the 625-line WSS word (ETSI EN 300 294: aspect 8 = 4:3, 7 = 16:9 anamorphic, copy bits << 12).
-// Macrovision is off, so its two bits are 0.
+// The 20-bit CGMS-A word for 525 lines (IEC 61880: 14 data bits, 6-bit CRC x^6 + x + 1 with all-ones preset, data from bit 0) or the 625-line WSS word (ETSI EN
+// 300 294: aspect 8 = 4:3, 7 = 16:9 anamorphic, copy bits << 12). Macrovision is off, so its two bits are 0.
 static ULONG WssWord(ULONG Mode) {
     ULONG widescreen = (Mode >> 28) & 1;
     if ((Mode >> 30) == 1)
@@ -329,8 +324,8 @@ static void UpdateWss() {
 }
 
 // --- Encoder options (spec/stock/17 §5a)
-constexpr ULONG AV_QUERY_AV_CAPABILITIES = 6, AV_OPTION_BLANK_SCREEN = 9, AV_OPTION_NULL_MODE = 0xC,
-                AV_QUERY_ENCODER_TYPE = 0x10, AV_QUERY_MODE_TABLE_VERSION = 0x11;
+constexpr ULONG AV_QUERY_AV_CAPABILITIES = 6, AV_OPTION_BLANK_SCREEN = 9, AV_OPTION_NULL_MODE = 0xC, AV_QUERY_ENCODER_TYPE = 0x10,
+                AV_QUERY_MODE_TABLE_VERSION = 0x11;
 
 // AvSendTVEncoderOption (spec/stock/17 §5a; the encoder parts: spec/stock/18 §3, 19 §3, 20 §4).
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result) {
@@ -486,10 +481,9 @@ static void WriteSequencer(volatile UCHAR *regs, UCHAR index, UCHAR value) {
     regs[0xC03C5] = value;
 }
 
-// Display timings per mode (spec/oxos_internal/02_display_modes.md §1). The mode word's table (bits 30-31: 10b HDTV,
-// 11b VGA, otherwise SDTV) and CRTC row (bits 8-15) select the picture size; the row meanings follow the D3D mode words
-// (as nxdk's table lists them), and the timings are the public video standards' (CEA-861 480p, SMPTE 296M 720p, SMPTE
-// 274M 1080i, VESA), not the reference's tables. Interlaced modes are programmed per field. xemu sizes its display from
+// Display timings per mode (spec/oxos_internal/02_display_modes.md §1). The mode word's table (bits 30-31: 10b HDTV, 11b VGA, otherwise SDTV) and CRTC row
+// (bits 8-15) select the picture size; the row meanings follow the D3D mode words (as nxdk's table lists them), and the timings are the public video standards'
+// (CEA-861 480p, SMPTE 296M 720p, SMPTE 274M 1080i, VESA), not the reference's tables. Interlaced modes are programmed per field. xemu sizes its display from
 // these CRTC registers (width = (CR01 + 1) * 8, height from CR12/CR07, doubled when CR39 says interlaced).
 struct AVP_TIMING {
     UCHAR Table, Row;
@@ -521,13 +515,12 @@ static const AVP_TIMING *FindTiming(ULONG Mode) {
     return &DefaultTiming;
 }
 
-// VGA CRTC timing registers plus the NV extended bits (CR25 vertical bit 10s, CR2D horizontal bit 8s, CR39 the
-// interlace half-line: 0xFF = progressive). Horizontal values are in 8-pixel characters.
+// VGA CRTC timing registers plus the NV extended bits (CR25 vertical bit 10s, CR2D horizontal bit 8s, CR39 the interlace half-line: 0xFF = progressive).
+// Horizontal values are in 8-pixel characters.
 static void ProgramTiming(volatile UCHAR *regs, const AVP_TIMING &t) {
     ULONG ht = t.HTotal / 8 - 5, hd = t.HDisplay / 8 - 1, hbs = t.HDisplay / 8 - 1, hbe = t.HTotal / 8 - 1;
     ULONG hrs = t.HSyncStart / 8, hre = t.HSyncEnd / 8;
-    ULONG vt = t.VTotal - 2, vd = t.VDisplay - 1, vrs = t.VSyncStart, vre = t.VSyncEnd, vbs = t.VDisplay - 1,
-          vbe = t.VTotal - 1, lc = 0x3FF;
+    ULONG vt = t.VTotal - 2, vd = t.VDisplay - 1, vrs = t.VSyncStart, vre = t.VSyncEnd, vbs = t.VDisplay - 1, vbe = t.VTotal - 1, lc = 0x3FF;
     WriteCrtc(regs, 0x11, 0x00); // unlock CR0-7
     WriteCrtc(regs, 0x00, (UCHAR)ht);
     WriteCrtc(regs, 0x01, (UCHAR)hd);
@@ -553,9 +546,8 @@ static void ProgramTiming(volatile UCHAR *regs, const AVP_TIMING &t) {
     WriteCrtc(regs, 0x39, t.Interlaced ? (UCHAR)(t.HTotal / 16 - 5) : 0xFF);
 }
 
-// Standard VGA graphics-mode state (spec/stock/17 §5 step 9): sequencer, graphics controller, attribute controller with
-// an identity palette, then attribute index bit 5 (palette address source = display enabled). Without that last bit a
-// VGA (and xemu's display) shows a blank screen.
+// Standard VGA graphics-mode state (spec/stock/17 §5 step 9): sequencer, graphics controller, attribute controller with an identity palette, then attribute
+// index bit 5 (palette address source = display enabled). Without that last bit a VGA (and xemu's display) shows a blank screen.
 static void VgaGraphicsMode(volatile UCHAR *regs) {
     static const UCHAR seq[] = {0x03, 0x01, 0x0F, 0x00, 0x0E};
     static const UCHAR gfx[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0F, 0xFF};
@@ -575,12 +567,11 @@ static void VgaGraphicsMode(volatile UCHAR *regs) {
     regs[0x6013C0] = 0x20;
 }
 
-// NV2A flat-panel timing generator, which drives the encoder's input (register use as in Cromwell's
-// VideoInitialization.c, GPL): active area from 0, totals as total - 1, sync positions as given; the horizontal display
-// end is the width the encoder takes (spec/oxos_internal/02_display_modes.md §1). The NV2A sends YCrCb to the encoders
-// (PRAMDAC 0x630 = 2, margin colours YCrCb black), and RGB for mode bit 29 (spec/stock/17 §5 step 8).
-static void ProgramTvTiming(volatile UCHAR *regs, ULONG Mode, ULONG Width, ULONG Active, ULONG Height, ULONG HTotal,
-                            ULONG HSyncStart, ULONG HSyncEnd, ULONG VTotal, ULONG VSyncStart, ULONG VSyncEnd) {
+// NV2A flat-panel timing generator, which drives the encoder's input (register use as in Cromwell's VideoInitialization.c, GPL): active area from 0, totals as
+// total - 1, sync positions as given; the horizontal display end is the width the encoder takes (spec/oxos_internal/02_display_modes.md §1). The NV2A sends
+// YCrCb to the encoders (PRAMDAC 0x630 = 2, margin colours YCrCb black), and RGB for mode bit 29 (spec/stock/17 §5 step 8).
+static void ProgramTvTiming(volatile UCHAR *regs, ULONG Mode, ULONG Width, ULONG Active, ULONG Height, ULONG HTotal, ULONG HSyncStart, ULONG HSyncEnd,
+                            ULONG VTotal, ULONG VSyncStart, ULONG VSyncEnd) {
     auto fp = [&](ULONG offset, ULONG value) { *(volatile ULONG *)(regs + 0x680800 + offset) = value; };
     bool rgb = Mode & 0x20000000;
     *(volatile ULONG *)(regs + 0x680630) = rgb ? 0 : 2;
@@ -608,8 +599,8 @@ static void ProgramTvTiming(volatile UCHAR *regs, ULONG Mode, ULONG Width, ULONG
 volatile ULONG EncoderProgrammed; // diagnostics: the last mode word whose encoder registers were written
 volatile ULONG EncoderMismatches; // diagnostics: registers that read back differently after that mode set
 
-// Read-back check of the rows just written (Conexant and Focus: xemu's encoder models store registers): each
-// register's last written value. Xcalibur registers cannot be read back in xemu; there the count is of failed writes.
+// Read-back check of the rows just written (Conexant and Focus: xemu's encoder models store registers): each register's last written value. Xcalibur registers
+// cannot be read back in xemu; there the count is of failed writes.
 static ULONG CheckRow(const UCHAR *Regs, const UCHAR *Values, ULONG Count, UCHAR *Seen) {
     ULONG bad = 0;
     for (ULONG i = Count; i-- > 0;) {
@@ -715,9 +706,9 @@ static void EncoderStart(ULONG Mode) {
 }
 
 // --- OXOS's boot display (spec/stock/22 §7-8)
-// OXOS's own boot screens (splash, fatal error): the mode word the reference's boot animation would choose for this
-// AV pack and video standard (spec/stock/22 §8.3; 4:3), so the encoder sends what the cable expects (component
-// YPbPr on the HDTV pack, not composite). Standard: factory setting 0x103 bits 8-15 (1 NTSC-M, 2 NTSC-J, 3 PAL).
+// OXOS's own boot screens (splash, fatal error): the mode word the reference's boot animation would choose for this AV pack and video standard (spec/stock/22
+// §8.3; 4:3), so the encoder sends what the cable expects (component YPbPr on the HDTV pack, not composite). Standard: factory setting 0x103 bits 8-15 (1
+// NTSC-M, 2 NTSC-J, 3 PAL).
 ULONG BootModeWord() {
     ULONG type, length, region = 0x00400100;
     ExQueryNonVolatileSetting(0x103, &type, &region, sizeof(region), &length);
@@ -734,10 +725,9 @@ ULONG BootModeWord() {
     }
 }
 
-// The reference graphics library's device set-up as far as the display needs it (spec/stock/22 §7), in its order:
-// every title repeats it before its first mode set, and the reference's boot animation does it before the boot
-// picture. OXOS shows its splash without a title, so it does this once at cold boot before the first mode set.
-// The colour table (step 9) is loaded once the display runs: LoadBootGamma.
+// The reference graphics library's device set-up as far as the display needs it (spec/stock/22 §7), in its order: every title repeats it before its first mode
+// set, and the reference's boot animation does it before the boot picture. OXOS shows its splash without a title, so it does this once at cold boot before the
+// first mode set. The colour table (step 9) is loaded once the display runs: LoadBootGamma.
 void PrepareBootDisplay() {
     auto regs = (volatile UCHAR *)0xFD000000;
     auto reg32 = [&](ULONG offset) -> volatile ULONG & { return *(volatile ULONG *)(regs + offset); };
@@ -777,13 +767,12 @@ void PrepareBootDisplay() {
         WriteCrtc(regs, 0x1F, 0x99);
 }
 
-// §7 step 9, gamma: every 32-bit pixel goes through the RAMDAC's colour table, which holds garbage at power-on (a
-// wrongly coloured picture on hardware that changes from boot to boot; xemu does not model the table). Write index 0,
-// then red / green / blue per entry through the VGA DAC data port (0x6813C8 / 0x6813C9), as the reference loads it.
-// Only once the display runs: the reference loads the table from its vertical-blank interrupt (0x80045bc0 ->
-// 0x80044fc4). The table works on the pixel clock, which the video encoder supplies after the mode is set; written
-// before that, the console froze (2026-10-23). Full 8-bit entries, as the reference's 0-255 ramps: the mode set
-// switches the DAC to 8 bits (RAMDAC general control bit 20).
+// §7 step 9, gamma: every 32-bit pixel goes through the RAMDAC's colour table, which holds garbage at power-on (a wrongly coloured picture on hardware that
+// changes from boot to boot; xemu does not model the table). Write index 0, then red / green / blue per entry through the VGA DAC data port (0x6813C8 /
+// 0x6813C9), as the reference loads it.
+// Only once the display runs: the reference loads the table from its vertical-blank interrupt (0x80045bc0 -> 0x80044fc4). The table works on the pixel clock,
+// which the video encoder supplies after the mode is set; written before that, the console froze (2026-10-23). Full 8-bit entries, as the reference's 0-255
+// ramps: the mode set switches the DAC to 8 bits (RAMDAC general control bit 20).
 void LoadBootGamma() {
     auto regs = (volatile UCHAR *)0xFD000000;
     regs[0x6813C8] = 0;
@@ -797,11 +786,10 @@ void LoadBootGamma() {
 
 volatile ULONG SetDisplayModeCalls; // diagnostics: AvSetDisplayMode calls (tests/boot_test.py)
 
-// The NV2A side of a mode change exactly as spec/stock/22 §2 describes it, with the reference NV2A and CRTC rows of the
-// console's encoder (spec 22 §3.4 / §4 Focus, §3.7 / §3.9 Conexant, §3.10 / §3.11 Xcalibur). Every encoder generates
-// the pixel clock and follows the NV2A's syncs (spec 22 §5), so the NV2A raster has to be the reference's to the
-// pixel; OXOS's own derived timing (spec/oxos_internal/02_display_modes.md §1) gave a locked but scrambled picture on
-// a 1.4 console. Returns false when the mode word's rows are outside the tables (the caller then uses its own path).
+// The NV2A side of a mode change exactly as spec/stock/22 §2 describes it, with the reference NV2A and CRTC rows of the console's encoder (spec 22 §3.4 / §4
+// Focus, §3.7 / §3.9 Conexant, §3.10 / §3.11 Xcalibur). Every encoder generates the pixel clock and follows the NV2A's syncs (spec 22 §5), so the NV2A raster
+// has to be the reference's to the pixel; OXOS's own derived timing (spec/oxos_internal/02_display_modes.md §1) gave a locked but scrambled picture on a 1.4
+// console. Returns false when the mode word's rows are outside the tables (the caller then uses its own path).
 static bool ReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer) {
     ULONG nvRow = (Mode >> 16) & 0xFF, crtcRow = (Mode >> 8) & 0xFF;
     const ULONG(*nv)[26] = AvpCxNv;
@@ -816,11 +804,9 @@ static bool ReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format,
         nv880 = AvpXcNv880;
         crtc = AvpXcCrtc;
     }
-    static_assert(sizeof(AvpFoNv) == sizeof(AvpCxNv) && sizeof(AvpFoNv) == sizeof(AvpXcNv) &&
-                      sizeof(AvpFoCrtc) == sizeof(AvpCxCrtc) && sizeof(AvpFoCrtc) == sizeof(AvpXcCrtc),
-                  "one row count for every encoder");
-    if (!nvRow || nvRow > sizeof(AvpFoNv) / sizeof(AvpFoNv[0]) || !crtcRow ||
-        crtcRow > sizeof(AvpFoCrtc) / sizeof(AvpFoCrtc[0]))
+    static_assert(sizeof(AvpFoNv) == sizeof(AvpCxNv) && sizeof(AvpFoNv) == sizeof(AvpXcNv) && sizeof(AvpFoCrtc) == sizeof(AvpCxCrtc) &&
+                      sizeof(AvpFoCrtc) == sizeof(AvpXcCrtc), "one row count for every encoder");
+    if (!nvRow || nvRow > sizeof(AvpFoNv) / sizeof(AvpFoNv[0]) || !crtcRow || crtcRow > sizeof(AvpFoCrtc) / sizeof(AvpFoCrtc[0]))
         return false;
     // §2.1: format -> general control and depth code; pitch in 8-byte units.
     ULONG gc = Format == 0x11 ? 0x00101030 : 0x00100030;
@@ -909,8 +895,7 @@ static bool ReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format,
     return true;
 }
 
-XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
-                                   ULONG FrameBuffer) {
+XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
     SetDisplayModeCalls = SetDisplayModeCalls + 1;
     if (!Mode)
@@ -945,26 +930,24 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         // (spec/oxos_internal/02_display_modes.md §1).
         const AVP_TV_TIMING *sd = encoder ? SdTiming(Mode) : nullptr;
         if (sd) {
-            AVP_TIMING t = {0, 0, sd->Width, sd->HSyncStart, (USHORT)(sd->HSyncStart + 32), sd->HTotal, sd->Height,
-                            sd->VSyncStart, (USHORT)(sd->VSyncStart + 3), sd->VTotal, FALSE};
+            AVP_TIMING t = {0, 0, sd->Width, sd->HSyncStart, (USHORT)(sd->HSyncStart + 32), sd->HTotal, sd->Height, sd->VSyncStart,
+                            (USHORT)(sd->VSyncStart + 3), sd->VTotal, FALSE};
             ProgramTiming(regs, t);
-            ProgramTvTiming(regs, Mode, sd->Width, sd->Active, sd->Height, sd->HTotal, t.HSyncStart, t.HSyncEnd,
-                            sd->VTotal, t.VSyncStart, t.VSyncEnd);
+            ProgramTvTiming(regs, Mode, sd->Width, sd->Active, sd->Height, sd->HTotal, t.HSyncStart, t.HSyncEnd, sd->VTotal, t.VSyncStart, t.VSyncEnd);
         } else {
             const AVP_TIMING &t = *FindTiming(Mode);
             ProgramTiming(regs, t);
             if (encoder) {
-                ProgramTvTiming(regs, Mode, t.HDisplay, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart, t.HSyncEnd,
-                                t.VTotal, t.VSyncStart, t.VSyncEnd);
+                ProgramTvTiming(regs, Mode, t.HDisplay, t.HDisplay, t.VDisplay, t.HTotal, t.HSyncStart, t.HSyncEnd, t.VTotal, t.VSyncStart, t.VSyncEnd);
             } else { // VGA and modes without an encoder row: the NV2A sends RGB
                 static const ULONG rgbRegs[] = {0x680630, 0x68084C, 0x6808C4};
                 for (ULONG offset : rgbRegs)
                     *(volatile ULONG *)(regs + offset) = 0;
             }
         }
-        // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it).
-        // Deviation (spec/oxos_internal/02_display_modes.md §2): also raised for 720p and 1080i, which are always 16:9,
-        // although titles leave bit 28 clear in those mode words and the reference keeps the line low.
+        // GPIOs: 0x80D6 bit 0 is the AV connector's widescreen line (mode bit 28; xemu's "Auto" aspect follows it). Deviation
+        // (spec/oxos_internal/02_display_modes.md §2): also raised for 720p and 1080i, which are always 16:9, although titles leave bit 28 clear in those mode
+        // words and the reference keeps the line low.
         bool hd = IsHd(Mode) && ((UCHAR)(Mode >> 8) == 0x0A || (UCHAR)(Mode >> 8) == 0x0C);
         outb(0x80D6, (UCHAR)((((Mode >> 28) & 1) | hd) | 4));
         outb(0x80D8, 4);

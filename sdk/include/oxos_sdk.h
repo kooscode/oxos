@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-// OXOS kernel extension SDK (spec/oxos_internal/34): what an extension's source includes, in C or C++. The kernel's
-// types and functions (oxos/oxos_kernel.h), the structures the kernel and the extension exchange
-// (oxos/oxos_interfaces.h), the descriptor macro and the runtime's helpers (in lib/oxos_sdk.lib).
+// OXOS kernel extension SDK (spec/oxos_internal/34): what an extension's source includes, in C or C++. The kernel's types and functions (oxos/oxos_kernel.h),
+// the structures the kernel and the extension exchange (oxos/oxos_interfaces.h), the descriptor macro and the runtime's helpers (in lib/oxos_sdk.lib).
 //
 //   static NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) { ...; return STATUS_SUCCESS; }
 //   OXOS_DEFINE_EXTENSION(.Name = "hello", .Version = "1.0.0", .Load = Load);
 //
-// The fields after the macro's own (Magic, ApiVersion) are OXOS_EXTENSION's, in its order: Name, Version, Flags,
-// Load, Main, Unload (C++ wants designated fields in declaration order).
+// The fields after the macro's own (Magic, ApiVersion) are OXOS_EXTENSION's, in its order: Name, Version, Flags, Load, Main, Unload (C++ wants designated
+// fields in declaration order).
 #pragma once
 #include <oxos/oxos_types.h>
 #include <oxos/oxos_interfaces.h>
@@ -36,8 +35,8 @@ const char *oxos_get_setting(const OXOS_CONTEXT *Context, const char *Key);
 // Waits up to Milliseconds for the kernel's stop request (Main's end, §4.3); TRUE once it came.
 BOOLEAN oxos_wait_for_stop(const OXOS_CONTEXT *Context, ULONG Milliseconds);
 
-// Reads a whole file (a \Device\... path) of at most MaxSize bytes into pool memory the caller frees with ExFreePool;
-// null when it does not open, is empty or larger, or cannot be read.
+// Reads a whole file (a \Device\... path) of at most MaxSize bytes into pool memory the caller frees with ExFreePool; null when it does not open, is empty or
+// larger, or cannot be read.
 char *oxos_read_file(const char *Path, ULONG MaxSize, ULONG *Size);
 
 #ifdef __cplusplus

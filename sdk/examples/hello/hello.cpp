@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 //
-// hello.xos: the smallest complete OXOS kernel extension, written to be read. It shows every part an extension can
-// have (spec/oxos_internal/34):
+// hello.xos: the smallest complete OXOS kernel extension, written to be read. It shows every part an extension can have (spec/oxos_internal/34):
 //
 //   Load      runs before each title starts: read settings, use the state page, hook kernel functions, register
 //             for events. It must return quickly; the title waits for it.
@@ -15,8 +14,8 @@
 //   [hello] The last title opened 127 files.
 //   [hello] Title 4D530004 "Halo" is starting.
 //
-// Remember that the kernel reloads every extension from the disk at each launch: global variables start again from
-// their initial values every time. Only the state page (4 KB) keeps its contents from one launch to the next.
+// Remember that the kernel reloads every extension from the disk at each launch: global variables start again from their initial values every time. Only the
+// state page (4 KB) keeps its contents from one launch to the next.
 #include <oxos_sdk.h>
 
 namespace {
@@ -37,19 +36,19 @@ HELLO_STATE *State;     // the state page, as this extension's own structure
 const char *Greeting;   // the "greeting" setting from oxos_extensions.ini
 ULONG HeartbeatSeconds; // the "heartbeat" setting: Main logs every so many seconds (0: Main only waits)
 
-// The kernel's NtOpenFile, or the next extension's hook of it: filled in by the kernel once every extension's Load
-// has returned (the extensions listed after this one in oxos_extensions.ini hook below it).
+// The kernel's NtOpenFile, or the next extension's hook of it: filled in by the kernel once every extension's Load has returned (the extensions listed after
+// this one in oxos_extensions.ini hook below it).
 decltype(&oxos::NtOpenFile) NextNtOpenFile;
 
 // --- A hook: the title's NtOpenFile calls come here first
 
-// It has exactly the kernel function's arguments, result and calling convention (NTAPI = stdcall). It may run on
-// several of the title's threads at once, so the count is updated atomically.
-NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
-                              PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions) {
+// It has exactly the kernel function's arguments, result and calling convention (NTAPI = stdcall). It may run on several of the title's threads at once, so the
+// count is updated atomically.
+NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                              ULONG ShareAccess, ULONG OpenOptions) {
     __atomic_add_fetch(&State->OpenCalls, 1, __ATOMIC_RELAXED);
-    // Pass the call on unchanged: the title gets the kernel's answer. A hook could also change the arguments or the
-    // result, or answer the call itself without passing it on.
+    // Pass the call on unchanged: the title gets the kernel's answer. A hook could also change the arguments or the result, or answer the call itself without
+    // passing it on.
     return NextNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
 }
 
@@ -72,8 +71,8 @@ void NTAPI OnTitleLoaded(OXOS_CONTEXT *Context, PVOID CallbackContext, PVOID Dat
 
 // Before each title. Context describes this launch and this extension; Context->Api is only valid here.
 NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    // The state page: zeroed after a cold boot (StateIsNew), else as the last launch left it. Check the magic too:
-    // an older build of this extension may have written the page with another layout.
+    // The state page: zeroed after a cold boot (StateIsNew), else as the last launch left it. Check the magic too: an older build of this extension may have
+    // written the page with another layout.
     State = static_cast<HELLO_STATE *>(Context->State);
     if (!State)
         return STATUS_INSUFFICIENT_RESOURCES; // no memory for it: this extension is unloaded, the others go on
@@ -90,28 +89,25 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
     for (; heartbeat && *heartbeat >= '0' && *heartbeat <= '9'; heartbeat++)
         HeartbeatSeconds = HeartbeatSeconds * 10 + static_cast<ULONG>(*heartbeat - '0');
 
-    oxos_log(Context, "%s from OXOS %s! Launch %lu since the cold boot.", Greeting, Context->KernelVersion,
-             State->Launches);
+    oxos_log(Context, "%s from OXOS %s! Launch %lu since the cold boot.", Greeting, Context->KernelVersion, State->Launches);
     if (State->Launches > 1)
         oxos_log(Context, "The last title opened %lu files.", State->OpenCalls);
     State->OpenCalls = 0;
 
     // Be called when a title has been loaded.
-    NTSTATUS status = Context->Api->RegisterEvent(Context, OXOS_EVENT_TITLE_LOADED,
-                                                  reinterpret_cast<PVOID>(OnTitleLoaded), nullptr);
+    NTSTATUS status = Context->Api->RegisterEvent(Context, OXOS_EVENT_TITLE_LOADED, reinterpret_cast<PVOID>(OnTitleLoaded), nullptr);
     if (!NT_SUCCESS(status))
         return status;
     // Hook NtOpenFile for the title. NextNtOpenFile is filled in after every extension's Load has returned.
-    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile),
-                                    reinterpret_cast<PVOID *>(&NextNtOpenFile));
+    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
 }
 
 // On its own thread while the title runs: the place for slow work (files, the network) that Load must not do.
 void NTAPI Main(OXOS_CONTEXT *Context) {
     if (!HeartbeatSeconds)
         return; // nothing to do: Main may simply return, its thread ends
-    // oxos_wait_for_stop returns TRUE once the kernel asks Main to end (the title is starting another one), else
-    // after the time given. Main must then return promptly: the kernel waits at most half a second for it.
+    // oxos_wait_for_stop returns TRUE once the kernel asks Main to end (the title is starting another one), else after the time given. Main must then return
+    // promptly: the kernel waits at most half a second for it.
     ULONG seconds = 0;
     while (!oxos_wait_for_stop(Context, HeartbeatSeconds * 1000)) {
         seconds += HeartbeatSeconds;
@@ -119,8 +115,7 @@ void NTAPI Main(OXOS_CONTEXT *Context) {
     }
 }
 
-// The title is starting another title or the dashboard: close files or connections here. The state page needs no
-// saving, it is kept as it is.
+// The title is starting another title or the dashboard: close files or connections here. The state page needs no saving, it is kept as it is.
 void NTAPI Unload(OXOS_CONTEXT *Context) {
     oxos_log(Context, "Goodbye: %lu files opened by this title.", State->OpenCalls);
 }
@@ -129,6 +124,6 @@ void NTAPI Unload(OXOS_CONTEXT *Context) {
 
 // --- The descriptor: what the kernel reads first
 
-// Name is this extension's own name: it decides which state page it gets, so keep it the same across versions.
-// Version is its own version, shown in the kernel's log when it loads.
+// Name is this extension's own name: it decides which state page it gets, so keep it the same across versions. Version is its own version, shown in the
+// kernel's log when it loads.
 OXOS_DEFINE_EXTENSION(.Name = "hello", .Version = "1.0.0", .Load = Load, .Main = Main, .Unload = Unload);

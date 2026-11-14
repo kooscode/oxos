@@ -1,6 +1,5 @@
-# Host unit tests for the OXOS core runtime (README.md in this folder). The kernel's core sources are built as a
-# 32-bit Linux program; privileged instructions fault and are emulated by the harness (host/hostcpu.cpp), and a
-# fake MMU maps the kernel's virtual addresses onto a 64 MB "physical RAM" the way a TLB would.
+# Host unit tests for the OXOS core runtime (README.md in this folder). The kernel's core sources are built as a 32-bit Linux program; privileged instructions
+# fault and are emulated by the harness (host/hostcpu.cpp), and a fake MMU maps the kernel's virtual addresses onto a 64 MB "physical RAM" the way a TLB would.
 #
 #   make                      build $(BUILD)/oxos_unit_tests (tools/unit_tests.sh builds and runs it)
 #   make COVERAGE=1           kernel sources instrumented for llvm-cov (own build directory)
@@ -18,10 +17,9 @@ KERNEL_OPT ?=
 KERNEL     := ../../kernel
 BUILD      ?= ../../build/tests/unit$(if $(filter 1,$(COVERAGE)),-cov)$(if $(KERNEL_OPT),-opt$(subst -,,$(subst =,,$(KERNEL_OPT))))
 
-# Everything: 32-bit, not position independent (the binary sits at 0x08048000, above the kernel's low window,
-# host/hostcpu.cpp; host_asm.S addresses KiPcr directly). -mstackrealign: kernel threads start on stacks laid out
-# by the kernel, not 16-byte aligned as the i386 Linux ABI assumes; functions that need the alignment (SSE spills
-# in the tests and libraries) realign their own frames.
+# Everything: 32-bit, not position independent (the binary sits at 0x08048000, above the kernel's low window, host/hostcpu.cpp; host_asm.S addresses KiPcr
+# directly). -mstackrealign: kernel threads start on stacks laid out by the kernel, not 16-byte aligned as the i386 Linux ABI assumes; functions that need the
+# alignment (SSE spills in the tests and libraries) realign their own frames.
 M32      := -m32 -march=pentium3
 COMMON   := $(M32) -g -O1 -fno-omit-frame-pointer -fno-pic -fno-pie -mstackrealign -MMD -MP
 DEFINES  := -DXK_HOST_TEST=1 -DXK_BOOT_SELFTEST=0 -DXK_DEBUG_SERIAL=1 -DXK_TRACE_IMPORTS=0 \
@@ -57,8 +55,8 @@ GTEST_FLAGS  := -std=c++20 $(COMMON) -DGTEST_HAS_PTHREAD=1 -fexceptions -I$(GTES
 KERNEL_OBJS := $(patsubst %.cpp,$(BUILD)/kernel/%.o,$(KERNEL_SOURCES))
 TEST_OBJS   := $(patsubst %.cpp,$(BUILD)/%.o,$(TEST_SOURCES)) $(BUILD)/host/host_asm.o
 GTEST_OBJ   := $(BUILD)/gtest/gtest-all.o
-# The kernel objects go into an archive of this name: host/kernel_text.ld places its code (and only its code) in
-# the section where the harness delivers asynchronous interrupts.
+# The kernel objects go into an archive of this name: host/kernel_text.ld places its code (and only its code) in the section where the harness delivers
+# asynchronous interrupts.
 CORE_LIB    := $(BUILD)/liboxos_core.a
 BIN         := $(BUILD)/oxos_unit_tests
 

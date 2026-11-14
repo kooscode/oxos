@@ -1,7 +1,6 @@
-// The kernel extension loader's image (spec/oxos_internal/34 §8.1): linked on its own at XK_EXTENSION_LOADER_BASE
-// against this kernel's addresses (tools/link_extension_loader.py) and appended to the kernel image by tools/mkbios.py,
-// in the boot-only pages, behind a header. A cold boot writes it to C:\OXOS\extensions\oxos_extension_loader.cache
-// (extension_runtime_loader.cpp); every launch runs it from that file.
+// The kernel extension loader's image (spec/oxos_internal/34 §8.1): linked on its own at XK_EXTENSION_LOADER_BASE against this kernel's addresses
+// (tools/link_extension_loader.py) and appended to the kernel image by tools/mkbios.py, in the boot-only pages, behind a header. A cold boot writes it to
+// C:\OXOS\extensions\oxos_extension_loader.cache (extension_runtime_loader.cpp); every launch runs it from that file.
 #pragma once
 #include <runtime/types.h>
 

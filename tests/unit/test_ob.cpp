@@ -11,9 +11,8 @@ using namespace xk; // the kernel's subsystems as storage::, objects::, ...
 typedef void(NTAPI *PTIMER_APC_ROUTINE)(PVOID TimerContext, ULONG TimerLowValue, LONG TimerHighValue);
 
 namespace {
-constexpr NTSTATUS NAME_COLLISION = (NTSTATUS)0xC0000035, NAME_NOT_FOUND = (NTSTATUS)0xC0000034,
-                   PATH_NOT_FOUND = (NTSTATUS)0xC000003A, NAME_EXISTS = (NTSTATUS)0x40000000,
-                   INVALID_HANDLE = (NTSTATUS)0xC0000008, TYPE_MISMATCH = (NTSTATUS)0xC0000024;
+constexpr NTSTATUS NAME_COLLISION = (NTSTATUS)0xC0000035, NAME_NOT_FOUND = (NTSTATUS)0xC0000034, PATH_NOT_FOUND = (NTSTATUS)0xC000003A,
+                   NAME_EXISTS = (NTSTATUS)0x40000000, INVALID_HANDLE = (NTSTATUS)0xC0000008, TYPE_MISMATCH = (NTSTATUS)0xC0000024;
 
 struct Name {
     OBJECT_STRING s;
@@ -105,8 +104,7 @@ TEST(Ob, DirectoriesListTheirEntries) {
     EXPECT_EQ(st, (NTSTATUS)0x8000001A) << "STATUS_NO_MORE_ENTRIES";
     std::sort(names.begin(), names.end());
     EXPECT_EQ(names, (std::vector<std::string>{"one", "three", "two"}));
-    EXPECT_EQ(NtQueryDirectoryObject(opened, buffer, 10, TRUE, &context, &needed), (NTSTATUS)0xC0000023)
-        << "buffer too small";
+    EXPECT_EQ(NtQueryDirectoryObject(opened, buffer, 10, TRUE, &context, &needed), (NTSTATUS)0xC0000023) << "buffer too small";
     for (HANDLE h : evs)
         NtClose(h);
     NtClose(opened);
@@ -287,8 +285,8 @@ TEST(ExObjects, SignalAndWaitAndYield) {
 }
 
 TEST(ExObjects, YieldGivesTheCpuEvenToALowerPriorityThread) {
-    // A thread spinning on NtYieldExecution (SwitchToThread) while a lower-priority thread does the work must let it
-    // run (a zero-length delay would not: it only yields to equal or higher priorities).
+    // A thread spinning on NtYieldExecution (SwitchToThread) while a lower-priority thread does the work must let it run (a zero-length delay would not: it
+    // only yields to equal or higher priorities).
     std::atomic<int> done{0};
     PKTHREAD low = Spawn([&] { done = 1; }, 4);
     int spins = 0;

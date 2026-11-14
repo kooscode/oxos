@@ -1,6 +1,6 @@
 // Kernel core (src/core/): dispatcher objects, threads, IRQL, exceptions, start-up, system threads. Layouts are
-// ABI: titles allocate these objects and XDK libraries read fs:[...] directly. Offsets from spec/stock/01,
-// spec/stock/06 (observed in xboxkrnl 4627) and nxdk headers.
+// ABI: titles allocate these objects and XDK libraries read fs:[...] directly. Offsets from spec/stock/01, spec/stock/06 (observed in xboxkrnl 4627) and nxdk
+// headers.
 #pragma once
 #include <runtime/types.h>
 
@@ -42,8 +42,7 @@ typedef struct _DISPATCHER_HEADER {
 XK_SIZE(DISPATCHER_HEADER, 0x10);
 
 struct _KDPC;
-typedef void(NTAPI *PKDEFERRED_ROUTINE)(struct _KDPC *Dpc, PVOID DeferredContext, PVOID SystemArgument1,
-                                         PVOID SystemArgument2);
+typedef void(NTAPI *PKDEFERRED_ROUTINE)(struct _KDPC *Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
 
 typedef struct _KDPC {
     CSHORT Type;
@@ -361,8 +360,8 @@ XBAPI void NTAPI KeInitializeEvent(PKEVENT Event, EVENT_TYPE Type, BOOLEAN State
 XBAPI LONG NTAPI KeSetEvent(PKEVENT Event, LONG Increment, BOOLEAN Wait);
 XBAPI LONG NTAPI KeResetEvent(PKEVENT Event);
 
-XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext,
-                                       ULONG Vector, KIRQL Irql, KINTERRUPT_MODE InterruptMode, BOOLEAN ShareVector);
+XBAPI void NTAPI KeInitializeInterrupt(PKINTERRUPT Interrupt, PKSERVICE_ROUTINE ServiceRoutine, PVOID ServiceContext, ULONG Vector, KIRQL Irql,
+                                       KINTERRUPT_MODE InterruptMode, BOOLEAN ShareVector);
 XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt);
 XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt);
 
@@ -371,8 +370,7 @@ typedef enum _KWAIT_REASON {
 } KWAIT_REASON;
 
 typedef void(NTAPI *PKNORMAL_ROUTINE)(PVOID NormalContext, PVOID SystemArgument1, PVOID SystemArgument2);
-typedef void(NTAPI *PKKERNEL_ROUTINE)(PKAPC Apc, PKNORMAL_ROUTINE *NormalRoutine, PVOID *NormalContext,
-                                      PVOID *SystemArgument1, PVOID *SystemArgument2);
+typedef void(NTAPI *PKKERNEL_ROUTINE)(PKAPC Apc, PKNORMAL_ROUTINE *NormalRoutine, PVOID *NormalContext, PVOID *SystemArgument1, PVOID *SystemArgument2);
 typedef void(NTAPI *PKRUNDOWN_ROUTINE)(PKAPC Apc);
 typedef BOOLEAN(NTAPI *PKSYNCHRONIZE_ROUTINE)(PVOID SynchronizeContext);
 typedef CHAR KPROCESSOR_MODE;
@@ -380,18 +378,16 @@ typedef LONG KPRIORITY;
 #define KernelMode 0
 #define UserMode 1
 
-constexpr NTSTATUS STATUS_WAIT_0 = 0, STATUS_ABANDONED = 0x80, STATUS_USER_APC = 0xC0, STATUS_KERNEL_APC = 0x100,
-                   STATUS_ALERTED = 0x101, STATUS_TIMEOUT = 0x102;
+constexpr NTSTATUS STATUS_WAIT_0 = 0, STATUS_ABANDONED = 0x80, STATUS_USER_APC = 0xC0, STATUS_KERNEL_APC = 0x100, STATUS_ALERTED = 0x101,
+                   STATUS_TIMEOUT = 0x102;
 
 XBAPI PKTHREAD NTAPI KeGetCurrentThread();
 XBAPI void NTAPI KeBugCheck(ULONG BugCheckCode) __attribute__((noreturn));
 XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, ULONG_PTR P4)
     __attribute__((noreturn));
-XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
-                                           BOOLEAN Alertable, PLARGE_INTEGER Timeout);
-XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType,
-                                              KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
-                                              PLARGE_INTEGER Timeout, PKWAIT_BLOCK WaitBlockArray);
+XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Timeout);
+XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
+                                              BOOLEAN Alertable, PLARGE_INTEGER Timeout, PKWAIT_BLOCK WaitBlockArray);
 XBAPI NTSTATUS NTAPI KeDelayExecutionThread(KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Interval);
 XBAPI LONG NTAPI KePulseEvent(PKEVENT Event, LONG Increment, BOOLEAN Wait);
 XBAPI void NTAPI KeInitializeSemaphore(PKSEMAPHORE Semaphore, LONG Count, LONG Limit);
@@ -399,8 +395,7 @@ XBAPI LONG NTAPI KeReleaseSemaphore(PKSEMAPHORE Semaphore, LONG Increment, LONG 
 XBAPI void NTAPI KeInitializeMutant(PKMUTANT Mutant, BOOLEAN InitialOwner);
 XBAPI LONG NTAPI KeReleaseMutant(PKMUTANT Mutant, LONG Increment, BOOLEAN Abandoned, BOOLEAN Wait);
 XBAPI LONG NTAPI KeSetPriorityThread(PKTHREAD Thread, LONG Priority);
-XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine,
-                                 PKRUNDOWN_ROUTINE RundownRoutine, PKNORMAL_ROUTINE NormalRoutine,
+XBAPI void NTAPI KeInitializeApc(PKAPC Apc, PKTHREAD Thread, PKKERNEL_ROUTINE KernelRoutine, PKRUNDOWN_ROUTINE RundownRoutine, PKNORMAL_ROUTINE NormalRoutine,
                                  KPROCESSOR_MODE ApcMode, PVOID NormalContext);
 XBAPI BOOLEAN NTAPI KeInsertQueueApc(PKAPC Apc, PVOID SystemArgument1, PVOID SystemArgument2, LONG Increment);
 XBAPI void NTAPI KeEnterCriticalRegion();
@@ -421,19 +416,16 @@ XBAPI BOOLEAN NTAPI KeSetDisableBoostThread(PKTHREAD Thread, BOOLEAN Disable);
 XBAPI KPRIORITY NTAPI KeSetPriorityProcess(PKPROCESS Process, KPRIORITY BasePriority);
 XBAPI void NTAPI KeInitializeDeviceQueue(PKDEVICE_QUEUE DeviceQueue);
 XBAPI BOOLEAN NTAPI KeInsertDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry);
-XBAPI BOOLEAN NTAPI KeInsertByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry,
-                                             ULONG SortKey);
+XBAPI BOOLEAN NTAPI KeInsertByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry, ULONG SortKey);
 XBAPI PKDEVICE_QUEUE_ENTRY NTAPI KeRemoveDeviceQueue(PKDEVICE_QUEUE DeviceQueue);
 XBAPI PKDEVICE_QUEUE_ENTRY NTAPI KeRemoveByKeyDeviceQueue(PKDEVICE_QUEUE DeviceQueue, ULONG SortKey);
 XBAPI BOOLEAN NTAPI KeRemoveEntryDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVICE_QUEUE_ENTRY DeviceQueueEntry);
-XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
-                                           PVOID SynchronizeContext);
+XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext);
 XBAPI LONG NTAPI KeQueryBasePriorityThread(PKTHREAD Thread);
 
 // Exceptions raised from C++, and stack walks (exceptions.cpp).
 XBAPI void NTAPI RtlRaiseStatus(NTSTATUS Status);
-XBAPI USHORT NTAPI RtlCaptureStackBackTrace(ULONG FramesToSkip, ULONG FramesToCapture, PVOID *BackTrace,
-                                            PULONG BackTraceHash);
+XBAPI USHORT NTAPI RtlCaptureStackBackTrace(ULONG FramesToSkip, ULONG FramesToCapture, PVOID *BackTrace, PULONG BackTraceHash);
 
 // --- List helpers (NT semantics)
 
@@ -515,8 +507,8 @@ NTSTATUS YieldExecution();
 } // namespace xk::core
 XBAPI void NTAPI KeSetEventBoostPriority(PKEVENT Event, PKTHREAD *Thread);
 
-// The FPU: lazy switching, each thread's save area, and kernel code's use of it (core/float_state.cpp). The caller's
-// 0x18-byte block for KeSaveFloatingPointState holds {flags, ..., +8 save buffer, +0x14 thread}.
+// The FPU: lazy switching, each thread's save area, and kernel code's use of it (core/float_state.cpp). The caller's 0x18-byte block for
+// KeSaveFloatingPointState holds {flags, ..., +8 save buffer, +0x14 thread}.
 struct KFLOATING_SAVE_ {
     UCHAR Flags, Irql, Reserved[6];
     PVOID Buffer;
@@ -538,15 +530,14 @@ namespace xk::core {
 extern ULONG MicrocodeRevision;
 } // namespace xk::core
 
-// Quick reboot (spec/stock/02 §1): the flag and count, and the boot keys kept for the restart (core/startup.cpp); the
-// restart itself is in arch/arch.h.
+// Quick reboot (spec/stock/02 §1): the flag and count, and the boot keys kept for the restart (core/startup.cpp); the restart itself is in arch/arch.h.
 extern "C" volatile UCHAR KiQuickRebootFlag;
 extern "C" volatile ULONG KiQuickRebootCount;
 extern "C" UCHAR KiPersistedBootKeys[32];
 
 namespace xk::core {
-// Diagnostics: the last fatal exception (core/startup.cpp), interrupt counts (core/interrupts.cpp), the debug output
-// (core/debug.cpp). The start-up marks and the last-words records are in diagnostics/diagnostics.h.
+// Diagnostics: the last fatal exception (core/startup.cpp), interrupt counts (core/interrupts.cpp), the debug output (core/debug.cpp). The start-up marks and
+// the last-words records are in diagnostics/diagnostics.h.
 extern volatile ULONG LastExceptionVector, LastExceptionCode, LastExceptionEip;
 extern volatile ULONG IrqCounts[16];
 void PrintDebugString(const char *Text, ULONG Length);
@@ -588,15 +579,12 @@ XBAPI NTSTATUS NTAPI PsQueryStatistics(PS_STATISTICS *ProcessStatistics);
 
 // The thread exports titles call (core/system_threads.cpp, core/async_calls.cpp).
 typedef void(NTAPI *PPS_APC_ROUTINE)(PVOID ApcArgument1, PVOID ApcArgument2, PVOID ApcArgument3);
-XBAPI NTSTATUS NTAPI NtQueueApcThread(HANDLE ThreadHandle, PPS_APC_ROUTINE ApcRoutine, PVOID ApcArgument1,
-                                      PVOID ApcArgument2, PVOID ApcArgument3);
+XBAPI NTSTATUS NTAPI NtQueueApcThread(HANDLE ThreadHandle, PPS_APC_ROUTINE ApcRoutine, PVOID ApcArgument1, PVOID ApcArgument2, PVOID ApcArgument3);
 XBAPI NTSTATUS NTAPI NtSuspendThread(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
 XBAPI NTSTATUS NTAPI NtResumeThread(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
-XBAPI NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine,
-                                          PVOID StartContext, BOOLEAN DebuggerThread);
-XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadExtensionSize, ULONG KernelStackSize,
-                                            ULONG TlsDataSize, PHANDLE ThreadId, PVOID StartContext1,
-                                            PVOID StartContext2, BOOLEAN CreateSuspended, BOOLEAN DebuggerThread,
+XBAPI NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine, PVOID StartContext, BOOLEAN DebuggerThread);
+XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadExtensionSize, ULONG KernelStackSize, ULONG TlsDataSize, PHANDLE ThreadId,
+                                            PVOID StartContext1, PVOID StartContext2, BOOLEAN CreateSuspended, BOOLEAN DebuggerThread,
                                             PKSYSTEM_ROUTINE SystemRoutine);
 XBAPI void NTAPI PsTerminateSystemThread(NTSTATUS ExitStatus);
 typedef void(NTAPI *PCREATE_THREAD_NOTIFY_ROUTINE)(PVOID Thread, HANDLE ThreadId, BOOLEAN Create);

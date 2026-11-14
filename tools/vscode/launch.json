@@ -2,8 +2,8 @@
     "version": "0.2.0",
     "configurations": [
         {
-            // F5: build with DEBUG=y, start xemu on OXOS's debug kernel with the app's disc, attach, continue to
-            // the first breakpoint. Needs the C/C++ extension (ms-vscode.cpptools) and gdb-multiarch.
+            // F5: build with DEBUG=y, start xemu on OXOS's debug kernel with the app's disc, attach, continue to the first breakpoint. Needs the C/C++
+            // extension (ms-vscode.cpptools) and gdb-multiarch.
             "name": "OXOS: debug in xemu",
             "type": "cppdbg",
             "request": "launch",

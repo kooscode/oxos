@@ -56,8 +56,7 @@ static WCHAR UpcaseW(WCHAR c) {
     return (c >= 'a' && c <= 'z') ? (WCHAR)(c - 'a' + 'A') : c;
 }
 
-XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                         BOOLEAN CaseInSensitive) {
+XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2, BOOLEAN CaseInSensitive) {
     USHORT n1 = String1->Length / 2, n2 = String2->Length / 2, n = n1 < n2 ? n1 : n2;
     for (USHORT i = 0; i < n; i++) {
         WCHAR a = String1->Buffer[i], b = String2->Buffer[i];
@@ -71,8 +70,7 @@ XBAPI LONG NTAPI RtlCompareUnicodeString(const UNICODE_STRING *String1, const UN
     return (LONG)n1 - (LONG)n2;
 }
 
-XBAPI BOOLEAN NTAPI RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2,
-                                          BOOLEAN CaseInSensitive) {
+XBAPI BOOLEAN NTAPI RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2, BOOLEAN CaseInSensitive) {
     return String1->Length == String2->Length && RtlCompareUnicodeString(String1, String2, CaseInSensitive) == 0;
 }
 
@@ -81,22 +79,19 @@ XBAPI void NTAPI RtlCopyString(PANSI_STRING DestinationString, const ANSI_STRING
         DestinationString->Length = 0;
         return;
     }
-    USHORT n = SourceString->Length < DestinationString->MaximumLength ? SourceString->Length
-                                                                       : DestinationString->MaximumLength;
+    USHORT n = SourceString->Length < DestinationString->MaximumLength ? SourceString->Length : DestinationString->MaximumLength;
     RtlCopyMemory(DestinationString->Buffer, SourceString->Buffer, n);
     DestinationString->Length = n;
 }
 
 XBAPI void NTAPI RtlUpperString(PANSI_STRING DestinationString, const ANSI_STRING *SourceString) {
-    USHORT n = SourceString->Length < DestinationString->MaximumLength ? SourceString->Length
-                                                                       : DestinationString->MaximumLength;
+    USHORT n = SourceString->Length < DestinationString->MaximumLength ? SourceString->Length : DestinationString->MaximumLength;
     for (USHORT i = 0; i < n; i++)
         DestinationString->Buffer[i] = RtlUpperChar(SourceString->Buffer[i]);
     DestinationString->Length = n;
 }
 
-XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString) {
+XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationString, const ANSI_STRING *SourceString, BOOLEAN AllocateDestinationString) {
     ULONG bytes = (ULONG)SourceString->Length * 2;
     if (bytes > 0xFFFE)
         return (NTSTATUS)0xC000000D;
@@ -116,8 +111,7 @@ XBAPI NTSTATUS NTAPI RtlAnsiStringToUnicodeString(PUNICODE_STRING DestinationStr
     return STATUS_SUCCESS;
 }
 
-XBAPI NTSTATUS NTAPI RtlUnicodeStringToAnsiString(PANSI_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                                  BOOLEAN AllocateDestinationString) {
+XBAPI NTSTATUS NTAPI RtlUnicodeStringToAnsiString(PANSI_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString) {
     ULONG chars = SourceString->Length / 2;
     if (AllocateDestinationString) {
         DestinationString->Buffer = (PCHAR)ExAllocatePoolWithTag(chars + 1, 'grtS');

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Host side of the Modxo debug rig (README.md in this folder): log a console's boot and press its power button.
 
-The rig is an RP2040 Modxo modchip running the oxos_debug firmware module. Its USB serial port carries, in one
-stream:
+The rig is an RP2040 Modxo modchip running the oxos_debug firmware module. Its USB serial port carries, in one stream:
   - the emulated 16550 UART's output (COM1 at 0x3F8: an OXOS kernel's serial log), as plain bytes;
   - port 0x80 (POST code) writes, as the two bytes 0xFE <code>;
   - the Pico's own status lines (power and reset pins, LPC cycle counts, early memory reads), as 0xFC <text> 0x0A.
-0xFE and 0xFC are reserved, so binary COM1 output (a kernel debugger's packets) can be misread; use --raw for it.
-The Pico answers the console's Super I/O probe only while this port is open with DTR set, so the logger keeps it
-open.
+0xFE and 0xFC are reserved, so binary COM1 output (a kernel debugger's packets) can be misread; use --raw for it. The Pico answers the console's Super I/O probe
+only while this port is open with DTR set, so the logger keeps it open.
 
   console.py log [--out FILE] [--raw FILE] [--no-dtr]   run the logger (one per Pico; it owns the serial port)
   console.py state                                      print the power state (on / off / unknown / no pico)
@@ -16,12 +14,11 @@ open.
   console.py power                                      press the power button once (a toggle)
   console.py cycle [--off S]                            off, wait S seconds (default 8), on
 
-The other commands talk to a running logger over UDP on 127.0.0.1 (--port, default 47800). The press lasts 2 s
-(the firmware holds the pin). The power state comes from the status lines' 3v3 level (LPC power).
+The other commands talk to a running logger over UDP on 127.0.0.1 (--port, default 47800). The press lasts 2 s (the firmware holds the pin). The power state
+comes from the status lines' 3v3 level (LPC power).
 
-Log lines: "HH:MM:SS.mmm post XX" per POST code, "... uart <text>" per COM1 line (a line without its newline is
-printed after 0.5 s without COM1 bytes, marked "[partial line]"), "... pico <status>" per status line.
-Needs pyserial.
+Log lines: "HH:MM:SS.mmm post XX" per POST code, "... uart <text>" per COM1 line (a line without its newline is printed after 0.5 s without COM1 bytes, marked
+"[partial line]"), "... pico <status>" per status line. Needs pyserial.
 """
 import argparse
 import socket

@@ -1,6 +1,5 @@
-# Image test title (nxdk + SDL3, tools/nxdk_app.mk): make -C kernel image_test ->
-# build/tests/image_test_title/image_test.iso (README.md in this folder). PICTURE=file.jpg puts another picture on the
-# disc (as D:\picture.jpg; give its full path).
+# Image test title (nxdk + SDL3, tools/nxdk_app.mk): make -C kernel image_test -> build/tests/image_test_title/image_test.iso (README.md in this folder).
+# PICTURE=file.jpg puts another picture on the disc (as D:\picture.jpg; give its full path).
 XBE_TITLE = OXOS\ image\ test
 GEN_XISO = image_test.iso
 APP_SOURCES = image_test.cpp

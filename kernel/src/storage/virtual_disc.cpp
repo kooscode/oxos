@@ -1,12 +1,11 @@
-// Virtual disc images: an Xbox disc image (XISO, a full disc dump or CCI) on the hard disk stands in for the DVD
-// drive (spec/oxos_internal/16_virtual_discs.md). The device interface is the one Cerbios titles and tools use
-// (spec/cerbios/07): the control device \Device\Virtual0\Image0 (links \Device\CdRom1, \??\CdRom1:), mount and unmount
-// device controls, image slots 1 and 2 (\Device\Virtual0\Image1, Image2). OXOS design:
-// - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (ServeVirtualDvd, called by the drive's read
-//   and device-control routines), so D: and every title's view of the drive need no renamed devices or links.
-// - Mounts survive quick reboots (the slot table is in .persist): a launcher mounts an image, then launches
-//   \Device\CdRom0\default.xbe through a quick reboot. A cold boot (or an eject, which resets the console) forgets
-//   them.
+// Virtual disc images: an Xbox disc image (XISO, a full disc dump or CCI) on the hard disk stands in for the DVD drive
+// (spec/oxos_internal/16_virtual_discs.md). The device interface is the one Cerbios titles and tools use (spec/cerbios/07): the control device
+// \Device\Virtual0\Image0 (links \Device\CdRom1, \??\CdRom1:), mount and unmount device controls, image slots 1 and 2 (\Device\Virtual0\Image1, Image2). OXOS
+// design:
+// - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (ServeVirtualDvd, called by the drive's read and device-control routines), so D: and
+//   every title's view of the drive need no renamed devices or links.
+// - Mounts survive quick reboots (the slot table is in .persist): a launcher mounts an image, then launches \Device\CdRom0\default.xbe through a quick reboot.
+//   A cold boot (or an eject, which resets the console) forgets them.
 // - Image files are read through their file system with the ordinary file calls, in the caller's thread.
 #include <storage/storage.h>
 #include <io/io.h>
@@ -29,11 +28,10 @@ constexpr ULONG VD_SLOTS = 2;      // images 1 and 2 (0 is the control device)
 constexpr ULONG VD_NAME = 0x106;   // the longest path or link name kept (as Cerbios)
 constexpr ULONG VD_SECTOR = 0x800;
 constexpr ULONGLONG VD_GAME_PARTITION = 0x18300000; // full disc dumps: where the game partition starts
-constexpr ULONG IOCTL_VD_PRESENT = 0x1EE7CD00, IOCTL_VD_MOUNT = 0x1EE7CD01, IOCTL_VD_UNMOUNT = 0x1EE7CD02,
-                IOCTL_VD_PRESENT2 = 0x0CE52B00, IOCTL_VD_MOUNT2 = 0x0CE52B01, IOCTL_VD_UNMOUNT2 = 0x0CE52B02;
-constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_LAST_SESSION = 0x24038,
-                IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C, IOCTL_CDROM_AUTHENTICATE_DISK = 0x24080,
-                IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014;
+constexpr ULONG IOCTL_VD_PRESENT = 0x1EE7CD00, IOCTL_VD_MOUNT = 0x1EE7CD01, IOCTL_VD_UNMOUNT = 0x1EE7CD02, IOCTL_VD_PRESENT2 = 0x0CE52B00,
+                IOCTL_VD_MOUNT2 = 0x0CE52B01, IOCTL_VD_UNMOUNT2 = 0x0CE52B02;
+constexpr ULONG IOCTL_CDROM_READ_TOC = 0x24000, IOCTL_CDROM_GET_LAST_SESSION = 0x24038, IOCTL_CDROM_GET_DRIVE_GEOMETRY = 0x2404C,
+                IOCTL_CDROM_AUTHENTICATE_DISK = 0x24080, IOCTL_SCSI_PASS_THROUGH_DIRECT = 0x4D014;
 constexpr NTSTATUS STATUS_NO_MEDIA_IN_DEVICE_ = (NTSTATUS)0xC0000013, STATUS_UNRECOGNIZED_MEDIA_ = (NTSTATUS)0xC0000014;
 constexpr ULONG CCI_MAGIC = 0x4D494343; // "CCIM"
 constexpr ULONG CCI_WINDOW = 1024;      // index entries cached per part
@@ -218,10 +216,8 @@ NTSTATUS ImageRead(VD_SLOT *s, PIRP Irp) {
     PUCHAR buffer = (PUCHAR)Irp->UserBuffer + st->Parameters.Read.BufferOffset;
     if (st->MajorFunction != IRP_MJ_READ)
         return Complete(Irp, STATUS_INVALID_PARAMETER); // read-only media
-    if ((length | (ULONG)offset) & (VD_SECTOR - 1) || offset < 0 || (ULONGLONG)offset + length > s->Length ||
-        Irp->SegmentArray) { {
-        XK_SERIAL("vd: read %#llx+%#lx rejected (image %#llx bytes%s)\n", (ULONGLONG)offset, length, s->Length,
-                  Irp->SegmentArray ? ", scatter list" : "");
+    if ((length | (ULONG)offset) & (VD_SECTOR - 1) || offset < 0 || (ULONGLONG)offset + length > s->Length || Irp->SegmentArray) { {
+        XK_SERIAL("vd: read %#llx+%#lx rejected (image %#llx bytes%s)\n", (ULONGLONG)offset, length, s->Length, Irp->SegmentArray ? ", scatter list" : "");
     }
         return Complete(Irp, STATUS_INVALID_PARAMETER);
     }
@@ -239,8 +235,8 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
     ULONG outLen = st->Parameters.DeviceIoControl.OutputBufferLength;
     auto out = (PUCHAR)Irp->UserBuffer;
     if (st->Parameters.DeviceIoControl.IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) { // logged with its command
-        XK_SERIAL("vd: device control %#lx (in %lu, out %lu)\n", st->Parameters.DeviceIoControl.IoControlCode,
-                  st->Parameters.DeviceIoControl.InputBufferLength, outLen);
+        XK_SERIAL("vd: device control %#lx (in %lu, out %lu)\n", st->Parameters.DeviceIoControl.IoControlCode, st->Parameters.DeviceIoControl.InputBufferLength,
+                  outLen);
     }
     switch (st->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_CDROM_READ_TOC:
@@ -267,8 +263,8 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
     case IOCTL_CDROM_AUTHENTICATE_DISK:
         return Complete(Irp, STATUS_SUCCESS);
     case IOCTL_SCSI_PASS_THROUGH_DIRECT: {
-        // The Xbox security commands get the drive emulation's answers (titles that check the disc themselves);
-        // TEST UNIT READY succeeds; anything else is not supported.
+        // The Xbox security commands get the drive emulation's answers (titles that check the disc themselves); TEST UNIT READY succeeds; anything else is not
+        // supported.
         struct PASS { // SCSI_PASS_THROUGH_DIRECT, Xbox layout (hardware/ide/dvd_drive.cpp)
             USHORT Length;
             UCHAR ScsiStatus, PathId, TargetId, Lun, CdbLength, SenseInfoLength, DataIn, Pad[3];
@@ -284,17 +280,15 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
         ULONG got = 0;
         const UCHAR *cdb = p->Cdb;
         auto data = (PUCHAR)p->DataBuffer;
-        // The same set as the drive emulation's: MODE SENSE / SELECT of page 0x3E and READ DVD STRUCTURE of the
-        // security sector (address 0xFF02FDFF, layer 0xFE). This used to test the layer in the wrong byte, so a
-        // title's own security-sector read failed ("dirty disc": Prince of Persia).
+        // The same set as the drive emulation's: MODE SENSE / SELECT of page 0x3E and READ DVD STRUCTURE of the security sector (address 0xFF02FDFF, layer
+        // 0xFE). This used to test the layer in the wrong byte, so a title's own security-sector read failed ("dirty disc": Prince of Persia).
         bool security = hardware::ide::IsDvdSecurityCommand(cdb, data, p->DataTransferLength);
         if (security)
             hardware::ide::EmulatedDvdSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
         else if (cdb[0] != 0x00) // TEST UNIT READY
             status = STATUS_INVALID_DEVICE_REQUEST;
-        XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n",
-                  cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5], cdb[6], cdb[7], cdb[8], cdb[9], p->DataTransferLength,
-                  status, got, security ? " (security, emulated)" : "");
+        XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n", cdb[0], cdb[1], cdb[2], cdb[3], cdb[4],
+                  cdb[5], cdb[6], cdb[7], cdb[8], cdb[9], p->DataTransferLength, status, got, security ? " (security, emulated)" : "");
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2;
         p->DataTransferLength = got;
         return Complete(Irp, status, got);
@@ -422,9 +416,8 @@ NTSTATUS Attach(ULONG n) {
         // A full disc dump: the game partition's volume descriptor (sector 32 of it) starts and ends with the magic.
         auto sector = (PUCHAR)ExAllocatePoolWithTag(VD_SECTOR, 'sCdV');
         if (sector) {
-            if (NT_SUCCESS(ReadFile(s->Part[0].File, VD_GAME_PARTITION + 32 * VD_SECTOR, sector, VD_SECTOR)) &&
-                RtlCompareMemory(sector, "MICROSOFT*XBOX*MEDIA", 20) == 20 &&
-                RtlCompareMemory(sector + VD_SECTOR - 20, "MICROSOFT*XBOX*MEDIA", 20) == 20) {
+            if (NT_SUCCESS(ReadFile(s->Part[0].File, VD_GAME_PARTITION + 32 * VD_SECTOR, sector, VD_SECTOR)) && RtlCompareMemory(sector, "MICROSOFT*XBOX*MEDIA",
+                20) == 20 && RtlCompareMemory(sector + VD_SECTOR - 20, "MICROSOFT*XBOX*MEDIA", 20) == 20) {
                 s->Skip = VD_GAME_PARTITION;
                 s->Length -= VD_GAME_PARTITION;
             }
@@ -485,8 +478,7 @@ NTSTATUS Attach(ULONG n) {
         if (hardware::ide::DvdDeviceObject)
             IoDismountVolume(hardware::ide::DvdDeviceObject); // the next open mounts the image
     }
-    XK_SERIAL("vd: slot %lu: %c, %lu part(s), %#llx bytes%s: %s\n", n, s->Type, (ULONG)s->Parts, s->Length,
-              s->Skip ? " (full dump)" : "", saved->Path[0]);
+    XK_SERIAL("vd: slot %lu: %c, %lu part(s), %#llx bytes%s: %s\n", n, s->Type, (ULONG)s->Parts, s->Length, s->Skip ? " (full dump)" : "", saved->Path[0]);
     return STATUS_SUCCESS;
 }
 
@@ -569,8 +561,7 @@ NTSTATUS NTAPI VirtualDiscDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             UnmountAll();
         NTSTATUS status = STATUS_SUCCESS;
         if (code == IOCTL_VD_MOUNT || code == IOCTL_VD_MOUNT2) {
-            status = MountRequest(n, (const UCHAR *)st->Parameters.DeviceIoControl.InputBuffer,
-                                  st->Parameters.DeviceIoControl.InputBufferLength);
+            status = MountRequest(n, (const UCHAR *)st->Parameters.DeviceIoControl.InputBuffer, st->Parameters.DeviceIoControl.InputBufferLength);
         }
         VirtualDiscLastMountStatus = status;
         KeSetEvent(&VirtualDiscMountLock, 0, FALSE);
@@ -591,9 +582,8 @@ DRIVER_OBJECT VirtualDiscDriverObject = {
     nullptr,
     nullptr,
     nullptr,
-    {VirtualDiscCreateClose, VirtualDiscCreateClose, VirtualDiscRead, VirtualDiscRead, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
-     IoInvalidDeviceRequest, VirtualDiscDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+    {VirtualDiscCreateClose, VirtualDiscCreateClose, VirtualDiscRead, VirtualDiscRead, IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+     IoInvalidDeviceRequest, IoInvalidDeviceRequest, IoInvalidDeviceRequest, VirtualDiscDeviceControl, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest}};
 
 // \Device\CdRom0's read and device-control routines (dvd_drive.cpp): true when a mounted DVD image took the request.
@@ -631,8 +621,7 @@ void InitVirtualDiscs() {
         NtClose(h);
     RtlInitAnsiString(&name, "\\Device\\Virtual0\\Image0");
     // Not a mountable type: opening \Device\CdRom1 reaches this driver directly.
-    if (!NT_SUCCESS(IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &name, FILE_DEVICE_UNKNOWN, FALSE,
-                                   &VirtualDiscControl)))
+    if (!NT_SUCCESS(IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &name, FILE_DEVICE_UNKNOWN, FALSE, &VirtualDiscControl)))
         return;
     *(PULONG)VirtualDiscControl->DeviceExtension = 0;
     VirtualDiscControl->Flags &= ~DO_DEVICE_INITIALIZING;
@@ -642,8 +631,7 @@ void InitVirtualDiscs() {
     IoCreateSymbolicLink(&link, &name);
 }
 
-// The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come
-// back.
+// The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come back.
 void RestoreVirtualDiscMounts() {
     KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
     for (ULONG n = 1; n <= VD_SLOTS; n++) {

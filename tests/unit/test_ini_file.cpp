@@ -1,6 +1,5 @@
-// The kernel's ini line reader (kernel/src/ini_file/ini_file.cpp), shared by title_patches.ini
-// (spec/oxos_internal/25 §3.1), oxos_launch_redirect.ini (spec/oxos_internal/33 §1) and oxos_extensions.ini
-// (spec/oxos_internal/34).
+// The kernel's ini line reader (kernel/src/ini_file/ini_file.cpp), shared by title_patches.ini (spec/oxos_internal/25 §3.1), oxos_launch_redirect.ini
+// (spec/oxos_internal/33 §1) and oxos_extensions.ini (spec/oxos_internal/34).
 #include "kernel_test.h"
 
 #include <string>
@@ -42,8 +41,7 @@ using V = std::vector<std::string>;
 } // namespace
 
 TEST(IniFile, SectionsKeysAndComments) {
-    EXPECT_EQ(Lines("; comment\r\n# also\r\n\r\n  [one]  ; note\r\nkey = value  \r\n\tother=x ; kept\r\n"),
-              (V{"S:one", "K:key=value", "K:other=x ; kept"}));
+    EXPECT_EQ(Lines("; comment\r\n# also\r\n\r\n  [one]  ; note\r\nkey = value  \r\n\tother=x ; kept\r\n"), (V{"S:one", "K:key=value", "K:other=x ; kept"}));
 }
 
 TEST(IniFile, ValuesMayBeEmptyOrHoldEquals) {

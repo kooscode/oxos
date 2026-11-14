@@ -1,6 +1,5 @@
-// Runtime exports: interlocked operations, S-lists, memory/integer helpers, ANSI/Unicode strings and conversions,
-// port buffers (spec/stock/13). Semantics follow the documented NT runtime; Xbox strings are ANSI, Unicode is UTF-16
-// with a Latin-1 multibyte mapping.
+// Runtime exports: interlocked operations, S-lists, memory/integer helpers, ANSI/Unicode strings and conversions, port buffers (spec/stock/13). Semantics
+// follow the documented NT runtime; Xbox strings are ANSI, Unicode is UTF-16 with a Latin-1 multibyte mapping.
 #include <runtime/runtime.h>
 #include <arch/arch.h>
 #include <objects/objects.h>
@@ -71,15 +70,13 @@ XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead) 
     return old.Next.Next;
 }
 
-XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange,
-                                                       PLONGLONG Comparand) {
+XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange, PLONGLONG Comparand) {
     LONGLONG expected = *Comparand;
     __atomic_compare_exchange_n(Destination, &expected, *Exchange, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
     return expected;
 }
 
-XBAPI LARGE_INTEGER NTAPI ExInterlockedAddLargeInteger(PLARGE_INTEGER Addend, LARGE_INTEGER Increment,
-                                                       PVOID /*Lock*/) {
+XBAPI LARGE_INTEGER NTAPI ExInterlockedAddLargeInteger(PLARGE_INTEGER Addend, LARGE_INTEGER Increment, PVOID /*Lock*/) {
     LARGE_INTEGER old;
     ULONG flags = save_flags_cli();
     old = *Addend;
@@ -196,8 +193,8 @@ XBAPI void NTAPI RtlMapGenericMask(PULONG AccessMask, const GENERIC_MAPPING *Gen
 
 // --- Strings
 
-constexpr NTSTATUS STATUS_BUFFER_TOO_SMALL_ = (NTSTATUS)0xC0000023, STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D,
-                   STATUS_NO_MEMORY_ = (NTSTATUS)0xC0000017, STATUS_BUFFER_OVERFLOW_ = (NTSTATUS)0x80000005;
+constexpr NTSTATUS STATUS_BUFFER_TOO_SMALL_ = (NTSTATUS)0xC0000023, STATUS_INVALID_PARAMETER_ = (NTSTATUS)0xC000000D, STATUS_NO_MEMORY_ = (NTSTATUS)0xC0000017,
+                   STATUS_BUFFER_OVERFLOW_ = (NTSTATUS)0x80000005;
 
 XBAPI NTSTATUS NTAPI RtlAppendStringToString(PSTRING Destination, const STRING *Source) {
     if (!Source->Length)
@@ -273,8 +270,7 @@ XBAPI WCHAR NTAPI RtlDowncaseUnicodeChar(WCHAR SourceCharacter) {
     return c;
 }
 
-static NTSTATUS ChangeUnicodeCase(PUNICODE_STRING Destination, const UNICODE_STRING *Source, BOOLEAN Allocate,
-                                  WCHAR (*Map)(WCHAR)) {
+static NTSTATUS ChangeUnicodeCase(PUNICODE_STRING Destination, const UNICODE_STRING *Source, BOOLEAN Allocate, WCHAR (*Map)(WCHAR)) {
     if (Allocate) {
         Destination->Buffer = (PWSTR)ExAllocatePoolWithTag(Source->Length ? Source->Length : 2, 'grtS');
         if (!Destination->Buffer)
@@ -297,19 +293,16 @@ static WCHAR ToLowerWide(WCHAR c) {
     return RtlDowncaseUnicodeChar(c);
 }
 
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                            BOOLEAN AllocateDestinationString) {
+XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString) {
     return ChangeUnicodeCase(DestinationString, SourceString, AllocateDestinationString, ToUpperWide);
 }
 
-XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString,
-                                              BOOLEAN AllocateDestinationString) {
+XBAPI NTSTATUS NTAPI RtlDowncaseUnicodeString(PUNICODE_STRING DestinationString, const UNICODE_STRING *SourceString, BOOLEAN AllocateDestinationString) {
     return ChangeUnicodeCase(DestinationString, SourceString, AllocateDestinationString, ToLowerWide);
 }
 
 // Multibyte <-> Unicode: Latin-1 (characters above 0xFF become '?').
-XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesInUnicodeString,
-                                            PULONG BytesInUnicodeString, const CHAR *MultiByteString,
+XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesInUnicodeString, PULONG BytesInUnicodeString, const CHAR *MultiByteString,
                                             ULONG BytesInMultiByteString) {
     ULONG room = MaxBytesInUnicodeString / 2;
     ULONG n = room < BytesInMultiByteString ? room : BytesInMultiByteString;
@@ -320,14 +313,13 @@ XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeN(PWSTR UnicodeString, ULONG MaxBytesI
     return STATUS_SUCCESS;
 }
 
-XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeSize(PULONG BytesInUnicodeString, const CHAR *,
-                                               ULONG BytesInMultiByteString) {
+XBAPI NTSTATUS NTAPI RtlMultiByteToUnicodeSize(PULONG BytesInUnicodeString, const CHAR *, ULONG BytesInMultiByteString) {
     *BytesInUnicodeString = BytesInMultiByteString * 2;
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS UnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PULONG BytesInMultiByteString,
-                                   const WCHAR *UnicodeString, ULONG BytesInUnicodeString, bool upper) {
+static NTSTATUS UnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PULONG BytesInMultiByteString, const WCHAR *UnicodeString, ULONG BytesInUnicodeString,
+                                   bool upper) {
     ULONG n = BytesInUnicodeString / 2 < MaxBytes ? BytesInUnicodeString / 2 : MaxBytes;
     for (ULONG i = 0; i < n; i++) {
         WCHAR c = upper ? RtlUpcaseUnicodeChar(UnicodeString[i]) : UnicodeString[i];
@@ -338,22 +330,17 @@ static NTSTATUS UnicodeToMultiByte(PCHAR MultiByteString, ULONG MaxBytes, PULONG
     return STATUS_SUCCESS;
 }
 
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                            PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
+XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString, PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
                                             ULONG BytesInUnicodeString) {
-    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
-                              BytesInUnicodeString, false);
+    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString, BytesInUnicodeString, false);
 }
 
-XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString,
-                                                  PULONG BytesInMultiByteString, const WCHAR *UnicodeString,
-                                                  ULONG BytesInUnicodeString) {
-    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString,
-                              BytesInUnicodeString, true);
+XBAPI NTSTATUS NTAPI RtlUpcaseUnicodeToMultiByteN(PCHAR MultiByteString, ULONG MaxBytesInMultiByteString, PULONG BytesInMultiByteString,
+                                                  const WCHAR *UnicodeString, ULONG BytesInUnicodeString) {
+    return UnicodeToMultiByte(MultiByteString, MaxBytesInMultiByteString, BytesInMultiByteString, UnicodeString, BytesInUnicodeString, true);
 }
 
-XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *,
-                                               ULONG BytesInUnicodeString) {
+XBAPI NTSTATUS NTAPI RtlUnicodeToMultiByteSize(PULONG BytesInMultiByteString, const WCHAR *, ULONG BytesInUnicodeString) {
     *BytesInMultiByteString = BytesInUnicodeString / 2;
     return STATUS_SUCCESS;
 }

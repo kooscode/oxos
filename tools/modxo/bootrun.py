@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Boot the console N times through the Modxo rig and classify each boot (README.md in this folder).
 
-Needs a running `console.py log --out LOG`: it owns the Pico's serial port and the power button. For netboot
-kernels, also tools/netboot/netboot.py, serving SERVE (a file or symlink this tool can repoint with --image).
+Needs a running `console.py log --out LOG`: it owns the Pico's serial port and the power button. For netboot kernels, also tools/netboot/netboot.py, serving
+SERVE (a file or symlink this tool can repoint with --image).
 
 Each run: switch the console off (if on), on, then watch LOG's COM1 lines:
   PASS    the --pass text was printed (default "boot: title launcher", an OXOS kernel starting the dashboard)
@@ -81,8 +81,7 @@ def main():
     p.add_argument("--image", help="netboot: point SERVE at this image first")
     p.add_argument("--serve", help="netboot: the path netboot.py serves (a symlink)")
     p.add_argument("--banner", default="OXOS kernel", help="text that marks the kernel's start (default: %(default)s)")
-    p.add_argument("--pass", dest="pass_text", default="boot: title launcher",
-                   help="text that marks a good boot (default: %(default)s)")
+    p.add_argument("--pass", dest="pass_text", default="boot: title launcher", help="text that marks a good boot (default: %(default)s)")
     p.add_argument("--boot", type=float, default=45, help="seconds to the banner before NOBOOT (default %(default)s)")
     p.add_argument("--stall", type=float, default=10, help="seconds without a line before FREEZE (default %(default)s)")
     p.add_argument("--after", type=float, default=0, help="seconds to stay on after a PASS")
@@ -101,8 +100,7 @@ def main():
     for i in range(args.runs):
         result, elapsed, last = one_run(args)
         counts[result] = counts.get(result, 0) + 1
-        print("%s run %d/%d: %-7s kernel+%5.1fs | %s" % (time.strftime("%H:%M:%S"), i + 1, args.runs, result,
-                                                          elapsed, last[:110]), flush=True)
+        print("%s run %d/%d: %-7s kernel+%5.1fs | %s" % (time.strftime("%H:%M:%S"), i + 1, args.runs, result, elapsed, last[:110]), flush=True)
         if result == "NOPOWER":
             break
     print("summary:", " ".join("%s=%d" % kv for kv in sorted(counts.items())), flush=True)

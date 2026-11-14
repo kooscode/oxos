@@ -1,6 +1,5 @@
-// The IDE drives (src/hardware/ide/, spec/stock/04): the channel (ide_channel.cpp), the hard disk (hard_disk.cpp,
-// 48-bit addressing: spec/oxos_internal/04_lba48.md) and the DVD drive (dvd_drive.cpp). What sits on them (the disk's
-// layout, formatting, virtual discs) is in storage/.
+// The IDE drives (src/hardware/ide/, spec/stock/04): the channel (ide_channel.cpp), the hard disk (hard_disk.cpp, 48-bit addressing:
+// spec/oxos_internal/04_lba48.md) and the DVD drive (dvd_drive.cpp). What sits on them (the disk's layout, formatting, virtual discs) is in storage/.
 #pragma once
 #include <io/io.h>
 
@@ -75,17 +74,14 @@ typedef struct _DISK_GEOMETRY {
 } DISK_GEOMETRY, *PDISK_GEOMETRY;
 XK_SIZE(DISK_GEOMETRY, 0x18);
 
-constexpr ULONG IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x70000, IOCTL_DISK_VERIFY = 0x70014,
-                IOCTL_DISK_GET_PARTITION_INFO = 0x74004, IOCTL_IDE_PASS_THROUGH = 0x4D028,
+constexpr ULONG IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x70000, IOCTL_DISK_VERIFY = 0x70014, IOCTL_DISK_GET_PARTITION_INFO = 0x74004, IOCTL_IDE_PASS_THROUGH = 0x4D028,
                 IOCTL_CDROM_CHECK_VERIFY = 0x24800;
-constexpr NTSTATUS STATUS_IO_DEVICE_ERROR = (NTSTATUS)0xC0000185, STATUS_IO_TIMEOUT = (NTSTATUS)0xC00000B5,
-                   STATUS_DEVICE_NOT_READY = (NTSTATUS)0xC00000A3, STATUS_BUFFER_TOO_SMALL_IO = (NTSTATUS)0xC0000023;
+constexpr NTSTATUS STATUS_IO_DEVICE_ERROR = (NTSTATUS)0xC0000185, STATUS_IO_TIMEOUT = (NTSTATUS)0xC00000B5, STATUS_DEVICE_NOT_READY = (NTSTATUS)0xC00000A3,
+                   STATUS_BUFFER_TOO_SMALL_IO = (NTSTATUS)0xC0000023;
 
-// IOCTL_IDE_PASS_THROUGH buffer (input = output). On return the register bytes hold the drive's error (Features),
-// count, LBA bytes and status (Command).
+// IOCTL_IDE_PASS_THROUGH buffer (input = output). On return the register bytes hold the drive's error (Features), count, LBA bytes and status (Command).
 typedef struct _IDEREGS {
-    UCHAR bFeaturesReg, bSectorCountReg, bSectorNumberReg, bCylLowReg, bCylHighReg, bDriveHeadReg, bCommandReg,
-        bHostSendsData;
+    UCHAR bFeaturesReg, bSectorCountReg, bSectorNumberReg, bCylLowReg, bCylHighReg, bDriveHeadReg, bCommandReg, bHostSendsData;
 } IDEREGS;
 typedef struct _ATA_PASS_THROUGH {
     IDEREGS IdeReg;
@@ -101,15 +97,12 @@ XBAPI STRING HalDiskModelNumber, HalDiskSerialNumber;
 XBAPI ULONG HalDiskCachePartitionCount;
 
 // ATA task file.
-constexpr USHORT IDE_DATA = 0x1F0, IDE_ERROR = 0x1F1, IDE_FEATURES = 0x1F1, IDE_COUNT = 0x1F2, IDE_LBA0 = 0x1F3,
-                 IDE_LBA1 = 0x1F4, IDE_LBA2 = 0x1F5, IDE_DRIVE = 0x1F6, IDE_STATUS = 0x1F7, IDE_COMMAND = 0x1F7,
-                 IDE_ALT_STATUS = 0x3F6, IDE_CONTROL = 0x3F6, IDE_BM_COMMAND = 0xFF60, IDE_BM_STATUS = 0xFF62,
-                 IDE_BM_PRDT = 0xFF64;
-constexpr UCHAR IDE_STATUS_ERR = 0x01, IDE_STATUS_DRQ = 0x08, IDE_STATUS_DF = 0x20, IDE_STATUS_DRDY = 0x40,
-                IDE_STATUS_BSY = 0x80;
+constexpr USHORT IDE_DATA = 0x1F0, IDE_ERROR = 0x1F1, IDE_FEATURES = 0x1F1, IDE_COUNT = 0x1F2, IDE_LBA0 = 0x1F3, IDE_LBA1 = 0x1F4, IDE_LBA2 = 0x1F5,
+                 IDE_DRIVE = 0x1F6, IDE_STATUS = 0x1F7, IDE_COMMAND = 0x1F7, IDE_ALT_STATUS = 0x3F6, IDE_CONTROL = 0x3F6, IDE_BM_COMMAND = 0xFF60,
+                 IDE_BM_STATUS = 0xFF62, IDE_BM_PRDT = 0xFF64;
+constexpr UCHAR IDE_STATUS_ERR = 0x01, IDE_STATUS_DRQ = 0x08, IDE_STATUS_DF = 0x20, IDE_STATUS_DRDY = 0x40, IDE_STATUS_BSY = 0x80;
 
-// Kinds of disk device: a FATX partition (or Partition0), a folder of the exFAT volume, the exFAT volume itself, and
-// the whole disk.
+// Kinds of disk device: a FATX partition (or Partition0), a folder of the exFAT volume, the exFAT volume itself, and the whole disk.
 enum : UCHAR { IDE_KIND_PARTITION, IDE_KIND_FOLDER, IDE_KIND_VOLUME, IDE_KIND_PHYSICAL };
 
 namespace xk::hardware::ide {
@@ -134,8 +127,7 @@ void CountDiskPowerCycle();
 // "Disk: WDC WD80EB-28CGH2", the model from IDENTIFY, when the disk answered; else an empty line.
 void DiskModelLine(char *Line, ULONG Size);
 // Creates a disk device of Kind over the byte range Start, Length.
-NTSTATUS CreateDiskDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE_OBJECT *Out,
-                          UCHAR Kind = IDE_KIND_PARTITION);
+NTSTATUS CreateDiskDevice(ULONG Number, LONGLONG Start, LONGLONG Length, PDEVICE_OBJECT *Out, UCHAR Kind = IDE_KIND_PARTITION);
 PCSZ FolderOfPartition(PDEVICE_OBJECT Device); // "E", "C", ... for a folder partition, else nullptr
 
 // The DVD drive (dvd_drive.cpp, spec/stock/04 §3), with the virtual disc driver's needs (storage/virtual_disc.cpp).

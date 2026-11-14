@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Converts an SVG into the vector boot splash's scene (spec/oxos_internal/00_boot_splash.md §1.1), which the kernel
-draws at boot (kernel/src/graphics/vector_renderer.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
+"""Converts an SVG into the vector boot splash's scene (spec/oxos_internal/00_boot_splash.md §1.1), which the kernel draws at boot
+(kernel/src/graphics/vector_renderer.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
 
     svg_splash.py IN.svg OUT.bin      write the scene (without the "XKSPLASH" header)
 
-The SVG is scaled to the full 640-pixel width and centred vertically (black bars above and below a wide picture).
-Curves are flattened to polygons and strokes turned into outlines here, so the kernel only fills polygons.
+The SVG is scaled to the full 640-pixel width and centred vertically (black bars above and below a wide picture). Curves are flattened to polygons and strokes
+turned into outlines here, so the kernel only fills polygons.
 
-Supported: <svg viewBox>, <g>, <rect> (no rounded corners), <circle>, <ellipse>, <polygon>, <polyline>, <path> (M L H
-V Q T C S Z, absolute and relative; no arcs); transform (matrix, translate, scale, rotate); fill, stroke,
-stroke-width, fill-opacity, stroke-opacity, opacity, fill-rule, inherited from groups and as style="..."; colours
+Supported: <svg viewBox>, <g>, <rect> (no rounded corners), <circle>, <ellipse>, <polygon>, <polyline>, <path> (M L H V Q T C S Z, absolute and relative; no
+arcs); transform (matrix, translate, scale, rotate); fill, stroke, stroke-width, fill-opacity, stroke-opacity, opacity, fill-rule, inherited from groups and as
+style="..."; colours
 #rgb, #rrggbb, rgb(), a few names; <linearGradient> and <radialGradient> (userSpaceOnUse or objectBoundingBox,
-gradientTransform, stops with stop-opacity); filter="url(#id)" with an <feGaussianBlur>, alone (the shape replaced by
-its blur) or merged under the SourceGraphic (a glow).
+gradientTransform, stops with stop-opacity); filter="url(#id)" with an <feGaussianBlur>, alone (the shape replaced by its blur) or merged under the
+SourceGraphic (a glow).
 
-The animation: an element (or group) with data-oxos-phase="start" is drawn only in the first picture, "end" only in
-the last; everything else in both. The kernel fades the first picture in, then cross-fades to the last.
+The animation: an element (or group) with data-oxos-phase="start" is drawn only in the first picture, "end" only in the last; everything else in both. The
+kernel fades the first picture in, then cross-fades to the last.
 """
 import math
 import re
@@ -26,8 +26,8 @@ import xml.etree.ElementTree as ET
 W, H = 640, 480
 SVG_NS = "{http://www.w3.org/2000/svg}"
 PHASE_START, PHASE_END = 1, 2
-NAMED = {"black": (0, 0, 0), "white": (255, 255, 255), "red": (255, 0, 0), "green": (0, 128, 0),
-         "blue": (0, 0, 255), "gray": (128, 128, 128), "grey": (128, 128, 128), "yellow": (255, 255, 0)}
+NAMED = {"black": (0, 0, 0), "white": (255, 255, 255), "red": (255, 0, 0), "green": (0, 128, 0), "blue": (0, 0, 255), "gray": (128, 128, 128), "grey": (128,
+         128, 128), "yellow": (255, 255, 0)}
 INHERITED = ("fill", "stroke", "stroke-width", "fill-opacity", "stroke-opacity", "fill-rule", "stroke-linejoin")
 
 
@@ -44,8 +44,7 @@ def mul(m, n):
     """m after n."""
     a, b, c, d, e, f = m
     a2, b2, c2, d2, e2, f2 = n
-    return (a * a2 + c * b2, b * a2 + d * b2, a * c2 + c * d2, b * c2 + d * d2, a * e2 + c * f2 + e,
-            b * e2 + d * f2 + f)
+    return (a * a2 + c * b2, b * a2 + d * b2, a * c2 + c * d2, b * c2 + d * d2, a * e2 + c * f2 + e, b * e2 + d * f2 + f)
 
 
 def apply(m, x, y):
@@ -188,8 +187,7 @@ def stroke_outline(points, closed, width):
         length = math.hypot(dx, dy)
         n = (-dy / length * hw, dx / length * hw)
         normals.append(n)
-        polys.append([(p[0] + n[0], p[1] + n[1]), (q[0] + n[0], q[1] + n[1]), (q[0] - n[0], q[1] - n[1]),
-                      (p[0] - n[0], p[1] - n[1])])
+        polys.append([(p[0] + n[0], p[1] + n[1]), (q[0] + n[0], q[1] + n[1]), (q[0] - n[0], q[1] - n[1]), (p[0] - n[0], p[1] - n[1])])
     joints = range(len(segs)) if closed else range(1, len(segs))
     for k in joints:
         v, n1, n2 = segs[k][0], normals[k - 1], normals[k]
@@ -253,8 +251,7 @@ class Converter:
         ox, oy = (W - vb[2] * s) / 2, (H - vb[3] * s) / 2
         self.scale = s
         self.view = (s, 0, 0, s, ox - vb[0] * s, oy - vb[1] * s)
-        self.clip = (max(0, int(math.floor(ox))), max(0, int(math.floor(oy))), min(W, int(math.ceil(ox + vb[2] * s))),
-                     min(H, int(math.ceil(oy + vb[3] * s))))
+        self.clip = (max(0, int(math.floor(ox))), max(0, int(math.floor(oy))), min(W, int(math.ceil(ox + vb[2] * s))), min(H, int(math.ceil(oy + vb[3] * s))))
         self.paints, self.paint_index = [], {}
         self.layers = []  # [phases, filter, sigma16, opacity, draws]; draws: (paint, alpha, evenodd, contours)
 

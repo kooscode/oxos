@@ -16,8 +16,8 @@ static ULONG BytesToPages(ULONG bytes) {
 
 // --- Contiguous memory: physical pages from the top down, returned at 0x80000000|PA.
 
-XBAPI PVOID NTAPI MmAllocateContiguousMemoryEx(ULONG NumberOfBytes, ULONG LowestAcceptableAddress,
-                                               ULONG HighestAcceptableAddress, ULONG Alignment, ULONG Protect) {
+XBAPI PVOID NTAPI MmAllocateContiguousMemoryEx(ULONG NumberOfBytes, ULONG LowestAcceptableAddress, ULONG HighestAcceptableAddress, ULONG Alignment,
+                                               ULONG Protect) {
     ULONG pteBits;
     if (!NumberOfBytes || !ProtectToPte(Protect, &pteBits))
         return nullptr;
@@ -63,9 +63,8 @@ XBAPI void NTAPI MmPersistContiguousMemory(PVOID BaseAddress, ULONG NumberOfByte
     KfLowerIrql(old);
 }
 
-// As the reference (0x8001de2e): counts PTEs up to the one marked as the allocation's end, at DISPATCH_LEVEL so
-// that the allocation cannot be freed or remapped meanwhile. Like the reference it trusts the caller to pass the
-// base of a live system-memory or pool allocation.
+// As the reference (0x8001de2e): counts PTEs up to the one marked as the allocation's end, at DISPATCH_LEVEL so that the allocation cannot be freed or remapped
+// meanwhile. Like the reference it trusts the caller to pass the base of a live system-memory or pool allocation.
 XBAPI ULONG NTAPI MmQueryAllocationSize(PVOID BaseAddress) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pages = 1;
@@ -107,8 +106,8 @@ PVOID AllocateMappedPages(ULONG pages, ULONG pteBits, bool guardPage, ULONG usag
     if (!base)
         return nullptr;
     ULONG va = base + (guardPage ? PAGE_SIZE : 0);
-    // Uncached / write-combined pages: no line of any free page may still sit in the caches when it is mapped with
-    // another memory type (a memory-type conflict is a machine check on the P6), so flush before mapping, not after.
+    // Uncached / write-combined pages: no line of any free page may still sit in the caches when it is mapped with another memory type (a memory-type conflict
+    // is a machine check on the P6), so flush before mapping, not after.
     if (pteBits & (PTE_PCD | PTE_PWT))
         FlushCaches();
     for (ULONG i = 0; i < pages; i++) {
@@ -162,8 +161,7 @@ XBAPI ULONG NTAPI MmFreeSystemMemory(PVOID BaseAddress, ULONG NumberOfBytes) {
 // Returns the stack top; a not-present guard page sits below the stack.
 XBAPI PVOID NTAPI MmCreateKernelStack(ULONG NumberOfBytes, BOOLEAN DebuggerThread) {
     ULONG pages = BytesToPages(NumberOfBytes);
-    auto stack = (UCHAR *)AllocateMappedPages(pages, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, true,
-                                              MmStackUsage);
+    auto stack = (UCHAR *)AllocateMappedPages(pages, PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY, true, MmStackUsage);
     if (!stack)
         return nullptr;
     return stack + (pages << PAGE_SHIFT);
@@ -175,17 +173,15 @@ XBAPI void NTAPI MmDeleteKernelStack(PVOID KernelStackBase, PVOID KernelStackLim
     ReleaseSystemPtes((UCHAR *)KernelStackLimit - PAGE_SIZE, pages + 1);
 }
 
-// Uncached MMIO in 0xF8000000-0xFFBFFFFF and write-combined AGP space in 0xF0000000-0xF7FFFFFF are
-// already mapped 1:1 by large pages; anything else gets system PTEs.
+// Uncached MMIO in 0xF8000000-0xFFBFFFFF and write-combined AGP space in 0xF0000000-0xF7FFFFFF are already mapped 1:1 by large pages; anything else gets system
+// PTEs.
 XBAPI PVOID NTAPI MmMapIoSpace(PHYSICAL_ADDRESS PhysicalAddress, ULONG NumberOfBytes, ULONG Protect) {
     ULONG pteBits;
     if (!ProtectToPte(Protect, &pteBits))
         return nullptr;
-    if (Protect == (PAGE_READWRITE | PAGE_NOCACHE) && PhysicalAddress >= 0xF8000000 &&
-        PhysicalAddress + NumberOfBytes < 0xFFC00000)
+    if (Protect == (PAGE_READWRITE | PAGE_NOCACHE) && PhysicalAddress >= 0xF8000000 && PhysicalAddress + NumberOfBytes < 0xFFC00000)
         return (PVOID)PhysicalAddress;
-    if (Protect == (PAGE_READWRITE | PAGE_WRITECOMBINE) && PhysicalAddress >= 0xF0000000 &&
-        PhysicalAddress + NumberOfBytes < 0xF8000000) {
+    if (Protect == (PAGE_READWRITE | PAGE_WRITECOMBINE) && PhysicalAddress >= 0xF0000000 && PhysicalAddress + NumberOfBytes < 0xF8000000) {
         FlushCaches();
         return (PVOID)PhysicalAddress;
     }
@@ -238,9 +234,8 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
     KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG va = (ULONG)BaseAddress & ~0xFFFu, end = (ULONG)BaseAddress + NumberOfBytes;
     const ULONG attrMask = PTE_PRESENT | PTE_WRITE | PTE_PWT | PTE_PCD | PTE_ACCESSED | PTE_DIRTY;
-    // A change of memory type: flush the caches first (nothing at DISPATCH_LEVEL touches these pages in between),
-    // then the new type, then flush again for anything prefetched meanwhile. Flushing only afterwards left cached
-    // lines of a page already mapped uncached.
+    // A change of memory type: flush the caches first (nothing at DISPATCH_LEVEL touches these pages in between), then the new type, then flush again for
+    // anything prefetched meanwhile. Flushing only afterwards left cached lines of a page already mapped uncached.
     bool typeChange = (NewProtect & (PAGE_NOCACHE | PAGE_WRITECOMBINE)) != 0;
     for (ULONG a = va; a < end && !typeChange; a += PAGE_SIZE) {
         ULONG *pte = PteAddress(a);
@@ -261,8 +256,7 @@ XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULO
 }
 
 // --- Page locking, as the reference: a lock count in the low word of a page's busy entry, in steps of 2. Locked
-// pages are not moved by contiguous allocations. Mapped pages (contiguous memory, the kernel) never move and keep
-// no count.
+// pages are not moved by contiguous allocations. Mapped pages (contiguous memory, the kernel) never move and keep no count.
 
 XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOLEAN UnlockPage) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
@@ -275,8 +269,7 @@ XBAPI void NTAPI MmLockUnlockPhysicalPage(PHYSICAL_ADDRESS PhysicalAddress, BOOL
 // Every page of the buffer, outside the 0x80000000 mapping and large pages.
 XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN UnlockPages) {
     ULONG va = (ULONG)BaseAddress;
-    if (!NumberOfBytes || (va >= MM_SYSTEM_PHYSICAL_MAP && va < MM_SYSTEM_PHYSICAL_MAP + 0x10000000) ||
-        (*PdeAddress(va) & PTE_LARGE))
+    if (!NumberOfBytes || (va >= MM_SYSTEM_PHYSICAL_MAP && va < MM_SYSTEM_PHYSICAL_MAP + 0x10000000) || (*PdeAddress(va) & PTE_LARGE))
         return;
     KIRQL old = KeRaiseIrqlToDpcLevel();
     for (ULONG a = va & ~(PAGE_SIZE - 1); a < va + NumberOfBytes; a += PAGE_SIZE) {
@@ -291,8 +284,8 @@ XBAPI void NTAPI MmLockUnlockBufferPages(PVOID BaseAddress, ULONG NumberOfBytes,
 }
 
 // --- GPU instance memory: the region below the top 64 KB of the low 64 MB, and with 128 MB its copy below the top of
-// RAM (spec/stock/09 §10); shrinking it returns pages of both to the pool. The address returned is the top of RAM
-// less the padding: the GPU uses the top of the memory it has.
+// RAM (spec/stock/09 §10); shrinking it returns pages of both to the pool. The address returned is the top of RAM less the padding: the GPU uses the top of the
+// memory it has.
 
 XBAPI PVOID NTAPI MmClaimGpuInstanceMemory(ULONG NumberOfBytes, ULONG *NumberOfPaddingBytes) {
     *NumberOfPaddingBytes = 0x10000;

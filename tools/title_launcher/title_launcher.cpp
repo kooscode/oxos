@@ -1,11 +1,9 @@
-// Title launcher (nxdk + SDL3, open source): lists the titles in F:\games and F:\titles (and their game folders) and
-// the applications in F:\Applications (one folder each, e.g. F:\Applications\ftp\ftp.xbe; F:\Tools, the folder's
-// old name, is still read), and starts the one chosen with the controller.
+// Title launcher (nxdk + SDL3, open source): lists the titles in F:\games and F:\titles (and their game folders) and the applications in F:\Applications (one
+// folder each, e.g. F:\Applications\ftp\ftp.xbe; F:\Tools, the folder's old name, is still read), and starts the one chosen with the controller.
 //   D-pad up / down: move (held: repeats), A: start the selected title.
-// Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files.
-// A disc image is mounted as the console's disc (tools/iso_launcher/mount_iso.h) and its default.xbe started; an
-// .xbe is started from where it is. Starting goes through the launch data page and a quick reboot, as a dashboard.
-// The screen and the controllers are SDL3's, through tools/sdl_screen.
+// Listed: .iso and .cci disc images (a split image only by its first part, name.1.iso / name.1.cci) and .xbe files. A disc image is mounted as the console's
+// disc (tools/iso_launcher/mount_iso.h) and its default.xbe started; an .xbe is started from where it is. Starting goes through the launch data page and a
+// quick reboot, as a dashboard. The screen and the controllers are SDL3's, through tools/sdl_screen.
 #include <hal/xbox.h>
 #include <windows.h>
 #include <xboxkrnl/xboxkrnl.h>
@@ -45,13 +43,12 @@ bool HasExtension(const std::string &name, const char *extension) {
 // A later part of a split image (name.2.iso, name.3.cci, ...): only the first part is listed.
 bool IsLaterPart(const std::string &name) {
     std::size_t n = name.size();
-    return n > 6 && name[n - 6] == '.' && name[n - 5] >= '0' && name[n - 5] <= '9' && name[n - 5] != '1' &&
-           (HasExtension(name, ".iso") || HasExtension(name, ".cci"));
+    return n > 6 && name[n - 6] == '.' && name[n - 5] >= '0' && name[n - 5] <= '9' && name[n - 5] != '1' && (HasExtension(name, ".iso") || HasExtension(name,
+           ".cci"));
 }
 
 bool Listed(const std::string &name) {
-    return (HasExtension(name, ".iso") || HasExtension(name, ".cci") || HasExtension(name, ".xbe")) &&
-           !IsLaterPart(name);
+    return (HasExtension(name, ".iso") || HasExtension(name, ".cci") || HasExtension(name, ".xbe")) && !IsLaterPart(name);
 }
 
 bool LessNoCase(const std::string &a, const std::string &b) {
@@ -63,9 +60,8 @@ bool LessNoCase(const std::string &a, const std::string &b) {
     return a.size() < b.size();
 }
 
-// The files of one folder that can be started, added as "folder\\file". A game folder one level down
-// (F:\\games\\Halo\\) is listed by its default.xbe (a launcher made by tools/oxos_isonator, or the game itself)
-// when it has one, else by the images and XBEs in it.
+// The files of one folder that can be started, added as "folder\\file". A game folder one level down (F:\\games\\Halo\\) is listed by its default.xbe (a
+// launcher made by tools/oxos_isonator, or the game itself) when it has one, else by the images and XBEs in it.
 NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int depth = 0) {
     char path[300];
     std::snprintf(path, sizeof(path), "%s\\%s", FolderDevice, sub.c_str());
@@ -75,16 +71,14 @@ NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int 
     HANDLE folder;
     RtlInitAnsiString(&name, path);
     InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
-    NTSTATUS status = NtOpenFile(&folder, FILE_LIST_DIRECTORY | SYNCHRONIZE, &attributes, &iosb,
-                                 FILE_SHARE_READ | FILE_SHARE_WRITE,
+    NTSTATUS status = NtOpenFile(&folder, FILE_LIST_DIRECTORY | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                  FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
     if (!NT_SUCCESS(status))
         return status;
     alignas(8) static unsigned char buffer[4096];
     std::vector<std::string> folders;
     for (bool first = true;; first = false) {
-        status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
-                                      FileDirectoryInformation, nullptr, first);
+        status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, first);
         if (!NT_SUCCESS(status))
             break; // STATUS_NO_MORE_FILES at the end
         for (ULONG offset = 0;;) {
@@ -115,9 +109,7 @@ NTSTATUS ReadFolder(const std::string &sub, std::vector<std::string> &list, int 
     return STATUS_SUCCESS;
 }
 
-// The files in F:\games, F:\titles and F:\Applications that can be started, sorted by name, the applications after
-// the games; a
-// failure only when none opens.
+// The files in F:\games, F:\titles and F:\Applications that can be started, sorted by name, the applications after the games; a failure only when none opens.
 NTSTATUS ReadList(std::vector<std::string> &list) {
     list.clear();
     NTSTATUS status = STATUS_OBJECT_PATH_NOT_FOUND;
@@ -160,8 +152,8 @@ void Draw(const std::vector<std::string> &list, int selected, int top, const cha
     sdl_screen::Present();
 }
 
-// Shows the message and starts the title: SDL and the USB host stop first, so nothing is left running into the title.
-// Returns only when the launch failed; the screen is open again then.
+// Shows the message and starts the title: SDL and the USB host stop first, so nothing is left running into the title. Returns only when the launch failed; the
+// screen is open again then.
 void Launch(const char *path, const std::vector<std::string> &list, int selected, int top, const char *message) {
     Draw(list, selected, top, message);
     sdl_screen::Close();
@@ -182,8 +174,7 @@ void Launch(const char *path, const std::vector<std::string> &list, int selected
             std::snprintf(message, sizeof(message), "Mounted %s, starting its title ...", file.c_str());
             Launch("\\Device\\CdRom0\\default.xbe", list, selected, top, message);
         }
-        std::snprintf(message, sizeof(message), "Cannot mount %s: status 0x%08lx", file.c_str(),
-                      static_cast<unsigned long>(status));
+        std::snprintf(message, sizeof(message), "Cannot mount %s: status 0x%08lx", file.c_str(), static_cast<unsigned long>(status));
         Draw(list, selected, top, message);
     }
     // XLaunchXBE returns only when the launch failed; stay on the message.
@@ -202,8 +193,7 @@ int main() {
     static char message[120];
     NTSTATUS status = ReadList(list);
     if (!NT_SUCCESS(status)) {
-        std::snprintf(message, sizeof(message), "None of F:\\games, F:\\titles, F:\\Applications opens: 0x%08lx",
-                      static_cast<unsigned long>(status));
+        std::snprintf(message, sizeof(message), "None of F:\\games, F:\\titles, F:\\Applications opens: 0x%08lx", static_cast<unsigned long>(status));
     }
 
     int selected = 0, top = 0, held = 0;

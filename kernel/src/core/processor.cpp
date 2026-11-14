@@ -1,5 +1,4 @@
-// Processor bring-up: GDT, TSSs, IDT and the processor control region (spec/stock/01_boot.md §2).
-// Selector layout matches the reference kernel:
+// Processor bring-up: GDT, TSSs, IDT and the processor control region (spec/stock/01_boot.md §2). Selector layout matches the reference kernel:
 //   0x08 code, 0x10 data, 0x18 main TSS, 0x20 FS -> KPCR, 0x28 double-fault TSS, 0x30 NMI TSS.
 #include <core/core.h>
 #include <diagnostics/diagnostics.h>
@@ -43,8 +42,7 @@ struct KTSS {
 };
 XK_SIZE(KTSS, 0x68);
 
-constexpr USHORT KGDT_R0_CODE = 0x08, KGDT_R0_DATA = 0x10, KGDT_TSS = 0x18, KGDT_R0_PCR = 0x20,
-                 KGDT_DF_TSS = 0x28, KGDT_NMI_TSS = 0x30;
+constexpr USHORT KGDT_R0_CODE = 0x08, KGDT_R0_DATA = 0x10, KGDT_TSS = 0x18, KGDT_R0_PCR = 0x20, KGDT_DF_TSS = 0x28, KGDT_NMI_TSS = 0x30;
 constexpr ULONG GDT_ENTRIES = 7;
 constexpr ULONG IDT_ENTRIES = 64;
 
@@ -58,8 +56,8 @@ alignas(16) UCHAR KiDoubleFaultStack[FAULT_STACK_SIZE];
 alignas(16) UCHAR KiNmiStack[FAULT_STACK_SIZE];
 
 SegmentDescriptor MakeSegment(ULONG base, ULONG limit, UCHAR access, UCHAR flags) {
-    return {(USHORT)(limit & 0xFFFF), (USHORT)(base & 0xFFFF), (UCHAR)(base >> 16), access,
-            (UCHAR)(((limit >> 16) & 0x0F) | (flags << 4)), (UCHAR)(base >> 24)};
+    return {(USHORT)(limit & 0xFFFF), (USHORT)(base & 0xFFFF), (UCHAR)(base >> 16), access, (UCHAR)(((limit >> 16) & 0x0F) | (flags << 4)),
+            (UCHAR)(base >> 24)};
 }
 
 GateDescriptor MakeInterruptGate(PVOID handler) {
@@ -97,10 +95,9 @@ extern "C" PVOID KiIrqStubs[16];
 
 // --- Double-fault and NMI tasks
 
-// The double-fault and NMI tasks (entry.S): the task switch saved the interrupted state in KiTss; record where it
-// was in CMOS (reported at the next boot), so a fault cascade does not just stop the console without a trace.
-// After the task's POST code (0xDF or 0xD2), the interrupted eip (4 bytes, low first) and esp (bytes 1-3) go to port
-// 0x80 too: a POST display or the Modxo's bus log then shows where it stopped on every build, not only a serial one.
+// The double-fault and NMI tasks (entry.S): the task switch saved the interrupted state in KiTss; record where it was in CMOS (reported at the next boot), so a
+// fault cascade does not just stop the console without a trace. After the task's POST code (0xDF or 0xD2), the interrupted eip (4 bytes, low first) and esp
+// (bytes 1-3) go to port 0x80 too: a POST display or the Modxo's bus log then shows where it stopped on every build, not only a serial one.
 extern "C" void KiFaultTaskReport(ULONG Kind) {
     diagnostics::SaveExceptionLastWords(Kind, KiTss.Eip);
     for (int i = 0; i < 4; i++)
@@ -118,8 +115,8 @@ static void InitializeGdt() {
     // 4 GB: the import-trace stubs run from pool (0xD0000000+).
     KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xFFFFF, 0x9B, 0xC);
 #else
-    // The reference's code-segment limit (spec/stock/23 §6.4): 0xBFFFFFFF, so a jump into the page tables, pool, the
-    // MMIO and AGP windows or the flash is an immediate #GP instead of running whatever is there.
+    // The reference's code-segment limit (spec/stock/23 §6.4): 0xBFFFFFFF, so a jump into the page tables, pool, the MMIO and AGP windows or the flash is an
+    // immediate #GP instead of running whatever is there.
     KiGdt[KGDT_R0_CODE / 8] = MakeSegment(0, 0xBFFFF, 0x9B, 0xC);
 #endif
     KiGdt[KGDT_R0_DATA / 8] = MakeSegment(0, 0xFFFFF, 0x93, 0xC);
@@ -187,11 +184,10 @@ static void InitializePcr() {
 
 // --- The page attribute table and microcode
 
-// The page attribute table as the retail 2BLs leave it (spec/stock/21 §1): PA0 WB, PA1 WC, PA2 UC-, PA3 UC, repeated.
-// With it a PTE's PWT bit means write-combined, which is what PAGE_WRITECOMBINE (PTE_PWT) and the 0xF0000000 window
-// rely on; the power-on table makes PWT write-through, i.e. cached: the CPU then keeps stale copies of memory the GPU
-// writes (fences, push-buffer state) and a title waits for it forever. Set here too so that any 2BL works; the
-// change follows Intel's procedure (caches off and flushed around the write, then a TLB flush).
+// The page attribute table as the retail 2BLs leave it (spec/stock/21 §1): PA0 WB, PA1 WC, PA2 UC-, PA3 UC, repeated. With it a PTE's PWT bit means
+// write-combined, which is what PAGE_WRITECOMBINE (PTE_PWT) and the 0xF0000000 window rely on; the power-on table makes PWT write-through, i.e. cached: the CPU
+// then keeps stale copies of memory the GPU writes (fences, push-buffer state) and a title waits for it forever. Set here too so that any 2BL works; the change
+// follows Intel's procedure (caches off and flushed around the write, then a TLB flush).
 static void InitializePat() {
     constexpr ULONGLONG RETAIL_PAT = 0x0007010600070106ULL;
     ULONG a, b, c, d;
@@ -208,11 +204,10 @@ static void InitializePat() {
     restore_flags(flags);
 }
 
-// CPU microcode (spec/stock/01 §2 step 3): the reference loads an update at start-up when cpuid(1) reports 0x686 or
-// 0x68A. Ours are Intel's published updates for those steppings on platform 4 (generated into ucode.inc by
-// tools/mkucode.py); one is loaded when both the signature and the platform (MSR 0x17 bits 50-52) match. Only at a
-// cold boot: a quick reboot does not reset the processor, so the update stays loaded, and the table is boot-only
-// memory (spec/oxos_internal/18_boot_memory.md).
+// CPU microcode (spec/stock/01 §2 step 3): the reference loads an update at start-up when cpuid(1) reports 0x686 or 0x68A. Ours are Intel's published updates
+// for those steppings on platform 4 (generated into ucode.inc by tools/mkucode.py); one is loaded when both the signature and the platform (MSR 0x17 bits
+// 50-52) match. Only at a cold boot: a quick reboot does not reset the processor, so the update stays loaded, and the table is boot-only memory
+// (spec/oxos_internal/18_boot_memory.md).
 #ifndef XK_HOST_TEST
 alignas(16) XK_BOOT_DATA static const ULONG KiMicrocode[][512] = {
 #include "ucode.inc"

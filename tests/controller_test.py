@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Controller input test: boot a BIOS with the controller test title's disc, press every input of a virtual gamepad and check
-which Xbox controller input the title receives for each.
+"""Controller input test: boot a BIOS with the controller test title's disc, press every input of a virtual gamepad and check which Xbox controller input the
+title receives for each.
 
-The title (tests/controller_test_title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this
-script finds it in a RAM dump (QMP pmemsave) and then reads it through its virtual address after each press.
+The title (tests/controller_test_title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this script finds it in a RAM dump (QMP
+pmemsave) and then reads it through its virtual address after each press.
 
 usage: controller_test.py --bios BIOS --iso controller_test_title.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
 """
@@ -18,13 +18,10 @@ AXES = ["LX", "LY", "RX", "RY"]
 SLOT_SIZE, SLOT_BASE, SLOTS = 64, 28, 4
 
 # Host input (virtual pad control, value) -> the Xbox input it should produce (xemu's default pad mapping).
-STEPS = [
-    ("A", 1, "A"), ("B", 1, "B"), ("X", 1, "X"), ("Y", 1, "Y"),
-    ("RB", 1, "BLACK"), ("LB", 1, "WHITE"), ("LT", 255, "LT"), ("RT", 255, "RT"),
-    ("HATY", -1, "UP"), ("HATY", 1, "DOWN"), ("HATX", -1, "LEFT"), ("HATX", 1, "RIGHT"),
-    ("START", 1, "START"), ("BACK", 1, "BACK"), ("LS", 1, "LS"), ("RS", 1, "RS"),
-    ("LX", -32768, "LX-"), ("LX", 32767, "LX+"), ("LY", -32768, "LY+"), ("LY", 32767, "LY-"),
-    ("RX", -32768, "RX-"), ("RX", 32767, "RX+"), ("RY", -32768, "RY+"), ("RY", 32767, "RY-"),
+STEPS = [("A", 1, "A"), ("B", 1, "B"), ("X", 1, "X"), ("Y", 1, "Y"), ("RB", 1, "BLACK"), ("LB", 1, "WHITE"), ("LT", 255, "LT"), ("RT", 255, "RT"), ("HATY", -1,
+    "UP"), ("HATY", 1, "DOWN"), ("HATX", -1, "LEFT"), ("HATX", 1, "RIGHT"), ("START", 1, "START"), ("BACK", 1, "BACK"), ("LS", 1, "LS"), ("RS", 1, "RS"), ("LX",
+    -32768, "LX-"), ("LX", 32767, "LX+"), ("LY", -32768, "LY+"), ("LY", 32767, "LY-"), ("RX", -32768, "RX-"), ("RX", 32767, "RX+"), ("RY", -32768, "RY+"),
+    ("RY", 32767, "RY-"),
 ]
 
 
@@ -44,8 +41,8 @@ def decode(report):
 def xemu_env():
     """Environment for an xemu that sees only the virtual pad, also while its window is not focused."""
     return dict(os.environ,
-                # SDL ignores gamepads while the app has no focus unless told otherwise: without this, a test fails
-                # whenever focus moves elsewhere (e.g. back to the terminal).
+                # SDL ignores gamepads while the app has no focus unless told otherwise: without this, a test fails whenever focus moves elsewhere (e.g. back to
+                # the terminal).
                 SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS="1",
                 # The user's own controllers would take controller port 1 and could press things mid-test.
                 SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=f"0x{VPAD_VENDOR:04x}/0x{VPAD_PRODUCT:04x}")
@@ -124,8 +121,7 @@ def main():
     pad = VirtualPad()  # before xemu starts, so it is bound to a controller port at startup
     log = open(os.path.join(work, "xemu.log"), "w")
     env = xemu_env()
-    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"],
-                            stdout=log, stderr=subprocess.STDOUT, env=env)
+    proc = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"], stdout=log, stderr=subprocess.STDOUT, env=env)
     ok = False
     try:
         for _ in range(100):

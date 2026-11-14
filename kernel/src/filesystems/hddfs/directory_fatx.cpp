@@ -1,13 +1,10 @@
-// FATX directories: 64-byte entries, ended by an end marker (spec/stock/04b). A FATX volume reaches its directory
-// operations through FATXFormat (at the end).
+// FATX directories: 64-byte entries, ended by an end marker (spec/stock/04b). A FATX volume reaches its directory operations through FATXFormat (at the end).
 #include <filesystems/hddfs/hddfs.h>
 
 namespace xk::filesystems {
 
-// Map entry Index of a directory. With Extend, a directory that ends exactly there grows by one cluster
-// (filled with end markers).
-static NTSTATUS FATXMapDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, FATX_DIRENT **Entry,
-                              LONGLONG *BlockOffset, bool Extend) {
+// Map entry Index of a directory. With Extend, a directory that ends exactly there grows by one cluster (filled with end markers).
+static NTSTATUS FATXMapDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, FATX_DIRENT **Entry, LONGLONG *BlockOffset, bool Extend) {
     ULONG byte = Index * sizeof(FATX_DIRENT);
     ULONG clusterIndex = byte >> v->ClusterShift, within = byte & (v->BytesPerCluster - 1);
     ULONG cluster;
@@ -135,8 +132,7 @@ NTSTATUS FATXRemoveDirent(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     }
     return status;
 }
-NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes,
-                          ULONG FirstCluster, ULONG *Index) {
+NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, UCHAR Attributes, ULONG FirstCluster, ULONG *Index) {
     for (ULONG i = 0;; i++) {
         FATX_DIRENT *e;
         LONGLONG block;
@@ -222,7 +218,7 @@ NTSTATUS FATXIsDirectoryEmpty(HDDFS_VOLUME *v, HDDFS_FCB *dir) {
 }
 
 // The directory operations of a FATX volume (HDDFS_VOLUME::Format).
-const HDDFS_FORMAT FATXFormat = {FATXLookup, FATXReadEntry, FATXNextEntry, FATXInitDirectory, FATXRemoveDirent,
-                                  FATXCreateDirent, FATXFlushFcb, FATXDeleteDirent, FATXIsDirectoryEmpty};
+const HDDFS_FORMAT FATXFormat = {FATXLookup, FATXReadEntry, FATXNextEntry, FATXInitDirectory, FATXRemoveDirent, FATXCreateDirent, FATXFlushFcb,
+                                  FATXDeleteDirent, FATXIsDirectoryEmpty};
 
 } // namespace xk::filesystems

@@ -4,18 +4,18 @@
 usage: trace.py --qmp SOCK --map xboxkrnl.map [--exports exports.tsv] [--last N] [--only NAMES] [--hide NAMES]
                 [--all] [--thread ID] [--save FILE | --load FILE]
 
-`make run_trace_full` runs a title in xemu and dumps the ring by itself when the kernel reports a crash on the serial
-port and when xemu is closed (tools/run.py --trace-map). Any time in between, `make print_trace_dump` in another terminal
-prints it. xemu is paused while the ring is copied (a fraction of a second) and then resumed.
+`make run_trace_full` runs a title in xemu and dumps the ring by itself when the kernel reports a crash on the serial port and when xemu is closed (tools/run.py
+--trace-map). Any time in between, `make print_trace_dump` in another terminal prints it. xemu is paused while the ring is copied (a fraction of a second) and
+then resumed.
 
-Each line: sequence number, function, return value ("(no return)" while the call has not returned: the thread is
-blocked in it, ended in it, or crashed there), caller's return address, thread, the first three stack arguments, and:
+Each line: sequence number, function, return value ("(no return)" while the call has not returned: the thread is blocked in it, ended in it, or crashed there),
+caller's return address, thread, the first three stack arguments, and:
 - NtCreateFile/NtOpenFile: the end of the path, share access and create/open options;
 - NtQueryFullAttributesFile, NtDeleteFile, IoCreate/DeleteSymbolicLink: the end of the name;
 - NtReadFile/NtWriteFile: APC context, I/O status block, buffer, length, byte offset, the buffer's first dword;
 - NtSetInformationFile: information class, length, the first four dwords of the information.
-The kernel itself never records the most frequent calls (IRQL, critical sections, spin locks, NtYieldExecution, ...);
-by default this tool also hides a list of other very common ones (waits, events, timers, pool), --all shows them.
+The kernel itself never records the most frequent calls (IRQL, critical sections, spin locks, NtYieldExecution, ...); by default this tool also hides a list of
+other very common ones (waits, events, timers, pool), --all shows them.
 """
 import argparse, json, os, re, socket, struct, sys, tempfile
 
@@ -169,12 +169,11 @@ def report(count, data, table, last=200, only=None, hide=(), show_all=False, thr
         if (only and name not in only) or name in hidden or (thread is not None and e[2] != thread):
             continue
         ret = "(no return)" if e[6] == NOT_RETURNED else f"{e[6]:#010x}"
-        lines.append(f"{seq:7d} {name:30s} -> {ret:11s} from {e[1]:#010x} thr {e[2]:#010x} "
-                     f"args {e[3]:#x} {e[4]:#x} {e[5]:#x}  {detail(e)}".rstrip())
+        lines.append(f"{seq:7d} {name:30s} -> {ret:11s} from {e[1]:#010x} thr {e[2]:#010x} " f"args {e[3]:#x} {e[4]:#x} {e[5]:#x}  {detail(e)}".rstrip())
         if last and len(lines) == last:
             break
-    header = (f"{count} calls recorded, the last {min(count, RING)} kept; showing {len(lines)}"
-              + ("" if show_all or only else " (common calls hidden: --all shows them)"))
+    header = (f"{count} calls recorded, the last {min(count, RING)} kept; showing {len(lines)}" + ("" if show_all or
+              only else " (common calls hidden: --all shows them)"))
     return [header] + lines[::-1]
 
 
@@ -203,8 +202,7 @@ def main():
                 print(f"ring saved to {a.save}")
     except TraceError as e:
         sys.exit(str(e))
-    print("\n".join(report(count, data, names(a.exports), a.last, a.only.split(",") if a.only else None,
-                           a.hide.split(",") if a.hide else (), a.all, a.thread)))
+    print("\n".join(report(count, data, names(a.exports), a.last, a.only.split(",") if a.only else None, a.hide.split(",") if a.hide else (), a.all, a.thread)))
 
 
 if __name__ == "__main__":

@@ -124,19 +124,16 @@ TEST_F(Mm, ContiguousMemoryHonoursTheRangeAndAlignment) {
     EXPECT_LE(pa + 3 * 4096 - 1, 0x1FFFFFu);
     EXPECT_EQ(pa & 0xFFFF, 0u);
     MmFreeContiguousMemory(p);
-    EXPECT_EQ(MmAllocateContiguousMemoryEx(0x200000, 0x1000000, 0x10FFFFF, 0, PAGE_READWRITE), nullptr)
-        << "larger than the range";
+    EXPECT_EQ(MmAllocateContiguousMemoryEx(0x200000, 0x1000000, 0x10FFFFF, 0, PAGE_READWRITE), nullptr) << "larger than the range";
 }
 
 TEST_F(Mm, ContiguousMemoryWithTheLowestAboveTheHighestClampsTheLowest) {
-    // As the reference (0x8001dc6c): the lowest page is clamped to the highest, so only the highest page qualifies,
-    // below the requested lowest address.
+    // As the reference (0x8001dc6c): the lowest page is clamped to the highest, so only the highest page qualifies, below the requested lowest address.
     auto p = MmAllocateContiguousMemoryEx(4096, 0x2000000, 0x1FFFFF, 0, PAGE_READWRITE);
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(MmGetPhysicalAddress(p), 0x1FF000u);
     MmFreeContiguousMemory(p);
-    EXPECT_EQ(MmAllocateContiguousMemoryEx(2 * 4096, 0x2000000, 0x1FFFFF, 0, PAGE_READWRITE), nullptr)
-        << "two pages do not fit in the one-page window";
+    EXPECT_EQ(MmAllocateContiguousMemoryEx(2 * 4096, 0x2000000, 0x1FFFFF, 0, PAGE_READWRITE), nullptr) << "two pages do not fit in the one-page window";
 }
 
 TEST_F(Mm, ContiguousMemoryTypes) {
@@ -150,8 +147,7 @@ TEST_F(Mm, ContiguousMemoryTypes) {
     EXPECT_EQ(MmQueryAddressProtect(uc), PAGE_READWRITE | PAGE_NOCACHE);
     EXPECT_EQ(MmQueryAddressProtect(wc), PAGE_READWRITE | PAGE_WRITECOMBINE);
     EXPECT_EQ(MmQueryAddressProtect(ro), PAGE_READONLY);
-    EXPECT_EQ(MmAllocateContiguousMemoryEx(4096, 0, 0xFFFFFFFF, 0, PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE),
-              nullptr);
+    EXPECT_EQ(MmAllocateContiguousMemoryEx(4096, 0, 0xFFFFFFFF, 0, PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE), nullptr);
     MmFreeContiguousMemory(uc);
     MmFreeContiguousMemory(wc);
     MmFreeContiguousMemory(ro);
@@ -189,8 +185,8 @@ TEST_F(Mm, ContiguousRequestsMoveUnlockedPagesAndKeepTheirContents) {
 }
 
 TEST_F(Mm, LockedPagesAreNotMoved) {
-    // Allocate every free page as single system pages, lock one in the middle, then ask for a contiguous run of
-    // half of memory: the locked page must stay where it is.
+    // Allocate every free page as single system pages, lock one in the middle, then ask for a contiguous run of half of memory: the locked page must stay where
+    // it is.
     std::vector<uint8_t *> pages;
     while (memory::AvailablePages > 64) {
         auto p = (uint8_t *)MmAllocateSystemMemory(4096, PAGE_READWRITE);

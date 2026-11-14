@@ -3,8 +3,8 @@
 // XAPI's XInputGetState(hDevice, pState), linked into every XDK title, starts
 //     push ebx; push esi; xor ebx, ebx; call [KeRaiseIrqlToDpcLevel]
 //     mov reg, [esp+0Ch]; <2 bytes> A3 00 00 00   (the device field at +0xA3)
-// When that is the caller, its return address is redirected to HalpIgrReturn, which sees the filled-in state once
-// the function has returned: no title code is patched.
+// When that is the caller, its return address is redirected to HalpIgrReturn, which sees the filled-in state once the function has returned: no title code is
+// patched.
     .text
     .globl _KeRaiseIrqlToDpcLevel@0
 _KeRaiseIrqlToDpcLevel@0:
@@ -17,9 +17,8 @@ _KeRaiseIrqlToDpcLevel@0:
     jne 1f
     cmpl $0xA3, 6(%eax)
     jne 1f
-    // Stack: our return, saved esi, saved ebx, the title's return, hDevice, pState. Move these six down by 12 bytes
-    // and put HalpIgrReturn where the title's return address was copied to: XInputGetState's "ret 8" then lands in
-    // HalpIgrReturn with the original return address, hDevice and pState above it.
+    // Stack: our return, saved esi, saved ebx, the title's return, hDevice, pState. Move these six down by 12 bytes and put HalpIgrReturn where the title's
+    // return address was copied to: XInputGetState's "ret 8" then lands in HalpIgrReturn with the original return address, hDevice and pState above it.
     subl $12, %esp
     pushl %esi
     pushl %edi

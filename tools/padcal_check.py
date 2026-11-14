@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Check that OXOS's NV2A pad calibration (kernel/boot/bl.cpp BlPadCalibrate) makes exactly the NV2A writes of a
-reference routine (spec/stock/21 §3), by running both in the Unicorn CPU emulator (pip install unicorn) with the
-same fake measurements, straps and upgraded-memory flag.
+"""Check that OXOS's NV2A pad calibration (kernel/boot/bl.cpp BlPadCalibrate) makes exactly the NV2A writes of a reference routine (spec/stock/21 §3), by
+running both in the Unicorn CPU emulator (pip install unicorn) with the same fake measurements, straps and upgraded-memory flag.
 
 usage: padcal_check.py REF REF_LOADER REF_BIOS OUR_BL_ELF OUR_IMAGE [CASES]
   REF         cerbios: REF_LOADER = Cerbios's bootloader (runs at 0x90000; table routine 0x9103C(base, flag))

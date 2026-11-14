@@ -1,7 +1,6 @@
-// Draws a vector splash scene (tools/svg_splash.py) with the kernel's renderer and writes the start picture, the end
-// picture and the half-way point of the cross-fade as PPM files; with --frames, every frame of the boot animation
-// instead (OUT-0000.ppm ...: 25 per second, as kernel/src/boot_splash/splash.cpp shows them, to 8 s), for a preview
-// video (the jingle starts 2 s in): ffmpeg -framerate 25 -i OUT-%04d.ppm -itsoffset 2 -i jingle.wav ... (tools/jingle)
+// Draws a vector splash scene (tools/svg_splash.py) with the kernel's renderer and writes the start picture, the end picture and the half-way point of the
+// cross-fade as PPM files; with --frames, every frame of the boot animation instead (OUT-0000.ppm ...: 25 per second, as kernel/src/boot_splash/splash.cpp
+// shows them, to 8 s), for a preview video (the jingle starts 2 s in): ffmpeg -framerate 25 -i OUT-%04d.ppm -itsoffset 2 -i jingle.wav ... (tools/jingle)
 #include <graphics/vector_renderer.h>
 
 #include <cstdio>
@@ -43,8 +42,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: check %u failed\n", argv[1], status);
         return 1;
     }
-    std::vector<unsigned> scratch(scratchBytes / 4 + 1), start(vector_renderer::W * vector_renderer::H),
-        end(start.size()), mid(start.size());
+    std::vector<unsigned> scratch(scratchBytes / 4 + 1), start(vector_renderer::W * vector_renderer::H), end(start.size()), mid(start.size());
     vector_renderer::Render(scene.data(), (unsigned)scene.size(), vector_renderer::START, start.data(), scratch.data());
     vector_renderer::Render(scene.data(), (unsigned)scene.size(), vector_renderer::END, end.data(), scratch.data());
     for (size_t i = 0; i < mid.size(); i++) {
@@ -55,9 +53,9 @@ int main(int argc, char **argv) {
     }
     std::string out = argv[2];
     if (frames) {
-        // The splash thread's timeline (kernel/src/boot_splash/splash.cpp): 0.5 s from black to the start picture,
-        // which stays until 1 s; the jingle starts and the picture cross-fades (smoothstep) to the end picture, there
-        // at the jingle's climax 2.6 s later; held 1.4 s, as the jingle's chord dies away; then black (the title).
+        // The splash thread's timeline (kernel/src/boot_splash/splash.cpp): 0.5 s from black to the start picture, which stays until 1 s; the jingle starts and
+        // the picture cross-fades (smoothstep) to the end picture, there at the jingle's climax 2.6 s later; held 1.4 s, as the jingle's chord dies away; then
+        // black (the title).
         const unsigned introMs = 500, logoMs = 1000, climaxMs = 2600, holdMs = 1400;
         std::vector<unsigned> frame(start.size());
         unsigned n = 0;
@@ -92,7 +90,6 @@ int main(int argc, char **argv) {
         perror(out.c_str());
         return 1;
     }
-    printf("scene %zu bytes, scratch %u bytes: %s-start.ppm, %s-end.ppm, %s-mid.ppm\n", scene.size(), scratchBytes,
-           argv[2], argv[2], argv[2]);
+    printf("scene %zu bytes, scratch %u bytes: %s-start.ppm, %s-end.ppm, %s-mid.ppm\n", scene.size(), scratchBytes, argv[2], argv[2], argv[2]);
     return 0;
 }

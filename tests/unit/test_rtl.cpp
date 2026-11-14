@@ -1,5 +1,4 @@
-// Run-time library: memory, strings and conversions, formatting, time, critical sections and read/write locks,
-// interlocked operations, integer conversions.
+// Run-time library: memory, strings and conversions, formatting, time, critical sections and read/write locks, interlocked operations, integer conversions.
 #include "kernel_test.h"
 #include <objects/objects.h>
 

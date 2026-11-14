@@ -1,6 +1,5 @@
-// PE images for kernel extensions (spec/oxos_internal/34 §8). Offsets are the PE/COFF format's (Microsoft's "PE
-// Format" specification): the file header after the "PE\0\0" signature, the 32-bit optional header after it, its
-// data directories, then the section table.
+// PE images for kernel extensions (spec/oxos_internal/34 §8). Offsets are the PE/COFF format's (Microsoft's "PE Format" specification): the file header after
+// the "PE\0\0" signature, the 32-bit optional header after it, its data directories, then the section table.
 #include <extensions/extension_parser.h>
 
 namespace xk::extensions {
@@ -204,8 +203,7 @@ ULONG FindExport(const UCHAR *Image, ULONG ImageSize, const char *Name) {
     ULONG functionCount = Read32(Image + rva + 0x14), nameCount = Read32(Image + rva + 0x18);
     ULONG functions = Read32(Image + rva + 0x1C), names = Read32(Image + rva + 0x20);
     ULONG ordinals = Read32(Image + rva + 0x24);
-    if (!Inside(names, nameCount * 4, ImageSize) || !Inside(ordinals, nameCount * 2, ImageSize) ||
-        !Inside(functions, functionCount * 4, ImageSize))
+    if (!Inside(names, nameCount * 4, ImageSize) || !Inside(ordinals, nameCount * 2, ImageSize) || !Inside(functions, functionCount * 4, ImageSize))
         return 0;
     for (ULONG i = 0; i < nameCount; i++) {
         if (!NameIs(Image, ImageSize, Read32(Image + names + i * 4), Name, false))

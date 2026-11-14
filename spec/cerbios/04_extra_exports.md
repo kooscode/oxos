@@ -13,5 +13,5 @@ Studied from Cerbios 3.1.0 Beta's export table (378 ordinals; retail 4627: 366).
 | 377 | MmDbgReleaseAddress | implemented (0x80022D01) | |
 | 378 | MmDbgWriteCheck | implemented (0x80022C9D) | |
 
-These serve Debug mode (spec 14 §1: the debug monitor `xbdm.dll` is loaded into memory from MmDbgAllocateMemory).
-The behaviour of each MmDbg* function (and whether it uses spec 02's second page region) is still to study.
+These serve Debug mode (spec 14 §1: the debug monitor `xbdm.dll` is loaded into memory from MmDbgAllocateMemory). The behaviour of each MmDbg* function (and
+whether it uses spec 02's second page region) is still to study.

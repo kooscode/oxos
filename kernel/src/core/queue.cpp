@@ -23,8 +23,7 @@ LONG InsertQueue(PKQUEUE Queue, PLIST_ENTRY Entry, bool Head) {
     LONG previous = Queue->Header.SignalState;
     PKTHREAD current = Prcb.CurrentThread;
     PLIST_ENTRY waitEntry = Queue->Header.WaitListHead.Blink; // waiters are served LIFO
-    if (waitEntry != &Queue->Header.WaitListHead && Queue->CurrentCount < Queue->MaximumCount &&
-        (current->Queue != Queue || current->WaitReason != WrQueue)) {
+    if (waitEntry != &Queue->Header.WaitListHead && Queue->CurrentCount < Queue->MaximumCount && (current->Queue != Queue || current->WaitReason != WrQueue)) {
         PKTHREAD t = CONTAINING_RECORD(waitEntry, KWAIT_BLOCK, WaitListEntry)->Thread;
         UnwaitThread(t, (LONG)Entry, 0);
     } else {
@@ -51,12 +50,10 @@ XBAPI LONG NTAPI KeInsertHeadQueue(PKQUEUE Queue, PLIST_ENTRY Entry) {
     return previous;
 }
 
-// A thread associated with Queue is about to block on something else: release its concurrency
-// slot and give a queued entry to another waiter.
+// A thread associated with Queue is about to block on something else: release its concurrency slot and give a queued entry to another waiter.
 void ActivateWaiterQueue(PKQUEUE Queue) {
     Queue->CurrentCount--;
-    if (Queue->CurrentCount < Queue->MaximumCount && !IsListEmpty(&Queue->EntryListHead) &&
-        !IsListEmpty(&Queue->Header.WaitListHead)) {
+    if (Queue->CurrentCount < Queue->MaximumCount && !IsListEmpty(&Queue->EntryListHead) && !IsListEmpty(&Queue->Header.WaitListHead)) {
         PLIST_ENTRY entry = RemoveHeadList(&Queue->EntryListHead);
         Queue->Header.SignalState--;
         PKTHREAD t = CONTAINING_RECORD(Queue->Header.WaitListHead.Blink, KWAIT_BLOCK, WaitListEntry)->Thread;
@@ -166,8 +163,7 @@ XBAPI BOOLEAN NTAPI KeRemoveEntryDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVIC
     return wasInserted;
 }
 
-XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
-                                           PVOID SynchronizeContext) {
+XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext) {
     KIRQL old = KfRaiseIrql((KIRQL)Interrupt->Irql);
     BOOLEAN result = SynchronizeRoutine(SynchronizeContext);
     KfLowerIrql(old);

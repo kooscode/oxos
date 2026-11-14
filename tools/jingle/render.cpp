@@ -1,5 +1,5 @@
-// Renders the boot jingle (kernel/src/boot_splash/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints
-// its peak and loudness per half second: make -C tools/jingle, then tools/jingle/bin/jingle OUT.wav
+// Renders the boot jingle (kernel/src/boot_splash/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints its peak and loudness per half second:
+// make -C tools/jingle, then tools/jingle/bin/jingle OUT.wav
 #include <boot_splash/jingle.h>
 
 #include <chrono>
@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
     std::fwrite(pcm.data(), 2, pcm.size(), f);
     std::fclose(f);
 
-    std::printf("%u frames (%.2f s), state %u bytes, rendered in %.1f ms\n", jingle::Frames(),
-                double(jingle::Frames()) / jingle::RATE, jingle::StateSize(), ms);
+    std::printf("%u frames (%.2f s), state %u bytes, rendered in %.1f ms\n", jingle::Frames(), double(jingle::Frames()) / jingle::RATE, jingle::StateSize(),
+                ms);
     for (unsigned at = 0; at < jingle::Frames(); at += jingle::RATE / 2) {
         int peak = 0;
         double sum = 0;
@@ -51,8 +51,7 @@ int main(int argc, char **argv) {
             peak = std::max(peak, std::abs(int(pcm[i])));
             sum += double(pcm[i]) * pcm[i];
         }
-        std::printf("  %4.1f s  peak %6.1f dBFS  rms %6.1f dBFS\n", double(at) / jingle::RATE,
-                    20 * std::log10(std::max(peak, 1) / 32768.0),
+        std::printf("  %4.1f s  peak %6.1f dBFS  rms %6.1f dBFS\n", double(at) / jingle::RATE, 20 * std::log10(std::max(peak, 1) / 32768.0),
                     10 * std::log10(std::max(sum / n, 1.0) / (32768.0 * 32768.0)));
     }
     return 0;

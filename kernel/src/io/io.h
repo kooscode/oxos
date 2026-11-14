@@ -24,11 +24,9 @@ typedef NTSTATUS(NTAPI *PDRIVER_DISMOUNTVOLUME)(struct _DEVICE_OBJECT *DeviceObj
 typedef NTSTATUS(NTAPI *PIO_COMPLETION_ROUTINE)(struct _DEVICE_OBJECT *DeviceObject, struct _IRP *Irp, PVOID Context);
 
 constexpr ULONG FSCTL_DISMOUNT_VOLUME = 0x90020;
-constexpr UCHAR IRP_MJ_CREATE = 0, IRP_MJ_CLOSE = 1, IRP_MJ_READ = 2, IRP_MJ_WRITE = 3,
-                IRP_MJ_QUERY_INFORMATION = 4, IRP_MJ_SET_INFORMATION = 5, IRP_MJ_FLUSH_BUFFERS = 6,
-                IRP_MJ_QUERY_VOLUME_INFORMATION = 7, IRP_MJ_DIRECTORY_CONTROL = 8, IRP_MJ_FILE_SYSTEM_CONTROL = 9,
-                IRP_MJ_DEVICE_CONTROL = 0xA, IRP_MJ_INTERNAL_DEVICE_CONTROL = 0xB, IRP_MJ_SHUTDOWN = 0xC,
-                IRP_MJ_CLEANUP = 0xD, IRP_MJ_MAXIMUM_FUNCTION = 0xD;
+constexpr UCHAR IRP_MJ_CREATE = 0, IRP_MJ_CLOSE = 1, IRP_MJ_READ = 2, IRP_MJ_WRITE = 3, IRP_MJ_QUERY_INFORMATION = 4, IRP_MJ_SET_INFORMATION = 5,
+                IRP_MJ_FLUSH_BUFFERS = 6, IRP_MJ_QUERY_VOLUME_INFORMATION = 7, IRP_MJ_DIRECTORY_CONTROL = 8, IRP_MJ_FILE_SYSTEM_CONTROL = 9,
+                IRP_MJ_DEVICE_CONTROL = 0xA, IRP_MJ_INTERNAL_DEVICE_CONTROL = 0xB, IRP_MJ_SHUTDOWN = 0xC, IRP_MJ_CLEANUP = 0xD, IRP_MJ_MAXIMUM_FUNCTION = 0xD;
 
 typedef struct _DRIVER_OBJECT {
     PDRIVER_STARTIO DriverStartIo;
@@ -38,11 +36,9 @@ typedef struct _DRIVER_OBJECT {
 } DRIVER_OBJECT, *PDRIVER_OBJECT;
 XK_SIZE(DRIVER_OBJECT, 0x44);
 
-constexpr ULONG DO_RAW_MOUNT_ONLY = 1, DO_EXCLUSIVE = 2, DO_DIRECT_IO = 4, DO_DEVICE_HAS_NAME = 8,
-                DO_DEVICE_INITIALIZING = 0x10;
+constexpr ULONG DO_RAW_MOUNT_ONLY = 1, DO_EXCLUSIVE = 2, DO_DIRECT_IO = 4, DO_DEVICE_HAS_NAME = 8, DO_DEVICE_INITIALIZING = 0x10;
 constexpr UCHAR DO_STARTIO_BUSY = 1, DO_STARTIO_REQUESTED = 2, DO_STARTIO_REQUESTED_BYKEY = 4;
-constexpr UCHAR FILE_DEVICE_CD_ROM = 2, FILE_DEVICE_DISK = 7, FILE_DEVICE_UNKNOWN = 0x22,
-                FILE_DEVICE_MEMORY_UNIT = 0x3A, FILE_DEVICE_MEDIA_BOARD = 0x3B;
+constexpr UCHAR FILE_DEVICE_CD_ROM = 2, FILE_DEVICE_DISK = 7, FILE_DEVICE_UNKNOWN = 0x22, FILE_DEVICE_MEMORY_UNIT = 0x3A, FILE_DEVICE_MEDIA_BOARD = 0x3B;
 
 typedef struct _DEVICE_OBJECT {
     CSHORT Type;
@@ -72,8 +68,8 @@ typedef struct _IO_COMPLETION_CONTEXT {
     PVOID Key;
 } IO_COMPLETION_CONTEXT, *PIO_COMPLETION_CONTEXT;
 
-constexpr UCHAR FO_SYNCHRONOUS_IO = 1, FO_ALERTABLE_IO = 2, FO_NO_INTERMEDIATE_BUFFERING = 4,
-                FO_SEQUENTIAL_ONLY = 8, FO_HANDLE_CREATED = 0x20, FO_RANDOM_ACCESS = 0x40;
+constexpr UCHAR FO_SYNCHRONOUS_IO = 1, FO_ALERTABLE_IO = 2, FO_NO_INTERMEDIATE_BUFFERING = 4, FO_SEQUENTIAL_ONLY = 8, FO_HANDLE_CREATED = 0x20,
+                FO_RANDOM_ACCESS = 0x40;
 
 #pragma pack(push, 4) // CurrentByteOffset sits at 0x14
 typedef struct _FILE_OBJECT {
@@ -204,13 +200,11 @@ typedef struct _IO_STACK_LOCATION {
 XK_OFFSET(IO_STACK_LOCATION, DeviceObject, 0x14);
 XK_SIZE(IO_STACK_LOCATION, 0x24);
 
-constexpr UCHAR SL_PENDING_RETURNED = 1, SL_INVOKE_ON_CANCEL = 0x20, SL_INVOKE_ON_SUCCESS = 0x40,
-                SL_INVOKE_ON_ERROR = 0x80;
+constexpr UCHAR SL_PENDING_RETURNED = 1, SL_INVOKE_ON_CANCEL = 0x20, SL_INVOKE_ON_SUCCESS = 0x40, SL_INVOKE_ON_ERROR = 0x80;
 constexpr UCHAR SL_RESTART_SCAN = 1, SL_RETURN_SINGLE_ENTRY = 2, SL_INDEX_SPECIFIED = 4, SL_CASE_SENSITIVE = 0x80;
 
-constexpr ULONG IRP_NOCACHE = 1, IRP_PAGING_IO = 2, IRP_SYNCHRONOUS_API = 4, IRP_CREATE_OPERATION = 8,
-                IRP_READ_OPERATION = 0x10, IRP_WRITE_OPERATION = 0x20, IRP_CLOSE_OPERATION = 0x40,
-                IRP_DEFER_IO_COMPLETION = 0x80, IRP_UNLOCK_USER_BUFFER = 0x200;
+constexpr ULONG IRP_NOCACHE = 1, IRP_PAGING_IO = 2, IRP_SYNCHRONOUS_API = 4, IRP_CREATE_OPERATION = 8, IRP_READ_OPERATION = 0x10, IRP_WRITE_OPERATION = 0x20,
+                IRP_CLOSE_OPERATION = 0x40, IRP_DEFER_IO_COMPLETION = 0x80, IRP_UNLOCK_USER_BUFFER = 0x200;
 
 typedef struct _IRP {
     CSHORT Type;
@@ -280,46 +274,37 @@ static inline void IoCopyCurrentIrpStackLocationToNext(PIRP Irp) {
     next->Control = 0;
 }
 
-static inline void IoSetCompletionRoutine(PIRP Irp, PIO_COMPLETION_ROUTINE Routine, PVOID Context, bool Success,
-                                          bool Error, bool Cancel) {
+static inline void IoSetCompletionRoutine(PIRP Irp, PIO_COMPLETION_ROUTINE Routine, PVOID Context, bool Success, bool Error, bool Cancel) {
     PIO_STACK_LOCATION next = IoGetNextIrpStackLocation(Irp);
     next->CompletionRoutine = Routine;
     next->Context = Context;
-    next->Control = (Success ? SL_INVOKE_ON_SUCCESS : 0) | (Error ? SL_INVOKE_ON_ERROR : 0) |
-                    (Cancel ? SL_INVOKE_ON_CANCEL : 0);
+    next->Control = (Success ? SL_INVOKE_ON_SUCCESS : 0) | (Error ? SL_INVOKE_ON_ERROR : 0) | (Cancel ? SL_INVOKE_ON_CANCEL : 0);
 }
 
 // Access rights, share modes, dispositions, create options.
-constexpr ACCESS_MASK FILE_READ_DATA = 1, FILE_WRITE_DATA = 2, FILE_APPEND_DATA = 4, FILE_EXECUTE = 0x20,
-                      FILE_READ_ATTRIBUTES = 0x80, FILE_WRITE_ATTRIBUTES = 0x100, DELETE = 0x10000,
-                      SYNCHRONIZE = 0x100000, GENERIC_READ = 0x80000000, GENERIC_WRITE = 0x40000000;
+constexpr ACCESS_MASK FILE_READ_DATA = 1, FILE_WRITE_DATA = 2, FILE_APPEND_DATA = 4, FILE_EXECUTE = 0x20, FILE_READ_ATTRIBUTES = 0x80,
+                      FILE_WRITE_ATTRIBUTES = 0x100, DELETE = 0x10000, SYNCHRONIZE = 0x100000, GENERIC_READ = 0x80000000, GENERIC_WRITE = 0x40000000;
 constexpr ULONG FILE_SHARE_READ = 1, FILE_SHARE_WRITE = 2, FILE_SHARE_DELETE = 4;
 // File attributes (NT's values).
-constexpr UCHAR FILE_ATTRIBUTE_READONLY = 0x01, FILE_ATTRIBUTE_HIDDEN = 0x02, FILE_ATTRIBUTE_SYSTEM = 0x04,
-                FILE_ATTRIBUTE_DIRECTORY = 0x10, FILE_ATTRIBUTE_ARCHIVE = 0x20;
+constexpr UCHAR FILE_ATTRIBUTE_READONLY = 0x01, FILE_ATTRIBUTE_HIDDEN = 0x02, FILE_ATTRIBUTE_SYSTEM = 0x04, FILE_ATTRIBUTE_DIRECTORY = 0x10,
+                FILE_ATTRIBUTE_ARCHIVE = 0x20;
 constexpr ULONG FILE_ATTRIBUTE_NORMAL = 0x80;
-constexpr ULONG FILE_SUPERSEDE = 0, FILE_OPEN = 1, FILE_CREATE = 2, FILE_OPEN_IF = 3, FILE_OVERWRITE = 4,
-                FILE_OVERWRITE_IF = 5;
-constexpr ULONG FILE_DIRECTORY_FILE = 1, FILE_WRITE_THROUGH = 2, FILE_SEQUENTIAL_ONLY = 4,
-                FILE_NO_INTERMEDIATE_BUFFERING = 8, FILE_SYNCHRONOUS_IO_ALERT = 0x10,
-                FILE_SYNCHRONOUS_IO_NONALERT = 0x20, FILE_NON_DIRECTORY_FILE = 0x40, FILE_RANDOM_ACCESS = 0x800,
-                FILE_DELETE_ON_CLOSE = 0x1000;
+constexpr ULONG FILE_SUPERSEDE = 0, FILE_OPEN = 1, FILE_CREATE = 2, FILE_OPEN_IF = 3, FILE_OVERWRITE = 4, FILE_OVERWRITE_IF = 5;
+constexpr ULONG FILE_DIRECTORY_FILE = 1, FILE_WRITE_THROUGH = 2, FILE_SEQUENTIAL_ONLY = 4, FILE_NO_INTERMEDIATE_BUFFERING = 8, FILE_SYNCHRONOUS_IO_ALERT = 0x10,
+                FILE_SYNCHRONOUS_IO_NONALERT = 0x20, FILE_NON_DIRECTORY_FILE = 0x40, FILE_RANDOM_ACCESS = 0x800, FILE_DELETE_ON_CLOSE = 0x1000;
 constexpr ULONG FILE_OPEN_FOR_BACKUP_INTENT = 0x4000;
-// IoCreateFile Options (the low byte becomes the create stack location's Flags: SL_FORCE_ACCESS_CHECK 1,
-// SL_OPEN_TARGET_DIRECTORY 4).
-constexpr ULONG IO_FORCE_ACCESS_CHECK = 1, IO_OPEN_TARGET_DIRECTORY = 4, IO_NO_PARAMETER_CHECKING = 0x100,
-                IO_CHECK_CREATE_PARAMETERS = 0x200;
+// IoCreateFile Options (the low byte becomes the create stack location's Flags: SL_FORCE_ACCESS_CHECK 1, SL_OPEN_TARGET_DIRECTORY 4).
+constexpr ULONG IO_FORCE_ACCESS_CHECK = 1, IO_OPEN_TARGET_DIRECTORY = 4, IO_NO_PARAMETER_CHECKING = 0x100, IO_CHECK_CREATE_PARAMETERS = 0x200;
 
 // A read or write at this byte offset {LOW, HIGH} uses the file's current position.
 constexpr ULONG FILE_USE_FILE_POINTER_POSITION_HIGH = 0xFFFFFFFF, FILE_USE_FILE_POINTER_POSITION_LOW = 0xFFFFFFFE;
 
-constexpr NTSTATUS STATUS_PENDING = 0x103, STATUS_INVALID_INFO_CLASS = (NTSTATUS)0xC0000003,
-                   STATUS_INFO_LENGTH_MISMATCH = (NTSTATUS)0xC0000004, STATUS_INVALID_PARAMETER = (NTSTATUS)0xC000000D,
-                   STATUS_NO_SUCH_DEVICE = (NTSTATUS)0xC000000E, STATUS_INVALID_DEVICE_REQUEST = (NTSTATUS)0xC0000010,
-                   STATUS_END_OF_FILE = (NTSTATUS)0xC0000011, STATUS_MORE_PROCESSING_REQUIRED = (NTSTATUS)0xC0000016,
-                   STATUS_ACCESS_DENIED = (NTSTATUS)0xC0000022, STATUS_SHARING_VIOLATION = (NTSTATUS)0xC0000043,
-                   STATUS_INSUFFICIENT_RESOURCES = (NTSTATUS)0xC000009A, STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4,
-                   STATUS_UNRECOGNIZED_VOLUME = (NTSTATUS)0xC000014F;
+constexpr NTSTATUS STATUS_PENDING = 0x103, STATUS_INVALID_INFO_CLASS = (NTSTATUS)0xC0000003, STATUS_INFO_LENGTH_MISMATCH = (NTSTATUS)0xC0000004,
+                   STATUS_INVALID_PARAMETER = (NTSTATUS)0xC000000D, STATUS_NO_SUCH_DEVICE = (NTSTATUS)0xC000000E,
+                   STATUS_INVALID_DEVICE_REQUEST = (NTSTATUS)0xC0000010, STATUS_END_OF_FILE = (NTSTATUS)0xC0000011,
+                   STATUS_MORE_PROCESSING_REQUIRED = (NTSTATUS)0xC0000016, STATUS_ACCESS_DENIED = (NTSTATUS)0xC0000022,
+                   STATUS_SHARING_VIOLATION = (NTSTATUS)0xC0000043, STATUS_INSUFFICIENT_RESOURCES = (NTSTATUS)0xC000009A,
+                   STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4, STATUS_UNRECOGNIZED_VOLUME = (NTSTATUS)0xC000014F;
 
 typedef struct _FILE_POSITION_INFORMATION {
     LARGE_INTEGER CurrentByteOffset;
@@ -354,8 +339,8 @@ typedef struct _FILE_IO_COMPLETION_INFORMATION {
 
 XBAPI OBJECT_TYPE IoDeviceObjectType, IoFileObjectType, IoCompletionObjectType;
 
-XBAPI NTSTATUS NTAPI IoCreateDevice(PDRIVER_OBJECT DriverObject, ULONG DeviceExtensionSize, POBJECT_STRING DeviceName,
-                                    ULONG DeviceType, BOOLEAN Exclusive, PDEVICE_OBJECT *DeviceObject);
+XBAPI NTSTATUS NTAPI IoCreateDevice(PDRIVER_OBJECT DriverObject, ULONG DeviceExtensionSize, POBJECT_STRING DeviceName, ULONG DeviceType, BOOLEAN Exclusive,
+                                    PDEVICE_OBJECT *DeviceObject);
 XBAPI void NTAPI IoDeleteDevice(PDEVICE_OBJECT DeviceObject);
 XBAPI NTSTATUS NTAPI IoCreateSymbolicLink(POBJECT_STRING SymbolicLinkName, POBJECT_STRING DeviceName);
 XBAPI NTSTATUS NTAPI IoDeleteSymbolicLink(POBJECT_STRING SymbolicLinkName);
@@ -364,77 +349,57 @@ XBAPI void NTAPI IoInitializeIrp(PIRP Irp, USHORT PacketSize, CCHAR StackSize);
 XBAPI void NTAPI IoFreeIrp(PIRP Irp);
 XBAPI NTSTATUS FASTCALL IofCallDriver(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost);
-XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                               ULONG Length, PLARGE_INTEGER StartingOffset,
+XBAPI PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset,
                                                PIO_STATUS_BLOCK IoStatusBlock);
-XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                              ULONG Length, PLARGE_INTEGER StartingOffset, PKEVENT Event,
-                                              PIO_STATUS_BLOCK IoStatusBlock);
-XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer,
-                                               ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength,
-                                               BOOLEAN InternalDeviceIoControl, PKEVENT Event,
-                                               PIO_STATUS_BLOCK IoStatusBlock);
-XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer,
-                                             ULONG Length, PLARGE_INTEGER StartingOffset);
-XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject,
-                                                         PVOID InputBuffer, ULONG InputBufferLength,
-                                                         PVOID OutputBuffer, ULONG OutputBufferLength,
-                                                         PULONG ReturnedOutputBufferLength,
+XBAPI PIRP NTAPI IoBuildSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset,
+                                              PKEVENT Event, PIO_STATUS_BLOCK IoStatusBlock);
+XBAPI PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer,
+                                               ULONG OutputBufferLength, BOOLEAN InternalDeviceIoControl, PKEVENT Event, PIO_STATUS_BLOCK IoStatusBlock);
+XBAPI NTSTATUS NTAPI IoSynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset);
+XBAPI NTSTATUS NTAPI IoSynchronousDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer, ULONG InputBufferLength,
+                                                         PVOID OutputBuffer, ULONG OutputBufferLength, PULONG ReturnedOutputBufferLength,
                                                          BOOLEAN InternalDeviceIoControl);
 XBAPI void NTAPI IoStartPacket(PDEVICE_OBJECT DeviceObject, PIRP Irp, PULONG Key);
 XBAPI void NTAPI IoStartNextPacket(PDEVICE_OBJECT DeviceObject);
 XBAPI void NTAPI IoStartNextPacketByKey(PDEVICE_OBJECT DeviceObject, ULONG Key);
-XBAPI NTSTATUS NTAPI IoCheckShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject,
-                                        PSHARE_ACCESS ShareAccess, BOOLEAN Update);
-XBAPI void NTAPI IoSetShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject,
-                                  PSHARE_ACCESS ShareAccess);
+XBAPI NTSTATUS NTAPI IoCheckShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess,
+                                        BOOLEAN Update);
+XBAPI void NTAPI IoSetShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess);
 XBAPI void NTAPI IoRemoveShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess);
 XBAPI NTSTATUS NTAPI IoInvalidDeviceRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp);
-XBAPI NTSTATUS NTAPI IoSetIoCompletion(PVOID IoCompletion, PVOID KeyContext, PVOID ApcContext, NTSTATUS IoStatus,
-                                       ULONG_PTR IoStatusInformation);
+XBAPI NTSTATUS NTAPI IoSetIoCompletion(PVOID IoCompletion, PVOID KeyContext, PVOID ApcContext, NTSTATUS IoStatus, ULONG_PTR IoStatusInformation);
 
-XBAPI NTSTATUS NTAPI IoCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
-                                  PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER AllocationSize, ULONG FileAttributes,
-                                  ULONG ShareAccess, ULONG Disposition, ULONG CreateOptions, ULONG Options);
-XBAPI NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
-                                  PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER AllocationSize, ULONG FileAttributes,
-                                  ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions);
+XBAPI NTSTATUS NTAPI IoCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                                  PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG Disposition, ULONG CreateOptions,
+                                  ULONG Options);
+XBAPI NTSTATUS NTAPI NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                                  PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions);
 XBAPI NTSTATUS NTAPI NtDeleteFile(POBJECT_ATTRIBUTES ObjectAttributes);
-XBAPI NTSTATUS NTAPI NtQueryFullAttributesFile(POBJECT_ATTRIBUTES ObjectAttributes,
-                                               PFILE_NETWORK_OPEN_INFORMATION FileInformation);
-XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes,
-                                PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions);
-XBAPI NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                                PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                PLARGE_INTEGER ByteOffset);
-XBAPI NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                                 PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer, ULONG Length,
-                                 PLARGE_INTEGER ByteOffset);
-XBAPI NTSTATUS NTAPI NtDeviceIoControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
-                                           PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG IoControlCode,
-                                           PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer,
-                                           ULONG OutputBufferLength);
-XBAPI NTSTATUS NTAPI NtFsControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                                     PIO_STATUS_BLOCK IoStatusBlock, ULONG FsControlCode, PVOID InputBuffer,
-                                     ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength);
-XBAPI NTSTATUS NTAPI NtQueryInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
-                                            ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
-XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
-                                          ULONG Length, FILE_INFORMATION_CLASS FileInformationClass);
-XBAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock,
-                                                  PVOID FsInformation, ULONG Length,
+XBAPI NTSTATUS NTAPI NtQueryFullAttributesFile(POBJECT_ATTRIBUTES ObjectAttributes, PFILE_NETWORK_OPEN_INFORMATION FileInformation);
+XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
+                                ULONG ShareAccess, ULONG OpenOptions);
+XBAPI NTSTATUS NTAPI NtReadFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer,
+                                ULONG Length, PLARGE_INTEGER ByteOffset);
+XBAPI NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer,
+                                 ULONG Length, PLARGE_INTEGER ByteOffset);
+XBAPI NTSTATUS NTAPI NtDeviceIoControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                           ULONG IoControlCode, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength);
+XBAPI NTSTATUS NTAPI NtFsControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                     ULONG FsControlCode, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength);
+XBAPI NTSTATUS NTAPI NtQueryInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length,
+                                            FILE_INFORMATION_CLASS FileInformationClass);
+XBAPI NTSTATUS NTAPI NtSetInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length,
+                                          FILE_INFORMATION_CLASS FileInformationClass);
+XBAPI NTSTATUS NTAPI NtQueryVolumeInformationFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock, PVOID FsInformation, ULONG Length,
                                                   FS_INFORMATION_CLASS FsInformationClass);
-XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
-                                          PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
-                                          ULONG Length, FILE_INFORMATION_CLASS FileInformationClass,
-                                          POBJECT_STRING FileName, BOOLEAN RestartScan);
+XBAPI NTSTATUS NTAPI NtQueryDirectoryFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                          PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, POBJECT_STRING FileName,
+                                          BOOLEAN RestartScan);
 XBAPI NTSTATUS NTAPI NtFlushBuffersFile(HANDLE FileHandle, PIO_STATUS_BLOCK IoStatusBlock);
-XBAPI NTSTATUS NTAPI NtCreateIoCompletion(PHANDLE IoCompletionHandle, ACCESS_MASK DesiredAccess,
-                                          POBJECT_ATTRIBUTES ObjectAttributes, ULONG Count);
-XBAPI NTSTATUS NTAPI NtSetIoCompletion(HANDLE IoCompletionHandle, PVOID KeyContext, PVOID ApcContext,
-                                       NTSTATUS IoStatus, ULONG_PTR IoStatusInformation);
-XBAPI NTSTATUS NTAPI NtRemoveIoCompletion(HANDLE IoCompletionHandle, PVOID *KeyContext, PVOID *ApcContext,
-                                          PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER Timeout);
+XBAPI NTSTATUS NTAPI NtCreateIoCompletion(PHANDLE IoCompletionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, ULONG Count);
+XBAPI NTSTATUS NTAPI NtSetIoCompletion(HANDLE IoCompletionHandle, PVOID KeyContext, PVOID ApcContext, NTSTATUS IoStatus, ULONG_PTR IoStatusInformation);
+XBAPI NTSTATUS NTAPI NtRemoveIoCompletion(HANDLE IoCompletionHandle, PVOID *KeyContext, PVOID *ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                          PLARGE_INTEGER Timeout);
 XBAPI void NTAPI NtUserIoApcDispatcher(PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG Reserved);
 
 // The file systems the I/O manager tries when it mounts a volume (internal).
@@ -462,18 +427,15 @@ void QueueThreadIrp(PIRP Irp);
 void LockUserBuffer(PIRP Irp, ULONG Length);
 void CompleteRequestInline(PIRP Irp, PFILE_OBJECT FileObject);
 // The parse routines of the device and file object types (io/file.cpp); the IDE disk driver's devices use the first.
-NTSTATUS NTAPI ParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes,
-                           POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
-                           PVOID *Object);
-NTSTATUS NTAPI ParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName,
-                         POBJECT_STRING RemainingName, PVOID Context, PVOID *Object);
+NTSTATUS NTAPI ParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName, POBJECT_STRING RemainingName,
+                           PVOID Context, PVOID *Object);
+NTSTATUS NTAPI ParseFile(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Attributes, POBJECT_STRING CompleteName, POBJECT_STRING RemainingName, PVOID Context,
+                         PVOID *Object);
 // The file-system control routine of a file system that only handles dismount requests (io/device.cpp).
 NTSTATUS NTAPI DismountOnlyFsControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 
 } // namespace xk::io
-XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                                       PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
-                                       ULONG Length, PLARGE_INTEGER ByteOffset);
-XBAPI NTSTATUS NTAPI NtWriteFileGather(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext,
-                                       PIO_STATUS_BLOCK IoStatusBlock, PFILE_SEGMENT_ELEMENT SegmentArray,
-                                       ULONG Length, PLARGE_INTEGER ByteOffset);
+XBAPI NTSTATUS NTAPI NtReadFileScatter(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                       PFILE_SEGMENT_ELEMENT SegmentArray, ULONG Length, PLARGE_INTEGER ByteOffset);
+XBAPI NTSTATUS NTAPI NtWriteFileGather(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock,
+                                       PFILE_SEGMENT_ELEMENT SegmentArray, ULONG Length, PLARGE_INTEGER ByteOffset);

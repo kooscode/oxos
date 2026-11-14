@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate the kernel's video encoder tables (kernel/src/hardware/video/video_modes.inc) from the encoder specs.
 
-The register maps are read from spec/stock/18_conexant_encoder.md, 19_focus_encoder.md and 20_xcalibur_encoder.md
-(the "Video Encoder Mode" blocks); nothing else is an input. For each encoder the NV2A timing of the standard-definition
-rows is derived from the encoder's own settings (spec/oxos_internal/02_display_modes.md §1):
+The register maps are read from spec/stock/18_conexant_encoder.md, 19_focus_encoder.md and 20_xcalibur_encoder.md (the "Video Encoder Mode" blocks); nothing
+else is an input. For each encoder the NV2A timing of the standard-definition rows is derived from the encoder's own settings
+(spec/oxos_internal/02_display_modes.md §1):
   Conexant: input clocks per line H_CLKI, input lines V_LINESI, input blanking H_BLANKI / V_BLANKI, H_ACTIVE.
   Focus:    pixel clock from PLL and NCO, input lines from VSC, sync positions from IHO / IVO, width IHW.
   Xcalibur: input totals and active starts from registers 0x54-0x56.
@@ -22,8 +22,7 @@ NV_SPEC = "22_nv2a_display.md"
 
 PLAIN = re.compile(r"^- Register (0x[0-9A-F]+): Write Value (0x[0-9A-F]+) -> (.*)$")
 RMW = re.compile(r"^- Register (0x[0-9A-F]+): Clear Mask (0x[0-9A-F]+), Write Value (0x[0-9A-F]+) -> ")
-BANK = re.compile(r"^- Registers (0x[0-9A-F]+)–(0x[0-9A-F]+) \(([^;]+); table entry (0x[0-9A-F]+), index (\d+)\): "
-                  r"Write Values (.*?) -> (.*)$")
+BANK = re.compile(r"^- Registers (0x[0-9A-F]+)–(0x[0-9A-F]+) \(([^;]+); table entry (0x[0-9A-F]+), index (\d+)\): " r"Write Values (.*?) -> (.*)$")
 SECTION = re.compile(r"^#{2,4} (\d+(?:\.\d+)*) ")
 MODE = re.compile(r"^#{3,5} Video Encoder Mode: (.*)$")
 
@@ -126,8 +125,8 @@ def cx_timing(common, regs, vals):
     if not f["H_CLKI"]:
         return None
     hs, vs = f["H_CLKI"] - f["H_BLANKI"] - 7, f["V_LINESI"] - f["V_BLANKI"] + 1
-    return dict(width=f["H_ACTIVE"] - f["H_ACTIVE"] % 16, active=f["H_ACTIVE"], height=f["V_ACTIVEI"],
-                htotal=f["H_CLKI"], hsync=hs, vtotal=f["V_LINESI"], vsync=vs)
+    return dict(width=f["H_ACTIVE"] - f["H_ACTIVE"] % 16, active=f["H_ACTIVE"], height=f["V_ACTIVEI"], htotal=f["H_CLKI"], hsync=hs, vtotal=f["V_LINESI"],
+                vsync=vs)
 
 
 # ---- Focus (spec 19 §5.2, the 5838 set) ------------------------------------------------------------------------
@@ -157,8 +156,7 @@ def fo_timing(common, regs, vals, standard_lines, field_rate, height):
         vtotal = standard_lines / (vsc / 65536)
     vtotal = round(vtotal)
     htotal = round(clk / field_rate / vtotal)
-    return dict(width=w16(0x04), active=w16(0x04), height=height, htotal=htotal, hsync=htotal - w16(0x00),
-                vtotal=vtotal, vsync=vtotal - w16(0x02), clock=clk)
+    return dict(width=w16(0x04), active=w16(0x04), height=height, htotal=htotal, hsync=htotal - w16(0x00), vtotal=vtotal, vsync=vtotal - w16(0x02), clock=clk)
 
 
 # ---- Xcalibur (spec 20 §6) -------------------------------------------------------------------------------------
@@ -181,8 +179,7 @@ def xc_timing(writes):
     r54, r55, r56 = d[0x54], d[0x55], d[0x56]
     htotal, vtotal = (r54 >> 16) & 0xFFF, r54 & 0xFFF
     width, height = (r56 >> 20) & 0xFFE, (r55 >> 20) & 0xFFE
-    return dict(width=width, active=width, height=height, htotal=htotal, hsync=htotal - (r56 & 0xFFF),
-                vtotal=vtotal, vsync=vtotal - (r55 & 0xFF))
+    return dict(width=width, active=width, height=height, htotal=htotal, hsync=htotal - (r56 & 0xFFF), vtotal=vtotal, vsync=vtotal - (r55 & 0xFF))
 
 
 # ---- The generated file (kernel/src/hardware/video/video_modes.inc)
@@ -207,8 +204,7 @@ def generate():
     # Conexant
     cx = blocks(CX_SPEC)
     common = section(cx, "5.1")[0]["writes"]
-    out += ["// ---- Conexant CX25871 (spec/stock/18 §5)",
-            f"static const UCHAR AvpCxCommonRegs[{len(common)}] = {c_bytes([w[1] for w in common])};",
+    out += ["// ---- Conexant CX25871 (spec/stock/18 §5)", f"static const UCHAR AvpCxCommonRegs[{len(common)}] = {c_bytes([w[1] for w in common])};",
             f"static const UCHAR AvpCxCommon[{len(common)}] = {c_bytes([w[2] for w in common])};"]
     cd = last_values([w[1] for w in common], [w[2] for w in common])
     regs, vals, present = table(cx, "5.2", 0x1E)
@@ -223,8 +219,7 @@ def generate():
     out += [f"    {c_bytes(v)}," for v in vals] + ["};"]
     regs, vals, present = table(cx, "5.4", 0x1E)
     out += [f"static const UCHAR AvpCxScartRegs[{len(regs)}] = {c_bytes(regs)};",
-            f"static const UCHAR AvpCxScartValid[0x1E] = {c_bytes([int(p) for p in present])};",
-            f"static const UCHAR AvpCxScart[0x1E][{len(regs)}] = {{"]
+            f"static const UCHAR AvpCxScartValid[0x1E] = {c_bytes([int(p) for p in present])};", f"static const UCHAR AvpCxScart[0x1E][{len(regs)}] = {{"]
     out += [f"    {c_bytes(v)}," for v in vals] + ["};"]
     regs, vals, present = table(cx, "5.5", 0x14)
     out += [f"static const UCHAR AvpCxCaptionRegs[{len(regs)}] = {c_bytes(regs)};",
@@ -239,8 +234,7 @@ def generate():
             f"static const UCHAR AvpFoCommon[{len(common)}] = {c_bytes([w[2] for w in common])};"]
     cd = last_values([w[1] for w in common], [w[2] for w in common])
     regs, vals, present = table(fo, "5.2.2", 0x1E)
-    out += [f"static const UCHAR AvpFoSdRegs[{len(regs)}] = {c_bytes(regs)};",
-            f"static const UCHAR AvpFoSd[0x1E][{len(regs)}] = {{"]
+    out += [f"static const UCHAR AvpFoSdRegs[{len(regs)}] = {c_bytes(regs)};", f"static const UCHAR AvpFoSd[0x1E][{len(regs)}] = {{"]
     out += [f"    {c_bytes(v)}," for v in vals] + ["};"]
     sd_rows = {row_of(b["title"]): b["title"] for b in section(fo, "5.2.2")}
     timings = []
@@ -255,8 +249,7 @@ def generate():
         timings.append(t)
     out += ["static const AVP_TV_TIMING AvpFoSdTiming[0x1E] = {"] + [f"    {timing_row(t)}," for t in timings] + ["};"]
     regs, vals, _ = table(fo, "5.2.3", 4)
-    out += [f"static const UCHAR AvpFoHdRegs[{len(regs)}] = {c_bytes(regs)};",
-            f"static const UCHAR AvpFoHd[4][{len(regs)}] = {{"]
+    out += [f"static const UCHAR AvpFoHdRegs[{len(regs)}] = {c_bytes(regs)};", f"static const UCHAR AvpFoHd[4][{len(regs)}] = {{"]
     out += [f"    {c_bytes(v)}," for v in vals] + ["};"]
     scart = section(fo, "5.2.4")[0]["writes"]
     out += [f"static const UCHAR AvpFoScartRegs[{len(scart)}] = {c_bytes([w[1] for w in scart])};",
@@ -307,10 +300,9 @@ def generate():
     starts.append(len(writes))
     assert all(r < 256 and c < 32 and i < 1024 for r, _, c, _, i in writes), "AVP_XC_WRITE field widths"
     out += [f"static const AVP_XC_WRITE AvpXcWrites[{len(writes)}] = {{"]
-    out += ["    " + ", ".join(f"{{0x{r:02X}, 0x{v:02X}, {c}, {l}, {i}}}" for r, v, c, l, i in writes[k:k + 6]) + ","
-            for k in range(0, len(writes), 6)] + ["};"]
-    out += [f"static const USHORT AvpXcRowStart[{len(starts)}] = {{ // row r (1-{len(starts) - 1}): entries "
-            f"[AvpXcRowStart[r - 1], AvpXcRowStart[r])"]
+    out += ["    " + ", ".join(f"{{0x{r:02X}, 0x{v:02X}, {c}, {l}, {i}}}" for r, v, c, l, i in writes[k:k + 6]) + "," for k in range(0, len(writes),
+            6)] + ["};"]
+    out += [f"static const USHORT AvpXcRowStart[{len(starts)}] = {{ // row r (1-{len(starts) - 1}): entries " f"[AvpXcRowStart[r - 1], AvpXcRowStart[r])"]
     out += ["    " + ", ".join(str(s) for s in starts) + "};"]
     out += [f"static const ULONG AvpXcValues[{len(values)}] = {{"]
     out += ["    " + ", ".join(f"0x{v:08X}" for v in values[k:k + 8]) + "," for k in range(0, len(values), 8)] + ["};"]
@@ -329,10 +321,9 @@ def generate():
         out.append("    },")
     out += ["};"]
     out += nv_tables()
-    # Each encoder's tables go in their own section (AVP_CX, AVP_FO, AVP_XC in hardware/video/video.cpp): the kernel
-    # frees the pages of the two the console does not have (spec/oxos_internal/18_boot_memory.md).
-    out = [re.sub(r"^static const (\w+) Avp(Cx|Fo|Xc)", lambda m: f"AVP_{m[2].upper()} static const {m[1]} Avp{m[2]}", l)
-           for l in out]
+    # Each encoder's tables go in their own section (AVP_CX, AVP_FO, AVP_XC in hardware/video/video.cpp): the kernel frees the pages of the two the console does
+    # not have (spec/oxos_internal/18_boot_memory.md).
+    out = [re.sub(r"^static const (\w+) Avp(Cx|Fo|Xc)", lambda m: f"AVP_{m[2].upper()} static const {m[1]} Avp{m[2]}", l) for l in out]
     return "\n".join(out) + "\n"
 
 
@@ -379,12 +370,11 @@ def nv_tables():
     idx = []
     for a, b in re.findall(r"CR([0-9A-F]{2})(?:–CR([0-9A-F]{2}))?", idx_text):
         idx += list(range(int(a, 16), int(b or a, 16) + 1))
-    sets = [("Fo", "Focus", nv_rows(text, "### 3.4", "### 3.5"), crtc_rows(text, "## 4. CRTC rows", "## 5.", len(idx))),
-            ("Cx", "Conexant", nv_rows(text, "### 3.7", "### 3.8"), crtc_rows(text, "### 3.9", "### 3.10", len(idx))),
-            ("Xc", "Xcalibur", nv_rows(text, "### 3.10", "### 3.11"), crtc_rows(text, "### 3.11", "### 3.12", len(idx)))]
+    sets = [("Fo", "Focus", nv_rows(text, "### 3.4", "### 3.5"), crtc_rows(text, "## 4. CRTC rows", "## 5.", len(idx))), ("Cx", "Conexant", nv_rows(text,
+            "### 3.7", "### 3.8"), crtc_rows(text, "### 3.9", "### 3.10", len(idx))), ("Xc", "Xcalibur", nv_rows(text, "### 3.10", "### 3.11"), crtc_rows(text,
+            "### 3.11", "### 3.12", len(idx)))]
     out = ["// ---- NV2A side (spec/stock/22: NV rows §3.4 Focus, §3.7 Conexant, §3.10 Xcalibur; CRTC rows §4, §3.9,",
-           "// §3.11; register order §3.1; all from the 5838 AV blob)",
-           "static const ULONG AvpNvRegs[26] = {"]
+           "// §3.11; register order §3.1; all from the 5838 AV blob)", "static const ULONG AvpNvRegs[26] = {"]
     out += ["    " + ", ".join(f"0x{r:06X}" for r in order[k:k + 9]) + "," for k in range(0, 26, 9)] + ["};"]
     out += [f"static const UCHAR AvpCrtcIndex[{len(idx)}] = {c_bytes(idx)};"]
     for tag, name, rows, crtc in sets:
@@ -392,8 +382,7 @@ def nv_tables():
         out += [f"static const ULONG Avp{tag}Nv[{n}][26] = {{ // {name}: NV row r (mode bits 16-23) at index r - 1"]
         out += ["    {" + ", ".join(f"0x{rows[r][reg]:X}" for reg in order) + "}," for r in range(1, n + 1)] + ["};"]
         out += [f"static const ULONG Avp{tag}Nv880[{n}] = {{ // {name}: 0x680880 after the change (§2.3 step 19)"]
-        out += ["    " + ", ".join(f"0x{rows[r][0x680880]:08X}" for r in range(k, min(k + 6, n + 1))) + ","
-                for k in range(1, n + 1, 6)] + ["};"]
+        out += ["    " + ", ".join(f"0x{rows[r][0x680880]:08X}" for r in range(k, min(k + 6, n + 1))) + "," for k in range(1, n + 1, 6)] + ["};"]
         out += [f"static const UCHAR Avp{tag}Crtc[{max(crtc)}][{len(idx)}] = {{ // {name}: CRTC row r at index r - 1"]
         out += ["    " + c_bytes(crtc[r]) + "," for r in range(1, max(crtc) + 1)] + ["};"]
     return out

@@ -1,10 +1,9 @@
 # Specifications
 
-Behavioural specifications, written clean-room: the `stock`, `cerbios` and `evox` specs describe behaviour, data
-formats and constants observed in a reference binary, never its code (no source code, machine code, disassembly or
-decompiled code). The one kind of data taken from Microsoft images is the video encoder and NV2A pad calibration
-tables (stock specs 18–21), recorded as plain register maps ([`dmca_compliance.md`](../dmca_compliance.md) §5). The
-OXOS kernel is written from these documents only.
+Behavioural specifications, written clean-room: the `stock`, `cerbios` and `evox` specs describe behaviour, data formats and constants observed in a reference
+binary, never its code (no source code, machine code, disassembly or decompiled code). The one kind of data taken from Microsoft images is the video encoder and
+NV2A pad calibration tables (stock specs 18–21), recorded as plain register maps ([`dmca_compliance.md`](../dmca_compliance.md) §5). The OXOS kernel is written
+from these documents only.
 
 | Folder | Studied from | Content |
 |---|---|---|
@@ -15,11 +14,9 @@ OXOS kernel is written from these documents only.
 
 ## Conventions
 - Code comments cite a spec as `spec/stock/NN §M` (or `spec/cerbios/NN §M`).
-- Inside a folder, "spec NN" means a spec in the same folder. Specs in other folders are named with theirs:
-  "stock spec NN", "Cerbios spec NN".
-- Cerbios spec 00 has a clearly marked "Public information" section (release notes, tool docs, the shipped ini);
-  everything else in the Cerbios specs comes from the code.
+- Inside a folder, "spec NN" means a spec in the same folder. Specs in other folders are named with theirs: "stock spec NN", "Cerbios spec NN".
+- Cerbios spec 00 has a clearly marked "Public information" section (release notes, tool docs, the shipped ini); everything else in the Cerbios specs comes from
+  the code.
 - Each Cerbios spec separates Cerbios behaviour from "For OXOS" implementation notes and ends with an **Open** list.
-- Compatibility data in the Cerbios specs (per-game fixes, error texts) is described, not copied. OXOS derives its
-  own fixes by testing each game.
+- Compatibility data in the Cerbios specs (per-game fixes, error texts) is described, not copied. OXOS derives its own fixes by testing each game.
 - Reference binaries and other copyrighted inputs (`xbox_files/`, BIOS images, disc images) are never committed.

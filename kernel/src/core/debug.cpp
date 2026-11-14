@@ -1,5 +1,4 @@
-// Debugger services without a kernel debugger: DbgPrint goes to an in-memory log and, in SERIAL=1 builds, to the serial
-// port (spec/stock/13).
+// Debugger services without a kernel debugger: DbgPrint goes to an in-memory log and, in SERIAL=1 builds, to the serial port (spec/stock/13).
 #include <core/core.h>
 #include <arch/arch.h>
 #include <hardware/chipset/serial.h>
@@ -63,14 +62,14 @@ XBAPI void NTAPI DbgBreakPointWithStatus(ULONG Status) {
 }
 
 XBAPI void NTAPI RtlAssert(PVOID FailedAssertion, PVOID FileName, ULONG LineNumber, const char *Message) {
-    DbgPrint("\n*** Assertion failed: %s%s\n***   Source File: %s, line %lu\n\n", Message ? Message : "",
-             (const char *)FailedAssertion, (const char *)FileName, LineNumber);
+    DbgPrint("\n*** Assertion failed: %s%s\n***   Source File: %s, line %lu\n\n", Message ? Message : "", (const char *)FailedAssertion, (const char *)FileName,
+             LineNumber);
     DbgBreakPoint();
 }
 
 XBAPI void NTAPI RtlRip(const char *ApiName, const char *Expression, const char *Message) {
-    DbgPrint("%s%c %c%s%c %s\n", ApiName ? ApiName : "", ApiName ? ':' : ' ', Expression ? '(' : ' ',
-             Expression ? Expression : "", Expression ? ')' : ' ', Message ? Message : "");
+    DbgPrint("%s%c %c%s%c %s\n", ApiName ? ApiName : "", ApiName ? ':' : ' ', Expression ? '(' : ' ', Expression ? Expression : "", Expression ? ')' : ' ',
+             Message ? Message : "");
     DbgBreakPoint();
 }
 

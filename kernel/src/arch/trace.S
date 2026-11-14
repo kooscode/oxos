@@ -1,5 +1,5 @@
-// Import tracing (debug builds with TRACE_IMPORTS=1): each traced title import jumps here with eax = its index.
-// The call is recorded, then the real export runs with the caller's registers and stack unchanged.
+// Import tracing (debug builds with TRACE_IMPORTS=1): each traced title import jumps here with eax = its index. The call is recorded, then the real export runs
+// with the caller's registers and stack unchanged.
     .text
     .globl _XkTraceEntry
 _XkTraceEntry:

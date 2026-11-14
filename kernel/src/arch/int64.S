@@ -1,5 +1,5 @@
-// MSVC compiler helpers for 64-bit arithmetic on i386 (called by clang for the i386-pc-win32 target).
-// Division helpers take (dividend, divisor) on the stack and pop 16 bytes; shifts take edx:eax and cl.
+// MSVC compiler helpers for 64-bit arithmetic on i386 (called by clang for the i386-pc-win32 target). Division helpers take (dividend, divisor) on the stack
+// and pop 16 bytes; shifts take edx:eax and cl.
     .text
 
 .macro DIVHELPER name, impl, want_rem

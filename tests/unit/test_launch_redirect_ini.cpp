@@ -115,8 +115,8 @@ TEST(LaunchRedirect, IncompleteSectionsAndBadLinesAreCountedAndSkipped) {
     EXPECT_TRUE(r.Found);
     EXPECT_EQ(r.Name, "good");
     EXPECT_EQ(r.Target, XBL_UPDATER);
-    // The line outside a section, [no target], [no source], the Q: line and [bad drive] itself, the second source,
-    // [unclosed (no ']') and the line without '=' after it.
+    // The line outside a section, [no target], [no source], the Q: line and [bad drive] itself, the second source, [unclosed (no ']') and the line without '='
+    // after it.
     EXPECT_EQ(r.Errors, 8u);
 }
 

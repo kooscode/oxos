@@ -1,5 +1,5 @@
-// Structured exception support: context capture, continue, raise and unwind entry points (spec/stock/14).
-// CONTEXT (Xbox, 0x238 bytes): ContextFlags, FloatSave[0x204], Edi Esi Ebx Edx Ecx Eax Ebp Eip SegCs EFlags Esp SegSs.
+// Structured exception support: context capture, continue, raise and unwind entry points (spec/stock/14). CONTEXT (Xbox, 0x238 bytes): ContextFlags,
+// FloatSave[0x204], Edi Esi Ebx Edx Ecx Eax Ebp Eip SegCs EFlags Esp SegSs.
 
 #define CX_FLAGS  0x000
 #define CX_EDI    0x208
@@ -19,8 +19,8 @@
 
     .text
 
-// void cdecl KiContinueContext(CONTEXT *Context): resume execution with Context (never returns).
-// A small frame {eax, ebx, eip, cs, eflags} is built just below the target stack pointer, then iret.
+// void cdecl KiContinueContext(CONTEXT *Context): resume execution with Context (never returns). A small frame {eax, ebx, eip, cs, eflags} is built just below
+// the target stack pointer, then iret.
     .globl _KiContinueContext
 _KiContinueContext:
     movl 4(%esp), %ebx
@@ -45,8 +45,8 @@ _KiContinueContext:
     popl %ebx
     iretl
 
-// Fill *ctx (in %ebx) with the caller-of-caller state: the caller's frame starts at %ebp (pushl %ebp; movl %esp,%ebp),
-// so return address = 4(%ebp), its stack pointer after returning and popping `argbytes` = %ebp + 8 + argbytes.
+// Fill *ctx (in %ebx) with the caller-of-caller state: the caller's frame starts at %ebp (pushl %ebp; movl %esp,%ebp), so return address = 4(%ebp), its stack
+// pointer after returning and popping `argbytes` = %ebp + 8 + argbytes.
 .macro CAPTURE_CALLER argbytes
     movl $CONTEXT_FULL, CX_FLAGS(%ebx)
     movl %edi, CX_EDI(%ebx)
@@ -98,8 +98,7 @@ _RtlCaptureContext@4:
     popl %ebx
     ret $4
 
-// void NTAPI RtlRaiseException(EXCEPTION_RECORD *Record): dispatch with the caller's context; a handler that
-// continues execution resumes after this call.
+// void NTAPI RtlRaiseException(EXCEPTION_RECORD *Record): dispatch with the caller's context; a handler that continues execution resumes after this call.
     .globl _RtlRaiseException@4
 _RtlRaiseException@4:
     pushl %ebp

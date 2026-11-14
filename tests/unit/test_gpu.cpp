@@ -1,5 +1,5 @@
-// The graphics engine's default channel context (spec/oxos_internal/24): the table hardware::video::InitGraphicsEngine
-// loads at a cold boot so that titles which create their own graphics device start from a valid engine.
+// The graphics engine's default channel context (spec/oxos_internal/24): the table hardware::video::InitGraphicsEngine loads at a cold boot so that titles
+// which create their own graphics device start from a valid engine.
 #include "kernel_test.h"
 
 #include <map>

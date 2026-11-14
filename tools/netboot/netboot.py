@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Serve OXOS kernels to a console over the network (README.md in this folder; spec/oxos_internal/09_netboot.md).
 
-Flash a netboot image once (make -C kernel netboot -> build/kernel/netboot/bios_256k.bin or bios.bin). At every
-power-on its 2BL asks the network for a boot image; this tool answers with IMAGE, any OXOS open image (a 256 KiB
-bios_256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose kernel stream runs past
-the first bank is sent whole). The console boots the kernel inside it, or its own
-kernel from flash when nobody answers. IMAGE is read again at every request, so rebuilding it between power-ons is
-enough: each boot gets the newest build.
+Flash a netboot image once (make -C kernel netboot -> build/kernel/netboot/bios_256k.bin or bios.bin). At every power-on its 2BL asks the network for a boot
+image; this tool answers with IMAGE, any OXOS open image (a 256 KiB bios_256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose
+kernel stream runs past the first bank is sent whole). The console boots the kernel inside it, or its own kernel from flash when nobody answers. IMAGE is read
+again at every request, so rebuilding it between power-ons is enough: each boot gets the newest build.
 
   netboot.py IMAGE                   serve on the local network (UDP port 5141, broadcasts)
   netboot.py IMAGE --xemu PORT       serve an xemu console started with tools/run.py --net-udp PORT
@@ -192,11 +190,9 @@ def main():
             elif op == OP_BOOT and sess == session:
                 took = time.monotonic() - started
                 if offset == 0:
-                    log.say(f"netboot: console {who} downloaded {len(served)} KiB in {took:.1f} s "
-                            "and is booting it")
+                    log.say(f"netboot: console {who} downloaded {len(served)} KiB in {took:.1f} s " "and is booting it")
                 else:
-                    log.say(f"netboot: console {who} rejected the download (CRC or header mismatch); it boots "
-                            "from flash")
+                    log.say(f"netboot: console {who} rejected the download (CRC or header mismatch); it boots " "from flash")
                 session = None
                 if a.once:
                     return

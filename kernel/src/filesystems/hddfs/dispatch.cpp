@@ -15,10 +15,9 @@ static HDDFS_FCB *HDDFSFcbOf(PFILE_OBJECT f) {
     return (HDDFS_FCB *)f->FsContext;
 }
 
-// Access allowed by the attributes (spec/stock/04b): rights FATX has no use for, and the volume-label, device and
-// "normal" attribute bits, are refused; a read-only file or directory refuses write rights once it exists (a new
-// one is created with the attribute and any access: titles extract read-only files and write them), and
-// delete-on-close always.
+// Access allowed by the attributes (spec/stock/04b): rights FATX has no use for, and the volume-label, device and "normal" attribute bits, are refused; a
+// read-only file or directory refuses write rights once it exists (a new one is created with the attribute and any access: titles extract read-only files and
+// write them), and delete-on-close always.
 static NTSTATUS HDDFSCheckAttributes(ACCESS_MASK access, ULONG options, UCHAR attributes, bool creating) {
     if ((attributes & 0xC8) || (access & 0xFEE0FE00))
         return STATUS_ACCESS_DENIED;
@@ -48,8 +47,8 @@ static void HDDFSSplitElement(OBJECT_STRING *rest, OBJECT_STRING *element) {
 static NTSTATUS HDDFSOpenFcb(HDDFS_VOLUME *v, PIO_STACK_LOCATION s, HDDFS_FCB *f, PFILE_OBJECT fo) {
     ACCESS_MASK access = s->Parameters.Create.DesiredAccess;
     ULONG share = s->Parameters.Create.ShareAccess;
-    NTSTATUS status = f->CleanupCount ? IoCheckShareAccess(access, share, fo, &f->ShareAccess, TRUE)
-                                      : (IoSetShareAccess(access, share, fo, &f->ShareAccess), STATUS_SUCCESS);
+    NTSTATUS status = f->CleanupCount ? IoCheckShareAccess(access, share, fo, &f->ShareAccess, TRUE) : (IoSetShareAccess(access, share, fo, &f->ShareAccess),
+                                      STATUS_SUCCESS);
     if (!NT_SUCCESS(status))
         return status;
     auto ccb = (HDDFS_CCB *)ExAllocatePoolWithTag(sizeof(HDDFS_CCB), 'cxtF');
@@ -129,10 +128,9 @@ static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Informat
     parent->ReferenceCount++; // held while walking
     OBJECT_STRING element;
     NTSTATUS status = STATUS_SUCCESS;
-    // A doubled separator ("dir\\name") is accepted once, as the reference does: its walk through already-open
-    // directories stops at the first "\\" or at the first directory it must look up on disk, and the slower walk
-    // that takes over drops one leading '\' of the rest; after that a doubled separator is invalid. Brute Force
-    // opens its textures as "z:\splash_screen\\textures-splash_screen.tex".
+    // A doubled separator ("dir\\name") is accepted once, as the reference does: its walk through already-open directories stops at the first "\\" or at the
+    // first directory it must look up on disk, and the slower walk that takes over drops one leading '\' of the rest; after that a doubled separator is
+    // invalid. Brute Force opens its textures as "z:\splash_screen\\textures-splash_screen.tex".
     // Also at the start: "<link to a volume, ending in '\'>\name", as an nxdk title's D: gives (its folder + "\").
     bool slow = false;
     if (rest.Length >= 2 && rest.Buffer[0] == '\\' && rest.Buffer[1] == '\\') {
@@ -230,8 +228,8 @@ static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Informat
                     if (NT_SUCCESS(status) && !(f = HDDFSCreateFcb(parent, &pe, index)))
                         status = STATUS_INSUFFICIENT_RESOURCES;
                     created = true;
-                    // Preallocate; the file size stays 0. Not on exFAT: an entry set cannot hold more clusters than
-                    // its length, and a PC's check would free the rest (spec 07 §3a); clusters come with the writes.
+                    // Preallocate; the file size stays 0. Not on exFAT: an entry set cannot hold more clusters than its length, and a PC's check would free the
+                    // rest (spec 07 §3a); clusters come with the writes.
                     if (NT_SUCCESS(status) && Irp->Overlay.AllocationSize.LowPart && !isDir && !v->IsEXFAT) {
                         status = HDDFSSetFileSize(v, f, Irp->Overlay.AllocationSize.LowPart);
                         f->FileSize = 0;
@@ -334,8 +332,7 @@ static NTSTATUS NTAPI HDDFSFsdClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 // --- Read / write
 
-static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer,
-                              ULONG length) {
+static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length) {
     while (length) {
         ULONG within = (ULONG)offset & (v->BytesPerCluster - 1), cluster;
         NTSTATUS status = HDDFSClusterAtIndex(v, f, (ULONG)(offset >> v->ClusterShift), &cluster);
@@ -387,8 +384,7 @@ static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLO
 }
 
 // Scatter/gather: one page-sized piece of the transfer per segment element (spec/stock/11 §5).
-static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool write, ULONGLONG offset,
-                                 PUCHAR buffer, ULONG length) {
+static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length) {
     if (!Irp->SegmentArray)
         return HDDFSTransfer(v, f, write, offset, buffer, length);
     for (ULONG i = 0; length; i++) {
@@ -403,8 +399,8 @@ static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool w
 }
 
 #if XK_DEBUG_SERIAL
-// Debug (serial builds): a title that reads the same thing again and again. The last 8 reads are kept; when a read
-// repeats the one before it exactly, they are printed once, then the repeat count at each power of two.
+// Debug (serial builds): a title that reads the same thing again and again. The last 8 reads are kept; when a read repeats the one before it exactly, they are
+// printed once, then the repeat count at each power of two.
 struct HDDFS_READ_LOG {
     HDDFS_FCB *Fcb;
     ULONGLONG Offset;
@@ -421,14 +417,13 @@ static void HDDFSLogRead(HDDFS_FCB *f, ULONGLONG offset, ULONG length, NTSTATUS 
         if (HDDFSRepeats == 1) {
             for (ULONG i = HDDFSReadCount > 8 ? HDDFSReadCount - 8 : 0; i < HDDFSReadCount; i++) {
                 HDDFS_READ_LOG &r = HDDFSReadLog[i & 7];
-                XK_SERIAL("hddfs: read %.*s size %lx offset %lx length %lx -> %08lx, %lx bytes\n",
-                          (int)r.Fcb->NameLength, r.Fcb->Name, r.Fcb->FileSize, (ULONG)r.Offset, r.Length,
-                          (ULONG)r.Status, r.Done);
+                XK_SERIAL("hddfs: read %.*s size %lx offset %lx length %lx -> %08lx, %lx bytes\n", (int)r.Fcb->NameLength, r.Fcb->Name, r.Fcb->FileSize,
+                          (ULONG)r.Offset, r.Length, (ULONG)r.Status, r.Done);
             }
         }
         if (!(HDDFSRepeats & (HDDFSRepeats - 1))) {
-            XK_SERIAL("hddfs: the same read %lu times (%.*s offset %lx -> %08lx, %lx bytes)\n", HDDFSRepeats + 1,
-                      (int)f->NameLength, f->Name, (ULONG)offset, (ULONG)status, done);
+            XK_SERIAL("hddfs: the same read %lu times (%.*s offset %lx -> %08lx, %lx bytes)\n", HDDFSRepeats + 1, (int)f->NameLength, f->Name, (ULONG)offset,
+                      (ULONG)status, done);
         }
         return;
     }
@@ -449,26 +444,24 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (!f || (f->Flags & FCB_DIRECTORY))
         return HDDFSComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     if (f->Flags & FCB_VOLUME) {
-        // Raw access to the partition through a volume handle: pass down unchanged (exFAT: a folder partition has
-        // no sectors of its own, see EXFATVolumeTransfer).
+        // Raw access to the partition through a volume handle: pass down unchanged (exFAT: a folder partition has no sectors of its own, see
+        // EXFATVolumeTransfer).
         if (v->IsEXFAT)
             return EXFATVolumeTransfer(v, Irp);
         IoCopyCurrentIrpStackLocationToNext(Irp);
         return IofCallDriver(v->TargetDevice, Irp);
     }
-    // Non-cached and scatter/gather transfers must be sector-aligned (offset and requested length). For reads the
-    // reference checks this only after the end-of-file test: a read at the end of a file whose size is not whole
-    // sectors reports STATUS_END_OF_FILE, not an invalid parameter (the stock dashboard reads files that way).
-    bool unaligned = ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Irp->SegmentArray) &&
-                     ((offset.LowPart | length) & (v->SectorSize - 1));
+    // Non-cached and scatter/gather transfers must be sector-aligned (offset and requested length). For reads the reference checks this only after the
+    // end-of-file test: a read at the end of a file whose size is not whole sectors reports STATUS_END_OF_FILE, not an invalid parameter (the stock dashboard
+    // reads files that way).
+    bool unaligned = ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) || Irp->SegmentArray) && ((offset.LowPart | length) & (v->SectorSize - 1));
     if (write && unaligned)
         return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
-    // The reference pends exactly one kind of transfer (spec/stock/04b, asynchronous completion): a non-cached one
-    // on an asynchronous file object (no FO_SYNCHRONOUS_IO) that reaches the disk: length above 0, sector-aligned,
-    // a read starting inside the file, a write that does not extend it. It decides before the transfer, so the
-    // caller gets STATUS_PENDING whatever the disk then reports, and the result arrives in its I/O status block.
-    // Titles depend on it (an overlapped streaming loop that only advances on a pending read; XMV playback). Ours
-    // transfers synchronously, then completes the request as a pended one.
+    // The reference pends exactly one kind of transfer (spec/stock/04b, asynchronous completion): a non-cached one on an asynchronous file object (no
+    // FO_SYNCHRONOUS_IO) that reaches the disk: length above 0, sector-aligned, a read starting inside the file, a write that does not extend it. It decides
+    // before the transfer, so the caller gets STATUS_PENDING whatever the disk then reports, and the result arrives in its I/O status block. Titles depend on
+    // it (an overlapped streaming loop that only advances on a pending read; XMV playback). Ours transfers synchronously, then completes the request as a
+    // pended one.
     bool asyncNoCache = !(fo->Flags & FO_SYNCHRONOUS_IO) && (Irp->Flags & IRP_NOCACHE) && length && !unaligned;
     bool pend = false;
     HDDFSAcquireVolume(v);
@@ -766,8 +759,7 @@ static NTSTATUS NTAPI HDDFSFsdSetInformation(PDEVICE_OBJECT DeviceObject, PIRP I
             status = STATUS_INVALID_PARAMETER;
         } else if (size.QuadPart < 0) {
             status = (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
-        } else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||
-                   (ULONGLONG)size.QuadPart < HDDFSFileSize64(f)) {
+        } else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation || (ULONGLONG)size.QuadPart < HDDFSFileSize64(f)) {
             status = HDDFSSetFileSize(v, f, (ULONGLONG)size.QuadPart);
         } else if (v->IsEXFAT) { // allocation only: exFAT cannot hold clusters past the length (spec 07 §3a)
         } else { // allocation only grows the chain (FATX: sizes below 4 GB, FileSizeHigh stays 0)
@@ -884,9 +876,8 @@ static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP
 
 // --- Volume information
 
-// The folder D: names when a title runs from the hard disk, held open while the title runs (null for a disc or an
-// image). A title that asks the sector size of a path in it is told 2048, a DVD's, as some games require
-// (spec/oxos_internal/25 §2).
+// The folder D: names when a title runs from the hard disk, held open while the title runs (null for a disc or an image). A title that asks the sector size of
+// a path in it is told 2048, a DVD's, as some games require (spec/oxos_internal/25 §2).
 static HDDFS_FCB *HDDFSTitleFolder;
 static HANDLE HDDFSTitleFolderHandle;
 
@@ -899,8 +890,7 @@ void HDDFSRememberTitleFolder() {
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE h;
-    if (!NT_SUCCESS(NtOpenFile(&h, 0x0001 /*FILE_LIST_DIRECTORY*/ | SYNCHRONIZE, &a, &iosb,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    if (!NT_SUCCESS(NtOpenFile(&h, 0x0001 /*FILE_LIST_DIRECTORY*/ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
         return;
     PFILE_OBJECT fo;
@@ -1008,16 +998,15 @@ static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject
 
 // --- Flush, device and file-system control, dismount, and the driver object
 static NTSTATUS NTAPI HDDFSFsdFlushOrDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
-    // Flushing: the cache is write-through, so only the drive cache is left: pass down. Device controls on a
-    // volume handle go to the partition.
+    // Flushing: the cache is write-through, so only the drive cache is left: pass down. Device controls on a volume handle go to the partition.
     IoCopyCurrentIrpStackLocationToNext(Irp);
     return IofCallDriver(HDDFSVolume(DeviceObject)->MountTarget, Irp);
 }
 
 static NTSTATUS NTAPI HDDFSDismountVolume(PDEVICE_OBJECT DeviceObject);
 
-// FSCTL_DISMOUNT_VOLUME (used by the utility-drive format: XAPI rewrites the FATX metadata through the volume handle,
-// then dismounts so the next open mounts the new file system). The reference also accepts 0x9411C / 0x98120.
+// FSCTL_DISMOUNT_VOLUME (used by the utility-drive format: XAPI rewrites the FATX metadata through the volume handle, then dismounts so the next open mounts
+// the new file system). The reference also accepts 0x9411C / 0x98120.
 static NTSTATUS NTAPI HDDFSFsdFileSystemControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (IoGetCurrentIrpStackLocation(Irp)->Parameters.FileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
         return HDDFSComplete(Irp, HDDFSDismountVolume(DeviceObject));
@@ -1048,9 +1037,8 @@ DRIVER_OBJECT HDDFSDriverObject = {
     nullptr,
     HDDFSDeleteVolume,
     HDDFSDismountVolume,
-    {HDDFSFsdCreate, HDDFSFsdClose, HDDFSFsdReadWrite, HDDFSFsdReadWrite, HDDFSFsdQueryInformation,
-     HDDFSFsdSetInformation, HDDFSFsdFlushOrDeviceControl, HDDFSFsdQueryVolumeInformation,
-     HDDFSFsdDirectoryControl, HDDFSFsdFileSystemControl, HDDFSFsdFlushOrDeviceControl, IoInvalidDeviceRequest,
+    {HDDFSFsdCreate, HDDFSFsdClose, HDDFSFsdReadWrite, HDDFSFsdReadWrite, HDDFSFsdQueryInformation, HDDFSFsdSetInformation, HDDFSFsdFlushOrDeviceControl,
+     HDDFSFsdQueryVolumeInformation, HDDFSFsdDirectoryControl, HDDFSFsdFileSystemControl, HDDFSFsdFlushOrDeviceControl, IoInvalidDeviceRequest,
      IoInvalidDeviceRequest, HDDFSFsdCleanup}};
 
 } // namespace xk::filesystems

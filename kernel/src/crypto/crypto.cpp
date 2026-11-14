@@ -1,5 +1,4 @@
-// Xc crypto services: SHA-1, HMAC-SHA1, RC4 (public algorithms; the caller-visible contexts are opaque buffers:
-// 116 bytes for SHA, 258 for RC4).
+// Xc crypto services: SHA-1, HMAC-SHA1, RC4 (public algorithms; the caller-visible contexts are opaque buffers: 116 bytes for SHA, 258 for RC4).
 #include <crypto/crypto.h>
 #include <runtime/runtime.h>
 
@@ -96,8 +95,8 @@ void NTAPI FinishSHA(PUCHAR pbSHAContext, PUCHAR pbDigest) {
 }
 
 // HMAC-SHA1 over the concatenation of two inputs (either may be empty).
-void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData,
-                       const UCHAR *pbData2, ULONG cbData2, PUCHAR HmacData) {
+void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UCHAR *pbData, ULONG cbData, const UCHAR *pbData2, ULONG cbData2,
+                       PUCHAR HmacData) {
     UCHAR key[64] = {}, ctx[116], inner[20];
     if (cbKeyMaterial > 64) {
         InitSHA(ctx);

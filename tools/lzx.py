@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """LZX compressor (and a small decoder for self-checks) for the 2BL's kernel stream.
 
-Format: Microsoft LZX as used in CAB files, window 2^17, 32 KiB frames (spec/stock/00, spec/stock/01). Every frame is one
-*verbatim* block; the stream state (tree lengths, window, repeated offsets) carries over between frames, the bit
-stream is realigned to 16 bits at each frame end, and no match crosses a frame end. Matches are found with a
-hash chain (greedy plus one step of lazy evaluation). Repeated-offset slots are never emitted.
+Format: Microsoft LZX as used in CAB files, window 2^17, 32 KiB frames (spec/stock/00, spec/stock/01). Every frame is one *verbatim* block; the stream state
+(tree lengths, window, repeated offsets) carries over between frames, the bit stream is realigned to 16 bits at each frame end, and no match crosses a frame
+end. Matches are found with a hash chain (greedy plus one step of lazy evaluation). Repeated-offset slots are never emitted.
 
 Bit order: 16-bit little-endian words, bits taken MSB first.
 """
@@ -308,8 +307,7 @@ class Compressor:
 def compress_frames(data):
     """[(compressed frame, uncompressed size)] for consecutive 32 KiB frames."""
     c = Compressor()
-    return [(c.frame(data, off, min(off + FRAME, len(data)), off == 0), min(FRAME, len(data) - off))
-            for off in range(0, len(data), FRAME)]
+    return [(c.frame(data, off, min(off + FRAME, len(data)), off == 0), min(FRAME, len(data) - off)) for off in range(0, len(data), FRAME)]
 
 
 # --- Decoder (verbatim and uncompressed blocks; enough to check our own output)

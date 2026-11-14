@@ -1,13 +1,12 @@
-// Video (src/hardware/video/): the AV pack, the video encoders (Conexant, Focus, Xcalibur) and display modes, and the
-// boot display (video.cpp; spec/stock/12 §4, spec/stock/17-20, spec/oxos_internal/02); the NV2A graphics engine's
-// set-up at a cold boot (nv2a.cpp, spec/oxos_internal/24) with its default channel context (gpu_context.h).
+// Video (src/hardware/video/): the AV pack, the video encoders (Conexant, Focus, Xcalibur) and display modes, and the boot display (video.cpp; spec/stock/12
+// §4, spec/stock/17-20, spec/oxos_internal/02); the NV2A graphics engine's set-up at a cold boot (nv2a.cpp, spec/oxos_internal/24) with its default channel
+// context (gpu_context.h).
 #pragma once
 #include <core/core.h>
 #include <runtime/types.h>
 
 // The AV exports (video.cpp) and the SMC's AV pack code read at boot (7 = none).
-XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch,
-                                   ULONG FrameBuffer);
+XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer);
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
 XBAPI UCHAR HalBootSMCVideoMode;
 

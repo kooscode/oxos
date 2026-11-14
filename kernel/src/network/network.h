@@ -1,6 +1,6 @@
-// The kernel's network stack (src/network/, spec/oxos_internal/31_upload_server.md §2): the network card polled, IPv4
-// with ARP, ping and DHCP, and a small TCP server. Boot-only: the upload server uses it before the first title starts.
-// Everything runs in the caller's thread: PollNetwork handles what has arrived and what is due.
+// The kernel's network stack (src/network/, spec/oxos_internal/31_upload_server.md §2): the network card polled, IPv4 with ARP, ping and DHCP, and a small TCP
+// server. Boot-only: the upload server uses it before the first title starts. Everything runs in the caller's thread: PollNetwork handles what has arrived and
+// what is due.
 #pragma once
 #include <runtime/types.h>
 

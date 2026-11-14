@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build a small UDF 1.02 test image (DVD-video style, 2048-byte blocks), written from ECMA-167 / OSTA UDF 1.02.
 
-Layout: VRS (BEA01, NSR02, TEA01) at 16-18; main VDS (PVD, PD, LVD, terminator) at 32; AVDP at 256; the partition
-starts at 257 with the FSD and a terminator, then a File Entry per file/directory followed by its data.
-Exercises short_ad, long_ad with two extents, embedded data, 8- and 16-bit OSTA CS0 names.
+Layout: VRS (BEA01, NSR02, TEA01) at 16-18; main VDS (PVD, PD, LVD, terminator) at 32; AVDP at 256; the partition starts at 257 with the FSD and a terminator,
+then a File Entry per file/directory followed by its data. Exercises short_ad, long_ad with two extents, embedded data, 8- and 16-bit OSTA CS0 names.
 """
 import struct
 import sys

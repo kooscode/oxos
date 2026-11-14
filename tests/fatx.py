@@ -1,6 +1,5 @@
-"""FATX reader over a Qcow2 image, for checking the kernel's file system results in tests, and a small writer
-(FATXWriter: create directories, write files, copy a host folder) for preparing disk images; the changes go
-through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/stock/04b for the format).
+"""FATX reader over a Qcow2 image, for checking the kernel's file system results in tests, and a small writer (FATXWriter: create directories, write files, copy
+a host folder) for preparing disk images; the changes go through Qcow2.write() and are saved as a new image with Qcow2.save() (spec/stock/04b for the format).
 
 usage: fatx.py IMAGE                                   list each partition's root
        fatx.py IMAGE --add DRIVE:\\PATH=HOST_PATH ... --out NEW_IMAGE
@@ -8,8 +7,7 @@ usage: fatx.py IMAGE                                   list each partition's roo
        fatx.py IMAGE --format-f --out NEW_IMAGE        a copy of IMAGE (larger than 8 GB) with an empty F:"""
 import os, struct, time
 
-PARTITIONS = {"E": (0x55F400, 0x1312D6000), "C": (0x465400, 0x1F400000), "X": (0x400, 0x2EE00000),
-              "Y": (0x177400, 0x2EE00000), "Z": (0x2EE400, 0x2EE00000)}
+PARTITIONS = {"E": (0x55F400, 0x1312D6000), "C": (0x465400, 0x1F400000), "X": (0x400, 0x2EE00000), "Y": (0x177400, 0x2EE00000), "Z": (0x2EE400, 0x2EE00000)}
 
 
 class FATX:
@@ -73,8 +71,8 @@ class FATX:
         return None if e is None else self.read_chain(e[2], e[3])
 
 
-# F: on a disk without a partition table (kernel/src/storage/disk_layout.cpp, spec/cerbios/03 §3): from the retail
-# partitions' end up to sector 0x0FFFFFFF (or the disk's end), at most 0x74000000 sectors.
+# F: on a disk without a partition table (kernel/src/storage/disk_layout.cpp, spec/cerbios/03 §3): from the retail partitions' end up to sector 0x0FFFFFFF (or
+# the disk's end), at most 0x74000000 sectors.
 def f_partition(disk_bytes):
     start, end = 0xEE8AB0, min(disk_bytes // 512, 0x0FFFFFFF)
     return start, min(end - start, 0x74000000)
@@ -153,8 +151,7 @@ class FATXWriter(FATX):
                 any(not 0x20 <= ord(ch) <= 0x7E for ch in name):
             raise ValueError(f"invalid FATX name {name!r}")
         stamp = fatx_time()
-        entry = struct.pack("<BB42sIIIII", len(name), attr, name.encode().ljust(42, b"\xff"), first, size,
-                            stamp, stamp, stamp)
+        entry = struct.pack("<BB42sIIIII", len(name), attr, name.encode().ljust(42, b"\xff"), first, size, stamp, stamp, stamp)
         chain = self.chain(self.root if dir_first is None else dir_first)
         per = self.cluster // 64
         for n, c in enumerate(chain):

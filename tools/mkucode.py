@@ -3,10 +3,9 @@
 
 usage: mkucode.py OUT.inc FILE...
 
-Each FILE is an Intel microcode data file (intel-ucode/06-08-xx from Intel's Linux microcode repository): a series
-of updates, each a 48-byte header and its data (2048 bytes in all for these old ones). The updates for platform 4
-(platform-flag bit 0x10, the one the Xbox's Pentium III reports) are written to OUT.inc, unmodified, as a C++
-initializer of 32-bit words, one update per {...}. The kernel picks one by signature and platform at start-up.
+Each FILE is an Intel microcode data file (intel-ucode/06-08-xx from Intel's Linux microcode repository): a series of updates, each a 48-byte header and its
+data (2048 bytes in all for these old ones). The updates for platform 4 (platform-flag bit 0x10, the one the Xbox's Pentium III reports) are written to OUT.inc,
+unmodified, as a C++ initializer of 32-bit words, one update per {...}. The kernel picks one by signature and platform at start-up.
 """
 import struct, sys
 

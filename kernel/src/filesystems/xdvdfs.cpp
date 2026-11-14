@@ -131,8 +131,7 @@ static NTSTATUS XdvdfsReadEntry(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, ULONG offset,
     return XdvdfsRead(v, (LONGLONG)dir->StartSector * XDVDFS_SECTOR + offset + 14, e->Name, e->NameLength);
 }
 
-static NTSTATUS XdvdfsLookup(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, const CHAR *name, ULONG len, XDVDFS_ENTRY *e,
-                             ULONG *where) {
+static NTSTATUS XdvdfsLookup(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, const CHAR *name, ULONG len, XDVDFS_ENTRY *e, ULONG *where) {
     if (!dir->Size)
         return STATUS_OBJECT_NAME_NOT_FOUND;
     ULONG offset = 0;
@@ -154,8 +153,7 @@ static NTSTATUS XdvdfsLookup(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, const CHAR *name
 }
 
 // The n-th entry of the directory in tree (sorted) order.
-static NTSTATUS XdvdfsNth(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, ULONG offset, ULONG *n, XDVDFS_ENTRY *e, ULONG *where,
-                          ULONG depth) {
+static NTSTATUS XdvdfsNth(XDVDFS_VOLUME *v, XDVDFS_FCB *dir, ULONG offset, ULONG *n, XDVDFS_ENTRY *e, ULONG *where, ULONG depth) {
     if (depth > 64)
         return (NTSTATUS)0xC0000032;
     NTSTATUS status = XdvdfsReadEntry(v, dir, offset, e);
@@ -336,19 +334,18 @@ static NTSTATUS NTAPI XdvdfsFsdRead(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         return XdvdfsComplete(Irp, STATUS_INVALID_DEVICE_REQUEST);
     LARGE_INTEGER offset = s->Parameters.Read.ByteOffset;
     ULONG length = s->Parameters.Read.Length;
-    // Non-cached reads start on a sector, but their length need not be whole sectors: the reference rounds the
-    // transfer up and reports the length clipped to the file (Halo 2 reads its map files' tails this way).
-    // End of file comes first: after such a tail the file position is the (unaligned) file size, and the next read
-    // must report END_OF_FILE (Brute Force copies its .tgz files to the cache partition until it sees it).
+    // Non-cached reads start on a sector, but their length need not be whole sectors: the reference rounds the transfer up and reports the length clipped to
+    // the file (Halo 2 reads its map files' tails this way).
+    // End of file comes first: after such a tail the file position is the (unaligned) file size, and the next read must report END_OF_FILE (Brute Force copies
+    // its .tgz files to the cache partition until it sees it).
     if (offset.HighPart || offset.LowPart >= f->Size)
         return XdvdfsComplete(Irp, length ? STATUS_END_OF_FILE : STATUS_SUCCESS);
     if ((fo->Flags & FO_NO_INTERMEDIATE_BUFFERING) && (offset.LowPart & (XDVDFS_SECTOR - 1))) {
-        XK_SERIAL("xdvdfs: non-cached read %#lx at unaligned %#lx (file sector %#lx)\n", length, offset.LowPart,
-                  f->StartSector);
+        XK_SERIAL("xdvdfs: non-cached read %#lx at unaligned %#lx (file sector %#lx)\n", length, offset.LowPart, f->StartSector);
         return XdvdfsComplete(Irp, STATUS_INVALID_PARAMETER);
     }
-    // The reference rounds a read that ends the file up to whole sectors only when the caller asked for at least
-    // that much (0x8002b4e0): then the transfer may fill the buffer up to the sector's end.
+    // The reference rounds a read that ends the file up to whole sectors only when the caller asked for at least that much (0x8002b4e0): then the transfer may
+    // fill the buffer up to the sector's end.
     bool toEnd = length >= ((f->Size + XDVDFS_SECTOR - 1) & ~(XDVDFS_SECTOR - 1)) - offset.LowPart;
     if (length > f->Size - offset.LowPart)
         length = f->Size - offset.LowPart;
@@ -576,9 +573,9 @@ DRIVER_OBJECT XdvdfsDriverObject = {
     nullptr,
     XdvdfsDeleteVolume,
     XdvdfsDismountVolume,
-    {XdvdfsFsdCreate, XdvdfsFsdClose, XdvdfsFsdRead, IoInvalidDeviceRequest, XdvdfsFsdQueryInformation,
-     XdvdfsFsdSetInformation, XdvdfsFsdSuccess, XdvdfsFsdQueryVolume, XdvdfsFsdDirectoryControl,
-     io::DismountOnlyFsControl, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest, XdvdfsFsdSuccess}};
+    {XdvdfsFsdCreate, XdvdfsFsdClose, XdvdfsFsdRead, IoInvalidDeviceRequest, XdvdfsFsdQueryInformation, XdvdfsFsdSetInformation, XdvdfsFsdSuccess,
+     XdvdfsFsdQueryVolume, XdvdfsFsdDirectoryControl, io::DismountOnlyFsControl, XdvdfsFsdPassDown, IoInvalidDeviceRequest, IoInvalidDeviceRequest,
+     XdvdfsFsdSuccess}};
 
 NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice) {
     DISK_GEOMETRY g;

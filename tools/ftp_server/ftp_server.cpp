@@ -1,23 +1,17 @@
-// FTP server (nxdk + SDL3, open source): the console's disks over the network, for copying, moving and deleting files
-// with any FTP client (FileZilla, curl, lftp, Windows Explorer). No log-in: any user name and password are accepted.
+// FTP server (nxdk + SDL3, open source): the console's disks over the network, for copying, moving and deleting files with any FTP client (FileZilla, curl,
+// lftp, Windows Explorer). No log-in: any user name and password are accepted.
 //
 //   /            the drives: C, E, F, G, X, Y, Z (those that exist)
 //   /F/games     F:\games (\Device\Harddisk0\Partition6\games)
 //
-// Commands: USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE
-// REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF,
-// SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does), and on OXOS
-// SITE FORMAT-EXFAT YES (the hard disk becomes one exFAT volume; the server keeps itself on it and restarts from it)
-// and SITE DELETE-ALL-PARTITIONS YES [SECONDS] (the next boot finds a blank disk and formats it as exFAT after a
-// countdown of SECONDS, default 0).
-// RNTO moves a file or folder to another folder of the same drive. Passive data ports are lwIP's 49152-65535.
-// The address (DHCP, else 192.168.1.222 after 30 s) is on the screen and, with a SERIAL=1 kernel, on the debug serial
-// port.
-// The screen (and the debug serial port) shows every command as it arrives and what it did.
-// BACK on any controller reboots the console (as SITE REBOOT).
-// The main thread owns the screen and the controllers (SDL3, tools/sdl_screen) and starts titles; the network runs in
-// a thread of its own, and each client in another.
-// The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
+// Commands: USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP
+// ABOR QUIT, SITE REBOOT (cold reboot), SITE POWEROFF, SITE LAUNCH PATH (starts an XBE, or a folder's default.xbe, as a dashboard does), and on OXOS SITE
+// FORMAT-EXFAT YES (the hard disk becomes one exFAT volume; the server keeps itself on it and restarts from it) and SITE DELETE-ALL-PARTITIONS YES [SECONDS]
+// (the next boot finds a blank disk and formats it as exFAT after a countdown of SECONDS, default 0). RNTO moves a file or folder to another folder of the same
+// drive. Passive data ports are lwIP's 49152-65535. The address (DHCP, else 192.168.1.222 after 30 s) is on the screen and, with a SERIAL=1 kernel, on the
+// debug serial port. The screen (and the debug serial port) shows every command as it arrives and what it did. BACK on any controller reboots the console (as
+// SITE REBOOT). The main thread owns the screen and the controllers (SDL3, tools/sdl_screen) and starts titles; the network runs in a thread of its own, and
+// each client in another. The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -40,9 +34,8 @@ extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 
 namespace {
 
-// The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every
-// build, so a client can tell which build answers. The version is MAJOR.MINOR.PATCH: raise it when the server's
-// behaviour changes.
+// The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every build, so a client can tell which build
+// answers. The version is MAJOR.MINOR.PATCH: raise it when the server's behaviour changes.
 constexpr char ServerName[] = "OXOS FTP server 0.1.2 (built " __DATE__ " " __TIME__ ")";
 
 constexpr unsigned short ControlPort = 21;
@@ -50,8 +43,8 @@ constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
 constexpr SIZE_T SessionStack = 64 * 1024; // each client's thread, and the network's
 constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
-// 192.168.1.222, little-endian as nxdk wants it: the address the netboot BIOS uses for this console, so free on a
-// network set up for it (.223 was in use on the test network).
+// 192.168.1.222, little-endian as nxdk wants it: the address the netboot BIOS uses for this console, so free on a network set up for it (.223 was in use on the
+// test network).
 constexpr ULONG FallbackIp = 0xDE01A8C0;
 constexpr ULONG DhcpWaitMs = 30000; // nxdk waits 10 s; after a title switch the link can take longer to come back
 
@@ -147,8 +140,7 @@ const char *PartitionOf(char letter) {
 // An FTP path as its parts: {"F", "games", "halo"}; parts[0] is the drive.
 using Parts = std::vector<std::string>;
 
-// cwd + arg, with "." and ".." resolved; both slash kinds accepted. False for a name with a character that cannot
-// be in a file name.
+// cwd + arg, with "." and ".." resolved; both slash kinds accepted. False for a name with a character that cannot be in a file name.
 bool Resolve(const Parts &cwd, const std::string &arg, Parts &out) {
     out = (arg.empty() || (arg[0] != '/' && arg[0] != '\\')) ? cwd : Parts{};
     std::string part;
@@ -197,15 +189,14 @@ std::string NtPath(const Parts &p) {
 
 // --- Files --------------------------------------------------------------------------------------------------------
 
-NTSTATUS Open(HANDLE *handle, const std::string &path, ACCESS_MASK access, ULONG disposition, ULONG options,
-              ULONG share = FILE_SHARE_READ | FILE_SHARE_WRITE) {
+NTSTATUS Open(HANDLE *handle, const std::string &path, ACCESS_MASK access, ULONG disposition, ULONG options, ULONG share = FILE_SHARE_READ | FILE_SHARE_WRITE) {
     ANSI_STRING name;
     OBJECT_ATTRIBUTES attributes;
     IO_STATUS_BLOCK iosb;
     RtlInitAnsiString(&name, path.c_str());
     InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
-    return NtCreateFile(handle, access | SYNCHRONIZE, &attributes, &iosb, nullptr, FILE_ATTRIBUTE_NORMAL, share,
-                        disposition, options | FILE_SYNCHRONOUS_IO_NONALERT);
+    return NtCreateFile(handle, access | SYNCHRONIZE, &attributes, &iosb, nullptr, FILE_ATTRIBUTE_NORMAL, share, disposition,
+                        options | FILE_SYNCHRONOUS_IO_NONALERT);
 }
 
 struct Info {
@@ -262,14 +253,12 @@ NTSTATUS ListFolder(const Parts &p, std::vector<Entry> &list) {
     alignas(8) unsigned char buffer[4096];
     for (bool first = true;; first = false) {
         IO_STATUS_BLOCK iosb;
-        status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer),
-                                      FileDirectoryInformation, nullptr, first);
+        status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, first);
         if (!NT_SUCCESS(status))
             break; // STATUS_NO_MORE_FILES at the end
         for (ULONG offset = 0;;) {
             auto e = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer + offset);
-            list.push_back({std::string(e->FileName, e->FileNameLength),
-                            (e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, e->EndOfFile.QuadPart,
+            list.push_back({std::string(e->FileName, e->FileNameLength), (e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0, e->EndOfFile.QuadPart,
                             e->LastWriteTime.QuadPart});
             if (!e->NextEntryOffset)
                 break;
@@ -306,8 +295,7 @@ NTSTATUS Rename(const Parts &from, const Parts &to) {
     if (from.size() < 2 || to.size() < 2 || from[0] != to[0])
         return STATUS_NOT_SAME_DEVICE;
     HANDLE h;
-    NTSTATUS status = Open(&h, NtPath(from), DELETE, FILE_OPEN, 0,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
+    NTSTATUS status = Open(&h, NtPath(from), DELETE, FILE_OPEN, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
     if (!NT_SUCCESS(status))
         return status;
     std::string target = NtPath(to);
@@ -439,8 +427,8 @@ struct Session {
         sockaddr_in local = {};
         socklen_t length = sizeof(local);
         lwip_getsockname(control, reinterpret_cast<sockaddr *>(&local), &length);
-        // Port 0: lwIP picks a free port in 49152-65535, skipping ports still in TIME_WAIT. (A closed data
-        // connection keeps its port for 2 minutes; a fixed set of 100 ports ran out when copying many small files.)
+        // Port 0: lwIP picks a free port in 49152-65535, skipping ports still in TIME_WAIT. (A closed data connection keeps its port for 2 minutes; a fixed set
+        // of 100 ports ran out when copying many small files.)
         {
             int s = lwip_socket(AF_INET, SOCK_STREAM, 0);
             sockaddr_in a = {};
@@ -449,16 +437,15 @@ struct Session {
             a.sin_addr.s_addr = INADDR_ANY;
             sockaddr_in bound = {};
             socklen_t boundLength = sizeof(bound);
-            if (s >= 0 && lwip_bind(s, reinterpret_cast<sockaddr *>(&a), sizeof(a)) == 0 && lwip_listen(s, 1) == 0 &&
-                lwip_getsockname(s, reinterpret_cast<sockaddr *>(&bound), &boundLength) == 0) {
+            if (s >= 0 && lwip_bind(s, reinterpret_cast<sockaddr *>(&a), sizeof(a)) == 0 && lwip_listen(s, 1) == 0 && lwip_getsockname(s,
+                reinterpret_cast<sockaddr *>(&bound), &boundLength) == 0) {
                 unsigned short port = ntohs(bound.sin_port);
                 passive = s;
                 unsigned ip = ntohl(local.sin_addr.s_addr);
                 if (extended) {
                     Reply(229, "Entering Extended Passive Mode (|||%u|)", port);
                 } else {
-                    Reply(227, "Entering Passive Mode (%u,%u,%u,%u,%u,%u)", ip >> 24, ip >> 16 & 255, ip >> 8 & 255,
-                          ip & 255, port >> 8, port & 255);
+                    Reply(227, "Entering Passive Mode (%u,%u,%u,%u,%u,%u)", ip >> 24, ip >> 16 & 255, ip >> 8 & 255, ip & 255, port >> 8, port & 255);
                 }
                 return;
             }
@@ -528,12 +515,10 @@ struct Session {
             if (kind == 1) {
                 std::snprintf(line, sizeof(line), "%s\r\n", e.name.c_str());
             } else if (kind == 2) {
-                std::snprintf(line, sizeof(line), "type=%s;size=%lld;modify=%s; %s\r\n", e.directory ? "dir" : "file",
-                              e.size, mdtm, e.name.c_str());
+                std::snprintf(line, sizeof(line), "type=%s;size=%lld;modify=%s; %s\r\n", e.directory ? "dir" : "file", e.size, mdtm, e.name.c_str());
             } else {
-                std::snprintf(line, sizeof(line), "%s 1 xbox xbox %13lld %s %s\r\n",
-                              e.directory ? "drwxrwxrwx" : "-rw-rw-rw-", e.directory ? 0LL : e.size, when,
-                              e.name.c_str());
+                std::snprintf(line, sizeof(line), "%s 1 xbox xbox %13lld %s %s\r\n", e.directory ? "drwxrwxrwx" : "-rw-rw-rw-", e.directory ? 0LL : e.size,
+                              when, e.name.c_str());
             }
             out += line;
         }
@@ -601,8 +586,7 @@ struct Session {
         }
         HANDLE h;
         bool resume = restart || append;
-        NTSTATUS status = Open(&h, NtPath(p), GENERIC_WRITE, resume ? FILE_OPEN_IF : FILE_OVERWRITE_IF,
-                               FILE_NON_DIRECTORY_FILE, FILE_SHARE_READ);
+        NTSTATUS status = Open(&h, NtPath(p), GENERIC_WRITE, resume ? FILE_OPEN_IF : FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, FILE_SHARE_READ);
         if (!NT_SUCCESS(status)) {
             Reply(550, "%s", StatusText(status).c_str());
             return;
@@ -655,14 +639,12 @@ struct Session {
             Reply(226, "Stored %lld bytes", total);
         } else {
             Log("%s store FAILED %s (status %08lx)", peer, FtpPath(p).c_str(), (unsigned long)status);
-            Reply(NT_SUCCESS(status) ? 426 : 552, "%s",
-                  NT_SUCCESS(status) ? "Connection lost" : StatusText(status).c_str());
+            Reply(NT_SUCCESS(status) ? 426 : 552, "%s", NT_SUCCESS(status) ? "Connection lost" : StatusText(status).c_str());
         }
     }
 
-    // SITE LAUNCH: an XBE, or a folder whose default.xbe is started (an ISO's folder holds the ISO launcher as
-    // default.xbe). The title starts through the launch data page and a quick reboot, as a dashboard starts it;
-    // the reply goes out first, since the connection ends with the server.
+    // SITE LAUNCH: an XBE, or a folder whose default.xbe is started (an ISO's folder holds the ISO launcher as default.xbe). The title starts through the
+    // launch data page and a quick reboot, as a dashboard starts it; the reply goes out first, since the connection ends with the server.
     void Launch(const std::string &arg) {
         Parts p;
         if (arg.empty() || !Path(arg, p) || p.empty()) {
@@ -691,9 +673,8 @@ struct Session {
         RequestLaunch(path, false);
     }
 
-    // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z OXOS and keeps
-    // this server's XBE at the same place, then the server starts again from the new disk (a title launch, so the
-    // kernel mounts the new layout). Without YES it only says what it would do.
+    // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z OXOS and keeps this server's XBE at the same place, then
+    // the server starts again from the new disk (a title launch, so the kernel mounts the new layout). Without YES it only says what it would do.
     void FormatDisk(const std::string &arg) {
         auto format = (FormatDiskRoutine)KernelExport(OrdinalFormatDisk);
         if (!format) {
@@ -725,9 +706,8 @@ struct Session {
         RequestLaunch(self, true);
     }
 
-    // SITE DELETE-ALL-PARTITIONS YES [SECONDS]: the kernel clears every partition table and header, then the console
-    // reboots; OXOS finds a blank disk at the next boot and formats it as exFAT after SECONDS (default 0: at once)
-    // of countdown. Without YES it only says what it would do.
+    // SITE DELETE-ALL-PARTITIONS YES [SECONDS]: the kernel clears every partition table and header, then the console reboots; OXOS finds a blank disk at the
+    // next boot and formats it as exFAT after SECONDS (default 0: at once) of countdown. Without YES it only says what it would do.
     void DeleteAllPartitions(const std::string &arg) {
         auto remove = (DeleteAllPartitionsRoutine)KernelExport(OrdinalDeleteAllPartitions);
         if (!remove) {
@@ -825,8 +805,8 @@ struct Session {
                 } else {
                     char mdtm[20], text[400];
                     TimeText(info.written, nullptr, 0, mdtm, sizeof(mdtm));
-                    std::snprintf(text, sizeof(text), "250-Listing\r\n type=%s;size=%lld;modify=%s; %s\r\n250 End\r\n",
-                                  info.directory ? "dir" : "file", info.size, mdtm, FtpPath(p).c_str());
+                    std::snprintf(text, sizeof(text), "250-Listing\r\n type=%s;size=%lld;modify=%s; %s\r\n250 End\r\n", info.directory ? "dir" : "file",
+                                  info.size, mdtm, FtpPath(p).c_str());
                     SendAll(control, text, (int)std::strlen(text));
                 }
             }
@@ -855,8 +835,7 @@ struct Session {
         } else if (verb == "DELE" || verb == "RMD" || verb == "XRMD") {
             if (Path(arg, p)) {
                 NTSTATUS status = p.size() < 2 ? STATUS_ACCESS_DENIED : Delete(p, verb != "DELE");
-                Log("%s delete %s: %s", peer, FtpPath(p).c_str(),
-                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
+                Log("%s delete %s: %s", peer, FtpPath(p).c_str(), NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(250, "Deleted");
                 else
@@ -865,8 +844,7 @@ struct Session {
         } else if (verb == "MKD" || verb == "XMKD") {
             if (Path(arg, p)) {
                 NTSTATUS status = p.size() < 2 ? STATUS_ACCESS_DENIED : MakeFolder(p);
-                Log("%s mkdir %s: %s", peer, FtpPath(p).c_str(),
-                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
+                Log("%s mkdir %s: %s", peer, FtpPath(p).c_str(), NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(257, "\"%s\" created", FtpPath(p).c_str());
                 else
@@ -888,8 +866,7 @@ struct Session {
                 Reply(503, "RNFR first");
             } else if (Path(arg, p)) {
                 NTSTATUS status = Rename(renameFrom, p);
-                Log("%s move %s -> %s: %s", peer, FtpPath(renameFrom).c_str(), FtpPath(p).c_str(),
-                    NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
+                Log("%s move %s -> %s: %s", peer, FtpPath(renameFrom).c_str(), FtpPath(p).c_str(), NT_SUCCESS(status) ? "ok" : StatusText(status).c_str());
                 if (NT_SUCCESS(status))
                     Reply(250, "Renamed");
                 else
@@ -1022,9 +999,8 @@ DWORD WINAPI ServerThread(LPVOID) {
 
 } // namespace
 
-// The main thread: the screen, the controllers (BACK reboots the console cold, as SITE REBOOT: every device starts
-// reset, and a netbooted console starts what the PC serves; quitting to the dashboard with a quick reboot hung the
-// Xbox dashboard on the 1.4 console) and the titles SITE LAUNCH starts.
+// The main thread: the screen, the controllers (BACK reboots the console cold, as SITE REBOOT: every device starts reset, and a netbooted console starts what
+// the PC serves; quitting to the dashboard with a quick reboot hung the Xbox dashboard on the 1.4 console) and the titles SITE LAUNCH starts.
 int main() {
     InitializeCriticalSection(&PrintLock);
     if (!sdl_screen::Open(true))

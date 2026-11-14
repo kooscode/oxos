@@ -53,8 +53,7 @@ XBAPI LONG NTAPI KeResetEvent(PKEVENT Event) {
     return previous;
 }
 
-// Wake the first waiter with a fresh quantum instead of signalling (used by XAPI critical sections). With no
-// waiter the event is simply set.
+// Wake the first waiter with a fresh quantum instead of signalling (used by XAPI critical sections). With no waiter the event is simply set.
 XBAPI void NTAPI KeSetEventBoostPriority(PKEVENT Event, PKTHREAD *Thread) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
     if (IsListEmpty(&Event->Header.WaitListHead)) {

@@ -1,42 +1,35 @@
 # 24 — Graphics engine brought up at a cold boot
 
 OXOS addition, implemented 2026-11-01.
-- **Code:** `kernel/src/hardware/video/nv2a.cpp` (`hardware::InitGraphicsEngine`, called from `hardware::InitPci` after
-  the NV2A's PCI set-up) and `kernel/src/hardware/video/gpu_context.h` (`gpu::DefaultGraphicsContext`, the default
-  context image).
+- **Code:** `kernel/src/hardware/video/nv2a.cpp` (`hardware::InitGraphicsEngine`, called from `hardware::InitPci` after the NV2A's PCI set-up) and
+  `kernel/src/hardware/video/gpu_context.h` (`gpu::DefaultGraphicsContext`, the default context image).
 - **Unit tests:** `tests/unit/test_gpu.cpp`.
 - **Background:**
   - spec/oxos_internal/10 §2 step 7 (the GPU reset at entry, tiles and Z compression);
   - spec/stock/22 §7 (the stock graphics device's set-up).
 
-At a cold boot, before the splash and before any title, the kernel brings the NV2A graphics engine (PGRAPH) to a
-valid live context, as a stock console's boot animation leaves it.
+At a cold boot, before the splash and before any title, the kernel brings the NV2A graphics engine (PGRAPH) to a valid live context, as a stock console's boot
+animation leaves it.
 
 ## 1. Why
 - **The engine powers up holding junk.**
   - Its state registers and its internal tables hold power-on junk, e.g. PGRAPH 0x40005C = 0x39FEFF79.
-  - Switching the engine off and on (PMC 0x200 bit 12) changes none of it: 448 registers were checked on the 1.4
-    console.
-- **On a stock console** the boot animation's graphics device (spec/stock/22 §7) runs before any title. It loads a
-  default context image, so titles always find a valid engine. The Cerbios boot animation (an XDK title) does the
-  same.
+  - Switching the engine off and on (PMC 0x200 bit 12) changes none of it: 448 registers were checked on the 1.4 console.
+- **On a stock console** the boot animation's graphics device (spec/stock/22 §7) runs before any title. It loads a default context image, so titles always find
+  a valid engine. The Cerbios boot animation (an XDK title) does the same.
 - **OXOS has no boot animation.** So the first title that creates its own graphics device meets the junk.
   - Direct3D titles cope: their first context switch only loads the image they filled.
-  - nxdk's pbkit (up to 2026-11, `pb_load_gr_ctx`) saves the engine's live state over its freshly filled image on
-    the first switch. With the junk, every Kelvin method then fails with "FD invalid operation" (class 0x97, first
-    at method 0x1D6C), and pbkit stops at its GPU error screen.
+  - nxdk's pbkit (up to 2026-11, `pb_load_gr_ctx`) saves the engine's live state over its freshly filled image on the first switch. With the junk, every Kelvin
+    method then fails with "FD invalid operation" (class 0x97, first at method 0x1D6C), and pbkit stops at its GPU error screen.
   - This hit every pbkit app on hardware: nxdk's samples, the XBL Dashboard installer. xemu is not affected.
-  - Fixed in pbkit by https://github.com/XboxDev/nxdk/pull/801, but apps built before the fix keep the bug. OXOS's
-    own console apps build with the fix (nxdk from kooscode/nxdk, branch `oxos`; `kernel/Makefile`, `make nxdk`);
-    their SDL3 renderer starts the engine through the same `pb_init`.
-- **With a valid live context**, that save is harmless. Measured: these apps work after any Direct3D title has run,
-  and on a cold OXOS boot with this set-up.
-- The splash does not draw with the graphics engine (it writes the frame buffer). This set-up also leaves the engine
-  in a defined state for any later graphics code in the kernel.
+  - Fixed in pbkit by https://github.com/XboxDev/nxdk/pull/801, but apps built before the fix keep the bug. OXOS's own console apps build with the fix (nxdk
+    from kooscode/nxdk, branch `oxos`; `kernel/Makefile`, `make nxdk`); their SDL3 renderer starts the engine through the same `pb_init`.
+- **With a valid live context**, that save is harmless. Measured: these apps work after any Direct3D title has run, and on a cold OXOS boot with this set-up.
+- The splash does not draw with the graphics engine (it writes the frame buffer). This set-up also leaves the engine in a defined state for any later graphics
+  code in the kernel.
 
 ## 2. Sequence
-All NV2A registers are at 0xFD000000 + offset. The tiles and Z compression have just been cleared (spec 10 §2
-step 7.3).
+All NV2A registers are at 0xFD000000 + offset. The tiles and Z compression have just been cleared (spec 10 §2 step 7.3).
 
 1. **Engines on:** PMC 0x200 ← 0xFFFFFFFF.
    - At a cold boot it reads 0x01110000 (FIFO and graphics off), and 0x13111113 after.
@@ -60,8 +53,8 @@ step 7.3).
    | 0x400780 (context table) | 0x17F0 |
 
    Then wait until idle (§4).
-4. **The engine's copies of the memory set-up.** Set each register and the matching RDI entry: RDI select 0xEA,
-   index register 0x400750 = select << 16 | address, data 0x400754.
+4. **The engine's copies of the memory set-up.** Set each register and the matching RDI entry: RDI select 0xEA, index register 0x400750 = select << 16 |
+   address, data 0x400754.
 
    | Source (PFB) | PGRAPH register | RDI 0xEA address |
    |---|---|---|
@@ -74,29 +67,25 @@ step 7.3).
    | 0x100204 | 0x4009A8 | 0x04 |
 
    (i = 0-7.)
-5. **Context switch and control:** 0x40014C-0x400158 ← 0; 0x400144 ← 0x10000000 (device enabled);
-   0x400764 ← 0x08000000.
-6. **The default context image** (§3), 0x36B0 bytes at instance 0x1800: PRAMIN 0x18000, written through the
-   instance window at 0xFD700000.
-   - It lies inside the reserved 64 KB of GPU instance memory (PRAMIN 0x10000-0x1FFFF, physical
-     0x3FE0000-0x3FEFFFF, spec/stock/09 §2). Titles lay their own structures out from PRAMIN 0x10000.
+5. **Context switch and control:** 0x40014C-0x400158 ← 0; 0x400144 ← 0x10000000 (device enabled); 0x400764 ← 0x08000000.
+6. **The default context image** (§3), 0x36B0 bytes at instance 0x1800: PRAMIN 0x18000, written through the instance window at 0xFD700000.
+   - It lies inside the reserved 64 KB of GPU instance memory (PRAMIN 0x10000-0x1FFFF, physical 0x3FE0000-0x3FEFFFF, spec/stock/09 §2). Titles lay their own
+     structures out from PRAMIN 0x10000.
    - The one-entry context table at instance 0x17F0 holds 0x1800.
    - Never write PRAMIN below 0x10000: that is the kernel's page tables.
-7. **State reset:** 0x400080 ← 0x00070000, read it, ← 0, read it; RDI 0x3D addresses 0x00-0x38 ← 15 zero dwords;
-   0x400084 |= 0x01000000 (cache invalidate).
+7. **State reset:** 0x400080 ← 0x00070000, read it, ← 0, read it; RDI 0x3D addresses 0x00-0x38 ← 15 zero dwords; 0x400084 |= 0x01000000 (cache invalidate).
 8. **Load:** 0x400148 ← 0 (channel 0); 0x400784 ← 0x1800 (context pointer); 0x400788 ← 1 (load); wait until idle.
 9. **No channel current**, as the stock graphics device leaves it before its first channel:
    - 0x400144 ← 0x10000100; 0x400764 ← 0x08000000;
    - 0x400720 ← 1 (FIFO access on);
    - 0x400100 ← 0xFFFFFFFF (nothing pending); 0x400140 ← 0 (interrupts off).
-10. **Log (serial builds):** the PMC value before and after, and PGRAPH 0x40005C before and after. On the 1.4
-    console 0x39FEFF71 becomes 0x00000040.
+10. **Log (serial builds):** the PMC value before and after, and PGRAPH 0x40005C before and after. On the 1.4 console 0x39FEFF71 becomes 0x00000040.
 
 Only at a cold boot: a quick reboot keeps whatever the last title left, as on a stock console.
 
 ## 3. The default context image
-These are the values the stock graphics library (and Direct3D, and nxdk's pbkit) writes into a channel's context
-image before its first load. `gpu::DefaultGraphicsContext` lists the non-zero dwords; the rest is zero.
+These are the values the stock graphics library (and Direct3D, and nxdk's pbkit) writes into a channel's context image before its first load.
+`gpu::DefaultGraphicsContext` lists the non-zero dwords; the rest is zero.
 
 | Offset | Value |
 |---|---|
@@ -129,17 +118,15 @@ image before its first load. `gpu::DefaultGraphicsContext` lists the non-zero dw
 | 0x340C + 0x10-0x2C | 0x001C527C (8 dwords) |
 
 - **Bytes 0x004-0x33B** are state the engine fills when it saves a context; they start at zero.
-- **The 136 blocks are 16 bytes apart**, as the stock library writes them (Cerbios BootAnim's Direct3D at 0x4C5E6).
-  nxdk's pbkit advances 32 bytes per block, so it writes only every other block.
+- **The 136 blocks are 16 bytes apart**, as the stock library writes them (Cerbios BootAnim's Direct3D at 0x4C5E6). nxdk's pbkit advances 32 bytes per block, so
+  it writes only every other block.
 
 ## 4. Waiting for idle
-Poll PGRAPH 0x400700 until it reads 0, for at most 1,000,000 polls (about 100 ms). On a timeout the sequence
-carries on and the log says "engine not idle".
+Poll PGRAPH 0x400700 until it reads 0, for at most 1,000,000 polls (about 100 ms). On a timeout the sequence carries on and the log says "engine not idle".
 
 ## 5. Checked
 1.4 console (Modxo, serial build), cold boot, netbooted titles:
-- **nxdk's `triangle` sample with an unpatched pbkit:** it runs (60 fps). Without this set-up it stopped at the GPU
-  error screen.
+- **nxdk's `triangle` sample with an unpatched pbkit:** it runs (60 fps). Without this set-up it stopped at the GPU error screen.
 - **The XBL Dashboard installer** (pbkit, v0.8): its "Ready to install" screen appears.
 - **The boot splash** shows as before.
 

@@ -29,12 +29,9 @@ static void NTAPI DeleteTimer(PVOID Object) {
 }
 
 XBAPI OBJECT_TYPE ExEventObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0, 'vevE'};
-XBAPI OBJECT_TYPE ExMutantObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteMutant, nullptr, (PVOID)0,
-                                        'atuM'};
-XBAPI OBJECT_TYPE ExSemaphoreObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0,
-                                           'ameS'};
-XBAPI OBJECT_TYPE ExTimerObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteTimer, nullptr, (PVOID)0,
-                                       'emiT'};
+XBAPI OBJECT_TYPE ExMutantObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteMutant, nullptr, (PVOID)0, 'atuM'};
+XBAPI OBJECT_TYPE ExSemaphoreObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, nullptr, nullptr, (PVOID)0, 'ameS'};
+XBAPI OBJECT_TYPE ExTimerObjectType = {ExAllocatePoolWithTag, ExFreePool, nullptr, DeleteTimer, nullptr, (PVOID)0, 'emiT'};
 
 template <typename T>
 static NTSTATUS CreateNamedObject(POBJECT_TYPE type, POBJECT_ATTRIBUTES attrs, PHANDLE handle, T init) {
@@ -50,8 +47,7 @@ static NTSTATUS CreateNamedObject(POBJECT_TYPE type, POBJECT_ATTRIBUTES attrs, P
 
 // --- Events
 
-XBAPI NTSTATUS NTAPI NtCreateEvent(PHANDLE EventHandle, POBJECT_ATTRIBUTES ObjectAttributes, EVENT_TYPE EventType,
-                                   BOOLEAN InitialState) {
+XBAPI NTSTATUS NTAPI NtCreateEvent(PHANDLE EventHandle, POBJECT_ATTRIBUTES ObjectAttributes, EVENT_TYPE EventType, BOOLEAN InitialState) {
     if (EventType != NotificationEvent && EventType != SynchronizationEvent)
         return STATUS_INVALID_PARAMETER;
     return CreateNamedObject(&ExEventObjectType, ObjectAttributes, EventHandle, [&](PVOID o) {
@@ -139,8 +135,7 @@ XBAPI NTSTATUS NTAPI NtQueryMutant(HANDLE MutantHandle, MUTANT_BASIC_INFORMATION
 
 // --- Semaphores
 
-XBAPI NTSTATUS NTAPI NtCreateSemaphore(PHANDLE SemaphoreHandle, POBJECT_ATTRIBUTES ObjectAttributes, LONG InitialCount,
-                                       LONG MaximumCount) {
+XBAPI NTSTATUS NTAPI NtCreateSemaphore(PHANDLE SemaphoreHandle, POBJECT_ATTRIBUTES ObjectAttributes, LONG InitialCount, LONG MaximumCount) {
     if (MaximumCount <= 0 || InitialCount < 0 || InitialCount > MaximumCount)
         return STATUS_INVALID_PARAMETER;
     return CreateNamedObject(&ExSemaphoreObjectType, ObjectAttributes, SemaphoreHandle, [&](PVOID o) {
@@ -200,9 +195,8 @@ XBAPI NTSTATUS NTAPI NtCreateTimer(PHANDLE TimerHandle, POBJECT_ATTRIBUTES Objec
     });
 }
 
-XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PTIMER_APC_ROUTINE TimerApcRoutine,
-                                  KPROCESSOR_MODE ApcMode, PVOID TimerContext, BOOLEAN ResumeTimer, LONG Period,
-                                  PBOOLEAN PreviousState) {
+XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PTIMER_APC_ROUTINE TimerApcRoutine, KPROCESSOR_MODE ApcMode, PVOID TimerContext,
+                                  BOOLEAN ResumeTimer, LONG Period, PBOOLEAN PreviousState) {
     if (Period < 0)
         return STATUS_INVALID_PARAMETER;
     return WithReferencedObject(TimerHandle, &ExTimerObjectType, [&](PVOID o) {
@@ -213,8 +207,7 @@ XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PT
         KeRemoveQueueDpc(&t->TimerDpc);
         t->ApcAssociated = TimerApcRoutine != nullptr;
         if (TimerApcRoutine) {
-            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), TimerApcKernelRoutine, nullptr,
-                            (PKNORMAL_ROUTINE)TimerApcRoutine, ApcMode, TimerContext);
+            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), TimerApcKernelRoutine, nullptr, (PKNORMAL_ROUTINE)TimerApcRoutine, ApcMode, TimerContext);
         }
         KeSetTimerEx(&t->KeTimer, *DueTime, Period, &t->TimerDpc);
         KfLowerIrql(old);
@@ -249,8 +242,7 @@ XBAPI NTSTATUS NTAPI NtQueryTimer(HANDLE TimerHandle, TIMER_BASIC_INFORMATION *T
 
 // --- Waits through handles (WaitReason UserRequest)
 
-XBAPI NTSTATUS NTAPI NtWaitForSingleObjectEx(HANDLE Handle, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
-                                             PLARGE_INTEGER Timeout) {
+XBAPI NTSTATUS NTAPI NtWaitForSingleObjectEx(HANDLE Handle, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Timeout) {
     PVOID o;
     NTSTATUS status = ObReferenceObjectByHandle(Handle, nullptr, &o);
     if (!NT_SUCCESS(status))
@@ -264,8 +256,8 @@ XBAPI NTSTATUS NTAPI NtWaitForSingleObject(HANDLE Handle, BOOLEAN Alertable, PLA
     return NtWaitForSingleObjectEx(Handle, UserMode, Alertable, Timeout);
 }
 
-XBAPI NTSTATUS NTAPI NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], WAIT_TYPE WaitType,
-                                                KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Timeout) {
+XBAPI NTSTATUS NTAPI NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], WAIT_TYPE WaitType, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
+                                                PLARGE_INTEGER Timeout) {
     if (Count == 0 || Count > 64 || (WaitType != WaitAll && WaitType != WaitAny))
         return STATUS_INVALID_PARAMETER;
     PVOID objects[64], waitables[64];
@@ -279,16 +271,15 @@ XBAPI NTSTATUS NTAPI NtWaitForMultipleObjectsEx(ULONG Count, HANDLE Handles[], W
         waitables[n] = GetWaitableObject(objects[n]);
     }
     if (NT_SUCCESS(status)) {
-        status = KeWaitForMultipleObjects(Count, waitables, WaitType, UserRequest, WaitMode, Alertable, Timeout,
-                                          blocks);
+        status = KeWaitForMultipleObjects(Count, waitables, WaitType, UserRequest, WaitMode, Alertable, Timeout, blocks);
     }
     while (n)
         ObfDereferenceObject(objects[--n]);
     return status;
 }
 
-XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDLE WaitHandle, KPROCESSOR_MODE WaitMode,
-                                                      BOOLEAN Alertable, PLARGE_INTEGER Timeout) {
+XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDLE WaitHandle, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
+                                                      PLARGE_INTEGER Timeout) {
     PVOID signal, wait;
     NTSTATUS status = ObReferenceObjectByHandle(SignalHandle, nullptr, &signal);
     if (!NT_SUCCESS(status))
@@ -316,8 +307,7 @@ XBAPI NTSTATUS NTAPI NtSignalAndWaitForSingleObjectEx(HANDLE SignalHandle, HANDL
     return status;
 }
 
-// Any ready thread gets the processor, lower priorities included (spec/stock/07); not a zero-length delay, which only
-// yields to equal or higher priorities.
+// Any ready thread gets the processor, lower priorities included (spec/stock/07); not a zero-length delay, which only yields to equal or higher priorities.
 XBAPI NTSTATUS NTAPI NtYieldExecution() {
     return core::YieldExecution();
 }

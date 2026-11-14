@@ -1,7 +1,6 @@
-// The kernel's graphics (src/graphics/): the OXOS font and text (text.cpp), and the frame buffer and shapes of the
-// kernel's own screens (screen.cpp): the error screens, the format countdown and the File Manager's screen draw with
-// them, and the boot splash with the text. Resident: those screens can come up after the boot-only code is freed. The
-// vector renderer the splash draws its scene with (vector_renderer.cpp) is in graphics/vector_renderer.h.
+// The kernel's graphics (src/graphics/): the OXOS font and text (text.cpp), and the frame buffer and shapes of the kernel's own screens (screen.cpp): the error
+// screens, the format countdown and the File Manager's screen draw with them, and the boot splash with the text. Resident: those screens can come up after the
+// boot-only code is freed. The vector renderer the splash draws its scene with (vector_renderer.cpp) is in graphics/vector_renderer.h.
 #pragma once
 #include <runtime/types.h>
 
@@ -23,8 +22,7 @@ constexpr ULONG SCREEN_LINE_CHARS = 45;
 constexpr ULONG COLOR_WHITE = 0xFFFFFF, COLOR_TEXT = 0xC8C8C8, COLOR_GREY = 0x808080;
 constexpr ULONG COLOR_DIGIT = 0xFFFFFFFF; // the large digits' white (the boot tests look for this value)
 
-// A new black screen with "OXOS v0.3.16/CONEXANT" at the top (StartScreen), or null without an AV pack or memory;
-// ShowScreen puts it on the TV.
+// A new black screen with "OXOS v0.3.16/CONEXANT" at the top (StartScreen), or null without an AV pack or memory; ShowScreen puts it on the TV.
 ULONG *OpenScreen();
 void StartScreen(ULONG *Screen); // black, with the version at the top
 void ShowScreen(ULONG Physical); // the frame buffer at Physical on the TV, in the boot display mode

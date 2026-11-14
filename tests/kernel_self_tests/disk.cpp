@@ -1,5 +1,4 @@
-// Boot self-tests for the IDE disk driver (milestone 3c-1). boot_test.py compares the data read here with the
-// HDD image it attached.
+// Boot self-tests for the IDE disk driver (milestone 3c-1). boot_test.py compares the data read here with the HDD image it attached.
 #include <kernel_self_tests.h>
 #include <storage/storage.h>
 #include <runtime/runtime.h>
@@ -12,15 +11,15 @@ volatile ULONG KiTestIdexBigSum, KiTestIdexBigOk;  // 256 KB read at the start o
 volatile ULONG KiTestIdexWriteOk, KiTestIdexIoctlOk, KiTestIdexErrorsOk, KiTestIdexNamesOk, KiTestIdexDone;
 volatile ULONG KiTestIdexPassThroughOk, KiTestIdexSecurityAfter; // IDENTIFY word 128 after boot
 volatile UCHAR KiTestIdexPassword[32]; // the derived drive password (boot_test.py recomputes it)
-// 48-bit addressing (spec/oxos_internal/04_lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the
-// writes were made, 2 when skipped because a target sector held other data; Ok = every pattern read back.
+// 48-bit addressing (spec/oxos_internal/04_lba48.md): run only on disks past the 28-bit limit. Ran = 1 when the writes were made, 2 when skipped because a
+// target sector held other data; Ok = every pattern read back.
 volatile ULONG KiTestIdexLba48Ran, KiTestIdexLba48Ok;
 volatile ULONG KiTestIdexFolderOk; // exFAT disk: raw access refused where it must be
 
 static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major = IRP_MJ_READ);
 
-// Each test sector: 'LB48', its LBA (low, high), the write's tag, then dwords derived from the LBA. The host side
-// (boot_test.py) finds them at exactly LBA * 512 in the image.
+// Each test sector: 'LB48', its LBA (low, high), the write's tag, then dwords derived from the LBA. The host side (boot_test.py) finds them at exactly LBA *
+// 512 in the image.
 static void IdexLba48Fill(PULONG p, ULONGLONG lba, ULONG count, ULONG tag) {
     for (ULONG n = 0; n < count; n++, lba++, p += 128) {
         p[0] = 0x3834424C; // "LB48"
@@ -50,8 +49,7 @@ static bool IdexLba48Free(PDEVICE_OBJECT disk, PUCHAR buf, ULONGLONG lba, ULONG 
 static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
     ULONGLONG last = hardware::ide::DiskLengthInSectors - 1;
     // Needs the raw Partition0.
-    if (!hardware::ide::DiskSupportsLba48 || hardware::ide::DiskLengthInSectors < 0x20001000 ||
-        storage::DiskHasEXFATLayout)
+    if (!hardware::ide::DiskSupportsLba48 || hardware::ide::DiskLengthInSectors < 0x20001000 || storage::DiskHasEXFATLayout)
         return;
     struct {
         ULONGLONG lba;
@@ -86,8 +84,7 @@ static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
                 if (lba >= v.lba && lba < v.lba + v.count)
                     tag = v.tag;
             }
-            ok = p[0] == 0x3834424C && p[1] == (ULONG)lba && p[2] == (ULONG)(lba >> 32) && p[3] == tag &&
-                 p[127] == ((ULONG)lba * 2654435761u ^ 127);
+            ok = p[0] == 0x3834424C && p[1] == (ULONG)lba && p[2] == (ULONG)(lba >> 32) && p[3] == tag && p[127] == ((ULONG)lba * 2654435761u ^ 127);
         }
     }
     KiTestIdexLba48Ran = 1;
@@ -98,8 +95,7 @@ static PDEVICE_OBJECT IdexTestOpen(PCSZ name) {
     OBJECT_STRING s;
     RtlInitAnsiString(&s, name);
     PVOID dev = nullptr;
-    return NT_SUCCESS(ObReferenceObjectByName(&s, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &dev)) ? (PDEVICE_OBJECT)dev
-                                                                                                  : nullptr;
+    return NT_SUCCESS(ObReferenceObjectByName(&s, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &dev)) ? (PDEVICE_OBJECT)dev : nullptr;
 }
 
 static NTSTATUS IdexTestRead(PDEVICE_OBJECT dev, PVOID buf, ULONG len, LONGLONG offset, UCHAR major) {
@@ -116,9 +112,8 @@ static void NTAPI IdexControllerThread(PVOID) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     auto buf = (PUCHAR)MmAllocateContiguousMemory(0x40000);
-    static const char *names[] = {"\\Device\\Harddisk0\\Partition0", "\\Device\\Harddisk0\\Partition1",
-                                  "\\Device\\Harddisk0\\partition2", "\\Device\\Harddisk0\\Partition3",
-                                  "\\Device\\Harddisk0\\Partition4", "\\Device\\Harddisk0\\Partition5"};
+    static const char *names[] = {"\\Device\\Harddisk0\\Partition0", "\\Device\\Harddisk0\\Partition1", "\\Device\\Harddisk0\\partition2",
+                                  "\\Device\\Harddisk0\\Partition3", "\\Device\\Harddisk0\\Partition4", "\\Device\\Harddisk0\\Partition5"};
     PDEVICE_OBJECT parts[6];
     bool ok = true;
     for (ULONG i = 0; i < 6; i++) {
@@ -142,12 +137,11 @@ static void NTAPI IdexControllerThread(PVOID) {
         return;
     }
 
-    // exFAT disk (spec/oxos_internal/05_exfat_storage_spec.md): folder partitions have no sectors of their own, and
-    // Partition0 reaches only the retail reserved area (0-0x7FFFF).
+    // exFAT disk (spec/oxos_internal/05_exfat_storage_spec.md): folder partitions have no sectors of their own, and Partition0 reaches only the retail reserved
+    // area (0-0x7FFFF).
     if (storage::DiskHasEXFATLayout) {
-        KiTestIdexFolderOk = IdexTestRead(parts[1], buf, 512, 0) == STATUS_INVALID_DEVICE_REQUEST &&
-                             IdexTestRead(parts[0], buf, 512, 0x80000) == STATUS_INVALID_PARAMETER &&
-                             IdexTestRead(parts[0], buf, 512, 0x7FE00) == STATUS_SUCCESS;
+        KiTestIdexFolderOk = IdexTestRead(parts[1], buf, 512, 0) == STATUS_INVALID_DEVICE_REQUEST && IdexTestRead(parts[0], buf, 512,
+                             0x80000) == STATUS_INVALID_PARAMETER && IdexTestRead(parts[0], buf, 512, 0x7FE00) == STATUS_SUCCESS;
     }
 
     // Two 128 KB DMA chunks in one request, buffer from non-contiguous pool pages too.
@@ -176,13 +170,11 @@ static void NTAPI IdexControllerThread(PVOID) {
     PARTITION_INFORMATION pi;
     DISK_GEOMETRY g;
     ULONG ret;
-    ok = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, parts[2], nullptr, 0, &pi, sizeof(pi),
-                                             &ret, FALSE) == 0 &&
-         ret == sizeof(pi) && pi.StartingOffset.QuadPart == 0x465400LL * 512 &&
-         pi.PartitionLength.QuadPart == 0x1F400000 && pi.PartitionNumber == 2;
-    ok &= IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, parts[0], nullptr, 0, &g, sizeof(g),
-                                              &ret, FALSE) == 0 &&
-          (ULONGLONG)g.Cylinders.QuadPart == hardware::ide::DiskLengthInSectors && g.BytesPerSector == 512;
+    ok = IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_PARTITION_INFO, parts[2], nullptr, 0, &pi, sizeof(pi), &ret, FALSE) == 0 && ret == sizeof(pi) &&
+                                             pi.StartingOffset.QuadPart == 0x465400LL * 512 && pi.PartitionLength.QuadPart == 0x1F400000 &&
+                                             pi.PartitionNumber == 2;
+    ok &= IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, parts[0], nullptr, 0, &g, sizeof(g), &ret, FALSE) == 0 &&
+                                              (ULONGLONG)g.Cylinders.QuadPart == hardware::ide::DiskLengthInSectors && g.BytesPerSector == 512;
     KiTestIdexIoctlOk = ok;
 
     // Parameter errors: unaligned length/offset, past the end of a partition.
@@ -201,13 +193,12 @@ static void NTAPI IdexControllerThread(PVOID) {
         p.DataBuffer = buf;
         RtlZeroMemory(buf, 512);
         ULONG got = 0;
-        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p),
-                                                  &got, FALSE) == STATUS_SUCCESS && got == sizeof(p);
-        ok &= !(p.IdeReg.bCommandReg & 0x81) && HalDiskModelNumber.Length >= 2 &&
-              buf[54] == (UCHAR)HalDiskModelNumber.Buffer[1] && buf[55] == (UCHAR)HalDiskModelNumber.Buffer[0];
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p), &got, FALSE) == STATUS_SUCCESS &&
+                                                  got == sizeof(p);
+        ok &= !(p.IdeReg.bCommandReg & 0x81) && HalDiskModelNumber.Length >= 2 && buf[54] == (UCHAR)HalDiskModelNumber.Buffer[1] &&
+              buf[55] == (UCHAR)HalDiskModelNumber.Buffer[0];
         KiTestIdexSecurityAfter = buf[256] | buf[257] << 8;
-        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &q, sizeof(q),
-                                                  nullptr, FALSE) == STATUS_INVALID_PARAMETER;
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &q, sizeof(q), nullptr, FALSE) == STATUS_INVALID_PARAMETER;
         // A failing command still completes the IRP: status ERR comes back in the registers.
         p = {};
         p.IdeReg.bCommandReg = 0xF2; // SECURITY UNLOCK on an unlocked drive (or one without security) is aborted
@@ -215,8 +206,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         p.DataBufferSize = 512;
         p.DataBuffer = buf;
         RtlZeroMemory(buf, 512);
-        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p),
-                                                  nullptr, FALSE) == STATUS_SUCCESS;
+        ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p), nullptr, FALSE) == STATUS_SUCCESS;
         KiTestIdexPassThroughOk = ok;
     }
     UCHAR password[32] = {};

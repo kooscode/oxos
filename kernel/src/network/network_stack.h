@@ -1,6 +1,5 @@
-// The network stack's internal interface between its files (src/network/): ip.cpp (Ethernet, ARP, IPv4, ICMP, DHCP) and
-// tcp.cpp (TCP), on the network card's driver (hardware/ethernet/ethernet.h). spec/oxos_internal/31_upload_server.md
-// §2.
+// The network stack's internal interface between its files (src/network/): ip.cpp (Ethernet, ARP, IPv4, ICMP, DHCP) and tcp.cpp (TCP), on the network card's
+// driver (hardware/ethernet/ethernet.h). spec/oxos_internal/31_upload_server.md §2.
 #pragma once
 #include <network/network.h>
 #include <hardware/ethernet/ethernet.h>
@@ -38,8 +37,8 @@ void FrameReceived(const UCHAR *Frame, ULONG Length);
 // The one's complement sum of Length bytes, added to Sum (not yet folded or inverted).
 ULONG Checksum(const UCHAR *Data, ULONG Length, ULONG Sum);
 USHORT FoldChecksum(ULONG Sum); // folded and inverted: the checksum field
-// An IPv4 packet, built in a transmit buffer: IpPayload gives the place for its payload (NET_IP_PAYLOAD bytes;
-// null while the card is busy), then SendIp adds the headers and sends it.
+// An IPv4 packet, built in a transmit buffer: IpPayload gives the place for its payload (NET_IP_PAYLOAD bytes; null while the card is busy), then SendIp adds
+// the headers and sends it.
 PUCHAR IpPayload();
 void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Protocol, ULONG Length);
 

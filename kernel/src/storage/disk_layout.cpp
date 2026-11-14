@@ -1,6 +1,5 @@
-// The hard disk's layout (spec/cerbios/03, spec/oxos_internal/05_exfat_storage_spec.md): retail FATX partitions (the
-// fixed table, Cerbios's larger-disk defaults or a PARTINFO table), or an exFAT volume (GPT, MBR or the whole disk).
-// Read once, at the first open of a partition or the power-cycle count.
+// The hard disk's layout (spec/cerbios/03, spec/oxos_internal/05_exfat_storage_spec.md): retail FATX partitions (the fixed table, Cerbios's larger-disk
+// defaults or a PARTINFO table), or an exFAT volume (GPT, MBR or the whole disk). Read once, at the first open of a partition or the power-cycle count.
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
 #include <hardware/chipset/serial.h>
@@ -18,27 +17,23 @@
 
 namespace xk::storage {
 
-// The whole disk without remapping (not named): the layout is read through it. DiskLayoutKnown is set under
-// DiskLayoutLock.
+// The whole disk without remapping (not named): the layout is read through it. DiskLayoutKnown is set under DiskLayoutLock.
 static PDEVICE_OBJECT DiskPhysical;
 static KEVENT DiskLayoutLock;
 static volatile LONG DiskLayoutKnown;
 
 IDE_PARTITION DiskPartitions[15];
 
-// exFAT layout: a GPT or MBR disk whose first data partition holds exFAT, or exFAT on the whole disk with its FAT at
-// sector 2048 or later.
+// exFAT layout: a GPT or MBR disk whose first data partition holds exFAT, or exFAT on the whole disk with its FAT at sector 2048 or later.
 BOOLEAN DiskHasEXFATLayout;
 PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition (not named)
 
-// A disk with a PC partition table (GPT or an MBR with an exFAT/NTFS entry) on which no exFAT volume was found: it gets
-// no partitions and refuses writes, rather than being taken for a FATX disk whose fixed layout would write into it
-// (the refurb record in sector 3 lands in the GPT's entry array).
+// A disk with a PC partition table (GPT or an MBR with an exFAT/NTFS entry) on which no exFAT volume was found: it gets no partitions and refuses writes,
+// rather than being taken for a FATX disk whose fixed layout would write into it (the refurb record in sector 3 lands in the GPT's entry array).
 BOOLEAN DiskHasForeignLayout;
 
 void InitDiskLayout() {
-    hardware::ide::CreateDiskDevice(0x81, 0, (LONGLONG)hardware::ide::DiskLengthInSectors << 9, &DiskPhysical,
-                                    IDE_KIND_PHYSICAL);
+    hardware::ide::CreateDiskDevice(0x81, 0, (LONGLONG)hardware::ide::DiskLengthInSectors << 9, &DiskPhysical, IDE_KIND_PHYSICAL);
     KeInitializeEvent(&DiskLayoutLock, SynchronizationEvent, TRUE);
 }
 
@@ -59,8 +54,8 @@ NTSTATUS ReadDiskSectors(ULONGLONG Lba, PVOID Buffer, ULONG Length) {
     return status;
 }
 
-// The first basic-data partition of a GPT whose header (at Lba) and entry array check out. With Lenient, an entry array
-// that fails its CRC is used too (the caller then insists on an exFAT boot sector at the partition's start).
+// The first basic-data partition of a GPT whose header (at Lba) and entry array check out. With Lenient, an entry array that fails its CRC is used too (the
+// caller then insists on an exFAT boot sector at the partition's start).
 static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last, bool Lenient = false) {
     static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
                                         0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
@@ -96,9 +91,9 @@ static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLON
     return found;
 }
 
-// FATX partitions without a table (spec/cerbios/03 §3, Cerbios's default 5): the retail five; on a disk larger than the
-// retail 8 GB one, F: from E:'s end up to sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end,
-// each capped at 0x74000000 sectors and used only when larger than 0x200000 sectors (1 GiB).
+// FATX partitions without a table (spec/cerbios/03 §3, Cerbios's default 5): the retail five; on a disk larger than the retail 8 GB one, F: from E:'s end up to
+// sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end, each capped at 0x74000000 sectors and used only when larger than 0x200000 sectors
+// (1 GiB).
 static void DiskDefaultPartitions() {
     constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF, CAP = 0x74000000, MIN = 0x200000;
     DiskPartitions[1] = {0x55F400, 0x9896B0}; // E:
@@ -120,8 +115,7 @@ static void DiskDefaultPartitions() {
     place(7, fEnd, n);
 }
 
-// A PARTINFO table (spec/cerbios/03 §2) at sector 0, 8 sectors before the end or the last sector replaces the whole
-// table.
+// A PARTINFO table (spec/cerbios/03 §2) at sector 0, 8 sectors before the end or the last sector replaces the whole table.
 static bool DiskReadPartitionTable(PUCHAR Sector) {
     ULONGLONG n = hardware::ide::DiskLengthInSectors;
     const ULONGLONG places[] = {0, n - 8, n - 1};
@@ -172,8 +166,8 @@ static NTSTATUS DiskFormat(const DISK_FORMAT_FILE *File) {
     ULONG serial = (ULONG)now.QuadPart ^ (ULONG)(now.QuadPart >> 32) ^ (ULONG)hardware::ide::DiskLengthInSectors;
     DISK_FORMAT_RESULT r = {};
     NTSTATUS status = FormatDiskEXFAT(hardware::ide::DiskLengthInSectors, serial, stamp, File, &FormatIo, scratch, &r);
-    XK_SERIAL("disk: formatted as exFAT: %#lx (partition at %llu, %llu sectors, %lu clusters of %lu KB)\n", status,
-              r.PartitionStart, r.PartitionSectors, r.ClusterCount, (1ul << r.ClusterShift) >> 10);
+    XK_SERIAL("disk: formatted as exFAT: %#lx (partition at %llu, %llu sectors, %lu clusters of %lu KB)\n", status, r.PartitionStart, r.PartitionSectors,
+              r.ClusterCount, (1ul << r.ClusterShift) >> 10);
     MmFreeSystemMemory(scratch, DISK_FORMAT_SCRATCH);
     return status;
 }
@@ -187,8 +181,8 @@ volatile ULONG DiskCountdownSeconds, DiskCountdownReason;
 // The checks of a cold boot (DetectDiskLayout): boot-only code, which runs only while its pages are present.
 #pragma code_seg(".xkb")
 
-// Seconds on the screen and the serial port before the disk is formatted: turning the console off keeps the disk.
-// The splash ends first, as the countdown takes the screen; the boot-only pages stay (the upload server may run next).
+// Seconds on the screen and the serial port before the disk is formatted: turning the console off keeps the disk. The splash ends first, as the countdown takes
+// the screen; the boot-only pages stay (the upload server may run next).
 static void DiskCountdown(const char *Title, const char *What, ULONG Seconds, ULONG Reason) {
     DiskCountdownSeconds = Seconds;
     DiskCountdownReason = Reason;
@@ -205,8 +199,8 @@ static void DiskCountdown(const char *Title, const char *What, ULONG Seconds, UL
     user_interface::ShowFormatCountdown(nullptr, nullptr, 0);
 }
 
-// A blank disk (every sector a layout is recognised by reads back as zeros: a new disk, or one
-// OXOSDeleteAllPartitions cleared) is formatted after the marker's countdown, or IDEX_COUNTDOWN without one.
+// A blank disk (every sector a layout is recognised by reads back as zeros: a new disk, or one OXOSDeleteAllPartitions cleared) is formatted after the marker's
+// countdown, or IDEX_COUNTDOWN without one.
 static void DiskFormatIfBlank(PUCHAR Scratch) {
     if (!IsDiskBlank(hardware::ide::DiskLengthInSectors, &FormatIo, Scratch))
         return;
@@ -229,15 +223,14 @@ static bool DiskHasFatx(PUCHAR Scratch) {
 
 #pragma code_seg()
 
-// Reads the layout: exFAT (DiskHasEXFATLayout), a foreign PC disk (DiskHasForeignLayout), else FATX partitions.
-// The caller holds DiskLayoutLock.
+// Reads the layout: exFAT (DiskHasEXFATLayout), a foreign PC disk (DiskHasForeignLayout), else FATX partitions. The caller holds DiskLayoutLock.
 static void DiskReadLayout() {
     {
         auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'tyLI');
         ULONGLONG start = 0, last = 0;
         bool found = false, pcTable = false;
-        if (sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55 &&
-            RtlCompareMemory(sector, "****PARTINFO****", 16) != 16) {
+        if (sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55 && RtlCompareMemory(sector, "****PARTINFO****",
+            16) != 16) {
             if (sector[446 + 4] == 0xEE) { // protective MBR: GPT, the primary header, else the backup
                 pcTable = true;
                 const ULONGLONG headers[] = {1, hardware::ide::DiskLengthInSectors - 1};
@@ -265,9 +258,9 @@ static void DiskReadLayout() {
         found = found && start >= 2048 && last < hardware::ide::DiskLengthInSectors &&
                 NT_SUCCESS(ReadDiskSectors(start, sector, 512)) &&
                 RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8;
-        // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk): used when its FAT starts at
-        // sector 2048 or later, so the reserved-area copy (1024-2047) sits in the unused space after the two 12-sector
-        // boot regions. Boot sector: VolumeLength (sectors) at 72, FatOffset (sectors) at 80.
+        // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk): used when its FAT starts at sector 2048 or later, so the
+        // reserved-area copy (1024-2047) sits in the unused space after the two 12-sector boot regions. Boot sector: VolumeLength (sectors) at 72, FatOffset
+        // (sectors) at 80.
         if (!found && sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) &&
             RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8) {
             ULONGLONG length = *(ULONGLONG *)(sector + 72);
@@ -277,9 +270,8 @@ static void DiskReadLayout() {
             last = length - 1;
             found = fatOffset >= 2048 && length > fatOffset && length <= hardware::ide::DiskLengthInSectors;
         }
-        if (found && NT_SUCCESS(hardware::ide::CreateDiskDevice(0x80, (LONGLONG)(start << 9),
-                                                                (LONGLONG)((last - start + 1) << 9),
-                                                                &EXFATVolumeDevice, IDE_KIND_VOLUME)))
+        if (found && NT_SUCCESS(hardware::ide::CreateDiskDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9), &EXFATVolumeDevice,
+                                                                IDE_KIND_VOLUME)))
             DiskHasEXFATLayout = TRUE;
         if (!DiskHasEXFATLayout && pcTable) { // a PC disk without a usable exFAT volume: hands off
             DiskHasForeignLayout = TRUE;
@@ -289,8 +281,7 @@ static void DiskReadLayout() {
                 DiskDefaultPartitions();
             for ([[maybe_unused]] ULONG i = 1; i < 15; i++) {
                 if (DiskPartitions[i].Length) {
-                    XK_SERIAL("disk: partition %lu at sector %#llx, %#llx sectors\n", i, DiskPartitions[i].Start,
-                              DiskPartitions[i].Length);
+                    XK_SERIAL("disk: partition %lu at sector %#llx, %#llx sectors\n", i, DiskPartitions[i].Start, DiskPartitions[i].Length);
                 }
             }
         }
@@ -299,16 +290,15 @@ static void DiskReadLayout() {
     }
 }
 
-// Reads the layout once, before the first partition is used. A blank disk is formatted first; a foreign one (a PC
-// partition table without a usable exFAT volume, or a PC file system on the whole disk, and no FATX at C: or E:) is
-// formatted after a countdown that names what it holds (spec/oxos_internal/30 §4).
+// Reads the layout once, before the first partition is used. A blank disk is formatted first; a foreign one (a PC partition table without a usable exFAT
+// volume, or a PC file system on the whole disk, and no FATX at C: or E:) is formatted after a countdown that names what it holds (spec/oxos_internal/30 §4).
 void DetectDiskLayout() {
     if (DiskLayoutKnown)
         return;
     KeWaitForSingleObject(&DiskLayoutLock, Executive, KernelMode, FALSE, nullptr);
     if (!DiskLayoutKnown) {
-        // A blank or foreign disk is formatted only on a cold boot, while the boot-only code that recognises it is
-        // there: a quick reboot finds the disk the cold boot left.
+        // A blank or foreign disk is formatted only on a cold boot, while the boot-only code that recognises it is there: a quick reboot finds the disk the
+        // cold boot left.
         bool coldBoot = memory::BootPagesPresent();
         auto scratch = coldBoot ? (PUCHAR)MmAllocateSystemMemory(DISK_FORMAT_SCRATCH, PAGE_READWRITE) : nullptr;
         if (scratch)
@@ -335,10 +325,9 @@ void DetectDiskLayout() {
 
 // --- The OXOS exports (spec/oxos_internal/30_disk_format.md)
 
-// The file OXOSFormatDisk keeps: \Device\Harddisk0\PartitionN\... on one of the drives an exFAT disk has (1 E:, 2 C:,
-// 3-5 X:-Z:, 6 F:), read into memory before the disk is formatted. Path receives "E\ftp\ftp.xbe".
-static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *Data, ULONG *Length,
-                             ULONG *Allocated) {
+// The file OXOSFormatDisk keeps: \Device\Harddisk0\PartitionN\... on one of the drives an exFAT disk has (1 E:, 2 C:, 3-5 X:-Z:, 6 F:), read into memory before
+// the disk is formatted. Path receives "E\ftp\ftp.xbe".
+static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *Data, ULONG *Length, ULONG *Allocated) {
     static const char prefix[] = "\\device\\harddisk0\\partition";
     static const char drives[] = "?ECXYZF";
     ULONG i = 0;
@@ -365,8 +354,7 @@ static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *
     OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ,
-                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
     if (!NT_SUCCESS(status))
         return status;
     FILE_NETWORK_OPEN_INFORMATION info;
@@ -395,9 +383,9 @@ static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *
     return status;
 }
 
-// Formats the hard disk as exFAT (GPT, one partition) with the folders C E F X Y Z OXOS. KeepPath (optional): a file
-// on the hard disk, such as the running title (XeImageFileName), copied to the same place on the new disk. The old
-// partitions refuse writes from then on: the caller restarts (a title launch or a reboot) to use the new disk.
+// Formats the hard disk as exFAT (GPT, one partition) with the folders C E F X Y Z OXOS. KeepPath (optional): a file on the hard disk, such as the running
+// title (XeImageFileName), copied to the same place on the new disk. The old partitions refuse writes from then on: the caller restarts (a title launch or a
+// reboot) to use the new disk.
 XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath) {
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;
@@ -421,9 +409,8 @@ XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath) {
     return status;
 }
 
-// Deletes all partitions: zeroes what every layout is recognised by (DeleteAllPartitions), FATX partitions
-// from a PARTINFO table included. The next boot finds a blank disk and formats it as exFAT after CountdownSeconds
-// (0: at once), the number the partition delete leaves in the blank-disk marker.
+// Deletes all partitions: zeroes what every layout is recognised by (DeleteAllPartitions), FATX partitions from a PARTINFO table included. The next boot finds
+// a blank disk and formats it as exFAT after CountdownSeconds (0: at once), the number the partition delete leaves in the blank-disk marker.
 XBAPI NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds) {
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;
@@ -438,8 +425,7 @@ XBAPI NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds) {
     NTSTATUS status = STATUS_INSUFFICIENT_RESOURCES;
     auto scratch = (PUCHAR)MmAllocateSystemMemory(DISK_FORMAT_SCRATCH, PAGE_READWRITE);
     if (scratch) {
-        status = DeleteAllPartitions(hardware::ide::DiskLengthInSectors, starts, count, CountdownSeconds, &FormatIo,
-                                     scratch);
+        status = DeleteAllPartitions(hardware::ide::DiskLengthInSectors, starts, count, CountdownSeconds, &FormatIo, scratch);
         MmFreeSystemMemory(scratch, DISK_FORMAT_SCRATCH);
     }
     DiskReformatted = TRUE;

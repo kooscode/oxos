@@ -1,5 +1,4 @@
-// Waits and synchronization objects (spec/stock/07 "Waits", spec/stock/08; NT semantics with the Xbox's
-// in-kernel delivery of user APCs).
+// Waits and synchronization objects (spec/stock/07 "Waits", spec/stock/08; NT semantics with the Xbox's in-kernel delivery of user APCs).
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <arch/arch.h>
@@ -10,8 +9,7 @@ namespace xk::core {
 #define Prcb (KiPcr.PrcbData)
 
 constexpr ULONG THREAD_WAIT_OBJECTS = 3, MAXIMUM_WAIT_OBJECTS = 64;
-constexpr ULONG STATUS_MUTANT_LIMIT_EXCEEDED = 0xC0000191, STATUS_SEMAPHORE_LIMIT_EXCEEDED = 0xC0000047,
-                STATUS_MUTANT_NOT_OWNED = 0xC0000046;
+constexpr ULONG STATUS_MUTANT_LIMIT_EXCEEDED = 0xC0000191, STATUS_SEMAPHORE_LIMIT_EXCEEDED = 0xC0000047, STATUS_MUTANT_NOT_OWNED = 0xC0000046;
 
 static bool IsSignaledFor(DISPATCHER_HEADER *o, PKTHREAD t) {
     if (o->Type == MutantObject)
@@ -48,8 +46,8 @@ static void WaitSatisfy(DISPATCHER_HEADER *o, PKTHREAD t) {
     }
 }
 
-// Wake a waiting thread (reference UnwaitThread): detach wait blocks and timer, credit its queue,
-// apply the wake-up boost for variable-priority threads, then ready it.
+// Wake a waiting thread (reference UnwaitThread): detach wait blocks and timer, credit its queue, apply the wake-up boost for variable-priority threads, then
+// ready it.
 void UnwaitThread(PKTHREAD Thread, LONG WaitStatus, LONG Increment) {
     Thread->WaitStatus |= WaitStatus;
     PKWAIT_BLOCK wb = Thread->WaitBlockList;
@@ -120,8 +118,8 @@ void WaitTest(DISPATCHER_HEADER *Object, LONG Increment) {
 
 // --- Common wait plumbing
 
-// Timeouts are tracked as an interrupt-time deadline so a wait interrupted by a kernel APC resumes
-// with the remaining time (absolute system times are passed through unchanged).
+// Timeouts are tracked as an interrupt-time deadline so a wait interrupted by a kernel APC resumes with the remaining time (absolute system times are passed
+// through unchanged).
 struct KiTimeout {
     bool present, absolute;
     LONGLONG value; // relative: deadline in interrupt time; absolute: system time
@@ -214,8 +212,7 @@ static NTSTATUS FinishWait(PKTHREAD t, NTSTATUS status, bool unlocked = false) {
     return status;
 }
 
-XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
-                                           BOOLEAN Alertable, PLARGE_INTEGER Timeout) {
+XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable, PLARGE_INTEGER Timeout) {
     PKTHREAD t = Prcb.CurrentThread;
     auto o = (DISPATCHER_HEADER *)Object;
     KiTimeout timeout(Timeout);
@@ -230,9 +227,8 @@ XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason
         PLARGE_INTEGER remaining = timeout.present ? timeout.Remaining() : nullptr;
         if (remaining && remaining->QuadPart == 0)
             return FinishWait(t, STATUS_TIMEOUT);
-        // The boot thread is the idle thread until start-up ends and may not block (SwapThread): it polls instead.
-        // Every other thread has a higher priority, so the one holding the object (the splash thread's SMBus or
-        // EEPROM lock during the drive set-up) runs meanwhile, once the IRQL is down.
+        // The boot thread is the idle thread until start-up ends and may not block (SwapThread): it polls instead. Every other thread has a higher priority, so
+        // the one holding the object (the splash thread's SMBus or EEPROM lock during the drive set-up) runs meanwhile, once the IRQL is down.
         if (t == Prcb.IdleThread && t->WaitIrql < DISPATCH_LEVEL) {
             KiUnlockDispatcherDatabase(t->WaitIrql);
             KeStallExecutionProcessor(10);
@@ -256,9 +252,8 @@ XBAPI NTSTATUS NTAPI KeWaitForSingleObject(PVOID Object, KWAIT_REASON WaitReason
     }
 }
 
-XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType,
-                                              KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode, BOOLEAN Alertable,
-                                              PLARGE_INTEGER Timeout, PKWAIT_BLOCK WaitBlockArray) {
+XBAPI NTSTATUS NTAPI KeWaitForMultipleObjects(ULONG Count, PVOID Object[], WAIT_TYPE WaitType, KWAIT_REASON WaitReason, KPROCESSOR_MODE WaitMode,
+                                              BOOLEAN Alertable, PLARGE_INTEGER Timeout, PKWAIT_BLOCK WaitBlockArray) {
     KWAIT_BLOCK local[THREAD_WAIT_OBJECTS];
     if (!WaitBlockArray) {
         if (Count > THREAD_WAIT_OBJECTS)

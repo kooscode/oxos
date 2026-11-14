@@ -7,31 +7,27 @@ usage: run.py BIOS [--iso GAME.iso] [--hdd HDD.qcow2] [--state DIR [--fresh]] [-
 
 Disk and EEPROM:
 - default: a temporary copy of the HDD image and a new EEPROM, deleted when xemu exits (unless --keep);
-- --state DIR: a persistent copy in DIR (hdd.qcow2, eeprom.bin), made from --hdd the first time and reused after, so
-  saves and settings survive; --fresh starts DIR over from --hdd.
+- --state DIR: a persistent copy in DIR (hdd.qcow2, eeprom.bin), made from --hdd the first time and reused after, so saves and settings survive; --fresh starts
+  DIR over from --hdd.
 The --hdd image itself is never written.
 
 Display:
-- --widescreen sets the widescreen video flag in the EEPROM; games that support it then render 16:9 and tell the AV
-  connector so, and xemu's default ("auto") aspect follows that signal per game (4:3 games keep 4:3);
+- --widescreen sets the widescreen video flag in the EEPROM; games that support it then render 16:9 and tell the AV connector so, and xemu's default ("auto")
+  aspect follows that signal per game (4:3 games keep 4:3);
 - --aspect forces xemu's aspect ratio instead (auto, native, 4x3, 16x9);
-- --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier
-  (1 = native 640x480; 2 or 3 look sharp at 1080), --fullscreen starts full screen.
-Debugging: --serial prints the debug serial port (spec/oxos_internal/03_debug_serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by
-tools/trace.py); --memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds).
---trace-map MAP (an import-trace build's xboxkrnl.map) dumps the title's last kernel calls when the kernel reports a
-crash on the serial port (a line starting with "***", needs --serial) and when xemu is closed: the last 30 here, all
-of them in DIR/calls_<time>_<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load).
-xemu quits at once when its window is closed, so run.py also copies the record every second while the title runs
-(without pausing it) and saves the latest copy as the exit dump when xemu is gone.
---gdb PORT starts xemu's GDB server on localhost:PORT, paused at power-on until a debugger continues it (see
-tools/debug_app.py).
+- --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier (1 = native 640x480; 2 or 3 look sharp at
+  1080), --fullscreen starts full screen.
+Debugging: --serial prints the debug serial port (spec/oxos_internal/03_debug_serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by tools/trace.py);
+--memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds). --trace-map MAP (an import-trace build's xboxkrnl.map) dumps the title's last kernel
+calls when the kernel reports a crash on the serial port (a line starting with "***", needs --serial) and when xemu is closed: the last 30 here, all of them in
+DIR/calls_<time>_<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load). xemu quits at once when its window is closed, so run.py also
+copies the record every second while the title runs (without pausing it) and saves the latest copy as the exit dump when xemu is gone. --gdb PORT starts xemu's
+GDB server on localhost:PORT, paused at power-on until a debugger continues it (see tools/debug_app.py).
 """
 import argparse, json, os, shutil, signal, socket, struct, subprocess, sys, tempfile, threading, time
 
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", "2560x1440", "2560x1600",
-         "2560x1920", "3840x2160"]
+SIZES = ["640x480", "720x480", "1280x720", "1280x800", "1280x960", "1920x1080", "2560x1440", "2560x1600", "2560x1920", "3840x2160"]
 ap = argparse.ArgumentParser()
 ap.add_argument("bios")
 ap.add_argument("--iso", help="disc image (XISO) for the DVD drive")
@@ -92,8 +88,7 @@ def config(path, extra=""):
     display = []
     display.append(f"[display.ui]\naspect_ratio = '{a.aspect or 'auto'}'\n")
     if a.size or a.fullscreen:
-        display.append("[display.window]\n" + (f"startup_size = '{a.size}'\n" if a.size else "")
-                       + ("fullscreen_on_startup = true\n" if a.fullscreen else ""))
+        display.append("[display.window]\n" + (f"startup_size = '{a.size}'\n" if a.size else "") + ("fullscreen_on_startup = true\n" if a.fullscreen else ""))
     if a.scale:
         display.append(f"[display.quality]\nsurface_scale = {a.scale}\n")
     open(path, "w").write(
@@ -245,8 +240,7 @@ def create_eeprom():
     """xemu writes a new EEPROM when the configured one is missing: start it paused until the file appears."""
     cfg, sock = os.path.join(work, "init.toml"), os.path.join(work, "init.sock")
     config(cfg)
-    p = subprocess.Popen([a.xemu, "-config_path", cfg, "-S", "-qmp", f"unix:{sock},server,nowait"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen([a.xemu, "-config_path", cfg, "-S", "-qmp", f"unix:{sock},server,nowait"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(100):
             if os.path.exists(eeprom) and os.path.getsize(eeprom) == 256:
@@ -294,10 +288,8 @@ try:
                 print(f"warning: no EEPROM to set the {what} flags in", file=sys.stderr)
     cfg = os.path.join(work, "xemu.toml")
     config(cfg, f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "")
-    print(f"xemu: {a.bios}" + (f" + {a.iso}" if a.iso else " (no disc)")
-          + (f"; state {a.state}" if a.state else f"; work dir {work}"))
-    # The serial port goes to a file that a thread copies to this terminal (a stdio chardev would put the terminal
-    # in raw mode).
+    print(f"xemu: {a.bios}" + (f" + {a.iso}" if a.iso else " (no disc)") + (f"; state {a.state}" if a.state else f"; work dir {work}"))
+    # The serial port goes to a file that a thread copies to this terminal (a stdio chardev would put the terminal in raw mode).
     serial_log = os.path.join(work, "serial.log")
     serial = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
     qmp = []
@@ -320,8 +312,7 @@ try:
     p = subprocess.Popen([a.xemu, "-config_path", cfg] + serial + qmp + gdb + encoder + a.xemu_arg, stdout=open(os.path.join(work, "xemu.log"), "w"),
                          stderr=subprocess.STDOUT, start_new_session=True)
     if a.serial:
-        threading.Thread(target=follow, args=(serial_log, p, dumper.on_serial if dumper else None),
-                         daemon=True).start()
+        threading.Thread(target=follow, args=(serial_log, p, dumper.on_serial if dumper else None), daemon=True).start()
     if dumper:
         watcher = threading.Thread(target=dumper.watch, args=(p,), daemon=True)
         watcher.start()

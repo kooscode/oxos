@@ -1,8 +1,7 @@
 # OXOS kernel extension SDK
 
-Builds kernel extensions (`.xos` files) for the OXOS kernel, in C or C++. MIT licence: an extension built with it may
-use any licence; open source is preferred. The full rules: `spec/oxos_internal/34_kernel_extensions.md` in the OXOS
-repository.
+Builds kernel extensions (`.xos` files) for the OXOS kernel, in C or C++. MIT licence: an extension built with it may use any licence; open source is preferred.
+The full rules: `spec/oxos_internal/34_kernel_extensions.md` in the OXOS repository.
 
 **Needs:** LLVM's `clang` and `lld-link` (18 or newer) and GNU make, on Windows, macOS or Linux. Not nxdk.
 
@@ -18,8 +17,8 @@ SOURCES := hello.cpp
 include path/to/the/sdk/oxos_extension.mk
 ```
 
-`make` builds `hello.xos` (add `LLVM=C:/LLVM/bin` when clang is not on the `PATH`). Copy it to
-`C:\OXOS\extensions\` on the console and list it in `C:\OXOS\oxos_extensions.ini`:
+`make` builds `hello.xos` (add `LLVM=C:/LLVM/bin` when clang is not on the `PATH`). Copy it to `C:\OXOS\extensions\` on the console and list it in
+`C:\OXOS\oxos_extensions.ini`:
 
 ```ini
 [hello]
@@ -33,7 +32,6 @@ extension = hello.xos
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
 | `examples/hello/` | the example to start from: every part of an extension, commented ([README](examples/hello/README.md)) |
 
-**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the library's
-sources (`src/`), and a `Makefile` that builds the SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z`
-its release zip), then each example with that package into `build/sdk/examples/NAME/`. Extensions are only built
-with the package, never from the source, so what ships is what is tested.
+**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the library's sources (`src/`), and a `Makefile` that builds the
+SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z` its release zip), then each example with that package into `build/sdk/examples/NAME/`.
+Extensions are only built with the package, never from the source, so what ships is what is tested.

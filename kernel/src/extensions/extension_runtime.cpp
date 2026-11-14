@@ -1,6 +1,5 @@
-// Kernel extensions while a title runs (spec/oxos_internal/34 §4.3, §7): the title's imports of hooked kernel
-// functions, the launch events, and the end of the extensions at the title's quick reboot. Resident: it runs while
-// the title does, unlike the loader (extensions/extension_loader.cpp), which only runs before.
+// Kernel extensions while a title runs (spec/oxos_internal/34 §4.3, §7): the title's imports of hooked kernel functions, the launch events, and the end of the
+// extensions at the title's quick reboot. Resident: it runs while the title does, unlike the loader (extensions/extension_loader.cpp), which only runs before.
 #include <extensions/extensions.h>
 #include <extensions/extension_state.h>
 #include <core/core.h>
@@ -63,14 +62,14 @@ void TitleLoaded() {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
     if (!state)
         return;
-    // The XBE header (spec/stock/05 §4): the certificate's address at +0x118; in the certificate the title ID at +8,
-    // its name (40 UTF-16 characters) at +0x0C and its version at +0xAC.
+    // The XBE header (spec/stock/05 §4): the certificate's address at +0x118; in the certificate the title ID at +8, its name (40 UTF-16 characters) at +0x0C
+    // and its version at +0xAC.
     constexpr ULONG XBE_BASE = 0x00010000;
     auto cert = *(PUCHAR *)(XBE_BASE + 0x118);
     state->Kernel.TitleId = *(ULONG *)(cert + 8);
     state->Kernel.TitlePath = XeImageFileName.Buffer;
-    OXOS_TITLE_LOADED data = {sizeof(data), XeImageFileName.Buffer, state->Kernel.TitleId, *(ULONG *)(cert + 0xAC),
-                             (const USHORT *)(cert + 0x0C), (PVOID)XBE_BASE, cert};
+    OXOS_TITLE_LOADED data = {sizeof(data), XeImageFileName.Buffer, state->Kernel.TitleId, *(ULONG *)(cert + 0xAC), (const USHORT *)(cert + 0x0C),
+                             (PVOID)XBE_BASE, cert};
     FireEvent(OXOS_EVENT_TITLE_LOADED, &data);
 }
 

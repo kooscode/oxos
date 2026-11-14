@@ -1,9 +1,8 @@
-// Machine-state probe (OXOS diagnostics): prints the CPU, chipset and GPU set-up a kernel leaves behind, one text line
-// at a time, so two kernels can be compared on the same console (e.g. OXOS against a reference kernel at the end of
-// start-up). Freestanding and header-only: no kernel headers, no imports; it touches the machine only through port
-// I/O, MSR and descriptor-table reads and plain memory reads (NV2A registers at 0xFD000000, the page directory through
-// its self-map at 0xC0300000), and prints through the caller's function. Reads only registers that are safe while
-// the GPU engines are off (PMC, PFB, PRAMDAC clocks, PCRTC; never PFIFO/PGRAPH) and only MSRs the Pentium III has.
+// Machine-state probe (OXOS diagnostics): prints the CPU, chipset and GPU set-up a kernel leaves behind, one text line at a time, so two kernels can be
+// compared on the same console (e.g. OXOS against a reference kernel at the end of start-up). Freestanding and header-only: no kernel headers, no imports; it
+// touches the machine only through port I/O, MSR and descriptor-table reads and plain memory reads (NV2A registers at 0xFD000000, the page directory through
+// its self-map at 0xC0300000), and prints through the caller's function. Reads only registers that are safe while the GPU engines are off (PMC, PFB, PRAMDAC
+// clocks, PCRTC; never PFIFO/PGRAPH) and only MSRs the Pentium III has.
 #pragma once
 
 namespace statedump {
@@ -89,8 +88,7 @@ static void Cpu(Out out) {
     __asm__ volatile("sgdt %0" : "=m"(gdtr));
     __asm__ volatile("sidt %0" : "=m"(idtr));
     __asm__ volatile("str %0" : "=r"(tr));
-    l.s("sd gdtr ").x(gdtr.base).sp().x(gdtr.limit, 4).s(" idtr ").x(idtr.base).sp().x(idtr.limit, 4).s(" tr ").x(tr, 4)
-        .put(out);
+    l.s("sd gdtr ").x(gdtr.base).sp().x(gdtr.limit, 4).s(" idtr ").x(idtr.base).sp().x(idtr.limit, 4).s(" tr ").x(tr, 4).put(out);
     auto gdt = (const volatile u32 *)gdtr.base;
     for (u32 i = 0; i < ((u32)gdtr.limit + 1) / 8 && i < 16; i++)
         l.s("sd gdt ").x(i * 8, 2).sp().x(gdt[2 * i + 1]).sp().x(gdt[2 * i]).put(out);
@@ -105,13 +103,12 @@ static void Cpu(Out out) {
     // The TSS the task register selects: ESP0, SS0, CR3, I/O map base.
     u32 lo = gdt[(tr >> 3) * 2], hi = gdt[(tr >> 3) * 2 + 1];
     auto tss = (const volatile u32 *)((lo >> 16) | ((hi & 0xFF) << 16) | (hi & 0xFF000000));
-    l.s("sd tss ").x((u32)tss).s(" esp0 ").x(tss[1]).s(" ss0 ").x(tss[2]).s(" cr3 ").x(tss[7]).s(" iomap ")
-        .x(tss[25] >> 16, 4).put(out);
+    l.s("sd tss ").x((u32)tss).s(" esp0 ").x(tss[1]).s(" ss0 ").x(tss[2]).s(" cr3 ").x(tss[7]).s(" iomap ").x(tss[25] >> 16, 4).put(out);
 }
 
 static void Msrs(Out out) {
-    // Pentium III MSRs (Intel SDM vol. 3, P6 family): platform, APIC base, power-on configuration, microcode
-    // revision, L2 control, SYSENTER, machine check, performance counters, debug control, MTRRs, PAT.
+    // Pentium III MSRs (Intel SDM vol. 3, P6 family): platform, APIC base, power-on configuration, microcode revision, L2 control, SYSENTER, machine check,
+    // performance counters, debug control, MTRRs, PAT.
     static const u32 list[] = {0x17,  0x1B,  0x2A,  0x8B,  0xFE,  0x11E, 0x174, 0x175, 0x176, 0x179, 0x17A, 0x186,
                                0x187, 0x1D9, 0x200, 0x201, 0x202, 0x203, 0x204, 0x205, 0x206, 0x207, 0x208, 0x209,
                                0x20A, 0x20B, 0x20C, 0x20D, 0x20E, 0x20F, 0x250, 0x258, 0x259, 0x268, 0x269, 0x26A,
@@ -165,8 +162,8 @@ static void Gpu(Out out) {
     l.s("sd nv pmc ").x(r(0)).sp().x(r(0x100)).sp().x(r(0x140)).sp().x(r(0x200)).s(" pll ").x(r(0x680500)).sp()
         .x(r(0x680504)).sp().x(r(0x680508)).sp().x(r(0x68050C)).s(" gc ").x(r(0x680600)).s(" crtc ").x(r(0x600100))
         .sp().x(r(0x600140)).sp().x(r(0x600800)).put(out);
-    // The blocks that set up memory and the display, read whole: PMC, PBUS (memory timing and pads), PFB, PEXTDEV
-    // (straps), PCRTC and PRAMDAC. Not PFIFO, PGRAPH or PTIMER (running state, and PGRAPH reads can have effects).
+    // The blocks that set up memory and the display, read whole: PMC, PBUS (memory timing and pads), PFB, PEXTDEV (straps), PCRTC and PRAMDAC. Not PFIFO,
+    // PGRAPH or PTIMER (running state, and PGRAPH reads can have effects).
     static const struct { const char *name; u32 from, to; } blocks[] = {
         {"pmc", 0x000000, 0x000400}, {"pbus", 0x001000, 0x002000}, {"pfb", 0x100000, 0x101000},
         {"pextdev", 0x101000, 0x101100}, {"pcrtc", 0x600000, 0x601000}, {"pramdac", 0x680000, 0x681000}};
@@ -182,8 +179,8 @@ static void Gpu(Out out) {
 
 static void Io(Out out) {
     Line l;
-    l.s("sd io pic ").x(inb_(0x21), 2).sp().x(inb_(0xA1), 2).s(" elcr ").x(inb_(0x4D0), 2).sp().x(inb_(0x4D1), 2)
-        .s(" p61 ").x(inb_(0x61), 2).s(" bm ").x(inl_(0xFF60)).sp().x(inl_(0xFF64)).put(out);
+    l.s("sd io pic ").x(inb_(0x21), 2).sp().x(inb_(0xA1), 2).s(" elcr ").x(inb_(0x4D0), 2).sp().x(inb_(0x4D1), 2).s(" p61 ").x(inb_(0x61),
+        2).s(" bm ").x(inl_(0xFF60)).sp().x(inl_(0xFF64)).put(out);
     for (u32 p = 0x8000; p < 0x8100; p += 0x20) {
         l.s("sd io acpi ").x(p, 4);
         for (u32 k = p; k < p + 0x20; k += 4)

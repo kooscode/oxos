@@ -1,5 +1,4 @@
-// String port I/O, the HAL's READ_PORT_BUFFER_* and WRITE_PORT_BUFFER_* exports: Count reads or writes of one port,
-// one after another.
+// String port I/O, the HAL's READ_PORT_BUFFER_* and WRITE_PORT_BUFFER_* exports: Count reads or writes of one port, one after another.
 #include <hardware/chipset/chipset.h>
 #include <arch/arch.h>
 

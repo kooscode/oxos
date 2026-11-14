@@ -1,6 +1,6 @@
-// Test extension in plain C (spec/oxos_internal/34 §9.3): the SDK's headers, descriptor macro and runtime work
-// without C++, and the compiler's calls to memcpy, memset, memcmp and the 64-bit division helpers reach the kernel's
-// exports (OXOS's own ordinals 402-415). It records the results in its state page for tests/boot_test.py.
+// Test extension in plain C (spec/oxos_internal/34 §9.3): the SDK's headers, descriptor macro and runtime work without C++, and the compiler's calls to memcpy,
+// memset, memcmp and the 64-bit division helpers reach the kernel's exports (OXOS's own ordinals 402-415). It records the results in its state page for
+// tests/boot_test.py.
 #include <oxos_sdk.h>
 
 #define SAVED_MAGIC 0x434E4C50UL // "PLNC"
@@ -30,8 +30,7 @@ static void NTAPI OnTitleLoaded(OXOS_CONTEXT *Context, PVOID CallbackContext, PV
 static ULONG DivisionWorks(void) {
     volatile ULONGLONG dividend = 0x123456789ABCDEF0ULL, divisor = 0x1234567;
     volatile LONGLONG negative = -0x123456789ABCDEFLL, thousand = 1000;
-    return dividend / divisor == 0x1000000790ULL && dividend % divisor == 0x400 &&
-           negative / thousand == -0x4A90BE587DE6LL && negative % thousand == -0x37F;
+    return dividend / divisor == 0x1000000790ULL && dividend % divisor == 0x400 && negative / thousand == -0x4A90BE587DE6LL && negative % thousand == -0x37F;
 }
 
 static ULONG MemoryWorks(void) {

@@ -4,19 +4,16 @@
 usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs A.obj,B.obj --boot-entries F,G
                               --data-copy SIZE OBJECTS...
 
-1. Boot-only memory (spec/oxos_internal/18_boot_memory.md): the boot-only sections (.xka data, .xkb code) are
-   freed before the first title starts, so kept code must not use them. The linker keeps one copy of an inline
-   function or a shared constant that several objects define, and that copy can be the one a boot-only file put in
-   .xkb. So every global symbol the map places in a boot-only section must be absent from every other object,
-   except the boot objects (--boot-objs: the splash and the jingle, which call one another before the pages are
-   freed) and the boot-only functions that kept code calls during a cold boot, before the pages are freed
-   (--boot-entries, function names).
-2. The quick-reboot copy of .data (arch/entry.S, KI_DATA_COPY_SIZE = --data-copy): the initialised part of .data, as
-   tools/mkbios.py stores it, must fit, or a quick reboot of a network-booted kernel would take another kernel's.
-3. The title-start call (spec/oxos_internal/23_trainer_hook.md): dashboards search 0x80010000-0x8003AF90 for the
-   first `call [0x00010128]` (or `call [0x80000010]`) to redirect it to a game trainer, and later search for
-   `call [0x8000000C]` to put it back. The image must hold exactly one title-start call, inside that range and
-   outside the boot-only sections, and none of the other two.
+1. Boot-only memory (spec/oxos_internal/18_boot_memory.md): the boot-only sections (.xka data, .xkb code) are freed before the first title starts, so kept code
+   must not use them. The linker keeps one copy of an inline function or a shared constant that several objects define, and that copy can be the one a boot-only
+   file put in .xkb. So every global symbol the map places in a boot-only section must be absent from every other object, except the boot objects (--boot-objs:
+   the splash and the jingle, which call one another before the pages are freed) and the boot-only functions that kept code calls during a cold boot, before the
+   pages are freed (--boot-entries, function names).
+2. The quick-reboot copy of .data (arch/entry.S, KI_DATA_COPY_SIZE = --data-copy): the initialised part of .data, as tools/mkbios.py stores it, must fit, or a
+   quick reboot of a network-booted kernel would take another kernel's.
+3. The title-start call (spec/oxos_internal/23_trainer_hook.md): dashboards search 0x80010000-0x8003AF90 for the first `call [0x00010128]` (or `call
+   [0x80000010]`) to redirect it to a game trainer, and later search for `call [0x8000000C]` to put it back. The image must hold exactly one title-start call,
+   inside that range and outside the boot-only sections, and none of the other two.
 """
 import argparse, os, re, struct, subprocess, sys
 
@@ -38,8 +35,8 @@ def boot_only_users(map_path, boot, entries, objects):
             sections.add(m[1])
             continue
         m = re.match(r"\s*([0-9a-f]{4}):[0-9a-f]{8}\s+(\S+)\s+[0-9a-f]{16}\s+(?:\S+\s+)*?(\S+\.obj)\s*$", line)
-        # The plain name: C++ names start "?Name@", C ones "_Name"; string literals ("??_C@...") have none of their own.
-        # A namespaced C++ name ("?Name@storage@xk@@...") is also matched as "storage::Name".
+        # The plain name: C++ names start "?Name@", C ones "_Name"; string literals ("??_C@...") have none of their own. A namespaced C++ name
+        # ("?Name@storage@xk@@...") is also matched as "storage::Name".
         if m and m[1] in sections and re.match(r"[?_]*([A-Za-z0-9_]*)", m[2])[1] not in entries and \
                 qualified_name(m[2]) not in entries:
             boot_syms[m[2]] = m[3]
@@ -49,9 +46,8 @@ def boot_only_users(map_path, boot, entries, objects):
         m = re.match(r"(.+?\.obj):(?:[0-9a-f]+)?\s+([A-Z])\s+(\S+)$", line)
         if m and m[3] in boot_syms:
             used.setdefault(m[3], set()).add(m[1])
-    bad = [f"  {sym} (boot-only, from {owner}) is used by {obj}"
-           for sym, owner in sorted(boot_syms.items()) for obj in sorted(used.get(sym, ()))
-           if os.path.basename(obj) not in (owner, *boot)]
+    bad = [f"  {sym} (boot-only, from {owner}) is used by {obj}" for sym, owner in sorted(boot_syms.items()) for obj in sorted(used.get(sym,
+           ())) if os.path.basename(obj) not in (owner, *boot)]
     return len(boot_syms), bad
 
 
@@ -123,8 +119,7 @@ def main():
     count, bad = boot_only_users(a.map, set(filter(None, a.boot_objs.split(","))),
                                  set(filter(None, a.boot_entries.split(","))), a.objects)
     if bad:
-        errors.append("boot-only code or data used by kept code (make it static, or move it out of the boot-only "
-                      "file):\n" + "\n".join(bad))
+        errors.append("boot-only code or data used by kept code (make it static, or move it out of the boot-only " "file):\n" + "\n".join(bad))
     init = data_init_size(a.exe)
     if init > a.data_copy:
         errors.append(f"the initialised .data is {init:#x} bytes, more than the quick-reboot copy holds "

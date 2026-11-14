@@ -1,5 +1,5 @@
-// Scheduler (spec/stock/07 "Scheduling"). Uniprocessor: the dispatcher database is protected by running
-// at DISPATCH_LEVEL; KiUnlockDispatcherDatabase performs any pending switch when IRQL drops.
+// Scheduler (spec/stock/07 "Scheduling"). Uniprocessor: the dispatcher database is protected by running at DISPATCH_LEVEL; KiUnlockDispatcherDatabase performs
+// any pending switch when IRQL drops.
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <arch/arch.h>
@@ -109,8 +109,7 @@ bool SelectYieldThread(PKTHREAD Current) {
     return Prcb.NextThread != nullptr;
 }
 
-// Switch from the current thread to Next. Caller is at DISPATCH_LEVEL, not in a DPC, and has
-// already set the old thread's state (Ready/Waiting/Terminated).
+// Switch from the current thread to Next. Caller is at DISPATCH_LEVEL, not in a DPC, and has already set the old thread's state (Ready/Waiting/Terminated).
 static void SwapToThread(PKTHREAD Old, PKTHREAD Next) {
     if (Prcb.DpcRoutineActive)
         KeBugCheck(0xB8); // ATTEMPTED_SWITCH_FROM_DPC
@@ -119,8 +118,8 @@ static void SwapToThread(PKTHREAD Old, PKTHREAD Next) {
     Next->ContextSwitches++;
     Prcb.KeContextSwitches++;
     NpxPrepareSwitch(Next);
-    // Like the reference KiSwapContext: an incoming thread with kernel APCs queued (including a new thread
-    // created suspended) gets the APC interrupt as soon as it drops below APC_LEVEL.
+    // Like the reference KiSwapContext: an incoming thread with kernel APCs queued (including a new thread created suspended) gets the APC interrupt as soon as
+    // it drops below APC_LEVEL.
     if (Next->ApcState.KernelApcPending)
         HalRequestSoftwareInterrupt(APC_LEVEL);
     KiSwapContext(Old, Next);
@@ -131,8 +130,7 @@ static void SwapToThread(PKTHREAD Old, PKTHREAD Next) {
         HalRequestSoftwareInterrupt(APC_LEVEL);
 }
 
-// Block the current thread (its wait state is already set). Returns its WaitStatus when resumed;
-// the caller then lowers IRQL to WaitIrql.
+// Block the current thread (its wait state is already set). Returns its WaitStatus when resumed; the caller then lowers IRQL to WaitIrql.
 LONG SwapThread() {
     PKTHREAD old = Prcb.CurrentThread;
     PKTHREAD next = Prcb.NextThread;
@@ -140,13 +138,11 @@ LONG SwapThread() {
         Prcb.NextThread = nullptr;
     else if (!(next = FindReadyThread(0)))
         next = Prcb.IdleThread;
-    // The idle thread (the boot thread during start-up) must never block: with nothing else to run it would
-    // "switch" to itself and return at once with the wait still linked (its wait block on this stack), and with
-    // another thread ready the scheduler would later resume it as the idle thread in the middle of its wait. Either
-    // way the wait and timer lists get corrupted: stop with a report instead.
+    // The idle thread (the boot thread during start-up) must never block: with nothing else to run it would "switch" to itself and return at once with the wait
+    // still linked (its wait block on this stack), and with another thread ready the scheduler would later resume it as the idle thread in the middle of its
+    // wait. Either way the wait and timer lists get corrupted: stop with a report instead.
     if (old == Prcb.IdleThread) {
-        KeBugCheckEx(0x000000E3 /*our code: wait on the idle thread*/, (ULONG)old, old->WaitReason,
-                     (ULONG)__builtin_return_address(0), 0);
+        KeBugCheckEx(0x000000E3 /*our code: wait on the idle thread*/, (ULONG)old, old->WaitReason, (ULONG)__builtin_return_address(0), 0);
     }
     SwapToThread(old, next);
     return old->WaitStatus;
@@ -170,8 +166,8 @@ XBAPI void FASTCALL KiUnlockDispatcherDatabase(KIRQL OldIrql) {
     KfLowerIrql(OldIrql);
 }
 
-// NtYieldExecution (spec/stock/07): give the processor to any ready thread above the idle priority, lower ones
-// included; STATUS_NO_YIELD_PERFORMED when there is none.
+// NtYieldExecution (spec/stock/07): give the processor to any ready thread above the idle priority, lower ones included; STATUS_NO_YIELD_PERFORMED when there
+// is none.
 NTSTATUS YieldExecution() {
     constexpr NTSTATUS STATUS_NO_YIELD_PERFORMED = 0x40000024;
     if (!ReadySummary)
@@ -243,8 +239,8 @@ void DispatchInterrupt() {
     if (!IsListEmpty(&Prcb.DpcListHead)) {
         RetireDpcListOnDpcStack();
     } else {
-        // The DPC that requested this interrupt was removed again (KeRemoveQueueDpc): clear the request, or every
-        // later KeInsertQueueDpc would skip requesting the DISPATCH interrupt and its DPC wait for the idle loop.
+        // The DPC that requested this interrupt was removed again (KeRemoveQueueDpc): clear the request, or every later KeInsertQueueDpc would skip requesting
+        // the DISPATCH interrupt and its DPC wait for the idle loop.
         ULONG flags = save_flags_cli();
         if (IsListEmpty(&Prcb.DpcListHead))
             Prcb.DpcInterruptRequested = FALSE;
@@ -316,8 +312,7 @@ void InitializeScheduler(PVOID bootStackTop, PVOID bootStackLimit) {
     InitializeProcesses();
 
     PKTHREAD idle = &IdleThreadObject;
-    InitializeThread(idle, bootStackTop, (UCHAR *)bootStackTop - (UCHAR *)bootStackLimit, 0, nullptr, nullptr,
-                     nullptr, &IdleProcess);
+    InitializeThread(idle, bootStackTop, (UCHAR *)bootStackTop - (UCHAR *)bootStackLimit, 0, nullptr, nullptr, nullptr, &IdleProcess);
     InitializeNpxArea(idle);
     idle->Priority = idle->BasePriority = 0;
     idle->State = Running;

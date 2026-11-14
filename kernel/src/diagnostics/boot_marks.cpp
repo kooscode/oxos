@@ -1,6 +1,5 @@
-// Start-up marks and the start-up watchdog (spec/oxos_internal/03 §8): CMOS records that name where a start-up that
-// froze stopped, for the next boot to report. Off once the title starts, or once a last-words record owns the CMOS
-// bytes (last_words.cpp).
+// Start-up marks and the start-up watchdog (spec/oxos_internal/03 §8): CMOS records that name where a start-up that froze stopped, for the next boot to report.
+// Off once the title starts, or once a last-words record owns the CMOS bytes (last_words.cpp).
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
@@ -33,10 +32,9 @@ void BootMark(const char *Format) {
     restore_flags(flags);
 }
 
-// Start-up watchdog (clock interrupt, all builds): no mark for 3 s while the marks are on means start-up is stuck.
-// Each tick from then on leaves the interrupted EIP and IRQL in CMOS ('W' 0x77, EIP 0x78-0x7B, IRQL 0x7C, seconds
-// since the last mark 0x7D): a CPU that idles shows the idle loop, one that spins shows where. No record at all
-// means the clock interrupt stopped too.
+// Start-up watchdog (clock interrupt, all builds): no mark for 3 s while the marks are on means start-up is stuck. Each tick from then on leaves the
+// interrupted EIP and IRQL in CMOS ('W' 0x77, EIP 0x78-0x7B, IRQL 0x7C, seconds since the last mark 0x7D): a CPU that idles shows the idle loop, one that spins
+// shows where. No record at all means the clock interrupt stopped too.
 void BootMarkWatchdog(ULONG Eip, UCHAR Irql) {
     ULONG now = WatchdogTicks + 1;
     WatchdogTicks = now;
@@ -78,19 +76,17 @@ void TakePreviousBootMarks() {
 
 void ReportPreviousBootMarks() {
     if (PrevMarkFound) {
-        XK_SERIAL("*** previous boot stopped in start-up: last mark %08lx (mark %lu; the address of a log line's "
-                  "format string in that boot's image)\n", PrevMark, PrevMarkCount);
+        XK_SERIAL("*** previous boot stopped in start-up: last mark %08lx (mark %lu; the address of a log line's " "format string in that boot's image)\n",
+                  PrevMark, PrevMarkCount);
     }
     if (PrevMarkFound) {
-        XK_SERIAL("*** previous boot's last mark was set from a function called at %08lx (if that boot recorded it)\n",
-                  PrevMarkCaller);
+        XK_SERIAL("*** previous boot's last mark was set from a function called at %08lx (if that boot recorded it)\n", PrevMarkCaller);
     }
     if (PrevStallFound) {
-        XK_SERIAL("*** previous boot's start-up watchdog: %lu s after that mark the clock interrupt still ran, last "
-                  "interrupted eip %08lx at IRQL %lu\n", PrevStallSeconds, PrevStallEip, PrevStallIrql);
+        XK_SERIAL("*** previous boot's start-up watchdog: %lu s after that mark the clock interrupt still ran, last " "interrupted eip %08lx at IRQL %lu\n",
+                  PrevStallSeconds, PrevStallEip, PrevStallIrql);
     } else if (PrevMarkFound) {
-        XK_SERIAL("*** previous boot's start-up watchdog: no record (the clock interrupt stopped, or start-up "
-                  "had not stalled for 3 s)\n");
+        XK_SERIAL("*** previous boot's start-up watchdog: no record (the clock interrupt stopped, or start-up " "had not stalled for 3 s)\n");
     }
 }
 
