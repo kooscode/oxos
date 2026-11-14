@@ -1,5 +1,5 @@
 // The kernel extension loader (spec/oxos_internal/34 §3-§8): before each title, reads C:\OXOS\oxos_extensions.ini, loads each listed .xos from
-// C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook chains and starts the Main threads. Not part of the resident kernel:
+// C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook chains and starts the run loop thread. Not part of the resident kernel:
 // linked on its own at XK_EXTENSION_LOADER_BASE against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp
 // (§8.1). What runs while the title runs is in extensions/extension_runtime.cpp.
 #include <extensions/extension_state.h>
@@ -23,7 +23,7 @@ constexpr char FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\";
 constexpr ULONG LIST_MAX_BYTES = 0x10000;    // the list file
 constexpr ULONG FILE_MAX_BYTES = 0x40000;    // one extension's file
 constexpr ULONG IMAGES_MAX_BYTES = 0x80000;  // all loaded images together
-constexpr ULONG MAIN_STACK_BYTES = 0x4000;   // a Main thread's kernel stack
+constexpr ULONG LOOP_STACK_BYTES = 0x4000;   // the run loop thread's kernel stack
 constexpr ULONG POOL_TAG = 'txEX';
 constexpr ULONG IMPORT_SLOTS_MAX = 1024;     // kernel imports of all extensions together
 constexpr NTSTATUS STATUS_NOT_SUPPORTED = (NTSTATUS)0xC00000BB;
@@ -336,9 +336,7 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
                           : !descriptor             ? "no oxos_extension descriptor"
                           : descriptor->Magic != OXOS_EXTENSION_MAGIC || !descriptor->Load ? "a damaged descriptor"
                           : (descriptor->ApiVersion >> 16) != (OXOS_API_VERSION >> 16) ||
-                                  (descriptor->ApiVersion & 0xFFFF) > (OXOS_API_VERSION & 0xFFFF)
-                              ? "built for another kernel API version"
-                              : nullptr;
+                                  (descriptor->ApiVersion & 0xFFFF) > (OXOS_API_VERSION & 0xFFFF) ? "built for another kernel API version" : nullptr;
     if (refused) {
         XK_SERIAL("extensions: [%s] %s refused: %s (%lu)\n", name, path, refused, (ULONG)error);
         Slots->Count = firstSlot;
@@ -349,8 +347,6 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
 
     XK_EXTENSION &extension = state->Extensions[state->Count];
     extension.Descriptor = descriptor;
-    extension.MainThread = nullptr;
-    KeInitializeEvent(&extension.StopEvent, NotificationEvent, FALSE);
     OXOS_CONTEXT &context = extension.Context;
     context.Size = sizeof(OXOS_CONTEXT);
     context.ApiVersion = OXOS_API_VERSION;
@@ -364,9 +360,9 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     context.ImageSize = imageSize;
     context.State = StatePageFor(descriptor->Name ? descriptor->Name : name, &context.StateIsNew);
     context.StateSize = context.State ? PAGE_SIZE : 0;
-    context.StopEvent = &extension.StopEvent;
     context.Api = &LOADER_API;
     context.Kernel = &state->Kernel;
+    context.LogTarget = OXOS_LOG_SERIAL | OXOS_LOG_FILE;
 
     status = descriptor->Load(&context);
     if (!NT_SUCCESS(status)) {
@@ -434,6 +430,8 @@ extern "C" void XkExtensionLoaderEntry() {
     LoadedExtensions = (XK_EXTENSIONS_STATE *)ExAllocatePoolWithTag(sizeof(XK_EXTENSIONS_STATE), POOL_TAG);
     if (entries && slots && LoadedExtensions) {
         RtlZeroMemory(LoadedExtensions, sizeof(XK_EXTENSIONS_STATE));
+        KeInitializeEvent(&LoadedExtensions->LoopStop, NotificationEvent, FALSE);
+        LoadedExtensions->LoopExtension = XK_NO_EXTENSION;
         LoadedExtensions->Kernel.Size = sizeof(OXOS_KERNEL_INFO);
         LoadedExtensions->Kernel.MemoryPages = memory::HighestPhysicalPage + 1;
         slots->Count = 0;
@@ -463,18 +461,15 @@ extern "C" void XkExtensionLoaderEntry() {
     }
     if (!state)
         return;
-    // The loader's functions end with it; then the Main threads start.
-    for (ULONG i = 0; i < state->Count; i++)
-        state->Extensions[i].Context.Api = nullptr;
+    // The loader's functions end with it; then the run loop starts, when an extension has a RunLoop: one thread for all of them (§4.3).
+    bool loop = false;
     for (ULONG i = 0; i < state->Count; i++) {
-        XK_EXTENSION &extension = state->Extensions[i];
-        if (!extension.Descriptor->Main)
-            continue;
-        if (!NT_SUCCESS(PsCreateSystemThreadEx(&extension.MainThread, 0, MAIN_STACK_BYTES, 0, nullptr, (PVOID)extension.Descriptor->Main, &extension.Context,
-                                               FALSE, FALSE, MainThreadRoutine))) {
-            extension.MainThread = nullptr;
-            XK_SERIAL("extensions: [%s] Main not started\n", extension.Context.SectionName);
-        }
+        state->Extensions[i].Context.Api = nullptr;
+        loop |= state->Extensions[i].Descriptor->RunLoop != nullptr;
+    }
+    if (loop && !NT_SUCCESS(PsCreateSystemThreadEx(&state->LoopThread, 0, LOOP_STACK_BYTES, 0, nullptr, nullptr, nullptr, FALSE, FALSE, RunLoopThread))) {
+        state->LoopThread = nullptr;
+        XK_SERIAL("extensions: the run loop did not start\n");
     }
 }
 

@@ -15,13 +15,13 @@ constexpr ULONG XK_EXTENSION_EVENTS_MAX = 32; // event registrations of all exte
 struct XK_EXTENSION {
     OXOS_CONTEXT Context;
     const OXOS_EXTENSION *Descriptor;
-    KEVENT StopEvent;
-    HANDLE MainThread; // its Main thread, or null
 };
 // tests/boot_test.py reads the state pages through these offsets.
 XK_SIZE(OXOS_CONTEXT, 64);
 XK_OFFSET(OXOS_CONTEXT, State, 40);
-XK_SIZE(XK_EXTENSION, 88);
+XK_SIZE(XK_EXTENSION, 68);
+
+constexpr ULONG XK_NO_EXTENSION = 0xFFFFFFFF; // XK_EXTENSIONS_STATE::LoopExtension between RunLoop calls
 
 // One hook: Extension's Replacement for the title's calls of Ordinal; *Next is written when the chains are linked.
 struct XK_EXTENSION_HOOK {
@@ -48,6 +48,11 @@ struct XK_EXTENSIONS_STATE {
     ULONG EventCount;
     XK_EXTENSION_EVENT Events[XK_EXTENSION_EVENTS_MAX];
     OXOS_KERNEL_INFO Kernel;
+    // The run loop (§4.3): its thread, the request that stops it, and the RunLoop call in progress (for the warning when one does not return in time).
+    HANDLE LoopThread; // null when no extension has a RunLoop
+    KEVENT LoopStop;
+    volatile ULONG LoopExtension; // the index of the extension whose RunLoop is running, or XK_NO_EXTENSION
+    volatile ULONG LoopCallStart; // KeTickCount when that RunLoop was called
 };
 namespace xk::extensions {
 extern XK_EXTENSIONS_STATE *LoadedExtensions; // null when no extension is loaded
@@ -58,6 +63,6 @@ extern XK_EXTENSIONS_STATE *LoadedExtensions; // null when no extension is loade
 namespace xk::extensions {
 extern XK_PERSIST PVOID StateIndexPage; // the state pages' index (§6), kept across quick reboots
 extern const char KernelVersionText[];  // OXOS_CONTEXT::KernelVersion
-// A Main thread's routine: the extension's Main (StartRoutine) with its context, then the thread ends.
-void NTAPI MainThreadRoutine(PVOID Main, PVOID Context);
+// The run loop thread's routine (§4.3): until LoopStop, waits 1 ms, then calls each extension's RunLoop in oxos_extensions.ini order.
+void NTAPI RunLoopThread(PVOID StartRoutine, PVOID StartContext);
 } // namespace xk::extensions

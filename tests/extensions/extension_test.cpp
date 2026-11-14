@@ -14,8 +14,8 @@ struct SAVED {
     ULONG Generation;         // OXOS_CONTEXT::Generation at the last Load
     ULONG GenerationMismatch; // a Load whose Generation was not Launches
     ULONG Unloads;            // Unload calls
-    ULONG Heartbeats;         // turns of Main's loop, all launches
-    ULONG MainStops;          // Main saw the stop request and returned
+    ULONG RunLoopCalls;       // RunLoop calls, all launches
+    ULONG LoopAfterUnload;    // RunLoop calls after this launch's Unload (must stay 0: the loop stops first)
     ULONG Loading;            // OXOS_EVENT_TITLE_LOADING events
     ULONG Loaded;             // OXOS_EVENT_TITLE_LOADED events
     ULONG Exiting;            // OXOS_EVENT_TITLE_EXITING events
@@ -27,6 +27,8 @@ struct SAVED {
 
 SAVED *Saved;
 decltype(&oxos::NtOpenFile) NextNtOpenFile;
+bool OwnFileOpened; // this launch's RunLoop opened the extension's own file (globals start afresh at each launch)
+bool Unloaded;      // this launch's Unload has run
 
 NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
                               ULONG ShareAccess, ULONG OpenOptions) {
@@ -81,21 +83,27 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
     return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
 }
 
-void NTAPI Main(OXOS_CONTEXT *Context) {
+void NTAPI RunLoop(OXOS_CONTEXT *Context) {
+    if (Unloaded) {
+        Saved->LoopAfterUnload++;
+        return;
+    }
+    Saved->RunLoopCalls++;
+    if (OwnFileOpened)
+        return;
     // One NtOpenFile of its own once the chains are linked: it must pass chain.xos's hook (loaded after this one).
+    OwnFileOpened = true;
     ULONG size;
     char *file = oxos_read_file(OWN_FILE, 0x40000, &size);
     if (file)
         oxos::ExFreePool(file);
-    while (!oxos_wait_for_stop(Context, 10))
-        Saved->Heartbeats++;
-    Saved->MainStops++;
 }
 
 void NTAPI Unload(OXOS_CONTEXT *Context) {
+    Unloaded = true;
     Saved->Unloads++;
 }
 
 } // namespace
 
-OXOS_DEFINE_EXTENSION(.Name = "extension_test", .Version = "1.0.0", .Load = Load, .Main = Main, .Unload = Unload);
+OXOS_DEFINE_EXTENSION(.Name = "extension_test", .Version = "1.0.0", .Load = Load, .RunLoop = RunLoop, .Unload = Unload);

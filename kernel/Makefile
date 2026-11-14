@@ -397,9 +397,9 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	done
 
 # Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions) and the SDK's example, built with the SDK as it ships
-# (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks, events, Main
-# threads and Unloads, and leave out the ones that fail, are refused or are not listed. The SDK's import definitions are brought up to date with exports.tsv
-# first (sdk/src/xboxkrnl.def, committed with it when they change).
+# (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks, events,
+# RunLoops and Unloads (and log a slow RunLoop in C:\OXOS\log\extensions.log), and leave out the ones that fail, are refused or are not listed. The SDK's import
+# definitions are brought up to date with exports.tsv first (sdk/src/xboxkrnl.def, committed with it when they change).
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin

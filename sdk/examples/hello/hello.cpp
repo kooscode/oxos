@@ -4,12 +4,12 @@
 //
 //   Load      runs before each title starts: read settings, use the state page, hook kernel functions, register
 //             for events. It must return quickly; the title waits for it.
-//   Main      runs on its own thread while the title runs, until the kernel asks it to stop.
+//   RunLoop   called again and again while the title runs (about every millisecond, on the kernel's loop thread); it must return quickly.
 //   Unload    runs when the title starts another title or the dashboard (a quick reboot).
 //   a hook    the title's calls of NtOpenFile come here first; this one counts them and passes each one on.
 //   an event  called when a title has been loaded, before it runs: this one logs the title's name and ID.
 //
-// What it prints goes to the debug serial port, e.g.:
+// What it prints goes to the debug serial port and to C:\OXOS\log\extensions.log, e.g.:
 //   [hello] Hello from OXOS 0.4.7! Launch 2 since the cold boot.
 //   [hello] The last title opened 127 files.
 //   [hello] Title 4D530004 "Halo" is starting.
@@ -34,7 +34,9 @@ struct HELLO_STATE {
 
 HELLO_STATE *State;     // the state page, as this extension's own structure
 const char *Greeting;   // the "greeting" setting from oxos_extensions.ini
-ULONG HeartbeatSeconds; // the "heartbeat" setting: Main logs every so many seconds (0: Main only waits)
+ULONG HeartbeatSeconds; // the "heartbeat" setting: RunLoop logs every so many seconds (0: never)
+ULONG LastHeartbeat;    // KeTickCount (milliseconds) at Load or at the last heartbeat
+ULONG SecondsRunning;   // seconds of this title so far, in heartbeats
 
 // The kernel's NtOpenFile, or the next extension's hook of it: filled in by the kernel once every extension's Load has returned (the extensions listed after
 // this one in oxos_extensions.ini hook below it).
@@ -80,6 +82,10 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
         *State = {HELLO_MAGIC, 0, 0};
     State->Launches++;
 
+    // Where oxos_log writes: both C:\OXOS\log\extensions.log and the debug serial port (which only debug kernels have) unless an extension chooses one of them;
+    // this one keeps both.
+    oxos_set_log_target(Context, OXOS_LOG_SERIAL | OXOS_LOG_FILE);
+
     // Settings: the other keys of this extension's section in oxos_extensions.ini, as text (or null when missing).
     Greeting = oxos_get_setting(Context, "greeting");
     if (!Greeting)
@@ -93,6 +99,8 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
     if (State->Launches > 1)
         oxos_log(Context, "The last title opened %lu files.", State->OpenCalls);
     State->OpenCalls = 0;
+    LastHeartbeat = oxos::KeTickCount;
+    SecondsRunning = 0;
 
     // Be called when a title has been loaded.
     NTSTATUS status = Context->Api->RegisterEvent(Context, OXOS_EVENT_TITLE_LOADED, reinterpret_cast<PVOID>(OnTitleLoaded), nullptr);
@@ -102,17 +110,15 @@ NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
     return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
 }
 
-// On its own thread while the title runs: the place for slow work (files, the network) that Load must not do.
-void NTAPI Main(OXOS_CONTEXT *Context) {
-    if (!HeartbeatSeconds)
-        return; // nothing to do: Main may simply return, its thread ends
-    // oxos_wait_for_stop returns TRUE once the kernel asks Main to end (the title is starting another one), else after the time given. Main must then return
-    // promptly: the kernel waits at most half a second for it.
-    ULONG seconds = 0;
-    while (!oxos_wait_for_stop(Context, HeartbeatSeconds * 1000)) {
-        seconds += HeartbeatSeconds;
-        oxos_log(Context, "%lu s into this title, %lu files opened.", seconds, State->OpenCalls);
-    }
+// Called about every millisecond while the title runs, after the RunLoop of each extension listed before this one: the place for work Load must not do, a
+// little at a time. It must return quickly: every extension's RunLoop waits for it, and one that takes over 500 ms is logged in C:\OXOS\log\extensions.log.
+// Here: a heartbeat every HeartbeatSeconds, timed with the kernel's millisecond count (it never waits itself).
+void NTAPI RunLoop(OXOS_CONTEXT *Context) {
+    if (!HeartbeatSeconds || oxos::KeTickCount - LastHeartbeat < HeartbeatSeconds * 1000)
+        return;
+    LastHeartbeat += HeartbeatSeconds * 1000;
+    SecondsRunning += HeartbeatSeconds;
+    oxos_log(Context, "%lu s into this title, %lu files opened.", SecondsRunning, State->OpenCalls);
 }
 
 // The title is starting another title or the dashboard: close files or connections here. The state page needs no saving, it is kept as it is.
@@ -126,4 +132,4 @@ void NTAPI Unload(OXOS_CONTEXT *Context) {
 
 // Name is this extension's own name: it decides which state page it gets, so keep it the same across versions. Version is its own version, shown in the
 // kernel's log when it loads.
-OXOS_DEFINE_EXTENSION(.Name = "hello", .Version = "1.0.0", .Load = Load, .Main = Main, .Unload = Unload);
+OXOS_DEFINE_EXTENSION(.Name = "hello", .Version = "1.0.0", .Load = Load, .RunLoop = RunLoop, .Unload = Unload);

@@ -1,5 +1,5 @@
-// Boot diagnostics (src/diagnostics/): what a console that freezes or faults leaves for the next boot, and what the boot loader and the hardware report at
-// start-up. The CMOS bytes 0x70-0x7F hold the records; a serial build (spec/oxos_internal/03_debug_serial.md) prints them, and the reports, at the next boot.
+// Diagnostics (src/diagnostics/): what a console that freezes or faults leaves for the next boot, what the boot loader and the hardware report at start-up,
+// and the log files in C:\OXOS\log. The CMOS bytes 0x70-0x7F hold the records; a serial build (spec/oxos_internal/03_debug_serial.md) prints them, and the reports, at the next boot.
 #pragma once
 #include <runtime/types.h>
 
@@ -38,5 +38,14 @@ void ReportMachineCheckBanks(const char *When); // the banks that hold an error
 void ReportNvPads(const char *When);            // the NV2A memory pad registers, and the 2BL's calibration once
 void ReportRefresh();                           // the DRAM refresh, GPU clock and X-code records
 extern ULONG MachineCheckBanks;                 // the CPU's machine-check banks (0: none)
+
+// --- Log files (file_log.cpp)
+
+// Appends one line (Format as for RtlVsnprintf, at most 253 characters, then CR LF) to C:\OXOS\log\LogName.log, creating the folder and the file when they are
+// missing; a log that would pass 10 MB is rotated first (LogName_1.log the newest old part, spec/oxos_internal/35). PASSIVE_LEVEL only (it does nothing at a
+// raised IRQL); nothing is written when the disk has no C: or refuses.
+void AppendLogLine(const char *LogName, const char *Format, ...);
+// C:\OXOS and C:\OXOS\log, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine when its log cannot be opened.
+void CreateLogFolders();
 
 } // namespace xk::diagnostics

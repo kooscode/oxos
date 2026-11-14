@@ -28,10 +28,10 @@ extension = hello.xos
 | In the SDK | Contents |
 |---|---|
 | `include/oxos_sdk.h` | the one header an extension includes, C or C++ |
-| `lib/oxos_sdk.lib` | the one library: the SDK's helpers and the kernel's functions |
+| `lib/oxos_sdk.lib` | the one library: the kernel's functions (its import library). The SDK's helpers are inline in the header |
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
 | `examples/hello/` | the example to start from: every part of an extension, commented ([README](examples/hello/README.md)) |
 
-**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the library's sources (`src/`), and a `Makefile` that builds the
-SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z` its release zip), then each example with that package into `build/sdk/examples/NAME/`.
-Extensions are only built with the package, never from the source, so what ships is what is tested.
+**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the kernel's export list the library is made from
+(`src/xboxkrnl.def`), and a `Makefile` that builds the SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z` its release zip), then each example
+with that package into `build/sdk/examples/NAME/`. Extensions are only built with the package, never from the source, so what ships is what is tested.

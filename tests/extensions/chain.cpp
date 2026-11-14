@@ -10,7 +10,7 @@ constexpr ULONG SAVED_MAGIC = 0x4E414843; // "CHAN"
 struct SAVED {
     ULONG Magic;
     ULONG Launches;
-    ULONG OpenCalls; // NtOpenFile calls through this hook: the title's, and extension_test's own from its Main
+    ULONG OpenCalls; // NtOpenFile calls through this hook: the title's, and extension_test's own from its RunLoop
 };
 
 SAVED *Saved;

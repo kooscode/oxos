@@ -109,6 +109,13 @@ OXOS_IMPORT NTSTATUS NTAPI NtWriteFile(HANDLE FileHandle, HANDLE Event, PIO_APC_
                                        PVOID Buffer, ULONG Length, PLARGE_INTEGER ByteOffset);
 OXOS_IMPORT void NTAPI RtlInitAnsiString(PANSI_STRING DestinationString, PCSZ SourceString);
 OXOS_IMPORT int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args);
+OXOS_IMPORT KIRQL NTAPI KeGetCurrentIrql(void);
+OXOS_IMPORT int __cdecl RtlSnprintf(char *Buffer, SIZE_T Size, const char *Format, ...);
+// OXOS's own (416): one line in C:\OXOS\log\extensions.log, rotated at 10 MB (oxos_log with OXOS_LOG_FILE calls it).
+OXOS_IMPORT void NTAPI OXOSAppendExtensionLog(PCSZ Text);
+
+// Data: milliseconds since the console started (it counts up by one each millisecond, and wraps after 49 days).
+OXOS_IMPORT extern volatile ULONG KeTickCount;
 OXOS_KERNEL_FUNCTIONS_END
 
 // --- Ordinals of the functions above that extensions hook (kernel/exports.tsv)

@@ -29,8 +29,8 @@ OXOS_CXXFLAGS := $(OXOS_TARGET_FLAGS) -std=c++20 -fno-exceptions -fno-rtti -fno-
 OXOS_LDFLAGS := /DLL /DRIVER /NOENTRY /NODEFAULTLIB /SUBSYSTEM:NATIVE /MACHINE:X86 /BASE:0x10000000 /SAFESEH:NO \
                 /Brepro /DEBUG:NONE /ALIGN:0x20 /FILEALIGN:0x20 /NOIMPLIB
 
-# The SDK's one library: the runtime and the kernel's import library, prebuilt in lib/. The SDK's source has no lib/: extensions are built with the SDK as it
-# ships (in the OXOS repository, make -C sdk makes it in build/sdk/oxos_sdk/).
+# The SDK's one library: the kernel's import library, prebuilt in lib/ (the helpers are inline in oxos_sdk.h). The SDK's source has no lib/: extensions are
+# built with the SDK as it ships (in the OXOS repository, make -C sdk makes it in build/sdk/oxos_sdk/).
 OXOS_LIBRARIES ?= $(OXOS_SDK)/lib/oxos_sdk.lib
 ifeq ($(wildcard $(OXOS_LIBRARIES)),)
 $(OXOS_LIBRARIES):

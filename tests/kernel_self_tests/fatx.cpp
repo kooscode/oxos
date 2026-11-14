@@ -6,6 +6,7 @@
 #include <runtime/runtime.h>
 #include <core/core.h>
 #include <filesystems/filesystems.h>
+#include <diagnostics/diagnostics.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 
@@ -240,6 +241,10 @@ static void NTAPI FATXControllerThread(PVOID) {
         KiTestFATXTitleFolderOk = ok;
     }
     NtClose(hv);
+    // Log rotation (spec/oxos_internal/35): 50 lines of 200 bytes into a log that rotates at 4 KB in self-test builds, 20 lines a part. boot_test.py reads
+    // C:\OXOS\log\selftest_2.log (lines 0-19), selftest_1.log (20-39) and selftest.log (40-49) back from the disk.
+    for (ULONG i = 0; i < 50; i++)
+        diagnostics::AppendLogLine("selftest", "rotation line %02lu %0180lu", i, 0ul);
     if (storage::DiskHasEXFATLayout) {
         EXFATFormatTest(buf);
         EXFATCrossFolderTest(buf);

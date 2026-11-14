@@ -381,3 +381,4 @@ EXPORTS
     _allshl                                      @413 NONAME
     _allshr                                      @414 NONAME
     _aullshr                                     @415 NONAME
+    _OXOSAppendExtensionLog@4                    @416 NONAME

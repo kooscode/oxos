@@ -828,6 +828,7 @@ void LaunchAtColdBoot() {
     if (hardware::chipset::BootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
         user_interface::ShowFatalError(21);
     hardware::ide::CountDiskPowerCycle();
+    diagnostics::CreateLogFolders(); // C:\OXOS and C:\OXOS\log exist from every boot on (spec/oxos_internal/35)
     if (RunFileManager())
         return;
     // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).

@@ -3,6 +3,7 @@
 #include <extensions/extensions.h>
 #include <extensions/extension_state.h>
 #include <core/core.h>
+#include <diagnostics/diagnostics.h>
 #include <objects/objects.h>
 #include <hardware/chipset/serial.h>
 #include <titles/titles.h>
@@ -15,10 +16,39 @@ XK_PERSIST BOOLEAN SafeMode;
 XK_PERSIST PVOID StateIndexPage;
 const char KernelVersionText[] = XK_VERSION_TEXT;
 
-// --- Main threads (§4.3)
+// --- Warnings in C:\OXOS\log\extensions.log (§4.3)
 
-void NTAPI MainThreadRoutine(PVOID Main, PVOID Context) {
-    ((void(NTAPI *)(OXOS_CONTEXT *))Main)((OXOS_CONTEXT *)Context);
+namespace {
+
+constexpr ULONG LOOP_DELAY_WARNING_MS = 500; // a RunLoop call that takes longer is logged
+
+void LogLoopDelay(const XK_EXTENSION &Extension, ULONG Milliseconds) {
+    XK_SERIAL("extensions: extension %s delayed extension loop by %lu ms\n", Extension.Context.SectionName, Milliseconds);
+    diagnostics::AppendLogLine("extensions", "extension %s delayed extension loop by %lu ms", Extension.Context.SectionName, Milliseconds);
+}
+
+} // namespace
+
+// --- The run loop (§4.3): one thread, every extension's RunLoop in oxos_extensions.ini order, 1 ms between the rounds
+
+void NTAPI RunLoopThread(PVOID StartRoutine, PVOID StartContext) {
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
+    LARGE_INTEGER pause;
+    pause.QuadPart = -10000; // 1 ms
+    while (KeWaitForSingleObject(&state->LoopStop, Executive, KernelMode, FALSE, &pause) == STATUS_TIMEOUT) {
+        for (ULONG i = 0; i < state->Count && !state->LoopStop.Header.SignalState; i++) {
+            XK_EXTENSION &extension = state->Extensions[i];
+            if (!extension.Descriptor->RunLoop)
+                continue;
+            state->LoopCallStart = KeTickCount;
+            state->LoopExtension = i;
+            extension.Descriptor->RunLoop(&extension.Context);
+            state->LoopExtension = XK_NO_EXTENSION;
+            ULONG took = KeTickCount - state->LoopCallStart;
+            if (took > LOOP_DELAY_WARNING_MS)
+                LogLoopDelay(extension, took);
+        }
+    }
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
@@ -81,18 +111,15 @@ void TitleExiting() {
         return;
     OXOS_TITLE_EXITING data = {sizeof(data), LaunchDataPage};
     FireEvent(OXOS_EVENT_TITLE_EXITING, &data);
-    for (ULONG i = 0; i < state->Count; i++)
-        KeSetEvent(&state->Extensions[i].StopEvent, 0, FALSE);
-    // Each Main thread gets up to half a second to return; a title that reboots at a raised IRQL cannot wait.
-    if (KeGetCurrentIrql() == 0) {
-        for (ULONG i = 0; i < state->Count; i++) {
-            HANDLE thread = state->Extensions[i].MainThread;
-            if (!thread)
-                continue;
-            LARGE_INTEGER timeout;
-            timeout.QuadPart = -500 * 10000LL;
-            if (NtWaitForSingleObjectEx(thread, KernelMode, FALSE, &timeout) != STATUS_SUCCESS)
-                XK_SERIAL("extensions: [%s] Main did not return\n", state->Extensions[i].Context.SectionName);
+    // The run loop stops after the RunLoop call in progress, which gets up to half a second to return; a title that reboots at a raised IRQL cannot wait.
+    if (state->LoopThread) {
+        KeSetEvent(&state->LoopStop, 0, FALSE);
+        LARGE_INTEGER timeout;
+        timeout.QuadPart = -(LONGLONG)LOOP_DELAY_WARNING_MS * 10000;
+        if (KeGetCurrentIrql() == 0 && NtWaitForSingleObjectEx(state->LoopThread, KernelMode, FALSE, &timeout) != STATUS_SUCCESS) {
+            ULONG stuck = state->LoopExtension;
+            if (stuck != XK_NO_EXTENSION)
+                LogLoopDelay(state->Extensions[stuck], KeTickCount - state->LoopCallStart);
         }
     }
     for (ULONG i = 0; i < state->Count; i++) {

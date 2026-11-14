@@ -60,11 +60,16 @@ struct OXOS_CONTEXT {
     PVOID State;                 // its state page (§6)
     ULONG StateSize;             // 4096
     BOOLEAN StateIsNew;          // the page was just created (zeroed)
-    PVOID StopEvent;             // a KEVENT, signalled before Unload (§4.3)
 
     const OXOS_API *Api;            // only during Load, null afterwards
     const OXOS_KERNEL_INFO *Kernel; // facts about the console and the title
+    ULONG LogTarget;                // where oxos_log writes: OXOS_LOG_* (oxos_set_log_target); the kernel starts it at both
 };
+
+// --- Where oxos_log writes (OXOS_CONTEXT::LogTarget), one or both
+
+#define OXOS_LOG_SERIAL 1 // the debug serial port and the kernel's small in-memory debug log (debug kernels only: a release kernel has no serial output)
+#define OXOS_LOG_FILE 2   // C:\OXOS\log\extensions.log (spec/oxos_internal/35), at PASSIVE_LEVEL only
 
 // --- The descriptor each extension exports as oxos_extension (§4.1)
 
@@ -75,7 +80,9 @@ typedef struct OXOS_EXTENSION {
     const char *Version; // the extension's own version, for the log
     ULONG Flags;         // none defined: 0
     NTSTATUS(NTAPI *Load)(OXOS_CONTEXT *Context);
-    void(NTAPI *Main)(OXOS_CONTEXT *Context);
+    // Called again and again while the title runs, on the kernel's one loop thread: about every millisecond, after the RunLoop of each extension before it in
+    // oxos_extensions.ini (§4.3). It must return quickly; one that takes over 500 ms is logged in C:\OXOS\log\extensions.log.
+    void(NTAPI *RunLoop)(OXOS_CONTEXT *Context);
     void(NTAPI *Unload)(OXOS_CONTEXT *Context);
 } OXOS_EXTENSION;
 

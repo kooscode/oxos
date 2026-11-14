@@ -1,4 +1,4 @@
-// Test extension in plain C (spec/oxos_internal/34 §9.3): the SDK's headers, descriptor macro and runtime work without C++, and the compiler's calls to memcpy,
+// Test extension in plain C (spec/oxos_internal/34 §9.3): the SDK's header, descriptor macro and helpers work without C++, and the compiler's calls to memcpy,
 // memset, memcmp and the 64-bit division helpers reach the kernel's exports (OXOS's own ordinals 402-415). It records the results in its state page for
 // tests/boot_test.py.
 #include <oxos_sdk.h>

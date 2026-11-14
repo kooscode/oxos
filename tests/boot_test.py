@@ -490,13 +490,15 @@ def write_launch_redirect(hdd_copy):
     REDIRECT = True
 
 
-# The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: four that load (plain_c in C, then the SDK's example
-# hello), two the kernel must unload or refuse, one switched off, and one in the folder that the list does not name.
+# The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: five that load (plain_c in C, the SDK's example hello,
+# and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, and one in the folder that the
+# list does not name.
 EXTENSIONS_INI = ("; boot_test.py --extensions\r\n"
                   "[extension_test]\r\nextension = extension_test.xos\r\nanswer = 42\r\n"
                   "[chain]\r\nextension = chain.xos\r\n"
                   "[plain C]\r\nextension = plain_c.xos\r\ngreeting = hello\r\n"
                   "[hello]\r\nextension = hello.xos\r\nheartbeat = 1\r\n"
+                  "[slow_loop]\r\nextension = slow_loop.xos\r\n"
                   "[failload]\r\nextension = failload.xos\r\n"
                   "[badversion]\r\nextension = badversion.xos\r\n"
                   "[switched off]\r\nextension = disabled.xos\r\nenabled = no\r\n")
@@ -509,7 +511,7 @@ def write_extensions(hdd_copy, folder):
     w = FATXWriter(q, "C")
     w.makedirs("OXOS\\extensions")
     w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
-    for name in ("extension_test", "chain", "plain_c", "hello", "failload", "badversion"):
+    for name in ("extension_test", "chain", "plain_c", "hello", "slow_loop", "failload", "badversion"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, f"{name}.xos"), "rb").read())
     for name in ("disabled", "unlisted"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, "failload.xos"), "rb").read())
@@ -523,8 +525,8 @@ def extension_state_pages(mon):
     if not state:
         return []
     count = int(mon.hmp(f"x/1wx {state:#x}").split(":")[1].split()[0], 16)
-    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[8] of 88 bytes, each starting with its OXOS_CONTEXT (State at +40).
-    return [int(mon.hmp(f"x/1wx {state + 4 + 88 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
+    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[8] of 68 bytes, each starting with its OXOS_CONTEXT (State at +40).
+    return [int(mon.hmp(f"x/1wx {state + 4 + 68 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
 
 
 def extension_loaded_titles(mon):
@@ -538,9 +540,9 @@ def extension_loaded_titles(mon):
     return min(word(pages[0] + 4 * 8), word(pages[2] + 4 * 2))
 
 
-def extension_checks(mon, launches):
+def extension_checks(mon, launches, hdd):
     """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
-    plain_c.c, sdk/examples/hello) after `launches` launches: the cold boot's title and each quick reboot's
+    plain_c.c, sdk/examples/hello, slow_loop.cpp) after `launches` launches: the cold boot's title and each quick reboot's
     (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks)."""
     def words(address, n):
         out = mon.hmp(f"x/{n}wx {address:#x}")
@@ -551,19 +553,31 @@ def extension_checks(mon, launches):
     c = words(pages[1], 3) if count >= 2 else [0] * 3
     p = words(pages[2], 6) if count >= 3 else [0] * 6
     h = words(pages[3], 2) if count >= 4 else [0] * 2
+    s = words(pages[4], 4) if count >= 5 else [0] * 4
+    # C:\OXOS\log\extensions.log: one line per RunLoop call over 500 ms, all slow_loop's (the disk is read while the emulator is paused)
+    log = FATX(Qcow2(hdd), "C").read_file("OXOS\\log\\extensions.log") or b""
+    lines = log.decode("latin-1").split("\r\n")
+    delays = [re.fullmatch(r"extension slow_loop delayed extension loop by (\d+) ms", line) for line in lines if line.startswith("extension ")]
     if not count:
         return {"extensions loaded (extensions::LoadedExtensions)": False}
+    print(f"  (slow_loop: {s[1]} Loads, {s[2]} slow calls of {s[3]}; extensions.log: {len(lines) - 1} lines, {[l for l in lines if l.startswith('extension ')]})")
     return {
-        "extension_test, chain, plain_c and the SDK's example hello loaded; failload unloaded, badversion refused, "
-        "disabled and unlisted not loaded": count == 4 and x[0] == 0x54534F58 and c[0] == 0x4E414843 and p[0] == 0x434E4C50 and h[0] == 0x4F4C4548 and
-            h[1] == launches,
+        "extension_test, chain, plain_c, the SDK's example hello and slow_loop loaded; failload unloaded, badversion refused, "
+        "disabled and unlisted not loaded": count == 5 and s[0] == 0x574F4C53 and x[0] == 0x54534F58 and c[0] == 0x4E414843 and p[0] == 0x434E4C50 and
+            h[0] == 0x4F4C4548 and h[1] == launches,
         f"state page kept across the quick reboots: {launches} Loads, Generation {launches}": x[1] == launches and x[2] == launches and x[3] == 0 and
             c[1] == launches,
-        "Main ran while the titles ran and returned at each stop request": x[5] > 0 and x[6] == launches - 1,
+        "RunLoop called while the titles ran, never after Unload": x[5] > 0 and x[6] == 0,
+        # The cold boot's title may end before the 600 ms are up: the kernel then logs the call still running after its 500 ms wait at the title's end.
+        "slow_loop's 600 ms RunLoop at the cold boot; the loop went on calling RunLoop in the later launches": s[1] == launches and s[2] <= 1 and s[3] > 2,
+        "C:\\OXOS\\log\\extensions.log: 'extension slow_loop delayed extension loop by N ms' for it, once, 500 < N < 2000": len(delays) == 1 and delays[0] and
+            500 < int(delays[0][1]) < 2000,
+        "oxos_log to the file (hello: OXOS_LOG_SERIAL | OXOS_LOG_FILE): its greeting at each launch in extensions.log":
+            sum(line.startswith("[hello] Hello from OXOS ") for line in lines) == launches,
         "Unload at each quick reboot": x[4] == launches - 1,
         "events: a load and a loaded title per launch, an exit per quick reboot":
             x[7] >= launches and x[8] == launches and x[9] == launches - 1,
-        "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (Main) only chain's": x[10] > 0 and c[2] == x[10] + launches,
+        "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (RunLoop) only chain's": x[10] > 0 and c[2] == x[10] + launches,
         "settings from oxos_extensions.ini and oxos_read_file": x[12] == 1 and x[13] == 1,
         f"plain C extension: {launches} Loads and loaded titles, its setting": p[1] == launches and p[2] == launches and p[5] == 1,
         "the kernel's memcpy, memset, memcmp and 64-bit division for extensions (exports 402-415)": p[3] == 1 and p[4] == 1,
@@ -942,8 +956,12 @@ def upload_checks(mon, port, xbe, fs="exFAT"):
     entries = json.loads(listing) if status == 200 else []
     checks["it is listed with its size"] = any(e["name"] == "data.bin" and e["size"] == len(blob) for e in entries)
     if fs == "exFAT":
-        status, empty = request("GET", "/api/list?path=%2FC")  # a fresh disk: C: is an empty folder
+        status, empty = request("GET", "/api/list?path=%2FY")  # a fresh disk: Y: is an empty folder
         checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
+        # C: holds only what the kernel makes at every boot: C:\OXOS (with its log folder, spec/oxos_internal/35)
+        status, c = request("GET", "/api/list?path=%2FC")
+        checks[f"C: on a fresh disk holds only the OXOS folder made at boot ({status} {c[:60]!r})"] = \
+            status == 200 and [(e["name"], e["dir"]) for e in json.loads(c)] == [("OXOS", True)]
     status, _ = request("GET", "/api/list?path=%2FE%2F..")
     checks["'..' in a path is refused (400)"] = status == 400
     status, _ = request("PUT", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin", b"x" * 1000)
@@ -1088,6 +1106,18 @@ def large_file_ok(v):
     return read_at(0xFFFFF000, 0x1000) == below and read_at(0x100000000, 0x800) == again
 
 
+def rotated_log_ok(log_part):
+    """C:\\OXOS\\log\\selftest*.log, as the FATX self-test suite writes it (spec/oxos_internal/35): 50 numbered lines rotated at 4 KB, 20 a part, so
+    selftest_2.log holds lines 0-19, selftest_1.log 20-39 and selftest.log 40-49. log_part(name) reads one part (None when missing)."""
+    def line_numbers(name):
+        text = (log_part(name) or b"").decode("latin-1")
+        return [int(line.split()[2]) for line in text.split("\r\n") if line.startswith("rotation line ")]
+    parts = [line_numbers(name) for name in ("selftest_2.log", "selftest_1.log", "selftest.log")]
+    if parts != [list(range(0, 20)), list(range(20, 40)), list(range(40, 50))]:
+        print(f"  (C:\\OXOS\\log\\selftest*.log, oldest first: {[(len(p), p[:1], p[-1:]) for p in parts]})")
+    return parts == [list(range(0, 20)), list(range(20, 40)), list(range(40, 50))] and log_part("selftest_3.log") is None
+
+
 def disk_checks(hdd_copy):
     """After xemu exits: what the kernel wrote must read back with an independent FATX (or exFAT) reader."""
     q = Qcow2(hdd_copy)
@@ -1106,12 +1136,15 @@ def disk_checks(hdd_copy):
                 == bytes((i * 7 + i // 251) & 0xFF for i in range(3 * 16384 + 100)),
             "E:\\XkPre.bin (allocation size 256 KB, 100 bytes written) reads back": v.read_file("/E/XkPre.bin") == b"p" * 100,
             "E:\\XkLarge.bin (over 4 GB) has its size and reads back across the 4 GB mark": large_file_ok(v),
+            "C:\\OXOS\\log: a log rotated at its size limit into selftest_2.log, selftest_1.log, selftest.log": rotated_log_ok(lambda name: v.read_file(f"/C/OXOS/log/{name}")),
         }
     e = FATX(q, "E")
     names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None
     return {
         "E:\\XkTest\\keep.bin readable by an independent FATX reader": e.read_file("XkTest\\keep.bin") == b"open xbox kernel fatx test",
         "deleted/renamed entries gone, directory consistent": names == ["keep.bin"],
+        "C:\\OXOS\\log: a log rotated at its size limit into selftest_2.log, selftest_1.log, selftest.log": rotated_log_ok(lambda name: FATX(q,
+            "C").read_file(f"OXOS\\log\\{name}")),
     }
 
 
@@ -1344,7 +1377,7 @@ def main():
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions)), "RAM": ram_checks(mon, a.memory)}
             if a.extensions:
-                results["extensions"] = extension_checks(mon, 3)
+                results["extensions"] = extension_checks(mon, 3, hdd_copy)
         elif a.iso_launch:
             results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:

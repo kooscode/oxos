@@ -381,3 +381,4 @@ ordinal	name	convention	arg_bytes	kind
 413	_allshl	compiler		func
 414	_allshr	compiler		func
 415	_aullshr	compiler		func
+416	OXOSAppendExtensionLog	stdcall	4	func

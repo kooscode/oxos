@@ -6,7 +6,7 @@ extension can have:
 | Part | In `hello.cpp` | When it runs |
 |---|---|---|
 | `Load` | greets, counts launches in its state page, reads its settings, registers an event, hooks `NtOpenFile` | before each title starts; the title waits for it |
-| `Main` | logs a heartbeat every `heartbeat` seconds | on its own thread while the title runs |
+| `RunLoop` | logs a heartbeat every `heartbeat` seconds | about every millisecond while the title runs, on the kernel's loop thread |
 | `Unload` | logs how many files the title opened | when the title starts another title or the dashboard |
 | a hook | counts the title's `NtOpenFile` calls and passes each one on to the kernel | at each call the title makes |
 | an event | logs the title's name and ID | when a title has been loaded, before it runs |
@@ -32,7 +32,9 @@ To switch it off, set `enabled = no` in its section, or hold **B** at boot (safe
 
 ## See what it does
 
-Its messages go to the debug serial port of a kernel built with `SERIAL=1` (a debug kit, or a modchip's serial port):
+Its messages go to `C:\OXOS\log\extensions.log` on the console's hard disk (read it over FTP or with the File Manager; it moves to `extensions_1.log` at 10 MB),
+and to the debug serial port of a kernel built with `SERIAL=1` (a debug kit, or a modchip's serial port). `oxos_set_log_target` in `Load` chooses where; without
+it both get them:
 
 ```
 [hello] Hello from OXOS 0.4.7! Launch 1 since the cold boot.
@@ -49,6 +51,9 @@ Its messages go to the debug serial port of a kernel built with `SERIAL=1` (a de
   time. Only the 4 KB state page carries over, until the next cold boot.
 - **Hooks see the title's calls only.** `NextNtOpenFile` is the kernel's function, or the hook of an extension listed after this one in `oxos_extensions.ini`.
   The kernel's own calls are not hooked.
+- **`RunLoop` must return quickly.** One kernel thread calls every extension's `RunLoop` in turn, about every millisecond, in the order of
+  `oxos_extensions.ini`; a slow one holds up the others. Do a little work per call and keep the time with `oxos::KeTickCount`; a call that takes over 500 ms is
+  logged in `C:\OXOS\log\extensions.log`.
 - **Hooks run on the title's threads**, possibly several at once: shared data needs atomic operations or a lock.
 - **No floating point** in kernel code: the kernel does not save those registers for extensions (the SDK's build rules turn it off).
 - The full rules are in the specification: `spec/oxos_internal/34_kernel_extensions.md` in the OXOS repository.
