@@ -19,7 +19,7 @@ in the drive starts. The same folder works on OXOS and on Cerbios.
 
 ## Usage
 ```
-make -C kernel iso_launcher                      # once: builds tools/iso_launcher/bin/default.xbe, the template
+make -C kernel iso_launcher                      # once: builds build/tools/iso_launcher/bin/default.xbe, the template
 
 # An extracted game (default.xbe at its top): build an XISO in OUT/<name>/ and its launcher
 tools/oxos_isonator/oxos_isonator.py "extracted/Halo 2" -o games

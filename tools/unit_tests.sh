@@ -17,7 +17,7 @@ if [ "${1:-}" = "--coverage" ]; then COVERAGE=ON; shift; fi
 if [ "${1:-}" = "--" ]; then shift; fi
 
 inner() {
-    BUILD=$ROOT/tests/unit/build$( [ "$COVERAGE" = ON ] && echo _cov || true )$( [ -n "${OXOS_KERNEL_OPT:-}" ] && echo "_opt$(echo "$OXOS_KERNEL_OPT" | tr -dc 'A-Za-z0-9')" || true )
+    BUILD=$ROOT/build/tests/unit$( [ "$COVERAGE" = ON ] && echo _cov || true )$( [ -n "${OXOS_KERNEL_OPT:-}" ] && echo "_opt$(echo "$OXOS_KERNEL_OPT" | tr -dc 'A-Za-z0-9')" || true )
     make -s -C "$ROOT/tests/unit" -j"$(nproc)" CC=clang CXX=clang++ BUILD="$BUILD" \
         COVERAGE=$( [ "$COVERAGE" = ON ] && echo 1 || echo 0 ) KERNEL_OPT="${OXOS_KERNEL_OPT:-}"
     if [ "$COVERAGE" = ON ]; then

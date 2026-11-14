@@ -1,17 +1,19 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
-#   make            -> build/selftest/xboxkrnl.exe (+ map)
-#   make bios       -> build/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes; spec/stock/01 §5)
-#   make test       -> boot build/selftest/bios.bin in xemu and check all milestone conditions (boot self-tests)
-# All build output goes under build/, one folder per kind of build:
-#   build/selftest         make, make bios, make test (the kernel with its boot self-tests)
-#   build/release          make run and the published BIOS (no self-tests, no debug code)
-#   build/debug            make run_gdb, tools/debug_app.py, VS Code (DEBUG=1: debug info for gdb)
-#   build/trace_basic      make run_trace_basic (the debug serial log)
-#   build/trace_full       make run_trace_full (serial log + kernel call tracer, xemu at 128 MB)
-#   build/trace_full_64mb  make run_trace_full TRACE=1 (the call tracer within the console's 64 MB)
+#   make            -> build/kernel/selftest/xboxkrnl.exe (+ map)
+#   make bios       -> build/kernel/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes;
+#                      spec/stock/01 §5)
+#   make test       -> boot build/kernel/selftest/bios.bin in xemu and check all milestone conditions (boot self-tests)
+# All build output goes under the repository's build/ folder (the only one git ignores for it): the kernel's in
+# build/kernel/, one folder per kind of build; the apps in build/tools/ and build/tests/, the SDK in build/sdk/.
+#   build/kernel/selftest         make, make bios, make test (the kernel with its boot self-tests)
+#   build/kernel/release          make run and the published BIOS (no self-tests, no debug code)
+#   build/kernel/debug            make run_gdb, tools/debug_app.py, VS Code (DEBUG=1: debug info for gdb)
+#   build/kernel/trace_basic      make run_trace_basic (the debug serial log)
+#   build/kernel/trace_full       make run_trace_full (serial log + kernel call tracer, xemu at 128 MB)
+#   build/kernel/trace_full_64mb  make run_trace_full TRACE=1 (the call tracer within the console's 64 MB)
 
 ROOT      := ..
-OUT       := build
+OUT       := $(ROOT)/build/kernel
 BUILD     := $(OUT)/selftest
 RELEASE_BUILD := $(OUT)/release
 # The 1.6 console's release image (MCPX16=1: its own X-codes, spec/oxos_internal/28).
@@ -257,9 +259,10 @@ bios_256k: $(BUILD)/bios_256k.bin
 # A release, in order, stopping at the first failure: every host unit test (tools/unit_tests.sh), the release
 # images (1 MB and 256 KB, no self-tests, no serial log), the dashboard test on them (make test_dash), and a check
 # that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also packs the release file
-# build/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin, the title
+# build/kernel/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin, the title
 # patches (title_patches/title_patches.ini) and the FTP server (tools/ftp_server, as ftp.xbe; built with nxdk, which
-# `make nxdk` fetches), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
+# `make nxdk` fetches), puts the kernel extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip, from
+# oxos_sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
 # test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
@@ -269,6 +272,7 @@ release:
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
 	$(if $(VERSION),$(MAKE) ftp_server)
+	$(if $(VERSION),$(MAKE) -C $(ROOT)/oxos_sdk VERSION=$(VERSION))
 	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
 	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
 	    cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
@@ -278,17 +282,18 @@ release:
 	    cd $(RELEASE_BUILD)/dist && \
 	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
 	        title_patches.ini ftp.xbe && \
-	    sha256sum oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
-	        title_patches.ini ftp.xbe)
+	    cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) . && \
+	    sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin \
+	        bios_1.6_v$(VERSION)_256k.bin title_patches.ini ftp.xbe)
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a
 # kernel at every power-on and boots its own (a serial-log build) when no PC answers.
-NETBOOT_BUILD := build/netboot
+NETBOOT_BUILD := $(OUT)/netboot
 netboot:
 	$(MAKE) BUILD=$(NETBOOT_BUILD) NETBOOT=1 SERIAL=1 SELFTEST=0 $(NETBOOT_BUILD)/bios_256k.bin $(NETBOOT_BUILD)/bios.bin
 
 # The MCPX ROM dumper's payload (tools/mcpx_dump/README.md): a netboot image whose 2BL also sends the boot ROM.
-MCPX_DUMP_BUILD := build/mcpx_dump
+MCPX_DUMP_BUILD := $(OUT)/mcpx_dump
 mcpx_dump:
 	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios_256k.bin
 
@@ -398,10 +403,10 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 # oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks,
 # events, Main threads and Unloads, and leave out the ones that fail, are refused or are not listed. The SDK's prebuilt
 # libraries are brought up to date with exports.tsv first (committed with it when they change).
-TEST_EXTENSIONS_DIR := $(abspath $(BUILD))/test_extensions
+TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/oxos_sdk/lib/xboxkrnl.def
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/oxos_sdk/src/xboxkrnl.def
 	$(MAKE) -C $(ROOT)/oxos_sdk
 	mkdir -p $(TEST_EXTENSIONS_DIR)
 	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)
@@ -456,10 +461,10 @@ $(FATX16_HDD): $(XDASH_HDD)
 	rm -f $(FATX16_STATE)/grown.qcow2
 UPLOAD_FATX_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
     $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --boot-wait 2 \
-    --upload 18080 --upload-xbe $(ROOT)/tools/ftp_server/bin/default.xbe
+    --upload 18080 --upload-xbe $(FTP_SERVER_XBE)
 test_upload: ftp_server $(XDASH_HDD) $(FATX16_HDD)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(ROOT)/tools/ftp_server/bin/default.xbe
+	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(FTP_SERVER_XBE)
 	$(UPLOAD_FATX_TEST) --hdd $(XDASH_HDD)
 	$(UPLOAD_FATX_TEST) --hdd $(FATX16_HDD)
 
@@ -544,6 +549,7 @@ print_trace_dump:
 #     boot; XboxDev/nxdk#801) and lwIP sockets for more than one network client (MEMP_NUM_NETCONN 32);
 #   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
 # Every app draws and reads the controllers through SDL3 and the shared text screen in tools/sdl_screen.
+APPS_BUILD       := $(abspath $(ROOT)/build)
 NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_URL         := https://github.com/kooscode/nxdk
 NXDK_COMMIT      := d1e7004a236a7357b87e9d9ae7433b2ae6126fc0
@@ -576,7 +582,7 @@ nxdk: $(NXDK_READY)
 # reports what it received. CONTROLLER_BIOS=stock compares with the reference BIOS.
 CONTROLLER_BIOS ?= ours
 CONTROLLER_DIR  := $(ROOT)/tests/controller_test_title
-CONTROLLER_ISO  := $(CONTROLLER_DIR)/controller_test_title.iso
+CONTROLLER_ISO  := $(APPS_BUILD)/tests/controller_test_title/controller_test_title.iso
 
 $(CONTROLLER_ISO): $(NXDK_READY) $(SDL_SCREEN) $(CONTROLLER_DIR)/controller_test_title.cpp $(CONTROLLER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(CONTROLLER_DIR) -j8
@@ -585,7 +591,7 @@ $(CONTROLLER_ISO): $(NXDK_READY) $(SDL_SCREEN) $(CONTROLLER_DIR)/controller_test
 # the front LED changing once a second: the kernel, a title and video work. make image_test builds its disc image;
 # make run_image_test boots it in xemu with the release BIOS (RUN_OPTS as make run).
 IMAGE_TEST_DIR := $(ROOT)/tests/image_test_title
-IMAGE_TEST_ISO := $(IMAGE_TEST_DIR)/image_test.iso
+IMAGE_TEST_ISO := $(APPS_BUILD)/tests/image_test_title/image_test.iso
 $(IMAGE_TEST_ISO): $(NXDK_READY) $(SDL_SCREEN) $(IMAGE_TEST_DIR)/image_test.cpp $(IMAGE_TEST_DIR)/Makefile \
                    $(IMAGE_TEST_DIR)/picture.jpg
 	$(NXDK_ENV) $(MAKE) -C $(IMAGE_TEST_DIR) -j8
@@ -607,7 +613,7 @@ test_controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 # files in; unmount it before running), or STATE=... for another state folder. run_trace_xbe is the same with the
 # trace build (run_trace_full): the debug serial port in this terminal, the kernel call record dumped on a crash.
 LAUNCHER_DIR := $(ROOT)/tools/xbe_launcher
-LAUNCHER_XBE := $(LAUNCHER_DIR)/bin/default.xbe
+LAUNCHER_XBE := $(APPS_BUILD)/tools/xbe_launcher/bin/default.xbe
 XBE_STATE    := $(if $(filter command line,$(origin STATE)),$(STATE),$(ROOT)/xemu_state/oxos_exfat)
 
 $(LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(LAUNCHER_DIR)/xbe_launcher.cpp $(LAUNCHER_DIR)/Makefile
@@ -636,7 +642,7 @@ run_trace_xbe: xbe_disc
 # split .1.iso/.2.iso pair, a .cci and an image over 4 GB; the title runs from it, relaunches itself and ends in the
 # dashboard. make run_iso ISO='F:\titles\Halo 2.iso' boots the launcher in xemu for an image on the run_xbe disk.
 ISO_LAUNCHER_DIR := $(ROOT)/tools/iso_launcher
-ISO_LAUNCHER_XBE := $(ISO_LAUNCHER_DIR)/bin/default.xbe
+ISO_LAUNCHER_XBE := $(APPS_BUILD)/tools/iso_launcher/bin/default.xbe
 ISO_KINDS ?= plain split cci splitcci large
 
 $(ISO_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(ISO_LAUNCHER_DIR)/iso_launcher.cpp $(ISO_LAUNCHER_DIR)/mount_iso.h \
@@ -645,18 +651,19 @@ $(ISO_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(ISO_LAUNCHER_DIR)/iso_launche
 iso_launcher: $(ISO_LAUNCHER_XBE)
 
 # Title launcher (tools/title_launcher, nxdk): lists F:\games, F:\titles (and game folders) and F:\Applications and starts a disc image (mounted) or an XBE chosen with
-# the controller. make title_launcher builds bin/default.xbe and title_launcher.iso.
+# the controller. make title_launcher builds build/tools/title_launcher/bin/default.xbe and title_launcher.iso.
 TITLE_LAUNCHER_DIR := $(ROOT)/tools/title_launcher
-TITLE_LAUNCHER_XBE := $(TITLE_LAUNCHER_DIR)/bin/default.xbe
+TITLE_LAUNCHER_XBE := $(APPS_BUILD)/tools/title_launcher/bin/default.xbe
 $(TITLE_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(TITLE_LAUNCHER_DIR)/title_launcher.cpp \
                        $(ISO_LAUNCHER_DIR)/mount_iso.h $(TITLE_LAUNCHER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(TITLE_LAUNCHER_DIR) -j8
 title_launcher: $(TITLE_LAUNCHER_XBE)
 
 # FTP server (tools/ftp_server, nxdk): the console's disks over the network (copy, move, delete with any FTP client).
-# make ftp_server builds bin/default.xbe and ftp_server.iso; netboot.py IMAGE --title tools/ftp_server/bin runs it.
+# make ftp_server builds build/tools/ftp_server/bin/default.xbe and ftp_server.iso; netboot.py IMAGE --title
+# build/tools/ftp_server/bin runs it.
 FTP_SERVER_DIR := $(ROOT)/tools/ftp_server
-FTP_SERVER_XBE := $(FTP_SERVER_DIR)/bin/default.xbe
+FTP_SERVER_XBE := $(APPS_BUILD)/tools/ftp_server/bin/default.xbe
 $(FTP_SERVER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(FTP_SERVER_DIR)/ftp_server.cpp $(FTP_SERVER_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(FTP_SERVER_DIR) -j8
 ftp_server: $(FTP_SERVER_XBE)
@@ -682,7 +689,7 @@ run_iso: iso_disc
 # "limit to 64 MB") and with the flag cleared. MEMORY=128 for a 128 MB console; MEMORY_BIOS=... (with MCPX_ROM=...)
 # runs another BIOS instead of the release build, e.g. for comparison.
 MEMORY_DIR  := $(ROOT)/tests/memory_test_title
-MEMORY_XBE  := $(MEMORY_DIR)/bin/default.xbe
+MEMORY_XBE  := $(APPS_BUILD)/tests/memory_test_title/bin/default.xbe
 
 $(MEMORY_XBE): $(NXDK_READY) $(SDL_SCREEN) $(MEMORY_DIR)/memory_test_title.cpp $(MEMORY_DIR)/Makefile
 	$(NXDK_ENV) $(MAKE) -C $(MEMORY_DIR) -j8

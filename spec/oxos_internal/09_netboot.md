@@ -13,7 +13,7 @@ needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 - Paging off, interrupts off, polled; physical addresses throughout.
 - Time comes from the MCPX ACPI PM timer (I/O 0x8008, 3.375 MHz). If it does not advance over about 1 ms of port
   cycles, netboot is skipped.
-- Built by `make netboot` (`BUILD=build/netboot NETBOOT=1 SERIAL=1 SELFTEST=0`): the 2BL with netboot and a
+- Built by `make netboot` (`build/kernel/netboot`, `NETBOOT=1 SERIAL=1 SELFTEST=0`): the 2BL with netboot and a
   serial-log kernel as the flash fallback (a network-log kernel until 2026-10-28, spec 03 §7).
 
 ## 2. NIC use

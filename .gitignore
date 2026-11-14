@@ -13,55 +13,15 @@ xboxkrnl.exe
 *.iso
 *.bundle
 
-# Build output
-kernel/build*/
+# Build output: everything builds into build/ (kernel/, tools/, tests/, sdk/)
+/build/
 # Fetched by the build, except Intel's microcode and the game trainers, which are kept in the repo
 # (third_party/intel_ucode/README.md, third_party/xbox_trainers/README.md)
 third_party/*
 !third_party/intel_ucode/
 !third_party/xbox_trainers/
-tests/*_test_title/bin/
-tests/*_test_title/*.obj
-tests/*_test_title/*.d
-tests/*_test_title/*.exe
-tests/*_test_title/*.pdb
-tests/*_title/bin/
-tests/*_title/*.obj
-tests/*_title/*.d
-tests/*_title/*.exe
-tests/*_title/*.pdb
-tests/*_title/*.lib
 __pycache__/
 
 # Local tool state
 .claude/
 claude-resume.sh
-tools/xbe_launcher/bin/
-tools/xbe_launcher/*.obj
-tools/xbe_launcher/*.d
-tools/xbe_launcher/*.exe
-tools/xbe_launcher/*.pdb
-tools/iso_launcher/bin/
-tools/iso_launcher/*.obj
-tools/iso_launcher/*.d
-tools/iso_launcher/*.exe
-tools/iso_launcher/*.pdb
-tools/title_launcher/bin/
-tools/title_launcher/*.obj
-tools/title_launcher/*.d
-tools/title_launcher/*.exe
-tools/title_launcher/*.pdb
-tools/ftp_server/bin/
-tools/ftp_server/*.obj
-tools/ftp_server/*.d
-tools/ftp_server/*.exe
-tools/ftp_server/*.pdb
-# SDL3 (built per app from third_party/nxdk-sdl3) and the shared text screen's objects
-tools/*/libSDL3.lib
-tools/sdl_screen/*.obj
-tools/sdl_screen/*.d
-# Host unit-test build output
-tests/unit/build*/
-tools/mkcci/bin/
-tools/jingle/bin/
-tools/vsplash/bin/

@@ -19,7 +19,7 @@ Sources:
 Images are one file by default: exFAT (OXOS) has no file size limit. --split cuts an image over 4 GB into two parts
 for a FATX disk (Cerbios, stock partitions), named NAME.1.iso and NAME.2.iso.
 
-Python 3.8+, standard library only. The launcher template is tools/iso_launcher/bin/default.xbe
+Python 3.8+, standard library only. The launcher template is build/tools/iso_launcher/bin/default.xbe
 (make -C kernel iso_launcher), or --launcher.
 """
 import argparse
@@ -38,7 +38,8 @@ FULL_DUMP_MIN = 0x18310800        # a full dump's first part is larger than this
 PART_MAX = 0xFFF00000             # one part of a split image: under FATX's 4 GB file limit, whole sectors
 ATTR_DIR, ATTR_FILE = 0x10, 0x80  # as on retail discs
 CHUNK = 8 << 20
-LAUNCHER_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "iso_launcher", "bin", "default.xbe")
+LAUNCHER_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "build", "tools", "iso_launcher", "bin",
+                                "default.xbe")
 IMAGE_EXTS = (".iso", ".cci")
 
 

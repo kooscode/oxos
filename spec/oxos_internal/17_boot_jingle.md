@@ -65,7 +65,7 @@ Quick reboots (no splash) have no jingle. `HalpBootSoundOn = 0` turns it off.
 - `make test_dash`: the boot test reads `HalpBootSoundStatus` (3 = played to the end with no underruns), the
   controller's buffer at the end, the lead at the start and the synthesis time.
 - `boot_test.py --dash --jingle-pcm FILE` saves the synthesized samples from guest memory while the jingle plays, to
-  compare with `tools/jingle/bin/jingle OUT.wav`.
+  compare with `build/tools/jingle/jingle OUT.wav`.
 - Checked on the 1.4 console (Modxo rig): the HDMI capture card's audio input recorded the jingle at the right pitch
   and length (the level envelope correlates 0.75 with the render; HDMI adapters drop about the first 0.7 s while
   they lock), no underruns, the splash's timing unchanged, and the dashboard and titles start as before.

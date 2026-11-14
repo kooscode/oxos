@@ -1,5 +1,5 @@
 // Test extension (spec/oxos_internal/34 §9.3): built for a later major API version, so the kernel refuses it.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 namespace {
 

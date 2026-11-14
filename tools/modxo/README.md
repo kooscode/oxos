@@ -62,7 +62,7 @@ Flash an OXOS netboot image once (`make -C kernel netboot`; see `tools/netboot/R
 
 ```sh
 python3 tools/netboot/netboot.py serve.bin --to 192.168.1.255 &       # serve.bin: a symlink to the image
-python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image kernel/build/serial/bios_256k.bin --serve serve.bin
+python3 tools/modxo/bootrun.py --log console.txt --runs 5 --image build/kernel/serial/bios_256k.bin --serve serve.bin
 ```
 
 ## Notes

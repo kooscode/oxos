@@ -114,7 +114,7 @@ def run(a, xbe, label):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bios", required=True)
-    ap.add_argument("--xbe", required=True, help="the memory test title's default.xbe (tests/memory_test_title/bin)")
+    ap.add_argument("--xbe", required=True, help="the memory test title's default.xbe (build/tests/memory_test_title/bin)")
     ap.add_argument("--memory", choices=["64", "128"], default="64")
     ap.add_argument("--no-limit", action="store_true", help="clear the XBE's 'limit to 64 MB' init flag")
     ap.add_argument("--both", action="store_true", help="run as built, then with the flag cleared")

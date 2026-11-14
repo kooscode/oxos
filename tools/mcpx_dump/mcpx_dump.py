@@ -207,7 +207,7 @@ def main():
     b.add_argument("--mcpx", choices=("1.0", "1.1"), required=True,
                    help="the console's MCPX: 1.0 (consoles 1.0) or 1.1 (consoles 1.1-1.5; not 1.6)")
     b.add_argument("--bios", required=True, help="your retail BIOS for that MCPX (any size, top 256 KiB used)")
-    b.add_argument("--payload", default="kernel/build/mcpx_dump/bios_256k.bin",
+    b.add_argument("--payload", default="build/kernel/mcpx_dump/bios_256k.bin",
                    help="the OXOS payload image (default: %(default)s, from make -C kernel mcpx_dump)")
     b.add_argument("--out", required=True)
     r = sub.add_parser("receive", help="wait for the dump and save it")

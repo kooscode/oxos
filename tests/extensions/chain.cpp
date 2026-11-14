@@ -1,7 +1,7 @@
 // Test extension (spec/oxos_internal/34 §9.3), listed after extension_test.xos: hooks the same NtOpenFile, so every
 // title call passes extension_test's hook, then this one, then the kernel; extension_test's own NtOpenFile calls come
 // here too.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 namespace {
 

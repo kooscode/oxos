@@ -7,7 +7,7 @@ built from the kernel's own sources as a 32-bit Linux program. How it works: `sp
 
     tools/unit_tests.sh                          # build and run every test
     tools/unit_tests.sh -- --gtest_filter='Pool.*'
-    tools/unit_tests.sh --coverage               # + llvm-cov report: tests/unit/build_cov/coverage.txt, coverage_html/
+    tools/unit_tests.sh --coverage               # + llvm-cov report: build/tests/unit_cov/coverage.txt, coverage_html/
     OXOS_TEST_LOG=1 tools/unit_tests.sh          # also print the kernel log (XK_SERIAL) as it happens
     OXOS_STRESS_SECONDS=120 tools/unit_tests.sh -- --gtest_filter='Stress.*'   # longer runs under async interrupts
     OXOS_KERNEL_OPT=-O2 tools/unit_tests.sh      # kernel sources at the console build's optimisation

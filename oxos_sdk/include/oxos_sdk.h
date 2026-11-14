@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OXOS kernel extension SDK (spec/oxos_internal/34): what an extension's source includes, in C or C++. The kernel's
 // types and functions (oxos/oxos_kernel.h), the structures the kernel and the extension exchange
-// (oxos/oxos_interfaces.h), the descriptor macro and the runtime's helpers (lib/oxos_runtime.lib).
+// (oxos/oxos_interfaces.h), the descriptor macro and the runtime's helpers (in lib/oxos_sdk.lib).
 //
 //   static NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) { ...; return STATUS_SUCCESS; }
 //   OXOS_DEFINE_EXTENSION(.Name = "hello", .Version = "1.0.0", .Load = Load);

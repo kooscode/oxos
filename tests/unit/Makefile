@@ -16,7 +16,7 @@ GTEST_SRC  ?= /usr/src/googletest/googletest
 COVERAGE   ?= 0
 KERNEL_OPT ?=
 KERNEL     := ../../kernel
-BUILD      ?= build$(if $(filter 1,$(COVERAGE)),-cov)$(if $(KERNEL_OPT),-opt$(subst -,,$(subst =,,$(KERNEL_OPT))))
+BUILD      ?= ../../build/tests/unit$(if $(filter 1,$(COVERAGE)),-cov)$(if $(KERNEL_OPT),-opt$(subst -,,$(subst =,,$(KERNEL_OPT))))
 
 # Everything: 32-bit, not position independent (the binary sits at 0x08048000, above the kernel's low window,
 # host/hostcpu.cpp; host_asm.S addresses KiPcr directly). -mstackrealign: kernel threads start on stacks laid out

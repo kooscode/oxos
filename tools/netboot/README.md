@@ -10,7 +10,7 @@ Design and protocol: [spec/oxos_internal/09_netboot.md](../../spec/oxos_internal
 ## 1. Flash the netboot image (once)
 
 ```sh
-make -C kernel netboot          # -> kernel/build/netboot/bios_256k.bin (256 KiB) and bios.bin (1 MiB)
+make -C kernel netboot          # -> build/kernel/netboot/bios_256k.bin (256 KiB) and bios.bin (1 MiB)
 ```
 
 Flash `bios_256k.bin` or `bios.bin` to your modchip like any OXOS image. Its own kernel is a serial-log build
@@ -19,7 +19,7 @@ Flash `bios_256k.bin` or `bios.bin` to your modchip like any OXOS image. Its own
 
 The console uses the address `NETBOOT_IP` (default `192.168.1.222`) in its packets. It needs no DHCP and does not
 answer ARP; both sides use UDP broadcasts. If your LAN uses another subnet, build with
-`make -C kernel netboot NETBOOT_IP=10.0.0.222`. Delete `kernel/build/netboot` first, because the 2BL is not rebuilt
+`make -C kernel netboot NETBOOT_IP=10.0.0.222`. Delete `build/kernel/netboot` first, because the 2BL is not rebuilt
 when only a variable changes.
 
 ## 2. Serve a kernel
@@ -27,14 +27,14 @@ when only a variable changes.
 Build any OXOS image as usual, then point `netboot.py` at it:
 
 ```sh
-make -C kernel BUILD=build/serial SELFTEST=0 SERIAL=1 build/serial/bios_256k.bin
-python3 tools/netboot/netboot.py kernel/build/serial/bios_256k.bin
+make -C kernel BUILD=../build/kernel/serial SELFTEST=0 SERIAL=1 ../build/kernel/serial/bios_256k.bin
+python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin
 ```
 
 Power the console on. You should see:
 
 ```
-[   0.00] netboot: serving kernel/build/serial/bios_256k.bin on UDP port 5141 (replies to 255.255.255.255)
+[   0.00] netboot: serving build/kernel/serial/bios_256k.bin on UDP port 5141 (replies to 255.255.255.255)
 [   3.12] netboot: console 192.168.1.222 (02:58:42:4f:58:31) asks for a kernel; offering ... (CRC-32 1a2b3c4d, built ...)
 [   3.46] netboot: console 192.168.1.222 downloaded 256 KiB in 0.3 s and is booting it
 ```
@@ -73,8 +73,8 @@ the new build.
 ## 4. Trying it in xemu
 
 ```sh
-python3 tools/netboot/netboot.py kernel/build/serial/bios_256k.bin --xemu 9130 &
-python3 tools/run.py kernel/build/netboot/bios.bin --net-udp 9130
+python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin --xemu 9130 &
+python3 tools/run.py build/kernel/netboot/bios.bin --net-udp 9130
 ```
 
 xemu's `udp` network backend sends the console's Ethernet frames to `127.0.0.1:9130` and takes frames for it on
@@ -92,8 +92,8 @@ port 9131. `netboot.py --xemu` answers there.
 Any nxdk title (or other XBE) can run on the console without touching its disk, for example the image test:
 
 ```sh
-make -C kernel image_test        # tests/image_test_title/bin: default.xbe + picture.png
-python3 tools/netboot/netboot.py kernel/build/serial/bios_256k.bin --title tests/image_test_title/bin
+make -C kernel image_test        # build/tests/image_test_title/bin: default.xbe + picture.png
+python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin --title build/tests/image_test_title/bin
 ```
 
 At power-on the console downloads the kernel and the title, installs the title as `E:\imgtest\imgtest.xbe` (with its

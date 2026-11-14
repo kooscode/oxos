@@ -1,6 +1,6 @@
 // Test extension (spec/oxos_internal/34 §9.3): hooks NtOpenFile, then fails its Load. The kernel must unload it and
 // drop the hook: a title call through it would run freed memory.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 namespace {
 

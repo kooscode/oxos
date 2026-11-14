@@ -41,7 +41,7 @@ Optional extras:
   (`make nxdk` fetches one into `../third_party/nxdk`).
 - **256 KB flash chips:** `make bios_256k` writes a 256 KB image (one bank, splash included); the first 256 KB of the
   1 MB image is the same image.
-- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=build/release_1_6 SELFTEST=0`). The image
+- **The 1.6 console:** add `MCPX16=1` (e.g. `make bios_256k MCPX16=1 BUILD=../build/kernel/release_1_6 SELFTEST=0`). The image
   then carries OXOS's own 1.6 X-codes (`boot/xcodes_1_6.inc`: the 1.6 memory set-up, with four of its settings read
   from the EEPROM) instead of Cromwell's, and the 2BL calibrates the memory pads from the EEPROM
   ([`spec/oxos_internal/28`](../spec/oxos_internal/28_1_6_console.md), [`spec/stock/24`](../spec/stock/24_1_6_bringup.md)).
@@ -53,13 +53,13 @@ Optional extras:
 
 ## Build and test
 ```
-make            # build/selftest/xboxkrnl.exe + xboxkrnl.map (all build output: build/<kind>/, see the Makefile)
-make bios       # build/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
+make            # ../build/kernel/selftest/xboxkrnl.exe + xboxkrnl.map (all build output: ../build/, see the Makefile)
+make bios       # ../build/kernel/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
                 # MCPX16=1: the 1.6 console's image (our own 1.6 X-codes)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
-                                # 256 KB image, make test_dash; VERSION packs build/release/dist/oxos_vX.Y.Z.zip
+                                # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip
                                 # (the three images + title_patches.ini); the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
@@ -71,8 +71,8 @@ make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B com
 make run_trace_basic [ISO=game.iso]  # the same session with the debug serial port (spec/oxos_internal/03_debug_serial.md) printed in the terminal
 make run_trace_full [ISO=game.iso] [TRACE=1|2]  # run_trace_basic plus a record of the title's last 32768 kernel calls
 make print_trace_dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
-make run_gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, build/debug/) paused for gdb on xemu's
-                                # GDB server; symbols in build/debug/xboxkrnl.elf. nxdk apps: ../tools/debug_app.py
+make run_gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, ../build/kernel/debug/) paused for gdb on xemu's
+                                # GDB server; symbols in ../build/kernel/debug/xboxkrnl.elf. nxdk apps: ../tools/debug_app.py
 make test_memory [MEMORY=128] [MEMORY_BIOS=... MCPX_ROM=...]  # memory a title is given, with and without the
                                 # XBE's "limit to 64 MB" flag (tests/memory_test_title, nxdk)
 make run_xbe XBE='F:\apps\demo\default.xbe' [STATE=...]  # run an XBE from the hard disk: a launcher disc
@@ -120,7 +120,7 @@ Design: [`../spec/oxos_internal/05_exfat_storage_spec.md`](../spec/oxos_internal
 **Disc images** of your own discs: XISO, full disc dumps and `.cci`, whole or split in two (`name.1.iso` +
 `name.2.iso`; on FATX split below 4 GB); names of 42 characters or fewer.
 1. Copy the image to the hard disk, e.g. `F:\titles\` (`/F/titles` on exFAT).
-2. Build the ISO launcher (`make iso_launcher`, output `../tools/iso_launcher/bin/default.xbe`) and put a copy next to
+2. Build the ISO launcher (`make iso_launcher`, output `../build/tools/iso_launcher/bin/default.xbe`) and put a copy next to
    the image, or anywhere with an `iso.txt` naming the image (`F:\titles\Halo 2.iso`).
    [`../tools/oxos_isonator`](../tools/oxos_isonator) does this for you, one folder per game, with a launcher that
    carries the game's name, title ID and artwork.
@@ -154,9 +154,9 @@ its path.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
 **From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with
-`gdb-multiarch build/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`. For an
+`gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex 'target remote localhost:1234'`, set breakpoints and `continue`. For an
 nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then attach with
-`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file build/debug/xboxkrnl.elf'
+`gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf'
 -ex 'target remote localhost:1234'`.
 
 Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add
@@ -213,7 +213,7 @@ Microsoft's 2BL and keys: do not distribute it.
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/oxos_splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
 | `title_patches/title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |
-| `build/` | all build output, one folder per kind of build (`selftest`, `release`, `debug`, `trace_basic`, `trace_full`, `trace_full_64mb`, `netboot`; see the Makefile's header); `make clean` removes it |
+| `../build/` | all build output of the repository, the only folder git ignores for it: `kernel/` one folder per kind of kernel build (`selftest`, `release`, `debug`, `trace_basic`, `trace_full`, `trace_full_64mb`, `netboot`; see the Makefile's header; `make clean` removes it), `tools/` and `tests/` the apps, host tools, unit tests and test extensions, `sdk/` the kernel extension SDK as it ships |
 | `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
 

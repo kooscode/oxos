@@ -17,7 +17,7 @@
 //
 // Remember that the kernel reloads every extension from the disk at each launch: global variables start again from
 // their initial values every time. Only the state page (4 KB) keeps its contents from one launch to the next.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 // --- What this extension keeps from one launch to the next, in its state page
 

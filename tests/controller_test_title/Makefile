@@ -1,9 +1,5 @@
-# Controller test title, built with nxdk and SDL3 (../../third_party/nxdk and nxdk-sdl3, fetched by
-# `make -C kernel nxdk`); the text screen is ../../tools/sdl_screen.
+# Controller test title (nxdk + SDL3, tools/nxdk_app.mk): builds in build/tests/controller_test_title.
 XBE_TITLE = OXOS\ controller\ test\ title
 GEN_XISO = controller_test_title.iso
-SRCS = $(CURDIR)/controller_test_title.cpp $(CURDIR)/../../tools/sdl_screen/sdl_screen.cpp
-NXDK_CXX = y
-NXDK_DIR ?= $(CURDIR)/../../third_party/nxdk
-include $(NXDK_DIR)/Makefile
-include $(CURDIR)/../../tools/sdl_screen/sdl_screen.mk
+APP_SOURCES = controller_test_title.cpp
+include $(dir $(lastword $(MAKEFILE_LIST)))../../tools/nxdk_app.mk

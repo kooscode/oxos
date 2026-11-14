@@ -1,6 +1,6 @@
 // Test extension for the kernel extension loader (spec/oxos_internal/34 §9.3), run by tests/boot_test.py
 // --extensions: it records in its state page what the kernel did, for the test to read back after quick reboots.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 namespace {
 

@@ -5,10 +5,10 @@ An FTP server for the console's hard disk, as an nxdk title. Copy files to and f
 `ftplib`. It runs on OXOS and, as a plain nxdk title, on other kernels.
 
 ```
-make -C kernel ftp_server                    # -> tools/ftp_server/bin/default.xbe and ftp_server.iso
+make -C kernel ftp_server                    # -> build/tools/ftp_server/bin/default.xbe and ftp_server.iso
 
 # On a console with an OXOS netboot image: the kernel and the server in one go (the server runs from E:\ftp\)
-python3 tools/netboot/netboot.py kernel/build/serial/bios_256k.bin --title tools/ftp_server/bin --title-name ftp
+python3 tools/netboot/netboot.py build/kernel/serial/bios_256k.bin --title build/tools/ftp_server/bin --title-name ftp
 
 # Or copy bin/default.xbe to the disk and start it from a dashboard, or burn / mount ftp_server.iso.
 ```

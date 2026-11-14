@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve OXOS kernels to a console over the network (README.md in this folder; spec/oxos_internal/09_netboot.md).
 
-Flash a netboot image once (make -C kernel netboot -> kernel/build/netboot/bios_256k.bin or bios.bin). At every
+Flash a netboot image once (make -C kernel netboot -> build/kernel/netboot/bios_256k.bin or bios.bin). At every
 power-on its 2BL asks the network for a boot image; this tool answers with IMAGE, any OXOS open image (a 256 KiB
 bios_256k.bin, or a 1 MiB bios.bin, whose first bank is sent; an image up to 1 MiB whose kernel stream runs past
 the first bank is sent whole). The console boots the kernel inside it, or its own

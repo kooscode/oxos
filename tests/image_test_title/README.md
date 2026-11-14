@@ -7,7 +7,7 @@ setting is widescreen, it is drawn 3/4 as wide, because a 16:9 TV stretches the 
 panel updates and the front LED changes pattern: a frozen console is obvious at a glance.
 
 ```sh
-make -C kernel image_test              # -> tests/image_test_title/image_test.iso (fetches nxdk the first time)
+make -C kernel image_test              # -> build/tests/image_test_title/image_test.iso (fetches nxdk the first time)
 make -C kernel run_image_test          # boots it in xemu with the release BIOS
 make -C tests/image_test_title PICTURE=other.jpg   # another picture on the disc (nxdk environment as above)
 ```

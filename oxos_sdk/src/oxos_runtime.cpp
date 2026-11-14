@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-// OXOS kernel extension SDK runtime (lib/oxos_runtime.lib): the helpers of oxos/oxos_extension.h, built on the
+// OXOS kernel extension SDK runtime (part of lib/oxos_sdk.lib): the helpers of oxos_sdk.h, built on the
 // kernel's exports. Its functions have C names, so C and C++ extensions link the same library. memcpy and the other
 // functions the compiler calls come from the kernel (OXOS's own exports 402-415), not from here.
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 extern "C" void oxos_log(const OXOS_CONTEXT *Context, const char *Format, ...) {
     char line[256];

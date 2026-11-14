@@ -28,7 +28,7 @@ Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_du
 1. Build the payload, an OXOS netboot image whose boot loader also sends the ROM:
 
    ```sh
-   make -C kernel mcpx_dump        # -> kernel/build/mcpx_dump/bios_256k.bin
+   make -C kernel mcpx_dump        # -> build/kernel/mcpx_dump/bios_256k.bin
    ```
 2. Build the flash image from your retail BIOS:
 
@@ -65,7 +65,7 @@ Design: [spec/oxos_internal/12_mcpx_dump.md](../../spec/oxos_internal/12_mcpx_du
 |---|---|---|
 | `build` | `--mcpx 1.0` / `1.1` | the console's MCPX (see the table above) |
 | | `--bios FILE` | your retail BIOS |
-| | `--payload FILE` | the payload image (default `kernel/build/mcpx_dump/bios_256k.bin`) |
+| | `--payload FILE` | the payload image (default `build/kernel/mcpx_dump/bios_256k.bin`) |
 | | `--out FILE` | the image to flash |
 | `receive` | `--bios FILE` | also check the dump against that BIOS |
 | | `--out FILE` | file name (default `mcpx_1.0.bin` / `mcpx_1.1.bin`) |

@@ -185,7 +185,7 @@ below is optional: one that is not written does not exist in the extension, and 
 function that is not written is not hooked.
 
 ```cpp
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 class SaveWatch : public oxos::Extension<SaveWatch> {
 public:
@@ -246,7 +246,7 @@ goes through the extension's import of it, as `oxos::` does in C++ (§7.1). The 
 `oxos_get_setting`, `oxos_wait_for_stop`, `oxos_read_file` (§5.1).
 
 ```c
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 static NTSTATUS NTAPI WatchNtDeleteFile(POBJECT_ATTRIBUTES Attributes) {
     return STATUS_ACCESS_DENIED; // answered here: OXOS never sees it
@@ -301,7 +301,7 @@ memory. The class (§4.4) calls them for the author.
 | `RegisterEvent(Context, Event, Callback, CallbackContext)` | be called at a launch event (§7.2) |
 
 **The SDK's**, usable at any time (`Load`, `Main`, hooks, events): C functions in the SDK's static library
-`oxos_runtime.lib`, linked into each extension and built on the kernel's exports, so the kernel keeps no code for them.
+`oxos_sdk.lib`, linked into each extension and built on the kernel's exports, so the kernel keeps no code for them.
 The C++ class calls them for its author.
 
 | C function | Class method | What it does |
@@ -483,30 +483,42 @@ in the kernel. An extension needs much less, and what it needs is the kernel's.
 - **Plain C is the base, C++ on top** (decided 2026-11-13): every header is valid C17 and C++20; the C++ class
   (§4.4) and namespace `oxos` are added only when the compiler is C++.
 - **Windows, macOS and Linux alike:** an extension needs only LLVM's `clang` and `lld-link` (18 or newer) and GNU
-  make. The libraries come prebuilt, and the build rules run no other command, so they work from `cmd.exe`,
+  make. The library comes prebuilt, and the build rules run no other command, so they work from `cmd.exe`,
   PowerShell, bash or zsh. No CMake (decided 2026-11-13).
 - **The same bytes everywhere:** objects without time stamps and `/Brepro` links, so a source builds the same `.xos`
   on any system.
 - **Its own repository later:** `oxos_sdk/` is self-contained (it never reads the kernel's sources), so it can move to
   its own repository as it is; the kernel then takes `oxos_interfaces.h` from it (decided 2026-11-13: later).
 
-**Layout, `oxos_sdk/` in this repository (MIT, §11):**
+**What a release ships: `oxos_sdk_vX.Y.Z.zip`** (MIT, §11), next to `oxos_vX.Y.Z.zip`; `make -C kernel release
+VERSION=X.Y.Z` makes it with `oxos_sdk/Makefile`:
+
+```
+oxos_sdk/
+  include/oxos_sdk.h      the one header an extension includes, C and C++
+  lib/oxos_sdk.lib        the one library: the SDK's helpers (§5.1) and the kernel's import library
+  oxos_extension.mk       the build rules (optional for a build of one's own)
+  examples/hello/         the example to start from
+  README.md, LICENSE
+```
+
+**The SDK's source, `oxos_sdk/` in this repository:**
 
 | Part | Contents |
 |---|---|
-| `include/oxos/oxos_extension.h` | what an extension includes: the others below, `OXOS_DEFINE_EXTENSION(...)`, the C helpers (§5.1); in C++ also `oxos::Extension<T>` and `OXOS_DEFINE_EXTENSION_CLASS(Class, ...)` (§4.4, not yet) |
+| `include/oxos_sdk.h` | what an extension includes: the parts below, `OXOS_DEFINE_EXTENSION(...)`, the C helpers (§5.1); in C++ also `oxos::Extension<T>` and `OXOS_DEFINE_EXTENSION_CLASS(Class, ...)` (§4.4, not yet). The release merges the parts into it, so it ships as one file |
 | `include/oxos/oxos_interfaces.h` | the structures the kernel and an extension exchange: `OXOS_EXTENSION`, `OXOS_CONTEXT`, `OXOS_API`, `OXOS_KERNEL_INFO`, the events and their data, `OXOS_API_VERSION`; the kernel includes it too, so the layout has one definition |
 | `include/oxos/oxos_kernel.h` | the kernel's types and constants (`OBJECT_ATTRIBUTES`, `KEVENT`, ...), every `xboxkrnl.exe` function (in C++ in namespace `oxos`), `memcpy` and its kin, the hookable functions' ordinals (`OXOS_ORDINAL_NtOpenFile`) |
 | `include/oxos/oxos_types.h` | the NT base types (`ULONG`, `NTSTATUS`, `LARGE_INTEGER`, `STRING`, ...) and status codes |
 | `include/oxos/oxos_exports.inc` | *not yet:* the table of kernel functions, one line each: `OXOS_EXPORT(190, NtCreateFile, NTSTATUS, stdcall, (PHANDLE Handle, ...))`; generated from `kernel/exports.tsv` and the kernel's prototypes; drives the declarations, the ordinals, the hookable list and the class's compile-time checks |
-| `lib/xboxkrnl.def` | every `xboxkrnl.exe` export by ordinal, generated from `kernel/exports.tsv` by `tools/gen_oxos_sdk.py` |
-| `lib/xboxkrnl.lib` | the kernel's import library, prebuilt from `xboxkrnl.def` (`lld-link /lib /def:`) |
-| `lib/oxos_runtime.lib` | the SDK's static library, prebuilt from `src/`: the helpers of §5.1, with C names, so C and C++ extensions link the same one |
-| `src/oxos_runtime.cpp` | the runtime's source |
-| `oxos_extension.mk` | the build rules extensions include (below) |
-| `Makefile` | rebuilds `lib/` (for the SDK's maintainers) |
+| `src/oxos_runtime.cpp` | the helpers of §5.1, with C names, so C and C++ extensions link the same library |
+| `src/xboxkrnl.def` | every `xboxkrnl.exe` export by ordinal, generated from `kernel/exports.tsv` by `tools/gen_oxos_sdk.py`; the import library is made from it (`lld-link /lib /def:`) |
+| `oxos_extension.mk` | the build rules extensions include (below); in the source it takes the library from `../build/sdk/oxos_sdk/lib` |
+| `Makefile`, `make_sdk_package.py` | build the SDK as it ships into `build/sdk/oxos_sdk/` (the library, the merged header, the rest copied), and with `VERSION` its zip; for the SDK's maintainers (a POSIX shell and Python) |
 | `docs/kernel_functions.md` | *not yet:* every hookable kernel function, ready to copy into a class (§9.2) |
 | `examples/hello/` | the example to start from, in C: `Load`, `Main`, `Unload`, a hook, an event, settings and the state page, each commented; its Makefile, a sample `oxos_extensions.ini` and a README (build, install, what it prints) |
+
+Nothing built is committed: the library and the merged header exist only in `build/sdk/` and the release zip.
 
 ### 9.1 What the kernel provides
 Extensions call the kernel for everything a freestanding program needs, as Linux modules and Windows drivers do; the
@@ -569,7 +581,7 @@ include ../../oxos_extension.mk
 # oxos_extension.mk: clang --target=i386-pc-win32 -march=pentium -mno-sse -mno-mmx -mno-80387 -ffreestanding
 #                    -nostdinc -fno-builtin -O2 -std=c17 (.c) or -std=c++20 -fno-exceptions -fno-rtti (.cpp) ...
 #                    (no floating point or SIMD: the kernel does not save those registers for extensions);
-#                    lld-link /DLL /NOENTRY /NODEFAULTLIB /OUT:hello.xos ... oxos_runtime.lib xboxkrnl.lib
+#                    lld-link /DLL /DRIVER /NOENTRY /NODEFAULTLIB /OUT:hello.xos ... oxos_sdk.lib
 ```
 
 The output folder (`OXOS_OUT`, default the current one) must exist; the rules create no folders, so they need no
@@ -580,7 +592,7 @@ Once the class exists (§4.4), the example gets a C++ version next to `hello.c`:
 
 ```cpp
 // examples/hello/hello.cpp
-#include <oxos/oxos_extension.h>
+#include <oxos_sdk.h>
 
 class Hello : public oxos::Extension<Hello> {
     struct Saved { ULONG Magic, Launches; };
@@ -706,10 +718,10 @@ extension = oxos_title_patches.xos
   trainers), save-game redirection or backup, a background FTP server for titles that do not use the network.
 
 ## 11. Decisions
-- **Licence (2026-11-13).** The kernel stays GPL-2.0. The SDK (headers, `oxos_runtime.lib`, build files, examples)
+- **Licence (2026-11-13).** The kernel stays GPL-2.0. The SDK (header, `oxos_sdk.lib`, build files, examples)
   is open source under the **MIT** licence (`oxos_sdk/LICENSE`), so an extension built with it may use any licence:
   open source is preferred, closed source is allowed. (A GPL SDK would make every extension that links
-  `oxos_runtime.lib` GPL too, which is why the SDK is not GPL.) The SDK is written for it, not copied from GPL
+  `oxos_sdk.lib` GPL too, which is why the SDK is not GPL.) The SDK is written for it, not copied from GPL
   kernel sources.
 - **The descriptor has no author, description or licence (2026-11-13):** nothing uses them. It names the extension
   (its state page) and its version (the log), and points at its functions (§4.1).
@@ -720,7 +732,8 @@ extension = oxos_title_patches.xos
 - **Hooks are for titles' calls (2026-11-13):** an extension implements kernel functions by name, and `oxos::Name`
   passes a call on to OXOS (§4.4, §7.1).
 - **The loader is an overlay run from a cache file on the disk (2026-11-13)**, not from the flash (§8.1).
-- **The SDK (2026-11-13):** `oxos_sdk/`; plain C as the base with C++ on top; prebuilt `.lib` libraries; GNU make
+- **The SDK (2026-11-13):** `oxos_sdk/`; plain C as the base with C++ on top; ships as one header and one prebuilt
+  library (`oxos_sdk.h`, `oxos_sdk.lib`) in `oxos_sdk_vX.Y.Z.zip` with each release; GNU make
   only, on Windows, macOS and Linux; no nxdk; its own repository later (§9). The kernel exports `memcpy` and its kin
   and the compiler's 64-bit helpers, as Windows and Linux kernels do (§9.1). Names: `OXOS_` for types and macros,
   `oxos_` for functions and files, never `Oxos` (docs/cpp_style.md §2).

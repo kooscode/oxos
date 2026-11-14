@@ -76,7 +76,7 @@ int memcmp(const void *A, const void *B, SIZE_T Count);
 }
 #endif
 
-// --- Functions (ordinals in oxos_sdk/lib/xboxkrnl.def)
+// --- Functions (ordinals in the SDK source's src/xboxkrnl.def)
 
 #ifdef __cplusplus
 #define OXOS_KERNEL_FUNCTIONS_BEGIN                                                                                    \
