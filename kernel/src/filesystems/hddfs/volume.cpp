@@ -375,14 +375,18 @@ ULONG HDDFSCurrentTimestamp() {
 
 // --- File size
 
-// Grow or shrink the cluster chain to cover NewSize bytes.
-NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG NewSize) {
+// Grow or shrink the cluster chain to cover NewSize bytes. FATX sizes are 32-bit; exFAT files may be 4 GB or more
+// (spec/oxos_internal/07_exfat_driver.md §2). STATUS_DISK_FULL for a size the format or the volume cannot hold.
+NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONGLONG NewSize) {
+    ULONGLONG clusters = (NewSize + v->BytesPerCluster - 1) >> v->ClusterShift;
+    if ((!v->IsEXFAT && NewSize > 0xFFFFFFFFull) || clusters > v->NumberOfClusters)
+        return (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
     if (f->EXFATFlags & EXFAT_NOFATCHAIN) { // exFAT: chain the clusters before the allocation changes
         NTSTATUS status = EXFATMakeChain(v, f);
         if (!NT_SUCCESS(status))
             return status;
     }
-    ULONG need = (ULONG)(((ULONGLONG)NewSize + v->BytesPerCluster - 1) >> v->ClusterShift);
+    ULONG need = (ULONG)clusters;
     ULONG have = 0, last = 0;
     NTSTATUS status = HDDFSFileChain(v, f, &have, &last);
     if (!NT_SUCCESS(status))
@@ -413,7 +417,8 @@ NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG NewSize) {
         if (!NT_SUCCESS(status))
             return status;
     }
-    f->FileSize = NewSize;
+    f->FileSize = (ULONG)NewSize;
+    f->FileSizeHigh = (ULONG)(NewSize >> 32);
     f->EXFATAllocClusters = need;
     f->Flags |= FCB_DIRENT_DIRTY;
     return HDDFSFlushFcb(v, f);

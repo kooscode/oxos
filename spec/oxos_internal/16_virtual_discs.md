@@ -59,11 +59,9 @@ An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
 - CCI reads go one block at a time under a per-slot lock: two index entries (from a cached window of 1024 entries
   per part), then the stored block. A block stored as 2048 bytes is raw. Otherwise its first byte is a padding count
   p, and the next (length − 1 − p) bytes are an LZ4 block that must decode to exactly 2048 bytes.
-- **exFAT files of 4 GB or more** (spec/oxos_internal/07 §2) are visible and readable with 64-bit offsets. They are
-  read-only, because FATX sizes, writes and allocation are 32-bit. Opening one for writing, appending or
-  overwriting fails with STATUS_ACCESS_DENIED, and so does setting its size. Renaming, moving it to another folder
-  and deleting it work (spec 07). Size queries and directory listings
-  report the full 64-bit size.
+- **exFAT files of 4 GB or more** (spec/oxos_internal/07 §2) are ordinary files: read and written with 64-bit
+  offsets, so an image can be copied to the console in one piece (FTP, the File Manager). Size queries and
+  directory listings report the full 64-bit size.
 
 ## 5. Quick reboots
 The slot table (type, part paths, link name) is in `.persist`. A mount survives quick reboots (launches, a title's own

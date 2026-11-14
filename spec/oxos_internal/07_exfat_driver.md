@@ -90,11 +90,10 @@ directory (no in-use entries follow); a type with bit 7 clear is a deleted entry
 - **Names:** an exFAT name is visible to titles when it is 1–42 characters, all in Latin-1 and valid by the FATX
   rules; others are skipped when enumerating and are not found by lookups (they stay on the disk untouched).
   Comparisons up-case through the volume's up-case table for characters below 0x100.
-- **Sizes:** files below 4 GB as on FATX. Files of 4 GB or more (disc images, spec 16 §4) are visible and readable
-  with 64-bit offsets (`HDDFS_FCB::FileSizeHigh`), but read-only: writes, size changes and overwriting fail with
-  STATUS_ACCESS_DENIED, since the dispatcher's sizes and allocation are 32-bit. They can be renamed, moved to
-  another folder of the volume and deleted (2026-10-29): those rewrite only the directory entry set, which keeps
-  the 64-bit size and the NoFatChain flag, and free the clusters by count.
+- **Sizes:** 64-bit (`HDDFS_FCB::FileSizeHigh` holds the high dword). Files of 4 GB or more, such as disc images
+  (spec 16 §4), are read, written, grown, shrunk, overwritten, renamed, moved and deleted like any other file;
+  growing past 4 GB is refused only on FATX (STATUS_DISK_FULL), whose sizes are 32-bit. The entry set keeps the
+  64-bit length; a file holds at most 2^32 − 1 clusters. Directories stay below 4 GB.
 - **Clusters:** the dispatcher numbers clusters as the format does; the layer maps a cluster to its byte offset.
   Allocation prefers consecutive clusters; a NoFatChain file that cannot grow in place gets its FAT chain written
   and the flag cleared.

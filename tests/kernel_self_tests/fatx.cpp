@@ -25,6 +25,9 @@ volatile ULONG KiTestEXFATCrossOk;
 // preallocation does not allocate (an entry set cannot hold clusters past its length).
 volatile ULONG KiTestEXFATStaleOk, KiTestEXFATPreallocOk;
 
+// exFAT: a file grows past 4 GB, shrinks, and takes writes after it is opened again (EXFATLargeFileTest).
+volatile ULONG KiTestEXFATLargeOk;
+
 // A path in the title's D: folder reports 2048-byte sectors (spec/oxos_internal/25 §2).
 volatile ULONG KiTestFATXTitleFolderOk;
 
@@ -58,6 +61,7 @@ static ULONG FreeClusters(HANDLE h) {
 static void EXFATFormatTest(PUCHAR buf);
 static void EXFATCrossFolderTest(PUCHAR buf);
 static void EXFATLengthTest(PUCHAR buf);
+static void EXFATLargeFileTest(PUCHAR buf);
 
 static void NTAPI FATXControllerThread(PVOID) {
     while (!KiTestIdexDone)
@@ -264,6 +268,7 @@ static void NTAPI FATXControllerThread(PVOID) {
         EXFATFormatTest(buf);
         EXFATCrossFolderTest(buf);
         EXFATLengthTest(buf);
+        EXFATLargeFileTest(buf);
     }
     ExFreePool(buf);
     KiTestFATXDone = 1;
@@ -432,4 +437,69 @@ static void EXFATLengthTest(PUCHAR buf) {
     KiTestEXFATPreallocOk = ok;
     if (hv)
         NtClose(hv);
+}
+
+// The size and allocation of an open file (FileStandardInformation).
+static bool StandardSizes(HANDLE h, ULONGLONG *Allocation, ULONGLONG *EndOfFile) {
+    ULONG standard[6] = {};
+    IO_STATUS_BLOCK iosb;
+    if (!NT_SUCCESS(NtQueryInformationFile(h, &iosb, standard, sizeof(standard), FileStandardInformation)))
+        return false;
+    *Allocation = (ULONGLONG)standard[1] << 32 | standard[0];
+    *EndOfFile = (ULONGLONG)standard[3] << 32 | standard[2];
+    return true;
+}
+
+// E:\XkLarge.bin (spec/oxos_internal/07_exfat_driver.md §2): 8 KB written across the 4 GB mark and 4 KB 1 MB past it
+// (size 0x100101000), both read back; then shrunk to 0x100000800, still over 4 GB, giving back its last clusters; then
+// opened again for writing and 2 KB written at 4 GB. boot_test.py reads the file back from the disk copy.
+static void EXFATLargeFileTest(PUCHAR buf) {
+    constexpr ULONGLONG cluster = 16 * 1024, across = 0xFFFFF000, past = 0x100100000, shrunk = 0x100000800;
+    constexpr ULONG acrossLength = 0x2000, pastLength = 0x1000, againLength = 0x800;
+    constexpr ULONGLONG grown = past + pastLength;
+    HANDLE h, hv;
+    IO_STATUS_BLOCK iosb;
+    if (Open(&hv, "\\Device\\Harddisk0\\Partition1\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) != 0)
+        return;
+    ULONG before = FreeClusters(hv);
+    bool ok = Open(&h, "\\Device\\Harddisk0\\Partition1\\XkLarge.bin", GENERIC_READ | GENERIC_WRITE,
+                   FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE) == 0;
+    if (ok) {
+        PUCHAR check = buf + 0x10000;
+        for (ULONG i = 0; i < acrossLength; i++)
+            buf[i] = (UCHAR)(i * 13 + 5);
+        LARGE_INTEGER at;
+        at.QuadPart = (LONGLONG)across;
+        ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, acrossLength, &at)) &&
+             iosb.Information == acrossLength;
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, acrossLength, &at)) &&
+              RtlCompareMemory(buf, check, acrossLength) == acrossLength;
+        RtlFillMemory(buf, pastLength, 'L');
+        at.QuadPart = (LONGLONG)past;
+        ok &= NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, pastLength, &at));
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, pastLength, &at)) &&
+              RtlCompareMemory(buf, check, pastLength) == pastLength;
+        ULONGLONG allocation, size;
+        ok &= StandardSizes(h, &allocation, &size) && size == grown &&
+              allocation == (grown + cluster - 1) / cluster * cluster;
+        ok &= FreeClusters(hv) + (grown + cluster - 1) / cluster == before;
+        LARGE_INTEGER end;
+        end.QuadPart = (LONGLONG)shrunk;
+        ok &= NT_SUCCESS(NtSetInformationFile(h, &iosb, &end, sizeof(end), FileEndOfFileInformation));
+        ok &= StandardSizes(h, &allocation, &size) && size == shrunk;
+        ok &= FreeClusters(hv) + (shrunk + cluster - 1) / cluster == before;
+        NtClose(h);
+    }
+    ok &= Open(&h, "\\Device\\Harddisk0\\Partition1\\XkLarge.bin", GENERIC_WRITE, FILE_OPEN,
+               FILE_NON_DIRECTORY_FILE) == 0;
+    if (ok) {
+        for (ULONG i = 0; i < againLength; i++)
+            buf[i] = (UCHAR)(i * 3 + 1);
+        LARGE_INTEGER at;
+        at.QuadPart = 0x100000000;
+        ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, againLength, &at));
+        NtClose(h);
+    }
+    KiTestEXFATLargeOk = ok;
+    NtClose(hv);
 }

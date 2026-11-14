@@ -49,7 +49,7 @@ struct HDDFS_ENTRY : FATX_DIRENT {
     UCHAR EXFATEntries;       // entries in the set (file, stream, names)
     ULONG EXFATAllocClusters; // clusters allocated (DataLength rounded up)
     ULONG EXFATDirLength;     // directories: DataLength
-    ULONG FileSizeHigh;       // exFAT files of 4 GB or more: the size's high dword (read-only)
+    ULONG FileSizeHigh;       // exFAT files of 4 GB or more: the size's high dword
 };
 
 constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40,
@@ -76,7 +76,7 @@ struct HDDFS_FCB {
     ULONG HintClusterIndex, HintCluster; // last chain position looked up
     UCHAR EXFATFlags, EXFATEntries;      // exFAT (HDDFS_ENTRY)
     ULONG EXFATAllocClusters, EXFATDirLength;
-    ULONG FileSizeHigh;                  // exFAT: files of 4 GB or more (read-only: FATX sizes are 32-bit)
+    ULONG FileSizeHigh;                  // exFAT: files of 4 GB or more (FATX sizes are 32-bit)
 };
 
 XK_OFFSET(HDDFS_FCB, FirstCluster, 0x1C);
@@ -169,7 +169,7 @@ NTSTATUS HDDFSNextCluster(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG Cluster, ULONG *N
 LONGLONG HDDFSClusterOffset(HDDFS_VOLUME *v, ULONG Cluster);
 bool HDDFSIsValidCluster(HDDFS_VOLUME *v, ULONG Cluster);
 void HDDFSVolumeSize(HDDFS_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsPerUnit);
-NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG NewSize); // grow or shrink the file's chain
+NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONGLONG NewSize); // grow or shrink the file's chain
 
 // Names (FATX's rules, on both formats) and timestamps (FATX's format in the FCB).
 bool HDDFSIsValidName(const OBJECT_STRING *Name);

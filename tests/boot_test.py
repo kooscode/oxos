@@ -422,6 +422,8 @@ def exfat_format_checks(mon, q):
             mon.read("KiTestEXFATStaleOk") == 1,
         "an allocation size allocates nothing past the length (create and set-allocation)":
             mon.read("KiTestEXFATPreallocOk") == 1,
+        "a file grows past 4 GB, reads back, shrinks and opens again for writing":
+            mon.read("KiTestEXFATLargeOk") == 1,
     }
 
 
@@ -1084,6 +1086,23 @@ def launch_reason_checks(mon):
     }
 
 
+def large_file_ok(v):
+    """E:\\XkLarge.bin as the self-test left it (EXFATLargeFileTest): 0x100000800 bytes, the first 4 KB of its
+    pattern below the 4 GB mark, the 2 KB written after it was opened again from there on."""
+    e = v.lookup("/E/XkLarge.bin")
+    if e is None or e.size != 0x100000800 or e.valid != e.size:
+        return False
+    clusters = v.clusters(e.first, e.size, e.nofat)
+
+    def read_at(offset, n):
+        first, last = offset // v.cs, (offset + n - 1) // v.cs
+        data = b"".join(v.disk.read(v.coff(clusters[i]), v.cs) for i in range(first, last + 1))
+        return data[offset % v.cs:offset % v.cs + n]
+    below = bytes((i * 13 + 5) & 0xFF for i in range(0x1000))
+    again = bytes((i * 3 + 1) & 0xFF for i in range(0x800))
+    return read_at(0xFFFFF000, 0x1000) == below and read_at(0x100000000, 0x800) == again
+
+
 def disk_checks(hdd_copy):
     """After xemu exits: what the kernel wrote must read back with an independent FATX (or exFAT) reader."""
     q = Qcow2(hdd_copy)
@@ -1104,6 +1123,7 @@ def disk_checks(hdd_copy):
                 == bytes((i * 7 + i // 251) & 0xFF for i in range(3 * 16384 + 100)),
             "E:\\XkPre.bin (allocation size 256 KB, 100 bytes written) reads back": v.read_file("/E/XkPre.bin")
                 == b"p" * 100,
+            "E:\\XkLarge.bin (over 4 GB) has its size and reads back across the 4 GB mark": large_file_ok(v),
         }
     e = FATX(q, "E")
     names = sorted(n for n, *_ in e.listdir(e.lookup("XkTest")[2])) if e.lookup("XkTest") else None

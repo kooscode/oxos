@@ -26,9 +26,9 @@ The screen shows the address, e.g. `ftp://192.168.1.182/`. With a `SERIAL=1` ker
   APPE REST SIZE MDTM DELE MKD RMD RNFR RNTO NOOP ABOR QUIT, SITE (below). Transfers are always binary. Up to 8 clients at once.
 - **Moving:** RNTO to a path in another folder moves the file or folder there (same drive only; the kernel opens the
   target folder as the reference kernel does). Moving between drives is refused; copy and delete instead.
-- **Big images:** on exFAT, files of 4 GB or more are readable, can be moved, renamed and deleted, but not written
-  ([`spec/oxos_internal/07_exfat_driver.md`](../../spec/oxos_internal/07_exfat_driver.md)). Upload images under
-  4 GB or split them (`tools/oxos_isonator --split`), or copy big images with the disk on a PC.
+- **Big images:** on exFAT, files of 4 GB or more upload in one piece
+  ([`spec/oxos_internal/07_exfat_driver.md`](../../spec/oxos_internal/07_exfat_driver.md)). A FATX drive stops at
+  4 GB: split images for it (`tools/oxos_isonator --split`).
 - **SITE REBOOT** restarts the console (cold); **SITE POWEROFF** turns it off. In a client:
   `curl ftp://ADDR/ -Q 'SITE POWEROFF'`.
 - **SITE LAUNCH PATH** starts a title, as a dashboard does (launch data page and a quick reboot), so a title can be

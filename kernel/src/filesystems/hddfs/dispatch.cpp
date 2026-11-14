@@ -261,13 +261,6 @@ static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Informat
         }
         if (NT_SUCCESS(status))
             status = HDDFSCheckAttributes(access, options, f->Attributes, false);
-        // exFAT files of 4 GB or more (disc images) are read-only: FATX sizes, writes and allocation are 32-bit.
-        // Delete access stays allowed: moving, renaming and deleting rewrite only directory entries (the set keeps
-        // the 64-bit size) and free clusters by count.
-        if (NT_SUCCESS(status) && f->FileSizeHigh &&
-            ((access & (0x2 | 0x4 | 0x10000000 | 0x40000000)) || // write, append, all, generic write
-             disposition == FILE_SUPERSEDE || disposition == FILE_OVERWRITE || disposition == FILE_OVERWRITE_IF))
-            status = STATUS_ACCESS_DENIED;
     }
     ULONG info = created ? FILE_CREATED : FILE_OPENED;
     if (NT_SUCCESS(status))
@@ -470,8 +463,6 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
                      ((offset.LowPart | length) & (v->SectorSize - 1));
     if (write && unaligned)
         return HDDFSComplete(Irp, STATUS_INVALID_PARAMETER);
-    if (write && f->FileSizeHigh) // a read-only file of 4 GB or more
-        return HDDFSComplete(Irp, STATUS_ACCESS_DENIED);
     // The reference pends exactly one kind of transfer (spec/stock/04b, asynchronous completion): a non-cached one
     // on an asynchronous file object (no FO_SYNCHRONOUS_IO) that reaches the disk: length above 0, sector-aligned,
     // a read starting inside the file, a write that does not extend it. It decides before the transfer, so the
@@ -484,16 +475,18 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     NTSTATUS status = STATUS_SUCCESS;
     ULONG done = 0;
     if (write) {
+        ULONGLONG size = HDDFSFileSize64(f);
         if (offset.HighPart == -1 && offset.LowPart == 0xFFFFFFFF) // FILE_WRITE_TO_END_OF_FILE
-            offset.QuadPart = f->FileSize;
+            offset.QuadPart = (LONGLONG)size;
         ULONGLONG end = (ULONGLONG)offset.QuadPart + length;
-        pend = asyncNoCache && !offset.HighPart && end <= f->FileSize;
-        if (offset.HighPart || end > 0xFFFFFFFFull)
-            status = (NTSTATUS)0xC000007F; // beyond the 4 GB FATX limit: STATUS_DISK_FULL
-        else if (length && end > f->FileSize)
-            status = HDDFSSetFileSize(v, f, (ULONG)end);
+        pend = asyncNoCache && end <= size;
+        // Growing the file checks the size: past 4 GB only on exFAT (HDDFSSetFileSize).
+        if (offset.QuadPart < 0)
+            status = (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
+        else if (length && end > size)
+            status = HDDFSSetFileSize(v, f, end);
         if (NT_SUCCESS(status) && length)
-            status = HDDFSTransferIrp(v, f, Irp, true, offset.LowPart, buffer, length);
+            status = HDDFSTransferIrp(v, f, Irp, true, (ULONGLONG)offset.QuadPart, buffer, length);
         if (NT_SUCCESS(status)) {
             done = length;
             f->LastWriteTime = HDDFSCurrentTimestamp();
@@ -771,17 +764,15 @@ static NTSTATUS NTAPI HDDFSFsdSetInformation(PDEVICE_OBJECT DeviceObject, PIRP I
         LARGE_INTEGER size = *(PLARGE_INTEGER)in;
         if (f->Flags & FCB_DIRECTORY) {
             status = STATUS_INVALID_PARAMETER;
-        } else if (f->FileSizeHigh) { // a read-only file of 4 GB or more
-            status = STATUS_ACCESS_DENIED;
-        } else if (size.HighPart) {
-            status = (NTSTATUS)0xC000007F;
+        } else if (size.QuadPart < 0) {
+            status = (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
         } else if (s->Parameters.SetFile.FileInformationClass == FileEndOfFileInformation ||
-                   size.LowPart < f->FileSize) {
-            status = HDDFSSetFileSize(v, f, size.LowPart);
+                   (ULONGLONG)size.QuadPart < HDDFSFileSize64(f)) {
+            status = HDDFSSetFileSize(v, f, (ULONGLONG)size.QuadPart);
         } else if (v->IsEXFAT) { // allocation only: exFAT cannot hold clusters past the length (spec 07 §3a)
-        } else { // allocation only grows the chain
+        } else { // allocation only grows the chain (FATX: sizes below 4 GB, FileSizeHigh stays 0)
             ULONG keep = f->FileSize;
-            status = HDDFSSetFileSize(v, f, size.LowPart);
+            status = HDDFSSetFileSize(v, f, (ULONGLONG)size.QuadPart);
             f->FileSize = keep;
             HDDFSFlushFcb(v, f);
         }

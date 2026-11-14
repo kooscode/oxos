@@ -90,7 +90,7 @@ static NTSTATUS EXFATWriteSet(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, EXFAT
 }
 
 // A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set). Files
-// of 4 GB or more (disc images) are visible but read-only (FileSizeHigh); directories must stay below 4 GB. Other
+// of 4 GB or more (disc images) keep their size's high dword in FileSizeHigh; directories must stay below 4 GB. Other
 // sets stay on the disk untouched and are invisible.
 static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *Out) {
     const UCHAR *f = s->e[0], *st = s->e[1];

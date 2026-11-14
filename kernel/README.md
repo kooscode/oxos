@@ -292,8 +292,8 @@ Exports: all 364 functions and variables the 4627 retail kernel exports are impl
   and the SMBus is polled.
 - exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster
   size it writes are kept across quick reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so
-  a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters, and
-  files of 4 GB or more, are not shown to titles.
+  a title may format its cache again after a cold boot; exFAT names outside Latin-1 or longer than 42 characters are
+  not shown to titles.
 - No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0`
   acting as an empty drive, where the reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
