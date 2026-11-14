@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 # OXOS kernel extension SDK: build rules for .xos extensions (spec/oxos_internal/34 §9), for GNU make on Windows, macOS and Linux.
 #
-#   NAME := hello                    # builds $(OXOS_OUT)/hello.xos
-#   SOURCES := hello.cpp             # C (.c) or C++ (.cpp), in the Makefile's folder
+#   NAME := my_extension             # builds $(OXOS_OUT)/my_extension.xos
+#   SOURCES := my_extension.cpp      # C (.c) or C++ (.cpp), in the Makefile's folder
 #   include path/to/the/sdk/oxos_extension.mk
 #
 # Needs only clang and lld-link (LLVM 18 or newer) on the PATH, or in the folder LLVM names (LLVM=C:/LLVM/bin). The library is prebuilt in lib/. The rules run
@@ -36,7 +36,7 @@ ifeq ($(wildcard $(OXOS_LIBRARIES)),)
 $(OXOS_LIBRARIES):
 	$(error $(OXOS_LIBRARIES) is missing: build extensions with the SDK as it ships (make -C sdk: build/sdk/oxos_sdk/))
 endif
-OXOS_HEADERS := $(wildcard $(OXOS_SDK)/include/*.h $(OXOS_SDK)/include/oxos/*.h)
+OXOS_HEADERS := $(wildcard $(OXOS_SDK)/include/*.h)
 
 # --- One extension: $(1) its name, $(2) its sources
 

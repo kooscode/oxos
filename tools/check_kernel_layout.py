@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the kernel image's layout after the link (kernel/Makefile runs it).
 
-usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs A.obj,B.obj --boot-entries F,G
+usage: check_kernel_layout.py --exe OXOSKRNL.exe --map OXOSKRNL.map --boot-objs A.obj,B.obj --boot-entries F,G
                               --data-copy SIZE OBJECTS...
 
 1. Boot-only memory (spec/oxos_internal/18_boot_memory.md): the boot-only sections (.xka data, .xkb code) are freed before the first title starts, so kept code

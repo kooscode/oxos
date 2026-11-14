@@ -27,19 +27,28 @@ constexpr ULONG LOOP_STACK_BYTES = 0x4000;   // the run loop thread's kernel sta
 constexpr ULONG POOL_TAG = 'txEX';
 constexpr ULONG IMPORT_SLOTS_MAX = 1024;     // kernel imports of all extensions together
 constexpr NTSTATUS STATUS_NOT_SUPPORTED = (NTSTATUS)0xC00000BB;
+constexpr ULONG EXPORT_ORDINAL_MAX = 512; // above the kernel's highest export (kernel/exports.tsv)
 
 } // namespace
 
-// --- State pages (§6): one persisted page per descriptor Name, found again through a persisted index page
+// Whether the descriptor's context pointer lies inside the extension's own image (the kernel writes there).
+static bool InImage(OXOS_CONTEXT **Slot, PUCHAR Image, ULONG ImageSize) {
+    auto at = (PUCHAR)Slot;
+    return at >= Image && at + sizeof(*Slot) <= Image + ImageSize;
+}
+
+// --- State pages (§6): one persisted page per descriptor Name, found again through a persisted index page; zeroed again when the Version changes
 
 namespace {
 
 constexpr ULONG STATE_INDEX_MAGIC = 0x58444958; // "XIDX"
 constexpr ULONG STATE_NAME_MAX = 31;
+constexpr ULONG STATE_VERSION_MAX = 15;
 constexpr ULONG STATE_INDEX_ENTRIES = 64;
 
 struct STATE_INDEX_ENTRY {
     char Name[STATE_NAME_MAX + 1];
+    char Version[STATE_VERSION_MAX + 1]; // the descriptor's Version that wrote the page
     PVOID Page;
     BOOLEAN Used; // taken at this launch
 };
@@ -65,12 +74,21 @@ STATE_INDEX *&StateIndex() {
     return *reinterpret_cast<STATE_INDEX **>(&StateIndexPage);
 }
 
-bool SameName(const char *A, const char *B) {
+// A, as kept in the index (at most Max characters), equals B (compared as far as the index keeps it).
+bool SameText(const char *A, const char *B, ULONG Max) {
     ULONG i = 0;
-    for (; i < STATE_NAME_MAX && A[i] && A[i] == B[i]; i++) {
+    for (; i < Max && A[i] && A[i] == B[i]; i++) {
         // Compare up to the first difference or the end.
     }
-    return i == STATE_NAME_MAX || A[i] == B[i];
+    return i == Max || A[i] == B[i];
+}
+
+// Copies Text into an index field of Max characters and its 0.
+void CopyText(char *Field, const char *Text, ULONG Max) {
+    ULONG n = 0;
+    for (; n < Max && Text[n]; n++)
+        Field[n] = Text[n];
+    Field[n] = 0;
 }
 
 } // namespace
@@ -93,14 +111,18 @@ static void CheckStateIndex() {
         index->Entries[i].Used = FALSE;
 }
 
-// The state page of Name, taken for this launch: an existing one, or a new zeroed one (*IsNew).
-static PVOID StatePageFor(const char *Name, BOOLEAN *IsNew) {
+// The state page of Name, taken for this launch: its page from the last launch, zeroed again when Version is not the one that wrote it (a new build may lay
+// it out differently), or a new zeroed one; null when memory is short.
+static PVOID StatePageFor(const char *Name, const char *Version) {
     STATE_INDEX *index = StateIndex();
     for (ULONG i = 0; index && i < index->Count; i++) {
         STATE_INDEX_ENTRY &e = index->Entries[i];
-        if (SameName(e.Name, Name) && !e.Used) {
+        if (SameText(e.Name, Name, STATE_NAME_MAX) && !e.Used) {
+            if (!SameText(e.Version, Version, STATE_VERSION_MAX)) {
+                RtlZeroMemory(e.Page, PAGE_SIZE);
+                CopyText(e.Version, Version, STATE_VERSION_MAX);
+            }
             e.Used = TRUE;
-            *IsNew = FALSE;
             return e.Page;
         }
     }
@@ -121,13 +143,10 @@ static PVOID StatePageFor(const char *Name, BOOLEAN *IsNew) {
     RtlZeroMemory(page, PAGE_SIZE);
     MmPersistContiguousMemory(page, PAGE_SIZE, TRUE);
     STATE_INDEX_ENTRY &e = index->Entries[index->Count++];
-    ULONG n = 0;
-    for (; n < STATE_NAME_MAX && Name[n]; n++)
-        e.Name[n] = Name[n];
-    e.Name[n] = 0;
+    CopyText(e.Name, Name, STATE_NAME_MAX);
+    CopyText(e.Version, Version, STATE_VERSION_MAX);
     e.Page = page;
     e.Used = TRUE;
-    *IsNew = TRUE;
     return page;
 }
 
@@ -192,39 +211,49 @@ ULONG ExtensionIndex(OXOS_CONTEXT *Context) {
     return (ULONG)((XK_EXTENSION *)Context - LoadedExtensions->Extensions);
 }
 
-NTSTATUS NTAPI HookExport(OXOS_CONTEXT *Context, ULONG Ordinal, PVOID Replacement, PVOID *Next) {
+// The ordinal of the kernel export at Address (an extension's import of it, before the chains are linked), or 0.
+static ULONG ExportOrdinalAt(PVOID Address) {
+    for (ULONG ordinal = 1; ordinal <= EXPORT_ORDINAL_MAX; ordinal++) {
+        if (titles::KernelExportAddress(ordinal) == (ULONG)Address)
+            return ordinal;
+    }
+    return 0;
+}
+
+NTSTATUS NTAPI HookFunction(OXOS_CONTEXT *Context, PVOID Function, PVOID Hook) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
-    ULONG target = titles::KernelExportAddress(Ordinal);
-    if (!target || !Replacement)
+    ULONG hooked = ExportOrdinalAt(Function); // its ordinal
+    ULONG target = (ULONG)Function;
+    if (!hooked || !Hook)
         return STATUS_INVALID_PARAMETER;
     for (ULONG ordinal : NOT_HOOKABLE) {
-        if (ordinal == Ordinal)
+        if (ordinal == hooked)
             return STATUS_NOT_SUPPORTED;
     }
-    if (!IsKernelCode(target) || (Ordinal >= RUNTIME_ORDINALS_FIRST && Ordinal <= RUNTIME_ORDINALS_LAST))
+    if (!IsKernelCode(target) || (hooked >= RUNTIME_ORDINALS_FIRST && hooked <= RUNTIME_ORDINALS_LAST))
         return STATUS_NOT_SUPPORTED;
     ULONG extension = ExtensionIndex(Context);
     for (ULONG i = 0; i < state->HookCount; i++) {
-        if (state->Hooks[i].Ordinal == Ordinal && state->Hooks[i].Extension == extension)
+        if (state->Hooks[i].Ordinal == hooked && state->Hooks[i].Extension == extension)
             return STATUS_OBJECT_NAME_COLLISION;
     }
     if (state->HookCount == XK_EXTENSION_HOOKS_MAX)
         return STATUS_INSUFFICIENT_RESOURCES;
-    state->Hooks[state->HookCount++] = {Ordinal, extension, Replacement, Next};
+    state->Hooks[state->HookCount++] = {hooked, extension, Hook, nullptr};
     return STATUS_SUCCESS;
 }
 
-NTSTATUS NTAPI RegisterEvent(OXOS_CONTEXT *Context, ULONG Event, PVOID Callback, PVOID CallbackContext) {
+NTSTATUS NTAPI RegisterEvent(OXOS_CONTEXT *Context, ULONG Event, PVOID Callback, PVOID UserData) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
     if (!Event || Event >= OXOS_EVENT_COUNT || !Callback)
         return STATUS_INVALID_PARAMETER;
     if (state->EventCount == XK_EXTENSION_EVENTS_MAX)
         return STATUS_INSUFFICIENT_RESOURCES;
-    state->Events[state->EventCount++] = {Event, ExtensionIndex(Context), (OXOS_EVENT_CALLBACK)Callback, CallbackContext};
+    state->Events[state->EventCount++] = {Event, ExtensionIndex(Context), (OXOS_EVENT_CALLBACK)Callback, UserData};
     return STATUS_SUCCESS;
 }
 
-const OXOS_API LOADER_API = {sizeof(OXOS_API), HookExport, RegisterEvent};
+const OXOS_API LOADER_API = {sizeof(OXOS_API), HookFunction, RegisterEvent};
 
 // Removes what extension Index registered (its Load failed).
 void DropRegistrations(ULONG Index) {
@@ -334,7 +363,8 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     const char *refused = error != XK_PE_ERROR::NONE ? "not a valid .xos image"
                           : !image                  ? "no memory for its image"
                           : !descriptor             ? "no oxos_extension descriptor"
-                          : descriptor->Magic != OXOS_EXTENSION_MAGIC || !descriptor->Load ? "a damaged descriptor"
+                          : descriptor->Magic != OXOS_EXTENSION_MAGIC || !descriptor->Start || !InImage(descriptor->Context, image, imageSize)
+                              ? "a damaged descriptor"
                           : (descriptor->ApiVersion >> 16) != (OXOS_API_VERSION >> 16) ||
                                   (descriptor->ApiVersion & 0xFFFF) > (OXOS_API_VERSION & 0xFFFF) ? "built for another kernel API version" : nullptr;
     if (refused) {
@@ -342,6 +372,14 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
         Slots->Count = firstSlot;
         if (image)
             MmFreeContiguousMemory(image);
+        return false;
+    }
+    // Every extension has its state page, so oxos_state never returns null.
+    PVOID statePage = StatePageFor(descriptor->Name ? descriptor->Name : name, descriptor->Version ? descriptor->Version : "");
+    if (!statePage) {
+        XK_SERIAL("extensions: [%s] skipped: no memory for its state page\n", name);
+        Slots->Count = firstSlot;
+        MmFreeContiguousMemory(image);
         return false;
     }
 
@@ -358,15 +396,14 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     context.SettingCount = context.Settings ? Entry.SettingCount : 0;
     context.ImageBase = image;
     context.ImageSize = imageSize;
-    context.State = StatePageFor(descriptor->Name ? descriptor->Name : name, &context.StateIsNew);
-    context.StateSize = context.State ? PAGE_SIZE : 0;
+    context.State = statePage;
     context.Api = &LOADER_API;
     context.Kernel = &state->Kernel;
     context.LogTarget = OXOS_LOG_SERIAL | OXOS_LOG_FILE;
 
-    status = descriptor->Load(&context);
-    if (!NT_SUCCESS(status)) {
-        XK_SERIAL("extensions: [%s] Load failed (%#lx): unloaded\n", name, status);
+    *descriptor->Context = &context; // the SDK's oxos_context: its functions read this launch's context from there
+    if (!descriptor->Start()) {
+        XK_SERIAL("extensions: [%s] Start returned FALSE: unloaded\n", name);
         DropRegistrations(state->Count);
         ReleaseStatePage(context.State);
         Slots->Count = firstSlot;

@@ -326,7 +326,7 @@ namespace xk::core {
 extern KTHREAD IdleThreadObject;
 } // namespace xk::core
 
-// --- Exported data (ordinals in xboxkrnl.def)
+// --- Exported data (ordinals in oxoskrnl.def)
 XBAPI volatile ULONG KeTickCount;
 XBAPI volatile KSYSTEM_TIME KeInterruptTime;
 XBAPI volatile KSYSTEM_TIME KeSystemTime;

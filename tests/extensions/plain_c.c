@@ -8,11 +8,11 @@
 // The state page as boot_test.py reads it (words, in this order).
 typedef struct SAVED {
     ULONG Magic;
-    ULONG Launches;   // Load calls since the cold boot
-    ULONG Loaded;     // OXOS_EVENT_TITLE_LOADED events
-    ULONG DivisionOk; // 64-bit division and remainder, signed and unsigned, at every Load
-    ULONG MemoryOk;   // a struct copy, memset and memcmp at every Load
-    ULONG SettingOk;  // oxos_get_setting(Context, "greeting") was "hello" at every Load
+    ULONG Launches;   // starts since the cold boot
+    ULONG Loaded;     // title-loaded events
+    ULONG DivisionOk; // 64-bit division and remainder, signed and unsigned, at every start
+    ULONG MemoryOk;   // a struct copy, memset and memcmp at every start
+    ULONG SettingOk;  // oxos_setting("greeting") was "hello" at every start
 } SAVED;
 
 // Large enough that the compiler copies it with a call to memcpy.
@@ -22,7 +22,11 @@ typedef struct BLOCK {
 
 static SAVED *Saved;
 
-static void NTAPI OnTitleLoaded(OXOS_CONTEXT *Context, PVOID CallbackContext, PVOID Data) {
+static BOOLEAN ExtensionStart(void);
+
+OXOS_DEFINE_EXTENSION(.Name = "plain_c", .Version = "1.0.0", .Start = ExtensionStart);
+
+static void CountLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
     Saved->Loaded++;
 }
 
@@ -52,12 +56,9 @@ static ULONG SameText(const char *A, const char *B) {
     return A && *A == *B;
 }
 
-static NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    Saved = (SAVED *)Context->State;
-    if (!Saved)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    if (Context->StateIsNew || Saved->Magic != SAVED_MAGIC) {
-        memset(Saved, 0, sizeof(SAVED));
+static BOOLEAN ExtensionStart(void) {
+    Saved = (SAVED *)oxos_state();
+    if (!Saved->Launches) { /* the first launch: the page is all zero */
         Saved->Magic = SAVED_MAGIC;
         Saved->DivisionOk = Saved->MemoryOk = Saved->SettingOk = 1;
     }
@@ -66,10 +67,8 @@ static NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
         Saved->DivisionOk = 0;
     if (!MemoryWorks())
         Saved->MemoryOk = 0;
-    if (!SameText(oxos_get_setting(Context, "greeting"), "hello"))
+    if (!SameText(oxos_setting("greeting"), "hello"))
         Saved->SettingOk = 0;
-    oxos_log(Context, "plain C extension, launch %lu", Saved->Launches);
-    return Context->Api->RegisterEvent(Context, OXOS_EVENT_TITLE_LOADED, (PVOID)OnTitleLoaded, NULL);
+    oxos_log("plain C extension, launch %lu", Saved->Launches);
+    return oxos_on_title_loaded(CountLoaded, NULL);
 }
-
-OXOS_DEFINE_EXTENSION(.Name = "plain_c", .Version = "1.0.0", .Load = Load);

@@ -3,11 +3,13 @@
 #pragma once
 #include <core/core.h>
 #include <runtime/types.h>
-#include <oxos/oxos_interfaces.h>
+#define OXOS_SDK_IN_KERNEL // oxos_sdk.h without oxos_kernel.h: the kernel has its own types
+#include <oxos_sdk.h>
+#include <oxos_extension_context.h>
 
 // --- The loaded extensions
 
-constexpr ULONG XK_EXTENSIONS_MAX = 8;  // extensions loaded at one launch
+constexpr ULONG XK_EXTENSIONS_MAX = 16; // extensions loaded at one launch
 constexpr ULONG XK_EXTENSION_HOOKS_MAX = 256; // hooks of all extensions together
 constexpr ULONG XK_EXTENSION_EVENTS_MAX = 32; // event registrations of all extensions together
 
@@ -17,9 +19,9 @@ struct XK_EXTENSION {
     const OXOS_EXTENSION *Descriptor;
 };
 // tests/boot_test.py reads the state pages through these offsets.
-XK_SIZE(OXOS_CONTEXT, 64);
+XK_SIZE(OXOS_CONTEXT, 56);
 XK_OFFSET(OXOS_CONTEXT, State, 40);
-XK_SIZE(XK_EXTENSION, 68);
+XK_SIZE(XK_EXTENSION, 60);
 
 constexpr ULONG XK_NO_EXTENSION = 0xFFFFFFFF; // XK_EXTENSIONS_STATE::LoopExtension between RunLoop calls
 
@@ -36,7 +38,7 @@ struct XK_EXTENSION_EVENT {
     ULONG Event; // OXOS_EVENT_*
     ULONG Extension;
     OXOS_EVENT_CALLBACK Callback;
-    PVOID CallbackContext;
+    PVOID UserData;
 };
 
 // The loaded extensions and what they registered, for this launch (pool memory; a quick reboot clears it all).

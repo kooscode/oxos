@@ -18,7 +18,7 @@ Display:
 - --size picks the window size (an xemu startup size such as 1920x1080), --scale the render resolution multiplier (1 = native 640x480; 2 or 3 look sharp at
   1080), --fullscreen starts full screen.
 Debugging: --serial prints the debug serial port (spec/oxos_internal/03_debug_serial.md) here; --qmp opens xemu's QMP socket at SOCK (used by tools/trace.py);
---memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds). --trace-map MAP (an import-trace build's xboxkrnl.map) dumps the title's last kernel
+--memory 128 gives the console 128 MB (needed by TRACE_IMPORTS=2 builds). --trace-map MAP (an import-trace build's oxoskrnl.map) dumps the title's last kernel
 calls when the kernel reports a crash on the serial port (a line starting with "***", needs --serial) and when xemu is closed: the last 30 here, all of them in
 DIR/calls_<time>_<crash|exit>.txt, and the raw record next to it (.bin, for tools/trace.py --load). xemu quits at once when its window is closed, so run.py also
 copies the record every second while the title runs (without pausing it) and saves the latest copy as the exit dump when xemu is gone. --gdb PORT starts xemu's

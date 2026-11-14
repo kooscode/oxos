@@ -12,10 +12,10 @@ enum class XK_PE_ERROR {
     HAS_TLS,         // a TLS directory (not supported)
     BAD_SECTION,     // a section outside the file or the image
     BAD_RELOCATION,  // a relocation block or entry the loader does not handle
-    BAD_IMPORT,      // an import from another DLL than xboxkrnl.exe, by name, or an ordinal the resolver refuses
+    BAD_IMPORT,      // an import from another DLL than oxoskrnl.exe, by name, or an ordinal the resolver refuses
 };
 
-// Resolves one import: Ordinal of xboxkrnl.exe for the import address table entry at *Slot (an address in Image). Returns false to refuse it.
+// Resolves one import: Ordinal of oxoskrnl.exe for the import address table entry at *Slot (an address in Image). Returns false to refuse it.
 typedef bool (*XK_PE_IMPORT_RESOLVER)(PVOID Context, ULONG Ordinal, ULONG *Slot);
 
 namespace xk::extensions {
@@ -29,7 +29,7 @@ XK_PE_ERROR CheckImage(const UCHAR *File, ULONG Size, ULONG *ImageSize);
 XK_PE_ERROR MapImage(const UCHAR *File, ULONG Size, UCHAR *Image, ULONG ImageSize, ULONG Base);
 
 
-// Binds a mapped image's imports: every one must be an ordinal of xboxkrnl.exe (any case); Resolve fills each slot.
+// Binds a mapped image's imports: every one must be an ordinal of oxoskrnl.exe (any case); Resolve fills each slot.
 XK_PE_ERROR BindImports(UCHAR *Image, ULONG ImageSize, XK_PE_IMPORT_RESOLVER Resolve, PVOID Context);
 
 // The RVA of a mapped image's export named Name, or 0 when it has none.

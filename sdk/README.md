@@ -3,35 +3,73 @@
 Builds kernel extensions (`.xos` files) for the OXOS kernel, in C or C++. MIT licence: an extension built with it may use any licence; open source is preferred.
 The full rules: `spec/oxos_internal/34_kernel_extensions.md` in the OXOS repository.
 
+An extension is a small DLL that the kernel loads from `C:\OXOS\extensions\` before every title, as `C:\OXOS\oxos_extensions.ini` lists it. It has up to three
+functions: `ExtensionStart` (before each title: read settings, hook kernel functions, register for events), `ExtensionRunLoop` (again and again while the title
+runs) and `ExtensionTerminate` (when the title starts another). `include/oxos_sdk.h` explains each part where it is declared.
+
 **Needs:** LLVM's `clang` and `lld-link` (18 or newer) and GNU make, on Windows, macOS or Linux. Not nxdk.
 
 - Linux: `apt install clang lld make` (or your distribution's packages).
 - macOS: `brew install llvm lld`, and the `make` of the Xcode command-line tools.
 - Windows: LLVM from its installer, and `make` (`scoop install make` or `choco install make`).
 
-**An extension** (copy [`examples/hello`](examples/hello) to start):
+## The examples
+
+| Example | Shows |
+|---|---|
+| [`examples/example_run_loop`](examples/example_run_loop) | `ExtensionRunLoop`: work while a title runs, timed with the kernel's millisecond count; a number setting |
+| [`examples/example_kernel_hook`](examples/example_kernel_hook) | a hook on a kernel function (`NtOpenFile`), log lines in `ExtensionStart` and `ExtensionTerminate` |
+| [`examples/example_title_event`](examples/example_title_event) | a title event with user data, the state page that keeps data from one launch to the next, and kernel functions called by name: the LED turns orange for one title |
+
+Copy the one closest to what you want. In its folder, `make` builds `NAME.xos` (add `LLVM=C:/LLVM/bin` when clang is not on the `PATH`). A Makefile of your own:
 
 ```make
-NAME := hello
-SOURCES := hello.cpp
+NAME := my_extension
+SOURCES := my_extension.cpp
 include path/to/the/sdk/oxos_extension.mk
 ```
 
-`make` builds `hello.xos` (add `LLVM=C:/LLVM/bin` when clang is not on the `PATH`). Copy it to `C:\OXOS\extensions\` on the console and list it in
-`C:\OXOS\oxos_extensions.ini`:
+## Install
 
-```ini
-[hello]
-extension = hello.xos
-```
+1. Copy the `.xos` to `C:\OXOS\extensions\` on the console's hard disk (the OXOS File Manager, or FTP).
+2. List it in `C:\OXOS\oxos_extensions.ini` (each example has a sample), with any settings it reads:
 
-| In the SDK | Contents |
+   ```ini
+   [example_run_loop]
+   extension = example_run_loop.xos
+   interval = 10
+   ```
+
+3. Start any title: the extension loads before it, and at every launch after it. To switch one off, set `enabled = no` in its section; hold **B** at boot to
+   start without any (until the next cold boot).
+
+Its `oxos_log` lines go to `C:\OXOS\log\extensions.log` (read it over FTP or with the File Manager; it moves to `extensions_1.log` at 10 MB), and to the debug
+serial port of a debug kernel.
+
+## Things to know
+
+- **Each launch starts afresh.** The kernel reloads every extension from the disk before each title, so global variables start from their initial values every
+  time. Only the 4 KB state page (`oxos_state`) carries over, until the next cold boot.
+- **`ExtensionRunLoop` must return quickly.** One kernel thread calls every extension's in turn, about every millisecond; a slow one holds up the others. Do a
+  little work per call and keep time with `KeTickCount`; a call that takes over 500 ms is logged in `C:\OXOS\log\extensions.log`.
+- **Hooks see the title's calls only**, not the kernel's own. `oxos_hook(NtOpenFile, My_NtOpenFile)` takes the kernel function itself, as `oxos_kernel.h`
+  declares it. A hook passes a call on with `oxos_next(NtOpenFile)(...)`: to the hook of the next extension in `oxos_extensions.ini`, or to the kernel. Hooks
+  run on the title's threads, possibly several at once: count with `InterlockedIncrement`, not `++`.
+- **Hooks and events are made in `ExtensionStart`** only.
+- **Every kernel function** is in `include/oxos_kernel.h`, with its types; an extension calls any of them by name.
+- **No floating point** in kernel code: the kernel does not save those registers for extensions (the SDK's build rules turn it off).
+
+## In the SDK
+
+| File | Contents |
 |---|---|
-| `include/oxos_sdk.h` | the one header an extension includes, C or C++ |
-| `lib/oxos_sdk.lib` | the one library: the kernel's functions (its import library). The SDK's helpers are inline in the header |
+| `include/oxos_sdk.h` | what an extension includes, C or C++: the descriptor, the SDK's functions, the events' callbacks |
+| `include/oxos_kernel.h` | the Xbox kernel: every function an extension can call or hook, with its types (generated from the OXOS kernel) |
+| `lib/oxos_sdk.lib` | the one library: the SDK's functions and the kernel's import library |
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
-| `examples/hello/` | the example to start from: every part of an extension, commented ([README](examples/hello/README.md)) |
+| `examples/` | example_run_loop, example_kernel_hook, example_title_event |
 
-**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the kernel's export list the library is made from
-(`src/xboxkrnl.def`), and a `Makefile` that builds the SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z` its release zip), then each example
+**The SDK's source** (`sdk/` in the OXOS repository) holds the two headers, the SDK's functions (`src/oxos_sdk.cpp`, with `src/oxos_extension_context.h`, the
+context the kernel fills, shared with the kernel and not shipped), the kernel's export list and a check of the kernel table (generated by
+`tools/gen_oxos_sdk.py`), and a `Makefile` that builds the SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z` its release zip), then each example
 with that package into `build/sdk/examples/NAME/`. Extensions are only built with the package, never from the source, so what ships is what is tested.

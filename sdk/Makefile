@@ -1,28 +1,42 @@
 # SPDX-License-Identifier: MIT
 # Builds the SDK for its maintainers (extensions only include oxos_extension.mk), into ../build/sdk/:
 #
-#   make                     ../build/sdk/oxos_sdk/: the SDK as it ships: include/oxos_sdk.h (one header, the parts
-#                            in include/ merged), lib/oxos_sdk.lib (the kernel's import library, from src/xboxkrnl.def),
+#   make                     ../build/sdk/oxos_sdk/: the SDK as it ships: include/ (oxos_sdk.h, oxos_kernel.h),
+#                            lib/oxos_sdk.lib (the SDK's functions from src/oxos_sdk.cpp and the kernel's import library from src/oxoskrnl.def),
 #                            oxos_extension.mk, examples/, README.md, LICENSE; then each example built with that package, as a user builds it, into
 #                            ../build/sdk/examples/NAME/ (NAME.xos)
 #   make VERSION=X.Y.Z       also ../build/sdk/oxos_sdk_vX.Y.Z.zip, the release file
 #
-# src/xboxkrnl.def is generated from the kernel's exports by tools/gen_oxos_sdk.py. Needs clang, lld-link, python3 and a POSIX shell (mkdir, rm).
+# include/oxos_kernel.h, src/oxoskrnl.def and src/kernel_table_check.c are generated from the kernel by tools/gen_oxos_sdk.py; the table check is linked against
+# the import library here, so a kernel prototype that does not match its export fails this build. Needs clang, lld-link, python3 and a POSIX shell (mkdir, rm).
 include oxos_extension.mk
 
 BUILD_DIR := ../build/sdk
 PACKAGE := $(BUILD_DIR)/oxos_sdk
-PACKAGE_FILES := $(OXOS_HEADERS) include/oxos_sdk.h oxos_extension.mk README.md LICENSE make_sdk_package.py \
-                 $(wildcard examples/*/*)
+HEADERS := $(wildcard include/*.h)
+PACKAGE_FILES := $(HEADERS) oxos_extension.mk README.md LICENSE make_sdk_package.py $(wildcard examples/*/*)
 
 EXAMPLES := $(notdir $(wildcard examples/*))
 
-all: $(PACKAGE)/lib/oxos_sdk.lib $(PACKAGE)/include/oxos_sdk.h $(EXAMPLES) \
+all: $(PACKAGE)/lib/oxos_sdk.lib $(BUILD_DIR)/kernel_table_check.dll $(PACKAGE)/include/oxos_sdk.h $(EXAMPLES) \
      $(if $(VERSION),$(BUILD_DIR)/oxos_sdk_v$(VERSION).zip)
 
-$(PACKAGE)/lib/oxos_sdk.lib: src/xboxkrnl.def
-	mkdir -p $(PACKAGE)/lib
+$(BUILD_DIR)/oxoskrnl.lib: src/oxoskrnl.def
+	mkdir -p $(BUILD_DIR)
 	$(OXOS_LD) /lib /def:$< /machine:x86 /out:$@
+
+$(BUILD_DIR)/oxos_sdk.obj: src/oxos_sdk.cpp src/oxos_extension_context.h $(HEADERS)
+	mkdir -p $(BUILD_DIR)
+	$(OXOS_CC) $(OXOS_CXXFLAGS) -Iinclude -c $< -o $@
+
+$(PACKAGE)/lib/oxos_sdk.lib: $(BUILD_DIR)/oxos_sdk.obj $(BUILD_DIR)/oxoskrnl.lib
+	mkdir -p $(PACKAGE)/lib
+	$(OXOS_LD) /lib /out:$@ $^
+
+# Every kernel function of oxos_kernel.h, linked against the import library: the check, not something that ships.
+$(BUILD_DIR)/kernel_table_check.dll: src/kernel_table_check.c $(HEADERS) $(BUILD_DIR)/oxoskrnl.lib
+	$(OXOS_CC) $(OXOS_CFLAGS) -Iinclude -c $< -o $(BUILD_DIR)/kernel_table_check.obj
+	$(OXOS_LD) $(OXOS_LDFLAGS) /OUT:$@ $(BUILD_DIR)/kernel_table_check.obj $(BUILD_DIR)/oxoskrnl.lib
 
 $(PACKAGE)/include/oxos_sdk.h: $(PACKAGE_FILES)
 	python3 -I make_sdk_package.py $(PACKAGE)

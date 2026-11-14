@@ -1,21 +1,16 @@
-// Test extension (spec/oxos_internal/34 §9.3): hooks NtOpenFile, then fails its Load. The kernel must unload it and drop the hook: a title call through it
-// would run freed memory.
+// Test extension (spec/oxos_internal/34 §9.3): hooks NtOpenFile, then returns FALSE from its start. The kernel must unload it and drop the hook: a title call
+// through it would run freed memory.
 #include <oxos_sdk.h>
 
-namespace {
+static BOOLEAN ExtensionStart(void);
 
-decltype(&oxos::NtOpenFile) NextNtOpenFile;
+OXOS_DEFINE_EXTENSION(.Name = "failload", .Version = "1.0.0", .Start = ExtensionStart);
 
-NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
-                              ULONG ShareAccess, ULONG OpenOptions) {
+static NTSTATUS NTAPI RefuseNtOpenFile(PHANDLE File, ACCESS_MASK Access, POBJECT_ATTRIBUTES Name, PIO_STATUS_BLOCK Iosb, ULONG Share, ULONG Options) {
     return STATUS_ACCESS_DENIED;
 }
 
-NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
-    return STATUS_UNSUCCESSFUL;
+static BOOLEAN ExtensionStart(void) {
+    oxos_hook(NtOpenFile, RefuseNtOpenFile);
+    return FALSE;
 }
-
-} // namespace
-
-OXOS_DEFINE_EXTENSION(.Name = "failload", .Version = "1.0.0", .Load = Load);

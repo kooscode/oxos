@@ -22,7 +22,7 @@ def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__.split("\n\n")[1])
     tsv, out = sys.argv[1:3]
-    lines = ["LIBRARY xboxkrnl.exe", "EXPORTS"]
+    lines = ["LIBRARY oxoskrnl.exe", "EXPORTS"]
     count = 0
     for n, line in enumerate(open(tsv).read().splitlines()[1:], 2):
         ordinal, name, _conv, _args, kind = line.split("\t")[:5]

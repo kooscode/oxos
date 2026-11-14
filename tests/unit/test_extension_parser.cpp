@@ -36,7 +36,7 @@ void SetDirectory(std::vector<UCHAR> &f, ULONG index, ULONG rva, ULONG size) {
 }
 
 // The test DLL as the linker would write it (image base 0x10000000).
-std::vector<UCHAR> TestDll(const char *dll = "xboxkrnl.exe", bool byOrdinal = true) {
+std::vector<UCHAR> TestDll(const char *dll = "oxoskrnl.exe", bool byOrdinal = true) {
     std::vector<UCHAR> f(HEADERS + 0x1000, 0);
     Put16(f, 0, 0x5A4D);
     Put32(f, 0x3C, NT);
@@ -138,7 +138,7 @@ TEST(PeImage, ACheckedDllIsMappedRelocatedAndBound) {
 }
 
 TEST(PeImage, TheKernelsNameMatchesInAnyCase) {
-    std::vector<UCHAR> f = TestDll("XBOXKRNL.EXE");
+    std::vector<UCHAR> f = TestDll("OXOSKRNL.EXE");
     std::vector<UCHAR> image(IMAGE_SIZE);
     ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
     Resolver r;
@@ -171,7 +171,7 @@ TEST(PeImage, ImagesTheLoaderCannotUseAreRefused) {
 
 TEST(PeImage, ImportsMustBeKernelOrdinals) {
     std::vector<UCHAR> image(IMAGE_SIZE);
-    for (auto f : {TestDll("kernel32.dll"), TestDll("xboxkrnl.exe", false)}) {
+    for (auto f : {TestDll("kernel32.dll"), TestDll("oxoskrnl.exe", false)}) {
         ASSERT_EQ(extensions::MapImage(f.data(), (ULONG)f.size(), image.data(), IMAGE_SIZE, IMAGE_BASE), XK_PE_ERROR::NONE);
         Resolver r;
         EXPECT_EQ(extensions::BindImports(image.data(), IMAGE_SIZE, Resolve, &r), XK_PE_ERROR::BAD_IMPORT);

@@ -2,53 +2,57 @@
 // kernel did, for the test to read back after quick reboots.
 #include <oxos_sdk.h>
 
-namespace {
+static BOOLEAN ExtensionStart(void);
+static void ExtensionRunLoop(void);
+static void ExtensionTerminate(void);
 
-constexpr ULONG SAVED_MAGIC = 0x54534F58; // "XOST"
-constexpr char OWN_FILE[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\extension_test.xos";
+OXOS_DEFINE_EXTENSION(.Name = "extension_test", .Version = "1.0.0", .Start = ExtensionStart, .RunLoop = ExtensionRunLoop, .Terminate = ExtensionTerminate);
+
+#define SAVED_MAGIC 0x54534F58UL // "XOST"
+#define OWN_FILE "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\extension_test.xos"
 
 // The state page as boot_test.py reads it (words, in this order).
 struct SAVED {
     ULONG Magic;
-    ULONG Launches;           // Load calls since the cold boot
-    ULONG Generation;         // OXOS_CONTEXT::Generation at the last Load
-    ULONG GenerationMismatch; // a Load whose Generation was not Launches
-    ULONG Unloads;            // Unload calls
-    ULONG RunLoopCalls;       // RunLoop calls, all launches
-    ULONG LoopAfterUnload;    // RunLoop calls after this launch's Unload (must stay 0: the loop stops first)
-    ULONG Loading;            // OXOS_EVENT_TITLE_LOADING events
-    ULONG Loaded;             // OXOS_EVENT_TITLE_LOADED events
-    ULONG Exiting;            // OXOS_EVENT_TITLE_EXITING events
-    ULONG OpenCalls;          // the title's NtOpenFile calls through the hook (not its own: they start below it)
-    ULONG LastTitleId;        // the title ID of the last OXOS_EVENT_TITLE_LOADED
-    ULONG SettingOk;          // Setting("answer") was "42" at every Load
+    ULONG Launches;           // Start calls since the cold boot
+    ULONG Generation;         // oxos_launch_number() at the last Start
+    ULONG GenerationMismatch; // a Start whose launch number was not Launches
+    ULONG Terminates;         // ExtensionTerminate calls
+    ULONG RunLoopCalls;       // ExtensionRunLoop calls, all launches
+    ULONG LoopAfterTerminate; // ExtensionRunLoop calls after this launch's Terminate (must stay 0: the loop stops first)
+    ULONG Loading;            // title-loading events
+    ULONG Loaded;             // title-loaded events
+    ULONG Exiting;            // title-exiting events
+    LONG OpenCalls;           // the title's NtOpenFile calls through the hook (not its own: they start below it)
+    ULONG LastTitleId;        // the title ID of the last title-loaded event
+    ULONG SettingOk;          // oxos_setting("Answer") was "42" at every Start
     ULONG FileOk;             // oxos_read_file read the extension's own file
 };
 
-SAVED *Saved;
-decltype(&oxos::NtOpenFile) NextNtOpenFile;
-bool OwnFileOpened; // this launch's RunLoop opened the extension's own file (globals start afresh at each launch)
-bool Unloaded;      // this launch's Unload has run
+static SAVED *Saved;
+static BOOLEAN OwnFileOpened; // this launch's RunLoop opened the extension's own file
+static BOOLEAN Terminated;    // this launch's Terminate has run
 
-NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
-                              ULONG ShareAccess, ULONG OpenOptions) {
-    __atomic_add_fetch(&Saved->OpenCalls, 1, __ATOMIC_RELAXED);
-    return NextNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
+static NTSTATUS NTAPI CountNtOpenFile(PHANDLE File, ACCESS_MASK Access, POBJECT_ATTRIBUTES Name, PIO_STATUS_BLOCK Iosb, ULONG Share, ULONG Options) {
+    InterlockedIncrement(&Saved->OpenCalls);
+    return oxos_next(NtOpenFile)(File, Access, Name, Iosb, Share, Options);
 }
 
-void NTAPI OnEvent(OXOS_CONTEXT *Context, PVOID Which, PVOID Data) {
-    auto event = reinterpret_cast<ULONG>(Which);
-    if (event == OXOS_EVENT_TITLE_LOADING) {
-        Saved->Loading++;
-    } else if (event == OXOS_EVENT_TITLE_LOADED) {
-        Saved->Loaded++;
-        Saved->LastTitleId = static_cast<OXOS_TITLE_LOADED *>(Data)->TitleId;
-    } else {
-        Saved->Exiting++;
-    }
+// UserData is the counter each event registered with.
+static void CountLoading(const OXOS_TITLE_LOADING *Title, void *UserData) {
+    ++*(ULONG *)UserData;
 }
 
-bool SameText(const char *A, const char *B) {
+static void CountLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
+    ++*(ULONG *)UserData;
+    Saved->LastTitleId = Title->TitleId;
+}
+
+static void CountExiting(const OXOS_TITLE_EXITING *Title, void *UserData) {
+    ++*(ULONG *)UserData;
+}
+
+static BOOLEAN SameText(const char *A, const char *B) {
     while (A && *A && *A == *B) {
         A++;
         B++;
@@ -56,54 +60,46 @@ bool SameText(const char *A, const char *B) {
     return A && *A == *B;
 }
 
-NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    Saved = static_cast<SAVED *>(Context->State);
-    if (!Saved)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    if (Context->StateIsNew || Saved->Magic != SAVED_MAGIC) {
-        *Saved = {};
+static BOOLEAN ExtensionStart(void) {
+    Saved = (SAVED *)oxos_state();
+    if (!Saved->Launches) { // the first launch: the page is all zero
         Saved->Magic = SAVED_MAGIC;
         Saved->SettingOk = 1;
     }
     Saved->Launches++;
-    Saved->Generation = Context->Generation;
-    if (Context->Generation != Saved->Launches)
+    Saved->Generation = oxos_launch_number();
+    if (oxos_launch_number() != Saved->Launches)
         Saved->GenerationMismatch++;
-    if (!SameText(oxos_get_setting(Context, "Answer"), "42"))
+    if (!SameText(oxos_setting("Answer"), "42"))
         Saved->SettingOk = 0;
     ULONG size;
     char *file = oxos_read_file(OWN_FILE, 0x40000, &size);
     if (file) {
         Saved->FileOk = size > 2 && file[0] == 'M' && file[1] == 'Z';
-        oxos::ExFreePool(file);
+        oxos_free_file(file);
     }
-    for (ULONG event = OXOS_EVENT_TITLE_LOADING; event <= OXOS_EVENT_TITLE_EXITING; event++)
-        Context->Api->RegisterEvent(Context, event, reinterpret_cast<PVOID>(OnEvent), reinterpret_cast<PVOID>(event));
-    oxos_log(Context, "launch %lu, generation %lu", Saved->Launches, Context->Generation);
-    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
+    oxos_on_title_loading(CountLoading, &Saved->Loading);
+    oxos_on_title_loaded(CountLoaded, &Saved->Loaded);
+    oxos_on_title_exiting(CountExiting, &Saved->Exiting);
+    oxos_log("launch %lu, generation %lu", Saved->Launches, oxos_launch_number());
+    return oxos_hook(NtOpenFile, CountNtOpenFile);
 }
 
-void NTAPI RunLoop(OXOS_CONTEXT *Context) {
-    if (Unloaded) {
-        Saved->LoopAfterUnload++;
+static void ExtensionRunLoop(void) {
+    if (Terminated) {
+        Saved->LoopAfterTerminate++;
         return;
     }
     Saved->RunLoopCalls++;
     if (OwnFileOpened)
         return;
     // One NtOpenFile of its own once the chains are linked: it must pass chain.xos's hook (loaded after this one).
-    OwnFileOpened = true;
+    OwnFileOpened = TRUE;
     ULONG size;
-    char *file = oxos_read_file(OWN_FILE, 0x40000, &size);
-    if (file)
-        oxos::ExFreePool(file);
+    oxos_free_file(oxos_read_file(OWN_FILE, 0x40000, &size));
 }
 
-void NTAPI Unload(OXOS_CONTEXT *Context) {
-    Unloaded = true;
-    Saved->Unloads++;
+static void ExtensionTerminate(void) {
+    Terminated = TRUE;
+    Saved->Terminates++;
 }
-
-} // namespace
-
-OXOS_DEFINE_EXTENSION(.Name = "extension_test", .Version = "1.0.0", .Load = Load, .RunLoop = RunLoop, .Unload = Unload);

@@ -1,10 +1,10 @@
 # Open Xbox kernel
 
-A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), ABI-compatible with retail 1.0.4627.1. It is built from the behavioural specs in
-`../spec/stock/` (clean-room: no Microsoft source code, machine code, disassembly or decompiled code is used; the video encoder and NV2A pad calibration tables
-are the one data taken from Microsoft images, see [`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6: tested with all three
-video encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6, whose image has its own X-codes: `MCPX16=1`). It builds on Linux with clang +
-lld-link.
+A clean-room C++ reimplementation of the original Xbox kernel (`xboxkrnl.exe`), built as `oxoskrnl.exe` (the name of its export table too), ABI-compatible with
+retail 1.0.4627.1. It is built from the behavioural specs in `../spec/stock/` (clean-room: no Microsoft source code, machine code, disassembly or decompiled
+code is used; the video encoder and NV2A pad calibration tables are the one data taken from Microsoft images, see
+[`../dmca_compliance.md`](../dmca_compliance.md)). Runs on console revisions 1.0–1.6: tested with all three video encoders (Conexant on a debug kit, Focus on a
+1.4, Xcalibur on a 1.6, whose image has its own X-codes: `MCPX16=1`). It builds on Linux with clang + lld-link.
 
 ## Setting up
 Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the same packages under their own names.
@@ -42,7 +42,7 @@ Optional extras:
 
 ## Build and test
 ```
-make            # ../build/kernel/self_tests/xboxkrnl.exe + xboxkrnl.map (all build output: ../build/, see the Makefile)
+make            # ../build/kernel/self_tests/oxoskrnl.exe + oxoskrnl.map (all build output: ../build/, see the Makefile)
 make bios       # ../build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
                 # MCPX16=1: the 1.6 console's image (our own 1.6 X-codes)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
@@ -61,7 +61,7 @@ make run_trace_basic [ISO=game.iso]  # the same session with the debug serial po
 make run_trace_full [ISO=game.iso] [TRACE=1|2]  # run_trace_basic plus a record of the title's last 32768 kernel calls
 make print_trace_dump [LAST=N] [ONLY=Name,..] [ALL=1]  # while it runs or after a crash: print them (tools/trace.py)
 make run_gdb [ISO=game.iso] [GDB_PORT=1234]  # the debug kernel (DEBUG=1, ../build/kernel/debug/) paused for gdb on xemu's
-                                # GDB server; symbols in ../build/kernel/debug/xboxkrnl.elf. nxdk apps: ../tools/debug_app.py
+                                # GDB server; symbols in ../build/kernel/debug/oxoskrnl.elf. nxdk apps: ../tools/debug_app.py
 make test_memory [MEMORY=128] [MEMORY_BIOS=... MCPX_ROM=...]  # memory a title is given, with and without the
                                 # XBE's "limit to 64 MB" flag (tests/memory_test_title, nxdk)
 make run_xbe XBE='F:\apps\demo\default.xbe' [STATE=...]  # run an XBE from the hard disk: a launcher disc
@@ -128,9 +128,9 @@ need `gdb-multiarch` and GNU `objcopy` (binutils).
    first breakpoint. Stopping the debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel calls.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
-**From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with `gdb-multiarch ../build/kernel/debug/xboxkrnl.elf -ex
+**From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with `gdb-multiarch ../build/kernel/debug/oxoskrnl.elf -ex
 'target remote localhost:1234'`, set breakpoints and `continue`. For an nxdk app, `python3 ../tools/debug_app.py path/to/app` does the app steps above; then
-attach with `gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/xboxkrnl.elf' -ex 'target remote
+attach with `gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/oxoskrnl.elf' -ex 'target remote
 localhost:1234'`.
 
 Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add `CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to

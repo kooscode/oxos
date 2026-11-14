@@ -13,7 +13,7 @@ state and each constant where the rules say it is, and trust every comment to de
 - C++20 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`sdk/`) supports extensions in plain C (spec/oxos_internal/34
   §9), so its public headers are valid C17 as well as C++20 (their constants are `#define`s, their structures `typedef struct`), and
   `tests/extensions/plain_c.c` checks that a C extension builds and runs: it is the repository's only `.c` file. The SDK's own code and its example
-  (`sdk/examples/hello/hello.cpp`) are C++.
+  (`sdk/examples/example_*/`) are C++.
 - The kernel and the 2BL are freestanding: no exceptions, no RTTI, no standard library, no static constructors. The kernel is built `-Oz` on purpose (free
   memory for titles); a readability change must not cost code size.
 - Constants are `constexpr`, not `#define` (Core Guidelines ES.31). Macros are for build options (`XK_DEBUG_SERIAL`, `XK_BOOT_SELFTEST`) and for what only a
@@ -68,11 +68,11 @@ state and each constant where the rules say it is, and trust every comment to de
 ### Names users and extension authors see
 
 - **Descriptive, never short or jargon:** a console user or an extension author must understand a name without reading the code. `oxos_extensions.ini`, not
-  `oxos_ext.ini`; `oxos_title_patches.xos`, not `oxos_patches.xos` (which reads like kernel patches); `oxos_interfaces.h`, not `abi.h`. When a name could be
-  read two ways, take the longer one that cannot.
+  `oxos_ext.ini`; `oxos_title_patches.xos`, not `oxos_patches.xos` (which reads like kernel patches); `oxos_extension_context.h`, not `abi.h`. When a name could
+  be read two ways, take the longer one that cannot.
 - **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console (`C:\OXOS\oxos_launch_redirect.ini`,
   `oxos_extensions.ini`, `extensions\oxos_extension_loader.cache`), OXOS's own extensions and their data (`oxos_NAME.xos` with `oxos_NAME.ini`), and the SDK's
-  headers (`oxos_interfaces.h`). Names without it belong to users and third-party extensions.
+  headers (`oxos_sdk.h`, `oxos_kernel.h`). Names without it belong to users and third-party extensions.
 - **OXOS is written `OXOS` or `oxos`, never `Oxos`**, in identifiers as in text: `OXOS_CONTEXT`, `OXOS_API_VERSION`, `oxos_log`, `oxos::NtCreateFile`.
 - **Everything the user writes or reads:** ini keys (`extension =`, `enabled =`, never `ext =`), folders (`C:\OXOS\extensions\`, not `ext\`), section names, log
   and screen text.

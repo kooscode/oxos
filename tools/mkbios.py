@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Pack a kernel PE into an MCPX 1.0 BIOS image, reusing the base image's init tables and 2BL.
 
-usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel xboxkrnl.exe --out bios.bin
+usage: mkbios.py --base BIOS.bin --mcpx-rom MCPX.bin --kernel oxoskrnl.exe --out bios.bin
                  [--flat-kernel OUT.exe] [--splash SVG]
-       mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel xboxkrnl.exe
+       mkbios.py --open --xcodes X.bin --loader BL.bin --reset RESET.bin --cromwell DIR --kernel oxoskrnl.exe
                  --out bios.bin [--flat-kernel OUT.exe] [--splash SVG] [--size 256K|1M]
 
 The second form builds the open image (no Microsoft parts, no MCPX dump needed; spec/stock/01 §5), see build_open().

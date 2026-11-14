@@ -3,7 +3,10 @@
 // quick-reboot sooner than 600 ms: the kernel then logs the call still running when the title ends (after its 500 ms wait), so there is one line either way.
 #include <oxos_sdk.h>
 
-namespace {
+static BOOLEAN ExtensionStart(void);
+static void ExtensionRunLoop(void);
+
+OXOS_DEFINE_EXTENSION(.Name = "slow_loop", .Version = "1.0.0", .Start = ExtensionStart, .RunLoop = ExtensionRunLoop);
 
 constexpr ULONG SAVED_MAGIC = 0x574F4C53; // "SLOW"
 constexpr LONGLONG SLOW_CALL_MS = 600;
@@ -11,35 +14,28 @@ constexpr LONGLONG SLOW_CALL_MS = 600;
 // The state page as boot_test.py reads it (words, in this order).
 struct SAVED {
     ULONG Magic;
-    ULONG Launches;  // Load calls since the cold boot
+    ULONG Launches;  // starts since the cold boot
     ULONG SlowCalls; // RunLoop calls that took 600 ms: one, in the cold boot's launch
     ULONG Calls;     // RunLoop calls, all launches
 };
 
-SAVED *Saved;
-bool SlowCallDone; // this launch's slow call (globals start afresh at each launch)
+static SAVED *Saved;
+static BOOLEAN SlowCallDone; // this launch's slow call (globals start afresh at each launch)
 
-NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    Saved = static_cast<SAVED *>(Context->State);
-    if (!Saved)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    if (Context->StateIsNew || Saved->Magic != SAVED_MAGIC)
-        *Saved = {SAVED_MAGIC, 0, 0, 0};
+static BOOLEAN ExtensionStart(void) {
+    Saved = (SAVED *)oxos_state();
+    Saved->Magic = SAVED_MAGIC;
     Saved->Launches++;
-    return STATUS_SUCCESS;
+    return TRUE;
 }
 
-void NTAPI RunLoop(OXOS_CONTEXT *Context) {
+static void ExtensionRunLoop(void) {
     Saved->Calls++;
-    if (SlowCallDone || Context->Generation != 1)
+    if (SlowCallDone || oxos_launch_number() != 1)
         return;
-    SlowCallDone = true;
+    SlowCallDone = TRUE;
     LARGE_INTEGER wait;
     wait.QuadPart = -SLOW_CALL_MS * 10000;
-    oxos::KeDelayExecutionThread(KernelMode, FALSE, &wait);
+    KeDelayExecutionThread(KernelMode, FALSE, &wait);
     Saved->SlowCalls++;
 }
-
-} // namespace
-
-OXOS_DEFINE_EXTENSION(.Name = "slow_loop", .Version = "1.0.0", .Load = Load, .RunLoop = RunLoop);

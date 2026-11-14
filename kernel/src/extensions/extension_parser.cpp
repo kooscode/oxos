@@ -176,7 +176,7 @@ XK_PE_ERROR BindImports(UCHAR *Image, ULONG ImageSize, XK_PE_IMPORT_RESOLVER Res
         ULONG names = Read32(Image + at), name = Read32(Image + at + 12), slots = Read32(Image + at + 16);
         if (!name && !slots)
             return XK_PE_ERROR::NONE;
-        if (!NameIs(Image, ImageSize, name, "xboxkrnl.exe", true))
+        if (!NameIs(Image, ImageSize, name, "oxoskrnl.exe", true))
             return XK_PE_ERROR::BAD_IMPORT;
         ULONG lookup = names ? names : slots;
         for (ULONG i = 0;; i++) {

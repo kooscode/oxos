@@ -2,34 +2,29 @@
 // then this one, then the kernel; extension_test's own NtOpenFile calls come here too.
 #include <oxos_sdk.h>
 
-namespace {
+static BOOLEAN ExtensionStart(void);
 
-constexpr ULONG SAVED_MAGIC = 0x4E414843; // "CHAN"
+OXOS_DEFINE_EXTENSION(.Name = "chain", .Version = "1.0.0", .Start = ExtensionStart);
+
+#define SAVED_MAGIC 0x4E414843UL // "CHAN"
 
 // The state page as boot_test.py reads it.
 struct SAVED {
     ULONG Magic;
     ULONG Launches;
-    ULONG OpenCalls; // NtOpenFile calls through this hook: the title's, and extension_test's own from its RunLoop
+    LONG OpenCalls; // NtOpenFile calls through this hook: the title's, and extension_test's own from its RunLoop
 };
 
-SAVED *Saved;
-decltype(&oxos::NtOpenFile) NextNtOpenFile;
+static SAVED *Saved;
 
-NTSTATUS NTAPI HookNtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock,
-                              ULONG ShareAccess, ULONG OpenOptions) {
-    __atomic_add_fetch(&Saved->OpenCalls, 1, __ATOMIC_RELAXED);
-    return NextNtOpenFile(FileHandle, DesiredAccess, ObjectAttributes, IoStatusBlock, ShareAccess, OpenOptions);
+static NTSTATUS NTAPI CountNtOpenFile(PHANDLE File, ACCESS_MASK Access, POBJECT_ATTRIBUTES Name, PIO_STATUS_BLOCK Iosb, ULONG Share, ULONG Options) {
+    InterlockedIncrement(&Saved->OpenCalls);
+    return oxos_next(NtOpenFile)(File, Access, Name, Iosb, Share, Options);
 }
 
-NTSTATUS NTAPI Load(OXOS_CONTEXT *Context) {
-    Saved = static_cast<SAVED *>(Context->State);
-    if (Context->StateIsNew || Saved->Magic != SAVED_MAGIC)
-        *Saved = {SAVED_MAGIC, 0, 0};
+static BOOLEAN ExtensionStart(void) {
+    Saved = (SAVED *)oxos_state();
+    Saved->Magic = SAVED_MAGIC;
     Saved->Launches++;
-    return Context->Api->HookExport(Context, OXOS_ORDINAL_NtOpenFile, reinterpret_cast<PVOID>(HookNtOpenFile), reinterpret_cast<PVOID *>(&NextNtOpenFile));
+    return oxos_hook(NtOpenFile, CountNtOpenFile);
 }
-
-} // namespace
-
-OXOS_DEFINE_EXTENSION(.Name = "chain", .Version = "1.0.0", .Load = Load);

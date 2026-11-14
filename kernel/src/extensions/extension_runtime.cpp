@@ -57,7 +57,7 @@ void NTAPI RunLoopThread(PVOID StartRoutine, PVOID StartContext) {
                 continue;
             state->LoopCallStart = KeTickCount;
             state->LoopExtension = i;
-            extension.Descriptor->RunLoop(&extension.Context);
+            extension.Descriptor->RunLoop();
             state->LoopExtension = XK_NO_EXTENSION;
             ULONG took = KeTickCount - state->LoopCallStart;
             if (took > LOOP_DELAY_WARNING_MS)
@@ -91,7 +91,7 @@ static void FireEvent(ULONG Event, PVOID Data) {
     for (ULONG i = 0; i < state->EventCount; i++) {
         const XK_EXTENSION_EVENT &e = state->Events[i];
         if (e.Event == Event)
-            e.Callback(&state->Extensions[e.Extension].Context, e.CallbackContext, Data);
+            e.Callback(Data, e.UserData);
     }
 }
 
@@ -113,8 +113,13 @@ void TitleLoaded() {
     auto cert = *(PUCHAR *)(XBE_BASE + 0x118);
     state->Kernel.TitleId = *(ULONG *)(cert + 8);
     state->Kernel.TitlePath = XeImageFileName.Buffer;
-    OXOS_TITLE_LOADED data = {sizeof(data), XeImageFileName.Buffer, state->Kernel.TitleId, *(ULONG *)(cert + 0xAC), (const USHORT *)(cert + 0x0C),
-                             (PVOID)XBE_BASE, cert};
+    // The name as extensions use it: plain text in 41 bytes, a character outside ASCII as '?'.
+    auto wide = (const USHORT *)(cert + 0x0C);
+    char name[41] = {};
+    ULONG length = 0;
+    for (; length < 40 && wide[length]; length++)
+        name[length] = wide[length] >= 0x20 && wide[length] < 0x7F ? (char)wide[length] : '?';
+    OXOS_TITLE_LOADED data = {sizeof(data), XeImageFileName.Buffer, state->Kernel.TitleId, *(ULONG *)(cert + 0xAC), name, (PVOID)XBE_BASE, cert};
     FireEvent(OXOS_EVENT_TITLE_LOADED, &data);
 }
 
@@ -139,8 +144,8 @@ void TitleExiting() {
     }
     for (ULONG i = 0; i < state->Count; i++) {
         XK_EXTENSION &extension = state->Extensions[i];
-        if (extension.Descriptor->Unload)
-            extension.Descriptor->Unload(&extension.Context);
+        if (extension.Descriptor->Terminate)
+            extension.Descriptor->Terminate();
     }
 }
 

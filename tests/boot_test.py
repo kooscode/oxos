@@ -4,7 +4,7 @@
 The kernel's boot self-tests (tests/kernel_self_tests/kernel_self_tests.cpp) leave results in globals that are located through the linker map and read with HMP
 `x`.
 
-usage: boot_test.py --bios build/kernel/self_tests/bios.bin --map build/kernel/self_tests/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
+usage: boot_test.py --bios build/kernel/self_tests/bios.bin --map build/kernel/self_tests/oxoskrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
 """
 import argparse
 import hashlib
@@ -490,14 +490,16 @@ def write_launch_redirect(hdd_copy):
     REDIRECT = True
 
 
-# The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: five that load (plain_c in C, the SDK's example hello,
-# and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, and one in the folder that the
-# list does not name.
+# The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: seven that load (plain_c in C, the SDK's three
+# examples, and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, and one in the folder
+# that the list does not name.
 EXTENSIONS_INI = ("; boot_test.py --extensions\r\n"
                   "[extension_test]\r\nextension = extension_test.xos\r\nanswer = 42\r\n"
                   "[chain]\r\nextension = chain.xos\r\n"
                   "[plain C]\r\nextension = plain_c.xos\r\ngreeting = hello\r\n"
-                  "[hello]\r\nextension = hello.xos\r\nheartbeat = 1\r\n"
+                  "[example_run_loop]\r\nextension = example_run_loop.xos\r\ninterval = 1\r\n"
+                  "[example_kernel_hook]\r\nextension = example_kernel_hook.xos\r\n"
+                  "[example_title_event]\r\nextension = example_title_event.xos\r\nled_title = oxos KERNEL test title\r\n"
                   "[slow_loop]\r\nextension = slow_loop.xos\r\n"
                   "[failload]\r\nextension = failload.xos\r\n"
                   "[badversion]\r\nextension = badversion.xos\r\n"
@@ -511,7 +513,8 @@ def write_extensions(hdd_copy, folder):
     w = FATXWriter(q, "C")
     w.makedirs("OXOS\\extensions")
     w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
-    for name in ("extension_test", "chain", "plain_c", "hello", "slow_loop", "failload", "badversion"):
+    for name in ("extension_test", "chain", "plain_c", "example_run_loop", "example_kernel_hook", "example_title_event", "slow_loop", "failload",
+                 "badversion"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, f"{name}.xos"), "rb").read())
     for name in ("disabled", "unlisted"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, "failload.xos"), "rb").read())
@@ -525,8 +528,8 @@ def extension_state_pages(mon):
     if not state:
         return []
     count = int(mon.hmp(f"x/1wx {state:#x}").split(":")[1].split()[0], 16)
-    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[8] of 68 bytes, each starting with its OXOS_CONTEXT (State at +40).
-    return [int(mon.hmp(f"x/1wx {state + 4 + 68 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
+    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[16] of 60 bytes, each starting with its OXOS_CONTEXT (State at +40).
+    return [int(mon.hmp(f"x/1wx {state + 4 + 60 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
 
 
 def extension_loaded_titles(mon):
@@ -542,7 +545,8 @@ def extension_loaded_titles(mon):
 
 def extension_checks(mon, launches, hdd):
     """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
-    plain_c.c, sdk/examples/hello, slow_loop.cpp) after `launches` launches: the cold boot's title and each quick reboot's
+    plain_c.c, the SDK's examples example_run_loop, example_kernel_hook and example_title_event, slow_loop.cpp) after `launches` launches: the cold boot's
+    title and each quick reboot's
     (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks)."""
     def words(address, n):
         out = mon.hmp(f"x/{n}wx {address:#x}")
@@ -552,29 +556,40 @@ def extension_checks(mon, launches, hdd):
     x = words(pages[0], 14) if count >= 1 else [0] * 14
     c = words(pages[1], 3) if count >= 2 else [0] * 3
     p = words(pages[2], 6) if count >= 3 else [0] * 6
-    h = words(pages[3], 2) if count >= 4 else [0] * 2
-    s = words(pages[4], 4) if count >= 5 else [0] * 4
+    t = words(pages[5], 1) if count >= 6 else [0]  # example_title_event: its launches
+    s = words(pages[6], 4) if count >= 7 else [0] * 4
     # C:\OXOS\log\extensions.log: one line per RunLoop call over 500 ms, all slow_loop's (the disk is read while the emulator is paused)
     log = FATX(Qcow2(hdd), "C").read_file("OXOS\\log\\extensions.log") or b""
     lines = log.decode("latin-1").split("\r\n")
     delays = [re.fullmatch(r"extension slow_loop delayed extension loop by (\d+) ms", line) for line in lines if line.startswith("extension ")]
+    hook_lines = [line for line in lines if line.startswith("[example_kernel_hook] ")]
+    hook_start = "[example_kernel_hook] Starting extension example_kernel_hook version 1.0.0."
+    hook_end = "[example_kernel_hook] Terminating extension example_kernel_hook version 1.0.0."
+    hook_counts = [bool(re.fullmatch(r"\[example_kernel_hook\] NtOpenFile called [1-9]\d* times\.", line)) for line in hook_lines[1::3]]
     if not count:
         return {"extensions loaded (extensions::LoadedExtensions)": False}
     print(f"  (slow_loop: {s[1]} Loads, {s[2]} slow calls of {s[3]}; extensions.log: {len(lines) - 1} lines, {[l for l in lines if l.startswith('extension ')]})")
     return {
-        "extension_test, chain, plain_c, the SDK's example hello and slow_loop loaded; failload unloaded, badversion refused, "
-        "disabled and unlisted not loaded": count == 5 and s[0] == 0x574F4C53 and x[0] == 0x54534F58 and c[0] == 0x4E414843 and p[0] == 0x434E4C50 and
-            h[0] == 0x4F4C4548 and h[1] == launches,
+        "extension_test, chain, plain_c, the three examples and slow_loop loaded; failload unloaded, badversion refused, disabled and unlisted not loaded":
+            count == 7 and s[0] == 0x574F4C53 and x[0] == 0x54534F58 and c[0] == 0x4E414843 and p[0] == 0x434E4C50,
         f"state page kept across the quick reboots: {launches} Loads, Generation {launches}": x[1] == launches and x[2] == launches and x[3] == 0 and
             c[1] == launches,
-        "RunLoop called while the titles ran, never after Unload": x[5] > 0 and x[6] == 0,
+        "RunLoop called while the titles ran, never after Terminate": x[5] > 0 and x[6] == 0,
         # The cold boot's title may end before the 600 ms are up: the kernel then logs the call still running after its 500 ms wait at the title's end.
         "slow_loop's 600 ms RunLoop at the cold boot; the loop went on calling RunLoop in the later launches": s[1] == launches and s[2] <= 1 and s[3] > 2,
         "C:\\OXOS\\log\\extensions.log: 'extension slow_loop delayed extension loop by N ms' for it, once, 500 < N < 2000": len(delays) == 1 and delays[0] and
             500 < int(delays[0][1]) < 2000,
-        "oxos_log to the file (hello: OXOS_LOG_SERIAL | OXOS_LOG_FILE): its greeting at each launch in extensions.log":
-            sum(line.startswith("[hello] Hello from OXOS ") for line in lines) == launches,
-        "Unload at each quick reboot": x[4] == launches - 1,
+        "example_run_loop: '1 s into this title.' from its RunLoop; at each title's end how long it ran": "[example_run_loop] 1 s into this title." in lines and
+            sum(bool(re.fullmatch(r"\[example_run_loop\] This title ran \d+ s\.", l)) for l in lines) == launches - 1,
+        f"example_kernel_hook: its start line at each of the {launches} launches (oxos_log's default: the file and the serial port); its NtOpenFile count and "
+        "end line at each title's end": hook_lines[0::3] == [hook_start] * launches and hook_lines[2::3] == [hook_end] * (launches - 1) and
+            len(hook_counts) == launches - 1 and all(hook_counts),
+        f"example_title_event: {launches} launches in its state page; the title's name and the one before it": t[0] == launches and
+            '[example_title_event] "OXOS kernel test title" is starting, the first title since the cold boot.' in lines and
+            any(l.startswith('[example_title_event] ') and 'the title before it was "OXOS kernel test title"' in l for l in lines),
+        "example_title_event: the LED orange from its RunLoop, for the title led_title names (any case)":
+            '[example_title_event] "OXOS kernel test title": the LED is orange.' in lines,
+        "Terminate at each quick reboot": x[4] == launches - 1,
         "events: a load and a loaded title per launch, an exit per quick reboot":
             x[7] >= launches and x[8] == launches and x[9] == launches - 1,
         "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (RunLoop) only chain's": x[10] > 0 and c[2] == x[10] + launches,
@@ -1384,13 +1399,11 @@ def main():
             results = run_checks(mon, a.hdd, a.title_map)
         if a.serial:
             results["serial"] = serial_checks(serial_log)
-            if a.extensions:  # the SDK's example writes what its README shows
+            if a.extensions:  # the SDK's examples write what their sources show, on the serial port too
                 text = open(serial_log, "rb").read().decode("latin1") if os.path.exists(serial_log) else ""
-                hello = [line for line in text.splitlines() if line.startswith("[hello]")]
-                results["serial"]["the example extension hello: its greeting, title, goodbye"] = (
-                    any(line.startswith("[hello] Hello from OXOS ") for line in hello)
-                    and any(line.endswith('"OXOS kernel test title" is starting.') for line in hello)
-                    and any(line.startswith("[hello] Goodbye: ") for line in hello))
+                results["serial"]["the examples' lines on the serial port: example_kernel_hook's start, example_title_event's title"] = (
+                    any(line.startswith("[example_kernel_hook] Starting extension ") for line in text.splitlines())
+                    and any(line.startswith('[example_title_event] "OXOS kernel test title" is starting') for line in text.splitlines()))
         ok = True
         for group, checks in results.items():
             for name, passed in checks.items():

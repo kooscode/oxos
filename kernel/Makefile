@@ -1,5 +1,5 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
-#   make            -> build/kernel/self_tests/xboxkrnl.exe (+ map)
+#   make            -> build/kernel/self_tests/oxoskrnl.exe (+ map)
 #   make bios       -> build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes;
 #                      spec/stock/01 §5)
 #   make test       -> boot build/kernel/self_tests/bios.bin in xemu and check all milestone conditions (boot
@@ -44,7 +44,7 @@ SELFTEST  ?= 1
 RETAIL_MEDIA_POLICY ?= 0
 TRACE_IMPORTS ?= 0
 # Source-level debugging with gdb (make run_gdb, tools/debug_app.py): DWARF debug info, and -Og so that stepping follows the source. C++ functions get no
-# (MSVC-style) linkage names, which gdb cannot demangle, so gdb names them from the source. The BIOS packs the kernel as usual; xboxkrnl.elf (the same link with
+# (MSVC-style) linkage names, which gdb cannot demangle, so gdb names them from the source. The BIOS packs the kernel as usual; oxoskrnl.elf (the same link with
 # the debug info kept, converted to ELF, which gdb reads better than PE) is the symbol file for gdb.
 DEBUG     ?= 0
 # The kernel is built for size (-Oz): its code stays resident, in memory titles count on (spec/oxos_internal/18). Code where speed shows uses -O2 (FAST_SRCS
@@ -90,7 +90,7 @@ XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
 # The kernel extensions' binary interface, shared with their SDK (spec/oxos_internal/34).
-CXXFLAGS += -I$(ROOT)/sdk/include
+CXXFLAGS += -I$(ROOT)/sdk/include -I$(ROOT)/sdk/src
 # The boot self-tests' header, for the kernel's hooks that start them (SELFTEST=1 builds only).
 CXXFLAGS += $(if $(filter 0,$(SELFTEST)),,-I$(ROOT)/tests/kernel_self_tests)
 # The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
@@ -98,7 +98,7 @@ CXXFLAGS += -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
            /ALIGN:0x20 /FILEALIGN:0x20 /MERGE:.rdata=.text /MERGE:.bss=.data /SAFESEH:NO \
            /SECTION:.xka,D /SECTION:.xkb,D \
-           /Brepro /DEBUG:NONE /MAP:$(BUILD)/xboxkrnl.map
+           /Brepro /DEBUG:NONE /MAP:$(BUILD)/oxoskrnl.map
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and take memory titles count on (Halo 2 needs nearly
 # all of it). Every kernel header (each folder of src/ holds its own): a source file is rebuilt when one changes.
@@ -116,7 +116,7 @@ SELFTEST_SRCS := $(if $(filter 0,$(SELFTEST)),,$(wildcard $(SELF_TESTS_DIR)/*.cp
 OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) \
         $(SELFTEST_SRCS:$(SELF_TESTS_DIR)/%.cpp=$(BUILD)/kernel_self_tests/%.obj)
 
-all: $(BUILD)/xboxkrnl.exe
+all: $(BUILD)/oxoskrnl.exe
 
 # Boot-only code (spec/oxos_internal/18_boot_memory.md): these files may call one another's boot-only functions.
 BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,nic.obj,ip.obj,tcp.obj,webserver.obj,webpage.obj
@@ -169,23 +169,23 @@ $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/xboxkrnl.def: exports.tsv $(ROOT)/tools/gen_def.py
+$(BUILD)/oxoskrnl.def: exports.tsv $(ROOT)/tools/gen_def.py
 	@mkdir -p $(BUILD)
 	python3 -I $(ROOT)/tools/gen_def.py exports.tsv $@
 
 ifeq ($(DEBUG),1)
 # One link with the debug info; the kernel is the same file with the debug sections stripped, so its code and data sit at exactly the addresses gdb reads from
-# xboxkrnl.dbg.exe.
-$(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
-	$(LD) $(filter-out /DEBUG:NONE,$(LDFLAGS)) /DEBUG:DWARF /DEF:$(BUILD)/xboxkrnl.def \
-	    /OUT:$(BUILD)/xboxkrnl.dbg.exe $(OBJS)
-	$(OBJCOPY) --strip-all $(BUILD)/xboxkrnl.dbg.exe $@
-	$(GNU_OBJCOPY) -O elf32-i386 $(BUILD)/xboxkrnl.dbg.exe $(BUILD)/xboxkrnl.elf
+# oxoskrnl.dbg.exe.
+$(BUILD)/oxoskrnl.exe: $(OBJS) $(BUILD)/oxoskrnl.def
+	$(LD) $(filter-out /DEBUG:NONE,$(LDFLAGS)) /DEBUG:DWARF /DEF:$(BUILD)/oxoskrnl.def \
+	    /OUT:$(BUILD)/oxoskrnl.dbg.exe $(OBJS)
+	$(OBJCOPY) --strip-all $(BUILD)/oxoskrnl.dbg.exe $@
+	$(GNU_OBJCOPY) -O elf32-i386 $(BUILD)/oxoskrnl.dbg.exe $(BUILD)/oxoskrnl.elf
 else
-$(BUILD)/xboxkrnl.exe: $(OBJS) $(BUILD)/xboxkrnl.def
-	$(LD) $(LDFLAGS) /DEF:$(BUILD)/xboxkrnl.def /OUT:$@ $(OBJS)
+$(BUILD)/oxoskrnl.exe: $(OBJS) $(BUILD)/oxoskrnl.def
+	$(LD) $(LDFLAGS) /DEF:$(BUILD)/oxoskrnl.def /OUT:$@ $(OBJS)
 endif
-	python3 -I $(ROOT)/tools/check_kernel_layout.py --exe $@ --map $(BUILD)/xboxkrnl.map --boot-objs $(BOOT_OBJS) \
+	python3 -I $(ROOT)/tools/check_kernel_layout.py --exe $@ --map $(BUILD)/oxoskrnl.map --boot-objs $(BOOT_OBJS) \
 	    --boot-entries $(BOOT_ENTRIES) --data-copy $(KI_DATA_COPY_SIZE) $(OBJS) || { rm -f $@; exit 1; }
 
 # Kernel test title (tests/kernel_test_title): a minimal freestanding "game" the boot tests run from a disc to check the title loader and the kernel functions
@@ -304,22 +304,22 @@ mcpx_dump:
 # 0xB0000000 (XK_EXTENSION_LOADER_BASE) against this kernel's addresses, then appended to the kernel image.
 EXTENSION_LOADER_OBJS := $(patsubst src/%.cpp,$(BUILD)/%.obj,$(EXTENSION_LOADER_SRCS))
 EXTENSION_LOADER := $(BUILD)/extension_loader.exe
-$(EXTENSION_LOADER): $(EXTENSION_LOADER_OBJS) $(BUILD)/xboxkrnl.exe $(ROOT)/tools/link_extension_loader.py
-	python3 -I $(ROOT)/tools/link_extension_loader.py --kernel $(BUILD)/xboxkrnl.exe --map $(BUILD)/xboxkrnl.map \
+$(EXTENSION_LOADER): $(EXTENSION_LOADER_OBJS) $(BUILD)/oxoskrnl.exe $(ROOT)/tools/link_extension_loader.py
+	python3 -I $(ROOT)/tools/link_extension_loader.py --kernel $(BUILD)/oxoskrnl.exe --map $(BUILD)/oxoskrnl.map \
 	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(EXTENSION_LOADER_OBJS)
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 ifeq ($(IMAGE),base)
-$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(EXTENSION_LOADER)
+$(BUILD)/bios.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
 else
-$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
+$(BUILD)/bios.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
                    $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
-	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
-$(BUILD)/bios_256k.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
+	    --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
+$(BUILD)/bios_256k.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
                         $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K \
@@ -334,7 +334,7 @@ $(XDASH_HDD):
 hdd_image: $(XDASH_HDD)
 
 test: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(HDD_FETCH)
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) \
 	    --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map $(if $(filter 1,$(SERIAL)),--serial)
 	$(MAKE) test_dash test_relaunch test_fatal test_udf
 	$(if $(MCPX_ROM),$(MAKE) test_mcpx)
@@ -349,7 +349,7 @@ $(LBA48_HDD): $(HDD_FETCH)
 	mkdir -p $(LBA48_STATE)
 	python3 -I $(ROOT)/tests/qcow2.py --grow $(HDD_IMAGE) $@ 2T
 test_lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map \
 	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
 # exFAT disks (spec/oxos_internal/07_exfat_driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB, 16 KB clusters, sparse), the test disk's C:
@@ -363,26 +363,26 @@ $(EXFAT_HDD): $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K \
 	    --add /E/XkStale.stale=$(EXFAT_STATE)/stale.bin
 test_exfat: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(EXFAT_HDD)
-	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map \
 	    --hdd $(EXFAT_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
 test_mcpx: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin --mcpx-rom $(MCPX_ROM) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 
 # Dashboard phase: a build without self-tests, booted without a disc, so C:\xboxdash.xbe is launched.
 test_dash: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
 	# ... and with EvoX installed (C:\evoxdash.xbe): it is the dashboard started (spec/oxos_internal/19).
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --evox
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --evox
 	# ... and with C:\xboxdash.xbe moved to C:\Dashboard\default.xbe: it is started from there (spec/oxos_internal/19).
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as media\second.xbe through a persisted
 # LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console: the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10).
@@ -392,24 +392,24 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	for run in "--memory 64" "--memory 128" "--memory 64 --redirect"; do \
 	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	        --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 $$run || exit 1; \
 	done
 
 # Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions) and the SDK's example, built with the SDK as it ships
 # (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks, events,
 # RunLoops and Unloads (and log a slow RunLoop in C:\OXOS\log\extensions.log), and leave out the ones that fail, are refused or are not listed. The SDK's import
-# definitions are brought up to date with exports.tsv first (sdk/src/xboxkrnl.def, committed with it when they change).
+# definitions are brought up to date with exports.tsv first (sdk/src/oxoskrnl.def, committed with it when they change).
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/sdk/src/xboxkrnl.def
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv src $(ROOT)/sdk/src/oxoskrnl.def $(ROOT)/sdk/include/oxos_kernel.h $(ROOT)/sdk/src/kernel_table_check.c
 	$(MAKE) -C $(ROOT)/sdk
 	mkdir -p $(TEST_EXTENSIONS_DIR)
 	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)
-	cp $(ROOT)/build/sdk/examples/hello/hello.xos $(TEST_EXTENSIONS_DIR)/
+	cp $(ROOT)/build/sdk/examples/*/*.xos $(TEST_EXTENSIONS_DIR)/
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	    --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR)
 
 # Video encoder phase: the encoder tables must be what tools/gen_av_tables.py makes from the specs (spec/stock/18-20); then the release build on each encoder
@@ -420,24 +420,24 @@ test_encoders: $(HDD_FETCH)
 	@python3 -I $(ROOT)/tools/gen_av_tables.py --check src/hardware/video/video_modes.inc || { echo "src/hardware/video/video_modes.inc is stale: run tools/gen_av_tables.py --out src/hardware/video/video_modes.inc"; exit 1; }
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
-	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \
+	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc \
 	    --encoder $$e --boot-wait 2 || exit 1; done
 	$(MAKE) $(BUILD)/bios.bin
 	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin \
-	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \
+	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc \
 	    --encoder $$e --boot-wait 2 || exit 1; done
 
 # Fatal-error phase: no hard disk, so the disk driver reports a fatal error (EEPROM history, code on screen).
 test_fatal:
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --fatal --boot-wait 2
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --no-disc --fatal --boot-wait 2
 
 # Formatting at boot (spec/oxos_internal/30 §4): a new blank 16 GB disk (5 s countdown: not a release build), a blank one with the partition delete's marker
 # asking for 0 s, and a PC disk (MBR, NTFS; 5 s); each is formatted, then, with no dashboard on it, the upload server starts (no network link in these runs: it
 # waits for one).
 FORMAT_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
-    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --blank-hdd 16 --boot-wait 2
+    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/oxoskrnl.map --no-disc --blank-hdd 16 --boot-wait 2
 test_format:
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	$(FORMAT_TEST)
@@ -456,7 +456,7 @@ $(FATX16_HDD): $(XDASH_HDD)
 	python3 -I $(ROOT)/tests/fatx.py $(FATX16_STATE)/grown.qcow2 --format-f --out $@
 	rm -f $(FATX16_STATE)/grown.qcow2
 UPLOAD_FATX_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
-    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --no-disc --boot-wait 2 \
+    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/oxoskrnl.map --no-disc --boot-wait 2 \
     --upload 18080 --upload-xbe $(FTP_SERVER_XBE)
 test_upload: ftp_server $(XDASH_HDD) $(FATX16_HDD)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
@@ -466,7 +466,7 @@ test_upload: ftp_server $(XDASH_HDD) $(FATX16_HDD)
 
 # UDF phase (milestone 8): the self-test build with a UDF disc (tests/mkudf.py) instead of the XISO.
 test_udf: $(BUILD)/bios.bin $(HDD_FETCH)
-	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/xboxkrnl.map \
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map \
 	    --hdd $(HDD_IMAGE) --udf --boot-wait 4
 
 # Interactive: boot the release BIOS in xemu; optional ISO=path/to/game.iso. The HDD copy and EEPROM persist in STATE (saves and settings survive; made from
@@ -506,12 +506,12 @@ run_trace_basic: $(PLAY_FETCH)
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BASIC_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
 
 # Source-level debugging: the same as run_trace_basic with the debug kernel (DEBUG=1) and xemu's GDB server on localhost:$(GDB_PORT), paused at power-on. Attach
-# with gdb-multiarch (symbols: $(DEBUG_BUILD)/xboxkrnl.elf, plus an app's own); tools/debug_app.py does the same for an nxdk app, and tools/vscode/ sets it up
+# with gdb-multiarch (symbols: $(DEBUG_BUILD)/oxoskrnl.elf, plus an app's own); tools/debug_app.py does the same for an nxdk app, and tools/vscode/ sets it up
 # for VS Code.
 GDB_PORT    ?= 1234
 run_gdb: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(DEBUG_BUILD) SELFTEST=0 SERIAL=1 DEBUG=1 $(DEBUG_BUILD)/bios.bin
-	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/$(DEBUG_BUILD)/xboxkrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
+	@echo "attach from another terminal: gdb-multiarch $(CURDIR)/$(DEBUG_BUILD)/oxoskrnl.elf -ex 'target remote localhost:$(GDB_PORT)'"
 	python3 -I $(ROOT)/tools/run.py $(DEBUG_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
 	    --serial --gdb $(GDB_PORT)
 
@@ -527,10 +527,10 @@ run_trace_full: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(TRACE_BUILD) SELFTEST=0 TRACE_IMPORTS=$(TRACE) SERIAL=1 $(TRACE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) \
 	    --serial --qmp $(TRACE_BUILD)/qmp.sock $(if $(filter 2,$(TRACE)),--memory 128) \
-	    --trace-map $(TRACE_BUILD)/xboxkrnl.map --dump-dir $(TRACE_BUILD)/dumps
+	    --trace-map $(TRACE_BUILD)/oxoskrnl.map --dump-dir $(TRACE_BUILD)/dumps
 
 print_trace_dump:
-	python3 -I $(ROOT)/tools/trace.py --qmp $(TRACE_BUILD)/qmp.sock --map $(TRACE_BUILD)/xboxkrnl.map \
+	python3 -I $(ROOT)/tools/trace.py --qmp $(TRACE_BUILD)/qmp.sock --map $(TRACE_BUILD)/oxoskrnl.map \
 	    --exports exports.tsv $(if $(LAST),--last $(LAST)) $(if $(ONLY),--only $(ONLY)) $(if $(filter 1,$(ALL)),--all)
 
 # nxdk and SDL3 for the console apps (tools/*, tests/*_title except the kernel test title), fetched into third_party/ (not committed) by `make nxdk` or the
@@ -659,7 +659,7 @@ test_iso: $(ISO_LAUNCHER_XBE) $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	set -e; for kind in $(ISO_KINDS); do \
 	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	        --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	        --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	        --title-map $(TEST_TITLE).map --iso-launch $(ISO_LAUNCHER_XBE) --iso-kind $$kind --boot-wait 1; done
 
 iso_disc: $(ISO_LAUNCHER_XBE) $(PLAY_FETCH)
