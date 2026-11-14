@@ -3,7 +3,7 @@
 // emblem and caption. The title launcher waits for it, turns the screen off and frees its memory before the title starts; the title turns the screen on with
 // its first frame.
 #include <boot_splash/boot_splash.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <memory/memory.h>
 #include <objects/objects.h>

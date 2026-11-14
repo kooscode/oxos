@@ -46,12 +46,7 @@ static inline void oxos_log(const OXOS_CONTEXT *Context, const char *Format, ...
     __builtin_va_start(args, Format);
     RtlVsnprintf(text, sizeof(text), Format, args);
     __builtin_va_end(args);
-    char line[256];
-    RtlSnprintf(line, sizeof(line), "[%s] %s", Context->SectionName, text);
-    if (Context->LogTarget & OXOS_LOG_SERIAL)
-        DbgPrint("%s\n", line);
-    if ((Context->LogTarget & OXOS_LOG_FILE) && KeGetCurrentIrql() == 0)
-        OXOSAppendExtensionLog(line);
+    OXOSWriteExtensionLog(Context, text); // the kernel sends it where Context->LogTarget says
 }
 
 // The value of Key in the extension's section of oxos_extensions.ini (any case), or null.

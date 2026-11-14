@@ -292,7 +292,7 @@ before). The C++ class calls them for its author.
 
 | C function | Class method | What it does |
 |---|---|---|
-| `oxos_log(Context, Format, ...)` | `Log(Format, ...)` | one line, prefixed with the extension's section name, to where the log target says: the debug serial port through `DbgPrint` (a `SERIAL=1` kernel; the others keep only the in-memory debug log), `C:\OXOS\log\extensions.log` through `OXOSAppendExtensionLog` (§9.1, spec/oxos_internal/35; at `PASSIVE_LEVEL` only), or both |
+| `oxos_log(Context, Format, ...)` | `Log(Format, ...)` | one line, prefixed with the extension's section name, to where the log target says: the kernel's debug log (the serial port of a `SERIAL=1` kernel; a release kernel keeps nothing of it), `C:\OXOS\log\extensions.log` (spec/oxos_internal/35; at `PASSIVE_LEVEL` only), or both. The SDK formats the text; the kernel adds the section name and sends it on (export 416, §9.1) |
 | `oxos_set_log_target(Context, Target)` | `SetLogTarget(Target)` | where `oxos_log` writes from then on: `OXOS_LOG_SERIAL`, `OXOS_LOG_FILE` or both; at any time. The kernel starts each extension at both (user, 2026-11-14: a release kernel has no serial output, so the serial half costs nothing there, and a debug or trace kernel prints the lines too) |
 | `oxos_get_setting(Context, Key)` | `Setting(Key)` | the value of `Key` in the extension's section of `oxos_extensions.ini` (any case), or null |
 | `oxos_read_file(Path, MaxSize, &Size)` | `ReadFile(...)` | reads a whole file into pool memory (a `\Device\...` path) |
@@ -486,7 +486,7 @@ never exported these (titles link their own C library), so OXOS exports them at 
 |---|---|---|
 | 402-405 | `memcpy`, `memset`, `memmove`, `memcmp` (`cdecl`) | the compiler calls them for copies and zeroing, even with `-fno-builtin` |
 | 406-415 | `_allmul`, `_alldiv`, `_aulldiv`, `_allrem`, `_aullrem`, `_alldvrm`, `_aulldvrm`, `_allshl`, `_allshr`, `_aullshr` | the compiler's 64-bit arithmetic helpers for the `i386-pc-win32` target, each with its own register convention (`kernel/src/arch/int64.S`) |
-| 416 | `OXOSAppendExtensionLog(Text)` (`stdcall`) | one line in `C:\OXOS\log\extensions.log`, for `oxos_log`'s file target (spec/oxos_internal/35); extensions name no file, so they cannot write outside it |
+| 416 | `OXOSWriteExtensionLog(Context, Text)` (`stdcall`) | one line of `oxos_log`, `[SECTION] Text`, to where `Context->LogTarget` says: the debug log (`diagnostics::LogLine`) and/or `C:\OXOS\log\extensions.log` (spec/oxos_internal/35); extensions name no file, so they cannot write outside it |
 
 `kernel/exports.tsv` lists them with the convention `cdecl` or `compiler`. They cost the resident kernel 4 bytes each in its export table, and `memcmp`.
 

@@ -14,6 +14,9 @@ usage: check_kernel_layout.py --exe XBOXKRNL.exe --map XBOXKRNL.map --boot-objs 
 3. The title-start call (spec/oxos_internal/23_trainer_hook.md): dashboards search 0x80010000-0x8003AF90 for the first `call [0x00010128]` (or `call
    [0x80000010]`) to redirect it to a game trainer, and later search for `call [0x8000000C]` to put it back. The image must hold exactly one title-start call,
    inside that range and outside the boot-only sections, and none of the other two.
+4. Tables a bus master reads by physical address must not cross a 64 KB boundary: the IDE controller's PRD table (kernel/src/hardware/ide/ide_channel.cpp),
+   aligned only to 8 bytes so no alignment padding sits in the resident data. The kernel image is mapped at physical = virtual - 0x80000000, so the boundary is
+   the same in the map's addresses.
 """
 import argparse, os, re, struct, subprocess, sys
 
@@ -66,6 +69,25 @@ def data_init_size(exe):
 TITLE_SCAN_START, TITLE_SCAN_END = 0x80010000, 0x8003AF90
 TITLE_CALL = bytes.fromhex("ff1528010100")
 OTHER_CALLS = (bytes.fromhex("ff1510000080"), bytes.fromhex("ff150c000080"))
+
+
+NO_64K_CROSSING = {"hardware::ide::PrdTable": 33 * 8}  # name: bytes
+
+
+def crossing_errors(map_path):
+    """The tables of NO_64K_CROSSING that cross a 64 KB boundary, or are not in the map."""
+    found = {}
+    for line in open(map_path):
+        m = re.match(r"\s*[0-9a-f]{4}:[0-9a-f]{8}\s+(\S+)\s+([0-9a-f]{16})\s", line)
+        if m and qualified_name(m[1]) in NO_64K_CROSSING:
+            found[qualified_name(m[1])] = int(m[2], 16)
+    errors = []
+    for name, size in NO_64K_CROSSING.items():
+        if name not in found:
+            errors.append(f"{name} is not in the map (renamed? update NO_64K_CROSSING)")
+        elif found[name] >> 16 != (found[name] + size - 1) >> 16:
+            errors.append(f"{name} at {found[name]:#x} ({size:#x} bytes) crosses a 64 KB boundary, which its bus master cannot read across")
+    return errors
 
 
 def title_call_errors(exe):
@@ -125,11 +147,11 @@ def main():
         errors.append(f"the initialised .data is {init:#x} bytes, more than the quick-reboot copy holds "
                       f"({a.data_copy:#x}, KI_DATA_COPY_SIZE in src/arch/entry.S)")
     call_errors, calls = title_call_errors(a.exe)
-    errors += call_errors
+    errors += call_errors + crossing_errors(a.map)
     if errors:
         sys.exit("\n".join(errors))
     print(f"kernel layout: {count} boot-only symbols, none used by kept code; .data initialiser {init:#x} of "
-          f"{a.data_copy:#x} bytes; title-start call at {calls[0]:#x}")
+          f"{a.data_copy:#x} bytes; title-start call at {calls[0]:#x}; DMA tables inside 64 KB regions")
 
 
 if __name__ == "__main__":

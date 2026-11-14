@@ -5,7 +5,7 @@
 #include <core/core.h>
 #include <memory/memory.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::hardware::usb {
 

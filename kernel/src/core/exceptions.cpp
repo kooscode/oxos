@@ -1,6 +1,6 @@
 // Structured exception handling: trap translation, handler dispatch, raise, unwind, stack walks (spec/stock/14).
 #include <core/core.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <runtime/runtime.h>
 

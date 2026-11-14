@@ -11,7 +11,7 @@
 #include <objects/objects.h>
 #include <extensions/extension_parser.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <titles/titles.h>
 
 namespace xk::extensions {

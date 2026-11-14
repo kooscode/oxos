@@ -3,7 +3,6 @@
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
-#include <hardware/chipset/serial.h>
 
 namespace xk::diagnostics {
 

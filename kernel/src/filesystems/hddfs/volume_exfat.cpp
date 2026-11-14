@@ -2,7 +2,7 @@
 // own volume whose root is that folder; they share one EXFAT_DISK (geometry, up-case table, free count, block cache key). Here: the allocation bitmap, the
 // volume handle and size, and the mount.
 #include <filesystems/hddfs/hddfs.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::filesystems {
 

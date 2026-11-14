@@ -4,7 +4,6 @@
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
-#include <hardware/chipset/serial.h>
 
 namespace xk::diagnostics {
 

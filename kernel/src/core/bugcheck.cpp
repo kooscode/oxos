@@ -4,7 +4,6 @@
 #include <diagnostics/diagnostics.h>
 #include <user_interface/user_interface.h>
 #include <arch/arch.h>
-#include <hardware/chipset/serial.h>
 #include <titles/titles.h>
 
 XBAPI ULONG KiBugCheckData[5] = {}; // exported: code and the four parameters

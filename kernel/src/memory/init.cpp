@@ -1,6 +1,6 @@
 // Memory manager initialisation, the page database and the system PTE range (spec/stock/09 §1-3, §7).
 #include <memory/memory.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
 #include <runtime/runtime.h>

@@ -29,8 +29,11 @@ module), and the standard 16550 UART register set.
 - A byte that is not accepted within about 100 ms disables the port for the rest of the boot (a stuck or removed adapter must not hang the kernel).
 
 ## 4. What is sent
-- A banner at each boot (cold or quick), then each start-up step of KiSystemStartup.
-- Everything passed to DbgPrint (titles' and the kernel's own), as well as the in-memory log (spec/stock/13).
+Every line comes from one logger, `diagnostics::LogLine` (`kernel/src/diagnostics/serial_log.cpp`), which writes it to its in-memory copy (spec/stock/13) and
+here; the UART driver (`kernel/src/hardware/chipset/serial.cpp`) only sends bytes.
+- A banner at each boot (cold or quick), then each start-up step of KiSystemStartup: the kernel's own lines (`XK_SERIAL`).
+- Everything passed to DbgPrint or OutputDebugString (titles').
+- Kernel extensions' `oxos_log` lines with the serial target (spec/oxos_internal/34 §5.1).
 - Title loads: the image path and the loader's status.
 - Fatal paths: unexpected CPU exceptions (vector, error code, EIP), bug checks (code and four parameters), and fatal errors reported through the fatal-error
   screen (code).

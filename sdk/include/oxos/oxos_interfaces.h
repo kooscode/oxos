@@ -68,7 +68,7 @@ struct OXOS_CONTEXT {
 
 // --- Where oxos_log writes (OXOS_CONTEXT::LogTarget), one or both
 
-#define OXOS_LOG_SERIAL 1 // the debug serial port and the kernel's small in-memory debug log (debug kernels only: a release kernel has no serial output)
+#define OXOS_LOG_SERIAL 1 // the kernel's debug log: the debug serial port (debug kernels only: a release kernel keeps nothing of it)
 #define OXOS_LOG_FILE 2   // C:\OXOS\log\extensions.log (spec/oxos_internal/35), at PASSIVE_LEVEL only
 
 // --- The descriptor each extension exports as oxos_extension (§4.1)

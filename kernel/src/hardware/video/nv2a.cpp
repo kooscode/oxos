@@ -3,7 +3,7 @@
 #include <hardware/chipset/chipset.h>
 #include <arch/arch.h>
 #include <hardware/video/gpu_context.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::hardware::video {
 

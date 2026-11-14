@@ -1,5 +1,5 @@
 // Log files in C:\OXOS\log (spec/oxos_internal/35): lines of text appended to a named file, for what a console without a serial port should still keep (the
-// serial port and the in-memory debug log are in hardware/chipset/serial.cpp and core/debug.cpp). A log over its size limit is rotated: NAME_1.log is the
+// serial port and its in-memory copy, in SERIAL=1 builds only, are the debug log: serial_log.cpp). A log over its size limit is rotated: NAME_1.log is the
 // newest old part. Resident; file I/O, so PASSIVE_LEVEL only.
 #include <diagnostics/diagnostics.h>
 #include <core/core.h>
@@ -32,7 +32,8 @@ HANDLE Open(const char *Path, ACCESS_MASK Access, ULONG Disposition, ULONG Optio
     IO_STATUS_BLOCK iosb;
     HANDLE handle;
     ULONG attribute = Options & FILE_DIRECTORY_FILE ? FILE_ATTRIBUTE_DIRECTORY : 0;
-    NTSTATUS status = NtCreateFile(&handle, Access | SYNCHRONIZE, &attributes, &iosb, nullptr, attribute, 0, Disposition, Options | FILE_SYNCHRONOUS_IO_NONALERT);
+    NTSTATUS status = NtCreateFile(&handle, Access | SYNCHRONIZE, &attributes, &iosb, nullptr, attribute, 0, Disposition,
+                                   Options | FILE_SYNCHRONOUS_IO_NONALERT);
     return NT_SUCCESS(status) ? handle : nullptr;
 }
 
@@ -122,9 +123,3 @@ void AppendLogLine(const char *LogName, const char *Format, ...) {
 }
 
 } // namespace xk::diagnostics
-
-// OXOS's own export (416, spec/oxos_internal/35 §2): one line of a kernel extension's oxos_log in C:\OXOS\log\extensions.log. Extensions name no file: they can
-// write only this log.
-XBAPI void NTAPI OXOSAppendExtensionLog(PCSZ Text) {
-    xk::diagnostics::AppendLogLine("extensions", "%s", Text);
-}

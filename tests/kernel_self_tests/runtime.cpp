@@ -5,6 +5,7 @@
 #include <hardware/chipset/chipset.h>
 #include <objects/objects.h>
 #include <core/core.h>
+#include <diagnostics/diagnostics.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
@@ -190,11 +191,17 @@ static void NTAPI RtlControllerThread(PVOID) {
     NtSetSystemTime(&now, nullptr);
     KiTestRtlTimeOk = ok;
 
-    // DbgPrint lands in the log
+    // DbgPrint lands in the debug log's ring (read around its end: the line may wrap)
     DbgPrint("xk-log %d %s\n", 77, "marker");
+    static const char MARKER[] = "xk-log 77 marker\n";
+    constexpr ULONG RING = sizeof(diagnostics::DebugLog);
     ok = false;
-    for (ULONG i = 0; i + 14 < sizeof(core::DebugLog) && !ok; i++)
-        ok = core::DebugLog[i] == 'x' && StrEq(core::DebugLog + i, "xk-log 77 marker\n");
+    for (ULONG i = 0; i < RING && !ok; i++) {
+        ULONG n = 0;
+        while (MARKER[n] && diagnostics::DebugLog[(i + n) % RING] == MARKER[n])
+            n++;
+        ok = !MARKER[n];
+    }
     KiTestRtlDbgOk = ok;
 
     // KeSetEventBoostPriority hands the event to the waiter. The test waits for the real state, at most 1 s each: the waiter in its wait (on the event's wait

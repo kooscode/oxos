@@ -2,7 +2,7 @@
 #include <io/io.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::io {
 

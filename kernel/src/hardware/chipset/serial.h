@@ -1,29 +1,12 @@
-// Debug serial port (spec/oxos_internal/03_debug_serial.md): SuperIO serial port 1 at 0x3F8, polled. Compiled in with SERIAL=1.
+// Debug serial port (spec/oxos_internal/03_debug_serial.md): the UART driver, SuperIO serial port 1 at 0x3F8, polled. Compiled in with SERIAL=1. The log lines
+// that go out through it (XK_SERIAL, DbgPrint, oxos_log) are formatted by diagnostics::LogLine (diagnostics/serial_log.cpp).
 #pragma once
 #include <runtime/types.h>
-#include <diagnostics/diagnostics.h>
-
-// Start-up marks (diagnostics/boot_marks.cpp): until the title starts, every log point also leaves an address of its own in CMOS 0x70-0x76 ('P', address,
-// count), in every build. A console that freezes during start-up with no log (a release build) names the last log point it passed at the next boot (a serial
-// build reports it). With the serial log the address is the format string's; without it (release builds) the text is not needed, so each log point has a
-// one-byte mark instead, named in the map after the function that holds it (the strings would take about 5 KB of resident memory,
-// spec/oxos_internal/18_boot_memory.md).
-#define XK_MARK_ID() ([] { static const char XkMark = 0; return &XkMark; }())
-#if XK_DEBUG_SERIAL
-// A start-up mark that is never printed (hot paths: each disk transfer, each SMBus transaction).
-#define XK_MARK(Label) ::xk::diagnostics::BootMark(Label)
-#else
-#define XK_MARK(Label) ::xk::diagnostics::BootMark(XK_MARK_ID())
-#endif
 
 #if XK_DEBUG_SERIAL
 namespace xk::hardware::chipset {
-void InitSerial();
-void WriteSerial(const char *Text, ULONG Length);
-void SerialPrint(const char *Format, ...);
+void InitSerial();                                // finds the SuperIO and sets the UART up; SerialPresent says whether one answered
+void WriteSerial(const char *Text, ULONG Length); // Length bytes, a CR before each LF; gives up (SerialPresent false) when the UART stops taking them
 extern volatile BOOLEAN SerialPresent;
 } // namespace xk::hardware::chipset
-#define XK_SERIAL(...) ::xk::hardware::chipset::SerialPrint(__VA_ARGS__)
-#else
-#define XK_SERIAL(Format, ...) ::xk::diagnostics::BootMark(XK_MARK_ID())
 #endif

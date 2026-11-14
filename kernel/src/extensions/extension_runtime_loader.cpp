@@ -9,7 +9,7 @@
 #include <memory/memory.h>
 #include <objects/objects.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <titles/titles.h>
 
 namespace xk::extensions {

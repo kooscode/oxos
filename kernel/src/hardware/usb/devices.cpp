@@ -3,7 +3,7 @@
 // Boot-only.
 #include <hardware/usb/usb.h>
 #include <core/core.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::hardware::usb {
 

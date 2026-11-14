@@ -1,7 +1,7 @@
 // The MCPX's AC'97 controller (spec/oxos_internal/17_boot_jingle.md §2): its codec started, and its PCM and S/PDIF outputs played together from one list of
 // buffer descriptors. Boot-only, except StopNow.
 #include <hardware/audio/audio.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <memory/memory.h>
 

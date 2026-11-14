@@ -1,7 +1,7 @@
 // IDE DVD drive (ATAPI, device 1): \Device\CdRom0, READ via bus-master DMA, packet IOCTLs (spec/stock/04 §3).
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <runtime/runtime.h>
 #include <io/io.h>

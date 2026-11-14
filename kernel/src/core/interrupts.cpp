@@ -5,7 +5,6 @@
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <diagnostics/diagnostics.h>
-#include <hardware/chipset/serial.h>
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
 #include <io/io.h>

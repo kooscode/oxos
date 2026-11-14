@@ -1,13 +1,13 @@
-// Diagnostics (src/diagnostics/): what a console that freezes or faults leaves for the next boot, what the boot loader and the hardware report at start-up,
-// and the log files in C:\OXOS\log. The CMOS bytes 0x70-0x7F hold the records; a serial build (spec/oxos_internal/03_debug_serial.md) prints them, and the reports, at the next boot.
+// Diagnostics (src/diagnostics/): what a console that freezes or faults leaves for the next boot, what the boot loader and the hardware report at start-up, the
+// debug log (its ring and the serial port) and the log files in C:\OXOS\log. The CMOS bytes 0x70-0x7F hold the records; a serial build
+// (spec/oxos_internal/03_debug_serial.md) prints them, and the reports, at the next boot.
 #pragma once
 #include <runtime/types.h>
 
 namespace xk::diagnostics {
 
 // --- Start-up marks (boot_marks.cpp). Until the title starts, every log point leaves its address in CMOS 0x70-0x76
-// ('P', address, count) through XK_MARK / XK_SERIAL (hardware/chipset/serial.h); a start-up that stalls for 3 s gets a watchdog record ('W', 0x77-0x7D) from
-// the clock interrupt.
+// ('P', address, count) through XK_MARK / XK_SERIAL (below); a start-up that stalls for 3 s gets a watchdog record ('W', 0x77-0x7D) from the clock interrupt.
 
 void BootMark(const char *Format);
 void BootMarkWatchdog(ULONG Eip, UCHAR Irql); // each clock interrupt: the interrupted EIP and IRQL
@@ -39,6 +39,17 @@ void ReportNvPads(const char *When);            // the NV2A memory pad registers
 void ReportRefresh();                           // the DRAM refresh, GPU clock and X-code records
 extern ULONG MachineCheckBanks;                 // the CPU's machine-check banks (0: none)
 
+// --- The debug log (serial_log.cpp): the kernel's, titles' (DbgPrint, OutputDebugString) and extensions' (oxos_log) debug lines, to the in-memory ring and
+// the debug serial port; SERIAL=1 builds only (a release kernel's LogLine does nothing)
+
+// One line, Format as for RtlVsnprintf (at most 255 characters): its start-up mark, then the ring and the serial port.
+void LogLine(const char *Format, ...);
+void LogLineArgs(const char *Format, __builtin_va_list Args); // the same, for a caller holding a va_list (DbgPrint)
+#if XK_DEBUG_SERIAL
+extern char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256];           // the ring, readable from the emulator monitor
+extern volatile ULONG DebugLogPosition;                        // characters written so far; the next goes at this % sizeof(DebugLog)
+#endif
+
 // --- Log files (file_log.cpp)
 
 // Appends one line (Format as for RtlVsnprintf, at most 253 characters, then CR LF) to C:\OXOS\log\LogName.log, creating the folder and the file when they are
@@ -49,3 +60,20 @@ void AppendLogLine(const char *LogName, const char *Format, ...);
 void CreateLogFolders();
 
 } // namespace xk::diagnostics
+
+// --- Log points in kernel code
+
+// Start-up marks (boot_marks.cpp): until the title starts, every log point also leaves an address of its own in CMOS 0x70-0x76 ('P', address, count), in every
+// build. A console that freezes during start-up with no log (a release build) names the last log point it passed at the next boot (a serial build reports it).
+// With the serial log the address is the format string's; without it (release builds) the text is not needed, so each log point has a one-byte mark instead,
+// named in the map after the function that holds it (the strings would take about 5 KB of resident memory, spec/oxos_internal/18_boot_memory.md).
+#define XK_MARK_ID() ([] { static const char XkMark = 0; return &XkMark; }())
+#if XK_DEBUG_SERIAL
+// A start-up mark that is never printed (hot paths: each disk transfer, each SMBus transaction).
+#define XK_MARK(Label) ::xk::diagnostics::BootMark(Label)
+// A line of the kernel's own in the debug log (LogLine).
+#define XK_SERIAL(...) ::xk::diagnostics::LogLine(__VA_ARGS__)
+#else
+#define XK_MARK(Label) ::xk::diagnostics::BootMark(XK_MARK_ID())
+#define XK_SERIAL(Format, ...) ::xk::diagnostics::BootMark(XK_MARK_ID())
+#endif

@@ -49,19 +49,24 @@ void WriteSerial(const char *Text, ULONG Length) {
     HostLogWrite(Text, Length);
 }
 
-void SerialPrint(const char *Format, ...) {
-    char line[256];
-    va_list ap;
-    va_start(ap, Format);
-    int n = RtlVsnprintf(line, sizeof(line), Format, ap);
-    va_end(ap);
-    HostLogWrite(line, n < 0 ? 0 : n >= (int)sizeof(line) ? sizeof(line) - 1 : (size_t)n);
-}
 
 } // namespace xk::hardware::chipset
 
-// diagnostics/: the start-up marks and last words (CMOS records) are not under test here.
+// diagnostics/: the start-up marks and last words (CMOS records) are not under test here; the debug log goes to the harness's log.
 namespace xk::diagnostics {
+void LogLineArgs(const char *Format, va_list Args) {
+    char line[256];
+    int n = RtlVsnprintf(line, sizeof(line), Format, Args);
+    HostLogWrite(line, n < 0 ? 0 : n >= (int)sizeof(line) ? sizeof(line) - 1 : (size_t)n);
+}
+
+void LogLine(const char *Format, ...) {
+    va_list args;
+    va_start(args, Format);
+    LogLineArgs(Format, args);
+    va_end(args);
+}
+
 volatile BOOLEAN BootMarksOn;
 
 void BootMark(const char *) {

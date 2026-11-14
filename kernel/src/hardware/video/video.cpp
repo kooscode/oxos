@@ -3,7 +3,7 @@
 // (spec/oxos_internal/02_display_modes.md).
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
 #include <titles/titles.h>

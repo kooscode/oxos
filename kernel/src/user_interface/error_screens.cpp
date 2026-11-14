@@ -5,7 +5,7 @@
 #include <core/core.h>
 #include <memory/memory.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
 #include <titles/titles.h>

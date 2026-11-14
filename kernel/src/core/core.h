@@ -536,16 +536,13 @@ extern "C" volatile ULONG KiQuickRebootCount;
 extern "C" UCHAR KiPersistedBootKeys[32];
 
 namespace xk::core {
-// Diagnostics: the last fatal exception (core/startup.cpp), interrupt counts (core/interrupts.cpp), the debug output (core/debug.cpp). The start-up marks and
-// the last-words records are in diagnostics/diagnostics.h.
+// Diagnostics: the last fatal exception (core/startup.cpp), interrupt counts (core/interrupts.cpp), a title's debug output (core/debug.cpp). The debug log
+// itself, the start-up marks and the last-words records are in diagnostics/diagnostics.h.
 extern volatile ULONG LastExceptionVector, LastExceptionCode, LastExceptionEip;
 extern volatile ULONG IrqCounts[16];
 void PrintDebugString(const char *Text, ULONG Length);
 } // namespace xk::core
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...);
-namespace xk::core {
-extern char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // the debug output's ring buffer
-} // namespace xk::core
 
 // --- System threads as executive objects (core/system_threads.cpp; spec/stock/07, spec/stock/10 §5)
 

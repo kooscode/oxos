@@ -1,6 +1,6 @@
 // Exported memory-manager routines (spec/stock/09 §2-5).
 #include <memory/memory.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
 #include <runtime/runtime.h>

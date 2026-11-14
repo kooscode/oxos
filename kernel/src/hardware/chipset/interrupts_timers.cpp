@@ -1,7 +1,7 @@
 // 8259 PIC, interrupt enable/disable, 8254 PIT and CMOS RTC (spec/stock/02 §3.3-3.6, spec/stock/06 §1, §3).
 #include <hardware/chipset/chipset.h>
 #include <arch/arch.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::hardware::chipset {
 

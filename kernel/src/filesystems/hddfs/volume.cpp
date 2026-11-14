@@ -2,7 +2,7 @@
 // spec/stock/04b).
 #include <filesystems/hddfs/hddfs.h>
 #include <filesystems/filesystems.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <io/io.h>
 
 namespace xk::filesystems {

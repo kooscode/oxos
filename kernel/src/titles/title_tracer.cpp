@@ -4,7 +4,7 @@
 #include <runtime/runtime.h>
 #include <objects/objects.h>
 #include <io/io.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 
 extern "C" {
 ULONG XkTraceTargets[XK_TRACE_MAX_IMPORTS];

@@ -2,7 +2,7 @@
 // power-cycles the console (a cold boot: a netbooted console fetches its image again and starts the launcher, a mounted disc image is dropped).
 #include <in_game_reset/in_game_reset.h>
 #include <hardware/chipset/chipset.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <runtime/types.h>
 #include <core/core.h>
 

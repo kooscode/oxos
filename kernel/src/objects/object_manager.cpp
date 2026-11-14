@@ -1,6 +1,6 @@
 // Object manager (spec/stock/10): headers, handle table, namespace, directories and symbolic links. The Ob "lock" is DISPATCH_LEVEL, as in the reference.
 #include <objects/objects.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <runtime/runtime.h>
 

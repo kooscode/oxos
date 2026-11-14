@@ -2,7 +2,7 @@
 // ABI.
 #include <kernel_self_tests.h>
 #include <hardware/chipset/chipset.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <memory/memory.h>
 #include <objects/objects.h>

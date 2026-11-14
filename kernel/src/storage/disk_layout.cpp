@@ -2,7 +2,7 @@
 // defaults or a PARTINFO table), or an exFAT volume (GPT, MBR or the whole disk). Read once, at the first open of a partition or the power-cycle count.
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <runtime/runtime.h>
 #include <hardware/ide/ide.h>
 #include <storage/storage.h>

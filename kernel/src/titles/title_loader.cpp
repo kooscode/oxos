@@ -8,7 +8,6 @@
 #include <ini_file/title_patcher_ini.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
 #include <titles/title_start_call.h>
 #include <hardware/chipset/chipset.h>
 #include <storage/storage.h>

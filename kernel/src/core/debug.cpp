@@ -1,46 +1,26 @@
-// Debugger services without a kernel debugger: DbgPrint goes to an in-memory log and, in SERIAL=1 builds, to the serial port (spec/stock/13).
+// Debugger services without a kernel debugger (spec/stock/13): DbgPrint and a title's OutputDebugString go to the kernel's debug log
+// (diagnostics/serial_log.cpp: the serial port and its in-memory copy in SERIAL=1 builds; nothing in a release kernel, as the stock kernel without a debugger).
 #include <core/core.h>
-#include <arch/arch.h>
-#include <hardware/chipset/serial.h>
-#include <runtime/runtime.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::core {
-
-#define va_start(v, l) __builtin_va_start(v, l)
-#define va_end(v) __builtin_va_end(v)
 
 // Exported: there is no kernel debugger (titles and the XDK check these).
 XBAPI BOOLEAN KdDebuggerEnabled, KdDebuggerNotPresent;
 XBAPI BOOLEAN KdDebuggerEnabled = FALSE;
 XBAPI BOOLEAN KdDebuggerNotPresent = TRUE;
 
-// Ring buffer of debug output, readable from the emulator monitor (DebugLog / DebugLogPosition).
-char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256]; // small in release builds: it stays resident (spec/stock/09 §7)
-volatile ULONG DebugLogPosition;
-
-static void WriteDebugLog(const char *s, ULONG n) {
-    ULONG flags = save_flags_cli();
-    for (ULONG i = 0; i < n; i++)
-        DebugLog[(DebugLogPosition + i) % sizeof(DebugLog)] = s[i];
-    DebugLogPosition = DebugLogPosition + n;
-    restore_flags(flags);
-#if XK_DEBUG_SERIAL
-    hardware::chipset::WriteSerial(s, n);
-#endif
-}
-
-// Debug service 1 (int 0x2D, print): the counted string a title's OutputDebugString / DbgPrint passes (spec/stock/14).
+// Debug service 1 (int 0x2D, print): the counted string a title's OutputDebugString / DbgPrint passes (spec/stock/14); copied as it is ("%.*s": no formatting,
+// no closing NUL needed).
 void PrintDebugString(const char *Text, ULONG Length) {
-    WriteDebugLog(Text, Length > 512 ? 512 : Length);
+    diagnostics::LogLine("%.*s", (int)Length, Text);
 }
 
 XBAPI ULONG __cdecl DbgPrint(const char *Format, ...) {
-    char line[512];
-    va_list ap;
-    va_start(ap, Format);
-    int n = RtlVsnprintf(line, sizeof(line), Format, ap);
-    va_end(ap);
-    WriteDebugLog(line, n < 0 ? sizeof(line) : (ULONG)n);
+    __builtin_va_list args;
+    __builtin_va_start(args, Format);
+    diagnostics::LogLineArgs(Format, args);
+    __builtin_va_end(args);
     return STATUS_SUCCESS;
 }
 

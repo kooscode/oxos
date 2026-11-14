@@ -1,7 +1,7 @@
 // PCI configuration access and the Xbox chipset set-up (spec/stock/02_executive_init.md §3.7-3.8).
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
 

@@ -1,6 +1,6 @@
 // FATX volumes: reading the boot sector and the FAT size at mount (spec/stock/04 §6), and counting the free clusters.
 #include <filesystems/hddfs/hddfs.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <io/io.h>
 
 namespace xk::filesystems {

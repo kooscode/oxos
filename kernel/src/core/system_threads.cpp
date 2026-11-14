@@ -2,7 +2,7 @@
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <runtime/runtime.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <objects/objects.h>
 
 namespace xk::core {

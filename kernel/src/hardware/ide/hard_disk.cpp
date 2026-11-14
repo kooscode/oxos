@@ -2,7 +2,7 @@
 // (spec/oxos_internal/04_lba48.md).
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
 #include <runtime/runtime.h>

@@ -1,6 +1,6 @@
 // IDE channel: interrupt, completion DPC, timeout timer, packet serialisation, bus-master DMA (spec/stock/04 §1, §5).
 #include <storage/storage.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
 #include <memory/memory.h>
@@ -23,13 +23,13 @@ bool WaitForIdeStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
 
 // --- Bus-master DMA
 
-// Physical region descriptor table: 33 entries cover 128 KB starting at any page offset. 512-byte alignment keeps it inside one 64 KB region as the bus master
-// requires.
+// Physical region descriptor table: 33 entries cover 128 KB starting at any page offset. The bus master wants it in one 64 KB region: the link checks that
+// (tools/check_kernel_layout.py), so it needs no 512-byte alignment, whose padding in the resident data moved with every change before it.
 struct IDE_PRD {
     ULONG Physical;
     ULONG Count; // bytes in bits 0-15 (0 = 64 KB), bit 31 = end of table
 };
-alignas(512) static IDE_PRD PrdTable[33];
+alignas(8) static IDE_PRD PrdTable[33];
 
 volatile ULONG BadDmaPages; // diagnostics: transfers refused because a page was not valid RAM
 

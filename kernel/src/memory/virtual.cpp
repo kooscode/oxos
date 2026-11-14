@@ -2,7 +2,7 @@
 // reservations are VADs kept in an address-sorted list.
 #include <memory/memory.h>
 #include <arch/arch.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
 

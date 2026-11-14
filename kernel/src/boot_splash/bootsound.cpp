@@ -2,7 +2,7 @@
 // through the AC'97 controller (hardware/audio/), starting with the splash's fade-in. The title launcher waits for the jingle to end, and the controller is
 // stopped and its memory freed before the title starts.
 #include <boot_splash/boot_splash.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <memory/memory.h>
 #include <objects/objects.h>

@@ -2,7 +2,7 @@
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
 #include <arch/arch.h>
-#include <hardware/chipset/serial.h>
+#include <diagnostics/diagnostics.h>
 #include <core/core.h>
 #include <titles/titles.h>
 #include <extensions/extensions.h>
