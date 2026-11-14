@@ -1,9 +1,9 @@
 # 31. The upload server: a dashboard from a browser (OXOS's own)
 
 Status: implemented 2026-11-08. Code: `kernel/src/network/` (the network card and a small IPv4 stack),
-`kernel/src/webserver/` (the HTTP server and its page), `kernel/include/xk/nic.h` (the network card's registers and
-bring-up, shared with the 2BL's netboot), `kernel/src/titles/loader.cpp` (when it runs), `kernel/src/core/fatal.cpp`
-(its screen).
+`kernel/src/webserver/` (the HTTP server and its page), `kernel/src/user_interface/file_manager_screen.cpp` (its
+screen), `kernel/src/hardware/ethernet/nic.h` (the network card's registers and bring-up, shared with the 2BL's
+netboot), `kernel/src/titles/title_loader.cpp` (when it runs).
 
 The OXOS File Manager: the kernel serves a web page on the local network, and any browser uploads files and folders
 to the disk, creates and deletes folders and files, and launches an XBE. A console without a dashboard, such as one
@@ -16,10 +16,11 @@ until an XBE is launched. When the network card does not start (no PCI device), 
 
 ## 2. The network
 - **The card:** the MCPX's NVIDIA Ethernet controller, polled (no interrupts), with the same bring-up as the 2BL's
-  netboot (`xk/nic.h`). 64 receive and 32 transmit descriptors in one uncached page (the card and the processor both
-  change them); the frame buffers in ordinary cached memory (the MCPX's DMA keeps the cache coherent; with uncached
-  buffers every byte the stack read went to RAM, and uploads ran at 2.7 MB/s instead of 11.8). Its MAC address is the
-  console's, EEPROM factory setting 0x101, so the server gets the address the console's titles get from DHCP.
+  netboot (`hardware/ethernet/nic.h`). 64 receive and 32 transmit descriptors in one uncached page (the card and the
+  processor both change them); the frame buffers in ordinary cached memory (the MCPX's DMA keeps the cache coherent;
+  with uncached buffers every byte the stack read went to RAM, and uploads ran at 2.7 MB/s instead of 11.8). Its MAC
+  address is the console's, EEPROM factory setting 0x101, so the server gets the address the console's titles get from
+  DHCP.
 - **IPv4** with ARP (answers requests for our address; a reply goes to the MAC address the request came from), ICMP
   echo (ping), UDP for DHCP, and TCP. No fragments, no IP options, no routing beyond answering the sender.
 - **DHCP:** DISCOVER, OFFER, REQUEST, ACK; no lease renewal (the server runs for minutes, not days). No answer within
@@ -77,8 +78,8 @@ before the first title and are freed when it starts (15 pages on the debug kit),
 kernel grows by the upload screen and the hooks only (about 1.8 KB, no new page). Their buffers (the card's rings and
 frame buffers, the connections' and the requests' buffers, about 1.3 MB) are allocated when the server starts and freed
 before the title starts; the network card is stopped first, so it does no DMA into memory the title gets. Ending the
-splash early (the format countdown, the upload screen: `bootscreen::StopSplash`) keeps the boot-only pages; the title
-start (`bootscreen::EndSplash`) frees them.
+splash early (the format countdown, the upload screen: `boot_splash::StopSplash`) keeps the boot-only pages; the title
+start (`boot_splash::EndSplash`) frees them.
 
 ## 7. Safety
 While the screen is up, anyone on the local network can write to the disk and start code, as with the FTP server

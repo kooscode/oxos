@@ -1,7 +1,8 @@
 // Deferred procedure calls (spec/stock/06 §4).
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
 
 namespace xk::core {
 

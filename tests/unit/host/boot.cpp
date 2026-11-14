@@ -6,10 +6,11 @@
 #include <cstring>
 #include <gtest/gtest.h>
 
-#include <xk/hardware.h>
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
 
 using namespace xk; // the kernel's subsystems as memory::, objects::, ...
 
@@ -64,8 +65,8 @@ static void NTAPI TestThread(PVOID p) {
 int BootAndRun(int (*body)(void *), void *context) {
     Make2blState();
     core::InitializeProcessor();
-    hardware::InitPic();
-    hardware::InitPit();
+    hardware::chipset::InitPic();
+    hardware::chipset::InitPit();
     memory::InitMemoryManager(false);
     core::InitializeDpcs();
     core::InitializeTimers();

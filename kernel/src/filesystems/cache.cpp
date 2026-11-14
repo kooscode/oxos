@@ -2,11 +2,11 @@
 // structure. Each buffer is a page of system memory counted as file-cache pages (MmQueryStatistics), mapped
 // read-only except while a caller writes it, described by a 20-byte element; the elements form one most-recently-
 // used list. 16 pages at boot; FscSetCacheSize changes it (the dashboard asks for 256).
-#include <xk/filesystems.h>
-#include <xk/io.h>
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/runtime.h>
+#include <filesystems/filesystems.h>
+#include <io/io.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <runtime/runtime.h>
 
 namespace xk::filesystems {
 

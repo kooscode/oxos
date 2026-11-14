@@ -2,8 +2,9 @@
 
 Status: implemented 2026-11-07. Code: `kernel/src/storage/disk_format.cpp` (GPT, partition delete, blank check),
 `kernel/src/filesystems/hddfs/format_exfat.cpp` (the exFAT volume), `kernel/src/storage/disk_layout.cpp` (the exports
-and the format at boot), `kernel/include/xk/disk_format.h`; the FTP server's `SITE FORMAT-EXFAT` and
-`SITE DELETE-ALL-PARTITIONS` (`tools/ftp_server`).
+and the format at boot), `kernel/src/user_interface/format_countdown_screen.cpp` (the countdown screen),
+`kernel/src/storage/disk_format.h`; the FTP server's `SITE FORMAT-EXFAT` and `SITE DELETE-ALL-PARTITIONS`
+(`tools/ftp_server`).
 
 A new or unwanted disk becomes an OXOS exFAT disk (spec/oxos_internal/05) without a PC: from the FTP server, or by
 itself at boot, after a countdown, when the disk is blank or holds something other than FATX or exFAT.

@@ -1,14 +1,14 @@
 // Run-time library: memory, strings and conversions, formatting, time, critical sections and read/write locks,
 // interlocked operations, integer conversions.
 #include "kernel_test.h"
-#include <xk/objects.h>
+#include <objects/objects.h>
 
 #include <atomic>
 #include <cstdio>
 #include <string>
 #include <vector>
 
-#include <xk/runtime.h>
+#include <runtime/runtime.h>
 
 // --- Memory
 

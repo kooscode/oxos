@@ -6,21 +6,12 @@
 //   - CR4 = PSE | OSFXSR | OSXMMEXCPT, CR3 = 0xF000, CR0 = PG | WP | NE | ET | PE;
 //   - KernelEntry(arg0, keys) called with cdecl. arg0 = 'OXOS' marks our key block (spec/stock/01 §1): no EEPROM key
 //     but the EEPROM HMAC states taken from XboxDev/cromwell at build time, and the retail certificate key.
-#include <xk/inflate.h>
+#include "bl.h"
+#include "inflate.h"
 
 using xk_inflate::Inflate;
 using xk_inflate::Inflater;
-typedef unsigned char UCHAR;
-typedef unsigned long ULONG;
 
-// Written by tools/mkbios.py at bank offset 0x6000.
-struct XK_BOOT_PAYLOAD {
-    ULONG Magic;                      // 'OXKP'
-    ULONG KernelOffset, KernelPacked; // raw deflate stream, bank-relative
-    ULONG KernelSize;                 // the flat kernel image
-    ULONG KeysOffset, KeysSize;       // the key block handed to the kernel
-    ULONG SplashOffset, SplashSize;   // the boot splash copy in this bank (0, 0 if none; read by the kernel)
-};
 
 // The boot splash, copied into RAM for the kernel (spec/oxos_internal/00_boot_splash.md): "XKSPLASH" header (20 bytes)
 // + vector scene, at SPLASH_RAM, described by the record at SPLASH_RECORD (in page 2, free at this point, next to the
@@ -30,7 +21,7 @@ constexpr ULONG SPLASH_RAM = 0x00C00000, SPLASH_RAM_MAX = 0x40000, SPLASH_RECORD
                 SPLASH_RECORD_MAGIC = 0x5053584F;
 constexpr ULONG SPLASH_BANK1 = 0xFFF40000, SPLASH_HEADER = 20;
 
-constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + 0x6000, PAYLOAD_MAGIC = 0x504B584F, BOOT_MAGIC = 0x534F584F;
+constexpr ULONG BANK = 0xFFFC0000, PAYLOAD = BANK + PAYLOAD_OFFSET, BOOT_MAGIC = 0x534F584F;
 constexpr ULONG KERNEL_PHYS = 0x10000, PAGE_DIRECTORY = 0xF000;
 
 static UCHAR BlKeys[1024];
@@ -48,10 +39,6 @@ extern "C" void *memset(void *d, int c, unsigned n) {
 }
 
 // --- Helpers
-static void BlPost(UCHAR code) {
-    __asm__ volatile("outb %0, $0x80" ::"a"(code));
-}
-
 [[noreturn]] static void BlFail(UCHAR code) {
     BlPost(code);
     for (;;)
@@ -560,12 +547,6 @@ static int BlEepromReadWord(UCHAR Command) {
     BlPadApply<true>(a, b, table + 0x0E, rows, PAD_EEPROM, BlNv(0x101000));
     BlPost(0x32);
 }
-
-// --- Network boot (NETBOOT=1 images): built on the port, PCI and timing helpers above.
-
-#if XK_NETBOOT
-#include "netboot.h"
-#endif
 
 // --- The boot splash's copy for the kernel
 

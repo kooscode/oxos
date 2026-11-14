@@ -101,7 +101,7 @@ def title_call_errors(exe):
     calls = found(TITLE_CALL)
     if len(calls) != 1:
         errors.append(f"{len(calls)} title-start calls (FF 15 28 01 01 00) below {TITLE_SCAN_END:#x}: "
-                      f"{[hex(c) for c in calls]}, need exactly one (src/titles/loader.cpp titles::TitleThread)")
+                      f"{[hex(c) for c in calls]}, need exactly one (src/titles/title_loader.cpp titles::TitleThread)")
     elif any(lo <= calls[0] < hi for lo, hi in boot):
         errors.append(f"the title-start call at {calls[0]:#x} is in a boot-only section")
     for other in OTHER_CALLS:

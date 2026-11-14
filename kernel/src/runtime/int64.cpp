@@ -1,6 +1,6 @@
 // 64-bit division for the MSVC-style compiler helpers (src/arch/int64.S). Only 32-bit divides and
 // constant shifts are used here so the compiler cannot call back into the helpers.
-#include <xk/types.h>
+#include <runtime/types.h>
 
 namespace xk::runtime {
 

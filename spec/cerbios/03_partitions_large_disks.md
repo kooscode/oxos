@@ -36,9 +36,9 @@ entry carry the high parts, so sectors beyond 2^32 work.)
   disk" flag is set). A table found on the disk therefore always wins.
 
 ## 3. Automatic extra partitions (when the disk has no table)
-A partition-mode byte controls them. It is the variable **exported as ordinal 40 (HalDiskCachePartitionCount)**,
-which holds **5** in the 3.1.0 image (the retail kernel's value is 3); it is not an ini key. It applies only for disks larger than
-0xEE8AB0 sectors:
+A partition-mode byte controls them. It is the variable **exported as ordinal 40 (HalDiskCachePartitionCount)**, which
+holds **5** in the 3.1.0 image (the retail kernel's value is 3); it is not an ini key. It applies only for disks larger
+than 0xEE8AB0 sectors:
 - **bit 0:** entry 5 (F:, name "XBOX F") starts at E:'s end (E start + E size) and runs to the end of the disk but
   **not beyond sector 0x0FFFFFFF** (the 28-bit limit, about 128 GiB);
 - **bit 1:** entry 5 (F:) from E:'s end to the end of the disk;
@@ -78,8 +78,8 @@ STATUS_BUFFER_TOO_SMALL (0xC0000023). The other handled codes are the retail one
 
 ## For OXOS (notes, not Cerbios behaviour)
 - OXOS reads the PARTINFO table and lays out the automatic F:/G: as in §2–§3 (default 5) on FATX disks
-  (`kernel/src/storage/disk.cpp`, `IdexDiskReadPartitionTable`, `IdexDiskDefaultPartitions`): partition N is entry
-  N − 1's start and size. exFAT disks keep their own layout (spec/oxos_internal/05).
+  (`kernel/src/hardware/ide/hard_disk.cpp`, `IdexDiskReadPartitionTable`, `IdexDiskDefaultPartitions`): partition N is
+  entry N − 1's start and size. exFAT disks keep their own layout (spec/oxos_internal/05).
 
 ## Open
 - The DMA EXT command bytes and the read/write path (expected 0x25/0x35); how partition devices are created for

@@ -1,7 +1,7 @@
 # 29. Error screens (OXOS's own)
 
-Status: implemented 2026-11-07. Code: `kernel/src/core/fatal.cpp`, `kernel/src/core/fatal_help.cpp`,
-`kernel/src/bootscreen/text.cpp`.
+Status: implemented 2026-11-07. Code: `kernel/src/user_interface/error_screens.cpp`,
+`kernel/src/user_interface/error_screen_text.cpp`, `kernel/src/graphics/` (`text.cpp`, `screen.cpp`).
 
 The reference kernel shows a fatal error as a two-digit number and nothing else, and a bug check shows nothing at
 all (spec/stock/05 §6). OXOS keeps the codes and what goes with them (LED sequence, EEPROM error history, the halt)
@@ -10,9 +10,9 @@ and draws a screen that says what happened and what to try.
 ## 1. Text
 - One font for every OXOS screen: `text.cpp`, the OXOS 5x8 font (drawn for OXOS), printable ASCII 0x20–0x7E, one
   byte per row. Rows 0–6 hold capitals and digits (row 6 is the baseline), row 7 descenders. A glyph is drawn as
-  `Scale x Scale` squares, glyphs `6 * Scale` apart (`bootscreen::DrawText`, `bootscreen::TextWidth`).
+  `Scale x Scale` squares, glyphs `6 * Scale` apart (`graphics::DrawText`, `graphics::TextWidth`).
 - The boot splash's caption and its `[ Hold X for File Manager - v0.4.2/CONEXANT ]` label use the same code
-  (`bootscreen::VersionLabel`).
+  (`graphics::VersionLabel`).
 - `text.cpp` is resident (not boot-only, not `-O2`): fatal errors 13, 20 and 21 and bug checks come after the
   boot-only pages are freed (spec/oxos_internal/18).
 
@@ -28,7 +28,7 @@ and draws a screen that says what happened and what to try.
 | details | 8 px below | scale 2, grey |
 
 An `X` with two spaces on each side in any text (`Press  X  to`) is drawn as the controller's X button: a bold blue
-X in a blue ring (`bootscreen::DrawText`; the splash's label uses it too).
+X in a blue ring (`graphics::DrawText`; the splash's label uses it too).
 
 Lines are at most 45 characters (`XK_FATAL_LINE`, 45 x 12 px fits between 48 px margins); at most seven help lines so
 the details stay inside the part of the picture a TV shows. A unit test (`tests/unit/test_fatal.cpp`) checks every
@@ -48,8 +48,8 @@ code's title and lines.
 OXOS never raises 5 (non-secure disk, spec/stock/05 "Policy differences") or 10–12 (no DVD drive is allowed).
 
 ## 3. Bug check screen
-`KeBugCheckEx` records the bug check (CMOS, serial, `KiBugCheckData`) and then calls `core::ShowBugCheck`, with
-interrupts off. Nothing can be allocated then, so it takes over the frame buffer being scanned out (the CRTC start,
+`KeBugCheckEx` records the bug check (CMOS, serial, `KiBugCheckData`) and then calls `user_interface::ShowBugCheck`,
+with interrupts off. Nothing can be allocated then, so it takes over the frame buffer being scanned out (the CRTC start,
 NV2A 0x600800), which is a title's or the splash's:
 1. No AV pack, no scan-out address, or 640x480x4 bytes from it would pass the end of RAM: nothing is drawn.
 2. The GPU stops drawing into it: PFIFO caches (0x2500), push buffer fetch (0x3220) and puller (0x3250) off,

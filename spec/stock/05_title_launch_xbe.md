@@ -47,10 +47,10 @@ B. Otherwise:
 - `XeLaunchDashboardWithReason(type, code)` (inferred, 0x8002f291): allocate the LDP if needed
   (`MmAllocateContiguousMemory(4096)`), `MmPersistContiguousMemory(…, TRUE)`, zero it, set dwLaunchDataType = 1,
   `+0x400 = type`, `+0x408 = code`, then launch the dashboard.
-- `XeLaunchDashboard` (inferred, 0x8002f236): load **`\Device\Harddisk0\Partition2\xboxdash.xbe`** as
-  dashboard. On failure, cold boot only: SMC LED sequence (SMC reg 0x08 = 0xE1, then reg 0x07 = 1, custom LED mode), then **fatal error 13**, or **13 + LDP type**
-  if the LDP type is 1, or **20** if the title-disc flag is set. In every failure case it then calls
-  `HalReturnToFirmware(4)` (fatal-error reboot).
+- `XeLaunchDashboard` (inferred, 0x8002f236): load **`\Device\Harddisk0\Partition2\xboxdash.xbe`** as dashboard. On
+  failure, cold boot only: SMC LED sequence (SMC reg 0x08 = 0xE1, then reg 0x07 = 1, custom LED mode), then **fatal
+  error 13**, or **13 + LDP type** if the LDP type is 1, or **20** if the title-disc flag is set. In every failure case
+  it then calls `HalReturnToFirmware(4)` (fatal-error reboot).
 - Boot-flags 0x40 path (0x80055e75): poll SMC register 3 (tray state) every 250 ms until it is
   not 0 or 0x50. If it is 0x60 → dismount CdRom0 and run `XeLaunchTitle(0)`; otherwise → dashboard.
 
@@ -118,9 +118,10 @@ Then phase-1 calls the entry point at 0x10128 (spec 03).
   seven-segment glyph drawn as lines by the GPU code; then 0x80021b78(0) and `int 3`.
 
 ### Our implementation (milestone 5f)
-- `src/core/fatal.cpp` `IdexFatalError(code)`: LED sequence, the cert boot key wiped, the EEPROM history as above,
-  then (with an AV pack) a 640x480 X8R8G8B8 framebuffer with the two digits in **our own** seven-segment layout,
-  shown through `AvSetDisplayMode`; the thread then sleeps forever. No GPU drawing, no animation to stop yet.
+- `src/user_interface/error_screens.cpp` `IdexFatalError(code)`: LED sequence, the cert boot key wiped, the EEPROM
+  history as above, then (with an AV pack) a 640x480 X8R8G8B8 framebuffer with the two digits in **our own**
+  seven-segment layout, shown through `AvSetDisplayMode`; the thread then sleeps forever. No GPU drawing, no animation
+  to stop yet.
 - Test: `make test_fatal` boots without a hard disk → code 9; checks the drawn digits and the EEPROM history bit.
 - Since milestone 34 the screen also has a title, what to try and details, and bug checks get a screen too
   (spec/oxos_internal/29).
@@ -150,7 +151,7 @@ Evidence: batch_decompile `ev_38839e94…` (thunk resolver 0x8002ecee, section l
   HMAC-SHA1(certificate key from the 2BL, certificate +0xB0 / +0xC0 / +0xD0 + 16i).
 
 ## 8. Our implementation (milestone 4a)
-- `src/titles/loader.cpp`:
+- `src/titles/title_loader.cpp`:
   - XeLoadImage, XeLoadSection/XeUnloadSection, thunk resolution, media and region checks, key derivation
   - the launch order: `\Device\CdRom0\default.xbe`, then the dashboard
 - **Policy differences:**

@@ -58,7 +58,7 @@ register 0x08 is the sequence (bits 7–4 red, 3–0 green, one bit per quarter 
 | NETBOOT=1 2BL, waiting for the link and the network (spec/oxos_internal/09) | 0xFF, solid orange | `kernel/boot/bl.cpp` |
 | the kernel, from the end of HAL phase 0 to the title launch (cold and quick boots) | 0x0A, fast green blink | `KiSystemStartup` |
 | the title (dashboard or game) entered | 0x0F, solid green | the title launcher |
-| fatal error | 0xE1, red / green (the reference's) | `core::ShowFatalError` |
+| fatal error | 0xE1, red / green (the reference's) | `user_interface::ShowFatalError` |
 
 - A normal boot only blinks green, then goes steady green: orange looked like a fault to users (2026-10-30; until then
   the 2BL blinked orange, 0xAA, and the kernel alternated green / orange, 0x5F).

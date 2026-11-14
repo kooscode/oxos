@@ -4,8 +4,8 @@ Evidence: batch_decompile `ev_4cc1cd36…` (AvGetSavedDataAddress, AvSendTVEncod
 HalWriteSMBusValue, HalReturnToFirmware), `ev_6316410b…` (SMBus transaction start 0x8001460c / 0x800146df),
 `ev_1ae40f50…` (ExQueryNonVolatileSetting, ExSaveNonVolatileSetting, HalReadSMCTrayState), `ev_1f71a036…` (setting
 lookup, checksum, EEPROM shadow read/write), objdump of the SMBus DPC (0x80014bfa) and the SMC state machine
-(0x800147a8…), and the setting tables at 0x80010918 / 0x80010930. **Status: implemented (milestones 4b-1/4b-2), except the
-SMC interrupt state machine and the per-mode AV tables.**
+(0x800147a8…), and the setting tables at 0x80010918 / 0x80010930. **Status: implemented (milestones 4b-1/4b-2), except
+the SMC interrupt state machine and the per-mode AV tables.**
 
 ## 1. SMBus host (MCPX, I/O 0xC000)
 - Registers: +0 status (written back to clear), +2 control, +4 address (slave << 1 | read), +6 data (byte/word),
@@ -46,7 +46,7 @@ SMC interrupt state machine and the per-mode AV tables.**
   - 0x104 → game region (REG_DWORD)
   - 0xFFFF → the whole EEPROM; 0xFFFE → the security section (REG_BINARY)
   - 0x100 + n → factory descriptor n; n < 0x100 → user descriptor n. Descriptors are {type, index, size,
-    offset}; the full tables are in `src/hardware/eeprom.cpp`.
+    offset}; the full tables are in `src/hardware/chipset/eeprom.cpp`.
   - unknown index → OBJECT_NAME_NOT_FOUND; short buffer → BUFFER_TOO_SMALL; bad section checksum →
     STATUS_DEVICE_DATA_ERROR
 - **ExSaveNonVolatileSetting:**
@@ -130,9 +130,9 @@ CACHE + STANDBY IMMEDIATE, wait 125 ms; then the final register write, retried u
 on cold boot for the dashboard with flag 8 clear → flags |= 8, 0x19 ← 1; returns "ejected before launch", which makes
 a non-dashboard load fail with 0xC000003A (→ plain dashboard).
 
-**Ours** (`src/hardware/smbus.cpp`): same register traffic, done synchronously (polled SMBus) in the SCI DPC, like the
-reference's DPC-driven handling; when a passive-level caller holds the SMBus the DPC retries 1 ms later from a timer.
-`HalInitiateShutdown` queues the DPC with the request and returns. (Until milestone 13 a system thread did this; its
-3-page stack counted against the title's memory, spec/stock/09 §7.) The disk standby is issued with polled port I/O.
-xemu raises SMC events only from its UI, so the boot tests feed tray events to the handler directly and check that
-the SCI (PM-timer overflows) is delivered and acknowledged.
+**Ours** (`src/hardware/chipset/smbus.cpp`): same register traffic, done synchronously (polled SMBus) in the SCI DPC,
+like the reference's DPC-driven handling; when a passive-level caller holds the SMBus the DPC retries 1 ms later from a
+timer. `HalInitiateShutdown` queues the DPC with the request and returns. (Until milestone 13 a system thread did this;
+its 3-page stack counted against the title's memory, spec/stock/09 §7.) The disk standby is issued with polled port I/O.
+xemu raises SMC events only from its UI, so the boot tests feed tray events to the handler directly and check that the
+SCI (PM-timer overflows) is delivered and acknowledged.

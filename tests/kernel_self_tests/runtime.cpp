@@ -1,10 +1,10 @@
 // Boot self-tests for the runtime exports (milestone 5a).
 #include <kernel_self_tests.h>
-#include <xk/io.h>
-#include <xk/runtime.h>
-#include <xk/hardware.h>
-#include <xk/objects.h>
-#include <xk/core.h>
+#include <io/io.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/chipset.h>
+#include <objects/objects.h>
+#include <core/core.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
@@ -12,6 +12,9 @@ volatile ULONG KiTestRtlSprintfOk, KiTestRtlInterlockedOk, KiTestRtlCritSecOk, K
     KiTestRtlMathOk, KiTestRtlRefurbOk, KiTestRtlTimeOk, KiTestRtlDbgOk, KiTestRtlBoostOk, KiTestRtlFpuOk,
     KiTestRtlDone;
 volatile char KiTestRtlSprintfOut[64];
+// The Refurb test's steps, for boot_test.py to print when it fails: the first read's status, the signature read last,
+// the write-and-read-again status (0x103 when not needed), the short-length call's status.
+volatile ULONG KiTestRtlRefurbSteps[4];
 
 static void Sleep(LONG ms) {
     LARGE_INTEGER t;
@@ -163,13 +166,20 @@ static void NTAPI RtlControllerThread(PVOID) {
     // Refurb record (sector 3): read it; a disk without a valid one (an invalid signature reads as zeros) gets one
     // written first, as on a console's first boot (the tests only ever use a copy of the disk image).
     ULONG refurb[4] = {};
-    bool read = ExReadWriteRefurbInfo(refurb, 16, FALSE) == 0;
-    if (read && refurb[0] != 0x52465242) {
+    NTSTATUS first = ExReadWriteRefurbInfo(refurb, 16, FALSE), again = STATUS_PENDING;
+    if (first == 0 && refurb[0] != 0x52465242) {
         ULONG fresh[4] = {0x52465242, 0, 0, 0};
-        read = ExReadWriteRefurbInfo(fresh, 16, TRUE) == 0 && ExReadWriteRefurbInfo(refurb, 16, FALSE) == 0;
+        again = ExReadWriteRefurbInfo(fresh, 16, TRUE);
+        if (again == 0)
+            again = ExReadWriteRefurbInfo(refurb, 16, FALSE);
     }
-    KiTestRtlRefurbOk = read && refurb[0] == 0x52465242 &&
-                        ExReadWriteRefurbInfo(refurb, 8, FALSE) == (NTSTATUS)0xC000000D;
+    NTSTATUS shortLength = ExReadWriteRefurbInfo(refurb, 8, FALSE);
+    KiTestRtlRefurbSteps[0] = (ULONG)first;
+    KiTestRtlRefurbSteps[1] = refurb[0];
+    KiTestRtlRefurbSteps[2] = (ULONG)again;
+    KiTestRtlRefurbSteps[3] = (ULONG)shortLength;
+    KiTestRtlRefurbOk = first == 0 && (again == STATUS_PENDING || again == 0) && refurb[0] == 0x52465242 &&
+                        shortLength == (NTSTATUS)0xC000000D;
 
     // System time comes from the RTC; setting it updates the RTC.
     LARGE_INTEGER now, old, set, after;
@@ -189,13 +199,16 @@ static void NTAPI RtlControllerThread(PVOID) {
         ok = core::DebugLog[i] == 'x' && StrEq(core::DebugLog + i, "xk-log 77 marker\n");
     KiTestRtlDbgOk = ok;
 
-    // KeSetEventBoostPriority hands the event to the waiter
+    // KeSetEventBoostPriority hands the event to the waiter. The test waits for the real state, at most 1 s each:
+    // the waiter in its wait (on the event's wait list), then the waiter run after the hand-off.
     KeInitializeEvent(&BoostEvent, SynchronizationEvent, FALSE);
     core::CreateSystemThread(BoostWaiter, nullptr, 0, 8);
-    Sleep(10);
+    for (ULONG ms = 0; ms < 1000 && IsListEmpty(&BoostEvent.Header.WaitListHead); ms++)
+        Sleep(1);
     PKTHREAD woken = nullptr;
     KeSetEventBoostPriority(&BoostEvent, &woken);
-    Sleep(10);
+    for (ULONG ms = 0; ms < 1000 && !BoostWoken; ms++)
+        Sleep(1);
     KiTestRtlBoostOk = BoostWoken && woken && BoostEvent.Header.SignalState == 0;
 
     // FP state save/restore around FPU use

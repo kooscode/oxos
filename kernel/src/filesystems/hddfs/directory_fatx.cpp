@@ -1,6 +1,6 @@
 // FATX directories: 64-byte entries, ended by an end marker (spec/stock/04b). A FATX volume reaches its directory
 // operations through FATXFormat (at the end).
-#include <xk/hddfs.h>
+#include <filesystems/hddfs/hddfs.h>
 
 namespace xk::filesystems {
 

@@ -37,9 +37,10 @@ describe the code directly below it.
   `OBJECT_ATTRIBUTES`, and their parameter names. They are global (`XBAPI`, C names), because titles and kernel
   extensions import them by those names; so is anything assembly uses.
 - This is OXOS's own kernel, not NT: everything else lives in a namespace per source folder, `xk::<folder>`
-  (`xk::storage`, `xk::memory`, `xk::titles`, ...), with names that say what they do, without subsystem prefixes.
-  Functions put the verb first: `storage::DescribeDisk`, `storage::InitDvdDrive`, `storage::ReadDiskSectors`; data says
-  what it holds: `storage::DiskLengthInSectors`, `storage::DvdDeviceObject`.
+  (`xk::storage`, `xk::memory`, `xk::titles`, ...), with names that say what they do, without subsystem prefixes. The
+  hardware drivers' folders are one level down and so are their namespaces: `hardware/ide/` is `xk::hardware::ide`.
+  Functions put the verb first: `storage::DescribeDisk`, `hardware::ide::InitDvdDrive`, `storage::ReadDiskSectors`;
+  data says what it holds: `hardware::ide::DiskLengthInSectors`, `hardware::ide::DvdDeviceObject`.
   - Inside its subsystem a name is written plain (`DescribeDisk(...)`); another subsystem writes
     `storage::DescribeDisk`; the tests outside the kernel write `using namespace xk;` and the same.
   - A subsystem's `.cpp` files are wrapped in `namespace xk::<folder> { ... }`, its headers declare its names in the
@@ -49,8 +50,9 @@ describe the code directly below it.
     `storage::DiskLengthInSectors`.
   - Converted 2026-11-13, every subsystem. What keeps an NT-style name: the exports; the names assembly uses (`KiPcr`,
     `KiQuickRebootFlag`, the trap and interrupt stubs, `HalpIgrCheck`, `XkUDivMod64`, ...); the call tracer
-    (`titles/trace.cpp`, until it becomes `oxos_tracer.xos`); the encoder tables `tools/gen_av_tables.py` generates;
-    types and enumerators (`MMPFN_USAGE`'s `MmPoolUsage`, ...). `arch/` is assembly only.
+    (`titles/title_tracer.cpp`, until it becomes `oxos_tracer.xos`); the encoder tables `tools/gen_av_tables.py`
+    generates; types and enumerators (`MMPFN_USAGE`'s `MmPoolUsage`, ...). `arch/` is assembly, plus `arch.h` (x86
+    primitives).
 - Format and standard names inside an identifier are written in capitals: `filesystems::FATXLookup`,
   `filesystems::EXFATWalk`, `storage::DiskHasEXFATLayout`. Written `Exfat...` they read like the NT executive's `Ex`
   prefix (`ExAllocatePoolWithTag`), and `Fatx...` like an unrelated word. In comments the formats keep their proper
@@ -94,11 +96,16 @@ describe the code directly below it.
 The folders and what each holds are listed in the kernel README (`kernel/README.md`, "Layout"). The style behind
 them:
 
-- Code is grouped by what it does, and a folder or file is named for that in plain words: `storage/`, `bootscreen/`,
+- Code is grouped by what it does, and a folder or file is named for that in plain words: `storage/`, `boot_splash/`,
   `disk_layout.cpp`, never a two- or three-letter abbreviation (`ke/`, `idex/`, `vd/`). New code goes in the folder
   of what it does; a file that does two jobs is split.
-- All headers are in `include/xk/`. Each folder has one header with its name (`xk/storage.h`) for what other
-  folders use; what only some files share has a header named for it (`xk/disk.h`, `xk/hddfs.h`, `xk/jingle.h`).
+- A header sits in the folder of the code it declares (`kernel/src/storage/storage.h`), and is included with that
+  folder (`#include <storage/storage.h>`; `kernel/src` is the include path). Each folder has one header with its name
+  for what other folders use, and declares only what its own folder defines (exports included); what only some files
+  share has a header named for it (`core/scheduler.h`, `extensions/extension_state.h`, `hardware/chipset/serial.h`,
+  `filesystems/hddfs/hddfs.h`, `boot_splash/jingle.h`). A header that seems to have no home goes in the folder whose
+  code it supports (the ABI's types are `runtime/types.h`), or in a new folder with a descriptive name; there is no
+  `common/` or `misc/` folder. The 2BL's own headers are in `kernel/boot/`.
 - Test and debug code is kept out of the release kernel by the build, not by comments: the boot self-tests are in
   `tests/kernel_self_tests/` (compiled into the kernel only with `SELFTEST=1`), debug-only code under `#if XK_...`.
 
@@ -107,8 +114,8 @@ them:
 Every source file follows the same order, so its parts are always in the same place:
 
 1. **The file comment**: what the file does, and the spec it implements (`spec/stock/...`, `spec/oxos_internal/...`).
-2. **Includes**: the file's own header first (its folder's, or the one named for its files: `xk/hddfs.h` in
-   `filesystems/hddfs/`), then the other `xk/` headers, then anything else. Only what the file uses; never the same
+2. **Includes**: the file's own header first (its folder's, or the one named for its files: `filesystems/hddfs/hddfs.h`
+   in `filesystems/hddfs/`), then the other `xk/` headers, then anything else. Only what the file uses; never the same
    header twice.
 3. **File-wide constants and types**: those that more than one section of the file uses.
 4. **File-wide state**: variables that more than one section uses, each with a comment saying what it holds.
@@ -125,9 +132,9 @@ section moves to the top of the file. Two exceptions:
   functions, under the test's comment: each test is its own small section.
 
 **Declarations of other files' code come from headers.** A `.cpp` file does not declare another file's functions or
-variables (`void HalpFoo();`, `extern ULONG XeBar;`) itself: the declaration goes in a header in `include/xk/`, where
-the compiler checks it against the definition and every caller (Google: header files; Core Guidelines SF.2, SF.5). The
-exceptions:
+variables (`void HalpFoo();`, `extern ULONG XeBar;`) itself: the declaration goes in the header of the code's folder,
+where the compiler checks it against the definition and every caller (Google: header files; Core Guidelines SF.2, SF.5).
+The exceptions:
 
 - symbols defined in assembly or by the linker script, declared next to the code that uses them;
 - a forward declaration of a `static` function further down the same file.
@@ -148,9 +155,9 @@ never copied into each file or test that uses it.
   takes every mention of it along. Code that does something different from what its comment says is fixed, or the
   comment is.
 - References name things that exist: a spec by file and section (`spec/oxos_internal/16_virtual_discs.md §3`), a source
-  file by its path under `kernel/src/` (`storage/disk.cpp`), or by its name alone for a file in the same folder (or, in
-  a header, in the folder its first line names). A hardware finding keeps its date (`(2026-10-28)`) when the finding is
-  the reason for the code.
+  file by its path under `kernel/src/` (`hardware/ide/hard_disk.cpp`), or by its name alone for a file in the same
+  folder (or, in a header, in the folder its first line names). A hardware finding keeps its date (`(2026-10-28)`) when
+  the finding is the reason for the code.
 - Trailing comments describe one declaration or one field; those of a group are aligned.
 - A section header (`// --- Title`) sits directly above the code it names; a description of the section may follow
   the header as a paragraph.

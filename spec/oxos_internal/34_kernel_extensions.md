@@ -54,7 +54,7 @@ at each launch**, because a quick reboot restarts the kernel (§3.2). Only the s
 
 - **The file:** `C:\OXOS\oxos_extensions.ini` (`\Device\Harddisk0\Partition2\OXOS\oxos_extensions.ini`;
   `/C/OXOS/oxos_extensions.ini` on an exFAT disk), text, at most 64 KB, read with the ini reader the other OXOS files
-  use (`kernel/src/titles/ini_file.cpp`, the same format rules: sections, `key = value`, `;` and `#` comments, LF or
+  use (`kernel/src/ini_file/ini_file.cpp`, the same format rules: sections, `key = value`, `;` and `#` comments, LF or
   CR LF).
 - **The extensions:** `C:\OXOS\extensions\` (`/C/OXOS/extensions/` on exFAT). Only files named in the ini are read;
   other files in the folder are ignored, so an extension can keep its data next to it.
@@ -99,7 +99,8 @@ value would be part of it (spec/oxos_internal/33 §1).
 
 ### 3.2 When
 At **every launch**, after the disk is mounted and before the title is chosen and loaded:
-- cold boot: before the disc, the dashboard or a netbooted title (`XepChooseTitle`, `kernel/src/titles/loader.cpp`);
+- cold boot: before the disc, the dashboard or a netbooted title (`XepChooseTitle`,
+  `kernel/src/titles/title_loader.cpp`);
 - quick reboot: before `titles::LaunchTitle` reads the launch data page, so an extension sees every title start (§7.2).
 
 A quick reboot restores the kernel's `.data`, zeroes its `.bss` and stops every thread (`quick_reboot.S`). The
@@ -113,7 +114,7 @@ Not loaded:
 - **Safe mode** (§3.3).
 
 ### 3.3 Safe mode: B at boot
-- Holding **B** during the boot splash, like X for the File Manager (`kernel/src/gamepad/pads.cpp` reads the pads
+- Holding **B** during the boot splash, like X for the File Manager (`kernel/src/gamepad/gamepad.cpp` reads the pads
   between the splash's frames; B is the report's analog byte 5, X byte 6), starts the console in safe mode: no
   extension is loaded at this launch or any launch until the next cold boot.
 - The flag is kept in the persisted section (`XK_PERSIST`), so it survives quick reboots and is cleared by a cold boot.
@@ -331,7 +332,7 @@ One page, 4096 bytes, per extension, that keeps its contents from one launch to 
 - **What survives:** the page is allocated as contiguous memory and persisted (`MmPersistContiguousMemory`, PTE
   bit 10), so a quick reboot takes it back at the same physical address (spec/stock/09; `kernel/src/memory/init.cpp`,
   the re-adoption loop). The kernel finds the pages again through an index page, also persisted, whose address is in
-  the persisted section (`XK_PERSIST`), as `LaunchDataPage` is kept (`kernel/src/titles/loader.cpp`).
+  the persisted section (`XK_PERSIST`), as `LaunchDataPage` is kept (`kernel/src/titles/title_loader.cpp`).
 - **Index page:** a magic number, a checksum over the index, and one entry per extension: its descriptor `Name` and
   its state page's address. At a launch the kernel checks the magic and the checksum; if either is wrong (a cold
   boot, or memory written over), it starts a new, empty index.
@@ -447,9 +448,9 @@ can fail to start. The serial log reports each extension's image size after `Loa
 state page too, and showing it in the File Manager.
 
 **The loader is not resident: it is linked on its own and run from a cache file on the disk** (decided 2026-11-13):
-- **Built on its own.** The loader's sources (`kernel/src/extensions/`: `extension_ini.cpp`, `extension_loader.cpp`,
-  `extension_parser.cpp`; `oxos_extensions.ini`, PE loading, relocation, import binding, chains, the state-page index,
-  `HookExport`, `RegisterEvent`) are compiled like the kernel but are not part of its link.
+- **Built on its own.** The loader's sources (`kernel/src/extensions/`: `extension_loader.cpp`, `extension_parser.cpp`;
+  `kernel/src/ini_file/extensions_ini.cpp`; `oxos_extensions.ini`, PE loading, relocation, import binding, chains, the
+  state-page index, `HookExport`, `RegisterEvent`) are compiled like the kernel but are not part of its link.
   `tools/link_extension_loader.py` links them at the fixed address 0xB0000000 (`XK_EXTENSION_LOADER_BASE`, a page
   directory entry nothing else uses) and gives each kernel symbol they use as an absolute symbol at this kernel's
   address, from the kernel's map: the loader calls the kernel directly. A symbol in the kernel's boot-only sections
@@ -629,7 +630,7 @@ It runs from the next launch.
 `tests/extensions/`, built with the SDK; `make -C kernel test_extensions` (`tests/boot_test.py --extensions`) puts them
 and an `oxos_extensions.ini` on the test disk and runs `test_relaunch`'s title through a cold boot and two quick
 reboots. The extensions record what the kernel did in their state pages; the test reads those back through
-`extensions::LoadedExtensions` (the offsets are checked at compile time in `include/xk/extensions.h`).
+`extensions::LoadedExtensions` (the offsets are checked at compile time in `src/extensions/extension_state.h`).
 
 **`extension_test.xos`:**
 
@@ -681,9 +682,9 @@ extension = oxos_title_patches.xos
 
 | Feature | Today | As an extension | Needs from §5/§7 |
 |---|---|---|---|
-| **Title patches** (`title_patches.ini`, spec/oxos_internal/25 §3; `patchfile.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the trainers zip with its patch file, now **`oxos_title_patches.ini`** (the same format as `title_patches.ini`), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in `OnTitleLoaded` | `OnTitleLoaded` (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos::XeLoadSection` has read it |
-| **Netbooted title** (`nettitle.cpp`, spec/oxos_internal/09 §7) | in the kernel, 981 bytes resident | `oxos_nettitle.xos`; installs the package as `E:\NAME\` and replaces the launch's XBE path with it | the netboot package's address and size in the kernel facts (§5.2; the kernel still keeps those pages from the memory manager); `OnTitleLoading` replaces the path |
-| **Call tracer** (`trace.cpp`, `trace.S`, spec/oxos_internal/01) | a separate kernel build, `TRACE_IMPORTS=1/2` | `oxos_tracer.xos`, listed first in `oxos_extensions.ini` so it sees the title's calls first; release kernels can be traced | `HookExport` from plain C with its own assembly stubs for every hookable ordinal (the stubs keep the registers and jump to `Next`); its ring outside the memory manager at a fixed physical address with 128 MB, as `TRACE_IMPORTS=2` does |
+| **Title patches** (`title_patches.ini`, spec/oxos_internal/25 §3; `title_patcher_ini.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the trainers zip with its patch file, now **`oxos_title_patches.ini`** (the same format as `title_patches.ini`), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in `OnTitleLoaded` | `OnTitleLoaded` (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos::XeLoadSection` has read it |
+| **Netbooted title** (`title_netboot.cpp`, spec/oxos_internal/09 §7) | in the kernel, 981 bytes resident | `oxos_nettitle.xos`; installs the package as `E:\NAME\` and replaces the launch's XBE path with it | the netboot package's address and size in the kernel facts (§5.2; the kernel still keeps those pages from the memory manager); `OnTitleLoading` replaces the path |
+| **Call tracer** (`title_tracer.cpp`, `trace.S`, spec/oxos_internal/01) | a separate kernel build, `TRACE_IMPORTS=1/2` | `oxos_tracer.xos`, listed first in `oxos_extensions.ini` so it sees the title's calls first; release kernels can be traced | `HookExport` from plain C with its own assembly stubs for every hookable ordinal (the stubs keep the registers and jump to `Next`); its ring outside the memory manager at a fixed physical address with 128 MB, as `TRACE_IMPORTS=2` does |
 
 - **Netboot packages carry extensions:** a development console should not need a prepared disk. `netboot.py` adds
   `.xos` files to the title package (`--extension FILE`, and `oxos_nettitle.xos` by itself with `--title`); the loader

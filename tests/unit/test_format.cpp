@@ -13,7 +13,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <xk/disk_format.h>
+#include <storage/disk_format.h>
+#include <filesystems/filesystems.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 

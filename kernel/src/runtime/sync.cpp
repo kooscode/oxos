@@ -1,6 +1,8 @@
-// RTL critical sections and executive read/write locks (spec/stock/13). Their layouts, the Xbox ABI, are in xk/core.h.
-#include <xk/arch.h>
-#include <xk/core.h>
+// RTL critical sections and executive read/write locks (spec/stock/13). Their layouts, the Xbox ABI, are in
+// runtime/runtime.h.
+#include <arch/arch.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
 
 namespace xk::runtime {
 

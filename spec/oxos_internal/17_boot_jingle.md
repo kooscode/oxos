@@ -2,8 +2,8 @@
 
 OXOS addition. On cold boot the splash (spec/oxos_internal/00_boot_splash) comes with a short, original piece of music
 for cellos, bass and drums, as the retail boot animation comes with its sound. Implemented 2026-10-27. Code:
-`kernel/src/bootscreen/jingle.cpp` (the synthesizer and the score), `kernel/src/bootscreen/bootsound.cpp` (the player);
-host side `tools/jingle`.
+`kernel/src/boot_splash/jingle.cpp` (the synthesizer and the score), `kernel/src/boot_splash/bootsound.cpp` (the
+player); host side `tools/jingle`.
 
 ## 1. The music
 4 seconds (5.9 until 2026-11-06), timed to the splash: it starts after the logo has shown for 1 s, with the
@@ -39,31 +39,30 @@ The mix goes through a soft limiter and fades over its last 1.2 s. Peaks are abo
 
 ## 3. Playing it
 The MCPX AC'97 controller's memory-mapped registers (PCI BAR2, 0xFEC00000) are used directly. The APU is not.
-1. `bootscreen::StartSplash` starts the player thread at priority 7, below the splash thread. So drawing the splash
+1. `boot_splash::StartSplash` starts the player thread at priority 7, below the splash thread. So drawing the splash
    is not slowed down, and the picture comes up as soon as it would without the jingle.
 2. The thread allocates the sample buffer (32 buffers of 0.225 s, the controller's limit of 32 descriptors,
    write-combined, below 16 MB as the splash) and its state. It cold-resets the codec (global control 0x12C bit 1, then
    waits for codec-ready, global status 0x130 bit 8) and unmutes the master and PCM volumes only if they are muted. Then
    it resets the PCM-out (0x110) and S/PDIF-out (0x170) channels.
-3. Both channels get the same descriptor list, with every descriptor valid from the start, over a zeroed buffer.
-   The thread synthesizes in 50 ms slices until the splash starts the jingle (`bootscreen::PlayBootSound`, 2 s after the
-   picture comes on), then starts both
-   channels. From then on it runs at priority 9, keeping at least 0.6 s of sound ready ahead of the controller and
-   sleeping when it is further ahead. On the console, synthesis finishes about 5.3 s after it starts, sharing the
-   CPU with the splash; in xemu it takes about 0.35 s.
+3. Both channels get the same descriptor list, with every descriptor valid from the start, over a zeroed buffer. The
+   thread synthesizes in 50 ms slices until the splash starts the jingle (`boot_splash::PlayBootSound`, 2 s after the
+   picture comes on), then starts both channels. From then on it runs at priority 9, keeping at least 0.6 s of sound
+   ready ahead of the controller and sleeping when it is further ahead. On the console, synthesis finishes about 5.3 s
+   after it starts, sharing the CPU with the splash; in xemu it takes about 0.35 s.
 4. On the console, the MCPX does not stop at the last valid index: it carries on round the descriptor list. So the
    player keeps time itself, 48 frames a millisecond from the start, and stops both channels when the jingle's
    length has passed. A buffer not yet synthesized would play the silence it was cleared to.
-5. `bootscreen::EndSplash` waits for the player to finish. It resets both channels, clears their list addresses, frees
+5. `boot_splash::EndSplash` waits for the player to finish. It resets both channels, clears their list addresses, frees
    its memory and exits before the title starts. Titles find the controller idle. The synthesizer's and the player's
    code and the score are boot-only memory, freed then too (spec/oxos_internal/18_boot_memory.md).
 
-Quick reboots (no splash) have no jingle. `bootscreen::BootSoundOn = 0` turns it off.
+Quick reboots (no splash) have no jingle. `boot_splash::BootSoundOn = 0` turns it off.
 
 ## 4. Tests
 - `make test_dash` also checks that the splash reached full intensity within 100 ms after the climax
-  (`bootscreen::SplashFullMs` against `bootscreen::SplashFadeMs`; 2 601 ms against 2 600 ms in xemu).
-- `make test_dash`: the boot test reads `bootscreen::BootSoundStatus` (3 = played to the end with no underruns), the
+  (`boot_splash::SplashFullMs` against `boot_splash::SplashFadeMs`; 2 601 ms against 2 600 ms in xemu).
+- `make test_dash`: the boot test reads `boot_splash::BootSoundStatus` (3 = played to the end with no underruns), the
   controller's buffer at the end, the lead at the start and the synthesis time.
 - `boot_test.py --dash --jingle-pcm FILE` saves the synthesized samples from guest memory while the jingle plays, to
   compare with `build/tools/jingle/jingle OUT.wav`.

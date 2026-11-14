@@ -1,9 +1,9 @@
 // The volume layer both formats share: the lock, the block cache, FAT access, cluster allocation, file sizes, names
 // and timestamps (spec/stock/04 §6, spec/stock/04b).
-#include <xk/hddfs.h>
-#include <xk/filesystems.h>
-#include <xk/serial.h>
-#include <xk/io.h>
+#include <filesystems/hddfs/hddfs.h>
+#include <filesystems/filesystems.h>
+#include <hardware/chipset/serial.h>
+#include <io/io.h>
 
 namespace xk::filesystems {
 

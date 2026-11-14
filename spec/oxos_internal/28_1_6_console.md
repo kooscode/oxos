@@ -78,7 +78,7 @@ extended as listed in G0.
 | B4 | Pad method choice | Nothing to change: NV2A ≥ D3 and not "upgraded" → EEPROM method. With the retail decision "upgraded" cannot happen: host 0x84 is 128 MB only when the large mask is 0xFF, never with 0x0F/0xF0 | POST 0x32 |
 | B5 | SMC 0x13/0x12 | If the memory test stays in start.S: send the two masks to the SMC from the 2BL (retail sends them from the X-codes; Cromwell sends 0x0F/0xF0) | — (nothing reads them back; spec 24 §8) |
 
-### 4.4 Kernel (`kernel/src/hardware/init.cpp`, `video.cpp`, `memory/init.cpp`)
+### 4.4 Kernel (`kernel/src/hardware/chipset/init.cpp`, `video.cpp`, `memory/init.cpp`)
 | # | Gap | What OXOS must do | Check |
 |---|---|---|---|
 | K1 | Flags on a 1.6 | The retail kernel sets 0x10 when flash byte 0x78 ≥ 0x80 and 0x400 when it is 0x90; OXOS tests == 0x80 and probes the encoder, so a 1.6 gets 0x440, not 0x450. Set 0x10 together with 0x400 (or apply the 5838 byte rule; the MCPX16 image has 0x90 at 0x78) | Log XboxHardwareInfo.Flags: 0x450 |

@@ -20,7 +20,7 @@ by default this tool also hides a list of other very common ones (waits, events,
 import argparse, json, os, re, socket, struct, sys, tempfile
 
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-RING, WORDS = 0x8000, 15  # kernel/src/titles/trace.cpp: XK_TRACE_RING entries of XK_TRACE_WORDS dwords
+RING, WORDS = 0x8000, 15  # kernel/src/titles/title_tracer.cpp: XK_TRACE_RING entries of XK_TRACE_WORDS dwords
 NOT_RETURNED = 0xDEADDEAD
 HIDDEN = ("KeSetEvent KeResetEvent KeDelayExecutionThread KeWaitForSingleObject KeWaitForMultipleObjects "
           "NtWaitForSingleObjectEx NtWaitForMultipleObjectsEx NtSetEvent NtClearEvent NtUserIoApcDispatcher "

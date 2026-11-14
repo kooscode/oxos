@@ -3,16 +3,17 @@
 // chains and starts the Main threads. Not part of the resident kernel: linked on its own at XK_EXTENSION_LOADER_BASE
 // against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp (§8.1). What
 // runs while the title runs is in extensions/extension_runtime.cpp.
-#include <xk/extensions.h>
-#include <xk/core.h>
-#include <xk/extension_ini.h>
-#include <xk/io.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
-#include <xk/extension_parser.h>
-#include <xk/runtime.h>
-#include <xk/serial.h>
-#include <xk/titles.h>
+#include <extensions/extension_state.h>
+#include <extensions/extension_loader.h>
+#include <core/core.h>
+#include <ini_file/extensions_ini.h>
+#include <io/io.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
+#include <extensions/extension_parser.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/serial.h>
+#include <titles/titles.h>
 
 namespace xk::extensions {
 
@@ -440,7 +441,7 @@ extern "C" void XkExtensionLoaderEntry() {
         LoadedExtensions->Kernel.MemoryPages = memory::HighestPhysicalPage + 1;
         slots->Count = 0;
         ULONG errors;
-        ULONG count = ParseExtensionIni(text, got, entries, XK_EXTENSIONS_MAX, &errors);
+        ULONG count = ini_file::ParseExtensions(text, got, entries, XK_EXTENSIONS_MAX, &errors);
         if (errors)
             XK_SERIAL("extensions: oxos_extensions.ini: %lu lines not understood\n", errors);
         CheckStateIndex();

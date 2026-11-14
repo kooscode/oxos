@@ -1,20 +1,20 @@
 // Draws a vector splash scene (tools/svg_splash.py) with the kernel's renderer and writes the start picture, the end
 // picture and the half-way point of the cross-fade as PPM files; with --frames, every frame of the boot animation
-// instead (OUT-0000.ppm ...: 25 per second, as kernel/src/bootscreen/splash.cpp shows them, to 8 s), for a preview
+// instead (OUT-0000.ppm ...: 25 per second, as kernel/src/boot_splash/splash.cpp shows them, to 8 s), for a preview
 // video (the jingle starts 2 s in): ffmpeg -framerate 25 -i OUT-%04d.ppm -itsoffset 2 -i jingle.wav ... (tools/jingle)
-#include <xk/vsplash.h>
+#include <graphics/vector_renderer.h>
 
 #include <cstdio>
 #include <string>
 #include <vector>
 
-using namespace xk::bootscreen; // jingle:: and vsplash::, the kernel's boot screen code
+using namespace xk::graphics; // vector_renderer::, the kernel's vector renderer
 
 static bool WritePpm(const std::string &path, const std::vector<unsigned> &px) {
     FILE *f = fopen(path.c_str(), "wb");
     if (!f)
         return false;
-    fprintf(f, "P6\n%u %u\n255\n", vsplash::W, vsplash::H);
+    fprintf(f, "P6\n%u %u\n255\n", vector_renderer::W, vector_renderer::H);
     for (unsigned p : px) {
         unsigned char rgb[3] = {(unsigned char)(p >> 16), (unsigned char)(p >> 8), (unsigned char)p};
         fwrite(rgb, 1, 3, f);
@@ -38,15 +38,15 @@ int main(int argc, char **argv) {
     for (int c; (c = fgetc(f)) != EOF;)
         scene.push_back((unsigned char)c);
     fclose(f);
-    unsigned scratchBytes = 0, status = vsplash::Check(scene.data(), (unsigned)scene.size(), &scratchBytes);
+    unsigned scratchBytes = 0, status = vector_renderer::Check(scene.data(), (unsigned)scene.size(), &scratchBytes);
     if (status) {
         fprintf(stderr, "%s: check %u failed\n", argv[1], status);
         return 1;
     }
-    std::vector<unsigned> scratch(scratchBytes / 4 + 1), start(vsplash::W * vsplash::H), end(start.size()),
-        mid(start.size());
-    vsplash::Render(scene.data(), (unsigned)scene.size(), vsplash::START, start.data(), scratch.data());
-    vsplash::Render(scene.data(), (unsigned)scene.size(), vsplash::END, end.data(), scratch.data());
+    std::vector<unsigned> scratch(scratchBytes / 4 + 1), start(vector_renderer::W * vector_renderer::H),
+        end(start.size()), mid(start.size());
+    vector_renderer::Render(scene.data(), (unsigned)scene.size(), vector_renderer::START, start.data(), scratch.data());
+    vector_renderer::Render(scene.data(), (unsigned)scene.size(), vector_renderer::END, end.data(), scratch.data());
     for (size_t i = 0; i < mid.size(); i++) {
         unsigned v = 0;
         for (unsigned sh = 0; sh < 24; sh += 8)
@@ -55,9 +55,9 @@ int main(int argc, char **argv) {
     }
     std::string out = argv[2];
     if (frames) {
-        // The splash thread's timeline (kernel/src/bootscreen/splash.cpp): 0.5 s from black to the start picture, which
-        // stays until 1 s; the jingle starts and the picture cross-fades (smoothstep) to the end picture, there at the
-        // jingle's climax 2.6 s later; held 1.4 s, as the jingle's chord dies away; then black (the title).
+        // The splash thread's timeline (kernel/src/boot_splash/splash.cpp): 0.5 s from black to the start picture,
+        // which stays until 1 s; the jingle starts and the picture cross-fades (smoothstep) to the end picture, there
+        // at the jingle's climax 2.6 s later; held 1.4 s, as the jingle's chord dies away; then black (the title).
         const unsigned introMs = 500, logoMs = 1000, climaxMs = 2600, holdMs = 1400;
         std::vector<unsigned> frame(start.size());
         unsigned n = 0;

@@ -4,8 +4,8 @@
 // Only what a server on the local network needs: ARP answers requests for our address (we never ask: every reply
 // goes to the MAC address the request came from, a router's for a browser on another subnet), IPv4 without options
 // or fragments, ping, and a DHCP client without renewals (the server runs for minutes).
-#include <xk/network_stack.h>
-#include <xk/runtime.h>
+#include <network/network_stack.h>
+#include <runtime/runtime.h>
 
 namespace xk::network {
 
@@ -50,14 +50,14 @@ USHORT FoldChecksum(ULONG Sum) {
 }
 
 PUCHAR IpPayload() {
-    BuildingFrame = NextFrameBuffer();
+    BuildingFrame = hardware::ethernet::NextFrameBuffer();
     return BuildingFrame ? BuildingFrame + 14 + NET_IP_HEADER : nullptr;
 }
 
 void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Protocol, ULONG Length) {
     PUCHAR e = BuildingFrame, h = BuildingFrame + 14;
     RtlCopyMemory(e, DestinationMac, 6);
-    RtlCopyMemory(e + 6, MacAddress, 6);
+    RtlCopyMemory(e + 6, hardware::ethernet::MacAddress, 6);
     StoreBigEndian16(e + 12, ETHERTYPE_IP);
     RtlZeroMemory(h, NET_IP_HEADER);
     h[0] = 0x45; // IPv4, 20-byte header
@@ -69,7 +69,7 @@ void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Proto
     RtlCopyMemory(h + 12, IpAddress, 4);
     RtlCopyMemory(h + 16, DestinationIp, 4);
     StoreBigEndian16(h + 10, FoldChecksum(Checksum(h, NET_IP_HEADER, 0)));
-    SendFrame(14 + NET_IP_HEADER + Length);
+    hardware::ethernet::SendFrame(14 + NET_IP_HEADER + Length);
 }
 
 // --- ARP: a request for our address gets a reply
@@ -79,19 +79,19 @@ static void ArpReceived(const UCHAR *a, ULONG Length) {
                    a[5] == 4 && LoadBigEndian16(a + 6) == 1;
     if (!request || AddressState < NetLeased || RtlCompareMemory(a + 24, IpAddress, 4) != 4)
         return;
-    PUCHAR reply = NextFrameBuffer();
+    PUCHAR reply = hardware::ethernet::NextFrameBuffer();
     if (!reply)
         return;
     RtlCopyMemory(reply, a + 8, 6); // to the asker
-    RtlCopyMemory(reply + 6, MacAddress, 6);
+    RtlCopyMemory(reply + 6, hardware::ethernet::MacAddress, 6);
     StoreBigEndian16(reply + 12, ETHERTYPE_ARP);
     PUCHAR r = reply + 14;
     RtlCopyMemory(r, a, 6);     // hardware and protocol types and sizes, as asked
     StoreBigEndian16(r + 6, 2); // reply
-    RtlCopyMemory(r + 8, MacAddress, 6);
+    RtlCopyMemory(r + 8, hardware::ethernet::MacAddress, 6);
     RtlCopyMemory(r + 14, IpAddress, 4);
     RtlCopyMemory(r + 18, a + 8, 10); // the asker's MAC and IP address
-    SendFrame(14 + 28);
+    hardware::ethernet::SendFrame(14 + 28);
 }
 
 // --- ICMP: an echo request gets its echo reply
@@ -114,7 +114,7 @@ static void IcmpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UC
 // A DISCOVER or a REQUEST (for the offered address), broadcast from 0.0.0.0.
 static void SendDhcp(UCHAR Type) {
     DhcpSent = Type;
-    DhcpSentMs = Milliseconds();
+    DhcpSentMs = hardware::ethernet::Milliseconds();
     PUCHAR u = IpPayload();
     if (!u)
         return; // sent again after DHCP_RETRY_MS
@@ -126,7 +126,7 @@ static void SendDhcp(UCHAR Type) {
     b[2] = 6;
     StoreBigEndian32(b + 4, DhcpXid);
     StoreBigEndian16(b + 10, 0x8000); // answer by broadcast: we have no address yet
-    RtlCopyMemory(b + 28, MacAddress, 6);
+    RtlCopyMemory(b + 28, hardware::ethernet::MacAddress, 6);
     StoreBigEndian32(b + 236, 0x63825363); // the DHCP magic cookie
     PUCHAR o = b + length;
     auto option = [&](UCHAR code, const UCHAR *value, UCHAR size) {
@@ -195,7 +195,7 @@ static void DhcpReceived(const UCHAR *b, ULONG Length) {
 
 // DHCP's timers: a lost DISCOVER or REQUEST is sent again; no answer in 30 s: the fixed address.
 static void PollDhcp() {
-    ULONG now = Milliseconds();
+    ULONG now = hardware::ethernet::Milliseconds();
     if (now - DhcpStartMs >= DHCP_GIVE_UP_MS) {
         RtlCopyMemory(IpAddress, FixedIp, 4);
         AddressState = NetFixed;
@@ -236,12 +236,12 @@ void FrameReceived(const UCHAR *Frame, ULONG Length) {
 
 // Starts the card; with a link, DHCP starts asking. Without one, PollNetwork tries again every LINK_CHECK_MS.
 static void TryLink() {
-    LinkCheckMs = Milliseconds();
-    if (!StartCard(0))
+    LinkCheckMs = hardware::ethernet::Milliseconds();
+    if (!hardware::ethernet::StartCard(0))
         return;
     AddressState = NetAsking;
-    DhcpStartMs = Milliseconds();
-    DhcpXid = DhcpStartMs ^ (ULONG)MacAddress[5] << 24 ^ 0x4F584F53;
+    DhcpStartMs = hardware::ethernet::Milliseconds();
+    DhcpXid = DhcpStartMs ^ (ULONG)hardware::ethernet::MacAddress[5] << 24 ^ 0x4F584F53;
     SendDhcp(DHCP_DISCOVER);
 }
 
@@ -254,19 +254,19 @@ bool StartNetwork() {
 }
 
 void StopNetwork() {
-    StopCard();
+    hardware::ethernet::StopCard();
     StopTcp();
     AddressState = NetNoLink;
 }
 
 bool PollNetwork() {
     if (AddressState == NetNoLink) {
-        if (Milliseconds() - LinkCheckMs >= LINK_CHECK_MS)
+        if (hardware::ethernet::Milliseconds() - LinkCheckMs >= LINK_CHECK_MS)
             TryLink();
         if (AddressState == NetNoLink)
             return false;
     }
-    ULONG frames = ReceiveFrames();
+    ULONG frames = hardware::ethernet::ReceiveFrames();
     if (AddressState == NetAsking)
         PollDhcp();
     PollTcp();

@@ -1,7 +1,7 @@
 // Objects behind handles: events, mutants, semaphores, timers, and the Nt wait calls (spec/stock/10 §5).
-#include <xk/objects.h>
-#include <xk/runtime.h>
-#include <xk/core.h>
+#include <objects/objects.h>
+#include <runtime/runtime.h>
+#include <core/core.h>
 
 namespace xk::objects {
 

@@ -1,6 +1,6 @@
-// Renders the boot jingle (kernel/src/bootscreen/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints its
-// peak and loudness per half second: make -C tools/jingle, then tools/jingle/bin/jingle OUT.wav
-#include <xk/jingle.h>
+// Renders the boot jingle (kernel/src/boot_splash/jingle.cpp, the kernel's own synthesizer) to a WAV file and prints
+// its peak and loudness per half second: make -C tools/jingle, then tools/jingle/bin/jingle OUT.wav
+#include <boot_splash/jingle.h>
 
 #include <chrono>
 #include <cmath>
@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <vector>
 
-using namespace xk::bootscreen; // jingle:: and vsplash::, the kernel's boot screen code
+using namespace xk::boot_splash; // jingle::, the boot splash's synthesizer
 
 int main(int argc, char **argv) {
     if (argc != 2 && argc != 3) {

@@ -8,14 +8,14 @@
 //   \Device\CdRom0\default.xbe through a quick reboot. A cold boot (or an eject, which resets the console) forgets
 //   them.
 // - Image files are read through their file system with the ordinary file calls, in the caller's thread.
-#include <xk/storage.h>
-#include <xk/io.h>
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
-#include <xk/runtime.h>
-#include <xk/serial.h>
-#include <xk/titles.h>
+#include <storage/storage.h>
+#include <io/io.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/serial.h>
+#include <titles/titles.h>
 
 namespace xk::storage {
 
@@ -269,7 +269,7 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
     case IOCTL_SCSI_PASS_THROUGH_DIRECT: {
         // The Xbox security commands get the drive emulation's answers (titles that check the disc themselves);
         // TEST UNIT READY succeeds; anything else is not supported.
-        struct PASS { // SCSI_PASS_THROUGH_DIRECT, Xbox layout (storage/dvd_drive.cpp)
+        struct PASS { // SCSI_PASS_THROUGH_DIRECT, Xbox layout (hardware/ide/dvd_drive.cpp)
             USHORT Length;
             UCHAR ScsiStatus, PathId, TargetId, Lun, CdbLength, SenseInfoLength, DataIn, Pad[3];
             ULONG DataTransferLength, TimeOutValue;
@@ -287,9 +287,9 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
         // The same set as the drive emulation's: MODE SENSE / SELECT of page 0x3E and READ DVD STRUCTURE of the
         // security sector (address 0xFF02FDFF, layer 0xFE). This used to test the layer in the wrong byte, so a
         // title's own security-sector read failed ("dirty disc": Prince of Persia).
-        bool security = IsDvdSecurityCommand(cdb, data, p->DataTransferLength);
+        bool security = hardware::ide::IsDvdSecurityCommand(cdb, data, p->DataTransferLength);
         if (security)
-            EmulatedDvdSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
+            hardware::ide::EmulatedDvdSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
         else if (cdb[0] != 0x00) // TEST UNIT READY
             status = STATUS_INVALID_DEVICE_REQUEST;
         XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n",
@@ -317,8 +317,8 @@ void Unmount(ULONG n) {
         ULONG other = 3 - n;
         const VD_SLOT &slot = VirtualDiscSlots[other - 1];
         VirtualDvdSlot = slot.Mounted && IsDvdType(slot.Type) ? (LONG)other : 0;
-        if (DvdDeviceObject)
-            IoDismountVolume(DvdDeviceObject); // the next open mounts the drive (or the other image)
+        if (hardware::ide::DvdDeviceObject)
+            IoDismountVolume(hardware::ide::DvdDeviceObject); // the next open mounts the drive (or the other image)
         titles::TitleDiscAuthenticated = 0;
         titles::DiscTitleId = 0;
     }
@@ -482,8 +482,8 @@ NTSTATUS Attach(ULONG n) {
         VirtualDvdSlot = (LONG)n;
         titles::TitleDiscAuthenticated = 0;
         titles::DiscTitleId = 0;
-        if (DvdDeviceObject)
-            IoDismountVolume(DvdDeviceObject); // the next open mounts the image
+        if (hardware::ide::DvdDeviceObject)
+            IoDismountVolume(hardware::ide::DvdDeviceObject); // the next open mounts the image
     }
     XK_SERIAL("vd: slot %lu: %c, %lu part(s), %#llx bytes%s: %s\n", n, s->Type, (ULONG)s->Parts, s->Length,
               s->Skip ? " (full dump)" : "", saved->Path[0]);
@@ -613,12 +613,12 @@ bool ServeVirtualDvd(PIRP Irp, NTSTATUS *Status) {
     return true;
 }
 
-// The loader's media check (titles/loader.cpp): a mounted image is an Xbox game disc.
+// The loader's media check (titles/title_loader.cpp): a mounted image is an Xbox game disc.
 bool IsDvdImageMounted() {
     return VirtualDvdSlot != 0;
 }
 
-// Phase 1, after the drive (storage/ide_channel.cpp): the control device and its links.
+// Phase 1, after the drive (hardware/ide/ide_channel.cpp): the control device and its links.
 void InitVirtualDiscs() {
     KeInitializeEvent(&VirtualDiscMountLock, SynchronizationEvent, TRUE);
     for (auto &s : VirtualDiscSlots)
@@ -642,7 +642,8 @@ void InitVirtualDiscs() {
     IoCreateSymbolicLink(&link, &name);
 }
 
-// The title-launch thread, before the first title (titles/loader.cpp): mounts from before a quick reboot come back.
+// The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come
+// back.
 void RestoreVirtualDiscMounts() {
     KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
     for (ULONG n = 1; n <= VD_SLOTS; n++) {

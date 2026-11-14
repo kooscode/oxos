@@ -1,9 +1,9 @@
 # 25 — Title compatibility: answers games expect
 
 OXOS addition, implemented 2026-11-03.
-- **Code:** `kernel/src/filesystems/xdvdfs.cpp` (file-system name, `XDVDFS_FCB`), `kernel/include/xk/hddfs.h`
+- **Code:** `kernel/src/filesystems/xdvdfs.cpp` (file-system name, `XDVDFS_FCB`), `kernel/src/filesystems/hddfs/hddfs.h`
   (`HDDFS_FCB`), `kernel/src/filesystems/hddfs/dispatch.cpp` (`filesystems::HDDFSRememberTitleFolder`,
-  FileFsSizeInformation), `kernel/src/titles/loader.cpp` (the call before the title starts).
+  FileFsSizeInformation), `kernel/src/titles/title_loader.cpp` (the call before the title starts).
 - **Tests:** boot self-tests `KiTestDvdSortKeyOk` (tests/kernel_self_tests/dvd_drive.cpp) and `KiTestFATXTitleFolderOk`
   (tests/kernel_self_tests/fatx.cpp), on FATX and on exFAT.
 - **Background:** spec/cerbios/13 §7, where Cerbios patches these games' code. Here the kernel gives the answers
@@ -52,10 +52,10 @@ Some games ask the sector size of `D:\` and expect a DVD's 2048 bytes:
 Some problems are in a game's own code, and no kernel answer can fix them (spec/cerbios/13 §7: a race in an intro, a
 CPUID wrapper, a display mode). For those the kernel writes patches into the loaded game, taken from a file, so any
 title can be fixed without a new kernel.
-- **Code:** `kernel/src/titles/patchfile.cpp` (the parser, `include/xk/title_patches.h`), on the ini line reader it
-  shares with the launch redirects (`kernel/src/titles/ini_file.cpp`, `include/xk/ini_file.h`, spec/oxos_internal/33);
-  `kernel/src/titles/loader.cpp` (`titles::LoadPatches`, `titles::ApplyPatches`).
-- **Tests:** host unit tests `tests/unit/test_patches.cpp` (the format, and the shipped file parses without an
+- **Code:** `kernel/src/ini_file/title_patcher_ini.cpp` (the parser, `src/ini_file/title_patcher_ini.h`), on the ini
+  line reader it shares with the launch redirects (`kernel/src/ini_file/ini_file.cpp`, `src/ini_file/ini_file.h`,
+  spec/oxos_internal/33); `kernel/src/titles/title_loader.cpp` (`titles::LoadPatches`, `titles::ApplyPatches`).
+- **Tests:** host unit tests `tests/unit/test_title_patcher_ini.cpp` (the format, and the shipped file parses without an
   error); boot self-test "title patches" (boot_test.py puts a patch file for the test title on the test disk: a
   matching section changes a variable, a section for another certificate version leaves another one alone, a patch
   whose current bytes are not there leaves a third one alone, and a patch below the image is skipped).
@@ -137,7 +137,7 @@ A dashboard that plays video through the GPU's video overlay (PVIDEO) can leave 
 a buffer marked in use (NV2A 0x8700 bit 4), an overlay interrupt pending (0x8100), and the overlay's addresses
 never set. A test title's graphics set-up stops the overlay (0x8704 ← 1) and waits for 0x8700 to clear; in that
 state the overlay never finishes and the game hangs on a black screen (about one start in three from the dashboard).
-- **Code:** `kernel/src/hardware/chipset.cpp` `hardware::IdleVideoOverlay`, called on a cold boot
+- **Code:** `kernel/src/hardware/chipset/chipset.cpp` `hardware::IdleVideoOverlay`, called on a cold boot
   (hardware::QuiesceBusMasters) and on the quick reboot that starts the next title (hardware::InitHalPhase0).
 - **What it does** when the overlay is switched on (PMC 0x200 bit 28): overlay interrupts off (0x8140 ← 0), both
   buffers stopped (0x8704 ← 0x11), 0x8700 ← 0, pending interrupts acknowledged (0x8100 ← 0xFFFFFFFF). Writing 0x8700
@@ -163,10 +163,10 @@ read, priority 9 against the main thread's 8) asked for the input object as well
 second set-up found `\Device\MU_0` taken (IoCreateDevice, STATUS_OBJECT_NAME_COLLISION), carried on with memory-unit
 devices it never created, and its USB interrupt code then read through a garbage device pointer (bug check 0x1E, an
 access violation at the start of the title, about 0.35 s in).
-- **Code:** `kernel/src/hardware/smbus.cpp` `KiQuickRebootQuiesce` (and the same step in
-  `kernel/src/hardware/chipset.cpp` `hardware::QuiesceBusMasters`): after the reset completes (bit 0 clear, within 10
-  µs), HcControl ← 0: USBRESET, every list off. A title then finds the controllers as after a cold boot and starts its
-  USB library without the sleep.
+- **Code:** `kernel/src/hardware/chipset/smbus.cpp` `KiQuickRebootQuiesce` (and the same step in
+  `kernel/src/hardware/chipset/chipset.cpp` `hardware::QuiesceBusMasters`): after the reset completes (bit 0 clear,
+  within 10 µs), HcControl ← 0: USBRESET, every list off. A title then finds the controllers as after a cold boot and
+  starts its USB library without the sleep.
 - **Checked:** the Modxo console, the test title started directly over netboot and from the dashboard: before, it
   stopped at start every time, and the trace showed both set-ups (`\Device\MU_0` created twice, by two threads); with
   the change it starts and plays.

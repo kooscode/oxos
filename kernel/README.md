@@ -139,8 +139,9 @@ and GNU `objcopy` (binutils).
 
 **The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and
 press F5. It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts xemu paused and
-runs to your breakpoint. For example, a breakpoint in `titles::LoadImageFile` (`src/titles/loader.cpp`) stops on every
-title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and `XeImageFileName` its path.
+runs to your breakpoint. For example, a breakpoint in `titles::LoadImageFile` (`src/titles/title_loader.cpp`) stops on
+every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and `XeImageFileName` its
+path.
 
 ![Kernel debugging in VS Code: stopped in titles::LoadImageFile, with the loaded title's name in a
 watch](../docs/kernel_debugging.jpg)
@@ -191,24 +192,28 @@ Microsoft's 2BL and keys: do not distribute it.
 ## Layout
 | path | contents |
 |---|---|
-| `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5) |
-| `include/xk/` | every header: one per source folder (`core.h`, `memory.h`, `storage.h`, ...) for what other folders use, a few named for one part (`hddfs.h`, `disk.h`, `jingle.h`, `vsplash.h`, `selftest.h`), and the shared types (`types.h`) |
-| `src/arch/` | assembly: entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as) |
-| `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks and fatal boot errors |
+| `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5): `start.S` and `bl.cpp`, with `netboot.cpp` in `NETBOOT=1` images (the network boot, spec/oxos_internal/09); `bl.h` holds what they share |
+| `src/arch/` | assembly: entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as); `arch.h`, the x86 primitives the C++ code uses (port I/O, MSRs, interrupt flag, POST codes) |
+| `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks |
+| `src/user_interface/` | the kernel's own screens (spec/oxos_internal/29), drawn with `graphics/`: the fatal error (with its LED sequence and EEPROM error history), No Dashboard Found and the bug check (`error_screens.cpp`, their text in `error_screen_text.cpp`), the countdown before a disk is formatted (`format_countdown_screen.cpp`) and the OXOS File Manager's screen (`file_manager_screen.cpp`). The boot splash is in `boot_splash/` |
+| `src/graphics/` | what the kernel draws with: the OXOS font and text (`text.cpp`), the screens' frame buffer, rectangles, centred text and large digits (`screen.cpp`), both resident; and the vector renderer the boot splash draws its scene with (`vector_renderer.cpp`, boot-only) |
+| `src/diagnostics/` | what a console that freezes or faults leaves in CMOS for the next boot: start-up marks and their watchdog (`boot_marks.cpp`), the last words of an exception or bug check (`last_words.cpp`); and the start-up reports for the serial log: DRAM refresh, GPU clock, X-code checks, machine checks, NV2A memory pads (`boot_reports.cpp`) |
 | `src/memory/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
 | `src/objects/` | object manager (handles, namespace, symbolic links) and the objects titles reach through handles: events, mutants, semaphores, timers |
 | `src/io/` | I/O manager: devices, IRPs, files, completion ports |
-| `src/hardware/` | PIC, PIT, RTC, PCI chipset set-up, ACPI PM, SMBus/SMC, EEPROM, AV (video modes), network PHY, GPU set-up, in-game reset, debug serial port (spec/oxos_internal/03_debug_serial.md) |
-| `src/bootscreen/` | the boot splash and jingle: boot-only code, freed before the first title starts (spec/oxos_internal/18) |
-| `src/storage/` | IDE channel, hard disk (28- and 48-bit addressing), its layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), DVD drive, virtual discs (disc images standing in for the DVD drive) |
-| `src/network/` | the network card polled (`nic.cpp`, its bring-up shared with the 2BL's netboot through `include/xk/nic.h`), IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`): boot-only, for the File Manager (spec/oxos_internal/31) |
-| `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`server.cpp`, `page.cpp`; boot-only, spec/oxos_internal/31) |
-| `src/gamepad/` | the controllers read during the boot splash, for the X button (the File Manager): the USB controller polled (`usb_host.cpp`), hubs and pads (`pads.cpp`); boot-only, spec/oxos_internal/32 |
+| `src/hardware/` | the console's hardware, one subfolder per part, namespace `xk::hardware::<part>`: `chipset/` (PCI set-up and HAL phase 0, PIC, PIT, CMOS clock, ACPI PM, SMBus and the SMC, EEPROM, string port I/O, the debug serial port: spec/oxos_internal/03), `video/` (AV pack, encoders and display modes, the NV2A's set-up: spec/stock/17-20, spec/oxos_internal/24), `ide/` (the IDE channel, hard disk with 28- and 48-bit addressing, DVD drive: spec/stock/04), `ethernet/` (the network card and its PHY; `nic.h` is shared with the 2BL's netboot), `usb/` (the first OHCI controller and the devices on its ports and behind hubs; boot-only, spec/oxos_internal/32), `audio/` (the AC'97 controller and codec; boot-only, for the boot jingle) |
+| `src/boot_splash/` | the boot splash and jingle: boot-only code, freed before the first title starts (spec/oxos_internal/18) |
+| `src/storage/` | what sits on the IDE drives (`hardware/ide/`): the hard disk's layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), virtual discs (disc images standing in for the DVD drive, `virtual_disc.cpp`) |
+| `src/network/` | the network stack on the card's driver (`hardware/ethernet/`): IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`); boot-only, for the File Manager (spec/oxos_internal/31) |
+| `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`webserver.cpp`, `webpage.cpp`); boot-only, spec/oxos_internal/31 |
+| `src/gamepad/` | the gamepads read during the boot splash, for the X button (the File Manager) and B (safe mode): Xbox pads found on USB (`hardware/usb/`) and their reports (`gamepad.cpp`); boot-only, spec/oxos_internal/32 |
 | `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
-| `src/titles/` | the title (XBE) loader and launcher, netboot titles, the title-patch and launch-redirect parsers and their ini reader; the kernel call tracer (`trace.cpp`, trace builds only) |
-| `src/extensions/` | kernel extensions (spec/oxos_internal/34). Resident while a title runs: `extension_runtime.cpp` (hooked imports, events, the end of a title) and `extension_runtime_loader.cpp` (writes the loader's cache file at a cold boot, runs the loader before each title). The loader, not part of the kernel's link (`../tools/link_extension_loader.py` links it at 0xB0000000 against the kernel's addresses and `mkbios.py` appends it to the kernel image): `extension_loader.cpp` (loads the extensions), `extension_ini.cpp` (reads `oxos_extensions.ini`), `extension_parser.cpp` (checks, maps and binds a `.xos` image); the last two make no kernel calls, for the host unit tests |
-| `src/runtime/` | runtime library: strings, sprintf, interlocked operations, critical sections, time |
+| `src/titles/` | the title (XBE) loader and launcher (`title_loader.cpp`), netboot titles (`title_netboot.cpp`); the kernel call tracer (`title_tracer.cpp`, trace builds only) |
+| `src/in_game_reset/` | the in-game reset: LT + RT + BACK + BLACK in a title power-cycles the console (`xinput_hook.S` watches `XInputGetState`; spec/oxos_internal/22) |
+| `src/ini_file/` | the kernel's ini files in `C:\OXOS`: the line reader (`ini_file.cpp`), the title patches' parser (`title_patcher_ini.cpp`, `title_patches.ini`) the extension list's (`extensions_ini.cpp`, `oxos_extensions.ini`) and the launch redirects' (`launch_redirect_ini.cpp`, `oxos_launch_redirect.ini`); no kernel calls, for the host unit tests |
+| `src/extensions/` | kernel extensions (spec/oxos_internal/34). Resident while a title runs: `extension_runtime.cpp` (hooked imports, events, the end of a title) and `extension_runtime_loader.cpp` (writes the loader's cache file at a cold boot, runs the loader before each title). The loader, not part of the kernel's link (`../tools/link_extension_loader.py` links it at 0xB0000000 against the kernel's addresses and `mkbios.py` appends it to the kernel image): `extension_loader.cpp` (loads the extensions), `extension_parser.cpp` (checks, maps and binds a `.xos` image; no kernel calls, for the host unit tests), and `../ini_file/extensions_ini.cpp` (reads `oxos_extensions.ini`) |
+| `src/runtime/` | runtime library: strings, sprintf, interlocked operations, critical sections, time; `types.h`, the NT-style types of the Xbox kernel's ABI that every folder builds on. Each header is in the folder of the code it declares (`src/storage/storage.h`, included as `<storage/storage.h>`) |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/oxos_splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
 | `title_patches/title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |
@@ -221,17 +226,21 @@ Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, th
 
 | namespace | folder | namespace | folder |
 |---|---|---|---|
-| `xk::core` | `core/` | `xk::hardware` (and `xk::hardware::gpu`) | `hardware/` |
+| `xk::core` | `core/` | `xk::hardware::chipset`, `::video`, `::ide`, `::ethernet`, `::usb`, `::audio` | `hardware/<part>/` |
 | `xk::memory` | `memory/` | `xk::storage` | `storage/` |
 | `xk::objects` | `objects/` | `xk::filesystems` (names keep their format: `filesystems::FATXLookup`) | `filesystems/` |
 | `xk::io` | `io/` | `xk::crypto` | `crypto/` |
 | `xk::runtime` | `runtime/` | `xk::titles` | `titles/` |
-| `xk::bootscreen` (and `::jingle`, `::vsplash`) | `bootscreen/` | `xk::network` | `network/` |
+| `xk::boot_splash` (and `::jingle`, `::vsplash`) | `boot_splash/` | `xk::network` | `network/` |
 | `xk::gamepad` | `gamepad/` | `xk::webserver` | `webserver/` |
-| `xk::extensions` | `extensions/` | assembly only, C names | `arch/` |
+| `xk::extensions` | `extensions/` | `xk::ini_file` | `ini_file/` |
+| `xk::in_game_reset` | `in_game_reset/` | | |
+| `xk::user_interface` | `user_interface/` | `xk::diagnostics` | `diagnostics/` |
+| `xk::graphics` (and `::vector_renderer`) | `graphics/` | | |
+| C names (assembly, and `arch.h`'s inline primitives) | `arch/` | | |
 
 Names assembly uses keep their C names (`KiPcr`, `KiQuickRebootFlag`, the trap stubs, ...), and so does the call
-tracer (`titles/trace.cpp`) until it becomes `oxos_tracer.xos`.
+tracer (`titles/title_tracer.cpp`) until it becomes `oxos_tracer.xos`.
 
 ## Milestones
 Specs are in `../spec/stock/` unless named otherwise (`oxos/NN` = `../spec/oxos_internal/NN`). ✅ xemu = checked by

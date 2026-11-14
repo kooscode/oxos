@@ -1,6 +1,6 @@
 // RtlSprintf family: MS C runtime formatting (_snprintf semantics: -1 when the output was truncated).
-#include <xk/runtime.h>
-#include <xk/objects.h>
+#include <runtime/runtime.h>
+#include <objects/objects.h>
 
 namespace xk::runtime {
 

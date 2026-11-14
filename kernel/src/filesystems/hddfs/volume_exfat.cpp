@@ -2,8 +2,8 @@
 // 05_exfat_storage_spec.md). Each folder partition mounts as its own volume whose root is that folder; they share one
 // EXFAT_DISK (geometry, up-case table, free count, block cache key). Here: the allocation bitmap, the volume handle
 // and size, and the mount.
-#include <xk/hddfs.h>
-#include <xk/serial.h>
+#include <filesystems/hddfs/hddfs.h>
+#include <hardware/chipset/serial.h>
 
 namespace xk::filesystems {
 

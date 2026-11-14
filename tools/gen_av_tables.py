@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the kernel's video encoder tables (kernel/src/hardware/video_modes.inc) from the encoder specs.
+"""Generate the kernel's video encoder tables (kernel/src/hardware/video/video_modes.inc) from the encoder specs.
 
 The register maps are read from spec/stock/18_conexant_encoder.md, 19_focus_encoder.md and 20_xcalibur_encoder.md
 (the "Video Encoder Mode" blocks); nothing else is an input. For each encoder the NV2A timing of the standard-definition
@@ -185,7 +185,8 @@ def xc_timing(writes):
                 vtotal=vtotal, vsync=vtotal - (r55 & 0xFF))
 
 
-# ---- The generated file (kernel/src/hardware/video_modes.inc) ----------------------------------------------------------
+# ---- The generated file (kernel/src/hardware/video/video_modes.inc)
+# ----------------------------------------------------------
 def c_bytes(vals):
     return "{" + ", ".join(f"0x{v:02X}" for v in vals) + "}"
 
@@ -328,8 +329,8 @@ def generate():
         out.append("    },")
     out += ["};"]
     out += nv_tables()
-    # Each encoder's tables go in their own section (AVP_CX, AVP_FO, AVP_XC in hardware/video.cpp): the kernel frees the
-    # pages of the two the console does not have (spec/oxos_internal/18_boot_memory.md).
+    # Each encoder's tables go in their own section (AVP_CX, AVP_FO, AVP_XC in hardware/video/video.cpp): the kernel
+    # frees the pages of the two the console does not have (spec/oxos_internal/18_boot_memory.md).
     out = [re.sub(r"^static const (\w+) Avp(Cx|Fo|Xc)", lambda m: f"AVP_{m[2].upper()} static const {m[1]} Avp{m[2]}", l)
            for l in out]
     return "\n".join(out) + "\n"

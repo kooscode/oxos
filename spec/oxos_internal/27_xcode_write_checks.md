@@ -3,7 +3,7 @@
 OXOS addition. Write checks (§1-§4) implemented 2026-11-06; our X-code interpreter for consoles without a boot ROM
 (§5) implemented 2026-10-15 with the open BIOS image (spec/stock/01 §5).
 - **Code:** `tools/harden_xcodes.py` (run by `kernel/Makefile` on the assembled X-code bank), `kernel/boot/start.S`
-  (entry snapshot, serial builds), `kernel/src/core/startup.cpp` (its log line), `kernel/boot/reset.S` (§5).
+  (entry snapshot, serial builds), `kernel/src/diagnostics/boot_reports.cpp` (its log line), `kernel/boot/reset.S` (§5).
 - **Related:** the 2BL's repairs (spec 26: GPU clock, memory interface; spec 20: DRAM refresh) stay as a second line.
 
 ## 1. The problem

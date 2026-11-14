@@ -1,11 +1,13 @@
 // Boot self-tests for dismount, Fsc and PHY (milestone 5d-1).
 #include <kernel_self_tests.h>
-#include <xk/arch.h>
-#include <xk/io.h>
-#include <xk/runtime.h>
-#include <xk/filesystems.h>
-#include <xk/hardware.h>
-#include <xk/core.h>
+#include <arch/arch.h>
+#include <io/io.h>
+#include <runtime/runtime.h>
+#include <filesystems/filesystems.h>
+#include <hardware/chipset/chipset.h>
+#include <hardware/video/video.h>
+#include <hardware/ethernet/ethernet.h>
+#include <core/core.h>
 
 using namespace xk; // the kernel's subsystems as storage::, hardware::, ...
 
@@ -14,7 +16,7 @@ volatile ULONG KiTestAvOptionsOk; // encoder options (spec/stock/17 §5a): bit p
 
 static ULONG KiAvRead(UCHAR Register, BOOLEAN Word) {
     ULONG v = 0;
-    HalReadSMBusValue(hardware::EncoderAddress, Register, Word, &v);
+    HalReadSMBusValue(hardware::video::EncoderAddress, Register, Word, &v);
     return v;
 }
 
@@ -23,26 +25,26 @@ static ULONG KiTestAvXcalibur(ULONG fb) {
     ULONG ok = 0, dummy = 0;
     AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
     AvSendTVEncoderOption(nullptr, 0x13, 1, &dummy); // widescreen: CGMS-A word 0x60001
-    if (hardware::XcShadow[0x07] == ((0x60001u | 0x01800000) << 1))
+    if (hardware::video::XcShadow[0x07] == ((0x60001u | 0x01800000) << 1))
         ok |= 1;
     AvSendTVEncoderOption(nullptr, 0x13, 0, &dummy);
     AvSendTVEncoderOption(nullptr, 0x0B, 0, &dummy); // flicker filter: level 0 and 5 write different entries
-    ULONG level0 = hardware::XcShadow[0x61];
+    ULONG level0 = hardware::video::XcShadow[0x61];
     AvSendTVEncoderOption(nullptr, 0x0B, 5, &dummy);
-    if (hardware::XcShadow[0x61] != level0)
+    if (hardware::video::XcShadow[0x61] != level0)
         ok |= 2;
     AvSendTVEncoderOption(nullptr, 0x02, 0, &dummy); // captions on, then off
-    bool cc = hardware::XcShadow[0x09] == 7;
+    bool cc = hardware::video::XcShadow[0x09] == 7;
     AvSendTVEncoderOption(nullptr, 0x03, 0, &dummy);
-    if (cc && hardware::XcShadow[0x09] == 0)
+    if (cc && hardware::video::XcShadow[0x09] == 0)
         ok |= 4;
     UCHAR data[4] = {0x41, 0, 0x42, 0}; // caption bytes for field 0
     AvSendTVEncoderOption(nullptr, 0x04, 0, (PULONG)data);
-    if (hardware::XcShadow[0x0A] == 0x41 && hardware::XcShadow[0x0B] == 8)
+    if (hardware::video::XcShadow[0x0A] == 0x41 && hardware::video::XcShadow[0x0B] == 8)
         ok |= 8;
-    ULONG bank = hardware::XcShadow[0x20]; // luma filter on: the variant-1 coefficient banks are written
+    ULONG bank = hardware::video::XcShadow[0x20]; // luma filter on: the variant-1 coefficient banks are written
     AvSendTVEncoderOption(nullptr, 0x0E, 1, &dummy);
-    if (hardware::XcShadow[0x20] != bank)
+    if (hardware::video::XcShadow[0x20] != bank)
         ok |= 16;
     AvSendTVEncoderOption(nullptr, 0x0E, 0, &dummy);
     return ok;
@@ -50,9 +52,9 @@ static ULONG KiTestAvXcalibur(ULONG fb) {
 
 // Encoder options on NTSC 640x480 composite: WSS/CGMS word, flicker filter, captions on/off and data, luma filter.
 static ULONG KiTestAvOptions(ULONG fb) {
-    if (hardware::EncoderAddress == 0xE0)
+    if (hardware::video::EncoderAddress == 0xE0)
         return KiTestAvXcalibur(fb);
-    bool focus = hardware::EncoderAddress == 0xD4;
+    bool focus = hardware::video::EncoderAddress == 0xD4;
     ULONG ok = 0, dummy = 0;
     AvSetDisplayMode((PVOID)0xFD000000, 0, 0x04010101, 0x12, 640 * 4, fb);
     AvSendTVEncoderOption(nullptr, 0x13, 1, &dummy); // widescreen: CGMS-A word 0x60001 (CRC checked against IEC 61880)
@@ -144,21 +146,21 @@ static void NTAPI MiscControllerThread(PVOID) {
     KiTestMiscFscOk = ok;
 
     // CMOS "clock set" signature (spec/stock/05 §1): written, detected, a damaged byte detected, restored.
-    hardware::WriteCmosSignature();
-    ok = hardware::CmosSignatureValid();
+    hardware::chipset::WriteCmosSignature();
+    ok = hardware::chipset::CmosSignatureValid();
     __asm__ volatile("cli; movb $0x90, %%al; outb %%al, $0x72; xorl %%eax, %%eax; outb %%al, $0x71; sti" ::: "eax");
-    ok &= !hardware::CmosSignatureValid();
-    hardware::WriteCmosSignature();
-    ok &= hardware::CmosSignatureValid();
+    ok &= !hardware::chipset::CmosSignatureValid();
+    hardware::chipset::WriteCmosSignature();
+    ok &= hardware::chipset::CmosSignatureValid();
     KiTestMiscCmosOk = ok;
 
     // SMC tray events (spec/stock/12 §4): "tray opening" caches state 0, "tray state changed" drops the cache (the SMC
     // is read again: 0x60 with the test disc); each one counts a change.
     ULONG tray, count0, count1, count2;
     HalReadSMCTrayState(&tray, &count0);
-    hardware::HandleSmcEvents(0x40);
+    hardware::chipset::HandleSmcEvents(0x40);
     ok = NT_SUCCESS(HalReadSMCTrayState(&tray, &count1)) && tray == 0 && count1 == count0 + 1;
-    hardware::HandleSmcEvents(0x02);
+    hardware::chipset::HandleSmcEvents(0x02);
     ok &= NT_SUCCESS(HalReadSMCTrayState(&tray, &count2)) && tray == 0x60 && count2 == count1 + 1;
     KiTestMiscSmcOk = ok;
 
@@ -204,23 +206,29 @@ static void NTAPI MiscControllerThread(PVOID) {
         KiTestMiscScatterOk = ok;
     }
 
-    // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz).
+    // Performance counter: monotonic, and one KeTickCount second ≈ KeQueryPerformanceFrequency (3.375 MHz). Up to 5
+    // seconds are measured until one is within 2%: an emulator on a busy host delivers clock interrupts late, which
+    // makes a second look longer (more counts), so one bad second is the host, while a wrong counter fails all 5.
     {
-        ULONG t0 = KeTickCount;
-        while (KeTickCount == t0) {
-            // Wait for the next clock tick.
+        LONGLONG f = KeQueryPerformanceFrequency().QuadPart, rate = 0;
+        bool monotonic = true, inRange = false;
+        for (ULONG attempt = 0; attempt < 5 && !inRange; attempt++) {
+            ULONG t0 = KeTickCount;
+            while (KeTickCount == t0) {
+                // Wait for the next clock tick.
+            }
+            LARGE_INTEGER start = KeQueryPerformanceCounter(), last = start, now;
+            ULONG startTick = KeTickCount;
+            while (KeTickCount - startTick < 1000) {
+                now = KeQueryPerformanceCounter();
+                monotonic &= now.QuadPart >= last.QuadPart;
+                last = now;
+            }
+            rate = last.QuadPart - start.QuadPart;
+            inRange = rate > f * 98 / 100 && rate < f * 102 / 100;
         }
-        LARGE_INTEGER start = KeQueryPerformanceCounter(), last = start, now;
-        ULONG startTick = KeTickCount;
-        bool monotonic = true;
-        while (KeTickCount - startTick < 1000) {
-            now = KeQueryPerformanceCounter();
-            monotonic &= now.QuadPart >= last.QuadPart;
-            last = now;
-        }
-        LONGLONG rate = last.QuadPart - start.QuadPart, f = KeQueryPerformanceFrequency().QuadPart;
         KiTestMiscPmTicksPerSecond = (ULONG)rate;
-        KiTestMiscPerfOk = monotonic && f == 3375000 && rate > f * 98 / 100 && rate < f * 102 / 100;
+        KiTestMiscPerfOk = monotonic && f == 3375000 && inRange;
     }
 
     // TV encoder: every mode word below programs the encoder's rows (spec/stock/18-20), which read back as written on
@@ -229,7 +237,7 @@ static void NTAPI MiscControllerThread(PVOID) {
     static const ULONG cxModes[] = {0x04010101, 0x04020202, 0x04010103, 0x44030307, 0x44040408, 0x0401010B,
                                     0x2001010B, 0x60030307, 0x0801010D, 0x48030314, 0x08010119,
                                     0x88070701, 0x88080801, 0x880B0A02, 0x880E0C03};
-    const ULONG *modesBegin = hardware::EncoderAddress ? cxModes : nullptr;
+    const ULONG *modesBegin = hardware::video::EncoderAddress ? cxModes : nullptr;
     if (modesBegin) {
         const ULONG *modesEnd = cxModes + sizeof(cxModes) / sizeof(cxModes[0]);
         ULONG previous = 0;
@@ -237,7 +245,7 @@ static void NTAPI MiscControllerThread(PVOID) {
         ULONG fb = *(volatile ULONG *)0xFD600800, ok = 0;
         for (const ULONG *mode = modesBegin; mode < modesEnd; mode++) {
             AvSetDisplayMode((PVOID)0xFD000000, 0, *mode, 0x12, 640 * 4, fb);
-            if (hardware::EncoderProgrammed == *mode && hardware::EncoderMismatches == 0)
+            if (hardware::video::EncoderProgrammed == *mode && hardware::video::EncoderMismatches == 0)
                 ok++;
         }
         KiTestAvModesTried = (ULONG)(modesEnd - modesBegin);

@@ -1,9 +1,9 @@
 // Object manager (spec/stock/10): headers, handle table, namespace, directories and symbolic links.
 // The Ob "lock" is DISPATCH_LEVEL, as in the reference.
-#include <xk/objects.h>
-#include <xk/serial.h>
-#include <xk/arch.h>
-#include <xk/runtime.h>
+#include <objects/objects.h>
+#include <hardware/chipset/serial.h>
+#include <arch/arch.h>
+#include <runtime/runtime.h>
 
 // Exported variables: outside the namespace, with the names titles import.
 OBJECT_HANDLE_TABLE ObpObjectHandleTable; // the one handle table (ordinal 245)

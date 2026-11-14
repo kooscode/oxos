@@ -1,14 +1,14 @@
 // The remaining entry points: Nt query calls, timer APCs, path links through a parse procedure, link deletion, and
 // the rarer run-time helpers.
 #include "kernel_test.h"
-#include <xk/hardware.h>
-#include <xk/core.h>
-#include <xk/objects.h>
+#include <hardware/chipset/chipset.h>
+#include <core/core.h>
+#include <objects/objects.h>
 
 #include <atomic>
 #include <string>
 
-#include <xk/runtime.h>
+#include <runtime/runtime.h>
 
 using namespace xk; // the kernel's subsystems as storage::, objects::, ...
 
@@ -221,7 +221,7 @@ TEST(Misc, ByKeyDeviceQueueRemovalAndClockInitialisation) {
     EXPECT_EQ(KeRemoveByKeyDeviceQueue(&dq, 20), &b) << "none after it: the first one";
     EXPECT_EQ(KeRemoveByKeyDeviceQueue(&dq, 20), nullptr);
     KfLowerIrql(old);
-    hardware::InitRtcLate();
+    hardware::chipset::InitRtcLate();
     core::InitializeSystemTime(); // from the RTC set by the time tests
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);

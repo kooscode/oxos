@@ -4,9 +4,9 @@ CXX ?= g++
 CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra
 OUT := ../../build/tools/jingle
 
-$(OUT)/jingle: render.cpp ../../kernel/src/bootscreen/jingle.cpp ../../kernel/include/xk/jingle.h
+$(OUT)/jingle: render.cpp ../../kernel/src/boot_splash/jingle.cpp ../../kernel/src/boot_splash/jingle.h
 	@mkdir -p $(OUT)
-	$(CXX) $(CXXFLAGS) -I../../kernel/include -o $@ render.cpp ../../kernel/src/bootscreen/jingle.cpp
+	$(CXX) $(CXXFLAGS) -I../../kernel/src -o $@ render.cpp ../../kernel/src/boot_splash/jingle.cpp
 
 clean:
 	rm -rf $(OUT)

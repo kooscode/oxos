@@ -4,11 +4,11 @@
 
 #include "host.h"
 #include <functional>
-#include <xk/arch.h>
-#include <xk/hardware.h>
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
 
 // The page database (PTE array of the 0x80000000 map) as physical memory, independent of the kernel's mappings.
 inline uint32_t PfnEntry(uint32_t pfn) {

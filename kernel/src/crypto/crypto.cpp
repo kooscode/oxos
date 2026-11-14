@@ -1,7 +1,7 @@
 // Xc crypto services: SHA-1, HMAC-SHA1, RC4 (public algorithms; the caller-visible contexts are opaque buffers:
 // 116 bytes for SHA, 258 for RC4).
-#include <xk/crypto.h>
-#include <xk/runtime.h>
+#include <crypto/crypto.h>
+#include <runtime/runtime.h>
 
 namespace xk::crypto {
 

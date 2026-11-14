@@ -1,7 +1,7 @@
 # 22 — In-game reset (IGR)
 
-OXOS addition, implemented 2026-10-29. Code: `kernel/src/arch/in_game_reset.S` (`KeRaiseIrqlToDpcLevel`,
-`HalpIgrReturn`), `kernel/src/hardware/in_game_reset.cpp` (`HalpIgrCheck`, `hardware::InGameResetReboot`). Background:
+OXOS addition, implemented 2026-10-29. Code: `kernel/src/in_game_reset/`: `xinput_hook.S` (`KeRaiseIrqlToDpcLevel`,
+`HalpIgrReturn`), `in_game_reset.cpp` (`HalpIgrCheck`, `in_game_reset::Reboot`). Background:
 how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
 
 Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title, reboots the console. The reboot is a
@@ -65,7 +65,7 @@ reboot (§6) uses the polled SMBus, which works at any IRQL.
   `HalReturnToFirmware(1)`, cold boot 2 s later, back to what netboot serves.
 
 ## 6. The reboot: a power cycle (2026-11-04)
-`hardware::InGameResetReboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08),
+`in_game_reset::Reboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08),
 retrying the SMBus write up to five times; if the console is still running two seconds later, `HalReturnToFirmware(1)`.
 - **Why not `HalReturnToFirmware(1)`** (until 2026-11-03): that is the reference reset, SMC 0x02 ← 1 and then port
   0xCF9 ← 0x0E. Pressed while a test title was running, the next boot found 29 of the X-codes' GPU and memory
@@ -76,7 +76,7 @@ retrying the SMBus write up to five times; if the console is still running two s
 - A power cycle takes the GPU's power away, so the next boot is a cold boot like any other, which the 2BL's checks
   cover (spec 26).
 - **Debug build option** `make REBOOT_TEST=N`: N seconds into every boot (also inside a title started by a quick
-  reboot) the kernel calls `hardware::InGameResetReboot`, so the reboot can be tested in a loop without a controller.
+  reboot) the kernel calls `in_game_reset::Reboot`, so the reboot can be tested in a loop without a controller.
 - **Tests (1.4 console, Modxo, netboot, REBOOT_TEST=30):** from the dashboard, 4 power cycles, each a cold boot back
   into the dashboard about 3 s later; with a test title running (netbooted launcher, the reboot 30 s into the
   game), 10 power cycles: every next boot a normal cold boot (64 MB, 0x11448000; 3-9 X-code settings differing at 2BL
@@ -102,7 +102,7 @@ Status: design only. The power cycle of §6 stays until the tests of §8.6 pass.
   community title-update installer whose menu's "restart" item starts a 53 KB XBE that does only this: the console
   is back in the dashboard in a moment, without the BIOS, the splash or the drives' start-up. Every title that exits
   to the dashboard takes the same path.
-- In OXOS (`kernel/src/hardware/smbus.cpp`), `HalReturnToFirmware(2)` runs the shutdown notifications the title
+- In OXOS (`kernel/src/hardware/chipset/smbus.cpp`), `HalReturnToFirmware(2)` runs the shutdown notifications the title
   registered (`HalRegisterShutdownNotification`; its graphics and sound libraries stop their hardware), then
   `KiQuickReboot`: `KiQuickRebootQuiesce` masks both PICs, stops the IDE bus master, resets both USB host controllers
   into USBRESET (spec 25 §5), turns the GPU's interrupts off and the NIC's transmitter off; the kernel re-enters from

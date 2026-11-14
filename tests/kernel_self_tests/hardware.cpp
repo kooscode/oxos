@@ -1,7 +1,7 @@
 // Boot self-tests for SMBus/SMC/EEPROM services (milestone 4b-1).
 #include <kernel_self_tests.h>
-#include <xk/hardware.h>
-#include <xk/core.h>
+#include <hardware/chipset/chipset.h>
+#include <core/core.h>
 
 using namespace xk; // the kernel's subsystems as storage::, hardware::, ...
 
@@ -18,7 +18,7 @@ static void NTAPI HalControllerThread(PVOID) {
     UCHAR all[256];
     bool ok = ExQueryNonVolatileSetting(0xFFFF, &type, all, sizeof(all), &len) == 0 && type == 3 && len == 256;
     ok &= ExQueryNonVolatileSetting(0xFFFF, &type, all, 16, &len) == (NTSTATUS)0xC0000023;
-    KiTestHalEepromOk = ok && hardware::EepromSecurityValid;
+    KiTestHalEepromOk = ok && hardware::chipset::EepromSecurityValid;
 
     ok = ExQueryNonVolatileSetting(0x104, &type, &v, 4, &len) == 0 && type == 4;
     KiTestHalRegion = v;

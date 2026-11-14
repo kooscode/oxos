@@ -1,16 +1,16 @@
 # Kernel call tracer (OXOS addition)
 
-Not part of the reference: the retail kernel has no way to record what a title asks of it. This spec describes
-OXOS's own opt-in tracer, which records a title's most recent kernel calls so a hang or crash can be traced back to
-the call that started it. It is how Halo reached its main menu (milestone 10) and Halo 2 its title screen (11).
-First implemented 2026-10-15 (milestone 10, "import tracer"); its current form, with the host tools, dates from
-2026-10-17. Code: `kernel/src/titles/trace.cpp`, `kernel/src/arch/trace.S`, the hook in `kernel/src/titles/loader.cpp`;
-host side `tools/trace.py`, `tools/run.py --trace-map`.
+Not part of the reference: the retail kernel has no way to record what a title asks of it. This spec describes OXOS's
+own opt-in tracer, which records a title's most recent kernel calls so a hang or crash can be traced back to the call
+that started it. It is how Halo reached its main menu (milestone 10) and Halo 2 its title screen (11). First implemented
+2026-10-15 (milestone 10, "import tracer"); its current form, with the host tools, dates from 2026-10-17. Code:
+`kernel/src/titles/title_tracer.cpp`, `kernel/src/arch/trace.S`, the hook in `kernel/src/titles/title_loader.cpp`; host
+side `tools/trace.py`, `tools/run.py --trace-map`.
 
 ## 1. Builds
 | `TRACE_IMPORTS` | Where the record lives | Use |
 |---|---|---|
-| 0 (default) | no tracer: `trace.cpp` and `trace.S` are not even compiled | release and self-test builds |
+| 0 (default) | no tracer: `title_tracer.cpp` and `trace.S` are not even compiled | release and self-test builds |
 | 1 | ring from contiguous memory, stubs from pool: inside the console's 64 MB (about 2 MB less for the title) | `make run_trace_full TRACE=1` (`build/trace_full_64mb`) |
 | 2 | ring and stubs mapped at physical 0x7C00000, near the top of 128 MB and kept from the memory manager; needs xemu with 128 MB | `make run_trace_full` (default, `build/trace_full`): a title limited to 64 MB (retail games) sees exactly a release build's memory; a 128 MB title (spec/stock/09 §10) about 2 MB less of the upper half |
 

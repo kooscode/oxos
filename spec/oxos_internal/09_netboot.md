@@ -5,11 +5,11 @@ served by a PC (`tools/netboot/netboot.py`, user guide in `tools/netboot/README.
 needs a power-cycle instead of a reflash. Implemented 2026-10-22.
 
 ## 1. Where it runs
-- The network card's registers, bring-up and shut-down are in `kernel/include/xk/nic.h`, shared with the kernel's own
-  network stack (spec/oxos_internal/31); `netboot.h` keeps the rings, the frames and the protocol.
-- In the open image's 2BL (`kernel/boot/netboot.h`, included by `boot/bl.cpp` when built with `NETBOOT=1`), after
-  the SMC challenge and the chipset set-up (`BlSetUpChipset`, which enables the NIC: spec/stock/21), before the
-  kernel is unpacked.
+- The network card's registers, bring-up and shut-down are in `kernel/src/hardware/ethernet/nic.h`, shared with the
+  kernel's own network stack (spec/oxos_internal/31); `netboot.cpp` keeps the rings, the frames and the protocol.
+- In the open image's 2BL (`kernel/boot/netboot.cpp`, linked into the 2BL with `boot/bl.cpp` when built with
+  `NETBOOT=1`), after the SMC challenge and the chipset set-up (`BlSetUpChipset`, which enables the NIC: spec/stock/21),
+  before the kernel is unpacked.
 - Paging off, interrupts off, polled; physical addresses throughout.
 - Time comes from the MCPX ACPI PM timer (I/O 0x8008, 3.375 MHz). If it does not advance over about 1 ms of port
   cycles, netboot is skipped.
@@ -102,8 +102,8 @@ RAM disc: the title runs from the disk, as any title launched from it.
 - **Package:** {'OXTP', version 1, count, name[16]}, then per file {name[64], offset, size} (offsets from the
   package's start, each file 16-byte aligned), then the files; padded to a multiple of 1 KiB. DIR's `default.xbe`
   is stored as NAME.xbe; the other files keep their names.
-- **Kernel entry** (cold boots only, `titles/nettitle.cpp`): with 'OXKP' at bank 0x6000 and the marker present, note
-  the package's physical range and clear the marker, so a quick reboot does not find it again.
+- **Kernel entry** (cold boots only, `titles/title_netboot.cpp`): with 'OXKP' at bank 0x6000 and the marker present,
+  note the package's physical range and clear the marker, so a quick reboot does not find it again.
 - **Memory manager start-up:** the package's pages are held (mapped, counted as contiguous memory), not put on the
   free lists.
 - **Title launch** (path B of spec/stock/05 §2, before the disc): create `E:\NAME\`, write each file, give the

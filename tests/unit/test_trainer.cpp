@@ -6,11 +6,11 @@
 #include <algorithm>
 #include <cstring>
 
-#include <xk/title_call.h>
+#include <titles/title_start_call.h>
 
 using namespace xk; // the kernel's subsystems as storage::, titles::, ...
 
-// Compiled from the same header as the kernel's title thread (src/titles/loader.cpp). Never called.
+// Compiled from the same header as the kernel's title thread (src/titles/title_loader.cpp). Never called.
 __attribute__((noinline, used)) static void TitleStartForTest() {
     titles::CallTitleEntry();
 }

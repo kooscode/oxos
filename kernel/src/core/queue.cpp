@@ -1,6 +1,7 @@
 // Queue objects (I/O completion back-end; NT semantics, spec/stock/08) and device queues.
-#include <xk/core.h>
-#include <xk/arch.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
 
 namespace xk::core {
 

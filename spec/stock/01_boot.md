@@ -46,9 +46,11 @@ Evidence: entry `ev_…` from analyze_function 0x8005504c; startup
    - init idle thread object (stack 0x3000 bytes, owner = system process)
    - idle thread NPX save area (0x210 bytes at stack top) zeroed; **FPU CW = 0x027F**, **MXCSR = 0x1F80**
    - call executive init (**0x80015724**, under SEH; next spec)
-   - allocate the DPC stack: `MmCreateKernelStack(0x3000)`; on failure `KeBugCheckEx(0x4D /*NO_PAGES_AVAILABLE*/,1,0,0,0)`
+   - allocate the DPC stack: `MmCreateKernelStack(0x3000)`; on failure `KeBugCheckEx(0x4D
+     /*NO_PAGES_AVAILABLE*/,1,0,0,0)`
    - set idle thread priority 0; if no next thread was scheduled, set a flag; end at HIGH_LEVEL
-9. Back in start-up: PCR IRQL byte = 0x10 (the field written is inferred); `KfLowerIrql(DISPATCH_LEVEL)`; enter the idle loop.
+9. Back in start-up: PCR IRQL byte = 0x10 (the field written is inferred); `KfLowerIrql(DISPATCH_LEVEL)`; enter the idle
+   loop.
 
 ## 3. Idle loop (0x8001b025, `KiIdleLoop`, inferred)
 Runs forever at DISPATCH_LEVEL:
@@ -118,7 +120,7 @@ Bank 1 holds the splash instead (spec/oxos_internal/00_boot_splash.md). `make bi
     Added 2026-10-21 after the first hardware run (a 1.4 console) ended that way;
   - loads its own GDT, sets the MTRRs as in §4 and enables the caches;
   - copies its C part to 0x400000;
-  - inflates the kernel to 0x10000 (`xk/inflate.h`);
+  - inflates the kernel to 0x10000 (`boot/inflate.h`);
   - builds the §4 page directory and sets CR4, CR3 and CR0 as in §4;
   - calls `KernelEntry('OXOS', keys)`.
 - **Key block:** 16 zero bytes (no EEPROM key), the certificate key (§1), then 'OXBK', a count, and per EEPROM key

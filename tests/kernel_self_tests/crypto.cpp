@@ -1,8 +1,8 @@
 // Boot self-tests for Xc public-key and block crypto (milestone 5c). Test RSA key: 512-bit, generated offline.
 #include <kernel_self_tests.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/crypto.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
+#include <crypto/crypto.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 

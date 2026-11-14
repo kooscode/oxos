@@ -1,0 +1,86 @@
+// HAL phase 0, cold path (spec/stock/02_executive_init.md §3). Order matches the reference kernel;
+// the 0x80CF pulse runs between steps.
+#include <hardware/chipset/chipset.h>
+#include <arch/arch.h>
+#include <core/core.h>
+#include <memory/memory.h>
+
+// Exported variables: outside the namespace, with the names titles import.
+XK_PERSIST XBOX_HARDWARE_INFO XboxHardwareInfo;
+
+namespace xk::hardware::chipset {
+
+// Filled at cold boot only and kept across quick reboots, as in the reference (0x8003B150 lies past the .data/BSS
+// range the quick reboot re-initializes). Titles launched by another title read it too: Half-Life 2's USB library
+// reserves its descriptors by Flags bit 0 and, with the flags zeroed, ran out of them and never found the pad.
+
+// Purpose unknown (spec 02 §3): writes 5 then 4 to MCPX I/O 0x80CF with 5 us stalls. The reference skips it when bit 0
+// of its boot flags (0x8003B138, BootFlags in hardware/chipset/smbus.cpp) is set; OXOS never sets that bit.
+void Pulse() {
+    outb(0x80CF, 5);
+    KeStallExecutionProcessor(5);
+    outb(0x80CF, 4);
+    KeStallExecutionProcessor(5);
+}
+
+static void DisableLocalApic() {
+    constexpr ULONG IA32_APIC_BASE = 0x1B;
+    constexpr ULONGLONG APIC_GLOBAL_ENABLE = 1ull << 11;
+    wrmsr(IA32_APIC_BASE, rdmsr(IA32_APIC_BASE) & ~APIC_GLOBAL_ENABLE);
+}
+
+void InitHalPhase0(bool coldBoot) {
+    if (!coldBoot) {
+        // Quick reboot: the interrupt controller is reprogrammed, and the video overlay the last title may have left
+        // running is stopped.
+        Pulse();
+        InitPic();
+        IdleVideoOverlay();
+        return;
+    }
+
+    outb(0x61, 0x08); // system control port B: disable IOCHK NMI
+    Pulse();
+    DisableLocalApic();
+    Pulse();
+    InitPic();
+    post(post_code::Pic);
+    Pulse();
+    InitRtc();
+    post(post_code::Rtc);
+    Pulse();
+    InitPit();
+    post(post_code::Pit);
+    Pulse();
+    InitRtcLate();
+    Pulse();
+    InitPci();
+    post(post_code::Pci);
+    Pulse();
+    InitAcpiPm();
+    post(post_code::AcpiPm);
+}
+
+// XboxHardwareInfo at cold boot (spec/stock/02 §5, confirmed from the assembly, 0x80055081): the flash and strap flags,
+// the MCPX and NV2A revisions.
+void DetectHardware() {
+    auto flash = (volatile UCHAR *)MmMapIoSpace(0xFFF00078, 4, PAGE_READWRITE | PAGE_NOCACHE);
+    if (flash) {
+        if (*flash == 0x80) {
+            XboxHardwareInfo.Flags |= 0x10;
+            if (inb(0x80CE) & 0x20)
+                XboxHardwareInfo.Flags |= 0x20;
+        }
+        MmUnmapIoSpace((PVOID)flash, 4);
+    }
+    // NV2A straps, bits 25-26: 0 → 0x40. (The reference also tests the masked value against 1 for 0x80, which can
+    // never match; 0x80 is therefore never set.)
+    if (!(*(volatile ULONG *)0xFD101000 & 0x06000000))
+        XboxHardwareInfo.Flags |= 0x40;
+    XboxHardwareInfo.McpRevision = ReadPci8(0, 1, 0x08);
+    XboxHardwareInfo.GpuRevision = *(volatile UCHAR *)0xFD000000; // NV2A boot ID, low byte
+    if (XboxHardwareInfo.McpRevision <= 0xB3)
+        XboxHardwareInfo.Flags |= 0x01;
+}
+
+} // namespace xk::hardware::chipset

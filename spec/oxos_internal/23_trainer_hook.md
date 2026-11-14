@@ -1,10 +1,10 @@
 # 23 — Title-start call for game trainers
 
-OXOS addition, implemented 2026-10-31. Code: `kernel/include/xk/title_call.h` (`titles::CallTitleEntry`), used by
-`kernel/src/titles/loader.cpp` (`titles::TitleThread`). Guards: unit tests `tests/unit/test_trainer.cpp` (the bytes, the
-dashboard's patch round trip, page 0) and the link-time check `tools/check_kernel_layout.py` (check 3: the image).
-Background: spec/stock/03 §6 (the stock kernel starts the title with `call [0x00010128]`), spec/oxos_internal/18 §3 (no
-boot-only page is freed below 0x8003B000).
+OXOS addition, implemented 2026-10-31. Code: `kernel/src/titles/title_start_call.h` (`titles::CallTitleEntry`), used by
+`kernel/src/titles/title_loader.cpp` (`titles::TitleThread`). Guards: unit tests `tests/unit/test_trainer.cpp` (the
+bytes, the dashboard's patch round trip, page 0) and the link-time check `tools/check_kernel_layout.py` (check 3: the
+image). Background: spec/stock/03 §6 (the stock kernel starts the title with `call [0x00010128]`), spec/oxos_internal/18
+§3 (no boot-only page is freed below 0x8003B000).
 
 The kernel starts every title with exactly the 6-byte instruction **`call [0x00010128]`** (`FF 15 28 01 01 00`), the
 XBE entry point that the loader decoded into the image header. There is one copy of it in the kernel image. It lies

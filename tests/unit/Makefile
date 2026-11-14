@@ -37,16 +37,18 @@ KERNEL_SOURCES := \
     src/objects/object_manager.cpp src/objects/handle_objects.cpp \
     src/runtime/memory.cpp src/runtime/runtime.cpp src/runtime/sprintf.cpp src/runtime/status.cpp \
     src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
-    src/hardware/interrupts_timers.cpp src/bootscreen/vsplash.cpp src/titles/patchfile.cpp src/core/fatal_help.cpp src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
-    src/titles/launch_redirect.cpp src/titles/ini_file.cpp \
-    src/extensions/extension_ini.cpp src/extensions/extension_parser.cpp
-KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/include $(KERNEL_OPT) -mno-sse -mno-mmx \
+    src/hardware/chipset/interrupts_timers.cpp src/hardware/chipset/port_io.cpp src/graphics/vector_renderer.cpp src/user_interface/error_screen_text.cpp \
+    src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
+    src/extensions/extension_parser.cpp \
+    src/ini_file/ini_file.cpp src/ini_file/title_patcher_ini.cpp src/ini_file/extensions_ini.cpp \
+    src/ini_file/launch_redirect_ini.cpp
+KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/src $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS)
 
 # The harness and the tests (host C++: exceptions, RTTI, the C++ library).
 TEST_SOURCES := host/hostcpu.cpp host/boot.cpp host/stubs.cpp host/checks.cpp $(sort $(wildcard test_*.cpp))
-TEST_FLAGS   := -std=gnu++20 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ../../kernel)\" -DGTEST_HAS_PTHREAD=1 -Ihost -I$(KERNEL)/include \
+TEST_FLAGS   := -std=gnu++20 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ../../kernel)\" -DGTEST_HAS_PTHREAD=1 -Ihost -I$(KERNEL)/src \
                 -isystem $(GTEST_SRC)/include -isystem $(GTEST_SRC)
 
 # GoogleTest itself, from its sources (one translation unit), 32-bit with everything else.
@@ -81,7 +83,7 @@ $(BUILD)/%.o: %.cpp
 
 $(BUILD)/host/host_asm.o: host/host_asm.S
 	@mkdir -p $(@D)
-	$(CC) $(COMMON) $(DEFINES) -Ihost -I$(KERNEL)/include -c $< -o $@
+	$(CC) $(COMMON) $(DEFINES) -Ihost -I$(KERNEL)/src -c $< -o $@
 
 $(GTEST_OBJ): $(GTEST_SRC)/src/gtest-all.cc
 	@mkdir -p $(@D)

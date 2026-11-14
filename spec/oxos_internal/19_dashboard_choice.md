@@ -1,6 +1,6 @@
 # 19. Which dashboard starts
 
-OXOS addition, implemented 2026-10-27. Code: `kernel/src/titles/loader.cpp` (`titles::Dashboards`,
+OXOS addition, implemented 2026-10-27. Code: `kernel/src/titles/title_loader.cpp` (`titles::Dashboards`,
 `titles::LaunchDashboard`).
 
 Wherever the kernel starts the dashboard (no disc, the tray open, a title that failed to load, a title asking for

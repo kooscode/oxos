@@ -3,12 +3,14 @@
 // Device interrupts are masked in the PIC as soon as IRQL reaches their level (eager masking), so
 // a hardware interrupt never arrives at or below the current IRQL and nothing has to be replayed.
 // APC/DISPATCH software interrupts are pending bits delivered when IRQL drops below them.
-#include <xk/core.h>
-#include <xk/serial.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
-#include <xk/io.h>
-#include <xk/memory.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <diagnostics/diagnostics.h>
+#include <hardware/chipset/serial.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
+#include <io/io.h>
+#include <memory/memory.h>
 
 namespace xk::core {
 
@@ -57,7 +59,7 @@ XBAPI KIRQL FASTCALL KfRaiseIrql(KIRQL NewIrql) {
     if (NewIrql > DISPATCH_LEVEL) {
         ULONG flags = save_flags_cli();
         KiPcr.Irql = NewIrql;
-        hardware::SetIrqlMask(NewIrql);
+        hardware::chipset::SetIrqlMask(NewIrql);
         restore_flags(flags);
     } else {
         KiPcr.Irql = NewIrql;
@@ -70,13 +72,14 @@ XBAPI void FASTCALL KfLowerIrql(KIRQL NewIrql) {
     KIRQL old = KiPcr.Irql;
     KiPcr.Irql = NewIrql;
     if (old > DISPATCH_LEVEL)
-        hardware::SetIrqlMask(NewIrql);
+        hardware::chipset::SetIrqlMask(NewIrql);
     if (PendingSoftwareInterrupts)
         DeliverSoftwareInterrupts();
     restore_flags(flags);
 }
 
-// KeRaiseIrqlToDpcLevel is in src/arch/in_game_reset.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game reset hook.
+// KeRaiseIrqlToDpcLevel is in src/in_game_reset/xinput_hook.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game
+// reset hook.
 
 XBAPI KIRQL NTAPI KeRaiseIrqlToSynchLevel() {
     return KfRaiseIrql(SYNCH_LEVEL);
@@ -164,12 +167,12 @@ static void DumpThreads() {
 
 // Called from the IRQ entry stubs with interrupts disabled.
 extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
-    if (hardware::IsSpuriousIrq(irq))
+    if (hardware::chipset::IsSpuriousIrq(irq))
         return;
-    // The start-up watchdog (core/startup.cpp) gets the interrupted eip: in the IRQ stub's frame, past this function's
-    // frame and the registers the stub saved.
+    // The start-up watchdog (diagnostics/boot_marks.cpp) gets the interrupted eip: in the IRQ stub's frame, past this
+    // function's frame and the registers the stub saved.
     if (irq == 0)
-        BootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
+        diagnostics::BootMarkWatchdog(((PULONG)__builtin_frame_address(0) + 3)[9], KiPcr.Irql);
 #if XK_DEBUG_SERIAL
     // Sampler (serial builds): every 5 s, where the processor was interrupted, so a hang names its code.
     if (irq == 0 && KeTickCount % 5000 == 0) {
@@ -182,10 +185,10 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     }
 #endif
     KIRQL old = KiPcr.Irql;
-    KIRQL level = hardware::GetIrqLevel(irq);
+    KIRQL level = hardware::chipset::GetIrqLevel(irq);
     KiPcr.Irql = level;
-    hardware::SetIrqlMask(level);
-    hardware::SendEoi(irq);
+    hardware::chipset::SetIrqlMask(level);
+    hardware::chipset::SendEoi(irq);
     KiPcr.PrcbData.InterruptCount++;
     if (irq < 16)
         IrqCounts[irq] = IrqCounts[irq] + 1;
@@ -202,7 +205,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
             XK_SERIAL("*** interrupt storm on IRQ %lu (%lu taken in all): masked\n", irq, IrqCounts[irq]);
             HalDisableSystemInterrupt(irq);
             KiPcr.Irql = old;
-            hardware::SetIrqlMask(old);
+            hardware::chipset::SetIrqlMask(old);
             return;
         }
     }
@@ -218,7 +221,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     cli();
 
     KiPcr.Irql = old;
-    hardware::SetIrqlMask(old);
+    hardware::chipset::SetIrqlMask(old);
     if (PendingSoftwareInterrupts)
         DeliverSoftwareInterrupts();
 }
@@ -246,7 +249,7 @@ XBAPI BOOLEAN NTAPI KeConnectInterrupt(PKINTERRUPT Interrupt) {
     if (!Interrupt->Connected && level > 0 && level < 16 && !InterruptObjects[level]) {
         InterruptObjects[level] = Interrupt;
         Interrupt->Connected = TRUE;
-        hardware::SetIrqLevel(level, (KIRQL)Interrupt->Irql);
+        hardware::chipset::SetIrqLevel(level, (KIRQL)Interrupt->Irql);
         HalEnableSystemInterrupt(level, (KINTERRUPT_MODE)Interrupt->Mode);
         connected = TRUE;
     }
@@ -261,7 +264,7 @@ XBAPI BOOLEAN NTAPI KeDisconnectInterrupt(PKINTERRUPT Interrupt) {
         ULONG level = Interrupt->BusInterruptLevel;
         HalDisableSystemInterrupt(level);
         InterruptObjects[level] = nullptr;
-        hardware::ResetIrqLevel(level);
+        hardware::chipset::ResetIrqLevel(level);
         Interrupt->Connected = FALSE;
     }
     KfLowerIrql(old);

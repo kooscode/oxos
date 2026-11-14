@@ -1,9 +1,11 @@
 // Bug checks: record the code (in memory, in CMOS for the next boot, and on the serial port) and halt. The reference
 // also reports through the fatal-error path (spec/stock/05 §6); OXOS's bug check does not.
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/serial.h>
-#include <xk/titles.h>
+#include <core/core.h>
+#include <diagnostics/diagnostics.h>
+#include <user_interface/user_interface.h>
+#include <arch/arch.h>
+#include <hardware/chipset/serial.h>
+#include <titles/titles.h>
 
 XBAPI ULONG KiBugCheckData[5] = {}; // exported: code and the four parameters
 
@@ -26,9 +28,9 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     // An unhandled exception (0x1E) is always raised from the dispatcher: record where it happened instead, the
     // faulting instruction (P2) and, for an access violation, the address it touched (P4).
     if (BugCheckCode == 0x1E)
-        SaveBugCheckLastWords(BugCheckCode, P4, P2);
+        diagnostics::SaveBugCheckLastWords(BugCheckCode, P4, P2);
     else
-        SaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
+        diagnostics::SaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
     XK_SERIAL("*** bug check %#lx (%#lx, %#lx, %#lx, %#lx)\n", BugCheckCode, P1, P2, P3, P4);
 #if XK_TRACE_IMPORTS
     // Trace builds: the title's last kernel calls (ordinal, return value, caller, arguments), oldest first.
@@ -54,7 +56,7 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
 #ifndef XK_HOST_TEST
     {
         const ULONG_PTR parameters[4] = {P1, P2, P3, P4};
-        ShowBugCheck(BugCheckCode, parameters);
+        user_interface::ShowBugCheck(BugCheckCode, parameters);
     }
 #endif
     for (;;)

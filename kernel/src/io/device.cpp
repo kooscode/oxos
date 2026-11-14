@@ -1,7 +1,7 @@
 // I/O manager: device objects, symbolic links, StartIo queueing, share access (spec/stock/11 §2).
-#include <xk/io.h>
-#include <xk/runtime.h>
-#include <xk/filesystems.h>
+#include <io/io.h>
+#include <runtime/runtime.h>
+#include <filesystems/filesystems.h>
 
 namespace xk::io {
 

@@ -1,6 +1,6 @@
 // FATX: IRP dispatch — create, cleanup/close, read/write, information, directory and volume queries (spec/stock/04b).
-#include <xk/hddfs.h>
-#include <xk/serial.h>
+#include <filesystems/hddfs/hddfs.h>
+#include <hardware/chipset/serial.h>
 
 namespace xk::filesystems {
 

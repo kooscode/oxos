@@ -50,7 +50,7 @@ class Monitor:
         return r.get("return", r)
 
     def addr(self, name):
-        """A symbol's address: a C name, a global C++ name, or a namespaced one ("storage::DiskLengthInSectors", in
+        """A symbol's address: a C name, a global C++ name, or a namespaced one ("hardware::ide::DiskLengthInSectors", in
         namespace xk), as the linker map spells them."""
         if "::" in name:
             parts = name.split("::")
@@ -79,10 +79,14 @@ class Monitor:
         self.hmp("cont")
 
     def rate(self, name, seconds=2.0):
-        v0, t0 = self.read(name), time.monotonic()
+        return self.rates([name], seconds)[0]
+
+    def rates(self, names, seconds=2.0):
+        """The rates of several counters over the same window."""
+        v0, t0 = [self.read(n) for n in names], time.monotonic()
         time.sleep(seconds)
-        v1, t1 = self.read(name), time.monotonic()
-        return (v1 - v0) / (t1 - t0)
+        v1, t1 = [self.read(n) for n in names], time.monotonic()
+        return [(b - a) / (t1 - t0) for a, b in zip(v0, v1)]
 
 
 def run_checks(mon, hdd=None, title_map=None):
@@ -115,7 +119,12 @@ def run_checks(mon, hdd=None, title_map=None):
         "KiTestIoOpenOk", "KiTestIoSyncRwOk", "KiTestIoQueryOk", "KiTestIoAsyncOk", "KiTestIoApcOk",
         "KiTestIoPortOk", "KiTestIoIoctlOk", "KiTestIoRelativeOk", "KiTestIoErrorsOk", "KiTestIoStartIoOk",
         "KiTestIoCloseOk", "KiTestIoDeleteOk", "KiTestIoPoolBalanced", "KiTestIoDone")}
-    spin_a, spin_b = mon.rate("KiTestSpinA", 1.0), mon.rate("KiTestSpinB", 1.0)
+    # The spinners (priority 1) get what the test suites leave over, which changes from one second to the next: both
+    # are measured over the same second, up to 5 times until both have run.
+    for _ in range(5):
+        spin_a, spin_b = mon.rates(["KiTestSpinA", "KiTestSpinB"], 1.0)
+        if spin_a > 0 and spin_b > 0 and min(spin_a, spin_b) / max(spin_a, spin_b) > 0.3:
+            break
     switches = mon.read_offset("KiPcr", 0x28 + 0x20)
 
     code, at = mon.read("core::LastExceptionCode"), mon.read("core::LastExceptionEip")
@@ -275,15 +284,15 @@ def idex_checks(mon, hdd):
         return raw[:length]
     password = hmac.new(mem("XboxHDKey", 16), ansi("HalDiskModelNumber") + ansi("HalDiskSerialNumber"),
                         hashlib.sha1).digest() + bytes(12)
-    before, after = mon.read("storage::DiskSecurityWord") & 0xFFFF, mon.read("KiTestIdexSecurityAfter")
+    before, after = mon.read("hardware::ide::DiskSecurityWord") & 0xFFFF, mon.read("KiTestIdexSecurityAfter")
     print(f"  (IDENTIFY word 128: {before:#06x} at boot, {after:#06x} after)")
     return {
         "IDE pass-through: IDENTIFY, buffer rule, failing command completes": mon.read("KiTestIdexPassThroughOk") == 1,
         "drive password = HMAC-SHA1(XboxHDKey, model, serial)": mem("KiTestIdexPassword", 32) == password,
         "locked drive unlocked at boot (word 128: locked bit gone)": not (before & 4)
-            or (after & 6) == 2 and mon.read("storage::DiskSecurityUnlocked") & 0xFF == 1,
-        "disk identified: capacity of the image (64-bit size)": mon.read("storage::DiskLengthInSectors")
-            | mon.read_offset("storage::DiskLengthInSectors", 4) << 32 == q.size // 512,
+            or (after & 6) == 2 and mon.read("hardware::ide::DiskSecurityUnlocked") & 0xFF == 1,
+        "disk identified: capacity of the image (64-bit size)": mon.read("hardware::ide::DiskLengthInSectors")
+            | mon.read_offset("hardware::ide::DiskLengthInSectors", 4) << 32 == q.size // 512,
         "\\Device\\Harddisk0\\PartitionN on demand, names checked": mon.read("KiTestIdexNamesOk") == 1,
         "sector 0 of partitions 0-5 matches the image": sigs_ok,
         "256 KB DMA read (2 chunks) matches the image": mon.read("KiTestIdexBigOk") == 1 and mon.read("KiTestIdexBigSum") == want,
@@ -321,7 +330,7 @@ def lba48_kernel_checks(mon, q):
     if q.size // 512 < 0x20001000:
         return {}
     return {
-        "48-bit drive detected (IDENTIFY words 83/86)": mon.read("storage::DiskSupportsLba48") & 0xFF == 1,
+        "48-bit drive detected (IDENTIFY words 83/86)": mon.read("hardware::ide::DiskSupportsLba48") & 0xFF == 1,
         "48-bit self-test ran (target sectors were free)": mon.read("KiTestIdexLba48Ran") == 1,
         "48-bit writes read back (around 0x0FFFFFFF, 256-sector counts, end of disk)": mon.read("KiTestIdexLba48Ok") == 1,
     }
@@ -366,9 +375,18 @@ def read_string(mon, name, length):
     return raw.split(b"\0")[0].decode("latin-1")
 
 
+def wait_for_suite(mon, done_flag, seconds=60):
+    """Waits (bounded) until a self-test suite says it has finished, so its results are read once they are final."""
+    for _ in range(int(seconds * 4)):
+        if mon.read(done_flag):
+            return
+        time.sleep(0.25)
+
+
 def fatx_checks(mon, hdd):
     if hdd is None:
         return {"HDD image attached": False}
+    wait_for_suite(mon, "KiTestFATXDone")  # its exFAT part writes a file past 4 GB: about 14 s after power-on
     q = Qcow2(hdd)
     if is_exfat_disk(q):
         v = exfat.EXFAT(q)
@@ -428,6 +446,7 @@ def exfat_format_checks(mon, q):
 
 
 def dvd_checks(mon):
+    wait_for_suite(mon, "KiTestDvdDone")  # it starts after the FATX suite
     big = mkxiso.TREE["media"]["big.bin"]
     names = "".join(n + "|" for n in sorted(mkxiso.TREE, key=lambda n: n.upper().encode()))
     return {
@@ -742,6 +761,10 @@ def rtl_checks(mon):
     names = ["Sprintf", "Interlocked", "CritSec", "RwLock", "Strings", "Math", "Refurb", "Time", "Dbg", "Boost", "Fpu"]
     out = {f"Rtl {n}": mon.read(f"KiTestRtl{n}Ok") == 1 for n in names}
     out["Rtl suite finished"] = mon.read("KiTestRtlDone") == 1
+    if not out["Rtl Refurb"]:
+        steps = [mon.read_offset("KiTestRtlRefurbSteps", 4 * i) for i in range(4)]
+        print(f"  (Refurb: first read {steps[0]:#x}, signature {steps[1]:#x}, write and read again {steps[2]:#x}, "
+              f"short length {steps[3]:#x})")
     return out
 
 
@@ -769,7 +792,7 @@ def misc_checks(mon):
         "SMC tray events update the tray cache and change count": mon.read("KiTestMiscSmcOk") == 1,
         "performance counter: 3.375 MHz, monotonic, matches the clock": mon.read("KiTestMiscPerfOk") == 1,
         "FATX scatter/gather: NtWriteFileGather + NtReadFileScatter round trip": mon.read("KiTestMiscScatterOk") == 1,
-        "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("hardware::SciCount") >= 1,
+        "ACPI SCI (IRQ 12) delivered and acknowledged (PM timer overflow)": mon.read("hardware::chipset::SciCount") >= 1,
         "XboxHardwareInfo: GpuRevision = NV2A boot ID, McpRevision set": hw_info_ok(mon),
         "TV encoder: every SD and HD mode word programs the Conexant registers (read back)":
             mon.read("KiTestAvModesTried") == 15 and mon.read("KiTestAvModesOk") == 15,
@@ -782,10 +805,10 @@ def misc_checks(mon):
 def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     if jingle_pcm:  # once synthesis has finished (the jingle is still playing): the whole buffer
         for _ in range(200):
-            if mon.read("bootscreen::BootSoundSynthMs"):
+            if mon.read("boot_splash::BootSoundSynthMs"):
                 break
             time.sleep(0.05)
-        buffer, size = mon.read("bootscreen::BootSoundBuffer"), mon.read("bootscreen::BootSoundBytes")
+        buffer, size = mon.read("boot_splash::BootSoundBuffer"), mon.read("boot_splash::BootSoundBytes")
         r = mon.hmp(f"pmemsave {buffer:#x} {size:#x} \"{jingle_pcm}\"")
         print("  jingle samples saved:", jingle_pcm, r.strip() if isinstance(r, str) else r)
     for _ in range(60):
@@ -794,7 +817,7 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
         time.sleep(0.25)
     time.sleep(4)
     for _ in range(40):  # the jingle (and the splash) end a little after the dashboard has loaded
-        if mon.read("bootscreen::BootSoundStatus") >= 3:
+        if mon.read("boot_splash::BootSoundStatus") >= 3:
             break
         time.sleep(0.25)
     exc = mon.read("core::LastExceptionVector")
@@ -808,7 +831,7 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     def mapped(name):
         pfn = (mon.addr(name) & 0x03FFFFFF) >> 12
         return int(mon.hmp(f"x/1wx {0x83FF0000 + 4 * pfn:#x}").split(":")[1].split()[0], 16) & 1
-    boot_code_present, tables_present = mapped("bootscreen::StartSplash"), mapped("ConexantTablesStart")
+    boot_code_present, tables_present = mapped("boot_splash::StartSplash"), mapped("ConexantTablesStart")
     start = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)
     fb = start & 0x03FFFFFF
     words = []
@@ -821,8 +844,8 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     dash = raw.split(b"\0")[0].decode("latin-1")
     want = ("\\Device\\Harddisk0\\Partition2\\Dashboard\\default.xbe" if xbl else
             "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if evox else "xboxdash.xbe"))
-    # The boot screen's diagnostics (kernel/src/bootscreen), read once: the splash and the jingle have ended.
-    bs = {name: mon.read(f"bootscreen::{name}") for name in (
+    # The boot screen's diagnostics (kernel/src/boot_splash), read once: the splash and the jingle have ended.
+    bs = {name: mon.read(f"boot_splash::{name}") for name in (
         "SplashFullMs", "SplashFadeMs", "SplashFrames", "SplashSource", "SplashStatus", "BootSoundStatus",
         "BootSoundPosition", "BootSoundLast", "BootSoundAhead", "BootSoundUnderruns", "BootSoundSynthMs")}
     return {"M4b-2": {
@@ -830,7 +853,7 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
         f"({'EvoX first' if evox else 'only C:\\Dashboard' if xbl else 'no EvoX: the Xbox dashboard'})":
             mon.read("titles::TitleLaunched") == 2 and mon.read("titles::LastLoadStatus") == 0 and dash == want,
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
-        "AvSetDisplayMode called, CRTC start set": mon.read("hardware::SetDisplayModeCalls") >= 1 and fb != 0,
+        "AvSetDisplayMode called, CRTC start set": mon.read("hardware::video::SetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
         f"boot splash faded in before the dashboard, full intensity {bs['SplashFullMs']} ms after the jingle's "
         f"start, at its climax ({bs['SplashFadeMs']} ms)":
@@ -851,11 +874,11 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
 
 def fatal_checks(mon):
     for _ in range(240):  # the disk wait times out first
-        if mon.read("core::FatalErrorCode"):
+        if mon.read("user_interface::FatalErrorCode"):
             break
         time.sleep(0.25)
     time.sleep(2)
-    code, fb = mon.read("core::FatalErrorCode"), mon.read("core::FatalErrorFrameBuffer")
+    code, fb = mon.read("user_interface::FatalErrorCode"), mon.read("user_interface::FatalErrorFrameBuffer")
     lit = text = 0
     for y in range(72, 182, 8):  # the two digit cells (x 250-390)
         out = mon.hmp(f"xp/36wx {fb + (y * 640 + 250) * 4:#x}") if fb else ""
@@ -864,7 +887,7 @@ def fatal_checks(mon):
         out = mon.hmp(f"xp/544wx {fb + (y * 640 + 48) * 4:#x}") if fb else ""
         text += len(re.findall(r"0x00ffffff", out))
     print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit digit samples, {text} title samples)")
-    sound_stopped = mon.read("core::FatalSoundStopped")
+    sound_stopped = mon.read("user_interface::FatalSoundStopped")
     return {"M5f": {
         "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
         "error code drawn on screen": fb != 0 and lit > 20
@@ -880,12 +903,12 @@ def blank_disk_fatal_checks(mon, reason, seconds, pad=None):
     X is then pressed and the File Manager must start."""
     shown = 0
     for _ in range(4 * (seconds + 30)):
-        if not shown and mon.read("core::FatalErrorFrameBuffer") == 0 and mon.read("storage::DiskCountdownSeconds"):
+        if not shown and mon.read("user_interface::FatalErrorFrameBuffer") == 0 and mon.read("storage::DiskCountdownSeconds"):
             shown = int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16)  # the countdown on screen
-        if mon.read("core::FatalErrorCode") or mon.read("webserver::Serving"):
+        if mon.read("user_interface::FatalErrorCode") or mon.read("webserver::Serving"):
             break
         time.sleep(0.25)
-    code, serving = mon.read("core::FatalErrorCode"), mon.read("webserver::Serving")
+    code, serving = mon.read("user_interface::FatalErrorCode"), mon.read("webserver::Serving")
     got = (mon.read("storage::DiskCountdownSeconds"), mon.read("storage::DiskCountdownReason"))
     print(f"  (fatal error {code}, upload server {serving}, countdown {got[0]} s, reason {got[1]})")
     checks = {f"countdown of {seconds} s, reason {reason}": got == (seconds, reason),
@@ -900,7 +923,7 @@ def blank_disk_fatal_checks(mon, reason, seconds, pad=None):
             time.sleep(0.25)
         pad.set("X", 0)
         checks[f"X on the error screen: the File Manager ({mon.read('gamepad::ControllersFound')} pads)"] = \
-            mon.read("webserver::Serving") == 1 and mon.read("core::FatalErrorCode") == 0
+            mon.read("webserver::Serving") == 1 and mon.read("user_interface::FatalErrorCode") == 0
     if seconds:
         checks["the countdown screen was shown"] = shown != 0
     return {"blank disk": checks}
@@ -1171,10 +1194,10 @@ def encoder_checks(mon, name, self_test=False):
     (spec/stock/18-20)."""
     address, flag, kind = ENCODERS[name]
     for _ in range(40):
-        if mon.read("hardware::EncoderAddress") & 0xFF:
+        if mon.read("hardware::video::EncoderAddress") & 0xFF:
             break
         time.sleep(0.25)
-    found = mon.read("hardware::EncoderAddress") & 0xFF
+    found = mon.read("hardware::video::EncoderAddress") & 0xFF
     flags = mon.read("XboxHardwareInfo")
     print(f"  encoder {name}: found {found:#x}, XboxHardwareInfo.Flags {flags:#x}")
     checks = {
@@ -1184,15 +1207,15 @@ def encoder_checks(mon, name, self_test=False):
     # The dashboard sets an SD mode: Conexant and Focus registers read back as the tables have them; on the Xcalibur
     # every write completes and the values written are the ones spec/stock/20 gives for that mode.
     for _ in range(60):
-        if mon.read("hardware::EncoderProgrammed"):
+        if mon.read("hardware::video::EncoderProgrammed"):
             break
         time.sleep(0.25)
-    mode, bad = mon.read("hardware::EncoderProgrammed"), mon.read("hardware::EncoderMismatches")
+    mode, bad = mon.read("hardware::video::EncoderProgrammed"), mon.read("hardware::video::EncoderMismatches")
     print(f"  {name}: mode {mode:#010x} programmed, {bad} registers read back differently or writes failed")
     checks[f"{name}: the dashboard's mode set programs the encoder"] = mode != 0 and bad == 0
     if name == "xcalibur" and mode and not self_test:
         row, want = xcalibur_expected(mode)
-        got = {r: mon.read_offset("hardware::XcShadow", r * 4) for r in want}
+        got = {r: mon.read_offset("hardware::video::XcShadow", r * 4) for r in want}
         diff = {f"{r:#04x}": (f"{got[r]:#010x}", f"{v:#010x}") for r, v in want.items() if got[r] != v}
         print(f"  Xcalibur row {row:#04x}: {len(want) - len(diff)} of {len(want)} registers as spec/stock/20 gives them"
               + (f"; differ: {diff}" if diff else ""))
@@ -1214,7 +1237,7 @@ def encoder_checks(mon, name, self_test=False):
         # xemu models the Xcalibur as byte registers, so a 4-byte block read returns its register 0 as the byte count
         # and the kernel rejects it, as it would a short reply on hardware (spec/stock/20 §1); the block writes
         # themselves complete on the bus.
-        last = mon.read("hardware::SMBusLastBlock")
+        last = mon.read("hardware::chipset::SMBusLastBlock")
         print(f"  last block transfer {last:#x}")
         checks["xcalibur: a 4-byte block SMBus transfer completes on the bus"] = (last >> 8) & 0x10 != 0
     return checks
@@ -1287,7 +1310,7 @@ def main():
         subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", hdd_copy, f"{a.blank_hdd}G"], check=True)
         if a.blank_marker is not None or a.foreign:
             q = Qcow2(hdd_copy)
-            if a.blank_marker is not None:  # sector 1023 (kernel/include/xk/disk_format.h)
+            if a.blank_marker is not None:  # sector 1023 (kernel/src/storage/disk_format.h)
                 q.write(1023 * 512, b"OXOS BLANK DISK\0" + struct.pack("<I", a.blank_marker))
             else:  # an MBR with one NTFS partition at sector 2048
                 mbr = bytearray(512)

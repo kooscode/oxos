@@ -1,11 +1,11 @@
 // Runtime exports: interlocked operations, S-lists, memory/integer helpers, ANSI/Unicode strings and conversions,
 // port buffers (spec/stock/13). Semantics follow the documented NT runtime; Xbox strings are ANSI, Unicode is UTF-16
 // with a Latin-1 multibyte mapping.
-#include <xk/runtime.h>
-#include <xk/arch.h>
-#include <xk/objects.h>
-#include <xk/hardware.h>
-#include <xk/core.h>
+#include <runtime/runtime.h>
+#include <arch/arch.h>
+#include <objects/objects.h>
+#include <hardware/chipset/chipset.h>
+#include <core/core.h>
 
 namespace xk::runtime {
 
@@ -192,36 +192,6 @@ XBAPI void NTAPI RtlMapGenericMask(PULONG AccessMask, const GENERIC_MAPPING *Gen
     if (m & 0x10000000)
         m |= GenericMapping->GenericAll;
     *AccessMask = m & 0x0FFFFFFF;
-}
-
-XBAPI void NTAPI READ_PORT_BUFFER_UCHAR(PUCHAR Port, PUCHAR Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        Buffer[i] = inb((USHORT)(ULONG)Port);
-}
-
-XBAPI void NTAPI READ_PORT_BUFFER_USHORT(PUSHORT Port, PUSHORT Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        Buffer[i] = inw((USHORT)(ULONG)Port);
-}
-
-XBAPI void NTAPI READ_PORT_BUFFER_ULONG(PULONG Port, PULONG Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        Buffer[i] = inl((USHORT)(ULONG)Port);
-}
-
-XBAPI void NTAPI WRITE_PORT_BUFFER_UCHAR(PUCHAR Port, PUCHAR Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        outb((USHORT)(ULONG)Port, Buffer[i]);
-}
-
-XBAPI void NTAPI WRITE_PORT_BUFFER_USHORT(PUSHORT Port, PUSHORT Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        outw((USHORT)(ULONG)Port, Buffer[i]);
-}
-
-XBAPI void NTAPI WRITE_PORT_BUFFER_ULONG(PULONG Port, PULONG Buffer, ULONG Count) {
-    for (ULONG i = 0; i < Count; i++)
-        outl((USHORT)(ULONG)Port, Buffer[i]);
 }
 
 // --- Strings

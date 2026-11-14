@@ -1,7 +1,7 @@
 // Executive pool: block format, sizes, lookaside lists, splitting, merging, page release, and the page hand-over
 // race.
 #include "kernel_test.h"
-#include <xk/memory.h>
+#include <memory/memory.h>
 
 #include <map>
 #include <random>

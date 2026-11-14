@@ -1,8 +1,9 @@
 // Process structure: system threads as objects (spec/stock/07 "Thread creation", spec/stock/10 §5).
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/serial.h>
-#include <xk/objects.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/serial.h>
+#include <objects/objects.h>
 
 namespace xk::core {
 

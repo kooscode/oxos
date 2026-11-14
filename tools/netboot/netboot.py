@@ -24,7 +24,8 @@ HEADER = struct.Struct("<IBBHIII")  # magic, op, version, reserved, session, off
 PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only used for frames injected into xemu
 
 
-TITLE_AT = 0x5FE0  # 'OXTI' + package offset + package size: a title's files after the image (kernel: titles/nettitle.cpp)
+# 'OXTI' + package offset + package size: a title's files after the image (kernel: titles/title_netboot.cpp)
+TITLE_AT = 0x5FE0
 
 
 def title_package(folder, name):

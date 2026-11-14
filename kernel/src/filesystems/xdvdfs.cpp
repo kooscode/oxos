@@ -1,9 +1,9 @@
 // XDVDFS (Xbox game disc file system), read-only (spec/stock/04c).
-#include <xk/filesystems.h>
-#include <xk/serial.h>
-#include <xk/storage.h>
-#include <xk/runtime.h>
-#include <xk/io.h>
+#include <filesystems/filesystems.h>
+#include <hardware/chipset/serial.h>
+#include <storage/storage.h>
+#include <runtime/runtime.h>
+#include <io/io.h>
 
 namespace xk::filesystems {
 

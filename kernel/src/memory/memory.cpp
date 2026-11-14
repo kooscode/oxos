@@ -1,9 +1,9 @@
 // Exported memory-manager routines (spec/stock/09 §2-5).
-#include <xk/memory.h>
-#include <xk/serial.h>
-#include <xk/arch.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
+#include <memory/memory.h>
+#include <hardware/chipset/serial.h>
+#include <arch/arch.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
 
 namespace xk::memory {
 

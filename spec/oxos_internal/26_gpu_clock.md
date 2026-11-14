@@ -1,8 +1,7 @@
 # 26 — GPU clock and memory interface checks before the kernel runs
 
 Status: implemented 2026-11-03 (boot/bl.cpp `BlCheckGpuClock`, `BlRestoreMemoryInterface`, `BlCheckXcodeValues`;
-kernel/src/core/startup.cpp). An OXOS addition, like the
-DRAM refresh check (20).
+kernel/src/diagnostics/boot_reports.cpp). An OXOS addition, like the DRAM refresh check (20).
 
 ## 1. The problem
 The X-codes set the NV2A core clock: NVPLL coefficients, NV2A 0x680500 ← 0x00011C01 (M 1, N 28, P 1: 16.667 MHz × 28

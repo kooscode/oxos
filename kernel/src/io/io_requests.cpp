@@ -1,7 +1,7 @@
 // I/O manager: IRP allocation, dispatch, completion and request builders (spec/stock/11 §3).
-#include <xk/io.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
+#include <io/io.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
 
 namespace xk::io {
 

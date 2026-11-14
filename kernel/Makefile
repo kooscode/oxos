@@ -67,7 +67,7 @@ SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # comparing the set-up with a reference kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
 # REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots
-# the console the way the in-game reset does (hardware::InGameResetReboot), so resets can be tested in a loop without a
+# the console the way the in-game reset does (in_game_reset::Reboot), so resets can be tested in a loop without a
 # controller.
 REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
@@ -86,9 +86,9 @@ ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
-ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
-# The version on the boot splash and the error screens (bootscreen/text.cpp): vX.Y.Z when built for a release (make
+            -Wall -Wextra -Werror -Wno-unused-parameter -Isrc -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
+ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Isrc $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
+# The version on the boot splash and the error screens (graphics/text.cpp): vX.Y.Z when built for a release (make
 # release VERSION=X.Y.Z), else DEV (and XK_RELEASE_VERSION 1 or 0: a development build's disk-format countdown is
 # short). It is a generated header, rewritten only when the text changes, so a new version rebuilds what uses it.
 XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
@@ -107,10 +107,13 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and
 # take memory titles count on (Halo 2 needs nearly all of it).
-# The extension loader's files (src/extensions/extension_ini.cpp, extension_loader.cpp, extension_parser.cpp) are
-# linked on their own, below, not into the kernel.
-EXTENSION_LOADER_SRCS := $(addprefix src/extensions/,extension_ini.cpp extension_loader.cpp extension_parser.cpp)
-CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/trace.cpp) $(EXTENSION_LOADER_SRCS), \
+# Every kernel header (each folder of src/ holds its own): a source file is rebuilt when one changes.
+KERNEL_HEADERS := $(wildcard src/*/*.h src/*/*/*.h)
+# The extension loader's files (src/extensions/extension_loader.cpp, extension_parser.cpp and
+# src/ini_file/extensions_ini.cpp) are linked on their own, below, not into the kernel.
+EXTENSION_LOADER_SRCS := $(addprefix src/extensions/,extension_loader.cpp extension_parser.cpp) \
+                         src/ini_file/extensions_ini.cpp
+CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) $(EXTENSION_LOADER_SRCS), \
                          $(wildcard src/*/*.cpp src/*/*/*.cpp))
 ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
 # The boot self-tests: test code in tests/kernel_self_tests, compiled into SELFTEST=1 kernels only.
@@ -122,21 +125,21 @@ OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) 
 all: $(BUILD)/xboxkrnl.exe
 
 # Boot-only code (spec/oxos_internal/18_boot_memory.md): these files may call one another's boot-only functions.
-BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,vsplash.obj,nic.obj,ip.obj,tcp.obj,server.obj,page.obj
-BOOT_OBJS := $(BOOT_OBJS),usb_host.obj,pads.obj
+BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,nic.obj,ip.obj,tcp.obj,webserver.obj,webpage.obj
+BOOT_OBJS := $(BOOT_OBJS),host_controller.obj,devices.obj,gamepad.obj,file_manager_screen.obj,vector_renderer.obj,ac97.obj
 # ... and the boot-only functions kept code calls during a cold boot, before the pages are freed, or that a kept file
-# defines for the boot-only code (the File Manager's screen, in core/fatal.cpp with the other screens).
-BOOT_ENTRIES := bootscreen::StartSplash,bootscreen::WaitForSplash,webserver::Start,webserver::Stop
-BOOT_ENTRIES := $(BOOT_ENTRIES),core::ShowFileManagerScreen,core::CloseFileManagerScreen,core::NoDashboardError
+# defines for the boot-only code.
+BOOT_ENTRIES := boot_splash::StartSplash,boot_splash::WaitForSplash,webserver::Start,webserver::Stop
+BOOT_ENTRIES := $(BOOT_ENTRIES),user_interface::NoDashboardError
 BOOT_ENTRIES := $(BOOT_ENTRIES),gamepad::WaitForXButton
 # The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
 BOOT_ENTRIES := $(BOOT_ENTRIES),storage::BlankDiskCountdown,storage::IsDiskBlank,storage::DescribeDisk
 # The kernel extension loader's cache, written at a cold boot from the boot-only copy
 # (extensions/extension_runtime_loader.cpp).
 BOOT_ENTRIES := $(BOOT_ENTRIES),extensions::WriteLoaderCache
-# The netboot title's installation (titles/nettitle.cpp): a package only ever comes with a cold boot.
+# The netboot title's installation (titles/title_netboot.cpp): a package only ever comes with a cold boot.
 BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchNetbootTitle
-# The cold boot's launch choice and the File Manager (titles/loader.cpp).
+# The cold boot's launch choice and the File Manager (titles/title_loader.cpp).
 BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchAtColdBoot,titles::ServeFileManager
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
@@ -144,16 +147,16 @@ KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-
 # Per-file optimization (not in DEBUG builds): -O2 for the hashes and ciphers (XBE sections, saves), memcpy and memset,
 # the virtual-disc decompressor (it runs for every sector a title reads from a CCI) and the boot-only code (the splash
 # and the jingle have to keep up with the clock; their pages are freed before the title starts, so their size costs
-# nothing then). bootscreen/text.cpp is resident (the error screens use it), so it stays -Oz.
+# nothing then), with the vector renderer it draws with.
 FAST_SRCS  := src/crypto/crypto.cpp src/runtime/memory.cpp src/storage/virtual_disc.cpp \
-              $(filter-out src/bootscreen/text.cpp,$(wildcard src/bootscreen/*.cpp))
+              $(wildcard src/boot_splash/*.cpp) src/graphics/vector_renderer.cpp src/hardware/audio/ac97.cpp
 ifneq ($(DEBUG),1)
 $(patsubst src/%.cpp,$(BUILD)/%.obj,$(FAST_SRCS)): FILE_OPT := -O2
 endif
 
 # Each object also depends on every header it includes (the compiler writes the list; -MP keeps a removed header
 # from breaking the build).
-$(BUILD)/%.obj: src/%.cpp $(wildcard include/xk/*.h)
+$(BUILD)/%.obj: src/%.cpp $(KERNEL_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
 
@@ -162,12 +165,12 @@ $(XK_VERSION_HEADER): FORCE
 	@printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' "$(XK_VERSION_TEXT)" \
 	    "$(if $(VERSION),1,0)" | cmp -s - $@ || printf '#define XK_VERSION_TEXT "%s"\n#define XK_RELEASE_VERSION %s\n' \
 	    "$(XK_VERSION_TEXT)" "$(if $(VERSION),1,0)" > $@
-$(BUILD)/bootscreen/text.obj $(BUILD)/storage/disk_layout.obj $(BUILD)/extensions/extension_runtime.obj: \
+$(BUILD)/graphics/text.obj $(BUILD)/storage/disk_layout.obj $(BUILD)/extensions/extension_runtime.obj: \
     $(XK_VERSION_HEADER)
 FORCE:
 
 # The boot self-tests (SELFTEST=1 only).
-$(BUILD)/kernel_self_tests/%.obj: $(SELF_TESTS_DIR)/%.cpp $(wildcard include/xk/*.h $(SELF_TESTS_DIR)/*.h)
+$(BUILD)/kernel_self_tests/%.obj: $(SELF_TESTS_DIR)/%.cpp $(KERNEL_HEADERS) $(wildcard $(SELF_TESTS_DIR)/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
 -include $(OBJS:.obj=.d) $(EXTENSION_LOADER_OBJS:.obj=.d)
@@ -220,7 +223,7 @@ MCPX16          ?= 0
 OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18/bin/llvm-objcopy)
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
-              -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Iinclude \
+              -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Isrc \
               $(if $(filter 1,$(MCPX16)),-DMCPXREVD5) -DXK_NETBOOT=$(NETBOOT) -DXK_MCPX_DUMP=$(MCPX_DUMP) -DXK_XCODE_ENTRY_SNAPSHOT=$(SERIAL) \
               -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 BOOT := $(BUILD)/boot
@@ -254,11 +257,14 @@ $(BOOT)/reset.bin: boot/reset.S
 	$(CC) $(BOOT_FLAGS) -c $< -o $(BOOT)/reset.o
 	$(OBJCOPY) -O binary -j .reset $(BOOT)/reset.o $@
 
-$(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/netboot.h boot/bl.ld include/xk/inflate.h
+# The 2BL: start.S and bl.cpp, and in NETBOOT=1 images netboot.cpp (the network boot).
+BL_NETBOOT := $(if $(filter 1,$(NETBOOT)),$(BOOT)/netboot.o)
+$(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.h boot/netboot.cpp boot/bl.ld boot/inflate.h src/hardware/ethernet/nic.h
 	@mkdir -p $(dir $@)
 	$(CC) $(BOOT_FLAGS) -c boot/start.S -o $(BOOT)/start.o
 	$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/bl.cpp -o $(BOOT)/bl.o
-	ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o -o $(BOOT)/bl.elf
+	$(if $(BL_NETBOOT),$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/netboot.cpp -o $(BL_NETBOOT))
+	ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o $(BL_NETBOOT) -o $(BOOT)/bl.elf
 	$(OBJCOPY) -O binary $(BOOT)/bl.elf $@
 
 bios: $(BUILD)/bios.bin
@@ -427,7 +433,7 @@ test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 # read back as written; the Xcalibur's writes are compared with spec/stock/20); then the self-test build on each
 # encoder, whose boot self-test sets 15 mode words and the encoder options and checks them.
 test_encoders: $(HDD_FETCH)
-	@python3 -I $(ROOT)/tools/gen_av_tables.py --check src/hardware/video_modes.inc || { echo "src/hardware/video_modes.inc is stale: run tools/gen_av_tables.py --out src/hardware/video_modes.inc"; exit 1; }
+	@python3 -I $(ROOT)/tools/gen_av_tables.py --check src/hardware/video/video_modes.inc || { echo "src/hardware/video/video_modes.inc is stale: run tools/gen_av_tables.py --out src/hardware/video/video_modes.inc"; exit 1; }
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	for e in conexant focus xcalibur; do python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
 	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc \

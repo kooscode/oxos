@@ -1,7 +1,7 @@
 // Out of memory: every allocating entry point fails cleanly (a status or nullptr, nothing leaked, nothing half
 // built), and works again once memory is back.
 #include "kernel_test.h"
-#include <xk/objects.h>
+#include <objects/objects.h>
 
 #include <vector>
 

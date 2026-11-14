@@ -10,9 +10,9 @@
 // - Freeing merges the block with free neighbours (PreviousSize finds the one in front) and returns the page to
 //   the memory manager once the whole page is free.
 // - Everything except the lookaside lists runs at DISPATCH_LEVEL, page allocation included.
-#include <xk/memory.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
+#include <memory/memory.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
 
 namespace xk::memory {
 

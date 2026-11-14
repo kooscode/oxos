@@ -6,14 +6,14 @@
 //   ACK). One ACK per connection after each batch of received frames (PollTcp), not one per segment: a full window
 //   is some 45 segments, and an ACK each would queue behind the card's transmit ring. The window is the receive
 //   buffer's free space, at most 64 KB less one byte (the field's limit), so a sender never has more in flight than
-//   the card's receive ring holds (network/nic.cpp).
+//   the card's receive ring holds (hardware/ethernet/nic.cpp).
 // - sending: what is queued stays in the send buffer until acknowledged. Nothing acknowledged for 1 s: everything
 //   from the oldest unacknowledged byte is sent again ("go back N"), 8 times at most, then the connection is reset.
 // - ending: our FIN after the queued data; the connection ends once both sides' FINs are acknowledged, or 2 s after
 //   ours with no FIN from the peer. Nothing heard for 30 s: reset.
-#include <xk/network_stack.h>
-#include <xk/memory.h>
-#include <xk/runtime.h>
+#include <network/network_stack.h>
+#include <memory/memory.h>
+#include <runtime/runtime.h>
 
 namespace xk::network {
 
@@ -179,14 +179,14 @@ static void TransmitConnection(NETP_CONNECTION *c) {
         if (n > window - inFlight)
             n = window - inFlight;
         if (inFlight == 0)
-            c->SentMs = Milliseconds();
+            c->SentMs = hardware::ethernet::Milliseconds();
         SendOnConnection(c, c->SndNxt, ACK | PSH, c->Tx + inFlight, n);
         c->SndNxt += n;
         inFlight += n;
     }
     if (c->FinQueued && !c->FinSent && inFlight == c->TxCount) {
         if (c->SndNxt == c->SndUna)
-            c->SentMs = Milliseconds();
+            c->SentMs = hardware::ethernet::Milliseconds();
         SendOnConnection(c, c->SndNxt, FIN | ACK, nullptr, 0);
         c->SndNxt++;
         c->FinSent = true;
@@ -237,9 +237,9 @@ static void NewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t, ULO
         i += t[i + 1] ? t[i + 1] : 1;
     }
     c->RcvNxt = seq + 1;
-    c->SndUna = c->SndNxt = Milliseconds() * 2654435761u; // the initial sequence number
+    c->SndUna = c->SndNxt = hardware::ethernet::Milliseconds() * 2654435761u; // the initial sequence number
     c->SndWindow = LoadBigEndian16(t + 14);
-    c->HeardMs = c->SentMs = Milliseconds();
+    c->HeardMs = c->SentMs = hardware::ethernet::Milliseconds();
     SendOnConnection(c, c->SndNxt, SYN | ACK, nullptr, 0);
     c->SndNxt++;
 }
@@ -263,9 +263,9 @@ static void Acknowledged(NETP_CONNECTION *c, ULONG Ack, ULONG Window) {
     c->SndUna = Ack;
     c->SndWindow = Window;
     c->Retries = 0;
-    c->SentMs = Milliseconds();
+    c->SentMs = hardware::ethernet::Milliseconds();
     if (finAcked)
-        c->FinAckedMs = Milliseconds();
+        c->FinAckedMs = hardware::ethernet::Milliseconds();
 }
 
 void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, ULONG Length) {
@@ -291,7 +291,7 @@ void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, 
         return NewConnection(SourceMac, SourceIp, t, Length, headerLength);
     UCHAR flags = t[13];
     ULONG seq = LoadBigEndian32(t + 4), dataLength = Length - headerLength;
-    c->HeardMs = Milliseconds();
+    c->HeardMs = hardware::ethernet::Milliseconds();
     if (flags & RST) {
         FreeConnection(c);
         return;
@@ -326,7 +326,7 @@ void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, 
 void PollTcp() {
     if (!Connections)
         return;
-    ULONG now = Milliseconds();
+    ULONG now = hardware::ethernet::Milliseconds();
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
         NETP_CONNECTION *c = &Connections[i];
         if (c->State == TcpFree)

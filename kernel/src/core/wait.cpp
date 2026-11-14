@@ -1,8 +1,9 @@
 // Waits and synchronization objects (spec/stock/07 "Waits", spec/stock/08; NT semantics with the Xbox's
 // in-kernel delivery of user APCs).
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
 
 namespace xk::core {
 

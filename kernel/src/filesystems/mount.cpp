@@ -1,7 +1,7 @@
 // Which file system mounts a volume: the I/O manager asks these routines when a device is first opened.
-#include <xk/filesystems.h>
-#include <xk/storage.h>
-#include <xk/hddfs.h>
+#include <filesystems/filesystems.h>
+#include <storage/storage.h>
+#include <filesystems/hddfs/hddfs.h>
 
 namespace xk::filesystems {
 
@@ -14,7 +14,7 @@ static NTSTATUS MountDvdVolume(PDEVICE_OBJECT TargetDevice) {
 
 // Disks: the folder partitions of an exFAT disk mount as exFAT views; every other partition as FATX.
 static NTSTATUS MountDiskVolume(PDEVICE_OBJECT TargetDevice) {
-    PCSZ folder = storage::FolderOfPartition(TargetDevice);
+    PCSZ folder = hardware::ide::FolderOfPartition(TargetDevice);
     return folder ? EXFATMountVolume(TargetDevice, folder) : FATXMountVolume(TargetDevice);
 }
 

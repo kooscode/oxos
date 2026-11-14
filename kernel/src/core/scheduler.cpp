@@ -1,9 +1,10 @@
 // Scheduler (spec/stock/07 "Scheduling"). Uniprocessor: the dispatcher database is protected by running
 // at DISPATCH_LEVEL; KiUnlockDispatcherDatabase performs any pending switch when IRQL drops.
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
-#include <xk/memory.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
+#include <memory/memory.h>
 
 namespace xk::core {
 

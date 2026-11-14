@@ -1,11 +1,12 @@
 // Thread and process objects (spec/stock/07 "Thread creation").
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
-#include <xk/runtime.h>
-#include <xk/titles.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
+#include <runtime/runtime.h>
+#include <titles/titles.h>
 
 namespace xk::core {
 

@@ -1,8 +1,9 @@
 // Processor bring-up: GDT, TSSs, IDT and the processor control region (spec/stock/01_boot.md §2).
 // Selector layout matches the reference kernel:
 //   0x08 code, 0x10 data, 0x18 main TSS, 0x20 FS -> KPCR, 0x28 double-fault TSS, 0x30 NMI TSS.
-#include <xk/core.h>
-#include <xk/arch.h>
+#include <core/core.h>
+#include <diagnostics/diagnostics.h>
+#include <arch/arch.h>
 
 KPCR KiPcr; // the processor control region (FS:0): outside the namespace, the unit tests' assembly uses it
 
@@ -101,7 +102,7 @@ extern "C" PVOID KiIrqStubs[16];
 // After the task's POST code (0xDF or 0xD2), the interrupted eip (4 bytes, low first) and esp (bytes 1-3) go to port
 // 0x80 too: a POST display or the Modxo's bus log then shows where it stopped on every build, not only a serial one.
 extern "C" void KiFaultTaskReport(ULONG Kind) {
-    SaveFaultTaskLastWords(Kind, KiTss.Eip);
+    diagnostics::SaveExceptionLastWords(Kind, KiTss.Eip);
     for (int i = 0; i < 4; i++)
         post((UCHAR)(KiTss.Eip >> (8 * i)));
     for (int i = 1; i < 4; i++)

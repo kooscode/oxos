@@ -8,8 +8,8 @@ Verified:
 - MCPX 1.0, in xemu with a 1.0 ROM. The dump was identical to the ROM given to xemu.
 
 Not applicable: the MCPX X2 of debug kits has no boot ROM; the CPU starts in the flash's top 512 bytes (spec/stock/01
-§5). Both attack images were run on the green debug kit (2026-11-10): the CPU ran the retail BIOS's decoy loader (its top
-512 bytes) and never reached the payload (RC4 image: wild reads; TEA image: hung at 0xFFFFFE3F).
+§5). Both attack images were run on the green debug kit (2026-11-10): the CPU ran the retail BIOS's decoy loader (its
+top 512 bytes) and never reached the payload (RC4 image: wild reads; TEA image: hung at 0xFFFFFE3F).
 
 ## 1. Why our normal entry can't read the ROM
 - Open images enter the 2BL through the X-codes' overflow trick (spec/stock/01 §5). The ROM's check fails, it hides
@@ -41,7 +41,7 @@ Built from the user's retail BIOS (top 256 KiB):
 ## 3. The payload's 2BL (`MCPX_DUMP=1`)
 - At entry (`kernel/boot/start.S`), after its own GDT and segments: copy 512 bytes from 0xFFFFFE00 to physical
   0x2000, then write 'MCPX' (0x5850434D) at 0x2200.
-- In netboot (`kernel/boot/netboot.h`): once the link is up, before the first HELLO, if the marker is present, send
+- In netboot (`kernel/boot/netboot.cpp`): once the link is up, before the first HELLO, if the marker is present, send
   netboot op 6 (`OP_MCPX`) three times, 100 ms apart. The message is the usual 20-byte header (Offset 0, Length 512)
   followed by the 512 bytes.
 - Then it boots as any netboot image: a served kernel, else its own.

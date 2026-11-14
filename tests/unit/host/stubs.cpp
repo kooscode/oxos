@@ -6,10 +6,11 @@
 #include <cstddef>
 #include <cstdio>
 
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/types.h>
-#include <xk/bootscreen.h>
+#include <arch/arch.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
+#include <runtime/types.h>
+#include <boot_splash/boot_splash.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
@@ -35,8 +36,8 @@ void KiTrap45() {
 }
 }
 
-// hardware/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
-namespace xk::hardware {
+// hardware/chipset/serial.cpp: the kernel log goes to the harness (shown for failing tests, or with OXOS_TEST_LOG=1).
+namespace xk::hardware::chipset {
 
 volatile BOOLEAN SerialPresent = TRUE;
 
@@ -57,10 +58,10 @@ void SerialPrint(const char *Format, ...) {
     HostLogWrite(line, n < 0 ? 0 : n >= (int)sizeof(line) ? sizeof(line) - 1 : (size_t)n);
 }
 
-} // namespace xk::hardware
+} // namespace xk::hardware::chipset
 
-// core/startup.cpp: the start-up marks and last words (CMOS records) are not under test here.
-namespace xk::core {
+// diagnostics/: the start-up marks and last words (CMOS records) are not under test here.
+namespace xk::diagnostics {
 volatile BOOLEAN BootMarksOn;
 
 void BootMark(const char *) {
@@ -75,10 +76,10 @@ void SaveBugCheckLastWords(ULONG, ULONG, ULONG) {
     // Not under test.
 }
 
-void SaveFaultTaskLastWords(ULONG, ULONG) {
+void SaveExceptionLastWords(ULONG, ULONG) {
     // Not under test.
 }
-} // namespace xk::core
+} // namespace xk::diagnostics
 
 // filesystems/cache.cpp: the file-system cache is not under test (no cache pages exist, so no page has this owner).
 namespace xk::filesystems {
@@ -87,18 +88,18 @@ ULONG *CachePte(ULONG) {
 }
 } // namespace xk::filesystems
 
-// arch/in_game_reset.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination);
-// here it is what it does for kernel callers.
+// in_game_reset/xinput_hook.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset
+// combination); here it is what it does for kernel callers.
 XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
     return KfRaiseIrql(DISPATCH_LEVEL);
 }
 
-// bootscreen/splash.cpp: no splash copy in host tests (no page holds one).
-bool xk::bootscreen::IsSplashPage(ULONG) {
+// boot_splash/splash.cpp: no splash copy in host tests (no page holds one).
+bool xk::boot_splash::IsSplashPage(ULONG) {
     return false;
 }
 
-// titles/nettitle.cpp: no network-delivered title in host tests (no page holds one).
+// titles/title_netboot.cpp: no network-delivered title in host tests (no page holds one).
 namespace xk::titles {
 bool IsNetbootTitlePage(ULONG) {
     return false;

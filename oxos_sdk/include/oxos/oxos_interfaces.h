@@ -2,7 +2,7 @@
 // OXOS kernel extensions: the structures the kernel and a .xos extension exchange (spec/oxos_internal/34 §4-§7): the
 // descriptor, the context, the loader's functions and the events. The kernel and the SDK both include this file, so
 // the layout has one definition. Plain C, also valid C++. It needs the NT base types (ULONG, PVOID, NTSTATUS, NTAPI,
-// ...) declared before it: the kernel's xk/types.h or the SDK's oxos/oxos_types.h.
+// ...) declared before it: the kernel's runtime/types.h or the SDK's oxos/oxos_types.h.
 #pragma once
 
 #ifdef __cplusplus

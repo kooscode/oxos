@@ -1,7 +1,7 @@
 # 20 — DRAM refresh check before the kernel runs
 
-Status: implemented 2026-10-28 (boot/start.S, boot/bl.cpp, kernel/src/core/startup.cpp). An OXOS addition; the
-reference boot chain has no equivalent.
+Status: implemented 2026-10-28 (boot/start.S, boot/bl.cpp, kernel/src/diagnostics/boot_reports.cpp). An OXOS addition;
+the reference boot chain has no equivalent.
 
 ## 1. The problem
 The NV2A's DRAM refresh is switched on by the X-codes: PFB 0x100210 ← 0x80000000, after the mode-register sequence

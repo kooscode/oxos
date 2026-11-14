@@ -4,12 +4,12 @@
 usage: link_extension_loader.py --kernel KERNEL_EXE --map KERNEL_MAP --base ADDRESS --out LOADER_EXE
                                 [--linker LLD-LINK] [--cc CLANG] OBJECTS...
 
-The loader (kernel/src/extensions/extension_ini.cpp, extension_loader.cpp, extension_parser.cpp) is not part of the
-kernel's link: it runs at its own fixed address (ADDRESS, mapped only while it runs) and calls the kernel directly.
-Every symbol its objects use but do not define is looked up in the kernel's map and given to the loader's link as an
-absolute symbol at the kernel's address, so its calls and data references go straight to this kernel build. A symbol the
-kernel does not have, or one in the kernel's boot-only sections (freed before the first title, spec/oxos_internal/18),
-stops the build.
+The loader (kernel/src/extensions/extension_loader.cpp, extension_parser.cpp, kernel/src/ini_file/extensions_ini.cpp) is
+not part of the kernel's link: it runs at its own fixed address (ADDRESS, mapped only while it runs) and calls the
+kernel directly. Every symbol its objects use but do not define is looked up in the kernel's map and given to the
+loader's link as an absolute symbol at the kernel's address, so its calls and data references go straight to this kernel
+build. A symbol the kernel does not have, or one in the kernel's boot-only sections (freed before the first title,
+spec/oxos_internal/18), stops the build.
 """
 import argparse, os, re, struct, subprocess, sys, tempfile
 

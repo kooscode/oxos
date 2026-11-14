@@ -1,8 +1,9 @@
 # 32. The X button: the OXOS File Manager (OXOS's own)
 
-Status: implemented 2026-11-08. Code: `kernel/src/gamepad/` (the USB controller and the pads),
-`kernel/src/bootscreen/splash.cpp` (when the pads are read), `kernel/src/titles/loader.cpp` (what happens then),
-`kernel/src/core/fatal.cpp` (the screen), `kernel/src/webserver/` (the File Manager, spec/oxos_internal/31).
+Status: implemented 2026-11-08. Code: `kernel/src/hardware/usb/` (the USB controller, devices and hubs),
+`kernel/src/gamepad/` (the pads), `kernel/src/boot_splash/splash.cpp` (when the pads are read),
+`kernel/src/titles/title_loader.cpp` (what happens then), `kernel/src/user_interface/error_screens.cpp` (No Dashboard
+Found), `kernel/src/webserver/` (the File Manager and its screen, spec/oxos_internal/31).
 
 X pressed on any controller while the boot splash and jingle run, or on the "No Dashboard Found" screen, opens
 the OXOS File Manager: a web page for uploading, organizing and launching files from a browser. X, not WHITE: the
@@ -11,17 +12,17 @@ Xbox Live dashboard already uses WHITE held at its start (2026-11-08).
 ## 1. When
 - Cold boot only, with an AV pack (the splash runs); a quick reboot never reads the pads.
 - X at any time from the start picture to the end of the jingle (about 4 s). The title thread waits for the
-  splash to end (`bootscreen::WaitForSplash`) before it chooses a title, then:
+  splash to end (`boot_splash::WaitForSplash`) before it chooses a title, then:
   - X seen: the File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads
     (`titles::TitleLaunched` 4). Without a network card it cannot run: the title is chosen as usual.
   - Otherwise: the usual title (spec/stock/03 §4).
-- No dashboard on a cold boot (13–20): `core::NoDashboardError` shows the fatal error's screen (the dashboards tried and
-  "[ Press X to launch Web File Manager ]", spec/oxos_internal/29), with its LED sequence and error history, but keeps
-  the boot-only pages (`bootscreen::StopSplash`, not `bootscreen::EndSplash`) and the keys (a title launched from the
-  File Manager needs them). It reads the controllers (`gamepad::WaitForXButton`: set up, read every 10 ms; with none
-  found, set up again every 3 s for one plugged in later) until X, then closes the screen, sets the LED green and runs
-  the File Manager. Without a network card: the fatal error (`core::ShowFatalError`). A quick reboot without a dashboard
-  still reboots cold.
+- No dashboard on a cold boot (13–20): `user_interface::NoDashboardError` shows the fatal error's screen (the dashboards
+  tried and "[ Press X to launch Web File Manager ]", spec/oxos_internal/29), with its LED sequence and error history,
+  but keeps the boot-only pages (`boot_splash::StopSplash`, not `boot_splash::EndSplash`) and the keys (a title launched
+  from the File Manager needs them). It reads the controllers (`gamepad::WaitForXButton`: set up, read every 10 ms; with
+  none found, set up again every 3 s for one plugged in later) until X, then closes the screen, sets the LED green and
+  runs the File Manager. Without a network card: the fatal error (`user_interface::ShowFatalError`). A quick reboot
+  without a dashboard still reboots cold.
 
 ## 2. In the splash thread
 No thread of its own: the splash thread mostly sleeps between frames.
@@ -40,7 +41,8 @@ The first OHCI controller (USB 0, 0xFED00000: the four controller ports), polled
 - Interrupt-IN pipes: each pad's ED is on the periodic list (every HCCA interrupt-table entry: read each frame), one
   TD queued at a time, checked without waiting and queued again.
 - Stop: a reset (no more DMA into the page), then USBRESET, which resets the bus as at power-on: the title's own USB
-  driver finds the controller as after a cold boot (as `hardware/chipset.cpp` leaves it). Then the page is freed.
+  driver finds the controller as after a cold boot (as `hardware/chipset/chipset.cpp` leaves it). Then the page is
+  freed.
 
 ## 4. The pads
 - Each connected root port is reset and its device set up: its address, its configuration descriptor, its
@@ -69,7 +71,7 @@ Not a fatal error (no number, no LED sequence, no EEPROM history), drawn in the 
 | `Launch an XBE, or turn the console off.` | y 430 | grey |
 
 ## 6. Memory
-All of it is boot-only (spec/oxos_internal/18): `gamepad/` and the screen's code are freed when the first title
+All of it is boot-only (spec/oxos_internal/18): `usb/`, `gamepad/` and the screen's code are freed when the first title
 starts, the page with the controller's memory before that. The resident kernel does not grow: the old upload
 screen, resident, is gone.
 

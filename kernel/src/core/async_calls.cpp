@@ -3,8 +3,9 @@
 // Kernel APCs (ApcListHead[KernelMode]) are delivered by the APC_LEVEL software interrupt. "User"
 // APCs (ApcListHead[UserMode]) only run when an alertable user-mode wait returns STATUS_USER_APC:
 // the Xbox has no user mode, so the wait routine itself runs them at PASSIVE_LEVEL before returning.
-#include <xk/core.h>
-#include <xk/hardware.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <hardware/chipset/chipset.h>
 
 namespace xk::core {
 

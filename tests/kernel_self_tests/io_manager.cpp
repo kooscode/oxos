@@ -1,9 +1,9 @@
 // Boot self-tests for the I/O manager (milestone 3b): a RAM-disk test driver behind \Device\XkRam.
 #include <kernel_self_tests.h>
-#include <xk/io.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/memory.h>
+#include <io/io.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
+#include <memory/memory.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 

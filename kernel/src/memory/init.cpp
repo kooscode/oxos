@@ -1,13 +1,13 @@
 // Memory manager initialisation, the page database and the system PTE range (spec/stock/09 §1-3, §7).
-#include <xk/memory.h>
-#include <xk/serial.h>
-#include <xk/arch.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/hardware.h>
-#include <xk/titles.h>
-#include <xk/bootscreen.h>
-#include <xk/filesystems.h>
+#include <memory/memory.h>
+#include <hardware/chipset/serial.h>
+#include <arch/arch.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/chipset.h>
+#include <titles/titles.h>
+#include <boot_splash/boot_splash.h>
+#include <filesystems/filesystems.h>
 
 namespace xk::memory {
 
@@ -590,7 +590,7 @@ static void CacheUpperMemory() {
 #pragma code_seg()
 
 #if XK_TRACE_IMPORTS == 2
-// TRACE_IMPORTS=2 builds: the tracer's ring and stubs (titles/trace.cpp) are kept from the memory manager.
+// TRACE_IMPORTS=2 builds: the tracer's ring and stubs (titles/title_tracer.cpp) are kept from the memory manager.
 static bool IsTraceRingPage(ULONG pfn) {
     return pfn >= (XK_TRACE_HIGH_PHYSICAL >> PAGE_SHIFT) &&
            pfn < ((XK_TRACE_HIGH_PHYSICAL + XK_TRACE_HIGH_BYTES + PAGE_SIZE - 1) >> PAGE_SHIFT);
@@ -660,7 +660,7 @@ void InitMemoryManager(bool QuickReboot) {
         bool low = (pfn >= 1 && pfn < MM_LOW_RESERVED_PFN) || (pfn >= imageEndPfn && pfn <= MM_HIGHEST_CONTIGUOUS_PFN);
         bool upper = pfn >= pageTablesEndPfn && !IsTraceRingPage(pfn);
         return (low || upper || BootPageFreed(pfn)) && !titles::IsNetbootTitlePage(pfn) &&
-               !bootscreen::IsSplashPage(pfn);
+               !boot_splash::IsSplashPage(pfn);
     };
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own
     //    page directory), so each entry is written once with its final value: clearing the kernel's own entries
@@ -675,7 +675,7 @@ void InitMemoryManager(bool QuickReboot) {
             pte = (pfn << PAGE_SHIFT) | rw | PTE_PWT | PTE_PCD;
         } else if (!allocatable(pfn)) {
             // Held (contiguous usage): a netbooted title's files and the splash copy until used, the tracer's ring.
-            if (titles::IsNetbootTitlePage(pfn) || bootscreen::IsSplashPage(pfn) || IsTraceRingPage(pfn))
+            if (titles::IsNetbootTitlePage(pfn) || boot_splash::IsSplashPage(pfn) || IsTraceRingPage(pfn))
                 pte = (pfn << PAGE_SHIFT) | rw;
             if (pfn < imageEndPfn) // the kernel image (.text read-only) and the reserved low pages
                 pte = ((pfn << PAGE_SHIFT) | rw | PTE_PERSIST) & ((pfn >= 0x10 && pfn < textEndPfn) ? ~PTE_WRITE : ~0u);

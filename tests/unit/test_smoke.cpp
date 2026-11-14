@@ -2,8 +2,8 @@
 #include <gtest/gtest.h>
 
 #include "host.h"
-#include <xk/core.h>
-#include <xk/memory.h>
+#include <core/core.h>
+#include <memory/memory.h>
 
 TEST(Harness, RunsOnAKernelThreadAtPassiveLevel) {
     EXPECT_EQ(KeGetCurrentIrql(), PASSIVE_LEVEL);

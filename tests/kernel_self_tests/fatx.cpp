@@ -1,11 +1,11 @@
 // Boot self-tests for the FATX driver (milestone 3c-2). boot_test.py checks the results against the HDD image and,
 // after the run, re-reads what was written here from the disk copy with an independent FATX reader.
 #include <kernel_self_tests.h>
-#include <xk/storage.h>
-#include <xk/io.h>
-#include <xk/runtime.h>
-#include <xk/core.h>
-#include <xk/filesystems.h>
+#include <storage/storage.h>
+#include <io/io.h>
+#include <runtime/runtime.h>
+#include <core/core.h>
+#include <filesystems/filesystems.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 

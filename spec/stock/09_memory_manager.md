@@ -4,9 +4,9 @@ Clean-room behavioural spec. Evidence: batch_decompile `ev_1928c381…` (MmInitS
 MmAllocateContiguousMemoryEx, MmGetPhysicalAddress, MmCreateKernelStack), `ev_ef3f9b35…` (system-PTE allocator,
 MmAllocateSystemMemory, MmMapIoSpace, MmFreeContiguousMemory, free-list helpers), `ev_dc8155bd…` (protect→PTE,
 MmPersistContiguousMemory, MmQueryAllocationSize, MmLockUnlockPhysicalPage, MmClaimGpuInstanceMemory,
-ExQueryPoolBlockSize), objdump of ExAllocatePoolWithTag, the system-PTE descriptor at 0x800360F0, MmGlobalData,
-and a live dump of the 2BL page directory. Virtual memory: batch_decompile `ev_e049cd4d…` (NtAllocateVirtualMemory, NtFreeVirtualMemory).
-**Status: implemented (2c parts 1 and 2).**
+ExQueryPoolBlockSize), objdump of ExAllocatePoolWithTag, the system-PTE descriptor at 0x800360F0, MmGlobalData, and a
+live dump of the 2BL page directory. Virtual memory: batch_decompile `ev_e049cd4d…` (NtAllocateVirtualMemory,
+NtFreeVirtualMemory). **Status: implemented (2c parts 1 and 2).**
 
 ## 1. Hand-off from the 2BL
 - Page directory at physical 0xF000 (CR3), self-mapped at PDE 0x300 (0xC0300000). **Only 4 MB large pages**
@@ -169,16 +169,16 @@ title page tables 59/59, Image 2471/2470, Cache 16/16; the dashboard idles at 96
 256 pages. Those snapshots predate the last change below (the SMC thread, 3 stack pages).
 
 **Ours.** Before milestone 13 the difference (−305 pages for every title) was: the boot splash kept as the persisted
-display (301 pages), a 16-page stack for the title launcher thread (the reference runs it on 3 pages), our SMC
-thread (3 pages, no reference counterpart), the system PTE slot bitmap (4 pages), against 16 cache pages and ~3
-pool pages fewer. Now: the splash is freed before the title starts and its thread is waited for, so its stack is
-gone (spec/oxos_internal/00_boot_splash.md §3); the launcher stack is 0x3000; SMC events run in a DPC (spec/stock/12); system PTE runs live in the PTEs
-(§8); the 16 cache pages are allocated at boot (spec/stock/16); the image is 45 resident pages again (title page-table
-use counts moved into the page database, bits 17–27 of a title page table's entry; the disk unlock buffer moved to
-the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5). Later features grew the
-image to 69 pages; since 2026-10-27 the kernel is built for size and frees its boot-only code and the tables of the
-encoders the console does not have before the first title starts: 43 resident pages (45 with an Xcalibur), see
-spec/oxos_internal/18_boot_memory.md.
+display (301 pages), a 16-page stack for the title launcher thread (the reference runs it on 3 pages), our SMC thread (3
+pages, no reference counterpart), the system PTE slot bitmap (4 pages), against 16 cache pages and ~3 pool pages fewer.
+Now: the splash is freed before the title starts and its thread is waited for, so its stack is gone
+(spec/oxos_internal/00_boot_splash.md §3); the launcher stack is 0x3000; SMC events run in a DPC (spec/stock/12); system
+PTE runs live in the PTEs (§8); the 16 cache pages are allocated at boot (spec/stock/16); the image is 45 resident pages
+again (title page-table use counts moved into the page database, bits 17–27 of a title page table's entry; the disk
+unlock buffer moved to the stack). At entry: Stack 6, Contiguous 79, Cache 16 as stock; pool 1–2 pages (stock 5). Later
+features grew the image to 69 pages; since 2026-10-27 the kernel is built for size and frees its boot-only code and the
+tables of the encoders the console does not have before the first title starts: 43 resident pages (45 with an Xcalibur),
+see spec/oxos_internal/18_boot_memory.md.
 
 ## 8. Page database and allocation order (milestone 13)
 Evidence: `ev_e3d73cd7…` (0x800557f4 physical init), `ev_c2735117…` (0x8001dc6c MmAllocateContiguousMemoryEx,
@@ -283,17 +283,18 @@ Evidence: the 4627 **debug** kernel (`xboxkrnl-original-debug.exe`, sha256 19c37
 - MmQueryStatistics's TotalPhysicalPages is the page count of the RAM.
 
 **Ours:** the same layout, regions, XBE flag rule and GPU instance memory (memory/init.cpp, memory/memory.cpp,
-titles/loader.cpp), with these differences:
+titles/title_loader.cpp), with these differences:
 - the RAM size comes from the cold boot's probe (64 MB + x aliasing x or not, MiRamProbe), kept across quick reboots;
 - the kernel widens MTRR range 0 from 64 to 128 MB at a cold boot when the 2BL left it at 64 MB, so the upper half
   is cached;
 - the debug kernel's second system-PTE range (debugger memory) does not exist; nothing else takes upper pages;
-- the IDE bus master accepts buffers anywhere in the RAM (storage/ide_channel.cpp);
+- the IDE bus master accepts buffers anywhere in the RAM (hardware/ide/ide_channel.cpp);
 - TRACE_IMPORTS=2 builds keep the tracer's ring at physical 0x7C00000 out of the free pages
   (spec/oxos_internal/01_kernel_call_tracer.md).
 
 ## Implementation notes (internal, ABI-neutral)
-- The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7, spec/oxos_internal/00_boot_splash.md).
+- The boot splash framebuffer is allocated below 16 MB and freed before the title starts (§7,
+  spec/oxos_internal/00_boot_splash.md).
 - VADs are kept in an address-sorted list (the reference uses a tree), protected by a mutant.
 - Thread stacks are freed by the next thread to run after a thread terminates. Thread objects are kept until Ob
   reference counting exists (milestone 3).

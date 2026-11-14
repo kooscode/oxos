@@ -1,9 +1,9 @@
 // Boot self-tests for the DVD drive, XDVDFS and the RAW file system (milestone 3c-3). boot_test.py attaches an
 // XISO built by tests/mkxiso.py and compares.
 #include <kernel_self_tests.h>
-#include <xk/storage.h>
-#include <xk/runtime.h>
-#include <xk/core.h>
+#include <storage/storage.h>
+#include <runtime/runtime.h>
+#include <core/core.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 

@@ -2,8 +2,9 @@
 // the up-case table and the root with the folders C E F X Y Z OXOS (and one file), laid out as the exFAT specification
 // describes; the code and the up-case table's rules are OXOS's own. storage/disk_format.cpp puts the GPT around it.
 // Every sector goes out through the caller's DISK_FORMAT_IO.
-#include <xk/disk_format.h>
-#include <xk/runtime.h>
+#include <storage/disk_format.h>
+#include <filesystems/filesystems.h>
+#include <runtime/runtime.h>
 
 namespace xk::filesystems {
 

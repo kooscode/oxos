@@ -1,8 +1,8 @@
 // exFAT directories: entry sets (a file entry, a stream entry and name entries, 32 bytes each, with a checksum)
 // (spec/oxos_internal/07_exfat_driver.md), and the walks over a folder's tree that count or empty it. An exFAT volume
 // reaches its directory operations through EXFATFormat (at the end).
-#include <xk/hddfs.h>
-#include <xk/serial.h>
+#include <filesystems/hddfs/hddfs.h>
+#include <hardware/chipset/serial.h>
 
 namespace xk::filesystems {
 

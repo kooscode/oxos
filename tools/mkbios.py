@@ -56,7 +56,8 @@ u32 = lambda d, o: struct.unpack_from("<I", d, o)[0]
 u16 = lambda d, o: struct.unpack_from("<H", d, o)[0]
 
 
-EXTENSION_LOADER_MAGIC, EXTENSION_LOADER_HEADER_FIELD = 0x4C564F58, 0x38  # "XOVL"; kernel/include/xk/extensions.h
+# "XOVL" and the DOS-header field that points at the loader's header: kernel/src/extensions/extension_loader.h
+EXTENSION_LOADER_MAGIC, EXTENSION_LOADER_HEADER_FIELD = 0x4C564F58, 0x38
 
 
 def extension_loader_blob(path, kernel_stamp):

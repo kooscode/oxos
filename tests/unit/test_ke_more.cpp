@@ -1,9 +1,9 @@
 // More of the kernel core: alerts, boosts and priorities, time keeping, FPU state, process-level thread APIs, the
 // RTC, and the rarer memory-manager entry points.
 #include "kernel_test.h"
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
 
 #include <atomic>
 #include <vector>
@@ -138,7 +138,7 @@ TEST(Time, StallReturns) {
 }
 
 TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
-    hardware::InitRtc();
+    hardware::chipset::InitRtc();
     TIME_FIELDS f = {2026, 10, 23, 13, 45, 30, 0, 5};
     LARGE_INTEGER t;
     ASSERT_TRUE(RtlTimeFieldsToTime(&f, &t));
@@ -147,24 +147,24 @@ TEST(Time, SetSystemTimeUpdatesTheRtcAndItsSignature) {
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);
     EXPECT_EQ(now.QuadPart, t.QuadPart);
-    EXPECT_TRUE(hardware::CmosSignatureValid());
+    EXPECT_TRUE(hardware::chipset::CmosSignatureValid());
     TIME_FIELDS r = {};
-    hardware::QueryRealTimeClock(&r);
+    hardware::chipset::QueryRealTimeClock(&r);
     EXPECT_EQ(r.Year, 2026);
     EXPECT_EQ(r.Month, 10);
     EXPECT_EQ(r.Day, 23);
     EXPECT_EQ(r.Hour, 13);
     EXPECT_EQ(r.Minute, 45);
     EXPECT_EQ(r.Second, 30);
-    EXPECT_EQ(hardware::ReadCmos(0x09), 0x26) << "BCD year";
-    EXPECT_EQ(hardware::ReadCmos(0x7F), 0x20) << "BCD century";
+    EXPECT_EQ(hardware::chipset::ReadCmos(0x09), 0x26) << "BCD year";
+    EXPECT_EQ(hardware::chipset::ReadCmos(0x7F), 0x20) << "BCD century";
     LARGE_INTEGER bad;
     bad.QuadPart = -1;
     EXPECT_NE(NtSetSystemTime(&bad, nullptr), STATUS_SUCCESS);
-    hardware::WriteCmos(0x10, 0); // break the signature
-    EXPECT_FALSE(hardware::CmosSignatureValid());
-    hardware::WriteCmosSignature();
-    EXPECT_TRUE(hardware::CmosSignatureValid());
+    hardware::chipset::WriteCmos(0x10, 0); // break the signature
+    EXPECT_FALSE(hardware::chipset::CmosSignatureValid());
+    hardware::chipset::WriteCmosSignature();
+    EXPECT_TRUE(hardware::chipset::CmosSignatureValid());
 }
 
 // --- FPU state

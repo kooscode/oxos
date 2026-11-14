@@ -1,10 +1,9 @@
 # Spec 04 — IDE channel, disk, DVD, partitions, FATX mount (stock behaviour)
 
-Clean-room behavioural spec (no decompiled code). **Status: IDE channel + disk + partitions implemented (milestone 3c-1).** **Project rule: reproduce this exactly**
-(LBA28, fixed partition table) so stock drives and stock-formatted disks work. Extensions come later.
-Evidence: batch_decompile `ev_542cc685…` (0x80024ecc), `ev_9e7fc395…` (disk/DVD init),
-`ev_7012e098…` (FATX mount, transfer start, StartIo).
-Names marked (inferred) are not symbols in the binary.
+Clean-room behavioural spec (no decompiled code). **Status: IDE channel + disk + partitions implemented (milestone
+3c-1).** **Project rule: reproduce this exactly** (LBA28, fixed partition table) so stock drives and stock-formatted
+disks work. Extensions come later. Evidence: batch_decompile `ev_542cc685…` (0x80024ecc), `ev_9e7fc395…` (disk/DVD
+init), `ev_7012e098…` (FATX mount, transfer start, StartIo). Names marked (inferred) are not symbols in the binary.
 
 ## 1. IDE channel init (`IdexChannelInit`, inferred, 0x80024ecc; runs on every boot)
 - One channel: legacy primary ports 0x1F0–0x1F7 and control port 0x3F6; bus-master registers at **I/O 0xFF60**
@@ -70,7 +69,7 @@ xemu 0.8.136 rejects page 0x3E (sense 5/24), so authentication fails there; see 
 the certificate is larger than 0x1D8): MODE SENSE page 0x3E (5 tries) must have bytes 10, 11 and 12 set; then the
 security sector is read (5 tries) and must carry the certificate's **timestamp** (cert +4) at +0x4AB, at +0x4CF the
 SHA-1 of the dword 0x4CB followed by the 0x4CB bytes at +4, and at +0x4E3 a signature of that digest under
-`XePublicKeyData` (XcVerifyPKCS1Signature). Failure ends the title. Ours (src/storage/dvd_drive.cpp):
+`XePublicKeyData` (XcVerifyPKCS1Signature). Failure ends the title. Ours (src/hardware/ide/dvd_drive.cpp):
 - every successful security-sector read in a pass-through gets the signature block of its stored digest under our
   open exponent-1 key (spec 05 §8), replacing Microsoft's;
 - the first page-0x3E / security-sector request probes the drive with MODE SENSE page 0x3E. A drive that rejects it
@@ -89,10 +88,9 @@ reference copies all **12 CDB bytes** and ignores `CdbLength`, which callers com
    Timeout → **fatal error 10**.
 2. SET FEATURES PIO 4 (0x0C) then UDMA 2 (0x42). Failure → **error 12**.
 3. **IDENTIFY PACKET DEVICE (0xA1)**. Failure → **error 11**.
-4. Create **`\Device\CdRom0`** (sector size 0x800) and the symbolic link **`\??\CdRom0:`**. The device
-   pointer is kept at 0x8003AD00.
-   On quick reboot, if the "title disc" flag (0x8003B338) was set, re-check the media up to 5 times and keep the flag only
-   if the check passes.
+4. Create **`\Device\CdRom0`** (sector size 0x800) and the symbolic link **`\??\CdRom0:`**. The device pointer is kept
+   at 0x8003AD00. On quick reboot, if the "title disc" flag (0x8003B338) was set, re-check the media up to 5 times and
+   keep the flag only if the check passes.
 5. Cold boot, boot-flags bit 0x40 clear: wait for the drive to settle by sending **IOCTL 0x24800
    (CDROM check-verify)** to CdRom0 every 200 ms:
    - `STATUS_DEVICE_NOT_READY` (0xC00000A3) → keep waiting
@@ -135,13 +133,14 @@ Evidence: `ev_7550c775…` (channel init, partition create, channel StartPacket,
   StartNextPacketRoutine, InterruptIrql +0x18, ExpectingBusMasterInterrupt, StartPacketBusy, StartPacketRequested,
   Timeout +0x1C (10 s per command), IoRetries, MaximumIoRetries (4), CurrentIrp +0x20, DeviceQueue +0x24,
   PRD table physical address +0x30, TimerDpc +0x34, FinishDpc +0x50, Timer +0x6C (1 s periodic), Interrupt +0x94.
-- **Channel serialisation:** both drives' StartIo go through the channel's StartPacket. If the channel device queue is idle,
-  record CurrentIrp, reset the retries, set StartPacketBusy and call the device driver's StartIo. A StartNextPacket requested
-  meanwhile runs afterwards.
+- **Channel serialisation:** both drives' StartIo go through the channel's StartPacket. If the channel device queue is
+  idle, record CurrentIrp, reset the retries, set StartPacketBusy and call the device driver's StartIo. A
+  StartNextPacket requested meanwhile runs afterwards.
 - **`\Device\Harddisk0`** is not a directory. It is an object with its own parse procedure:
   - empty name → STATUS_ACCESS_DENIED
   - the first element must be `Partition<decimal>` (case-insensitive), number < 20
-  - the device is created on demand (table above), and the rest of the name goes to the I/O parse of that partition device
+  - the device is created on demand (table above), and the rest of the name goes to the I/O parse of that partition
+    device
   - unknown partition → NAME_NOT_FOUND, or PATH_NOT_FOUND when more path follows
 - **Partition device:** type DISK (mountable), extension 0x24 = {DeviceObject, PARTITION_INFORMATION
   {StartingOffset, PartitionLength, HiddenSectors = start LBA, PartitionNumber, …}}, Flags |= 0x44, SectorSize 512,

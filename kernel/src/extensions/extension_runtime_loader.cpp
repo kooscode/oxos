@@ -1,15 +1,18 @@
-// Runs the kernel extension loader (spec/oxos_internal/34 §8.1). The loader (extension_ini.cpp, extension_loader.cpp
-// and extension_parser.cpp in this folder) is not part of the resident kernel: tools/link_extension_loader.py links it
-// at XK_EXTENSION_LOADER_BASE against this kernel's addresses and tools/mkbios.py appends it to the kernel image, in
-// the boot-only pages. A cold boot writes it to the cache file; every launch reads it from there into temporary pages,
-// maps them at XK_EXTENSION_LOADER_BASE, runs it, and frees them before the title loads.
-#include <xk/extensions.h>
-#include <xk/io.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
-#include <xk/runtime.h>
-#include <xk/serial.h>
-#include <xk/titles.h>
+// Runs the kernel extension loader (spec/oxos_internal/34 §8.1). The loader (extension_loader.cpp and
+// extension_parser.cpp in this folder, ini_file/extensions_ini.cpp) is not part of the resident kernel:
+// tools/link_extension_loader.py links it at XK_EXTENSION_LOADER_BASE against this kernel's addresses and
+// tools/mkbios.py appends it to the kernel image, in the boot-only pages. A cold boot writes it to the cache file;
+// every launch reads it from there into temporary pages, maps them at XK_EXTENSION_LOADER_BASE, runs it, and frees them
+// before the title loads.
+#include <extensions/extensions.h>
+#include <extensions/extension_loader.h>
+#include <extensions/extension_state.h>
+#include <io/io.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/serial.h>
+#include <titles/titles.h>
 
 namespace xk::extensions {
 

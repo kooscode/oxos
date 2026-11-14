@@ -1,6 +1,6 @@
 // Freestanding memory primitives (the compiler may also emit calls to memset/memcpy). Exported to kernel extensions at
 // OXOS's own ordinals 402-405 (spec/oxos_internal/34 §9.1).
-#include <xk/runtime.h>
+#include <runtime/runtime.h>
 
 namespace xk::runtime {
 

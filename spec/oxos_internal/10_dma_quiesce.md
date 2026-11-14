@@ -1,7 +1,7 @@
 # 10. Stopping bus masters left running at kernel entry
 
-OXOS addition. Implemented 2026-10-22 (`hardware::QuiesceBusMasters` in `kernel/src/hardware/chipset.cpp`, the first
-step of `hardware::InitPci`, HAL phase 0).
+OXOS addition. Implemented 2026-10-22 (`hardware::QuiesceBusMasters` in `kernel/src/hardware/chipset/chipset.cpp`, the
+first step of `hardware::InitPci`, HAL phase 0).
 
 ## 1. Why
 - A console with a modchip usually runs the modchip's menu (XeniumOS) before it starts a flash bank. If that start

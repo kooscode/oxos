@@ -1,6 +1,6 @@
 // NTSTATUS -> Win32 error translation (spec/stock/13: the reference's algorithm; the table holds common codes only).
-#include <xk/runtime.h>
-#include <xk/types.h>
+#include <runtime/runtime.h>
+#include <runtime/types.h>
 
 namespace xk::runtime {
 

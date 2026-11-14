@@ -3,7 +3,7 @@
 Not the reference's behaviour: the retail kernel stops the boot with fatal error 10, 11 or 12 when the DVD drive
 (IDE device 1) does not come up (stock spec 04 §3). OXOS boots without one, for consoles whose drive was removed or
 disconnected. First implemented 2026-10-21, after the first run on a real console (a 1.4 with no drive). Code:
-`kernel/src/storage/dvd_drive.cpp` (`DvdStart`, `storage::InitDvdDrive`).
+`kernel/src/hardware/ide/dvd_drive.cpp` (`DvdStart`, `storage::InitDvdDrive`).
 
 ## 1. Detection
 At IDE initialisation the drive is brought up as the reference does (select device 1, wait while busy, SET FEATURES

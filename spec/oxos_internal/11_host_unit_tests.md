@@ -6,9 +6,10 @@ coverage. Implemented 2026-10-23. User guide: `tests/unit/README.md`.
 
 ## 1. What is built
 - The kernel's own sources, unchanged apart from `XK_HOST_TEST` hooks (§4): `core/` (APCs, bug checks, clock, DPCs,
-  events, IRQL and interrupts, FPU state, queues, scheduler, threads, system threads, timers, waits, processor
-  tables), `memory/` (all), `objects/` (all), `runtime/` (all but `int64.cpp`), `hardware/interrupts_timers.cpp`,
-  `bootscreen/vsplash.cpp`, `titles/patchfile.cpp`, `titles/launch_redirect.cpp`, `titles/ini_file.cpp`.
+  events, IRQL and interrupts, FPU state, queues, scheduler, threads, system threads, timers, waits, processor tables),
+  `memory/` (all), `objects/` (all), `runtime/` (all but `int64.cpp`), `hardware/chipset/interrupts_timers.cpp`,
+  `graphics/vector_renderer.cpp`, `ini_file/title_patcher_ini.cpp`, `ini_file/launch_redirect_ini.cpp`,
+  `ini_file/ini_file.cpp`.
 - 32-bit (`-m32`): the kernel's types assume 32-bit `long` and pointers. Kernel sources keep `-ffreestanding`,
   `-fno-builtin`, no SSE/MMX, as the real build.
 - Linked statically and not position independent: no shared libraries or binary in the kernel's address windows.

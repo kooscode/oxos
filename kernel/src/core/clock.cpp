@@ -1,7 +1,8 @@
 // Clock interrupt and time keeping. PIT channel 0 ticks every 1 ms (spec/stock/02 §3.5).
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/hardware.h>
+#include <core/core.h>
+#include <core/scheduler.h>
+#include <arch/arch.h>
+#include <hardware/chipset/chipset.h>
 
 // Exported variables: outside the namespace, with the names titles import.
 volatile ULONG KeTickCount;
@@ -112,7 +113,7 @@ static void SetSystemTime(LONGLONG t) {
 
 void InitializeSystemTime() {
     TIME_FIELDS f;
-    hardware::QueryRealTimeClock(&f);
+    hardware::chipset::QueryRealTimeClock(&f);
     LARGE_INTEGER t;
     if (RtlTimeFieldsToTime(&f, &t))
         SetSystemTime(t.QuadPart);
@@ -127,8 +128,8 @@ XBAPI NTSTATUS NTAPI NtSetSystemTime(PLARGE_INTEGER SystemTime, PLARGE_INTEGER P
     SetSystemTime(t.QuadPart);
     TIME_FIELDS f;
     RtlTimeToTimeFields(&t, &f);
-    hardware::SetRealTimeClock(&f);
-    hardware::WriteCmosSignature();
+    hardware::chipset::SetRealTimeClock(&f);
+    hardware::chipset::WriteCmosSignature();
     return STATUS_SUCCESS;
 }
 

@@ -1,9 +1,9 @@
 // Debugger services without a kernel debugger: DbgPrint goes to an in-memory log and, in SERIAL=1 builds, to the serial
 // port (spec/stock/13).
-#include <xk/core.h>
-#include <xk/arch.h>
-#include <xk/serial.h>
-#include <xk/runtime.h>
+#include <core/core.h>
+#include <arch/arch.h>
+#include <hardware/chipset/serial.h>
+#include <runtime/runtime.h>
 
 namespace xk::core {
 
@@ -26,7 +26,7 @@ static void WriteDebugLog(const char *s, ULONG n) {
     DebugLogPosition = DebugLogPosition + n;
     restore_flags(flags);
 #if XK_DEBUG_SERIAL
-    hardware::WriteSerial(s, n);
+    hardware::chipset::WriteSerial(s, n);
 #endif
 }
 

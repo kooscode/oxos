@@ -1,8 +1,8 @@
 // Structured exception handling: trap translation, handler dispatch, raise, unwind, stack walks (spec/stock/14).
-#include <xk/core.h>
-#include <xk/serial.h>
-#include <xk/arch.h>
-#include <xk/runtime.h>
+#include <core/core.h>
+#include <hardware/chipset/serial.h>
+#include <arch/arch.h>
+#include <runtime/runtime.h>
 
 namespace xk::core {
 

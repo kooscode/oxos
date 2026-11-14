@@ -1,9 +1,9 @@
 // Boot self-tests for the IDE disk driver (milestone 3c-1). boot_test.py compares the data read here with the
 // HDD image it attached.
 #include <kernel_self_tests.h>
-#include <xk/storage.h>
-#include <xk/runtime.h>
-#include <xk/core.h>
+#include <storage/storage.h>
+#include <runtime/runtime.h>
+#include <core/core.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 
@@ -48,9 +48,10 @@ static bool IdexLba48Free(PDEVICE_OBJECT disk, PUCHAR buf, ULONGLONG lba, ULONG 
 }
 
 static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
-    ULONGLONG last = storage::DiskLengthInSectors - 1;
+    ULONGLONG last = hardware::ide::DiskLengthInSectors - 1;
     // Needs the raw Partition0.
-    if (!storage::DiskSupportsLba48 || storage::DiskLengthInSectors < 0x20001000 || storage::DiskHasEXFATLayout)
+    if (!hardware::ide::DiskSupportsLba48 || hardware::ide::DiskLengthInSectors < 0x20001000 ||
+        storage::DiskHasEXFATLayout)
         return;
     struct {
         ULONGLONG lba;
@@ -181,7 +182,7 @@ static void NTAPI IdexControllerThread(PVOID) {
          pi.PartitionLength.QuadPart == 0x1F400000 && pi.PartitionNumber == 2;
     ok &= IoSynchronousDeviceIoControlRequest(IOCTL_DISK_GET_DRIVE_GEOMETRY, parts[0], nullptr, 0, &g, sizeof(g),
                                               &ret, FALSE) == 0 &&
-          (ULONGLONG)g.Cylinders.QuadPart == storage::DiskLengthInSectors && g.BytesPerSector == 512;
+          (ULONGLONG)g.Cylinders.QuadPart == hardware::ide::DiskLengthInSectors && g.BytesPerSector == 512;
     KiTestIdexIoctlOk = ok;
 
     // Parameter errors: unaligned length/offset, past the end of a partition.
@@ -219,7 +220,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         KiTestIdexPassThroughOk = ok;
     }
     UCHAR password[32] = {};
-    storage::ComputeDiskPassword(password);
+    hardware::ide::ComputeDiskPassword(password);
     for (ULONG i = 0; i < 32; i++)
         KiTestIdexPassword[i] = password[i];
 

@@ -1,5 +1,6 @@
 // Event objects (spec/stock/06 §6, waits in spec/stock/07).
-#include <xk/core.h>
+#include <core/core.h>
+#include <core/scheduler.h>
 
 namespace xk::core {
 

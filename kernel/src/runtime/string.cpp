@@ -1,6 +1,6 @@
 // Counted strings (ANSI OBJECT_STRING / STRING and UNICODE_STRING), as used by Ob and Io.
-#include <xk/runtime.h>
-#include <xk/objects.h>
+#include <runtime/runtime.h>
+#include <objects/objects.h>
 
 namespace xk::runtime {
 

@@ -1,10 +1,11 @@
 # 33. Launch redirects (OXOS's own)
 
 Status: implemented 2026-11-12; the file renamed from `launch_redirect.ini` to `oxos_launch_redirect.ini` on 2026-11-13
-(OXOS's own files get the `oxos_` prefix). Code: `kernel/src/titles/launch_redirect.cpp` (the file's parser,
-`include/xk/launch_redirect.h`), on the ini line reader it shares with title_patches.ini
-(`kernel/src/titles/ini_file.cpp`, `include/xk/ini_file.h`, spec/oxos_internal/25 §3.1); `kernel/src/titles/loader.cpp`
-(`titles::RedirectLaunch`, in `titles::LaunchTitle`, and `titles::ReadOxosFile`, which reads both files).
+(OXOS's own files get the `oxos_` prefix). Code: `kernel/src/ini_file/launch_redirect_ini.cpp` (the file's parser,
+`src/ini_file/launch_redirect_ini.h`), on the ini line reader it shares with title_patches.ini
+(`kernel/src/ini_file/ini_file.cpp`, `src/ini_file/ini_file.h`, spec/oxos_internal/25 §3.1);
+`kernel/src/titles/title_loader.cpp` (`titles::RedirectLaunch`, in `titles::LaunchTitle`, and `titles::ReadOxosFile`,
+which reads both files).
 
 When a title starts another XBE (`XLaunchNewImage`, `XLaunchXBE`), the kernel can start a different XBE in its
 place, named in a file on the hard disk. The first user: the XBL team replaces the Xbox dashboard's legacy Xbox Live
@@ -70,7 +71,7 @@ does not load either, the usual fallback follows (the dashboard with reason 1, s
 - `redirect: oxos_launch_redirect.ini: N lines not understood` when the file has errors.
 
 ## 6. Tests
-- Host unit tests `tests/unit/test_launch_redirect.cpp`: drive letters, device paths, `/`, case, comments, sections
+- Host unit tests `tests/unit/test_launch_redirect_ini.cpp`: drive letters, device paths, `/`, case, comments, sections
   without a source or target, the first match deciding, paths too long, CR LF; `tests/unit/test_ini_file.cpp`: the
   shared line reader.
 - `make test_relaunch` (boot_test.py `--redirect`): the test disk's `C:\OXOS\oxos_launch_redirect.ini` sends the kernel

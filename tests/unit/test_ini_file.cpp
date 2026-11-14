@@ -1,11 +1,12 @@
-// The kernel's ini line reader (kernel/src/titles/ini_file.cpp), shared by title_patches.ini
-// (spec/oxos_internal/25 §3.1) and oxos_launch_redirect.ini (spec/oxos_internal/33 §1).
+// The kernel's ini line reader (kernel/src/ini_file/ini_file.cpp), shared by title_patches.ini
+// (spec/oxos_internal/25 §3.1), oxos_launch_redirect.ini (spec/oxos_internal/33 §1) and oxos_extensions.ini
+// (spec/oxos_internal/34).
 #include "kernel_test.h"
 
 #include <string>
 #include <vector>
 
-#include <xk/ini_file.h>
+#include <ini_file/ini_file.h>
 
 using namespace xk; // the kernel's subsystems as storage::, titles::, ...
 
@@ -16,7 +17,7 @@ std::vector<std::string> Lines(const std::string &text) {
     INI_READER reader = {text.data(), text.data() + text.size()};
     INI_LINE line;
     std::vector<std::string> out;
-    while (titles::NextIniLine(&reader, &line)) {
+    while (ini_file::NextLine(&reader, &line)) {
         switch (line.Kind) {
         case INI_LINE_KIND::SECTION:
             out.push_back("S:" + std::string(line.Text, line.TextLength));
@@ -61,8 +62,8 @@ TEST(IniFile, KeysMatchInAnyCase) {
     const std::string text = "SoUrCe = x";
     INI_READER reader = {text.data(), text.data() + text.size()};
     INI_LINE line;
-    ASSERT_TRUE(titles::NextIniLine(&reader, &line));
-    EXPECT_TRUE(titles::IsIniKey(line, "source"));
-    EXPECT_FALSE(titles::IsIniKey(line, "sourc"));
-    EXPECT_FALSE(titles::IsIniKey(line, "sources"));
+    ASSERT_TRUE(ini_file::NextLine(&reader, &line));
+    EXPECT_TRUE(ini_file::IsKey(line, "source"));
+    EXPECT_FALSE(ini_file::IsKey(line, "sourc"));
+    EXPECT_FALSE(ini_file::IsKey(line, "sources"));
 }

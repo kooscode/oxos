@@ -1,8 +1,8 @@
 // I/O manager: opening files, file objects, Nt file services, completion ports (spec/stock/11 §4-6).
-#include <xk/io.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
-#include <xk/serial.h>
+#include <io/io.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
+#include <hardware/chipset/serial.h>
 
 namespace xk::io {
 

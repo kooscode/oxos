@@ -1,10 +1,10 @@
 // Title virtual memory: Nt{Allocate,Free,Query,Protect}VirtualMemory and MmQueryStatistics (spec/stock/09 §6).
 // One address space (0x00010000-0x7FFDFFFF); reservations are VADs kept in an address-sorted list.
-#include <xk/memory.h>
-#include <xk/arch.h>
-#include <xk/serial.h>
-#include <xk/core.h>
-#include <xk/runtime.h>
+#include <memory/memory.h>
+#include <arch/arch.h>
+#include <hardware/chipset/serial.h>
+#include <core/core.h>
+#include <runtime/runtime.h>
 
 namespace xk::memory {
 

@@ -3,7 +3,7 @@
 Not part of the reference: the retail kernel shows its own boot animation from its INIT section (what it does with the
 animation's memory is in stock spec 17 §6). OXOS shows its logo during cold boot instead, drawn from vector shapes and
 animated (since 2026-11-06; from 2026-10-15 a 640x480 PNG, removed 2026-11-06). Code:
-`kernel/src/bootscreen/splash.cpp`, `kernel/src/bootscreen/vsplash.cpp`; host side `tools/svg_splash.py`,
+`kernel/src/boot_splash/splash.cpp`, `kernel/src/graphics/vector_renderer.cpp`; host side `tools/svg_splash.py`,
 `tools/mkbios.py`. The music that comes with it: spec/oxos_internal/17.
 
 ## 1. The image in flash
@@ -41,12 +41,12 @@ the 640x480 PNG used until 2026-11-06 took 93 KB):
   layer count, each layer: u8 phases (bit 0 start, bit 1 end), u8 filter (0 none, 1 blur, 2 glow), u16 blur sigma, u8
   opacity, u8 0, u16 draw count, each draw: u16 paint, u8 alpha, u8 flags (bit 0 even-odd), u16 contour count, each
   contour: u16 point count and the points (2 x i16).
-- **Drawing** (`vsplash.cpp`, integer only, shared with the host preview `tools/vsplash` and the unit tests): each
-  shape filled with its rule, 8 sample rows per pixel row and exact coverage along the row; gradients through a
+- **Drawing** (`vector_renderer.cpp`, integer only, shared with the host preview `tools/vsplash` and the unit tests):
+  each shape filled with its rule, 8 sample rows per pixel row and exact coverage along the row; gradients through a
   257-entry table; a filtered layer drawn into its own buffer, blurred (three box blurs each way, together close to the
-  Gaussian), and composited at its opacity, its sharp copy over the blur for a glow. `vsplash::Check` walks the whole
-  scene first (counts, offsets, coordinate and gradient ranges, exact length) and a scene that fails shows the drawn
-  emblem (status 0x200 + the check's number).
+  Gaussian), and composited at its opacity, its sharp copy over the blur for a glow. `vector_renderer::Check` walks the
+  whole scene first (counts, offsets, coordinate and gradient ranges, exact length) and a scene that fails shows the
+  drawn emblem (status 0x200 + the check's number).
 - The kernel draws both pictures once (into two 1.2 MB buffers below 16 MB, with 2.4 MB of working memory freed right
   after); on the 1.4 console both took under 0.6 s from kernel start, during the drives' start-up.
 
@@ -56,22 +56,22 @@ the 640x480 PNG used until 2026-11-06 took 93 KB):
   boot bank), the copy the payload header of the boot bank (or of a netboot download) points to. It goes to physical
   0xC00000 (at most 256 KiB), and a record at physical 0x2380 (next to the pad calibration record at 0x2300) gives
   'OXSP' (0x5053584F), the physical address and the size (0: none).
-- The kernel takes the record before the memory manager starts (`bootscreen::TakeSplashRecord`, cold boot only); the
-  memory manager keeps those pages in use (`bootscreen::IsSplashPage`, like a netboot title's pages) and the splash
+- The kernel takes the record before the memory manager starts (`boot_splash::TakeSplashRecord`, cold boot only); the
+  memory manager keeps those pages in use (`boot_splash::IsSplashPage`, like a netboot title's pages) and the splash
   thread frees them once the scene is drawn. The kernel does not read the flash: decoding the earlier PNG byte by byte
   from uncached flash while the kernel ran coincided with bits of RAM changing on a Modxo console (a crash in about one
   cold boot in ten), and long flash reads hung that console. Without a record (an older 2BL) the drawn emblem is shown.
 - When there is no valid header or the scene fails its checks, the drawn emblem is shown instead: the logo's X as two
-  crossed green bars with a glow, and "OXOS" under it. `bootscreen::SplashSource` (1 = emblem, 2 = scene) and
-  `bootscreen::SplashStatus` (0 = drawn; 0x100 no copy from the 2BL, 0x101 no header, 0x102 bad header or an old version
-  1 PNG, 0x103 out of memory, 0x200 + the scene check that failed) record what happened.
+  crossed green bars with a glow, and "OXOS" under it. `boot_splash::SplashSource` (1 = emblem, 2 = scene) and
+  `boot_splash::SplashStatus` (0 = drawn; 0x100 no copy from the 2BL, 0x101 no header, 0x102 bad header or an old
+  version 1 PNG, 0x103 out of memory, 0x200 + the scene check that failed) record what happened.
 - It starts before the IDE set-up (since 2026-11-06; until then after it): a hard disk or DVD drive can take seconds
   to spin up after power-on, and the screen stayed dark meanwhile. The drives' ready waits run at the boot thread's
   IRQL (the reference raises to the IDE interrupt's first) and follow the clock, so the splash and jingle threads run
   during them; the boot thread, which may not block, polls a lock the splash thread holds (SMBus, EEPROM) instead.
 - It fades in while boot continues, with the boot jingle (spec/oxos_internal/17_boot_jingle.md): the fade follows the
   clock from the jingle's start, a frame about every 40 ms, and reaches full intensity as the jingle's build-up lands on
-  its final chord (`jingle::ClimaxMs`, 2.6 s; `bootscreen::SplashFullMs` records when it did). Since 2026-11-06 (user's
+  its final chord (`jingle::ClimaxMs`, 2.6 s; `boot_splash::SplashFullMs` records when it did). Since 2026-11-06 (user's
   timeline): a 0.5 s fade from black to the start picture (the metal logo), which stays until 1 s (the fade included);
   then the jingle starts and the picture cross-fades (smoothstep) to the end picture (the green X and its glow),
   reaching it at the climax, 2.6 s later (3.6 s); the end picture is held while the chord lingers, until the jingle has

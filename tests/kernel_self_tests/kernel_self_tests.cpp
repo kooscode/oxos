@@ -1,11 +1,11 @@
 // Boot self-tests for milestone checks. Results are plain globals that tests/boot_test.py reads
 // over the emulator monitor; nothing here is part of the kernel ABI.
 #include <kernel_self_tests.h>
-#include <xk/hardware.h>
-#include <xk/serial.h>
-#include <xk/core.h>
-#include <xk/memory.h>
-#include <xk/objects.h>
+#include <hardware/chipset/chipset.h>
+#include <hardware/chipset/serial.h>
+#include <core/core.h>
+#include <memory/memory.h>
+#include <objects/objects.h>
 
 using namespace xk; // the kernel's subsystems as storage::, objects::, ...
 
@@ -38,12 +38,12 @@ static void NTAPI OnOneShot(PKDPC, PVOID, PVOID, PVOID) {
 }
 
 static void NTAPI OnRtcDone(PKDPC, PVOID, PVOID, PVOID) {
-    hardware::WriteCmos(0x0B, hardware::ReadCmos(0x0B) & ~0x40); // periodic interrupt off
+    hardware::chipset::WriteCmos(0x0B, hardware::chipset::ReadCmos(0x0B) & ~0x40); // periodic interrupt off
     KiTestRtcDisconnected = KeDisconnectInterrupt(&RtcInterrupt);
 }
 
 static BOOLEAN NTAPI OnRtcInterrupt(PKINTERRUPT, PVOID) {
-    hardware::ReadCmos(0x0C); // acknowledge
+    hardware::chipset::ReadCmos(0x0C); // acknowledge
     if (KeGetCurrentIrql() == RtcIrql)
         KiTestRtcIrqlOk = 1;
     KiTestRtcCount = KiTestRtcCount + 1;
@@ -852,7 +852,7 @@ void KiRunBootSelfTests() {
     ULONG vector = HalGetInterruptVector(8, &RtcIrql);
     KeInitializeInterrupt(&RtcInterrupt, OnRtcInterrupt, nullptr, vector, RtcIrql, Latched, FALSE);
     if (KeConnectInterrupt(&RtcInterrupt)) {
-        hardware::ReadCmos(0x0C);
-        hardware::WriteCmos(0x0B, hardware::ReadCmos(0x0B) | 0x40);
+        hardware::chipset::ReadCmos(0x0C);
+        hardware::chipset::WriteCmos(0x0B, hardware::chipset::ReadCmos(0x0B) | 0x40);
     }
 }

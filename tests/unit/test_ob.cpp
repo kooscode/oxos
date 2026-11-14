@@ -1,6 +1,6 @@
 // Object manager and executive objects: names, directories, handles, references, links, and the Nt object calls.
 #include "kernel_test.h"
-#include <xk/objects.h>
+#include <objects/objects.h>
 
 #include <atomic>
 #include <string>
