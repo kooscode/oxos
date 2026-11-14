@@ -1,10 +1,10 @@
 # 34. Kernel extensions (OXOS's own)
 
-Status: **being implemented, 2026-11-13.** In the kernel: the loader (as an overlay, §8.1), hooks, events, Main and
-Unload, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base with its tests (§9,
-§9.3: `make -C kernel test_extensions`). Not yet: the SDK's C++ class and complete kernel function table (§4.4, §9.2),
-`oxos_write_file` and `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS
-features as extensions (§10). Sections marked *open* are decisions still to make.
+Status: **being implemented, 2026-11-13.** In the kernel: the loader (linked on its own, run from a disk cache, §8.1),
+hooks, events, Main and Unload, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base
+with its tests (§9, §9.3: `make -C kernel test_extensions`). Not yet: the SDK's C++ class and complete kernel function
+table (§4.4, §9.2), `oxos_write_file` and `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen
+(§3.4), the OXOS features as extensions (§10). Sections marked *open* are decisions still to make.
 
 A kernel extension is a DLL, file type `.xos`, that the kernel loads from the hard disk before each title and runs
 in kernel mode, with the kernel's own rights. It can watch and change what titles ask of the kernel (hooks on kernel
@@ -446,21 +446,22 @@ for the first extension). With extensions, titles lose their size, and a title t
 can fail to start. The serial log reports each extension's image size after `Load`; *open:* its pool, threads and
 state page too, and showing it in the File Manager.
 
-**The loader is not resident: it is an overlay, run from a cache file on the disk** (decided 2026-11-13):
-- **Built on its own.** The loader's sources (`kernel/overlay/`: `oxos_extensions.ini`, PE loading, relocation,
-  import binding, chains, the state-page index, `HookExport`, `RegisterEvent`) are compiled like the kernel but are not
-  part of its link. `tools/link_overlay.py` links them at the fixed address 0xB0000000 (`XK_OVERLAY_BASE`, a page
+**The loader is not resident: it is linked on its own and run from a cache file on the disk** (decided 2026-11-13):
+- **Built on its own.** The loader's sources (`kernel/src/extensions/`: `extension_ini.cpp`, `extension_loader.cpp`,
+  `extension_parser.cpp`; `oxos_extensions.ini`, PE loading, relocation, import binding, chains, the state-page index,
+  `HookExport`, `RegisterEvent`) are compiled like the kernel but are not part of its link.
+  `tools/link_extension_loader.py` links them at the fixed address 0xB0000000 (`XK_EXTENSION_LOADER_BASE`, a page
   directory entry nothing else uses) and gives each kernel symbol they use as an absolute symbol at this kernel's
   address, from the kernel's map: the loader calls the kernel directly. A symbol in the kernel's boot-only sections
   stops the build.
-- **In the kernel image.** `tools/mkbios.py --overlay` appends it to the kernel image after the boot-only sections,
-  behind a 20-byte header (`XK_OVERLAY_HEADER`: magic, the kernel's PE stamp, base, size, entry), and names the
-  header in the kernel's DOS header (offset 0x38). Its pages are boot-only: freed before the first title.
-- **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\extensions\oxos_extensions_loader.cache`
+- **In the kernel image.** `tools/mkbios.py --extension-loader` appends it to the kernel image after the boot-only
+  sections, behind a 20-byte header (`XK_EXTENSION_LOADER_HEADER`: magic, the kernel's PE stamp, base, size, entry), and
+  names the header in the kernel's DOS header (offset 0x38). Its pages are boot-only: freed before the first title.
+- **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\extensions\oxos_extension_loader.cache`
   (`XkExtensionsWriteCache`, boot-only), always: the file is a cache, overwritten with the known-good copy at every
   cold boot. Without the extensions folder nothing is written.
 - **Run from the cache at every launch** (the cold boot's too): `XkExtensionsLoad` (`src/extensions/
-  extension_overlay.cpp`) reads the file only when `oxos_extensions.ini` exists, checks the header (magic, this
+  extension_runtime_loader.cpp`) reads the file only when `oxos_extensions.ini` exists, checks the header (magic, this
   kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps them at 0xB0000000 through a
   temporary page table, calls the entry, then unmaps and frees everything before the title loads. No cache, or one
   from another kernel: no extensions at that launch (logged).
@@ -468,12 +469,12 @@ state page too, and showing it in the File Manager.
   console (2026-10-28, `kernel/boot/bl.cpp`), and some modchips hide themselves after the boot; a copy kept in RAM
   instead would cost about as much as the resident loader. So the flash is not read after the boot, and the loader
   is not compressed (nothing extra goes into the flash).
-- **Netboot:** the image the 2BL downloads holds the overlay like a flashed one; the cold boot writes the cache.
+- **Netboot:** the image the 2BL downloads holds the loader like a flashed one; the cold boot writes the cache.
 - **Resident in the kernel** stays what runs while the title runs (`extension_runtime.cpp`: the hooked imports, the
-  three events, the end of a title, the Main thread routine) and the overlay runner: about 1.1 KB. To keep every
-  page titles had, the cold boot's launch choice and the netboot title's installation moved to the boot-only pages
-  in the same change (spec/oxos_internal/18 §2). Checked: the memory test title starts with 15 960 free pages (xemu,
-  64 MB), as before kernel extensions.
+  three events, the end of a title, the Main thread routine) and the loader's runner (`extension_runtime_loader.cpp`):
+  about 1.1 KB. To keep every page titles had, the cold boot's launch choice and the netboot title's installation moved
+  to the boot-only pages in the same change (spec/oxos_internal/18 §2). Checked: the memory test title starts with 15
+  960 free pages (xemu, 64 MB), as before kernel extensions.
 
 ## 9. The SDK: building an extension
 Extension writers do not need nxdk. nxdk's runtime (its C library, `winapi`, heaps, threads, SDL) is made for a
@@ -731,7 +732,7 @@ extension = oxos_title_patches.xos
   switches and settings (§3.1).
 - **Hooks are for titles' calls (2026-11-13):** an extension implements kernel functions by name, and `oxos::Name`
   passes a call on to OXOS (§4.4, §7.1).
-- **The loader is an overlay run from a cache file on the disk (2026-11-13)**, not from the flash (§8.1).
+- **The loader is linked on its own and run from a cache file on the disk (2026-11-13)**, not from the flash (§8.1).
 - **The SDK (2026-11-13):** `oxos_sdk/`; plain C as the base with C++ on top; ships as one header and one prebuilt
   library (`oxos_sdk.h`, `oxos_sdk.lib`) in `oxos_sdk_vX.Y.Z.zip` with each release; GNU make
   only, on Windows, macOS and Linux; no nxdk; its own repository later (§9). The kernel exports `memcpy` and its kin
@@ -739,5 +740,5 @@ extension = oxos_title_patches.xos
   `oxos_` for functions and files, never `Oxos` (docs/cpp_style.md §2).
 - **A failed `Load` frees its state page (2026-11-13)** (§3.4).
 
-**Open:** a crashed extension's persisted "off" mark (§3.4), `Unload` on a reset (§4.3), the kernel facts list (§5.2), more
-events (§7.2), extensions calling each other (§8), the proposals of §10.1.
+**Open:** a crashed extension's persisted "off" mark (§3.4), `Unload` on a reset (§4.3), the kernel facts list (§5.2),
+more events (§7.2), extensions calling each other (§8), the proposals of §10.1.

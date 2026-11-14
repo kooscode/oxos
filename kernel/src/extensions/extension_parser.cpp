@@ -1,7 +1,7 @@
 // PE images for kernel extensions (spec/oxos_internal/34 §8). Offsets are the PE/COFF format's (Microsoft's "PE
 // Format" specification): the file header after the "PE\0\0" signature, the 32-bit optional header after it, its
 // data directories, then the section table.
-#include <xk/pe_image.h>
+#include <xk/extension_parser.h>
 
 namespace {
 

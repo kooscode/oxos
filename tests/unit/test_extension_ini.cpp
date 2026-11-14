@@ -1,10 +1,10 @@
-// The extension list's parser (spec/oxos_internal/34 §3.1, kernel/src/extensions/extension_list.cpp).
+// The extension list's parser (spec/oxos_internal/34 §3.1, kernel/src/extensions/extension_ini.cpp).
 #include "kernel_test.h"
 
 #include <string>
 #include <vector>
 
-#include <xk/extension_list.h>
+#include <xk/extension_ini.h>
 
 namespace {
 

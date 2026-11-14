@@ -1,4 +1,4 @@
-// PE images for kernel extensions (spec/oxos_internal/34 §8, kernel/src/extensions/pe_image.cpp), on a small DLL the
+// PE images for kernel extensions (spec/oxos_internal/34 §8, kernel/src/extensions/extension_parser.cpp), on a small DLL the
 // test lays out itself: one section with a relocated pointer, the kernel imports, the descriptor export and the
 // relocation block.
 #include "kernel_test.h"
@@ -6,7 +6,7 @@
 #include <cstring>
 #include <vector>
 
-#include <xk/pe_image.h>
+#include <xk/extension_parser.h>
 
 namespace {
 

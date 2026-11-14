@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Link the kernel extension loader overlay against a built kernel (spec/oxos_internal/34 §8.1).
+"""Link the kernel extension loader against a built kernel (spec/oxos_internal/34 §8.1).
 
-usage: link_overlay.py --kernel KERNEL_EXE --map KERNEL_MAP --base ADDRESS --out OVERLAY_EXE [--linker LLD-LINK]
-                       [--cc CLANG] OBJECTS...
+usage: link_extension_loader.py --kernel KERNEL_EXE --map KERNEL_MAP --base ADDRESS --out LOADER_EXE
+                                [--linker LLD-LINK] [--cc CLANG] OBJECTS...
 
-The overlay (kernel/overlay/*.cpp) is not part of the kernel's link: it runs at its own fixed address (ADDRESS, mapped
-only while it runs) and calls the kernel directly. Every symbol its objects use but do not define is looked up in the
-kernel's map and given to the overlay's link as an absolute symbol at the kernel's address, so its calls and data
-references go straight to this kernel build. A symbol the kernel does not have, or one in the kernel's boot-only
-sections (freed before the first title, spec/oxos_internal/18), stops the build.
+The loader (kernel/src/extensions/extension_ini.cpp, extension_loader.cpp, extension_parser.cpp) is not part of the
+kernel's link: it runs at its own fixed address (ADDRESS, mapped only while it runs) and calls the kernel directly.
+Every symbol its objects use but do not define is looked up in the kernel's map and given to the loader's link as an
+absolute symbol at the kernel's address, so its calls and data references go straight to this kernel build. A symbol the
+kernel does not have, or one in the kernel's boot-only sections (freed before the first title, spec/oxos_internal/18),
+stops the build.
 """
 import argparse, os, re, struct, subprocess, sys, tempfile
 
@@ -76,16 +77,18 @@ def main():
             continue
         lines.append(f'    .globl "{name}"\n    .set "{name}", {address:#x}\n')
     if errors:
-        sys.exit("link_overlay.py: the overlay uses\n  " + "\n  ".join(errors))
+        sys.exit("link_extension_loader.py: the loader uses\n  " + "\n  ".join(errors))
     with tempfile.TemporaryDirectory() as work:
         source, symbols = os.path.join(work, "kernel_symbols.S"), os.path.join(work, "kernel_symbols.obj")
-        open(source, "w").write("// The kernel's addresses for the overlay (tools/link_overlay.py).\n" + "".join(lines))
+        open(source, "w").write("// The kernel's addresses for the extension loader (tools/link_extension_loader.py).\n"
+                                + "".join(lines))
         subprocess.run([a.cc, "--target=i386-pc-win32", "-c", source, "-o", symbols], check=True)
-        subprocess.run([a.linker, "/NODEFAULTLIB", "/ENTRY:XkOverlayEntry", "/SUBSYSTEM:NATIVE", f"/BASE:{a.base:#x}",
-                        "/FIXED", "/ALIGN:0x20", "/FILEALIGN:0x20", "/MERGE:.rdata=.text", "/MERGE:.bss=.data",
+        subprocess.run([a.linker, "/NODEFAULTLIB", "/ENTRY:XkExtensionLoaderEntry", "/SUBSYSTEM:NATIVE",
+                        f"/BASE:{a.base:#x}", "/FIXED", "/ALIGN:0x20", "/FILEALIGN:0x20", "/MERGE:.rdata=.text",
+                        "/MERGE:.bss=.data",
                         "/SAFESEH:NO", "/Brepro", "/DEBUG:NONE", f"/MAP:{os.path.splitext(a.out)[0]}.map",
                         f"/OUT:{a.out}"] + a.objects + [symbols], check=True)
-    print(f"{a.out}: overlay at {a.base:#x}, {len(lines)} kernel symbols")
+    print(f"{a.out}: extension loader at {a.base:#x}, {len(lines)} kernel symbols")
 
 
 if __name__ == "__main__":

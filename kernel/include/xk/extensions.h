@@ -9,7 +9,7 @@
 
 // --- Called by the rest of the kernel
 
-// Runs the extension loader (the overlay, §8.1) for this launch: it loads the extensions of oxos_extensions.ini, calls
+// Runs the extension loader (§8.1) for this launch: it loads the extensions of oxos_extensions.ini, calls
 // each one's Load and starts their Main threads (§3.2, §4.3). Called once per launch by the title launcher, before the
 // title is chosen; nothing in safe mode or without the list.
 void XkExtensionsLoad();
@@ -26,31 +26,31 @@ void XkExtensionsTitleExiting();
 // Safe mode (B held at the cold boot's splash, §3.3): no extension loads until the next cold boot.
 extern XK_PERSIST BOOLEAN XkExtensionsSafeMode;
 
-// --- The loader overlay (§8.1): linked on its own at XK_OVERLAY_BASE against this kernel's addresses
-// (tools/link_overlay.py) and appended to the kernel image by tools/mkbios.py, in the boot-only pages. A cold boot
-// writes it to C:\OXOS\extensions\oxos_extensions_loader.cache; every launch runs it from that file.
+// --- The loader (§8.1): linked on its own at XK_EXTENSION_LOADER_BASE against this kernel's addresses
+// (tools/link_extension_loader.py) and appended to the kernel image by tools/mkbios.py, in the boot-only pages. A cold
+// boot writes it to C:\OXOS\extensions\oxos_extension_loader.cache; every launch runs it from that file.
 
-constexpr ULONG XK_OVERLAY_BASE = 0xB0000000;      // its link address, mapped only while it runs
-constexpr ULONG XK_OVERLAY_MAX_BYTES = 0x10000;    // its largest image
-constexpr ULONG XK_OVERLAY_MAGIC = 0x4C564F58;     // "XOVL"
-constexpr ULONG XK_OVERLAY_HEADER_FIELD = 0x38;    // the kernel's DOS header: the header's RVA in the image (0: none)
+constexpr ULONG XK_EXTENSION_LOADER_BASE = 0xB0000000;   // its link address, mapped only while it runs
+constexpr ULONG XK_EXTENSION_LOADER_MAX_BYTES = 0x10000; // its largest image
+constexpr ULONG XK_EXTENSION_LOADER_MAGIC = 0x4C564F58;  // "XOVL"
+constexpr ULONG XK_EXTENSION_LOADER_HEADER_FIELD = 0x38; // in the kernel's DOS header: the header's RVA (0: none)
 
-// In front of the overlay's image, in the kernel image and in the cache file.
-struct XK_OVERLAY_HEADER {
+// In front of the loader's image, in the kernel image and in the cache file.
+struct XK_EXTENSION_LOADER_HEADER {
     ULONG Magic;
     ULONG Stamp; // the kernel's PE TimeDateStamp it was linked against
-    ULONG Base;  // XK_OVERLAY_BASE
+    ULONG Base;  // XK_EXTENSION_LOADER_BASE
     ULONG Size;  // bytes of the image after this header (its SizeOfImage)
-    ULONG Entry; // the entry point's RVA: XkOverlayEntry
+    ULONG Entry; // the entry point's RVA: XkExtensionLoaderEntry
 };
-XK_SIZE(XK_OVERLAY_HEADER, 20);
+XK_SIZE(XK_EXTENSION_LOADER_HEADER, 20);
 
-// The overlay's entry point (overlay/extension_loader.cpp).
-extern "C" void XkOverlayEntry();
-// Cold boot, boot-only: writes the overlay from the kernel image to the cache file, when the extensions folder exists.
+// The loader's entry point (src/extensions/extension_loader.cpp).
+extern "C" void XkExtensionLoaderEntry();
+// Cold boot, boot-only: writes the loader from the kernel image to the cache file, when the extensions folder exists.
 void XkExtensionsWriteCache();
 
-// --- Resident state and code the overlay uses (extensions/extension_runtime.cpp)
+// --- Resident state and code the loader uses (extensions/extension_runtime.cpp)
 
 extern XK_PERSIST PVOID XkExtensionsStateIndex; // the state pages' index (§6), kept across quick reboots
 extern const char XkKernelVersionText[];        // OXOS_CONTEXT::KernelVersion

@@ -39,7 +39,7 @@ KERNEL_SOURCES := \
     src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
     src/hardware/interrupts_timers.cpp src/bootscreen/vsplash.cpp src/titles/patchfile.cpp src/core/fatal_help.cpp src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
     src/titles/launch_redirect.cpp src/titles/ini_file.cpp \
-    overlay/extension_list.cpp overlay/pe_image.cpp
+    src/extensions/extension_ini.cpp src/extensions/extension_parser.cpp
 KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/include $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS)

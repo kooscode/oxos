@@ -1,6 +1,6 @@
 // The extension list file's parser (spec/oxos_internal/34 §3.1), on the ini line reader the kernel's other files use
 // (titles/ini_file.cpp).
-#include <xk/extension_list.h>
+#include <xk/extension_ini.h>
 #include <xk/ini_file.h>
 
 namespace {

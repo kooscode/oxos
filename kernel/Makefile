@@ -2,9 +2,9 @@
 #   make            -> build/kernel/self_tests/xboxkrnl.exe (+ map)
 #   make bios       -> build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes;
 #                      spec/stock/01 §5)
-#   make test       -> boot build/kernel/self_tests/bios.bin in xemu and check all milestone conditions (boot self-tests)
-# All build output goes under the repository's build/ folder (the only one git ignores for it): the kernel's in
-# build/kernel/, one folder per kind of build; the apps in build/tools/ and build/tests/, the SDK in build/sdk/.
+#   make test       -> boot build/kernel/self_tests/bios.bin in xemu and check all milestone conditions (boot
+# self-tests) All build output goes under the repository's build/ folder (the only one git ignores for it): the kernel's
+# in build/kernel/, one folder per kind of build; the apps in build/tools/ and build/tests/, the SDK in build/sdk/.
 #   build/kernel/self_tests       make, make bios, make test (the kernel with its boot self-tests)
 #   build/kernel/release          make run and the published BIOS (no self-tests, no debug code)
 #   build/kernel/debug            make run_gdb, tools/debug_app.py, VS Code (DEBUG=1: debug info for gdb)
@@ -52,10 +52,10 @@ DEBUG     ?= 0
 # The kernel is built for size (-Oz): its code stays resident, in memory titles count on (spec/oxos_internal/18). Code
 # where speed shows uses -O2 (FAST_SRCS below).
 OPT       := $(if $(filter 1,$(DEBUG)),-Og -fno-inline-functions -g -gdwarf-4 -mllvm -dwarf-linkage-names=Abstract,-Oz -g0)
-# Debug serial port (spec/oxos_internal/03_debug_serial.md): on in the self-test and trace builds, off in release builds.
-# NETBOOT=1: the 2BL first asks the network for a boot image (spec/oxos_internal/09_netboot.md; tools/netboot/).
-# NETBOOT_IP is the address the console puts in its netboot packets (it needs no DHCP and answers no ARP).
-# Use its own BUILD directory (make netboot does): the 2BL is not rebuilt when only NETBOOT changes.
+# Debug serial port (spec/oxos_internal/03_debug_serial.md): on in the self-test and trace builds, off in release
+# builds. NETBOOT=1: the 2BL first asks the network for a boot image (spec/oxos_internal/09_netboot.md; tools/netboot/).
+# NETBOOT_IP is the address the console puts in its netboot packets (it needs no DHCP and answers no ARP). Use its own
+# BUILD directory (make netboot does): the 2BL is not rebuilt when only NETBOOT changes.
 NETBOOT ?= 0
 # MCPX_DUMP=1 (with NETBOOT=1): the 2BL copies the MCPX boot ROM at entry and sends it over the network
 # (spec/oxos_internal/12_mcpx_dump.md; tools/mcpx_dump/). make mcpx_dump builds that payload image.
@@ -66,8 +66,8 @@ SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # STATEDUMP=1: print the machine-state probe (tools/statedump) on the debug serial port at the end of start-up, for
 # comparing the set-up with a reference kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
-# REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots the
-# console the way the in-game reset does (HalpIgrReboot), so resets can be tested in a loop without a controller.
+# REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots
+# the console the way the in-game reset does (HalpIgrReboot), so resets can be tested in a loop without a controller.
 REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
 SERIAL := 1
@@ -87,9 +87,9 @@ CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exce
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
             -Wall -Wextra -Werror -Wno-unused-parameter -Iinclude -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Iinclude $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
-# The version on the boot splash and the error screens (bootscreen/text.cpp): vX.Y.Z when built for a release (make release VERSION=X.Y.Z),
-# else DEV (and XK_RELEASE_VERSION 1 or 0: a development build's disk-format countdown is short). It is a generated
-# header, rewritten only when the text changes, so a new version rebuilds what uses it.
+# The version on the boot splash and the error screens (bootscreen/text.cpp): vX.Y.Z when built for a release (make
+# release VERSION=X.Y.Z), else DEV (and XK_RELEASE_VERSION 1 or 0: a development build's disk-format countdown is
+# short). It is a generated header, rewritten only when the text changes, so a new version rebuilds what uses it.
 XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
@@ -106,7 +106,10 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and
 # take memory titles count on (Halo 2 needs nearly all of it).
-CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/trace.cpp), \
+# The extension loader's files (src/extensions/extension_ini.cpp, extension_loader.cpp, extension_parser.cpp) are
+# linked on their own, below, not into the kernel.
+EXTENSION_LOADER_SRCS := $(addprefix src/extensions/,extension_ini.cpp extension_loader.cpp extension_parser.cpp)
+CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/trace.cpp) $(EXTENSION_LOADER_SRCS), \
                          $(wildcard src/*/*.cpp src/*/*/*.cpp))
 ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
 # The boot self-tests: test code in tests/kernel_self_tests, compiled into SELFTEST=1 kernels only.
@@ -127,7 +130,8 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),XkShowFileManagerScreen,XkCloseFileManagerScreen
 BOOT_ENTRIES := $(BOOT_ENTRIES),GamepadWaitForX
 # The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
 BOOT_ENTRIES := $(BOOT_ENTRIES),IdexDiskBlankCountdown,IdexDiskIsBlank,IdexDiskDescribe
-# The kernel extension loader's cache, written at a cold boot from the boot-only copy (extensions/extension_overlay.cpp).
+# The kernel extension loader's cache, written at a cold boot from the boot-only copy
+# (extensions/extension_runtime_loader.cpp).
 BOOT_ENTRIES := $(BOOT_ENTRIES),XkExtensionsWriteCache
 # The netboot title's installation (titles/nettitle.cpp): a package only ever comes with a cold boot.
 BOOT_ENTRIES := $(BOOT_ENTRIES),XeLaunchNetbootTitle
@@ -165,7 +169,7 @@ FORCE:
 $(BUILD)/kernel_self_tests/%.obj: $(SELF_TESTS_DIR)/%.cpp $(wildcard include/xk/*.h $(SELF_TESTS_DIR)/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
--include $(OBJS:.obj=.d) $(OVERLAY_OBJS:.obj=.d)
+-include $(OBJS:.obj=.d) $(EXTENSION_LOADER_OBJS:.obj=.d)
 
 $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
@@ -301,33 +305,31 @@ MCPX_DUMP_BUILD := $(OUT)/mcpx_dump
 mcpx_dump:
 	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios_256k.bin
 
-# The kernel extension loader overlay (spec/oxos_internal/34 §8.1): overlay/*.cpp, compiled as the kernel is but
-# linked on its own at 0xB0000000 (XK_OVERLAY_BASE) against this kernel's addresses, then appended to the kernel image.
-OVERLAY_OBJS := $(patsubst overlay/%.cpp,$(BUILD)/overlay/%.obj,$(wildcard overlay/*.cpp))
-OVERLAY := $(BUILD)/extensions_loader.exe
-$(BUILD)/overlay/%.obj: overlay/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
-$(OVERLAY): $(OVERLAY_OBJS) $(BUILD)/xboxkrnl.exe $(ROOT)/tools/link_overlay.py
-	python3 -I $(ROOT)/tools/link_overlay.py --kernel $(BUILD)/xboxkrnl.exe --map $(BUILD)/xboxkrnl.map \
-	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(OVERLAY_OBJS)
+# The kernel extension loader (spec/oxos_internal/34 §8.1): EXTENSION_LOADER_SRCS, compiled as the kernel is
+# (the rule above) but linked on its own at 0xB0000000 (XK_EXTENSION_LOADER_BASE) against this kernel's addresses,
+# then appended to the kernel image.
+EXTENSION_LOADER_OBJS := $(patsubst src/%.cpp,$(BUILD)/%.obj,$(EXTENSION_LOADER_SRCS))
+EXTENSION_LOADER := $(BUILD)/extension_loader.exe
+$(EXTENSION_LOADER): $(EXTENSION_LOADER_OBJS) $(BUILD)/xboxkrnl.exe $(ROOT)/tools/link_extension_loader.py
+	python3 -I $(ROOT)/tools/link_extension_loader.py --kernel $(BUILD)/xboxkrnl.exe --map $(BUILD)/xboxkrnl.map \
+	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(EXTENSION_LOADER_OBJS)
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 ifeq ($(IMAGE),base)
-$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(OVERLAY)
+$(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --overlay $(OVERLAY)
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
 else
 $(BUILD)/bios.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(OVERLAY)
+                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
-	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --overlay $(OVERLAY)
+	    --flat-kernel $(BUILD)/xboxkrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
 $(BUILD)/bios_256k.bin: $(BUILD)/xboxkrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(OVERLAY)
+                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K \
-	    --overlay $(OVERLAY)
+	    --extension-loader $(EXTENSION_LOADER)
 endif
 
 $(XDASH_HDD):
@@ -390,8 +392,8 @@ test_dash: $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
 
-# Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as
-# media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console:
+# Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself
+# as media\second.xbe through a persisted LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console:
 # the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10). A third run puts
 # C:\OXOS\oxos_launch_redirect.ini on the test disk: the relaunch must start the disc's redirected\second.xbe instead
 # (spec/oxos_internal/33 §6).
@@ -511,9 +513,9 @@ run: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS)
 
-# The same with the debug serial port (spec/oxos_internal/03_debug_serial.md), whose output is printed in this terminal. No import tracing, so
-# titles see the memory of a release build (plus the serial code); also the build to flash for troubleshooting on
-# hardware.
+# The same with the debug serial port (spec/oxos_internal/03_debug_serial.md), whose output is printed in this terminal.
+# No import tracing, so titles see the memory of a release build (plus the serial code); also the build to flash for
+# troubleshooting on hardware.
 run_trace_basic: $(PLAY_FETCH)
 	$(MAKE) BUILD=$(TRACE_BASIC_BUILD) SELFTEST=0 SERIAL=1 $(TRACE_BASIC_BUILD)/bios.bin
 	python3 -I $(ROOT)/tools/run.py $(TRACE_BASIC_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(STATE),--state $(STATE)) $(RUN_OPTS) --serial
@@ -530,11 +532,11 @@ run_gdb: $(PLAY_FETCH)
 
 # Import tracing: the same as run_trace_basic, plus a record of the title's last 32768 kernel calls. They are dumped by
 # themselves when the kernel reports a crash and when xemu is closed (the last 30 in this terminal, all of them in
-# $(TRACE_BUILD)/dumps/); at any other time, `make print_trace_dump` in another terminal prints them (tools/trace.py; LAST=N calls,
-# ONLY=Name,Name, ALL=1 shows the common calls too). TRACE=2 (default) keeps the record above 64 MB, with xemu set
-# to 128 MB, so titles get the memory of a release build (Halo 2 needs it) and the calls from before a quick reboot
-# are kept. TRACE=1 keeps it in the console's 64 MB (2 MB less for the title). Each mode has its own build folder,
-# because make does not rebuild when only the flags change; pass the same TRACE to print_trace_dump.
+# $(TRACE_BUILD)/dumps/); at any other time, `make print_trace_dump` in another terminal prints them (tools/trace.py;
+# LAST=N calls, ONLY=Name,Name, ALL=1 shows the common calls too). TRACE=2 (default) keeps the record above 64 MB, with
+# xemu set to 128 MB, so titles get the memory of a release build (Halo 2 needs it) and the calls from before a quick
+# reboot are kept. TRACE=1 keeps it in the console's 64 MB (2 MB less for the title). Each mode has its own build
+# folder, because make does not rebuild when only the flags change; pass the same TRACE to print_trace_dump.
 TRACE       ?= 2
 TRACE_BUILD := $(OUT)/trace_full$(if $(filter 1,$(TRACE)),-64mb)
 run_trace_full: $(PLAY_FETCH)
@@ -654,8 +656,9 @@ $(ISO_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(ISO_LAUNCHER_DIR)/iso_launche
 	$(NXDK_ENV) $(MAKE) -C $(ISO_LAUNCHER_DIR) -j8
 iso_launcher: $(ISO_LAUNCHER_XBE)
 
-# Title launcher (tools/title_launcher, nxdk): lists F:\games, F:\titles (and game folders) and F:\Applications and starts a disc image (mounted) or an XBE chosen with
-# the controller. make title_launcher builds build/tools/title_launcher/bin/default.xbe and title_launcher.iso.
+# Title launcher (tools/title_launcher, nxdk): lists F:\games, F:\titles (and game folders) and F:\Applications and
+# starts a disc image (mounted) or an XBE chosen with the controller. make title_launcher builds
+# build/tools/title_launcher/bin/default.xbe and title_launcher.iso.
 TITLE_LAUNCHER_DIR := $(ROOT)/tools/title_launcher
 TITLE_LAUNCHER_XBE := $(APPS_BUILD)/tools/title_launcher/bin/default.xbe
 $(TITLE_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(TITLE_LAUNCHER_DIR)/title_launcher.cpp \

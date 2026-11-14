@@ -1,15 +1,15 @@
 // The kernel extension loader (spec/oxos_internal/34 §3-§8): before each title, reads C:\OXOS\oxos_extensions.ini,
 // loads each listed .xos from C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook
-// chains and starts the Main threads. Not part of the resident kernel: linked on its own at XK_OVERLAY_BASE against the
-// kernel's addresses, and run there for each launch by extensions/extension_overlay.cpp (§8.1). What runs while the
-// title runs is in extensions/extension_runtime.cpp.
+// chains and starts the Main threads. Not part of the resident kernel: linked on its own at XK_EXTENSION_LOADER_BASE
+// against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp (§8.1). What
+// runs while the title runs is in extensions/extension_runtime.cpp.
 #include <xk/extensions.h>
 #include <xk/core.h>
-#include <xk/extension_list.h>
+#include <xk/extension_ini.h>
 #include <xk/io.h>
 #include <xk/memory.h>
 #include <xk/objects.h>
-#include <xk/pe_image.h>
+#include <xk/extension_parser.h>
 #include <xk/runtime.h>
 #include <xk/serial.h>
 #include <xk/titles.h>
@@ -416,7 +416,7 @@ static void XkpLinkChains(const IMPORT_SLOTS *Slots) {
 
 // --- Loading the list
 
-extern "C" void XkOverlayEntry() {
+extern "C" void XkExtensionLoaderEntry() {
     ULONG got;
     NTSTATUS status;
     char *text = XeReadOxosFile(LIST_PATH, LIST_MAX_BYTES, POOL_TAG, &got, &status);

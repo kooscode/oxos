@@ -69,7 +69,7 @@ describe the code directly below it.
   (which reads like kernel patches); `oxos_interfaces.h`, not `abi.h`. When a name could be read two ways, take the
   longer one that cannot.
 - **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console
-  (`C:\OXOS\oxos_launch_redirect.ini`, `oxos_extensions.ini`, `extensions\oxos_extensions_loader.cache`), OXOS's own
+  (`C:\OXOS\oxos_launch_redirect.ini`, `oxos_extensions.ini`, `extensions\oxos_extension_loader.cache`), OXOS's own
   extensions and their data (`oxos_NAME.xos` with `oxos_NAME.ini`), and the SDK's headers (`oxos_interfaces.h`).
   Names without it belong to users and third-party extensions.
 - **OXOS is written `OXOS` or `oxos`, never `Oxos`**, in identifiers as in text: `OXOS_CONTEXT`, `OXOS_API_VERSION`,

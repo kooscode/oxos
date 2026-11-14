@@ -1,6 +1,6 @@
 // PE images for kernel extensions (spec/oxos_internal/34 §8): checking, mapping, relocating, binding imports and
 // finding an export. It makes no kernel calls, so the host unit tests run it unchanged
-// (tests/unit/test_pe_image.cpp).
+// (tests/unit/test_extension_parser.cpp).
 #pragma once
 #include <xk/types.h>
 

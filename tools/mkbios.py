@@ -56,12 +56,12 @@ u32 = lambda d, o: struct.unpack_from("<I", d, o)[0]
 u16 = lambda d, o: struct.unpack_from("<H", d, o)[0]
 
 
-OVERLAY_MAGIC, OVERLAY_HEADER_FIELD = 0x4C564F58, 0x38  # "XOVL"; kernel/include/xk/extensions.h
+EXTENSION_LOADER_MAGIC, EXTENSION_LOADER_HEADER_FIELD = 0x4C564F58, 0x38  # "XOVL"; kernel/include/xk/extensions.h
 
 
-def overlay_blob(path, kernel_stamp):
-    """The kernel extension loader overlay (spec/oxos_internal/34 §8.1) as the kernel finds it: XK_OVERLAY_HEADER
-    {magic, the kernel's stamp, base, size, entry RVA}, then the overlay's image laid out at its RVAs."""
+def extension_loader_blob(path, kernel_stamp):
+    """The kernel extension loader (spec/oxos_internal/34 §8.1) as the kernel finds it: XK_EXTENSION_LOADER_HEADER
+    {magic, the kernel's stamp, base, size, entry RVA}, then the loader's image laid out at its RVAs."""
     pe = open(path, "rb").read()
     lfanew = u32(pe, 0x3C)
     nsec, optsz = u16(pe, lfanew + 6), u16(pe, lfanew + 20)
@@ -71,16 +71,16 @@ def overlay_blob(path, kernel_stamp):
     for i in range(nsec):
         vsize, va, rawsize, rawptr = struct.unpack_from("<IIII", pe, oh + optsz + i * 40 + 8)
         image[va:va + min(vsize, rawsize)] = pe[rawptr:rawptr + min(vsize, rawsize)]
-    header = struct.pack("<5I", OVERLAY_MAGIC, kernel_stamp, u32(pe, oh + 28), len(image), u32(pe, oh + 16))
+    header = struct.pack("<5I", EXTENSION_LOADER_MAGIC, kernel_stamp, u32(pe, oh + 28), len(image), u32(pe, oh + 16))
     return header + bytes(image)
 
 
-def flatten(pe, data_src_addr_for, overlay=None):
+def flatten(pe, data_src_addr_for, extension_loader=None):
     """Return (image, data_init) with raw == RVA layout and quick-reboot header fields set.
 
     data_src_addr_for(len) -> flash address where the .data initializer of that length will live.
-    overlay: the kernel extension loader overlay's PE, appended to the image (in its boot-only pages) and named in
-    the DOS header at OVERLAY_HEADER_FIELD.
+    extension_loader: the kernel extension loader's PE, appended to the image (in its boot-only pages) and named in
+    the DOS header at EXTENSION_LOADER_HEADER_FIELD.
     """
     lfanew = u32(pe, 0x3C)
     nsec, optsz = u16(pe, lfanew + 6), u16(pe, lfanew + 20)
@@ -106,12 +106,12 @@ def flatten(pe, data_src_addr_for, overlay=None):
     init_len = min((rawsize + 0xF) & ~0xF, vsize)
     base = u32(pe, oh + 28)
     struct.pack_into("<IIII", img, 0x28, vsize - init_len, init_len, data_src_addr_for(init_len), base + va)
-    if overlay:
+    if extension_loader:
         at = (len(img) + 0x1F) & ~0x1F
-        blob = overlay_blob(overlay, u32(pe, lfanew + 8))
+        blob = extension_loader_blob(extension_loader, u32(pe, lfanew + 8))
         img += bytes(at - len(img)) + blob
         img += bytes(-len(img) % 0x20)
-        struct.pack_into("<I", img, OVERLAY_HEADER_FIELD, at)
+        struct.pack_into("<I", img, EXTENSION_LOADER_HEADER_FIELD, at)
         struct.pack_into("<I", img, oh + 56, len(img))  # SizeOfImage: the memory manager keeps it until the title
     # PE checksum over the final image.
     struct.pack_into("<I", img, oh + 64, 0)
@@ -227,7 +227,7 @@ def build_open(a):
         sys.exit(f"open image parts do not fit: x-codes {len(xcodes):#x}, 2BL {len(loader):#x}, reset {len(reset):#x}")
     pe = open(a.kernel, "rb").read()
     data_end = OPEN_RESET
-    image, data_init = flatten(pe, lambda n: OPEN_FLASH + ((data_end - n) & ~0xF), a.overlay)
+    image, data_init = flatten(pe, lambda n: OPEN_FLASH + ((data_end - n) & ~0xF), a.extension_loader)
     if a.flat_kernel:
         open(a.flat_kernel, "wb").write(image)
     dstart = (data_end - len(data_init)) & ~0xF
@@ -290,8 +290,8 @@ def main():
     ap.add_argument("--cromwell", help="XboxDev/cromwell source tree (EEPROM key states)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--flat-kernel")
-    ap.add_argument("--overlay", help="the kernel extension loader overlay (tools/link_overlay.py), appended to the "
-                    "kernel image")
+    ap.add_argument("--extension-loader", help="the kernel extension loader (tools/link_extension_loader.py), "
+                    "appended to the kernel image")
     ap.add_argument("--splash", help="boot splash SVG: flash bank 1 of a 1 MiB image, and (open image) a copy in "
                     "each boot bank when it fits")
     ap.add_argument("--size", choices=("256K", "1M"), default="1M", help="open image size (default 1M)")
@@ -315,7 +315,7 @@ def main():
     kkey = bytes(bl[BLDR_KEYS + 32:BLDR_KEYS + 48])
 
     pe = open(a.kernel, "rb").read()
-    image, data_init = flatten(pe, lambda n: FLASH_BASE + OFF_2BL - n, a.overlay)
+    image, data_init = flatten(pe, lambda n: FLASH_BASE + OFF_2BL - n, a.extension_loader)
     if a.flat_kernel:
         open(a.flat_kernel, "wb").write(image)
 
