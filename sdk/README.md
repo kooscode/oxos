@@ -14,8 +14,8 @@ repository.
 
 ```make
 NAME := hello
-SOURCES := hello.c
-include path/to/oxos_sdk/oxos_extension.mk
+SOURCES := hello.cpp
+include path/to/the/sdk/oxos_extension.mk
 ```
 
 `make` builds `hello.xos` (add `LLVM=C:/LLVM/bin` when clang is not on the `PATH`). Copy it to
@@ -33,6 +33,7 @@ extension = hello.xos
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
 | `examples/hello/` | the example to start from: every part of an extension, commented ([README](examples/hello/README.md)) |
 
-**The SDK's source** (`oxos_sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the library's
+**The SDK's source** (`sdk/` in the OXOS repository) has the header in parts (`include/oxos/`), the library's
 sources (`src/`), and a `Makefile` that builds the SDK as above into `build/sdk/oxos_sdk/` (and with `VERSION=X.Y.Z`
-its release zip). Extensions built inside the repository use that build.
+its release zip), then each example with that package into `build/sdk/examples/NAME/`. Extensions are only built
+with the package, never from the source, so what ships is what is tested.

@@ -4,7 +4,7 @@
 #
 #   NAME := hello                    # builds $(OXOS_OUT)/hello.xos
 #   SOURCES := hello.cpp             # C (.c) or C++ (.cpp), in the Makefile's folder
-#   include path/to/oxos_sdk/oxos_extension.mk
+#   include path/to/the/sdk/oxos_extension.mk
 #
 # Needs only clang and lld-link (LLVM 18 or newer) on the PATH, or in the folder LLVM names (LLVM=C:/LLVM/bin). The
 # library is prebuilt in lib/. The rules run no other command (no shell utilities), so they work from cmd.exe,
@@ -32,13 +32,12 @@ OXOS_CXXFLAGS := $(OXOS_TARGET_FLAGS) -std=c++20 -fno-exceptions -fno-rtti -fno-
 OXOS_LDFLAGS := /DLL /DRIVER /NOENTRY /NODEFAULTLIB /SUBSYSTEM:NATIVE /MACHINE:X86 /BASE:0x10000000 /SAFESEH:NO \
                 /Brepro /DEBUG:NONE /ALIGN:0x20 /FILEALIGN:0x20 /NOIMPLIB
 
-# The SDK's one library: the runtime and the kernel's import library, prebuilt in lib/ (in the SDK's source, made by
-# its Makefile in ../build/sdk/oxos_sdk/lib).
-OXOS_LIBRARIES ?= $(firstword $(wildcard $(OXOS_SDK)/lib/oxos_sdk.lib $(OXOS_SDK)/../build/sdk/oxos_sdk/lib/oxos_sdk.lib))
-ifeq ($(OXOS_LIBRARIES),)
-OXOS_LIBRARIES := $(OXOS_SDK)/lib/oxos_sdk.lib
+# The SDK's one library: the runtime and the kernel's import library, prebuilt in lib/. The SDK's source has no lib/:
+# extensions are built with the SDK as it ships (in the OXOS repository, make -C sdk makes it in build/sdk/oxos_sdk/).
+OXOS_LIBRARIES ?= $(OXOS_SDK)/lib/oxos_sdk.lib
+ifeq ($(wildcard $(OXOS_LIBRARIES)),)
 $(OXOS_LIBRARIES):
-	$(error oxos_sdk.lib is not in $(OXOS_SDK)/lib: in the SDK's source, build it first with make -C oxos_sdk)
+	$(error $(OXOS_LIBRARIES) is missing: build extensions with the SDK as it ships (make -C sdk: build/sdk/oxos_sdk/))
 endif
 OXOS_HEADERS := $(wildcard $(OXOS_SDK)/include/*.h $(OXOS_SDK)/include/oxos/*.h)
 

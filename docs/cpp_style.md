@@ -13,10 +13,11 @@ describe the code directly below it.
 
 ## 1. Language
 
-- C++20 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`oxos_sdk/`) supports
+- C++20 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`sdk/`) supports
   extensions in plain C (spec/oxos_internal/34 §9), so its public headers are valid C17 as well as C++20 (their
   constants are `#define`s, their structures `typedef struct`), and `tests/extensions/plain_c.c` checks that a C
-  extension builds and runs. The SDK's own code is C++.
+  extension builds and runs: it is the repository's only `.c` file. The SDK's own code and its example
+  (`sdk/examples/hello/hello.cpp`) are C++.
 - The kernel and the 2BL are freestanding: no exceptions, no RTTI, no standard library, no static constructors.
   The kernel is built `-Oz` on purpose (free memory for titles); a readability change must not cost code size.
 - Constants are `constexpr`, not `#define` (Core Guidelines ES.31). Macros are for build options (`XK_DEBUG_SERIAL`,

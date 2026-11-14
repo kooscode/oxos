@@ -561,7 +561,7 @@ def extension_loaded_titles(mon):
 
 def extension_checks(mon, launches):
     """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
-    plain_c.c, oxos_sdk/examples/hello) after `launches` launches: the cold boot's title and each quick reboot's
+    plain_c.c, sdk/examples/hello) after `launches` launches: the cold boot's title and each quick reboot's
     (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks)."""
     def words(address, n):
         out = mon.hmp(f"x/{n}wx {address:#x}")

@@ -3,10 +3,10 @@
 
 usage: gen_oxos_sdk.py EXPORTS_TSV OUT_DEF
 
-OUT_DEF (oxos_sdk/src/xboxkrnl.def) lists every export of xboxkrnl.exe by ordinal, with the symbol the compiler gives
+OUT_DEF (sdk/src/xboxkrnl.def) lists every export of xboxkrnl.exe by ordinal, with the symbol the compiler gives
 a call to it (stdcall _Name@N, fastcall @Name@N; cdecl functions, the compiler's helpers and variables by their C
 name, to which `lld-link /lib` adds the underscore), for `lld-link /lib /def:` to turn into the import library
-extensions link with (oxos_sdk/Makefile). Debugger-only rows (kind "debug") are left out, as in the kernel's own .def.
+extensions link with (sdk/Makefile). Debugger-only rows (kind "debug") are left out, as in the kernel's own .def.
 """
 import sys
 

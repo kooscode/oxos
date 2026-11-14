@@ -95,7 +95,7 @@ XK_VERSION_TEXT := $(if $(VERSION),v$(VERSION),DEV)
 XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
 # The kernel extensions' binary interface, shared with their SDK (spec/oxos_internal/34).
-CXXFLAGS += -I$(ROOT)/oxos_sdk/include
+CXXFLAGS += -I$(ROOT)/sdk/include
 # The boot self-tests' header, for the kernel's hooks that start them (SELFTEST=1 builds only).
 CXXFLAGS += $(if $(filter 0,$(SELFTEST)),,-I$(ROOT)/tests/kernel_self_tests)
 # The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
@@ -277,7 +277,7 @@ bios_256k: $(BUILD)/bios_256k.bin
 # build/kernel/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin, the title
 # patches (title_patches/title_patches.ini) and the FTP server (tools/ftp_server, as ftp.xbe; built with nxdk, which
 # `make nxdk` fetches), puts the kernel extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip, from
-# oxos_sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
+# sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the dashboard
 # test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
@@ -287,7 +287,7 @@ release:
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
 	$(if $(VERSION),$(MAKE) ftp_server)
-	$(if $(VERSION),$(MAKE) -C $(ROOT)/oxos_sdk VERSION=$(VERSION))
+	$(if $(VERSION),$(MAKE) -C $(ROOT)/sdk VERSION=$(VERSION))
 	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
 	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
 	    cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
@@ -412,17 +412,19 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 $$run || exit 1; \
 	done
 
-# Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions, built with oxos_sdk) and an
-# oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks,
-# events, Main threads and Unloads, and leave out the ones that fail, are refused or are not listed. The SDK's prebuilt
-# libraries are brought up to date with exports.tsv first (committed with it when they change).
+# Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions) and the SDK's example, built
+# with the SDK as it ships (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three
+# launches must keep their state pages, run their hooks, events, Main threads and Unloads, and leave out the ones that
+# fail, are refused or are not listed. The SDK's import definitions are brought up to date with exports.tsv first
+# (sdk/src/xboxkrnl.def, committed with it when they change).
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/oxos_sdk/src/xboxkrnl.def
-	$(MAKE) -C $(ROOT)/oxos_sdk
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv $(ROOT)/sdk/src/xboxkrnl.def
+	$(MAKE) -C $(ROOT)/sdk
 	mkdir -p $(TEST_EXTENSIONS_DIR)
 	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)
+	cp $(ROOT)/build/sdk/examples/hello/hello.xos $(TEST_EXTENSIONS_DIR)/
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/xboxkrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	    --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR)

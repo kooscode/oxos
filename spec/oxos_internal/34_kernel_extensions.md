@@ -489,11 +489,11 @@ in the kernel. An extension needs much less, and what it needs is the kernel's.
   PowerShell, bash or zsh. No CMake (decided 2026-11-13).
 - **The same bytes everywhere:** objects without time stamps and `/Brepro` links, so a source builds the same `.xos`
   on any system.
-- **Its own repository later:** `oxos_sdk/` is self-contained (it never reads the kernel's sources), so it can move to
+- **Its own repository later:** `sdk/` is self-contained (it never reads the kernel's sources), so it can move to
   its own repository as it is; the kernel then takes `oxos_interfaces.h` from it (decided 2026-11-13: later).
 
 **What a release ships: `oxos_sdk_vX.Y.Z.zip`** (MIT, §11), next to `oxos_vX.Y.Z.zip`; `make -C kernel release
-VERSION=X.Y.Z` makes it with `oxos_sdk/Makefile`:
+VERSION=X.Y.Z` makes it with `sdk/Makefile`:
 
 ```
 oxos_sdk/
@@ -504,7 +504,7 @@ oxos_sdk/
   README.md, LICENSE
 ```
 
-**The SDK's source, `oxos_sdk/` in this repository:**
+**The SDK's source, `sdk/` in this repository** (the kernel's SDK; its files keep the `oxos_` names):
 
 | Part | Contents |
 |---|---|
@@ -515,10 +515,10 @@ oxos_sdk/
 | `include/oxos/oxos_exports.inc` | *not yet:* the table of kernel functions, one line each: `OXOS_EXPORT(190, NtCreateFile, NTSTATUS, stdcall, (PHANDLE Handle, ...))`; generated from `kernel/exports.tsv` and the kernel's prototypes; drives the declarations, the ordinals, the hookable list and the class's compile-time checks |
 | `src/oxos_runtime.cpp` | the helpers of §5.1, with C names, so C and C++ extensions link the same library |
 | `src/xboxkrnl.def` | every `xboxkrnl.exe` export by ordinal, generated from `kernel/exports.tsv` by `tools/gen_oxos_sdk.py`; the import library is made from it (`lld-link /lib /def:`) |
-| `oxos_extension.mk` | the build rules extensions include (below); in the source it takes the library from `../build/sdk/oxos_sdk/lib` |
-| `Makefile`, `make_sdk_package.py` | build the SDK as it ships into `build/sdk/oxos_sdk/` (the library, the merged header, the rest copied), and with `VERSION` its zip; for the SDK's maintainers (a POSIX shell and Python) |
+| `oxos_extension.mk` | the build rules extensions include (below); they take the library from the package's `lib/`, so extensions are built only with the SDK as it ships, never from its source |
+| `Makefile`, `make_sdk_package.py` | build the SDK as it ships into `build/sdk/oxos_sdk/` (the library, the merged header, the rest copied), then each example from that package, as a user builds it, into `build/sdk/examples/NAME/`, and with `VERSION` the zip; for the SDK's maintainers (a POSIX shell and Python) |
 | `docs/kernel_functions.md` | *not yet:* every hookable kernel function, ready to copy into a class (§9.2) |
-| `examples/hello/` | the example to start from, in C: `Load`, `Main`, `Unload`, a hook, an event, settings and the state page, each commented; its Makefile, a sample `oxos_extensions.ini` and a README (build, install, what it prints) |
+| `examples/hello/` | the example to start from, in C++ (like all of OXOS; C extensions are supported, not shown): `Load`, `Main`, `Unload`, a hook, an event, settings and the state page, each commented; its Makefile, a sample `oxos_extensions.ini` and a README (build, install, what it prints) |
 
 Nothing built is committed: the library and the merged header exist only in `build/sdk/` and the release zip.
 
@@ -537,7 +537,7 @@ cannot be hooked (§7.1).
 in its export table, and `memcmp`.
 
 ### 9.2 The kernel function reference
-`oxos_sdk/docs/kernel_functions.md` lists **every kernel function an extension can hook**, each as the member
+`sdk/docs/kernel_functions.md` lists **every kernel function an extension can hook**, each as the member
 function declaration to paste into the class, with an empty body that passes the call on. A user finds the function,
 copies the block, and edits the body.
 
@@ -578,7 +578,7 @@ copies the block, and edits the body.
 ```make
 # examples/hello/Makefile
 NAME := hello
-SOURCES := hello.c
+SOURCES := hello.cpp
 include ../../oxos_extension.mk
 # oxos_extension.mk: clang --target=i386-pc-win32 -march=pentium -mno-sse -mno-mmx -mno-80387 -ffreestanding
 #                    -nostdinc -fno-builtin -O2 -std=c17 (.c) or -std=c++20 -fno-exceptions -fno-rtti (.cpp) ...
@@ -590,7 +590,7 @@ The output folder (`OXOS_OUT`, default the current one) must exist; the rules cr
 shell commands. Sources are in the Makefile's folder; their objects go to the output folder, named after the
 extension.
 
-Once the class exists (§4.4), the example gets a C++ version next to `hello.c`:
+Once the class exists (§4.4), the example (`hello.cpp`, today plain functions) uses it:
 
 ```cpp
 // examples/hello/hello.cpp
@@ -649,7 +649,7 @@ reboots. The extensions record what the kernel did in their state pages; the tes
 - `plain_c.xos`, written in C: counts its Loads and loaded titles and reads its setting, so the SDK's headers, macro
   and runtime work without C++; checks a struct copy, `memset`, `memcmp` and signed and unsigned 64-bit division and
   remainder at each Load, which the compiler turns into calls to the kernel's exports 402-410 (§9.1).
-- `hello.xos`, the SDK's example (`oxos_sdk/examples/hello`), listed after `plain_c` with `heartbeat = 1`: built and
+- `hello.xos`, the SDK's example (`sdk/examples/hello`), listed after `plain_c` with `heartbeat = 1`: built and
   loaded at every launch so the example keeps working; its state page counts the launches.
 - `failload.xos`: hooks `NtOpenFile`, then fails its `Load`: unloaded, its hook dropped (a title call through it
   would run freed memory), its state page freed.
@@ -721,7 +721,7 @@ extension = oxos_title_patches.xos
 
 ## 11. Decisions
 - **Licence (2026-11-13).** The kernel stays GPL-2.0. The SDK (header, `oxos_sdk.lib`, build files, examples)
-  is open source under the **MIT** licence (`oxos_sdk/LICENSE`), so an extension built with it may use any licence:
+  is open source under the **MIT** licence (`sdk/LICENSE`), so an extension built with it may use any licence:
   open source is preferred, closed source is allowed. (A GPL SDK would make every extension that links
   `oxos_sdk.lib` GPL too, which is why the SDK is not GPL.) The SDK is written for it, not copied from GPL
   kernel sources.
@@ -734,11 +734,13 @@ extension = oxos_title_patches.xos
 - **Hooks are for titles' calls (2026-11-13):** an extension implements kernel functions by name, and `oxos::Name`
   passes a call on to OXOS (§4.4, §7.1).
 - **The loader is linked on its own and run from a cache file on the disk (2026-11-13)**, not from the flash (§8.1).
-- **The SDK (2026-11-13):** `oxos_sdk/`; plain C as the base with C++ on top; ships as one header and one prebuilt
-  library (`oxos_sdk.h`, `oxos_sdk.lib`) in `oxos_sdk_vX.Y.Z.zip` with each release; GNU make
-  only, on Windows, macOS and Linux; no nxdk; its own repository later (§9). The kernel exports `memcpy` and its kin
-  and the compiler's 64-bit helpers, as Windows and Linux kernels do (§9.1). Names: `OXOS_` for types and macros,
-  `oxos_` for functions and files, never `Oxos` (docs/cpp_style.md §2).
+- **The SDK (2026-11-13):** `sdk/` (named `oxos_sdk/` until 2026-11-14); plain C as the base with C++ on top, so
+  extensions may be written in C; the SDK's own code and its example are C++, and `tests/extensions/plain_c.c` is the
+  only C source (2026-11-14). It ships as one header and one prebuilt library (`oxos_sdk.h`, `oxos_sdk.lib`) in
+  `oxos_sdk_vX.Y.Z.zip` with each release; GNU make only, on Windows, macOS and Linux; no nxdk; its own repository
+  later (§9). The kernel exports `memcpy` and its kin and the compiler's 64-bit helpers, as Windows and Linux kernels
+  do (§9.1). Names: `OXOS_` for types and macros, `oxos_` for functions and files, never `Oxos` (docs/cpp_style.md
+  §2).
 - **A failed `Load` frees its state page (2026-11-13)** (§3.4).
 
 **Open:** a crashed extension's persisted "off" mark (§3.4), `Unload` on a reset (§4.3), the kernel facts list (§5.2),

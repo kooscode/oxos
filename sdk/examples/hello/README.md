@@ -1,9 +1,9 @@
 # hello: an example kernel extension
 
-`hello.c` is a complete OXOS kernel extension in about a hundred lines of commented C. Start a new extension by
+`hello.cpp` is a complete OXOS kernel extension in about a hundred lines of commented C++. Start a new extension by
 copying this folder. It shows each part an extension can have:
 
-| Part | In `hello.c` | When it runs |
+| Part | In `hello.cpp` | When it runs |
 |---|---|---|
 | `Load` | greets, counts launches in its state page, reads its settings, registers an event, hooks `NtOpenFile` | before each title starts; the title waits for it |
 | `Main` | logs a heartbeat every `heartbeat` seconds | on its own thread while the title runs |
