@@ -1,6 +1,6 @@
 // Boot self-tests for the FATX driver (milestone 3c-2). boot_test.py checks the results against the HDD image and,
 // after the run, re-reads what was written here from the disk copy with an independent FATX reader.
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/storage.h>
 #include <xk/io.h>
 #include <xk/runtime.h>

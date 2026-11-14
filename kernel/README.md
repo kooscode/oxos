@@ -53,8 +53,8 @@ Optional extras:
 
 ## Build and test
 ```
-make            # ../build/kernel/selftest/xboxkrnl.exe + xboxkrnl.map (all build output: ../build/, see the Makefile)
-make bios       # ../build/kernel/selftest/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
+make            # ../build/kernel/self_tests/xboxkrnl.exe + xboxkrnl.map (all build output: ../build/, see the Makefile)
+make bios       # ../build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
                 # MCPX16=1: the 1.6 console's image (our own 1.6 X-codes)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
 make SELFTEST=0 # build without the boot self-tests
@@ -209,7 +209,6 @@ Microsoft's 2BL and keys: do not distribute it.
 | `src/extensions/` | kernel extensions (spec/oxos_internal/34): what stays resident while a title runs (`extension_runtime.cpp`: hooked imports, events, the end of a title) and what runs the loader overlay for each launch (`extension_overlay.cpp`: its cache file in `C:\OXOS\extensions\`) |
 | `overlay/` | the kernel extension loader (spec/oxos_internal/34 §8.1): not part of the kernel's link; `../tools/link_overlay.py` links it at 0xB0000000 against the kernel's addresses and `mkbios.py` appends it to the kernel image (`extension_list.cpp` and `pe_image.cpp` make no kernel calls, for the host unit tests) |
 | `src/runtime/` | runtime library: strings, sprintf, interlocked operations, critical sections, time |
-| `selftest/` | the boot self-tests `make test` checks (`selftest.cpp` runs them; one file per subsystem); built only into the self-test kernel (`SELFTEST=1`), declared in `include/xk/selftest.h` |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/oxos_splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
 | `title_patches/title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |

@@ -1,5 +1,5 @@
 // Boot self-tests for SMBus/SMC/EEPROM services (milestone 4b-1).
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/hardware.h>
 #include <xk/core.h>
 

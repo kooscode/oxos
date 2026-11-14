@@ -1,6 +1,6 @@
 // Boot self-tests for the IDE disk driver (milestone 3c-1). boot_test.py compares the data read here with the
 // HDD image it attached.
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/storage.h>
 #include <xk/runtime.h>
 #include <xk/core.h>

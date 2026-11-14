@@ -1,6 +1,6 @@
 // Boot self-tests for milestone checks. Results are plain globals that tests/boot_test.py reads
 // over the emulator monitor; nothing here is part of the kernel ABI.
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/hardware.h>
 #include <xk/serial.h>
 #include <xk/core.h>
@@ -265,6 +265,27 @@ static void NTAPI SuspendSpinner(PVOID) {
         SuspendCounter = SuspendCounter + 1;
 }
 
+// Waits up to Limit ms for SuspendCounter to stop changing for 10 ms (a suspend has taken effect); true if it did.
+static bool WaitForSpinnerStopped(LONG Limit) {
+    for (LONG waited = 0; waited < Limit; waited += 10) {
+        ULONG before = SuspendCounter;
+        Sleep(10);
+        if (SuspendCounter == before)
+            return true;
+    }
+    return false;
+}
+
+// Waits up to Limit ms for SuspendCounter to move from Value (the spinner runs again); true if it did.
+static bool WaitForSpinnerRunning(ULONG Value, LONG Limit) {
+    for (LONG waited = 0; waited < Limit; waited += 10) {
+        Sleep(10);
+        if (SuspendCounter != Value)
+            return true;
+    }
+    return false;
+}
+
 static KQUEUE TestQueue;
 static LIST_ENTRY QueueItems[10];
 static void NTAPI QueueWorker(PVOID) {
@@ -320,17 +341,18 @@ static void NTAPI ApcControllerThread(PVOID) {
     KeWaitForSingleObject(crit, Executive, KernelMode, FALSE, nullptr);
     KiTestCriticalRegionOk = CriticalApcRan == 2;
 
-    // Suspend stops a spinning thread; resume restarts it.
+    // Suspend stops a spinning thread; resume restarts it. Both take effect when the spinner is next scheduled (the
+    // suspend through a kernel APC), so the test waits for each, up to a second, instead of guessing how long it takes:
+    // the counter has to stop, stay stopped for 30 ms, and move again after the resume.
     PKTHREAD spinner = KiCreateSystemThread(SuspendSpinner, nullptr, 0, 2); // above the 2b spinners
     Sleep(20);
     KeSuspendThread(spinner);
-    Sleep(5);
+    bool stopped = WaitForSpinnerStopped(1000);
     ULONG frozen = SuspendCounter;
     Sleep(30);
-    bool stopped = SuspendCounter == frozen;
+    stopped = stopped && SuspendCounter == frozen;
     KeResumeThread(spinner);
-    Sleep(30);
-    KiTestSuspendOk = stopped && SuspendCounter != frozen;
+    KiTestSuspendOk = stopped && WaitForSpinnerRunning(frozen, 1000);
     KeSuspendThread(spinner); // leave it parked
 
     // Queue with concurrency 1 feeds two workers.

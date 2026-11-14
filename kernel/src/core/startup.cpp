@@ -7,9 +7,11 @@
 #include <xk/runtime.h>
 #include <xk/serial.h>
 #include <xk/titles.h>
-#include <xk/selftest.h>
 #include <xk/bootscreen.h>
 #include <xk/filesystems.h>
+#if XK_BOOT_SELFTEST
+#include <kernel_self_tests.h> // tests/kernel_self_tests (SELFTEST=1 builds only)
+#endif
 #if XK_STATEDUMP
 #include "../../../tools/statedump/statedump.h"
 #endif

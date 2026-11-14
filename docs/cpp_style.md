@@ -88,7 +88,7 @@ them:
 - All headers are in `include/xk/`. Each folder has one header with its name (`xk/storage.h`) for what other
   folders use; what only some files share has a header named for it (`xk/disk.h`, `xk/hddfs.h`, `xk/jingle.h`).
 - Test and debug code is kept out of the release kernel by the build, not by comments: the boot self-tests are in
-  `kernel/selftest/` (built only with `SELFTEST=1`), debug-only code under `#if XK_...`.
+  `tests/kernel_self_tests/` (compiled into the kernel only with `SELFTEST=1`), debug-only code under `#if XK_...`.
 
 ## 4. File layout
 

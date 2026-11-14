@@ -2,7 +2,7 @@
 // way compiler-generated SEH prologues do: {Next, Handler} pushed on the stack and linked at FS:[0]. The exception
 // record and context below are the test's own copies of the ABI layouts, and the exports are declared with them, so
 // the test checks those layouts independently of xk/core.h.
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/core.h>
 #include <xk/runtime.h>
 

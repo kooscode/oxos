@@ -168,7 +168,7 @@ files: if pending, wait on the file's Event (alertable per file) and take FinalS
 - `NtQueryIoCompletion(h, info)` → {Depth = current entry count}.
 
 ## 7. Implementation notes
-- Self-tests (`kernel/selftest/io_manager.cpp`) drive a RAM-disk test driver and a StartIo-queued device: open
+- Self-tests (`tests/kernel_self_tests/io_manager.cpp`) drive a RAM-disk test driver and a StartIo-queued device: open
   through `\??\R:`, sync/async/pended I/O, APC routine, completion port, IOCTLs, relative open, share access,
   exclusive devices, cleanup/close accounting and device deletion.
 - Open question for M4: drive-letter links whose target is a path *inside* a device (`D:` → a title directory)

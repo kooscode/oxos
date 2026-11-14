@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Boot a BIOS image in xemu and check milestone conditions through the QMP monitor.
 
-The kernel's boot self-tests (kernel/selftest/selftest.cpp) leave results in globals that are
+The kernel's boot self-tests (tests/kernel_self_tests/kernel_self_tests.cpp) leave results in globals that are
 located through the linker map and read with HMP `x`.
 
-usage: boot_test.py --bios build/kernel/selftest/bios.bin --map build/kernel/selftest/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
+usage: boot_test.py --bios build/kernel/self_tests/bios.bin --map build/kernel/self_tests/xboxkrnl.map [--mcpx-rom mcpx.bin] [--xemu PATH]
 """
 import argparse
 import hashlib
@@ -301,7 +301,7 @@ def idex_exfat_checks(mon, q):
 
 
 # 48-bit addressing (spec/oxos_internal/04_lba48.md): the writes the kernel's self-test makes on a disk past the 28-bit
-# limit, as (first LBA, sector count, tag); kernel/selftest/disk.cpp has the same list.
+# limit, as (first LBA, sector count, tag); tests/kernel_self_tests/disk.cpp has the same list.
 def lba48_writes(sectors):
     return [(0x0FFFFFFE, 1, 1), (0x0FFFFFFF, 1, 2), (0x10000000, 1, 3), (0x10000001, 1, 4), (0x0FFFFF80, 512, 5),
             (0x0FFFFE00, 256, 6), (0x20000000, 256, 7), (sectors - 8, 8, 8)]

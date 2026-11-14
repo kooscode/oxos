@@ -4,8 +4,8 @@ OXOS addition, implemented 2026-11-03.
 - **Code:** `kernel/src/filesystems/xdvdfs.cpp` (file-system name, `XDVDFS_FCB`), `kernel/include/xk/hddfs.h` (`HDDFS_FCB`),
   `kernel/src/filesystems/hddfs/dispatch.cpp` (`HDDFSRememberTitleFolder`, FileFsSizeInformation), `kernel/src/titles/loader.cpp` (the
   call before the title starts).
-- **Tests:** boot self-tests `KiTestDvdSortKeyOk` (kernel/selftest/dvd_drive.cpp) and `KiTestFATXTitleFolderOk`
-  (kernel/selftest/fatx.cpp), on FATX and on exFAT.
+- **Tests:** boot self-tests `KiTestDvdSortKeyOk` (tests/kernel_self_tests/dvd_drive.cpp) and `KiTestFATXTitleFolderOk`
+  (tests/kernel_self_tests/fatx.cpp), on FATX and on exFAT.
 - **Background:** spec/cerbios/13 §7, where Cerbios patches these games' code. Here the kernel gives the answers
   instead, so the games need no patch.
 

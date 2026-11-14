@@ -1,5 +1,5 @@
 // Boot self-tests for dismount, Fsc and PHY (milestone 5d-1).
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/arch.h>
 #include <xk/io.h>
 #include <xk/runtime.h>

@@ -1,11 +1,11 @@
 # Open Xbox kernel — build on Linux with clang + lld-link.
-#   make            -> build/kernel/selftest/xboxkrnl.exe (+ map)
-#   make bios       -> build/kernel/selftest/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes;
+#   make            -> build/kernel/self_tests/xboxkrnl.exe (+ map)
+#   make bios       -> build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + XboxDev/cromwell X-codes;
 #                      spec/stock/01 §5)
-#   make test       -> boot build/kernel/selftest/bios.bin in xemu and check all milestone conditions (boot self-tests)
+#   make test       -> boot build/kernel/self_tests/bios.bin in xemu and check all milestone conditions (boot self-tests)
 # All build output goes under the repository's build/ folder (the only one git ignores for it): the kernel's in
 # build/kernel/, one folder per kind of build; the apps in build/tools/ and build/tests/, the SDK in build/sdk/.
-#   build/kernel/selftest         make, make bios, make test (the kernel with its boot self-tests)
+#   build/kernel/self_tests       make, make bios, make test (the kernel with its boot self-tests)
 #   build/kernel/release          make run and the published BIOS (no self-tests, no debug code)
 #   build/kernel/debug            make run_gdb, tools/debug_app.py, VS Code (DEBUG=1: debug info for gdb)
 #   build/kernel/trace_basic      make run_trace_basic (the debug serial log)
@@ -14,7 +14,7 @@
 
 ROOT      := ..
 OUT       := $(ROOT)/build/kernel
-BUILD     := $(OUT)/selftest
+BUILD     := $(OUT)/self_tests
 RELEASE_BUILD := $(OUT)/release
 # The 1.6 console's release image (MCPX16=1: its own X-codes, spec/oxos_internal/28).
 RELEASE16_BUILD := $(OUT)/release_1_6
@@ -95,6 +95,8 @@ XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
 # The kernel extensions' binary interface, shared with their SDK (spec/oxos_internal/34).
 CXXFLAGS += -I$(ROOT)/oxos_sdk/include
+# The boot self-tests' header, for the kernel's hooks that start them (SELFTEST=1 builds only).
+CXXFLAGS += $(if $(filter 0,$(SELFTEST)),,-I$(ROOT)/tests/kernel_self_tests)
 # The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
 CXXFLAGS += -DXK_NETBOOT_IP=$(subst .,$(comma),$(NETBOOT_IP))
 LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80010000 /FIXED \
@@ -107,9 +109,11 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/trace.cpp), \
                          $(wildcard src/*/*.cpp src/*/*/*.cpp))
 ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
-SELFTEST_SRCS := $(if $(filter 0,$(SELFTEST)),,$(wildcard selftest/*.cpp))
+# The boot self-tests: test code in tests/kernel_self_tests, compiled into SELFTEST=1 kernels only.
+SELF_TESTS_DIR := $(ROOT)/tests/kernel_self_tests
+SELFTEST_SRCS := $(if $(filter 0,$(SELFTEST)),,$(wildcard $(SELF_TESTS_DIR)/*.cpp))
 OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) \
-        $(SELFTEST_SRCS:%.cpp=$(BUILD)/%.obj)
+        $(SELFTEST_SRCS:$(SELF_TESTS_DIR)/%.cpp=$(BUILD)/kernel_self_tests/%.obj)
 
 all: $(BUILD)/xboxkrnl.exe
 
@@ -158,7 +162,7 @@ $(BUILD)/bootscreen/text.obj $(BUILD)/storage/disk_layout.obj $(BUILD)/extension
 FORCE:
 
 # The boot self-tests (SELFTEST=1 only).
-$(BUILD)/selftest/%.obj: selftest/%.cpp $(wildcard include/xk/*.h)
+$(BUILD)/kernel_self_tests/%.obj: $(SELF_TESTS_DIR)/%.cpp $(wildcard include/xk/*.h $(SELF_TESTS_DIR)/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
 -include $(OBJS:.obj=.d) $(OVERLAY_OBJS:.obj=.d)

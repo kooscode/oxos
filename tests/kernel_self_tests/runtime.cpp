@@ -1,5 +1,5 @@
 // Boot self-tests for the runtime exports (milestone 5a).
-#include <xk/selftest.h>
+#include <kernel_self_tests.h>
 #include <xk/io.h>
 #include <xk/runtime.h>
 #include <xk/hardware.h>

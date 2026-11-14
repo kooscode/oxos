@@ -12,11 +12,13 @@
 #include <xk/storage.h>
 #include <xk/memory.h>
 #include <xk/crypto.h>
-#include <xk/selftest.h>
 #include <xk/bootscreen.h>
 #include <xk/filesystems.h>
 #include <xk/gamepad.h>
 #include <xk/uploader.h>
+#if XK_BOOT_SELFTEST
+#include <kernel_self_tests.h> // tests/kernel_self_tests (SELFTEST=1 builds only)
+#endif
 
 constexpr ULONG XBE_BASE = 0x10000, XBE_MAGIC = 0x48454258; // "XBEH"
 // The XOR keys of the header's entry point (+0x128) and kernel thunk table address (+0x158): retail and debug XBEs.
