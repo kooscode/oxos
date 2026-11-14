@@ -1,4 +1,4 @@
-# OXOS — an open Xbox kernel
+# OXOS = Open Xbox Operating System
 
 OXOS is an open-source replacement for the original Xbox's kernel and BIOS. It runs retail games and dashboards in
 [xemu](https://xemu.app) and on real consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump is
