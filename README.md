@@ -14,16 +14,17 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions keep working.
 - **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; press the X button for the [OXOS File Manager](#oxos-file-manager) to
   upload files and launch XBEs from any browser.
-- **Games from disc images:** of your own discs (XISO, full dumps, CCI).
+- **Titles from Disk/ISO:** Fully suports running Titles of your own discs dumped to HDD, XISO or CCI.
 - **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
-- **In-Game Reset (IGR):** the standard In Game Reset we are used to (LT + RT + BACK + BLACK).
+- **In-Game Reset (IGR):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK).
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
-- **Error screens that explain themselves:** what happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
+- **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.
-- **nxdk homebrew:** fully supports the latest nxdk homebrew.
+- **nxdk homebrew:** Fully supports the latest [nxdk](https://github.com/XboxDev/nxdk) and [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) homebrew.
+- **Release Testing:** Every release is tested with over 940 regression tests across Xemu and real hardware!
 
 ## Try it
 Download the [latest release](https://github.com/kooscode/oxos/releases/latest) (`oxos_vX.Y.Z.zip`) and unzip it.
