@@ -7,6 +7,8 @@ from these documents only.
 
 **[`oxos_features.md`](oxos_features.md): everything OXOS adds to a stock Xbox kernel, implemented and planned, each with its spec.**
 
+**[`oxos_disk_layout.md`](oxos_disk_layout.md): every file and folder OXOS uses, in `C:\OXOS` and on memory-unit sticks, today and planned.**
+
 | Folder | Studied from | Content |
 |---|---|---|
 | [`stock/`](stock/) | the retail kernel, xboxkrnl.exe 1.0.4627.1 (specs 17–20 also 1.0.5838.1, the 1.6 kernel) | what OXOS implements: boot, executive, memory, objects, I/O, file systems, AV, crypto; the video encoders with their register tables ([`18` Conexant](stock/18_conexant_encoder.md) 1.0–1.3, [`19` Focus](stock/19_focus_encoder.md) 1.4–1.5, [`20` Xcalibur](stock/20_xcalibur_encoder.md) 1.6, shared parts in [`17`](stock/17_av_display_mode.md)); MCPX and NV2A bring-up ([`21`](stock/21_mcpx_bringup.md), [`22`](stock/22_nv2a_display.md)); the 1.6 console from power-on ([`24`](stock/24_1_6_bringup.md)) |

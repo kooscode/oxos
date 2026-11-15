@@ -175,15 +175,31 @@ What is expected, to confirm with the tracer before this phase (an xemu memory-u
 - The dashboard (and possibly titles) format a memory unit by writing FATX structures raw, like the cache partitions in §5.
 - The unit's name (set in the dashboard) is kept in the FATX header area and read and written raw.
 
-Design, once confirmed:
-- **Recognition at mount:** FATX → today's driver; exFAT (no partition table, or MBR/GPT with one exFAT partition, as USB sticks come from a PC) → the exFAT
-  driver, rooted at the volume (or at a `/UDATA` folder when present, so a stick can carry other files).
-- **Names and sizes:** FATX name rules as on the hard disk (§3); size and free space reported in the units titles expect (16 KB blocks), capped (an official
-  unit is 8 MB; a proposed cap of 1 GB for sticks).
-- **Raw access:** the name area backed by a small file on the volume (`/C/OXOS/muname.bin`, i.e. `C:\OXOS\muname.bin`); a FATX format write turns into "empty
-  the volume's save data", as in §5; other raw writes are refused and logged.
-- **Formatting new units:** a setting chooses FATX (default, so units still work on other consoles) or exFAT.
-- **Compatibility:** an exFAT unit only works under OXOS; units move between consoles more often than hard disks, which is why FATX stays the default.
+Design, once confirmed (user, 2026-11-15): **everything about a memory unit is on the unit itself**; nothing is kept on the console's hard disk.
+- **Standard memory units (FATX):** unchanged, with today's FATX driver: an old unit with its saves keeps working, and units stay usable on other consoles.
+- **USB sticks as memory units:** a stick formatted on a PC as **exFAT, FAT32 or FAT16** (no partition table, or MBR/GPT with one partition) is shown to
+  titles as a memory unit **rooted at its `/OXOS` folder**: inside it the unit's usual folders, `/OXOS/UDATA` (saves), `/OXOS/TDATA` and anything else a
+  memory unit holds. The rest of the stick is untouched and unseen by the console, so the stick can carry other files. (A `/OXOS` folder at a stick's root is
+  the stick's own: the rule that OXOS keeps no folder at a hard disk's root is about the hard disk, spec 30.)
+- **The unit's description: `/OXOS/oxos_memory_unit.ini`** on the stick, plain text, written by OXOS when the stick is first used as a unit, renamed or
+  formatted, and editable on a PC. Titles never see it (the driver leaves it out of the unit's listing).
+
+  ```ini
+  ; the name the dashboard shows and edits (on a FATX unit it is in the unit's header)
+  name = Koos's MU
+  ; the FATX serial titles see, kept when the stick is edited on a PC
+  serial = 1A2B3C4D
+  ; the size titles are told, in MB (an official unit is 8 MB; capped so old titles' free-space arithmetic is safe)
+  size_mb = 1024
+  ```
+
+  Missing (a new stick, or deleted on a PC): written again with defaults: the volume label as the name, the volume's serial, the default size.
+- **What titles see:** FATX name rules as on the hard disk (§3); size and free space in the units titles expect (16 KB blocks), within `size_mb`; a FATX
+  header generated from the ini when a title reads the unit raw.
+- **Formatting from the dashboard:** a FATX format written raw empties `/OXOS/UDATA`, `/OXOS/TDATA` and the unit's other folders (as for the cache partitions,
+  §5), keeps the ini and its name, and leaves the rest of the stick alone; other raw writes are refused and logged.
+- **The file systems:** exFAT has a driver (spec 07); FAT32 and FAT16 need one (close to FATX, which FAT inspired).
+- **Compatibility:** a stick set up this way works as a unit only under OXOS; for other consoles the dashboard can still format a unit as FATX.
 
 ## Open
 - Other titles' sequences (a title that uses X: or Y:): expected to be the same runtime code, to confirm with the tracer. Halo 2 (2026-10-21) uses two cache

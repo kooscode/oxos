@@ -1,7 +1,7 @@
 # OXOS features: what OXOS adds to a stock Xbox kernel
 
 One page for everything OXOS has that the retail Xbox kernel does not, and everything planned next, each with its spec. The kernel itself is a complete,
-clean-room retail kernel (every function and variable, specs in [`stock/`](stock/)); this page lists only what goes beyond it.
+clean-room retail kernel (every function and variable, specs in [`stock/`](stock/)); this page lists only what goes beyond it. Every file and folder OXOS uses: [`oxos_disk_layout.md`](oxos_disk_layout.md).
 
 **Keeping it current:** a feature gets a row here when it is proposed or decided, with its spec (`oxos_internal/NN_name.md`, numbered in the order written).
 When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes ✅. Development aids are listed at the end.
@@ -59,8 +59,8 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 ## Planned
 | Feature | What it will do | Status | Spec |
 |---|---|---|---|
-| ⬜ Universal Trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainer.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_universal_trainers.md) |
-| ⬜ Boot video | a video of the user's choice from `C:\OXOS\boot_videos\` before the dashboard or first title, on cold boots and/or quick reboots, set in `oxos_boot.ini` (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
+| ⬜ Universal Trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainers.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_universal_trainers.md) |
+| ⬜ Boot video | a video of the user's choice from `C:\OXOS\boot_videos\` before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
 | ⬜ Boot buttons and safe boot | X, B and A work with or without the splash; B is a safe boot (no extensions, no OXOS ini files or EEPROM settings, the standard splash with `[ SAFE MODE ]`, default dashboard; X or A during it for the File Manager or Setup); skip the splash with an EEPROM setting | proposal (2026-11-15) | [39 §1.1](oxos_internal/39_oxos_setup.md) |
 | ⬜ Screenshots | a button combination (or a command from a PC) saves the picture on screen in `C:\OXOS\screenshots\`, from any title (extension `oxos_screenshots.xos`) | proposal (2026-11-15) | [40](oxos_internal/40_screenshots.md) |
@@ -72,7 +72,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ⬜ Run-once extensions | an extension that only prepares a launch (a trainer, a boot video) is unloaded before the title starts, giving its memory back | proposal (2026-11-15) | [34 §4.3a](oxos_internal/34_kernel_extensions.md) |
 | ⬜ Extensions: the rest | `oxos_resolve_path`; the error screen names a crashed extension | open items | [34](oxos_internal/34_kernel_extensions.md) |
 | ⬜ One image for every revision | a run-time 1.6 check, so 1.0–1.6 share one image | planned | [28 §4.5](oxos_internal/28_1_6_console.md) |
-| ⬜ exFAT memory units | exFAT on memory units, the last phase of the exFAT plan | planned | [06](oxos_internal/06_exfat_storage_plan.md) |
+| ⬜ USB sticks as memory units | a stick formatted exFAT, FAT32 or FAT16 on a PC is a memory unit, rooted at its `/OXOS` folder and described by `/OXOS/oxos_memory_unit.ini` on the stick; standard FATX units unchanged | planned | [06](oxos_internal/06_exfat_storage_plan.md) |
 
 **Ideas, not planned yet:** features studied in Cerbios that OXOS may add (a second hard disk, fan, LED, LCD and clock control, video options): see
 [`cerbios/00_overview.md`](cerbios/00_overview.md).

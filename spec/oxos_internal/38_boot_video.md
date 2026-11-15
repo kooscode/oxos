@@ -10,29 +10,26 @@ played before the dashboard or the first title starts, on a cold boot, after qui
 - After the OXOS splash (or instead of it, open), the video plays full screen with its sound, then the dashboard or title starts as usual.
 - Any button skips it.
 - **The videos** are in `C:\OXOS\boot_videos\` (exFAT disk: `/C/OXOS/boot_videos/`).
-- **The settings** are the `[boot_video]` section of **`C:\OXOS\oxos_boot.ini`**, the file for how the console boots (§1.1). `oxos_extensions.ini` only lists
-  the extension (spec 34 §3.1).
-
-### 1.1 `oxos_boot.ini`
-One file for the boot options that apply once the hard disk is up: the boot video and which dashboard starts.
+- **The settings** are the extension's own file, `C:\OXOS\extensions\oxos_boot_video.ini`, next to `oxos_boot_video.xos` (spec 34 §3.1: an extension's
+  settings are in a file of its name). `oxos_extensions.ini` only lists the extension.
 
 ```ini
-; C:\OXOS\oxos_boot.ini
-[boot_video]               ; read by oxos_boot_video.xos
-cold_boot = intro.oxv      ; a file in C:\OXOS\boot_videos\; none = off; random = any file there
-quick_reboot = none        ; when a title starts the dashboard or another title
-skippable = yes            ; any button skips it
-
-[dashboard]                ; read by the kernel (spec 19): the dashboards tried, in order
-order = C:\evoxdash.xbe, E:\evoxdash.xbe, C:\xboxdash.xbe, C:\Dashboard\default.xbe
+; C:\OXOS\extensions\oxos_boot_video.ini
+; a file in C:\OXOS\boot_videos\ for a cold boot; none = off; random = any file there
+cold_boot = intro.oxv
+; when a title starts the dashboard or another title
+quick_reboot = none
+; any button skips it
+skippable = yes
 ```
 
-- **The kernel** reads `[dashboard]` with its ini reader (`ini_file.cpp`, as for `oxos_launch_redirect.ini`) when it starts a dashboard; a missing file or
-  section keeps today's fixed order (spec 19).
-- **The extension** reads `[boot_video]` with the SDK's file functions.
+### 1.1 The other boot settings
+- **Which dashboard starts** is a kernel setting, in `C:\OXOS\oxos_settings.ini` (spec 39: the one file for the kernel's own options), section `[dashboard]`:
+  `order = C:\evoxdash.xbe, E:\evoxdash.xbe, C:\xboxdash.xbe, C:\Dashboard\default.xbe`. The kernel reads it with its ini reader (`ini_file.cpp`, as for
+  `oxos_launch_redirect.ini`) when it starts a dashboard; a missing file or section keeps today's fixed order (spec 19).
 - **Not the splash and the jingle:** they start at the very beginning of a cold boot, while the hard disk is still spinning up, before any file can be read
   (exFAT and FATX are mounted after the disk is up). Skipping them is an OXOS byte in the EEPROM instead, set by OXOS Setup (spec 39 §1.1).
-- **Safe boot (B held at a cold boot, spec 39 §1.1)** ignores `oxos_boot.ini` and the boot video with it.
+- **Safe boot (B held at a cold boot, spec 39 §1.1)** loads no extension and reads no ini file: no boot video.
 
 ## 2. How it works
 - **An extension, `oxos_boot_video.xos`:** its `ExtensionStart` runs before each title (spec 34 §4.3), when nothing else is on the screen. It checks the launch

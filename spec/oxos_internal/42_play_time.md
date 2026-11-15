@@ -13,8 +13,8 @@ patterns. A file needs none of that and works for every game, offline ones too.
 ## 1. Who does what
 | Part | Does | Built by |
 |---|---|---|
-| `oxos_playtime.xos` (a kernel extension, spec 34) | keeps the totals per title in `C:\OXOS\playtime\playtime.txt` and records each session in `playtime.log` | OXOS |
-| Any dashboard or app | reads `playtime.txt` to show the time played per game, with no network | anyone |
+| `oxos_playtime.xos` (a kernel extension, spec 34) | keeps the totals per title in `C:\OXOS\playtime\oxos_playtime.txt` and records each session in `oxos_playtime.log` | OXOS |
+| Any dashboard or app | reads `oxos_playtime.txt` to show the time played per game, with no network | anyone |
 | The XBL Dashboard | at start: sends the file's records to the service, then removes what was sent | the XBL team (OXOS can give a reference implementation of the file handling) |
 | The online service | stores play time per console and title; keeps one copy of each session | the XBL team |
 
@@ -23,20 +23,20 @@ patterns. A file needs none of that and works for every game, offline ones too.
 - **While the game runs** (`ExtensionRunLoop`): every N minutes (a setting, default 1) a progress line with the time played so far, so an in-game reset or a
   power-off loses at most N minutes. The current session is also kept in the extension's state page (spec 34 §6), which survives quick reboots.
 - **Title exiting** (`oxos_on_title_exiting`): the final line.
-- **The totals** in `playtime.txt` (§3.1) are updated at each progress line and at the final one.
+- **The totals** in `oxos_playtime.txt` (§3.1) are updated at each progress line and at the final one.
 - **Not counted:** dashboards and OXOS's own apps (the FTP server, launchers): a list of title IDs to skip, in the settings.
-- **Settings** in `oxos_extensions.ini`:
+- **Settings** in the extension's own file, `C:\OXOS\extensions\oxos_playtime.ini` (spec 34 §3.1):
 ```ini
-[oxos_playtime]
-extension = oxos_playtime.xos
-save_every = 1        ; minutes between progress lines
-skip = FFFF0002, ...  ; title IDs not counted (dashboards are always skipped)
+; minutes between progress lines
+save_every = 1
+; title IDs not counted (dashboards are always skipped)
+skip = FFFF0002, ...
 ```
 
 ## 3. The files
 
-### 3.1 The totals: `playtime.txt`, kept on the console
-`C:\OXOS\playtime\playtime.txt` (exFAT disk: `/C/OXOS/playtime/`): one line per title, never cleared by the sending. The console's own record of its play
+### 3.1 The totals: `oxos_playtime.txt`, kept on the console
+`C:\OXOS\playtime\oxos_playtime.txt` (exFAT disk: `/C/OXOS/playtime/`): one line per title, never cleared by the sending. The console's own record of its play
 time: any dashboard, app or FTP user can read it.
 
 ```
@@ -45,12 +45,12 @@ title=4D530004 name=Halo seconds=12030 sessions=9 first=2026-10-11 last=2026-11-
 ```
 
 - **`seconds`:** total time played; **`sessions`:** how many times it was started; **`first`** / **`last`:** the dates it was first and last played.
-- **Always whole:** the extension writes the new totals to `playtime.new`, then renames it over `playtime.txt`, so a reader never sees a half-written file. It
-  writes only while a game runs, never while a dashboard does.
+- **Always whole:** the extension writes the new totals to `oxos_playtime.new`, then renames it over `oxos_playtime.txt`, so a reader never sees a half-written
+  file. It writes only while a game runs, never while a dashboard does.
 - Deleting the file starts the totals over; the send queue (§3.2) is separate.
 
-### 3.2 The sessions to send: `playtime.log`
-`C:\OXOS\playtime\playtime.log` (exFAT disk: `/C/OXOS/playtime/`), plain text, one line per record, appended only:
+### 3.2 The sessions to send: `oxos_playtime.log`
+`C:\OXOS\playtime\oxos_playtime.log` (exFAT disk: `/C/OXOS/playtime/`), plain text, one line per record, appended only:
 
 ```
 session=0012-00000042-20261115T193012 title=4D530064 name=Halo 2 start=2026-11-15T19:30:12 seconds=1860 final=no
@@ -62,22 +62,22 @@ session=0012-00000042-20261115T193012 title=4D530064 name=Halo 2 start=2026-11-1
 - Text, so it can be read and checked by hand or over FTP.
 
 ## 4. Sending (the XBL Dashboard, at start)
-1. If `playtime.log` exists, rename it to `playtime.sending`. From then on the extension writes a new `playtime.log`; nothing recorded later is lost or
-   sent twice. (If `playtime.sending` is already there from a failed attempt, send that first.)
+1. If `oxos_playtime.log` exists, rename it to `oxos_playtime.sending`. From then on the extension writes a new `oxos_playtime.log`; nothing recorded later is
+   lost or sent twice. (If `oxos_playtime.sending` is already there from a failed attempt, send that first.)
 2. For each session, keep its last line; send them to the service.
-3. When the service confirms, delete `playtime.sending`. If sending fails, leave it for the next start.
+3. When the service confirms, delete `oxos_playtime.sending`. If sending fails, leave it for the next start.
 
 **No double counting:** a session is identified by `session`, so sending the same file again (a crash after sending, before deleting) changes nothing: the
 service keeps one record per session, the one with the most seconds.
 
 ## 5. Things to settle
 - The service's address and format, and how the console is identified there (the console ID, or the user's XBL account): with the XBL team.
-- Whether the dashboard shows the totals per game: from `playtime.txt` on the console, or from the service across consoles.
+- Whether the dashboard shows the totals per game: from `oxos_playtime.txt` on the console, or from the service across consoles.
 - The clock: a console without its clock set still records durations; start times are then wrong. Send the dashboard's own time with the upload so the
   service can correct them.
 - Privacy: play time leaves the console only through the dashboard; a setting to turn the extension off (`enabled = no`) already exists for every extension.
 
 ## 6. Tests
-- xemu: a test title runs for a known time with the extension; `playtime.txt` has its total and `playtime.log` its session lines; a quick reboot mid-session
-  keeps one session; a reboot without exit leaves a session with `final=no` and its last progress line.
+- xemu: a test title runs for a known time with the extension; `oxos_playtime.txt` has its total and `oxos_playtime.log` its session lines; a quick reboot
+  mid-session keeps one session; a reboot without exit leaves a session with `final=no` and its last progress line.
 - Host: a unit test of the dashboard-side reference code: rename, keep the last line per session, delete on success, keep on failure.

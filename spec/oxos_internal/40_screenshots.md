@@ -10,12 +10,12 @@ the display is showing instead, which needs nothing from the title.
 - **Take one:** hold a combination on any controller (to choose; it must not clash with the in-game reset's LT + RT + BACK + BLACK, spec 22), for example
   BACK + BLACK + the right thumbstick click. A toast says "Screenshot saved" (spec 36, when toasts exist), or the front LED blinks once.
 - **Where:** `C:\OXOS\screenshots\<title ID>\<date time>.png` (on an exFAT disk `/C/OXOS/screenshots/...`): OXOS's files are only ever in `C:\OXOS`.
-- **Settings** in `oxos_extensions.ini`:
+- **Settings** in the extension's own file, `C:\OXOS\extensions\oxos_screenshots.ini` (spec 34 §3.1):
 ```ini
-[oxos_screenshots]
-extension = oxos_screenshots.xos
-buttons = back black right_thumb   ; the combination
-format = png                       ; png (smaller) or bmp (faster to write)
+; the combination
+buttons = back black right_thumb
+; png (smaller) or bmp (faster to write)
+format = png
 ```
 
 ## 2. How it works

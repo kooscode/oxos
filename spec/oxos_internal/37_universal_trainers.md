@@ -22,8 +22,8 @@ opens the menu anyway.
 | Step | Where | What |
 |---|---|---|
 | 1. Which title | the kernel's launch (`titles::LaunchTitle`, spec/stock/05) | read the XBE's certificate (title ID, version) before loading it; look for a trainer for that title ID |
-| 2. Redirect | as launch redirects do (spec 33) | start `C:\OXOS\oxos_trainer_menu.xbe` instead, passing the game's path, title ID and the original launch data in the launch data page |
-| 3. The menu | an nxdk + SDL3 app (`tools/sdl_screen`, like the other OXOS apps) | reads the trainer's names and cheats, shows them, writes the choice to `C:\OXOS\oxos_trainers.ini`, launches the game with a marker in the launch data so step 2 does not redirect again |
+| 2. Redirect | as launch redirects do (spec 33) | start `C:\OXOS\extensions\oxos_trainers.xbe` instead, passing the game's path, title ID and the original launch data in the launch data page |
+| 3. The menu | an nxdk + SDL3 app (`tools/sdl_screen`, like the other OXOS apps) | reads the trainer's names and cheats, shows them, writes the choice to `C:\OXOS\extensions\oxos_trainers.ini`, launches the game with a marker in the launch data so step 2 does not redirect again |
 | 4. Install | the title-loaded event (spec 34 §7.2), before the game's first instruction | load the `.etm`, set its cheat switches, run it as XBMC's stub does (spec 23 §1), keep it resident for the whole game |
 
 **The trainer file (`.etm`, studied 2026-11-15 on the 998 trainers of `third_party/xbox_trainers`):** a header with the file size (0x00), format 1 (0x04),
@@ -31,19 +31,23 @@ the offset of the cheat switches (0x0A, one byte per cheat, 1 = on), of the text
 title IDs (0x12; 446 trainers list more than one, mostly regions) and the entry point (0x16). 966 of the 998 check the game's XBE build timestamp (0x10114)
 before patching, so a trainer for another version of the game patches nothing; 32 do not check. The menu needs only the header and the text table.
 
-**Choices file (`C:\OXOS\oxos_trainers.ini`),** editable by hand or over FTP as well as from the menu and from OXOS Setup (spec 39):
+**Choices file (`C:\OXOS\extensions\oxos_trainers.ini`, the extension's own, spec 34 §3.1; the menu `oxos_trainers.xbe` and the extension
+`oxos_trainers.xos` sit next to it, one name for all three),** editable by hand or over FTP as well as from the menu and
+from OXOS Setup (spec 39):
 ```ini
-[4D530064]          ; Halo 2
+; Halo 2
+[4D530064]
 trainer = Halo 2.etm
 enabled = yes
-ask = yes           ; no: start with these settings, without the menu
-Infinite Ammo = on
-Never Die = on
-Rapid Fire = off
+; no: start with these settings, without the menu
+ask = yes
+Infinite Ammo = yes
+Never Die = yes
+Rapid Fire = no
 ```
 
 ## 3. Where the code lives
-Universal Trainers run only for users who want them, so by spec 34 §10 they belong in an extension, `oxos_trainer.xos`, rather than the kernel: its
+Universal Trainers run only for users who want them, so by spec 34 §10 they belong in an extension, `oxos_trainers.xos`, rather than the kernel: its
 title-loading event finds the trainer and redirects, its title-loaded event installs it. It needs from the extension interface: replacing the launch's XBE path
 (the title-loading event, as `oxos_nettitle.xos` will, spec 34 §10) and memory that stays while the title runs. It is a run-once extension (spec 34 §4.3a): it
 installs the trainer in the title-loaded event and is unloaded before the game starts. Only the trainer stays resident, in its own block (a trainer's hooks

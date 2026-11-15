@@ -31,9 +31,9 @@ a blank disk and makes the folders at boot (spec 30).
 5. **Disk recognition and coexistence.** FATX disks unchanged; exFAT disks detected; memory units still FATX. Test: boot tests on both disk kinds.
 6. **Compatibility pass.** The titles we test (Halo, Halo 2, Half-Life 2, Enter the Matrix, Prince of Persia, Brute Force, demo disc) plus the stock dashboard,
    each run once on exFAT with the tracer; any new raw access goes into the spec.
-7. **Memory units (last).** Trace an xemu memory-unit image (a title saving, the dashboard's memory-unit screen) to confirm spec §9, then exFAT recognition on
-   memory-unit devices, name and format emulation, the format setting. Test: saves written under OXOS read back on a PC from an exFAT stick image, and the
-   reverse.
+7. **Memory units (last).** Trace an xemu memory-unit image (a title saving, the dashboard's memory-unit screen) to confirm spec §9, then USB sticks
+   formatted exFAT, FAT32 or FAT16 as units rooted at their `/OXOS` folder, described by `/OXOS/oxos_memory_unit.ini` on the stick (a FAT16/32 driver is
+   new); standard FATX units unchanged. Test: saves written under OXOS read back on a PC from a stick image, and the reverse.
 8. **Tools and docs.** A host script that lays out the folders on a freshly formatted exFAT disk (or the kernel does it at first boot), README instructions for
    preparing a disk on a PC, and an xemu disk image ready to use.
 

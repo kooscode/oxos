@@ -76,8 +76,8 @@ state and each constant where the rules say it is, and trust every comment to de
   `oxos_ext.ini`; `oxos_title_patches.xos`, not `oxos_patches.xos` (which reads like kernel patches); `oxos_extension_context.h`, not `abi.h`. When a name could
   be read two ways, take the longer one that cannot.
 - **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console (`C:\OXOS\oxos_launch_redirect.ini`,
-  `oxos_extensions.ini`, `cache\oxos_extension_loader.cache`), OXOS's own extensions and their data (`oxos_NAME.xos` with `oxos_NAME.ini`), and the SDK's
-  headers (`oxos_sdk.h`, `oxos_kernel.h`). Names without it belong to users and third-party extensions.
+  `oxos_extensions.ini`, `cache\oxos_extension_loader.cache`), OXOS's own extensions and their settings (`extensions\oxos_NAME.xos` with
+  `extensions\oxos_NAME.ini`), and the SDK's headers (`oxos_sdk.h`, `oxos_kernel.h`). Names without it belong to users and third-party extensions.
 - **OXOS is written `OXOS` or `oxos`, never `Oxos`**, in identifiers as in text: `OXOS_CONTEXT`, `OXOS_API_VERSION`, `oxos_log`, `oxos::NtCreateFile`.
 - **Everything the user writes or reads:** ini keys (`extension =`, `enabled =`, never `ext =`), folders (`C:\OXOS\extensions\`, not `ext\`), section names, log
   and screen text.
