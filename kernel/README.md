@@ -258,7 +258,7 @@ console.
 | 21 | Real hardware: netboot, flash mapping, CPU set-up, microcode, pad calibration | oxos/09, oxos/13–15, 21 §3 | ✅ console: the dashboard boots |
 | 22 | Virtual discs: XISO, full dumps, CCI, split images (`src/storage/`, ISO launcher) | oxos/16, cerbios/07 | ✅ xemu (`test_iso`); console: Halo 2 |
 | 23 | Boot jingle | oxos/17 | ✅ xemu (`test_dash`), console |
-| 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test_memory`); more free memory than stock when built (2026-10-27), 1–9 pages less on games since (2026-11-15, oxos/18 §7) |
+| 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test_memory`); more free memory than stock when built (2026-10-27), 4–36 KB (under 0.06 %) less on games since (2026-11-15, oxos/18 §7) |
 | 25 | Dashboard choice: EvoX when installed, else the Xbox dashboard | oxos/19 | ✅ xemu (`test_dash`) |
 | 26 | DRAM refresh check before the kernel runs | oxos/20, oxos/21 | ✅ console: 0 bad boots in 56 (8 in 40 before) |
 | 27 | In-game reset: LT + RT + BACK + BLACK, a power cycle through the SMC | oxos/22 | ✅ xemu, console |

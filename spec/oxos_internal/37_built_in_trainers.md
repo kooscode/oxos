@@ -51,7 +51,7 @@ other extensions.
 - **The trainer's calling contract:** which registers and memory XBMC's stub sets up before calling a trainer, and whether some trainers call XBMC's helper
   routines (physical 0x10 / 0x14, spec 23 §1). Read from XBMC4Gamers' stub, then tested on several trainers on the console.
 - **Memory:** the trainer stays resident during the game (XBMC reserves 0x3C00 bytes). It must come out of the title's memory without making the gap to the
-  stock kernel larger (OXOS gives games 1–9 pages less than stock today, spec 18 §7), or be accounted as accepted.
+  stock kernel larger (OXOS gives games 4–36 KB less than stock today, under 0.06 % of the 64 MB, spec 18 §7), or be accounted as accepted.
 - **Two installers:** when a dashboard such as XBMC4Gamers has also installed its trainer hook (spec 23), only one may run: OXOS steps aside, or the menu says
   so.
 - **Wrong game version:** for the 32 trainers without their own check, record the XBE timestamp each was made for and refuse a mismatch.

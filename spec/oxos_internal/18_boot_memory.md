@@ -88,23 +88,38 @@ Free pages, the same runs on both kernels in xemu (64 MB, Conexant):
 
 At Half-Life 2's menu the usage counts match the stock kernel's within a page each (pool +1, image +1, virtual memory −1, contiguous −2).
 
-**Measured again 2026-11-15 (v0.4.8):** OXOS is now behind the stock kernel on every title measured, by 1 to 9 pages (4 to 36 KB). The features added since
-(exFAT, the File Manager's resident parts, the error screens, 128 MB, launch redirects, kernel extensions, log files) each kept the memory test title at the
-same count when they were added, but that count was already below stock. Same runs on both kernels in xemu (64 MB, Conexant, a fresh copy of the
-xemu-dashboard disk; stock = the Complex 4627 BIOS through the MCPX 1.0 ROM); free pages read from `MmGlobalData`'s available-pages counter every 0.5 s:
+**Measured again 2026-11-15 (v0.4.8):** OXOS is now behind the stock kernel on every title measured, by 4 to 36 KB: at most 0.055 % of the console's
+64 MB. The features added since (exFAT, the File Manager's resident parts, the error screens, 128 MB, launch redirects, kernel extensions, log files) each
+kept the memory test title at the same amount when they were added, but that amount was already below stock. Same runs on both kernels in xemu (64 MB,
+Conexant, a fresh copy of the xemu-dashboard disk; stock = the Complex 4627 BIOS through the MCPX 1.0 ROM); free memory read from `MmGlobalData`'s
+available-pages counter (4 KB pages) every 0.5 s:
 
-| | Stock 4627 | OXOS v0.4.8 | |
+| Free memory | Stock 4627 | OXOS v0.4.8 | OXOS − stock (share of the 64 MB) |
 |---|---|---|---|
-| Memory test title, at its start | 15 964 | 15 960 | −4 |
-| Half-Life 2, lowest while loading | 5 935 | 5 932 | −3 |
-| Half-Life 2, settled (120 s) | 6 947 | 6 942 | −5 |
-| Halo 2, settled (120 s; also its lowest) | 203 | 196 | −7 |
-| Halo, lowest while loading | 195 | 186 | −9 |
-| Halo, settled (90 s) | 275 | 269 | −6 |
-| xemu dashboard | 12 694 | 12 693 | −1 |
+| Memory test title, at its start | 63 856 KB | 63 840 KB | −16 KB (0.024 %) |
+| Half-Life 2, lowest while loading | 23 740 KB | 23 728 KB | −12 KB (0.018 %) |
+| Half-Life 2, settled (120 s) | 27 788 KB | 27 768 KB | −20 KB (0.031 %) |
+| Halo 2, settled (120 s; also its lowest) | 812 KB | 784 KB | −28 KB (0.043 %) |
+| Halo, lowest while loading | 780 KB | 744 KB | −36 KB (0.055 %) |
+| Halo, settled (90 s) | 1 100 KB | 1 076 KB | −24 KB (0.037 %) |
+| xemu dashboard | 50 776 KB | 50 772 KB | −4 KB (0.006 %) |
 
-The memory test title's count (15 960) is what `make test_memory` and `make regression` hold OXOS to, so that no change loses more; it is not the stock
-kernel's.
+**What would win it back (estimate, 2026-11-15, from the release build's resident sections per object):**
+
+| Step | Resident kernel saved |
+|---|---|
+| Title patches and the netbooted title as extensions (spec 34 §10, decided): `title_patcher_ini` 1.7 KB, about 0.5 KB of the loader, `title_netboot` 1.0 KB | about 3 KB (0.005 %) |
+| The exFAT formatter only while formatting (`format_exfat` 4.0 KB, `disk_format` 1.9 KB resident): boot-only plus loaded for the FTP server's format | about 6 KB (0.009 %) |
+| The one kernel stack more than stock (12 KB, seen 2026-11-08; per-thread stacks are the reference's 12 KB, so it is one extra thread of the kernel's) | 12 KB (0.018 %) |
+| All three | about 21 KB (0.032 %) |
+
+Memory is handed out in 4 KB pages and the resident kernel ends about 0.3 KB below a page boundary today, so the first page is won after about 3.8 KB:
+the extension moves alone most likely win nothing. All three would put OXOS ahead of stock on the dashboard (+17 KB, +0.026 %) and the memory test title
+(+5 KB, +0.008 %), but still behind in Halo (−15 KB): the gap grows with the title (4 KB on the dashboard, 36 KB in Halo), so a per-title cost (per open
+file, per thread or in the pool, to measure with `MmQueryStatistics` per use) has to be found as well.
+
+The memory test title's amount (15 960 pages, 63 840 KB) is what `make test_memory` and `make regression` hold OXOS to, so that no change loses more; it is
+not the stock kernel's (63 856 KB).
 
 ## 8. Tests
 - `make test_dash`: at least 5 boot-only pages freed, the splash code's page no longer mapped in the page database, the Conexant's tables still mapped.

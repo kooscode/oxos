@@ -62,12 +62,13 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ⬜ Built-in trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainer.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_built_in_trainers.md) |
 | ⬜ Boot video | a video of the user's choice before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
+| ⬜ Screenshots | a button combination (or a command from a PC) saves the picture on screen in `C:\OXOS\screenshots\`, from any title (extension `oxos_screenshots.xos`) | proposal (2026-11-15) | [40](oxos_internal/40_screenshots.md) |
+| ⬜ Homebrew development on a real console | build, deploy, run, log and debug nxdk apps on a real console from Linux, macOS or Windows: one `oxos` tool, gdb or lldb over the GDB remote protocol, VS Code | proposal (2026-11-15) | [41](oxos_internal/41_remote_debugging.md) |
 | ⬜ In-game reset by quick reboot | the in-game reset returns to the dashboard by a quick reboot, as titles do, instead of a power cycle | proposal (2026-11-06) | [22 §8](oxos_internal/22_in_game_reset.md) |
 | ⬜ Toasts | short messages over a running title, from the kernel and from extensions | proposal (2026-11-14) | [36](oxos_internal/36_toasts.md) |
-| ⬜ OXOS features as extensions | title patches (`oxos_title_patches.xos`), the netbooted title (`oxos_nettitle.xos`), the call tracer (`oxos_tracer.xos`) leave the kernel | decided (2026-11-13), not built | [34 §10](oxos_internal/34_kernel_extensions.md) |
+| ⬜ OXOS features as extensions | Move `Title patches`, `Netboot` and `Kernel call tracer` features to Kernel Extensions so resident kernel gets smaller - winning back title memory, today the kernel has about 0.06 % less memory available than stock ([18 §7](oxos_internal/18_boot_memory.md)) | decided (2026-11-13), not built | [34 §10](oxos_internal/34_kernel_extensions.md) |
 | ⬜ Extensions: the rest | `oxos_resolve_path`; the error screen names a crashed extension | open items | [34](oxos_internal/34_kernel_extensions.md) |
 | ⬜ One image for every revision | a run-time 1.6 check, so 1.0–1.6 share one image | planned | [28 §4.5](oxos_internal/28_1_6_console.md) |
-| ⬜ Memory parity with stock again | games get 1–9 pages (4–36 KB) less than on the stock 4627 kernel (measured 2026-11-15); win them back | gap measured | [18 §7](oxos_internal/18_boot_memory.md) |
 | ⬜ exFAT memory units | exFAT on memory units, the last phase of the exFAT plan | planned | [06](oxos_internal/06_exfat_storage_plan.md) |
 
 **Ideas, not planned yet:** features studied in Cerbios that OXOS may add (a second hard disk, fan, LED, LCD and clock control, video options): see
