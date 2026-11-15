@@ -106,6 +106,22 @@ bit 7 clear is a deleted entry.
   later given out again: on a 2 TB disk, directories created on E: and Y: were overwritten by thumbnail files XBMC4Gamers wrote while a downloader used Z:.
   `make test_exfat` covers it (allocations through E: and Y: in turn, then a full volume check).
 
+### 2.0b Allocation writes each changed block once (2026-11-15)
+- **Allocating or freeing clusters is a batch** (`filesystems::HDDFSBeginBatch` / `HDDFSEndBatch` in `filesystems/hddfs/volume.cpp`, around
+  `HDDFSAllocateClusters`, `HDDFSFreeChain`, `EXFATMakeChain` and the NoFatChain branch of `EXFATFreeFile`): inside it `HDDFSWriteBlockRange` only marks the
+  held 4 KB block changed; the end of the batch, or a changed block leaving the held list to make room, writes each changed block once, whole. FATX volumes get
+  the same. Outside a batch every write goes straight to the disk as before.
+- **The link to the new clusters comes last:** `HDDFSAllocateClusters` writes the link from the file's old last cluster after the batch, one write of its
+  own. The batch writes blocks in the order they were mapped, not changed, and the old last cluster's block is usually mapped first; a power cut between
+  the two would leave a FATX chain (its length is the chain itself) running into a cluster still marked free, later given to another file. With the link
+  last, a power cut leaves at most clusters no file owns, as before batches.
+- **Whole blocks are safe:** blocks sit on the disk's 4 KB grid (`HDDFSMapBlock` aligns them), so two blocks never share a sector, and a block holds what the
+  disk holds (every change is written; a direct data transfer invalidates the blocks it covers).
+- **Why:** before, each cluster cost a 512-byte synchronous write of its bitmap byte, one of its FAT entry and one of the link from the cluster before. Halo 2
+  formats its cache partition (X:) at every start, without reading it first, and then creates 80 MB cache files there: on the Modxo console's exFAT disk
+  emptying X: took 7.3 s and creating the files about 17 s, a 25 s black screen (about 23,000 one-sector writes). With batches: 9 ms and under 1 s; the game
+  reads its controllers 9.4 s after the launch instead of 33 s.
+
 ### 2.1 Volume handle (cache formatting, storage spec §5)
 - **Cluster size:** a folder partition shows the FATX cluster size of its last format (the header's sectors per cluster, 8 to 128: 4 to 64 KB), 16 KB until it
   has been formatted. Titles choose it: Halo 2 formats Z: with 64 KB clusters and then checks that the volume it mounts has that cluster size and only its root

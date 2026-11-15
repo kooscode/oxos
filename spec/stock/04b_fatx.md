@@ -77,6 +77,7 @@ Evidence: batch_decompile `ev_484d7415…` (FatxMountVolume, RAW mount), `ev_059
 
 ## Implementation notes
 - Our driver uses a 32 × 4 KB write-through block cache for the FAT and directories. Sector-aligned data runs go straight to the disk. One lock per volume.
+  Allocating or freeing clusters writes each changed block once at the end (spec/oxos_internal/07_exfat_driver.md §2.0b).
 - Scatter/gather (`NtReadFileScatter` / `NtWriteFileGather`): each FILE_SEGMENT_ELEMENT is one page of the transfer; offset and length must be sector multiples.
   Ours since milestone 6e (volume handles still reject segment arrays). The Fsc exports, dismount and RAW are covered by specs 16 and 04c.
 

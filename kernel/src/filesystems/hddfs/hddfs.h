@@ -163,6 +163,10 @@ void HDDFSReleaseVolume(HDDFS_VOLUME *v);
 NTSTATUS HDDFSDeviceIo(HDDFS_VOLUME *v, UCHAR Major, LONGLONG Offset, PVOID Buffer, ULONG Length);
 NTSTATUS HDDFSMapBlock(HDDFS_VOLUME *v, LONGLONG Offset, PUCHAR *Data);
 NTSTATUS HDDFSWriteBlockRange(HDDFS_VOLUME *v, LONGLONG BlockOffset, ULONG Start, ULONG Length);
+// A batch: block writes between the two are made once, at the end of the outermost batch. HDDFSEndBatch returns Status, or the first failed write when Status
+// is a success. The lock is held throughout.
+void HDDFSBeginBatch();
+NTSTATUS HDDFSEndBatch(NTSTATUS Status);
 void HDDFSInvalidateRange(HDDFS_VOLUME *v, LONGLONG Offset, ULONG Length);
 
 // Clusters: the FAT, allocation and the chain of a file.

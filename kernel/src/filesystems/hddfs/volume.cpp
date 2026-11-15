@@ -16,6 +16,11 @@ static struct {
     LONGLONG Block;
 } HDDFSHeld[HDDFS_MAX_HELD];
 static ULONG HDDFSHeldCount;
+static ULONG HDDFSChangedHeld; // bit N: HDDFSHeld[N] was changed in a batch and is not written yet
+// Above 0 while clusters are allocated or freed: HDDFSWriteBlockRange then only marks the block changed, and HDDFSEndBatch writes each changed block once,
+// not a sector per cluster. Halo 2 formats its cache partition at every start and creates 80 MB files there: one cluster at a time, emptying the folder
+// took 7 s and creating the files 17 s (2026-11-15).
+static ULONG HDDFSBatchDepth;
 
 void HDDFSInitialize() {
     KeInitializeEvent(&HDDFSLock, SynchronizationEvent, TRUE);
@@ -38,38 +43,76 @@ NTSTATUS HDDFSDeviceIo(HDDFS_VOLUME *v, UCHAR Major, LONGLONG Offset, PVOID Buff
     return IoSynchronousFsdRequest(Major, v->TargetDevice, Buffer, Length, &o);
 }
 
-// --- Blocks (4 KB, through the file system cache; written through, never dirty). The lock is held.
+// --- Blocks (4 KB, through the file system cache; written through, never dirty once a batch ends). The lock is held.
+
+// The HDDFSHeld entry HDDFSMapBlock returned last.
+static ULONG HDDFSMappedIndex;
+
+// Write a held block that a batch changed: the whole block. Safe: a block holds what the disk holds (every change is written, a direct transfer invalidates
+// the blocks it covers), and blocks never overlap (HDDFSMapBlock aligns them on the disk).
+static NTSTATUS HDDFSWriteChanged(ULONG Index) {
+    auto &h = HDDFSHeld[Index];
+    if (!(HDDFSChangedHeld & (1u << Index)) || !h.Volume) // unchanged, or invalidated: a direct transfer rewrites it
+        return STATUS_SUCCESS;
+    return HDDFSDeviceIo(h.Volume, IRP_MJ_WRITE, h.Block, h.Buffer, HDDFS_BLOCK_SIZE);
+}
 
 NTSTATUS HDDFSMapBlock(HDDFS_VOLUME *v, LONGLONG Offset, PUCHAR *Data) {
     LONGLONG block = Offset & ~(LONGLONG)(HDDFS_BLOCK_SIZE - 1);
     for (ULONG i = HDDFSHeldCount; i--;) { // already held under this lock (FAT scans map the same block repeatedly)
         if (HDDFSHeld[i].Volume == v && HDDFSHeld[i].Block == block) {
+            HDDFSMappedIndex = i;
             *Data = (PUCHAR)HDDFSHeld[i].Buffer + (ULONG)(Offset - block);
             return STATUS_SUCCESS;
         }
+    }
+    if (HDDFSHeldCount == HDDFS_MAX_HELD) { // the oldest block makes room, written first if a batch changed it
+        NTSTATUS status = HDDFSWriteChanged(0);
+        if (!NT_SUCCESS(status))
+            return status;
+        UnmapCacheBuffer(HDDFSHeld[0].Buffer);
+        memmove(HDDFSHeld, HDDFSHeld + 1, (HDDFS_MAX_HELD - 1) * sizeof(HDDFSHeld[0]));
+        HDDFSHeldCount--;
+        HDDFSChangedHeld >>= 1;
     }
     PVOID p;
     NTSTATUS status = MapCacheBuffer(v->Cache, block, TRUE, &p);
     if (!NT_SUCCESS(status))
         return status;
-    if (HDDFSHeldCount == HDDFS_MAX_HELD) {
-        UnmapCacheBuffer(HDDFSHeld[0].Buffer);
-        memmove(HDDFSHeld, HDDFSHeld + 1, (HDDFS_MAX_HELD - 1) * sizeof(HDDFSHeld[0]));
-        HDDFSHeldCount--;
-    }
+    HDDFSMappedIndex = HDDFSHeldCount;
     HDDFSHeld[HDDFSHeldCount++] = {p, v, block};
     *Data = (PUCHAR)p + (ULONG)(Offset - block);
     return STATUS_SUCCESS;
 }
 
-// Write back the sectors [Start, Start+Length) of a mapped block.
+// Write back the sectors [Start, Start+Length) of a mapped block; in a batch, the block is written when the batch ends.
 NTSTATUS HDDFSWriteBlockRange(HDDFS_VOLUME *v, LONGLONG BlockOffset, ULONG Start, ULONG Length) {
     PUCHAR data;
     NTSTATUS status = HDDFSMapBlock(v, BlockOffset, &data);
     if (!NT_SUCCESS(status))
         return status;
+    if (HDDFSBatchDepth) {
+        HDDFSChangedHeld |= 1u << HDDFSMappedIndex;
+        return STATUS_SUCCESS;
+    }
     ULONG mask = v->SectorSize - 1, first = Start & ~mask, end = (Start + Length + mask) & ~mask;
     return HDDFSDeviceIo(v, IRP_MJ_WRITE, BlockOffset + first, data + first, end - first);
+}
+
+void HDDFSBeginBatch() {
+    HDDFSBatchDepth++;
+}
+
+NTSTATUS HDDFSEndBatch(NTSTATUS Status) {
+    if (--HDDFSBatchDepth)
+        return Status;
+    for (ULONG i = 0; i < HDDFSHeldCount; i++) {
+        NTSTATUS written = HDDFSWriteChanged(i);
+        if (NT_SUCCESS(Status))
+            Status = written;
+    }
+    HDDFSChangedHeld = 0;
+    return Status;
 }
 
 void HDDFSInvalidateRange(HDDFS_VOLUME *v, LONGLONG Offset, ULONG Length) {
@@ -139,11 +182,11 @@ static bool HDDFSIsLast(ULONG e) {
     return e >= 0xFFFFFFF8;
 }
 
-// Allocate Count clusters chained together; link them after PreviousLast (0 = new chain).
-NTSTATUS HDDFSAllocateClusters(HDDFS_VOLUME *v, ULONG PreviousLast, ULONG Count, ULONG *First) {
+// Allocate Count clusters chained together, linked to nothing yet. In a batch.
+static NTSTATUS HDDFSAllocateInBatch(HDDFS_VOLUME *v, ULONG Count, ULONG *First) {
     if (Count > v->Alloc->FreeClusters || (v->IsEXFAT && !EXFATMayAllocate(v, Count)))
         return (NTSTATUS)0xC000007F; // STATUS_DISK_FULL
-    ULONG first = 0, prev = PreviousLast, c = v->Alloc->AllocationHint;
+    ULONG prev = 0, c = v->Alloc->AllocationHint;
     for (ULONG n = 0; n < Count;) {
         if (!HDDFSIsValidCluster(v, c))
             c = v->FirstClusterNumber;
@@ -167,8 +210,8 @@ NTSTATUS HDDFSAllocateClusters(HDDFS_VOLUME *v, ULONG PreviousLast, ULONG Count,
                 status = HDDFSSetFatEntry(v, prev, c);
             if (!NT_SUCCESS(status))
                 return status;
-            if (!first)
-                first = c;
+            if (!prev)
+                *First = c;
             prev = c;
             v->Alloc->FreeClusters--;
             v->UsedClusters++;
@@ -177,12 +220,21 @@ NTSTATUS HDDFSAllocateClusters(HDDFS_VOLUME *v, ULONG PreviousLast, ULONG Count,
         c++;
     }
     v->Alloc->AllocationHint = c;
-    *First = first;
     return STATUS_SUCCESS;
 }
 
-// Free a chain: at most Limit clusters (exFAT: the file's length decides where its chain ends).
-NTSTATUS HDDFSFreeChain(HDDFS_VOLUME *v, ULONG First, ULONG Limit) {
+// Allocate Count clusters and link them after PreviousLast (0 = new chain). The link is written after the batch: the new clusters are on the disk before a
+// chain reaches them, so a power cut leaves at most clusters no file owns, never a chain into clusters marked free.
+NTSTATUS HDDFSAllocateClusters(HDDFS_VOLUME *v, ULONG PreviousLast, ULONG Count, ULONG *First) {
+    HDDFSBeginBatch();
+    NTSTATUS status = HDDFSEndBatch(HDDFSAllocateInBatch(v, Count, First));
+    if (NT_SUCCESS(status) && PreviousLast)
+        status = HDDFSSetFatEntry(v, PreviousLast, *First);
+    return status;
+}
+
+// Free a chain: at most Limit clusters (exFAT: the file's length decides where its chain ends). In a batch.
+static NTSTATUS HDDFSFreeInBatch(HDDFS_VOLUME *v, ULONG First, ULONG Limit) {
     ULONG c = First;
     for (ULONG guard = 0; HDDFSIsValidCluster(v, c) && guard <= v->NumberOfClusters && guard < Limit; guard++) {
         ULONG next;
@@ -201,6 +253,11 @@ NTSTATUS HDDFSFreeChain(HDDFS_VOLUME *v, ULONG First, ULONG Limit) {
         c = next;
     }
     return STATUS_SUCCESS;
+}
+
+NTSTATUS HDDFSFreeChain(HDDFS_VOLUME *v, ULONG First, ULONG Limit) {
+    HDDFSBeginBatch();
+    return HDDFSEndBatch(HDDFSFreeInBatch(v, First, Limit));
 }
 
 NTSTATUS HDDFSChainLength(HDDFS_VOLUME *v, ULONG First, ULONG *Count, ULONG *Last) {

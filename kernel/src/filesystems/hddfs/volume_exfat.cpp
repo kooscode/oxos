@@ -56,10 +56,8 @@ NTSTATUS EXFATZeroCluster(HDDFS_VOLUME *v, ULONG Cluster) {
     return status;
 }
 
-// A NoFatChain allocation gets its FAT entries, so it can grow or shrink out of place.
-NTSTATUS EXFATMakeChain(HDDFS_VOLUME *v, HDDFS_FCB *f) {
-    if (!(f->EXFATFlags & EXFAT_NOFATCHAIN))
-        return STATUS_SUCCESS;
+// A NoFatChain allocation gets its FAT entries, so it can grow or shrink out of place. In a batch.
+static NTSTATUS EXFATMakeChainInBatch(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     for (ULONG i = 0; i < f->EXFATAllocClusters; i++) {
         ULONG c = f->FirstCluster + i;
         NTSTATUS status = HDDFSSetFatEntry(v, c, i + 1 < f->EXFATAllocClusters ? c + 1 : HDDFS_CLUSTER_LAST);
@@ -72,11 +70,15 @@ NTSTATUS EXFATMakeChain(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     return STATUS_SUCCESS;
 }
 
-NTSTATUS EXFATFreeFile(HDDFS_VOLUME *v, HDDFS_FCB *f) {
-    if (!f->FirstCluster)
-        return STATUS_SUCCESS;
+NTSTATUS EXFATMakeChain(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     if (!(f->EXFATFlags & EXFAT_NOFATCHAIN))
-        return HDDFSFreeChain(v, f->FirstCluster, f->EXFATAllocClusters);
+        return STATUS_SUCCESS;
+    HDDFSBeginBatch();
+    return HDDFSEndBatch(EXFATMakeChainInBatch(v, f));
+}
+
+// A NoFatChain file's clusters are freed in the bitmap alone. In a batch.
+static NTSTATUS EXFATFreeContiguousInBatch(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     for (ULONG i = 0; i < f->EXFATAllocClusters; i++) {
         NTSTATUS status = EXFATMarkCluster(v, f->FirstCluster + i, false);
         if (!NT_SUCCESS(status))
@@ -87,6 +89,15 @@ NTSTATUS EXFATFreeFile(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     if (f->FirstCluster < v->Alloc->AllocationHint)
         v->Alloc->AllocationHint = f->FirstCluster;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS EXFATFreeFile(HDDFS_VOLUME *v, HDDFS_FCB *f) {
+    if (!f->FirstCluster)
+        return STATUS_SUCCESS;
+    if (!(f->EXFATFlags & EXFAT_NOFATCHAIN))
+        return HDDFSFreeChain(v, f->FirstCluster, f->EXFATAllocClusters);
+    HDDFSBeginBatch();
+    return HDDFSEndBatch(EXFATFreeContiguousInBatch(v, f));
 }
 
 // --- Volume handle and size (spec §5-6 of the storage spec)
