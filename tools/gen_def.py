@@ -4,7 +4,7 @@
 usage: gen_def.py EXPORTS_TSV OUT_DEF
 
 The table has one row per ordinal of the 4627 kernel: ordinal, name, calling convention, argument bytes, kind, and for an export whose name is not the kernel's
-own symbol, that symbol (kernel_symbol: the SDK's oxos_open_file is the kernel's io::OpenFile, ?OpenFile@io@xk@@...).
+own symbol, that symbol (kernel_symbol: the SDK's oxos_file_open is the kernel's io::OpenFile, ?OpenFile@io@xk@@...).
 Calling conventions: stdcall, fastcall, cdecl, and compiler: a 64-bit arithmetic helper the compiler calls itself (_alldiv, ...), with its own register
 convention. OXOS exports these and memcpy/memset/memmove/memcmp to kernel extensions at its own ordinals 402-415 (spec/oxos_internal/34 §9.1).
 

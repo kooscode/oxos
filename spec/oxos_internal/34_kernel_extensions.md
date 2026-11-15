@@ -439,9 +439,10 @@ oxos_sdk/
 Nothing built is committed: the library exists only in `build/sdk/` and the release zip.
 
 ### 9.1 What the kernel provides
-Extensions call the kernel for everything a freestanding program needs, as Linux modules and Windows drivers do; the SDK carries no copies. The Xbox kernel
-never exported these (titles link their own C library), so OXOS exports them at ordinals of its own, after its other exports (400-401, spec/oxos_internal/30
-§1). Titles never import them and they cannot be hooked (§7.1).
+Extensions call the kernel for everything a freestanding program needs, as Linux modules and Windows drivers do; the SDK carries only the C functions the
+kernel does not use itself (417-428 below). The Xbox kernel never exported these (titles link their own C library), so OXOS exports them at ordinals of its
+own, after its other exports (400-401, spec/oxos_internal/30 §1: the disk format and partition delete, for the dashboard's tools, which `oxos_kernel.h` does not
+declare for extensions). Titles never import them; 402-428 cannot be hooked (§7.1).
 
 | Ordinals | Exports | Why |
 |---|---|---|
@@ -449,6 +450,7 @@ never exported these (titles link their own C library), so OXOS exports them at 
 | 406-415 | `_allmul`, `_alldiv`, `_aulldiv`, `_allrem`, `_aullrem`, `_alldvrm`, `_aulldvrm`, `_allshl`, `_allshr`, `_aullshr` | the compiler's 64-bit arithmetic helpers for the `i386-pc-win32` target, each with its own register convention (`kernel/src/arch/int64.S`) |
 | 417-428 | `strlen`, `strnlen`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlcpy`, `toupper`, `isdigit`, `memchr`, `snprintf`, `vsnprintf` (`cdecl`) | the C library OXOS's own code uses (`kernel/src/runtime/c_library.h`, user, 2026-11-14: "a small C runtime in the kernel, used by the kernel and by extensions alike", not the Xbox kernel's `Rtl*` functions, which are for titles). The C functions the kernel does not use itself (`strchr`, `strrchr`, `strstr`, `strlcat`, `strtol`, `strtoul`, `atoi`, `tolower`, `isspace`, `isalpha`, `isalnum`) are in `runtime/c_library_extensions.cpp`, which the SDK's library carries (`src/oxos_c_library.cpp`, generated) instead of the kernel, so the resident kernel keeps stock's size; `oxos_kernel.h` declares both groups alike |
 | 416 | `OXOSWriteExtensionLog(Context, Text)` (`stdcall`) | one line of `oxos_log`, `[SECTION] Text`, to where `Context->LogTarget` says: the debug log (`diagnostics::LogLine`) and/or `C:\OXOS\log\extensions.log` (spec/oxos_internal/35); extensions name no file, so they cannot write outside it. The SDK's own: `oxos_kernel.h` leaves it out |
+| 429-432 | `oxos_file_open`, `oxos_file_create`, `oxos_file_delete` and the SDK's renames' `oxos_file_rename_handle` (`cdecl`) | the kernel's own `io::OpenFile`, `io::CreateFile`, `io::DeleteFile` and `io::RenameFile`, exported as they are: `kernel/exports.tsv`'s `kernel_symbol` column names each one's C++ symbol, so the kernel's code is unchanged (user, 2026-11-14). The SDK's other file and folder functions (§5.1) are built on them |
 
 `kernel/exports.tsv` lists them with the convention `cdecl` or `compiler`. They cost the resident kernel 4 bytes each in its export table, and `memcmp`.
 

@@ -18,6 +18,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
+- **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
 - **In-Game Reset (IGR):** the standard In Game Reset we are used to (LT + RT + BACK + BLACK).
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
 - **Error screens that explain themselves:** what happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug

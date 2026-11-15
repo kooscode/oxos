@@ -106,4 +106,4 @@ E:): the launcher mounts the image and the game starts. For a path that does not
 ## Open
 - Hard-disk and memory-unit images (types `M`, `H`).
 - A menu in the launcher for choosing an image with the controller.
-- exFAT names longer than 42 characters are not visible (spec/oxos_internal/07 §2), so such an image needs a shorter name.
+- On exFAT an image's name may have up to 255 characters, all in Latin-1 (spec/oxos_internal/07 §2); on FATX at most 42.

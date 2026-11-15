@@ -106,7 +106,7 @@ typedef struct _FILE_NETWORK_OPEN_INFORMATION {
 #define FILE_SHARE_READ 1UL
 #define FILE_SHARE_WRITE 2UL
 #define FILE_SHARE_DELETE 4UL
-#define FILE_SUPERSEDE 0UL // dispositions: what NtCreateFile and oxos_create_file do when the file exists or not
+#define FILE_SUPERSEDE 0UL // dispositions: what NtCreateFile and oxos_file_create do when the file exists or not
 #define FILE_OPEN 1UL
 #define FILE_CREATE 2UL
 #define FILE_OPEN_IF 3UL

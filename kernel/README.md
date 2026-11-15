@@ -49,7 +49,8 @@ make test       # boot bios.bin in xemu; check every milestone's boot self-tests
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
                                 # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip
-                                # (the three images + title_patches.ini); the splash shows vX.Y.Z (else DEV)
+                                # (the three images, title_patches.ini, the FTP server's ftp.xbe) and puts the SDK's
+                                # oxos_sdk_vX.Y.Z.zip next to it; the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
@@ -68,7 +69,19 @@ make run_xbe XBE='F:\apps\demo\default.xbe' [STATE=...]  # run an XBE from the h
                                 # (../tools/xbe_launcher) starts it as a dashboard would; the disk defaults to
                                 # xemu_state/oxos_exfat/ (an exFAT copy of the play disk, made on first use)
 make run_trace_xbe XBE=... [STATE=...]  # the same with the trace build: serial output here, call record on a crash
+make run_iso ISO='F:\titles\Halo 2.iso'  # a disc image from the run_xbe disk, through the ISO launcher (../tools/iso_launcher)
+make run_image_test             # the image test title (an nxdk picture, status panel and LED) in xemu, release BIOS
+make test_dash                  # the dashboard phase: no self-tests, no disc, so C:\xboxdash.xbe is launched
+make test_relaunch              # quick reboots: the test title relaunches itself through the launch data page (64 and 128 MB),
+                                # then the same with C:\OXOS\oxos_launch_redirect.ini starting the redirected XBE
+make test_fatal                 # no hard disk: the fatal error screen (its code, the EEPROM history)
+make test_format                # formatting at boot: a blank disk, a deleted-partitions disk and a PC disk become exFAT
+make test_upload                # the File Manager: upload, create, delete and launch over xemu's network, exFAT and FATX disks
+make test_iso                   # disc images through the ISO launcher: one .iso, a split pair, a .cci, an image over 4 GB
+make test_udf                   # the self-tests with a UDF (DVD-video) disc instead of an XISO
 make test_exfat                 # the self-tests on an exFAT disk (xemu_state/oxos_xemu_exfat/): E: as a folder
+make test_extensions            # kernel extensions: the SDK, its examples and tests/extensions/ on a test disk, a cold boot and two quick reboots
+make -C ../sdk [VERSION=X.Y.Z]  # the kernel extension SDK (../sdk/README.md) into ../build/sdk/oxos_sdk/, its examples built with it; VERSION: the zip
 make test_encoders              # the three video encoders (Conexant, Focus, Xcalibur) on xemu's models: probe, mode sets, options
 make test_lba48                 # the self-tests on a 2 TB disk (xemu_state/oxos_xemu_lba48/): 48-bit addressing
 make test_controller [CONTROLLER_BIOS=stock]  # controller test: a virtual gamepad (uinput) presses all 24 inputs;
@@ -159,34 +172,37 @@ from which titles derive their save-signature and System Link keys: with it, sav
 ## Layout
 | path | contents |
 |---|---|
-| `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5): `start.S` and `bl.cpp`, with `netboot.cpp` in `NETBOOT=1` images (the network boot, spec/oxos_internal/09); `bl.h` holds what they share |
 | `src/arch/` | assembly: entry from the 2BL, exception/IRQ stubs, context switch, SEH and quick-reboot code, the call tracer's stubs (GNU as); `arch.h`, the x86 primitives the C++ code uses (port I/O, MSRs, interrupt flag, POST codes) |
-| `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks |
-| `src/user_interface/` | the kernel's own screens (spec/oxos_internal/29), drawn with `graphics/`: the fatal error (with its LED sequence and EEPROM error history), No Dashboard Found and the bug check (`error_screens.cpp`, their text in `error_screen_text.cpp`), the countdown before a disk is formatted (`format_countdown_screen.cpp`) and the OXOS File Manager's screen (`file_manager_screen.cpp`). The boot splash is in `boot_splash/` |
-| `src/graphics/` | what the kernel draws with: the OXOS font and text (`text.cpp`), the screens' frame buffer, rectangles, centred text and large digits (`screen.cpp`), both resident; and the vector renderer the boot splash draws its scene with (`vector_renderer.cpp`, boot-only) |
-| `src/diagnostics/` | what a console that freezes or faults leaves in CMOS for the next boot: start-up marks and their watchdog (`boot_marks.cpp`), the last words of an exception or bug check (`last_words.cpp`); and the start-up reports for the serial log: DRAM refresh, GPU clock, X-code checks, machine checks, NV2A memory pads (`boot_reports.cpp`); the debug log, every debug line's way to the serial port and its in-memory copy, in `SERIAL=1` builds only (`serial_log.cpp`: `XK_SERIAL`, `DbgPrint`, extensions' `oxos_log`); and the log files in `C:\OXOS\log` (`file_log.cpp`, spec/oxos_internal/35) |
-| `src/memory/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
-| `src/objects/` | object manager (handles, namespace, symbolic links) and the objects titles reach through handles: events, mutants, semaphores, timers |
-| `src/io/` | I/O manager: devices, IRPs, files, completion ports |
-| `src/hardware/` | the console's hardware, one subfolder per part, namespace `xk::hardware::<part>`: `chipset/` (PCI set-up and HAL phase 0, PIC, PIT, CMOS clock, ACPI PM, SMBus and the SMC, EEPROM, string port I/O, the debug serial port's UART driver: spec/oxos_internal/03), `video/` (AV pack, encoders and display modes, the NV2A's set-up: spec/stock/17-20, spec/oxos_internal/24), `ide/` (the IDE channel, hard disk with 28- and 48-bit addressing, DVD drive: spec/stock/04), `ethernet/` (the network card and its PHY; `nic.h` is shared with the 2BL's netboot), `usb/` (the first OHCI controller and the devices on its ports and behind hubs; boot-only, spec/oxos_internal/32), `audio/` (the AC'97 controller and codec; boot-only, for the boot jingle) |
 | `src/boot_splash/` | the boot splash and jingle: boot-only code, freed before the first title starts (spec/oxos_internal/18) |
-| `src/storage/` | what sits on the IDE drives (`hardware/ide/`): the hard disk's layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), virtual discs (disc images standing in for the DVD drive, `virtual_disc.cpp`) |
-| `src/network/` | the network stack on the card's driver (`hardware/ethernet/`): IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`); boot-only, for the File Manager (spec/oxos_internal/31) |
-| `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`webserver.cpp`, `webpage.cpp`); boot-only, spec/oxos_internal/31 |
-| `src/gamepad/` | the gamepads read during the boot splash, for the X button (the File Manager) and B (safe mode): Xbox pads found on USB (`hardware/usb/`) and their reports (`gamepad.cpp`); boot-only, spec/oxos_internal/32 |
-| `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
+| `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
-| `src/titles/` | the title (XBE) loader and launcher (`title_loader.cpp`), netboot titles (`title_netboot.cpp`); the kernel call tracer (`title_tracer.cpp`, trace builds only) |
+| `src/diagnostics/` | what a console that freezes or faults leaves in CMOS for the next boot: start-up marks and their watchdog (`boot_marks.cpp`), the last words of an exception or bug check (`last_words.cpp`); and the start-up reports for the serial log: DRAM refresh, GPU clock, X-code checks, machine checks, NV2A memory pads (`boot_reports.cpp`); the debug log, every debug line's way to the serial port and its in-memory copy, in `SERIAL=1` builds only (`serial_log.cpp`: `XK_SERIAL`, `DbgPrint`, extensions' `oxos_log`); and the log files in `C:\OXOS\log` (`file_log.cpp`, spec/oxos_internal/35) |
+| `src/extensions/` | kernel extensions (spec/oxos_internal/34). Resident while a title runs: `extension_runtime.cpp` (hooked imports, events, the end of a title) and `extension_runtime_loader.cpp` (writes the loader's cache file at a cold boot, runs the loader before each title). The loader, not part of the kernel's link (`../tools/link_extension_loader.py` links it at 0xB0000000 against the kernel's addresses and `mkbios.py` appends it to the kernel image): `extension_loader.cpp` (loads the extensions), `extension_parser.cpp` (checks, maps and binds a `.xos` image; no kernel calls, for the host unit tests), and `../ini_file/extensions_ini.cpp` (reads `oxos_extensions.ini`) |
+| `src/filesystems/` | the file systems, the cache they share and which one mounts a volume (`mount.cpp`): FATX and exFAT (`hddfs/`, the hard-disk file system: one driver for both; `dispatch.cpp`, `volume.cpp` and `open_files.cpp` are shared, `directory_fatx.cpp` / `volume_fatx.cpp` and `directory_exfat.cpp` / `volume_exfat.cpp` hold what only one format does), XDVDFS (Xbox discs), UDF (DVD-video), RAW (whole-volume access) |
+| `src/gamepad/` | the gamepads read during the boot splash, for the X button (the File Manager) and B (safe mode): Xbox pads found on USB (`hardware/usb/`) and their reports (`gamepad.cpp`); boot-only, spec/oxos_internal/32 |
+| `src/graphics/` | what the kernel draws with: the OXOS font and text (`text.cpp`), the screens' frame buffer, rectangles, centred text and large digits (`screen.cpp`), both resident; and the vector renderer the boot splash draws its scene with (`vector_renderer.cpp`, boot-only) |
+| `src/hardware/` | the console's hardware, one subfolder per part, namespace `xk::hardware::<part>`: `chipset/` (PCI set-up and HAL phase 0, PIC, PIT, CMOS clock, ACPI PM, SMBus and the SMC, EEPROM, string port I/O, the debug serial port's UART driver: spec/oxos_internal/03), `video/` (AV pack, encoders and display modes, the NV2A's set-up: spec/stock/17-20, spec/oxos_internal/24), `ide/` (the IDE channel, hard disk with 28- and 48-bit addressing, DVD drive: spec/stock/04), `ethernet/` (the network card and its PHY; `nic.h` is shared with the 2BL's netboot), `usb/` (the first OHCI controller and the devices on its ports and behind hubs; boot-only, spec/oxos_internal/32), `audio/` (the AC'97 controller and codec; boot-only, for the boot jingle) |
 | `src/in_game_reset/` | the in-game reset: LT + RT + BACK + BLACK in a title power-cycles the console (`xinput_hook.S` watches `XInputGetState`; spec/oxos_internal/22) |
 | `src/ini_file/` | the kernel's ini files in `C:\OXOS`: the line reader (`ini_file.cpp`), the title patches' parser (`title_patcher_ini.cpp`, `title_patches.ini`) the extension list's (`extensions_ini.cpp`, `oxos_extensions.ini`) and the launch redirects' (`launch_redirect_ini.cpp`, `oxos_launch_redirect.ini`); no kernel calls, for the host unit tests |
-| `src/extensions/` | kernel extensions (spec/oxos_internal/34). Resident while a title runs: `extension_runtime.cpp` (hooked imports, events, the end of a title) and `extension_runtime_loader.cpp` (writes the loader's cache file at a cold boot, runs the loader before each title). The loader, not part of the kernel's link (`../tools/link_extension_loader.py` links it at 0xB0000000 against the kernel's addresses and `mkbios.py` appends it to the kernel image): `extension_loader.cpp` (loads the extensions), `extension_parser.cpp` (checks, maps and binds a `.xos` image; no kernel calls, for the host unit tests), and `../ini_file/extensions_ini.cpp` (reads `oxos_extensions.ini`) |
-| `src/runtime/` | runtime library: strings, sprintf, interlocked operations, critical sections, time; `types.h`, the NT-style types of the Xbox kernel's ABI that every folder builds on. Each header is in the folder of the code it declares (`src/storage/storage.h`, included as `<storage/storage.h>`) |
+| `src/io/` | I/O manager: devices, IRPs, files, completion ports |
+| `src/memory/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
+| `src/network/` | the network stack on the card's driver (`hardware/ethernet/`): IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`); boot-only, for the File Manager (spec/oxos_internal/31) |
+| `src/objects/` | object manager (handles, namespace, symbolic links) and the objects titles reach through handles: events, mutants, semaphores, timers |
+| `src/runtime/` | runtime library: the C library OXOS's own code and extensions use (`c_library.h`: `strlen`, `strcasecmp`, `snprintf`, `memcpy`, ...; `c_library_extensions.cpp` only in the SDK), the Xbox kernel's `Rtl*` exports for titles, interlocked operations, critical sections, time; `types.h`, the NT-style types of the Xbox kernel's ABI that every folder builds on. Each header is in the folder of the code it declares (`src/storage/storage.h`, included as `<storage/storage.h>`) |
+| `src/storage/` | what sits on the IDE drives (`hardware/ide/`): the hard disk's layout (`disk_layout.cpp`: retail or PARTINFO partitions, or an exFAT disk: GPT, MBR or whole disk), formatting it (`disk_format.cpp`), virtual discs (disc images standing in for the DVD drive, `virtual_disc.cpp`) |
+| `src/titles/` | the title (XBE) loader and launcher (`title_loader.cpp`), netboot titles (`title_netboot.cpp`); the kernel call tracer (`title_tracer.cpp`, trace builds only) |
+| `src/user_interface/` | the kernel's own screens (spec/oxos_internal/29), drawn with `graphics/`: the fatal error (with its LED sequence and EEPROM error history), No Dashboard Found and the bug check (`error_screens.cpp`, their text in `error_screen_text.cpp`), the countdown before a disk is formatted (`format_countdown_screen.cpp`) and the OXOS File Manager's screen (`file_manager_screen.cpp`). The boot splash is in `boot_splash/` |
+| `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`webserver.cpp`, `webpage.cpp`); boot-only, spec/oxos_internal/31 |
+| `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5): `start.S` and `bl.cpp`, with `netboot.cpp` in `NETBOOT=1` images (the network boot, spec/oxos_internal/09); `bl.h` holds what they share |
+| `Makefile` | the build: the kernel and BIOS images, the release, the boot tests, the xemu sessions and the console apps (its header lists the build kinds) |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/oxos_splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
 | `title_patches/title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |
 | `../build/` | all build output of the repository, the only folder git ignores for it: `kernel/` one folder per kind of kernel build (`selftest`, `release`, `debug`, `trace_basic`, `trace_full`, `trace_full_64mb`, `netboot`; see the Makefile's header; `make clean` removes it), `tools/` and `tests/` the apps, host tools, unit tests and test extensions, `sdk/` the kernel extension SDK as it ships |
-| `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
+| `../sdk/` | the kernel extension SDK's source: its headers, functions and examples, built into `../build/sdk/` with `make -C ../sdk` ([`../sdk/README.md`](../sdk/README.md), spec/oxos_internal/34 §9) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
+| `../tests/kernel_self_tests/` | the boot self-tests built into the self-test kernel (`make`; left out with `SELFTEST=0`), one file per part, read back by `../tests/boot_test.py` |
+| `../tools/` | host tools: BIOS packing, running and debugging in xemu, the call tracer's dump ([`../tools/README.md`](../tools/README.md)) |
 
 Names (`../docs/cpp_style.md` §2): the exports keep the Xbox kernel's names, the ABI titles import (`Ke`, `Mm`, `Io`, `Ob`, `Rtl`, `Hal`, `Av`, `Xc`, `Xe`,
 `Nt`, `Ex`, ...). Everything else is in a namespace per folder:
@@ -252,6 +268,10 @@ console.
 | 35 | Formatting the hard disk as exFAT and deleting all partitions: OXOS exports 400/401 (FTP `SITE FORMAT-EXFAT`, `SITE DELETE-ALL-PARTITIONS`); a blank disk is formatted at boot | oxos/30 | ✅ unit tests (fsck.exfat), xemu (`test_format`), console (debug kit) |
 | 36 | The OXOS File Manager: a web page on the local network uploads, creates and deletes files and folders and launches an XBE; the kernel's own network stack (boot-only); the 2BL's netboot shares the card's bring-up | oxos/31 | ✅ xemu (`test_upload`), console (debug kit: 11 MB/s, a 50 MB upload read back intact, a launched XBE) |
 | 37 | The X button opens the File Manager: during the boot splash, or on the No Dashboard Found screen; a boot-only USB host (OHCI, hubs, Xbox pads) | oxos/32 | ✅ xemu (`test_upload`, `test_format`, a virtual pad) |
+| 38 | Launch redirects: `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches | oxos/33 | ✅ unit tests, xemu (`test_relaunch --redirect`), console (debug kit) |
+| 39 | Kernel extensions: `.xos` files loaded before each title (hooks, title events, one run loop, state pages), their loader run from a disk cache, and the kernel extension SDK (`../sdk/`) with the C library and file functions the kernel exports | oxos/34 | ✅ unit tests, xemu (`test_extensions`) |
+| 40 | Log files in `C:\OXOS\log`, rotated at 10 MB; `C:\OXOS`, `log` and `extensions` made at every cold boot | oxos/35 | ✅ xemu (`test`, `test_upload`) |
+| 41 | exFAT names follow exFAT's rules: up to 255 characters, Latin-1, no path limit (FATX keeps its 42) | oxos/05, oxos/07 | ✅ xemu (`test_exfat`) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11, `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`,
 are absent in the reference as well).
@@ -266,8 +286,8 @@ are absent in the reference as well).
   once (`../spec/oxos_internal/22_in_game_reset.md` §7).
 - IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used and the SMBus is polled.
 - exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster size it writes are kept across quick
-  reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so a title may format its cache again after a cold boot; exFAT names outside
-  Latin-1 or longer than 42 characters are not shown to titles.
+  reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so a title may format its cache again after a cold boot; exFAT names with
+  characters outside Latin-1 are not shown (the kernel's names are 8-bit), and Latin-1 letters such as é and É compare as different names.
 - No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0` acting as an empty drive, where the
   reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
