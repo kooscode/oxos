@@ -59,7 +59,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 ## Planned
 | Feature | What it will do | Status | Spec |
 |---|---|---|---|
-| ⬜ Built-in trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainer.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_built_in_trainers.md) |
+| ⬜ Universal Trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainer.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_universal_trainers.md) |
 | ⬜ Boot video | a video of the user's choice before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
 | ⬜ Screenshots | a button combination (or a command from a PC) saves the picture on screen in `C:\OXOS\screenshots\`, from any title (extension `oxos_screenshots.xos`) | proposal (2026-11-15) | [40](oxos_internal/40_screenshots.md) |

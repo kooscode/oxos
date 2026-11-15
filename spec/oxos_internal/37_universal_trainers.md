@@ -1,4 +1,4 @@
-# 37. Built-in trainers: a trainer menu before the game (proposal)
+# 37. Universal Trainers: a trainer menu before any game, from any dashboard or disc (proposal)
 
 Status: **proposal**, not implemented (user, 2026-11-15: "a trainer selection xbe that we redirect to for any game that we have a trainer for ... so no
 dashboard specific trainers required, we handle it at kernel level"). Nothing here is decided until the user says so.
@@ -8,7 +8,8 @@ trainers, OXOS does it for every launch, from any dashboard, a disc, a disc imag
 comes first; the user switches the trainer and each of its cheats on or off, and the game starts with them.
 
 ## 1. What the user sees
-1. A title is launched (any dashboard, the File Manager, a disc, a disc image, a launcher).
+1. A title is launched: from any dashboard, the File Manager, a launcher, a disc image (the ISO launcher, or an image mounted as the disc in xemu) or an
+   original DVD. Only when XBMC4Gamers launches it with its own trainer installed does OXOS leave it to XBMC4Gamers (spec 23 §5).
 2. If `C:\OXOS\trainers\` has a trainer for that title, the **trainer menu** starts instead: the game's name, the trainer's name and author, and its cheats as
    a list with on/off switches (A toggles, the D-pad moves).
 3. **Start** launches the game with the trainer and the chosen cheats; **B** launches it without the trainer. The choice is remembered per title.
@@ -42,7 +43,7 @@ Rapid Fire = off
 ```
 
 ## 3. Where the code lives
-Built-in trainers run only for users who want them, so by spec 34 §10 they belong in an extension, `oxos_trainer.xos`, rather than the kernel: its
+Universal Trainers run only for users who want them, so by spec 34 §10 they belong in an extension, `oxos_trainer.xos`, rather than the kernel: its
 title-loading event finds the trainer and redirects, its title-loaded event installs it. It needs from the extension interface: replacing the launch's XBE path
 (the title-loading event, as `oxos_nettitle.xos` will, spec 34 §10) and memory that stays while the title runs. Safe mode (B at boot) turns it off with the
 other extensions.

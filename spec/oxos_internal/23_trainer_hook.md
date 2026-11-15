@@ -52,4 +52,21 @@ later title until XBMC runs again. A cold boot always starts clean.
 ## 4. Other BIOSes
 - EvoX M8 and Cerbios 3.1.0 keep the stock call: EvoX at 0x80015A6A, Cerbios at 0x8001653F.
 - Neither installs a trainer hook in its kernel image.
-- Cerbios loads titles in its own extension, with its own title patches (spec/cerbios/06).
+- Cerbios's extension only prepares each launch (its title patches among them, spec/cerbios/06) and is freed before the title starts; the kernel's own title
+  thread then starts the title through the stock call (spec/cerbios/00). So XBMC4Gamers' patch should take effect on Cerbios as on a stock BIOS (not tested
+  yet: the Halo 2 trainer from XBMC4Gamers on Cerbios would confirm it).
+
+## 5. With Universal Trainers (planned, spec 37)
+OXOS's Universal Trainers (spec 37, a proposal) install a trainer in the title-loaded event (spec 34 §7.2), before the title's first instruction. They never
+patch the title-start call, so this spec's guarantees (§2) stay as they are, and the two work side by side:
+
+| How the title is started | Whose trainer runs |
+|---|---|
+| From XBMC4Gamers with a trainer enabled (its hook installed, §1) | **XBMC4Gamers'**: OXOS sees the hook and installs none for that launch |
+| From any other dashboard (Xbox dashboard, XBL Dashboard, EvoX, ...) or XBMC4Gamers without a trainer | **Universal Trainers**, if `C:\OXOS\trainers\` has one for the title |
+| A disc image through the ISO launcher (spec 16), an image mounted as the disc in xemu, an original DVD | **Universal Trainers**: the title-loaded event runs for every launch, whatever started it |
+
+**How OXOS sees XBMC4Gamers' hook:** the call reads `FF 15 0C 00 00 80` (`call [0x8000000C]`) instead of `FF 15 28 01 01 00`, and the block at physical 0xC
+starts with the stub's `60 BA`. Then only one trainer patches the game: two (even the same one twice) could break each other's patches, toggle in-game-key
+cheats twice and take memory twice. XBMC4Gamers removes its hook when it starts again (§1), so the next launch from another dashboard gets Universal Trainers again; a
+cold boot always starts without it.
