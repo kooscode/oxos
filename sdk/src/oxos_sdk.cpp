@@ -243,6 +243,176 @@ void oxos_list_free(char **Names) {
         ExFreePool(Names);
 }
 
+// --- Data: one [section] of the extension's own NAME.ini (oxos_sdk.h §4a), read from the disk at each call, a piece at a time, so a large file never sits in
+// memory; two passes (count, then copy) give one block for oxos_ini_free
+
+namespace {
+
+constexpr ULONG INI_READ_BYTES = 4096;     // read from the file at a time
+constexpr ULONG INI_LINE_MAX = 512;        // a longer line is skipped
+constexpr ULONG INI_POOL_TAG = 0x20696E69; // "ini "
+constexpr KIRQL PASSIVE = 0;
+constexpr NTSTATUS STATUS_END_OF_FILE_CODE = static_cast<NTSTATUS>(0xC0000011), STATUS_OBJECT_NAME_NOT_FOUND_CODE = static_cast<NTSTATUS>(0xC0000034),
+                   STATUS_INVALID_DEVICE_STATE_CODE = static_cast<NTSTATUS>(0xC0000184), STATUS_NOT_SUPPORTED_CODE = static_cast<NTSTATUS>(0xC00000BB);
+
+// One pass over the file, looking for Section: the first pass counts its keys and their text, the second (Keys set) copies them.
+struct SECTION_READER {
+    const char *Section;
+    ULONG SectionLength;
+    bool InSection;     // the lines being read are the section's
+    bool Found;         // its [header] was seen
+    uint32_t Count;     // its keys so far
+    ULONG TextBytes;    // their keys and values, each with its terminating 0
+    OXOS_INI_KEY *Keys; // second pass: where the keys go (at most Capacity), and their text after them, up to TextEnd
+    uint32_t Capacity;
+    char *Text;
+    char *TextEnd;
+};
+
+// Start..End without the blanks (spaces, tabs, CR) around it.
+void TrimBlanks(const char *&Start, const char *&End) {
+    while (Start < End && (*Start == ' ' || *Start == '\t' || *Start == '\r'))
+        Start++;
+    while (End > Start && (End[-1] == ' ' || End[-1] == '\t' || End[-1] == '\r'))
+        End--;
+}
+
+// One line of the file: a [section] header, a key = value line of the section looked for, or anything else (skipped).
+void ReadINILine(SECTION_READER &Reader, const char *Line, ULONG Length) {
+    const char *start = Line;
+    const char *end = Line + Length;
+    TrimBlanks(start, end);
+    if (start == end || *start == ';' || *start == '#')
+        return;
+    if (*start == '[') {
+        auto close = static_cast<const char *>(memchr(start, ']', end - start));
+        const char *name = start + 1;
+        const char *nameEnd = close ? close : name;
+        TrimBlanks(name, nameEnd);
+        Reader.InSection = close && static_cast<ULONG>(nameEnd - name) == Reader.SectionLength &&
+                           strncasecmp(name, Reader.Section, Reader.SectionLength) == 0;
+        Reader.Found = Reader.Found || Reader.InSection;
+        return;
+    }
+    auto equals = static_cast<const char *>(memchr(start, '=', end - start));
+    if (!Reader.InSection || !equals)
+        return;
+    const char *key = start;
+    const char *keyEnd = equals;
+    const char *value = equals + 1;
+    const char *valueEnd = end;
+    TrimBlanks(key, keyEnd);
+    TrimBlanks(value, valueEnd);
+    ULONG keyLength = keyEnd - key;
+    ULONG valueLength = valueEnd - value;
+    if (!keyLength)
+        return;
+    if (Reader.Keys) {
+        if (Reader.Count == Reader.Capacity || keyLength + valueLength + 2 > static_cast<ULONG>(Reader.TextEnd - Reader.Text)) // the file grew meanwhile
+            return;
+        memcpy(Reader.Text, key, keyLength);
+        Reader.Text[keyLength] = 0;
+        memcpy(Reader.Text + keyLength + 1, value, valueLength);
+        Reader.Text[keyLength + 1 + valueLength] = 0;
+        Reader.Keys[Reader.Count] = {Reader.Text, Reader.Text + keyLength + 1};
+        Reader.Text += keyLength + valueLength + 2;
+    }
+    Reader.Count++;
+    Reader.TextBytes += keyLength + valueLength + 2;
+}
+
+// Reads the file at Path line by line into Reader, INI_READ_BYTES at a time through Buffer (INI_READ_BYTES + INI_LINE_MAX bytes).
+NTSTATUS ReadINIPass(const char *Path, SECTION_READER &Reader, char *Buffer) {
+    HANDLE file;
+    NTSTATUS status = oxos_file_open(Path, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &file);
+    if (!NT_SUCCESS(status))
+        return status;
+    LARGE_INTEGER at = {};
+    ULONG kept = 0;        // the start of a line, from the piece before
+    bool skipping = false; // inside a line longer than INI_LINE_MAX
+    for (;;) {
+        IO_STATUS_BLOCK iosb;
+        status = NtReadFile(file, nullptr, nullptr, nullptr, &iosb, Buffer + kept, INI_READ_BYTES, &at);
+        ULONG got = NT_SUCCESS(status) ? static_cast<ULONG>(iosb.Information) : 0;
+        if (!NT_SUCCESS(status) && status != STATUS_END_OF_FILE_CODE)
+            break;
+        at.QuadPart += got;
+        ULONG length = kept + got;
+        ULONG lineStart = 0;
+        while (auto newline = static_cast<const char *>(memchr(Buffer + lineStart, '\n', length - lineStart))) {
+            ULONG lineEnd = newline - Buffer;
+            if (!skipping)
+                ReadINILine(Reader, Buffer + lineStart, lineEnd - lineStart);
+            skipping = false;
+            lineStart = lineEnd + 1;
+        }
+        if (!got) { // the end of the file: its last line may have no newline
+            if (!skipping)
+                ReadINILine(Reader, Buffer + lineStart, length - lineStart);
+            status = STATUS_SUCCESS;
+            break;
+        }
+        kept = length - lineStart;
+        if (kept > INI_LINE_MAX) {
+            skipping = true;
+            kept = 0;
+        } else {
+            memmove(Buffer, Buffer + lineStart, kept);
+        }
+    }
+    NtClose(file);
+    return status;
+}
+
+} // namespace
+
+NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Count) {
+    Keys = nullptr;
+    Count = 0;
+    if (oxos_context->Size < sizeof(OXOS_CONTEXT) || !oxos_context->INIPath) // a kernel from before NAME.ini
+        return STATUS_NOT_SUPPORTED_CODE;
+    if (KeGetCurrentIrql() > PASSIVE)
+        return STATUS_INVALID_DEVICE_STATE_CODE;
+    auto buffer = static_cast<char *>(ExAllocatePoolWithTag(INI_READ_BYTES + INI_LINE_MAX, INI_POOL_TAG));
+    if (!buffer)
+        return STATUS_INSUFFICIENT_RESOURCES_CODE;
+    SECTION_READER counting = {Section, static_cast<ULONG>(strlen(Section))};
+    NTSTATUS status = ReadINIPass(oxos_context->INIPath, counting, buffer);
+    if (NT_SUCCESS(status) && !counting.Found)
+        status = STATUS_OBJECT_NAME_NOT_FOUND_CODE;
+    if (NT_SUCCESS(status) && counting.Count) {
+        ULONG arrayBytes = counting.Count * sizeof(OXOS_INI_KEY);
+        auto block = static_cast<OXOS_INI_KEY *>(ExAllocatePoolWithTag(arrayBytes + counting.TextBytes, INI_POOL_TAG));
+        SECTION_READER copying = {Section, counting.SectionLength};
+        copying.Keys = block;
+        copying.Capacity = counting.Count;
+        copying.Text = reinterpret_cast<char *>(block) + arrayBytes;
+        copying.TextEnd = copying.Text + counting.TextBytes;
+        status = block ? ReadINIPass(oxos_context->INIPath, copying, buffer) : STATUS_INSUFFICIENT_RESOURCES_CODE;
+        if (NT_SUCCESS(status)) {
+            Keys = block;
+            Count = copying.Count < counting.Count ? copying.Count : counting.Count;
+        } else if (block) {
+            ExFreePool(block);
+        }
+    }
+    ExFreePool(buffer);
+    return status;
+}
+
+const char *oxos_ini_value(const OXOS_INI_KEY *Keys, uint32_t Count, const char *Key) {
+    for (uint32_t i = 0; i < Count; i++) {
+        if (strcasecmp(Keys[i].Key, Key) == 0)
+            return Keys[i].Value;
+    }
+    return nullptr;
+}
+
+void oxos_ini_free(OXOS_INI_KEY *Keys) {
+    if (Keys)
+        ExFreePool(Keys);
+}
+
 // --- Hooks: Function is the extension's import of the kernel function, which during Start still holds the kernel's own address; the kernel finds the
 // function by it
 

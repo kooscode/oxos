@@ -29,9 +29,9 @@ Background used here: the call tracer's thunk wrapping (spec/oxos_internal/01 §
 |---|---|
 | `foo.ko` in `/lib/modules/…` | `foo.xos` in `C:\OXOS\extensions\` |
 | `/etc/modules-load.d`, `modprobe.d` options | `C:\OXOS\oxos_extensions.ini`: which extensions load, their order, their settings (§3.1) |
-| `insmod` / `rmmod` | add / remove (or `enabled = no`) a section in `oxos_extensions.ini`; counts from the next launch |
+| `insmod` / `rmmod` | `enabled = yes` / `no` (or add / remove the section) in `oxos_extensions.ini`; counts from the next launch |
 | `module_init` / `module_exit` | `ExtensionStart` / `ExtensionTerminate` (§4) |
-| module parameters | the section's other keys, read with `oxos_setting("key")` (§3.1) |
+| module parameters | settings at the top of the extension's own `NAME.ini`, read with `oxos_setting("key")` (§3.1) |
 | `MODULE_LICENSE`, `MODULE_AUTHOR`, `MODULE_DESCRIPTION` | none: the descriptor has only a name and a version (§4.1, §11) |
 | vermagic (refuses a module built for another kernel) | `ApiVersion` in the descriptor (§4.2) |
 | `EXPORT_SYMBOL` symbols | the `oxoskrnl.exe` exports (332 functions, 34 variables), declared in `oxos_kernel.h`, called by name (§7.1) |
@@ -63,15 +63,17 @@ happens without the file (decided 2026-11-13).
 ; C:\OXOS\extensions\savewatch.xos
 [savewatch]
 extension = savewatch.xos
+enabled = yes
 
-; kept in the list, not loaded
+; kept in the list, not loaded (enabled = no, or no enabled line at all)
 [cheats]
 extension = cheats.xos
 enabled = no
 
-; any other key is a setting for this extension
+; any other key is a setting for this extension (the older place: settings belong in netlog.ini, below)
 [netlog]
 extension = netlog.xos
+enabled = yes
 host = 192.168.1.10
 port = 9000
 ```
@@ -82,9 +84,19 @@ Comments go on lines of their own: as in the other OXOS ini files, a value is th
 - **Sections:** one per extension, loaded **in the file's order**. The name in the brackets is the user's: it is shown in the serial log and on the error
   screen. The extension's own descriptor `Name` (§4.1) decides which state page it gets (§6), so renaming a section keeps the state.
 - **`extension =`** (required): the `.xos` file's name in the extensions folder (no path, no subfolders).
-- **`enabled = no`** (optional; `yes` is the default): the section is skipped, so an extension can be switched off without deleting it or its settings.
-- **Settings:** every other key in the section is the extension's own. The loader copies them, as text, into pool memory for the extension, which reads them
-  with `Setting("host")` (§5). At most 32 keys per section, values up to 255 characters.
+- **`enabled = yes`** (required to load it; user, 2026-11-15): an extension is off unless its section says `enabled = yes`. Missing, `no` or anything else
+  (counted as a line not understood) leaves it off, so an extension never loads by accident and can be switched off without deleting it or its settings.
+- **Settings and data: the extension's own file, `C:\OXOS\extensions\NAME.ini`, next to `NAME.xos`** (the same name; implemented 2026-11-15, user: "less
+  crowded root"). It holds two kinds of things, read two ways:
+
+  | | Where in `NAME.ini` | Read | Limits | From |
+  |---|---|---|---|---|
+  | **Settings** | the keys at the top, before the first `[section]` | by the loader, into memory, when the extension loads | at most 32, values up to 255 characters, one-word keys | `oxos_setting()`, anywhere, hooks included |
+  | **Data** | the `[sections]` after the settings | from the disk, one section each time it is asked for; the rest of the file is never in memory | none (the file up to 1 MB for its settings to be read) | `oxos_ini_section()`, only where the disk may be read (not in hooks) |
+
+  The loader reads `NAME.ini` whole (at most 1 MB) before the title loads, keeps the settings and frees the rest at once (`extensions::LoadSettings`,
+  `ini_file::ParseOwnSettings`). Settings still in the extension's section of `oxos_extensions.ini`, the older place, are used for the keys `NAME.ini` does not
+  set, so setups from before keep working; `oxos_extensions.ini` itself only needs `extension =` and `enabled =`.
 - **Errors**, as in the other ini files: a line that cannot be read is skipped and counted; a section without `extension =`, a file that is missing or is not a
   valid `.xos`, a second section naming the same file: skipped and logged. The other sections still load.
 - **Limits:** at most 8 extensions loaded; each file at most 256 KB; all loaded images together at most 512 KB. A section past a limit is skipped and logged.
@@ -243,7 +255,7 @@ struct OXOS_CONTEXT {
 
     // This extension
     const char *SectionName;      // its section in oxos_extensions.ini: oxos_log's "[name]"
-    const OXOS_SETTING *Settings; // the section's other keys (§3.1)                     oxos_setting()
+    const OXOS_SETTING *Settings; // its settings: the top of NAME.ini, then its section's keys (§3.1)  oxos_setting()
     ULONG SettingCount;
     PVOID ImageBase;              // where it is loaded this launch (a different address each launch is possible)
     ULONG ImageSize;
@@ -252,6 +264,7 @@ struct OXOS_CONTEXT {
     const OXOS_API *Api;            // the loader's functions (§5.1): only during Start, null afterwards
     const OXOS_KERNEL_INFO *Kernel; // read-only facts about the console and the title (§5.2)
     ULONG LogTarget;                // where oxos_log writes                              oxos_set_log_target()
+    const char *INIPath;            // its own C:\OXOS\extensions\NAME.ini (\Device\... path)   oxos_ini_section()
 };
 ```
 
@@ -262,8 +275,9 @@ struct OXOS_CONTEXT {
 |---|---|
 | `oxos_log(Format, ...)` | one line, as printf formats it, prefixed with the extension's section name, to where the log target says: the kernel's debug log (the serial port of a `SERIAL=1` kernel; a release kernel keeps nothing of it), `C:\OXOS\log\extensions.log` (spec/oxos_internal/35; at `PASSIVE_LEVEL` only), or both. The kernel adds the name and sends it on (export 416, §9.1) |
 | `oxos_set_log_target(Target)` | where `oxos_log` writes from then on: `OXOS_LOG_SERIAL`, `OXOS_LOG_FILE` or both; at any time. The kernel starts each extension at both (user, 2026-11-14: a release kernel has no serial output, so the serial half costs nothing there, and a debug or trace kernel prints the lines too) |
-| `oxos_setting(Key)` | the value of `Key` in the extension's section of `oxos_extensions.ini` (any case), or null. The kernel owns the text, valid until the title ends |
+| `oxos_setting(Key)` | the value of the setting `Key` (any case), or null: the top of the extension's own `NAME.ini`, then its section in `oxos_extensions.ini` (§3.1). In memory: any time, hooks included. The kernel owns the text, valid until the title ends |
 | `oxos_setting_number(Key, Default)` | the value of `Key` as a whole decimal number, or `Default` when it is missing or does not start with a digit (user, 2026-11-14: extensions should not each parse digits) |
+| `oxos_ini_section(Section, Keys, Count)`, `oxos_ini_value(Keys, Count, Key)`, `oxos_ini_free(Keys)` | data (§3.1): one `[Section]` of the extension's own `NAME.ini` (any case), read from the disk at this call, 4 KB at a time, so the file never sits in memory: an array of its keys and values (keys may have spaces) in one block `oxos_ini_free` frees; `STATUS_OBJECT_NAME_NOT_FOUND` without the file or the section; `STATUS_INVALID_DEVICE_STATE` above `PASSIVE_LEVEL` (never from a hook). C++ only, as `oxos_file_list` |
 | `oxos_launch_number()`, `oxos_kernel_version()` | launches since the cold boot (1 = the cold boot's title); the kernel's version |
 | `oxos_state()` | the state page (§6): never null, all zero at the first launch and when the extension's `Version` changes |
 | `oxos_file_read(Path, Buffer, BufferSize, &Size)`, `oxos_file_write(Path, Data, Size)` | a whole file into the extension's buffer (too small: `STATUS_BUFFER_TOO_SMALL`, `Size` says how large it is), or written (created or replaced) |
@@ -340,8 +354,11 @@ title -> [savewatch] NtCreateFile -> oxos_next -> [netlog] NtCreateFile -> oxos_
 **How the loader does it** (no dispatcher stays in the kernel):
 - Each extension imports the kernel's functions from `oxoskrnl.exe` by ordinal (§8). `oxos_kernel.h` declares them as C functions, so a call goes through the
   extension's own import entry.
-- `oxos_hook(Name, Hook)` passes `&Name`: the extension's import of the function, which during `Start` still holds the kernel's own address. The loader's `HookFunction(Context, Function, Hook)` finds the export at that address and records the hook. The extension never sees an ordinal.
-- After every `Start` (§4.3 step 3), the loader links each chain: an extension's import entry for a hooked function is pointed at the next hook below it (or left at the kernel's function), and the title's thunk for it (`titles::ResolveKernelThunks`) at the first hook. So the extension's own call of the function, which is what `oxos_next(Name)` is, goes on down the chain.
+- `oxos_hook(Name, Hook)` passes `&Name`: the extension's import of the function, which during `Start` still holds the kernel's own address. The loader's
+  `HookFunction(Context, Function, Hook)` finds the export at that address and records the hook. The extension never sees an ordinal.
+- After every `Start` (§4.3 step 3), the loader links each chain: an extension's import entry for a hooked function is pointed at the next hook below it (or
+  left at the kernel's function), and the title's thunk for it (`titles::ResolveKernelThunks`) at the first hook. So the extension's own call of the function,
+  which is what `oxos_next(Name)` is, goes on down the chain.
 - A hooked call costs one jump (the stub) and one call more than an unhooked one.
 
 **Rules:**
@@ -402,7 +419,7 @@ reports each extension's image size after its start; *open:* its pool, threads a
   boot-only: freed before the first title.
 - **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\cache\oxos_extension_loader.cache` (`extensions::WriteLoaderCache`, boot-only),
   always: the file is a cache, overwritten with the known-good copy at every cold boot. The kernel creates `C:\OXOS\cache` (the kernel's own caches) and
-  `C:\OXOS\extensions` at every cold boot, before it writes the cache (`diagnostics::CreateOxosFolders`, with `C:\OXOS` and `C:\OXOS\log`; user,
+  `C:\OXOS\extensions` at every cold boot, before it writes the cache (`diagnostics::CreateOXOSFolders`, with `C:\OXOS` and `C:\OXOS\log`; user,
   2026-11-14), so extensions copied there later load at the next launch without a cold boot first.
 - **Run from the cache at every launch** (the cold boot's too): `extensions::LoadExtensions` (`src/extensions/ extension_runtime_loader.cpp`) reads the file
   only when `oxos_extensions.ini` exists, checks the header (magic, this kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps
@@ -454,7 +471,8 @@ oxos_sdk/
 | `src/oxos_c_library.cpp` | **generated**: the kernel's `runtime/c_library_extensions.cpp`, the C functions the kernel does not have itself (§9.1), built into `lib/oxos_sdk.lib` one section per function, so an extension links only those it calls |
 | `oxos_extension.mk` | the build rules extensions include (below); they take the library from the package's `lib/`, so extensions are built only with the SDK as it ships, never from its source |
 | `Makefile`, `make_sdk_package.py` | build the SDK as it ships into `build/sdk/oxos_sdk/` (the library, the headers, the rest copied), check the kernel table, then build each example from that package, as a user builds it, into `build/sdk/examples/NAME/`, and with `VERSION` the zip; for the SDK's maintainers (a POSIX shell and Python) |
-| `examples/example_run_loop`, `example_kernel_hook`, `example_title_event` | the examples to start from, each named for what it shows, in C++ (like all of OXOS; C extensions are supported, not shown), each with its Makefile, a sample `oxos_extensions.ini` and a README |
+| `oxos_extensions.ini` | a sample of the list that turns extensions on and sets their load order (§3.1), listing the examples: copied to the package's root, for `C:\OXOS\` |
+| `examples/example_run_loop`, `example_kernel_hook`, `example_title_event` | the examples to start from, each named for what it shows, in C++ (like all of OXOS; C extensions are supported, not shown), each with its Makefile, its own settings file (`NAME.ini`: settings at the top, data in `[sections]`, §3.1) and a README |
 
 Nothing built is committed: the library exists only in `build/sdk/` and the release zip.
 
@@ -529,6 +547,7 @@ did in their state pages; the test reads those back through `extensions::LoadedE
 | `ExtensionRunLoop`: one `NtOpenFile` of its own at its first call, then counts its calls, and any after `ExtensionTerminate` | `RunLoop` is called while the title runs and never after `Terminate`; its own call passes only the extensions below it |
 | `ExtensionTerminate` counts | `Terminate` at each quick reboot |
 | `oxos_setting("Answer")` is `42`; `oxos_file_read` finds its own `.xos` too large for 2 bytes; at the first launch a folder in `C:\OXOS` with a file and a folder in it, created, written, read, listed, renamed and deleted | settings, the SDK's file and folder functions, the kernel imports |
+| `oxos_setting("own")` is `file` and `oxos_setting("both")` comes from its own `extension_test.ini`, not its `oxos_extensions.ini` section; at the first launch `oxos_ini_section` reads `[Halo 2 cheats]` (keys with spaces) past 300 sections of padding in a 28 KB `extension_test.ini`, finds no `[not there]`, and data keys are no settings | settings from the extension's own ini win over its section; data read on demand, one section at a time |
 
 **Companions:**
 - `chain.xos`, listed after `extension_test`: hooks the same `NtOpenFile` and counts: the title's calls (through extension_test's hook, then this one) and
@@ -546,7 +565,7 @@ did in their state pages; the test reads those back through `extensions::LoadedE
 - `failload.xos`: hooks `NtOpenFile`, then returns FALSE from its start: unloaded, its hook dropped (a title call through it would run freed memory), its state
   page freed.
 - `badversion.xos`: built for the next major API version: refused.
-- `disabled.xos` (`enabled = no`) and `unlisted.xos` (in the folder, not in the list): neither loads.
+- `disabled.xos` (`enabled = no`), `notenabled.xos` (a copy of `chain.xos`, no `enabled =` line) and `unlisted.xos` (in the folder, not in the list): none loads.
 
 *Not yet automated:* safe mode (B at the splash), an extension that crashes (the error screen naming it, §3.4), and state pages freed when `oxos_extensions.ini`
 is deleted between launches (§6). Without `oxos_extensions.ini` nothing loads: `make test_memory` checks that titles keep 15 960 free pages.
@@ -560,9 +579,9 @@ ini reader (`ini_file.cpp`, which `oxos_extensions.ini` and the loader share); t
 image for it); the in-game reset; the title compatibility answers (spec/oxos_internal/25 §1-2: games need them to run at all); virtual discs; the error screens;
 the File Manager (the way out of a broken extension).
 
-**Names (decided 2026-11-13):** every extension OXOS provides is `C:\OXOS\extensions\oxos_NAME.xos`, its section in `oxos_extensions.ini` is `[oxos_NAME]`, and
-a file of its own data is `C:\OXOS\oxos_NAME.ini`. Extensions from others use any other name; the `oxos_` prefix is OXOS's. Kernel features keep their files
-(`oxos_launch_redirect.ini`).
+**Names (decided 2026-11-13; the ini's place 2026-11-15):** every extension OXOS provides is `C:\OXOS\extensions\oxos_NAME.xos`, its section in
+`oxos_extensions.ini` is `[oxos_NAME]`, and its settings and data file is `C:\OXOS\extensions\oxos_NAME.ini`, next to it (§3.1). Extensions from others use any
+other name; the `oxos_` prefix is OXOS's. Kernel features keep their files (`oxos_launch_redirect.ini`).
 
 ```ini
 ; oxos_extensions.ini for the title patches (in the trainers zip)

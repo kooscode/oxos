@@ -91,7 +91,7 @@ static NTSTATUS OpenImage(HANDLE *h) {
 
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
 // STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be read.
-char *ReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
+char *ReadOXOSFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
     *Got = 0;
     HANDLE h;
     NTSTATUS status = io::OpenFile(Path, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &h);
@@ -131,7 +131,7 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
     constexpr ULONG MAX_PATCH_FILE = 0x100000;
     ULONG got;
     NTSTATUS status;
-    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
+    char *text = ReadOXOSFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
             XK_SERIAL("patches: oxos_title_patches.ini not read: %#lx\n", status);
@@ -637,7 +637,7 @@ static bool RedirectLaunch(PCSZ Path) {
     constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
     ULONG got;
     NTSTATUS status;
-    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE, 'rLeX', &got, &status);
+    char *text = ReadOXOSFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE, 'rLeX', &got, &status);
     if (!text)
         return false;
     XE_REDIRECT redirect;
@@ -826,7 +826,7 @@ void LaunchAtColdBoot() {
     if (hardware::chipset::BootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
         user_interface::ShowFatalError(21);
     hardware::ide::CountDiskPowerCycle();
-    diagnostics::CreateOxosFolders(); // C:\OXOS and its log, extensions and cache folders exist from every boot on (spec/oxos_internal/34 §3, 35)
+    diagnostics::CreateOXOSFolders(); // C:\OXOS and its log, extensions and cache folders exist from every boot on (spec/oxos_internal/34 §3, 35)
     filesystems::ReadCachePartitions(); // an exFAT disk: X/Y/Z's formats from before a power-off (spec/oxos_internal/05 §3)
     if (RunFileManager())
         return;

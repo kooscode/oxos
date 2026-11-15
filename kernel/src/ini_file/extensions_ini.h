@@ -3,8 +3,11 @@
 //
 //   [name]                       one extension per section, loaded in the file's order
 //   extension = name.xos         its file in C:\OXOS\extensions\ (required)
-//   enabled = no                 optional: skip it (yes is the default)
-//   key = value                  any other key: a setting for the extension
+//   enabled = yes                required to load it: missing, no or anything else leaves it off
+//   key = value                  any other key: a setting for the extension (the older place; see ParseOwnSettings)
+//
+// An extension's own file, C:\OXOS\extensions\NAME.ini next to NAME.xos: its settings are the keys before the first [section]; the sections after them are
+// its data, which the extension reads itself (the SDK's oxos_ini_section).
 #pragma once
 #include <runtime/types.h>
 
@@ -22,7 +25,7 @@ struct XK_TEXT {
 struct XK_EXTENSION_ENTRY {
     XK_TEXT Section;   // the name between the brackets
     XK_TEXT File;      // the value of extension =
-    bool Enabled;
+    bool Enabled;      // enabled = yes
     ULONG SettingCount;
     XK_TEXT Keys[XK_EXTENSION_SETTINGS_MAX];
     XK_TEXT Values[XK_EXTENSION_SETTINGS_MAX];
@@ -30,9 +33,16 @@ struct XK_EXTENSION_ENTRY {
 
 namespace xk::ini_file {
 
+// The two texts are the same, in any case.
+bool SameText(const XK_TEXT &A, const XK_TEXT &B);
+
 // Reads the list in Text (Length bytes) into Entries, in the file's order, at most MaxEntries of them; returns how many. A section without a valid extension =
 // line, or naming a file an earlier section names, is left out. Every line that cannot be used (left-out sections, keys outside a section, a bad enabled =
-// value, too many settings or a value too long, sections past MaxEntries) counts one in *Errors.
+// value, too many settings or a value too long, sections past MaxEntries) counts one in *Errors. A section is Enabled only with enabled = yes.
 ULONG ParseExtensions(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entries, ULONG MaxEntries, ULONG *Errors);
+
+// Reads the settings at the top of an extension's own ini file (Text, Length bytes): the keys before its first section header, at most MaxSettings, into Keys
+// and Values; returns how many. A line that cannot be read, a key past MaxSettings or a value longer than XK_EXTENSION_VALUE_MAX counts one in *Errors.
+ULONG ParseOwnSettings(const char *Text, ULONG Length, XK_TEXT *Keys, XK_TEXT *Values, ULONG MaxSettings, ULONG *Errors);
 
 } // namespace xk::ini_file

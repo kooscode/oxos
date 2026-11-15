@@ -495,19 +495,29 @@ def write_launch_redirect(hdd_copy):
 
 
 # The test extensions (tests/extensions, spec/oxos_internal/34 §9.3) in their oxos_extensions.ini order: seven that load (plain_c in C, the SDK's three
-# examples, and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, and one in the folder
-# that the list does not name.
+# examples, and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, one without the
+# enabled = yes an extension needs to load (a copy of chain, which would load), and one in the folder that the list does not name.
 EXTENSIONS_INI = ("; boot_test.py --extensions\r\n"
-                  "[extension_test]\r\nextension = extension_test.xos\r\nanswer = 42\r\n"
-                  "[chain]\r\nextension = chain.xos\r\n"
-                  "[plain C]\r\nextension = plain_c.xos\r\ngreeting = hello\r\n"
-                  "[example_run_loop]\r\nextension = example_run_loop.xos\r\ninterval = 1\r\n"
-                  "[example_kernel_hook]\r\nextension = example_kernel_hook.xos\r\n"
-                  "[example_title_event]\r\nextension = example_title_event.xos\r\nled_title = oxos KERNEL test title\r\n"
-                  "[slow_loop]\r\nextension = slow_loop.xos\r\n"
-                  "[failload]\r\nextension = failload.xos\r\n"
-                  "[badversion]\r\nextension = badversion.xos\r\n"
-                  "[switched off]\r\nextension = disabled.xos\r\nenabled = no\r\n")
+                  "[extension_test]\r\nextension = extension_test.xos\r\nenabled = yes\r\nanswer = 42\r\nboth = from the section\r\n"
+                  "[chain]\r\nextension = chain.xos\r\nenabled = yes\r\n"
+                  "[plain C]\r\nextension = plain_c.xos\r\nenabled = yes\r\ngreeting = hello\r\n"
+                  "[example_run_loop]\r\nextension = example_run_loop.xos\r\nenabled = yes\r\n"
+                  "[example_kernel_hook]\r\nextension = example_kernel_hook.xos\r\nenabled = yes\r\n"
+                  "[example_title_event]\r\nextension = example_title_event.xos\r\nenabled = yes\r\n"
+                  "[slow_loop]\r\nextension = slow_loop.xos\r\nenabled = yes\r\n"
+                  "[failload]\r\nextension = failload.xos\r\nenabled = yes\r\n"
+                  "[badversion]\r\nextension = badversion.xos\r\nenabled = yes\r\n"
+                  "[switched off]\r\nextension = disabled.xos\r\nenabled = no\r\n"
+                  "[no enabled line]\r\nextension = notenabled.xos\r\n")
+# The extensions' own ini files, next to them (spec/oxos_internal/34 §3.1): settings at the top, data sections after them. extension_test's has 300 sections
+# of padding before the one it reads (past the first 16 KB, many 4 KB reads); its "both" is also in its oxos_extensions.ini section, where it must lose.
+OWN_INI_FILES = {
+    "extension_test": "; boot_test.py --extensions\r\nown = file\r\nboth = own ini wins\r\n" +
+                      "".join(f"[padding {i}]\r\nline = {'x' * 60}\r\n" for i in range(300)) +
+                      "[Halo 2 cheats]\r\nInfinite Ammo = yes\r\nNever Die = no\r\n",
+    "example_run_loop": "interval = 1\r\n",
+    "example_title_event": "led_title = oxos KERNEL test title\r\n\r\n[OXOS kernel test title]\r\ngreeting = Hello from the data section.\r\n",
+}
 
 
 def write_extensions(hdd_copy, folder):
@@ -517,11 +527,14 @@ def write_extensions(hdd_copy, folder):
     w = FATXWriter(q, "C")
     w.makedirs("OXOS\\extensions")
     w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
+    for name, text in OWN_INI_FILES.items():
+        w.write_file(f"OXOS\\extensions\\{name}.ini", text.encode())
     for name in ("extension_test", "chain", "plain_c", "example_run_loop", "example_kernel_hook", "example_title_event", "slow_loop", "failload",
                  "badversion"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, f"{name}.xos"), "rb").read())
     for name in ("disabled", "unlisted"):
         w.write_file(f"OXOS\\extensions\\{name}.xos", open(os.path.join(folder, "failload.xos"), "rb").read())
+    w.write_file("OXOS\\extensions\\notenabled.xos", open(os.path.join(folder, "chain.xos"), "rb").read())
     q.save(hdd_copy + ".new")
     os.replace(hdd_copy + ".new", hdd_copy)
 
@@ -532,8 +545,8 @@ def extension_state_pages(mon):
     if not state:
         return []
     count = int(mon.hmp(f"x/1wx {state:#x}").split(":")[1].split()[0], 16)
-    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[16] of 60 bytes, each starting with its OXOS_CONTEXT (State at +40).
-    return [int(mon.hmp(f"x/1wx {state + 4 + 60 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
+    # XK_EXTENSIONS_STATE: Count, then XK_EXTENSION[16] of 64 bytes, each starting with its OXOS_CONTEXT (State at +40).
+    return [int(mon.hmp(f"x/1wx {state + 4 + 64 * i + 40:#x}").split(":")[1].split()[0], 16) for i in range(count)]
 
 
 def extension_loaded_titles(mon):
@@ -557,7 +570,7 @@ def extension_checks(mon, launches, hdd):
         return [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:n]
     pages = extension_state_pages(mon)
     count = len(pages)
-    x = words(pages[0], 15) if count >= 1 else [0] * 15
+    x = words(pages[0], 17) if count >= 1 else [0] * 17
     c = words(pages[1], 3) if count >= 2 else [0] * 3
     p = words(pages[2], 6) if count >= 3 else [0] * 6
     t = words(pages[5], 1) if count >= 6 else [0]  # example_title_event: its launches
@@ -574,7 +587,7 @@ def extension_checks(mon, launches, hdd):
         return {"extensions loaded (extensions::LoadedExtensions)": False}
     print(f"  (slow_loop: {s[1]} Loads, {s[2]} slow calls of {s[3]}; extensions.log: {len(lines) - 1} lines, {[l for l in lines if l.startswith('extension ')]})")
     return {
-        "extension_test, chain, plain_c, the three examples and slow_loop loaded; failload unloaded, badversion refused, disabled and unlisted not loaded":
+        "extension_test, chain, plain_c, the three examples and slow_loop loaded; failload unloaded, badversion refused; disabled, the one without enabled = yes and unlisted not loaded":
             count == 7 and s[0] == 0x574F4C53 and x[0] == 0x54534F58 and c[0] == 0x4E414843 and p[0] == 0x434E4C50,
         f"state page kept across the quick reboots: {launches} Loads, Generation {launches}": x[1] == launches and x[2] == launches and x[3] == 0 and
             c[1] == launches,
@@ -598,6 +611,10 @@ def extension_checks(mon, launches, hdd):
             x[7] >= launches and x[8] == launches and x[9] == launches - 1,
         "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (RunLoop) only chain's": x[10] > 0 and c[2] == x[10] + launches,
         "settings from oxos_extensions.ini and oxos_file_read": x[12] == 1 and x[13] == 1,
+        "settings from the extension's own extension_test.ini, which win over its oxos_extensions.ini section": x[15] == 1,
+        f"data: oxos_ini_section reads one section of a 28 KB extension_test.ini, keys with spaces; a missing section (step {x[16]}; 1 = all)": x[16] == 1,
+        "example_title_event: its title's greeting from the data section of its own ini":
+            '[example_title_event] "OXOS kernel test title": Hello from the data section.' in lines,
         f"the SDK's file and folder functions: create, write, read, list, rename, delete (step {x[14]}; 1 = all)": x[14] == 1,
         f"plain C extension: {launches} Loads and loaded titles, its setting": p[1] == launches and p[2] == launches and p[5] == 1,
         "the kernel's memcpy, memset, memcmp and 64-bit division for extensions (exports 402-415)": p[3] == 1 and p[4] == 1,

@@ -58,7 +58,7 @@ extern volatile ULONG DebugLogPosition;                        // characters wri
 void AppendLogLine(const char *LogName, const char *Format, ...);
 // C:\OXOS, C:\OXOS\log, C:\OXOS\extensions and C:\OXOS\cache, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine
 // when its log cannot be opened.
-void CreateOxosFolders();
+void CreateOXOSFolders();
 
 } // namespace xk::diagnostics
 

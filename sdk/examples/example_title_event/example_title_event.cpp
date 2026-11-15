@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
-// example_title_event.xos: a title event, the state page, and a kernel function called from the run loop. When each title has been loaded, it logs the
-// title's name and the one before it, which it keeps in its state page from one launch to the next. When the title is the one "led_title" names in
-// C:\OXOS\oxos_extensions.ini (the sample names the OXOS FTP server), it turns the front LED orange a second later:
+// example_title_event.xos: a title event, the state page, a setting and data from its own ini file, and a kernel function called from the run loop. When
+// each title has been loaded, it logs the title's name and the one before it, which it keeps in its state page from one launch to the next, and the title's
+// greeting from its data in C:\OXOS\extensions\example_title_event.ini. When the title is the one its setting "led_title" names (the sample names the
+// OXOS FTP server), it turns the front LED orange a second later:
 //
 //   [example_title_event] Starting extension example_title_event version 1.0.0.
 //   [example_title_event] "OXOS FTP server" is starting; the title before it was "Xbox Dashboard".
+//   [example_title_event] "OXOS FTP server": Ready to copy files.
 //   [example_title_event] "OXOS FTP server": the LED is orange.
 //   [example_title_event] Terminating extension example_title_event version 1.0.0.
 #include <oxos_sdk.h>
@@ -55,7 +57,18 @@ static void Example_TitleLoaded_Callback(const OXOS_TITLE_LOADED *Title, void *U
     // Keep this title's name in the state page for the next launch (its 41 bytes, the ending 0 included).
     memcpy(last->Name, Title->TitleName, sizeof(last->Name));
 
-    // No "led_title" in oxos_extensions.ini: no LED.
+    // DATA: this title's own [section] of example_title_event.ini, read from the disk now, and only that section (oxos_ini_section). The file can hold a
+    // section for every title there is: none of it is in memory until asked for.
+    OXOS_INI_KEY *keys;
+    uint32_t count;
+    if (NT_SUCCESS(oxos_ini_section(Title->TitleName, keys, count))) {
+        const char *greeting = oxos_ini_value(keys, count, "greeting");
+        if (greeting)
+            oxos_log("\"%s\": %s", Title->TitleName, greeting);
+        oxos_ini_free(keys);
+    }
+
+    // SETTING: "led_title", read into memory with the extension (oxos_setting). Not set: no LED.
     const char *ledTitle = oxos_setting("led_title");
     if (!ledTitle)
         return;

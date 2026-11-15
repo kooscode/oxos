@@ -75,7 +75,7 @@ void LoadExtensions() {
     ULONG got;
     NTSTATUS status;
     ULONG largest = sizeof(XK_EXTENSION_LOADER_HEADER) + XK_EXTENSION_LOADER_MAX_BYTES;
-    auto cache = (PUCHAR)titles::ReadOxosFile(CACHE_PATH, largest, POOL_TAG, &got, &status);
+    auto cache = (PUCHAR)titles::ReadOXOSFile(CACHE_PATH, largest, POOL_TAG, &got, &status);
     auto header = (const XK_EXTENSION_LOADER_HEADER *)cache;
     if (!cache || got < sizeof(*header) || header->Magic != XK_EXTENSION_LOADER_MAGIC || header->Stamp != KernelStamp() ||
         header->Base != XK_EXTENSION_LOADER_BASE || header->Size > XK_EXTENSION_LOADER_MAX_BYTES || got != sizeof(*header) + header->Size ||

@@ -1,7 +1,7 @@
 // The kernel extension loader (spec/oxos_internal/34 §3-§8): before each title, reads C:\OXOS\oxos_extensions.ini, loads each listed .xos from
-// C:\OXOS\extensions\, gives it its state page and calls its Load, then links the hook chains and starts the run loop thread. Not part of the resident kernel:
-// linked on its own at XK_EXTENSION_LOADER_BASE against the kernel's addresses, and run there for each launch by extensions/extension_runtime_loader.cpp
-// (§8.1). What runs while the title runs is in extensions/extension_runtime.cpp.
+// C:\OXOS\extensions\ with the settings of its own NAME.ini there, gives it its state page and calls its Load, then links the hook chains and starts the run
+// loop thread. Not part of the resident kernel: linked on its own at XK_EXTENSION_LOADER_BASE against the kernel's addresses, and run there for each launch by
+// extensions/extension_runtime_loader.cpp (§8.1). What runs while the title runs is in extensions/extension_runtime.cpp.
 #include <extensions/extension_state.h>
 #include <extensions/extension_loader.h>
 #include <core/core.h>
@@ -20,14 +20,15 @@ namespace {
 
 constexpr char LIST_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_extensions.ini";
 constexpr char FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\";
-constexpr ULONG LIST_MAX_BYTES = 0x10000;    // the list file
-constexpr ULONG FILE_MAX_BYTES = 0x40000;    // one extension's file
-constexpr ULONG IMAGES_MAX_BYTES = 0x80000;  // all loaded images together
-constexpr ULONG LOOP_STACK_BYTES = 0x4000;   // the run loop thread's kernel stack
+constexpr ULONG LIST_MAX_BYTES = 0x10000;      // the list file
+constexpr ULONG FILE_MAX_BYTES = 0x40000;      // one extension's file
+constexpr ULONG OWN_INI_MAX_BYTES = 0x100000;  // its own NAME.ini: settings at the top, data sections after them (read by the SDK)
+constexpr ULONG IMAGES_MAX_BYTES = 0x80000;    // all loaded images together
+constexpr ULONG LOOP_STACK_BYTES = 0x4000;     // the run loop thread's kernel stack
 constexpr ULONG POOL_TAG = 'txEX';
-constexpr ULONG IMPORT_SLOTS_MAX = 1024;     // kernel imports of all extensions together
+constexpr ULONG IMPORT_SLOTS_MAX = 1024;       // kernel imports of all extensions together
 constexpr NTSTATUS STATUS_NOT_SUPPORTED = (NTSTATUS)0xC00000BB;
-constexpr ULONG EXPORT_ORDINAL_MAX = 512; // above the kernel's highest export (kernel/exports.tsv)
+constexpr ULONG EXPORT_ORDINAL_MAX = 512;      // above the kernel's highest export (kernel/exports.tsv)
 
 } // namespace
 
@@ -294,14 +295,59 @@ char *PoolText(const XK_TEXT &Text) {
     return copy;
 }
 
-// The settings of Entry as OXOS_SETTINGs, keys and values copied (null when it has none or memory is short).
-OXOS_SETTING *PoolSettings(const XK_EXTENSION_ENTRY &Entry) {
-    if (!Entry.SettingCount)
+// The extension's settings as OXOS_SETTINGs, keys and values copied: those of its own ini (OwnKeys, OwnValues), then those of its section in
+// oxos_extensions.ini that its own ini does not set (the older place), at most XK_EXTENSION_SETTINGS_MAX. Null when it has none or memory is short.
+OXOS_SETTING *PoolSettings(const XK_EXTENSION_ENTRY &Entry, const XK_TEXT *OwnKeys, const XK_TEXT *OwnValues, ULONG OwnCount, ULONG *Count) {
+    *Count = 0;
+    if (!OwnCount && !Entry.SettingCount)
         return nullptr;
-    auto settings = (OXOS_SETTING *)ExAllocatePoolWithTag(Entry.SettingCount * sizeof(OXOS_SETTING), POOL_TAG);
-    for (ULONG i = 0; settings && i < Entry.SettingCount; i++)
-        settings[i] = {PoolText(Entry.Keys[i]), PoolText(Entry.Values[i])};
+    auto settings = (OXOS_SETTING *)ExAllocatePoolWithTag(XK_EXTENSION_SETTINGS_MAX * sizeof(OXOS_SETTING), POOL_TAG);
+    if (!settings)
+        return nullptr;
+    for (ULONG i = 0; i < OwnCount; i++)
+        settings[(*Count)++] = {PoolText(OwnKeys[i]), PoolText(OwnValues[i])};
+    for (ULONG i = 0; i < Entry.SettingCount && *Count < XK_EXTENSION_SETTINGS_MAX; i++) {
+        bool own = false;
+        for (ULONG j = 0; j < OwnCount && !own; j++)
+            own = ini_file::SameText(Entry.Keys[i], OwnKeys[j]);
+        if (!own)
+            settings[(*Count)++] = {PoolText(Entry.Keys[i]), PoolText(Entry.Values[i])};
+    }
     return settings;
+}
+
+// C:\OXOS\extensions\NAME.ini for the file NAME.xos (FileName: the value of extension =), in Path.
+void BuildOwnINIPath(const XK_TEXT &FileName, char *Path) {
+    ULONG stem = FileName.Length;
+    if (stem > 4 && strncasecmp(FileName.Text + stem - 4, ".xos", 4) == 0)
+        stem -= 4;
+    memcpy(Path, FOLDER, sizeof(FOLDER) - 1);
+    memcpy(Path + sizeof(FOLDER) - 1, FileName.Text, stem);
+    memcpy(Path + sizeof(FOLDER) - 1 + stem, ".ini", 5); // with its terminating 0
+}
+
+// The extension's settings and its own NAME.ini's path, into Context (§3.1): the settings at the top of NAME.ini, then those of its section in
+// oxos_extensions.ini that NAME.ini does not set. Name is its section's name, for the log.
+void LoadSettings(const XK_EXTENSION_ENTRY &Entry, const char *Name, OXOS_CONTEXT &Context) {
+    char iniPath[sizeof(FOLDER) + XK_EXTENSION_FILE_NAME_MAX + 4];
+    BuildOwnINIPath(Entry.File, iniPath);
+    ULONG iniBytes = 0;
+    NTSTATUS status;
+    char *ini = titles::ReadOXOSFile(iniPath, OWN_INI_MAX_BYTES, POOL_TAG, &iniBytes, &status);
+    if (!ini && status != STATUS_OBJECT_NAME_NOT_FOUND)
+        XK_SERIAL("extensions: [%s] %s not read (%#lx)\n", Name, iniPath, status);
+    XK_TEXT ownKeys[XK_EXTENSION_SETTINGS_MAX];
+    XK_TEXT ownValues[XK_EXTENSION_SETTINGS_MAX];
+    ULONG ownCount = 0;
+    ULONG errors = 0;
+    if (ini)
+        ownCount = ini_file::ParseOwnSettings(ini, iniBytes, ownKeys, ownValues, XK_EXTENSION_SETTINGS_MAX, &errors);
+    if (errors)
+        XK_SERIAL("extensions: [%s] %s: %lu settings lines not understood\n", Name, iniPath, errors);
+    Context.Settings = PoolSettings(Entry, ownKeys, ownValues, ownCount, &Context.SettingCount);
+    if (ini)
+        ExFreePool(ini);
+    Context.INIPath = PoolText({iniPath, (ULONG)strlen(iniPath)});
 }
 
 } // namespace
@@ -319,7 +365,7 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
 
     ULONG size;
     NTSTATUS status;
-    auto file = (PUCHAR)titles::ReadOxosFile(path, FILE_MAX_BYTES, POOL_TAG, &size, &status);
+    auto file = (PUCHAR)titles::ReadOXOSFile(path, FILE_MAX_BYTES, POOL_TAG, &size, &status);
     if (!file) {
         XK_SERIAL("extensions: [%s] %s not read (%#lx)\n", name, path, status);
         return false;
@@ -374,8 +420,7 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     context.Generation = KiQuickRebootCount + 1;
     context.BootFlags = KiQuickRebootFlag ? OXOS_BOOT_QUICK : OXOS_BOOT_COLD;
     context.SectionName = name;
-    context.Settings = PoolSettings(Entry);
-    context.SettingCount = context.Settings ? Entry.SettingCount : 0;
+    LoadSettings(Entry, name, context);
     context.ImageBase = image;
     context.ImageSize = imageSize;
     context.State = statePage;
@@ -434,7 +479,7 @@ static void LinkChains(const IMPORT_SLOTS *Slots) {
 extern "C" void XkExtensionLoaderEntry() {
     ULONG got;
     NTSTATUS status;
-    char *text = titles::ReadOxosFile(LIST_PATH, LIST_MAX_BYTES, POOL_TAG, &got, &status);
+    char *text = titles::ReadOXOSFile(LIST_PATH, LIST_MAX_BYTES, POOL_TAG, &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
             XK_SERIAL("extensions: oxos_extensions.ini not read (%#lx)\n", status);

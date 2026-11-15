@@ -28,6 +28,8 @@ struct SAVED {
     ULONG SettingOk;          // oxos_setting("Answer") was "42" at every Start
     ULONG FileOk;             // oxos_file_read read the extension's own file
     ULONG FileOps;            // the file and folder functions' round trip at the first launch: 1 passed, else the first step that failed (2, 3, ...)
+    ULONG OwnSettingsOk;      // the settings of extension_test.ini at every Start: "own" there, and "both" from there, not from oxos_extensions.ini
+    ULONG DataOk;             // oxos_ini_section at the first launch: 1 passed, else the first step that failed (2, 3, ...)
 };
 
 static SAVED *Saved;
@@ -109,11 +111,30 @@ static ULONG FileAndFolderRoundTrip(void) {
     return 1;
 }
 
+// oxos_ini_section on extension_test.ini, which boot_test.py writes with its settings, 300 sections of padding (past the first 16 KB and many reads), then
+// the section looked for, whose keys have spaces.
+static ULONG DataRoundTrip(void) {
+    OXOS_INI_KEY *keys;
+    uint32_t count;
+    if (!NT_SUCCESS(oxos_ini_section("halo 2 cheats", keys, count)) || count != 2)
+        return 2;
+    BOOLEAN values = SameText(oxos_ini_value(keys, count, "Infinite Ammo"), "yes") && SameText(oxos_ini_value(keys, count, "never die"), "no");
+    oxos_ini_free(keys);
+    if (!values)
+        return 3;
+    if (oxos_ini_section("not there", keys, count) != (NTSTATUS)0xC0000034 || keys || count)
+        return 4;
+    if (oxos_setting("Infinite Ammo")) // data is not a setting
+        return 5;
+    return 1;
+}
+
 static BOOLEAN ExtensionStart(void) {
     Saved = (SAVED *)oxos_state();
     if (!Saved->Launches) { // the first launch: the page is all zero
         Saved->Magic = SAVED_MAGIC;
         Saved->SettingOk = 1;
+        Saved->OwnSettingsOk = 1;
     }
     Saved->Launches++;
     Saved->Generation = oxos_launch_number();
@@ -121,12 +142,16 @@ static BOOLEAN ExtensionStart(void) {
         Saved->GenerationMismatch++;
     if (!SameText(oxos_setting("Answer"), "42"))
         Saved->SettingOk = 0;
+    if (!SameText(oxos_setting("own"), "file") || !SameText(oxos_setting("both"), "own ini wins"))
+        Saved->OwnSettingsOk = 0;
     // Its own .xos, read whole: its first bytes. A buffer of 2 bytes is too small, and says how large the file is.
     UCHAR head[2];
     ULONG size;
     Saved->FileOk = oxos_file_read(OWN_FILE, head, sizeof(head), &size) == (NTSTATUS)0xC0000023 && size > 1024;
-    if (Saved->Launches == 1)
+    if (Saved->Launches == 1) {
         Saved->FileOps = FileAndFolderRoundTrip();
+        Saved->DataOk = DataRoundTrip();
+    }
     oxos_on_title_loading(CountLoading, &Saved->Loading);
     oxos_on_title_loaded(CountLoaded, &Saved->Loaded);
     oxos_on_title_exiting(CountExiting, &Saved->Exiting);

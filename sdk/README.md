@@ -28,9 +28,9 @@ make LLVM=C:/LLVM/bin                  # Windows, when clang is not on the PATH
 
 | Example | Shows |
 |---|---|
-| [`example_run_loop`](examples/example_run_loop) | `ExtensionRunLoop`: work while a title runs, timed with the kernel's millisecond count; a number setting |
-| [`example_kernel_hook`](examples/example_kernel_hook) | a hook on a kernel function (`NtOpenFile`); log lines in `ExtensionStart` and `ExtensionTerminate` |
-| [`example_title_event`](examples/example_title_event) | a title event, the state page that keeps data from one launch to the next, kernel functions called by name: the LED turns orange for one title |
+| [`example_run_loop`](examples/example_run_loop) | `ExtensionRunLoop`: work while a title runs, timed with the kernel's millisecond count; a number setting from its own `.ini` |
+| [`example_kernel_hook`](examples/example_kernel_hook) | a hook on a kernel function (`NtOpenFile`) that uses a setting from its own `.ini` at every call; log lines in `ExtensionStart` and `ExtensionTerminate` |
+| [`example_title_event`](examples/example_title_event) | a title event, the state page that keeps data from one launch to the next, a setting and a data section from its own `.ini`, kernel functions called by name: a greeting per title, and the LED turns orange for one title |
 
 ## 4. Write your own
 Copy the example closest to what you want into a folder of your own, rename it, and set its `Makefile`:
@@ -58,16 +58,47 @@ static BOOLEAN ExtensionStart(void) {
 
 ## 5. Install it
 1. Copy the `.xos` to `C:\OXOS\extensions\` on the console (the OXOS File Manager, or FTP). The kernel creates the folder at every boot.
-2. List it in `C:\OXOS\oxos_extensions.ini` (each example has a sample), with the settings it reads:
+2. List it in `C:\OXOS\oxos_extensions.ini`, which turns extensions on and sets the order they load in. The SDK's root has a sample listing the three
+   examples (copy it to `C:\OXOS\`):
 
    ```ini
    [example_run_loop]
    extension = example_run_loop.xos
-   interval = 10
+   enabled = yes
    ```
 
-3. Start any title: the extension loads before it, and at every launch after it. `enabled = no` in its section switches it off; holding **B** at boot starts
-   without any extension (until the next cold boot).
+   **An extension loads only with `enabled = yes`.** Without that line, or with `enabled = no`, it stays off.
+
+3. Put its settings, and any data, in its own file next to it, with its name: `C:\OXOS\extensions\example_run_loop.ini` (each example has one; see
+   "Settings and data" below).
+4. Start any title: the extension loads before it, and at every launch after it. `enabled = no` switches it off again; holding **B** at boot starts without
+   any extension (until the next cold boot).
+
+### Settings and data: the extension's own `NAME.ini`
+An extension's own file, `C:\OXOS\extensions\NAME.ini` next to `NAME.xos`, holds two different things, read in two different ways:
+
+```ini
+; SETTINGS: the keys at the top, before the first [section].
+buttons = back black
+format = png
+
+; DATA: the [sections] after the settings.
+[4D530064]
+Infinite Ammo = yes
+Never Die = no
+```
+
+| | **Settings** | **Data** |
+|---|---|---|
+| Where | the keys at the top of `NAME.ini`, before the first `[section]` | the `[sections]` after them |
+| When read | **once, into memory, when the extension loads** (before each title) | **from the disk, one section each time it is asked for**; the rest of the file is never in memory |
+| How | `oxos_setting("buttons")`, `oxos_setting_number("interval", 10)` | `oxos_ini_section("4D530064", keys, count)`, `oxos_ini_value(keys, count, "Infinite Ammo")`, `oxos_ini_free(keys)` |
+| Where it can be called | anywhere, **hooks included** | only where the disk may be read: `ExtensionStart`, `ExtensionRunLoop`, `ExtensionTerminate`, title events; **never in a hook** |
+| Limits | **at most 32 settings, each value up to 255 characters**, one-word keys | **no limit** on sections or keys (the file up to 1 MB); keys may have spaces |
+| For | a few options the user sets: a button, a format, an interval | lists that grow: a section per game, per cheat, per anything |
+
+Read data once, in `ExtensionStart` or a title event, and keep what you need: every `oxos_ini_section` call reads the file again. Settings still written in
+the extension's section of `oxos_extensions.ini` (how it was done before) keep working for the keys `NAME.ini` does not set.
 
 `oxos_log` lines go to `C:\OXOS\log\extensions.log` (read it over FTP or with the File Manager; it moves to `extensions_1.log` at 10 MB), and to the debug
 serial port of a debug kernel.
@@ -79,7 +110,8 @@ serial port of a debug kernel.
 |---|---|
 | Its functions | `ExtensionStart` (before each title: read settings, hook, register for events; TRUE to stay), `ExtensionRunLoop` (again and again while the title runs), `ExtensionTerminate` (the title starts another) |
 | Logging | `oxos_log(Format, ...)`, `oxos_set_log_target` |
-| Settings and launches | `oxos_setting("key")`, `oxos_setting_number("key", Default)`, `oxos_launch_number()`, `oxos_kernel_version()` |
+| Settings (in memory) and launches | `oxos_setting("key")`, `oxos_setting_number("key", Default)`, `oxos_launch_number()`, `oxos_kernel_version()` |
+| Data (from the disk, one section at a time) | `oxos_ini_section("section", keys, count)`, `oxos_ini_value(keys, count, "key")`, `oxos_ini_free(keys)` (C++) |
 | State page | `oxos_state()`: 4 KB that keep their contents from one launch to the next, until the next cold boot (all zero at first, and for a new `Version`) |
 | Files and folders | `oxos_file_read`, `oxos_file_write` (a whole file), `oxos_file_open`, `oxos_file_create`, `oxos_file_delete`, `oxos_file_rename`, `oxos_file_exists`, `oxos_file_list`; `oxos_directory_create`, `oxos_directory_delete`, `oxos_directory_rename`, `oxos_directory_exists`, `oxos_directory_list`; `oxos_list_free` |
 | Hooks | `oxos_hook(NtOpenFile, My_NtOpenFile)` and `oxos_next(NtOpenFile)(...)` (in `ExtensionStart`) |
@@ -104,7 +136,8 @@ serial port of a debug kernel.
 | `include/oxos_kernel.h` | the Xbox kernel's functions and the C library, with their types (generated from the OXOS kernel) |
 | `lib/oxos_sdk.lib` | the one library: the SDK's functions, the C functions the kernel does not have itself, and the kernel's import library |
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
-| `examples/` | example_run_loop, example_kernel_hook, example_title_event |
+| `oxos_extensions.ini` | which extensions OXOS loads, in which order: a sample listing the examples, for `C:\OXOS\` |
+| `examples/` | example_run_loop, example_kernel_hook, example_title_event, each with its own settings file (`NAME.ini`) |
 
 **The SDK's source** (`sdk/` in the OXOS repository) holds the two headers, the SDK's functions (`src/oxos_sdk.cpp`, with `src/oxos_extension_context.h`, the
 context the kernel fills, shared with the kernel and not shipped), and what `tools/gen_oxos_sdk.py` generates from the kernel: `include/oxos_kernel.h`, the

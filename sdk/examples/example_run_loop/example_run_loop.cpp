@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // example_run_loop.xos: work while a title runs. ExtensionRunLoop is called about every millisecond on the kernel's one loop thread, which every extension
-// shares, so it does a little and returns; here it logs once every "interval" seconds (C:\OXOS\oxos_extensions.ini), and how long the title ran when it ends:
+// shares, so it does a little and returns; here it logs once every "interval" seconds (its setting, in C:\OXOS\extensions\example_run_loop.ini), and how long the title ran when it ends:
 //
 //   [example_run_loop] Starting extension example_run_loop version 1.0.0.
 //   [example_run_loop] 10 s into this title.
@@ -33,7 +33,7 @@ static BOOLEAN ExtensionStart(void) {
     // Logging ExtensionStart message to the log file and serial port.
     oxos_log("Starting extension %s version %s.", EXTENSION_NAME, EXTENSION_VERSION);
 
-    // Reading the "interval" setting from oxos_extensions.ini, in seconds (10 when it is missing or 0).
+    // Reading the "interval" setting from example_run_loop.ini, in seconds (10 when it is missing or 0).
     ULONG seconds = oxos_setting_number("interval", 10);
     IntervalMs = (seconds ? seconds : 10) * 1000;
 

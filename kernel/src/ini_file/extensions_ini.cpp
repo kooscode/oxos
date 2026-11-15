@@ -5,11 +5,11 @@
 
 namespace xk::ini_file {
 
-namespace {
-
 bool SameText(const XK_TEXT &A, const XK_TEXT &B) {
     return A.Length == B.Length && strncasecmp(A.Text, B.Text, A.Length) == 0;
 }
+
+namespace {
 
 // The value is Word, in any case.
 bool ValueIs(const INI_LINE &Line, const char *Word) {
@@ -75,7 +75,7 @@ ULONG ParseExtensions(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entrie
             }
             section.Open = true;
             section.Entry.Section = {line.Text, line.TextLength};
-            section.Entry.Enabled = true;
+            section.Entry.Enabled = false; // only enabled = yes loads it (user, 2026-11-15)
             continue;
         }
         if (!section.Open) {
@@ -106,6 +106,25 @@ ULONG ParseExtensions(const char *Text, ULONG Length, XK_EXTENSION_ENTRY *Entrie
         }
     }
     CloseSection(section, Entries, &count, Errors);
+    return count;
+}
+
+ULONG ParseOwnSettings(const char *Text, ULONG Length, XK_TEXT *Keys, XK_TEXT *Values, ULONG MaxSettings, ULONG *Errors) {
+    *Errors = 0;
+    ULONG count = 0;
+    INI_READER reader = {Text, Text + Length};
+    INI_LINE line;
+    while (NextLine(&reader, &line)) {
+        if (line.Kind == INI_LINE_KIND::SECTION || line.Kind == INI_LINE_KIND::BAD_SECTION) // the data starts: not settings
+            break;
+        if (line.Kind == INI_LINE_KIND::BAD_LINE || count == MaxSettings || line.ValueLength > XK_EXTENSION_VALUE_MAX) {
+            (*Errors)++;
+            continue;
+        }
+        Keys[count] = {line.Text, line.TextLength};
+        Values[count] = {line.Value, line.ValueLength};
+        count++;
+    }
     return count;
 }
 

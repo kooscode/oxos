@@ -7,6 +7,7 @@ usage: make_sdk_package.py PACKAGE
 PACKAGE (../build/sdk/oxos_sdk) receives:
   include/             oxos_sdk.h (what an extension includes) and oxos_kernel.h (the Xbox kernel's functions)
   oxos_extension.mk    the build rules
+  oxos_extensions.ini  the list of extensions OXOS loads, in order: a sample with the examples, for C:\OXOS\
   examples/            the examples (sources, Makefiles, READMEs; no build output)
   README.md, LICENSE
 Files from earlier runs are replaced; lib/ is left as it is.
@@ -24,7 +25,7 @@ def main():
     for part in ("include", "examples"):
         shutil.rmtree(os.path.join(package, part), ignore_errors=True)
     shutil.copytree(os.path.join(SDK, "include"), os.path.join(package, "include"))
-    for name in ("oxos_extension.mk", "README.md", "LICENSE"):
+    for name in ("oxos_extension.mk", "oxos_extensions.ini", "README.md", "LICENSE"):
         shutil.copy(os.path.join(SDK, name), os.path.join(package, name))
     for example in sorted(os.listdir(os.path.join(SDK, "examples"))):
         source = os.path.join(SDK, "examples", example)

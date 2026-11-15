@@ -43,11 +43,25 @@ void oxos_log(const char *Format, ...);
 void oxos_set_log_target(ULONG Target); // OXOS_LOG_FILE, OXOS_LOG_SERIAL, or both (the default); at any time
 
 // --- 3. Settings, the launch, the state page
+//
+// An extension's own file is C:\OXOS\extensions\NAME.ini, next to NAME.xos (the same name). It holds two kinds of things:
+//
+//   ; SETTINGS: the keys at the top, before the first [section]. Read into memory when the extension loads;
+//   ; oxos_setting() returns them at any time, also in hooks. At most 32, values up to 255 characters.
+//   buttons = back black
+//   format = png
+//
+//   ; DATA: the [sections] after the settings. Never loaded with the extension: oxos_ini_section() reads one
+//   ; section from the disk each time it is called (section 4a). No limit on sections or keys; keys may have spaces.
+//   [4D530064]
+//   Infinite Ammo = yes
+//
+// Settings still in the extension's section of oxos_extensions.ini (the older place) are used for the keys NAME.ini does not set.
 
-// The value of Key in the extension's section of oxos_extensions.ini (any case), or null. The kernel owns the text; the extension never frees it.
+// The value of the setting Key (any case), or null. The kernel owns the text; the extension never frees it.
 const char *oxos_setting(const char *Key);
 
-// The value of Key as a whole number ("interval = 10" gives 10), or Default when the setting is missing or does not start with a digit.
+// The value of the setting Key as a whole number ("interval = 10" gives 10), or Default when it is missing or does not start with a digit.
 ULONG oxos_setting_number(const char *Key, ULONG Default);
 
 ULONG oxos_launch_number(void);        // launches since the cold boot: 1 = the cold boot's title
@@ -97,6 +111,38 @@ NTSTATUS oxos_file_list(const char *Folder, char **&Names, uint32_t &Count);
 NTSTATUS oxos_directory_list(const char *Folder, char **&Names, uint32_t &Count);
 #endif
 void oxos_list_free(char **Names);
+
+#endif
+
+// --- 4a. Data: one [section] of the extension's own NAME.ini, read from the disk when asked
+//
+// oxos_ini_section reads the file now, from the disk, and keeps only Section (any case): Keys gets an array of Count keys and values, in the file's order,
+// in one block of memory that oxos_ini_free frees. The rest of the file is never held in memory, however large it is. Each call reads the file again, so
+// read a section once (in ExtensionStart or a title event) and keep what you need. Only where the disk may be read: ExtensionStart, ExtensionRunLoop,
+// ExtensionTerminate and the title events, never in a hook (STATUS_INVALID_DEVICE_STATE above PASSIVE_LEVEL). A key is the text before '=' (spaces allowed),
+// its value the rest of the line. STATUS_OBJECT_NAME_NOT_FOUND when the file or the section does not exist.
+//
+//   OXOS_INI_KEY *keys;
+//   uint32_t count;
+//   if (NT_SUCCESS(oxos_ini_section("4D530064", keys, count))) {
+//       const char *ammo = oxos_ini_value(keys, count, "Infinite Ammo");   // "yes", or null
+//       oxos_ini_free(keys);
+//   }
+
+#ifndef OXOS_SDK_IN_KERNEL // only extensions use these
+
+// One key of a section, and its value.
+typedef struct OXOS_INI_KEY {
+    const char *Key;
+    const char *Value;
+} OXOS_INI_KEY;
+
+#ifdef __cplusplus // C++: references (as oxos_file_list; C extensions do without)
+NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Count);
+#endif
+// The value of Key (any case) among the Count keys oxos_ini_section returned, or null.
+const char *oxos_ini_value(const OXOS_INI_KEY *Keys, uint32_t Count, const char *Key);
+void oxos_ini_free(OXOS_INI_KEY *Keys);
 
 #endif
 

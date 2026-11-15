@@ -18,7 +18,8 @@ typedef void (*OXOS_EVENT_CALLBACK)(const void *Data, void *UserData);
 #define OXOS_BOOT_COLD 1  // OXOS_CONTEXT::BootFlags: this launch is the cold boot's
 #define OXOS_BOOT_QUICK 2 // this launch follows a quick reboot
 
-// One setting from the extension's section in oxos_extensions.ini (§3.1). The kernel owns the strings; they stay valid until the title ends.
+// One setting (§3.1): a key at the top of the extension's own C:\OXOS\extensions\NAME.ini, or of its section in oxos_extensions.ini. The kernel owns the
+// strings; they stay valid until the title ends.
 typedef struct OXOS_SETTING {
     const char *Key;
     const char *Value;
@@ -50,7 +51,7 @@ struct OXOS_CONTEXT {
     ULONG BootFlags;           // OXOS_BOOT_*
 
     const char *SectionName;      // its section in oxos_extensions.ini
-    const OXOS_SETTING *Settings; // the section's other keys
+    const OXOS_SETTING *Settings; // its settings: the top of its own NAME.ini, then its section's other keys
     ULONG SettingCount;
     PVOID ImageBase; // where it is loaded this launch
     ULONG ImageSize;
@@ -59,6 +60,7 @@ struct OXOS_CONTEXT {
     const OXOS_API *Api;            // only during Start, null afterwards
     const OXOS_KERNEL_INFO *Kernel; // facts about the console and the title
     ULONG LogTarget;                // where oxos_log writes: OXOS_LOG_*; the kernel starts it at both
+    const char *INIPath;            // its own C:\OXOS\extensions\NAME.ini (\Device\... path), for oxos_ini_section; null from kernels before 0.4.9
 };
 
 #ifdef __cplusplus

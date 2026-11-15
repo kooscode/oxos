@@ -19,9 +19,9 @@ struct XK_EXTENSION {
     const OXOS_EXTENSION *Descriptor;
 };
 // tests/boot_test.py reads the state pages through these offsets.
-XK_SIZE(OXOS_CONTEXT, 56);
+XK_SIZE(OXOS_CONTEXT, 60);
 XK_OFFSET(OXOS_CONTEXT, State, 40);
-XK_SIZE(XK_EXTENSION, 60);
+XK_SIZE(XK_EXTENSION, 64);
 
 constexpr ULONG XK_NO_EXTENSION = 0xFFFFFFFF; // XK_EXTENSIONS_STATE::LoopExtension between RunLoop calls
 

@@ -60,7 +60,7 @@ void Rotate(const char *LogName) {
 
 } // namespace
 
-void CreateOxosFolders() {
+void CreateOXOSFolders() {
     const char *const folders[] = {OXOS_FOLDER, LOG_FOLDER, EXTENSIONS_FOLDER, CACHE_FOLDER};
     for (const char *name : folders) {
         HANDLE folder = Open(name, FILE_READ_DATA, FILE_OPEN_IF, FILE_DIRECTORY_FILE);
@@ -88,8 +88,8 @@ void AppendLogLine(const char *LogName, const char *Format, ...) {
     for (int pass = 0; pass < 2; pass++) {
         HANDLE file = Open(path, GENERIC_WRITE, FILE_OPEN_IF, FILE_NON_DIRECTORY_FILE);
         if (!file) {
-            // The folders are made at every cold boot (CreateOxosFolders); a log written before that, or after they were deleted, makes them here.
-            CreateOxosFolders();
+            // The folders are made at every cold boot (CreateOXOSFolders); a log written before that, or after they were deleted, makes them here.
+            CreateOXOSFolders();
             file = Open(path, GENERIC_WRITE, FILE_OPEN_IF, FILE_NON_DIRECTORY_FILE);
         }
         if (!file)

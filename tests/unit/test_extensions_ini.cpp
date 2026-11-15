@@ -31,7 +31,7 @@ Parsed Parse(const std::string &file, ULONG max = 8) {
 
 TEST(ExtensionList, SectionsInTheFilesOrderWithTheirSettings) {
     const std::string file = "; the extensions\r\n"
-                             "[oxos_title_patches]\r\nextension = oxos_title_patches.xos\r\n"
+                             "[oxos_title_patches]\r\nextension = oxos_title_patches.xos\r\nenabled = yes\r\n"
                              "\r\n[netlog]\r\nExtension = NetLog.xos\r\nhost = 192.168.1.10\r\nport = 9000\r\n";
     Parsed p = Parse(file);
     ASSERT_EQ(p.Entries.size(), 2u);
@@ -48,11 +48,12 @@ TEST(ExtensionList, SectionsInTheFilesOrderWithTheirSettings) {
     EXPECT_EQ(Text(p.Entries[1].Values[1]), "9000");
 }
 
-TEST(ExtensionList, EnabledNoKeepsTheSectionSwitchedOff) {
-    Parsed p = Parse("[a]\nextension = a.xos\nenabled = NO\n[b]\nenabled = yes\nextension = b.xos\n");
-    ASSERT_EQ(p.Entries.size(), 2u);
+TEST(ExtensionList, OnlyEnabledYesSwitchesASectionOn) {
+    Parsed p = Parse("[a]\nextension = a.xos\nenabled = NO\n[b]\nenabled = Yes\nextension = b.xos\n[c]\nextension = c.xos\n");
+    ASSERT_EQ(p.Entries.size(), 3u);
     EXPECT_FALSE(p.Entries[0].Enabled);
     EXPECT_TRUE(p.Entries[1].Enabled);
+    EXPECT_FALSE(p.Entries[2].Enabled); // no enabled = line: off
     EXPECT_EQ(p.Errors, 0u);
 }
 
@@ -74,8 +75,8 @@ TEST(ExtensionList, BadSectionsAreLeftOutAndCounted) {
     Parsed p = Parse(file);
     ASSERT_EQ(p.Entries.size(), 2u);
     EXPECT_EQ(Text(p.Entries[0].Section), "good");
-    EXPECT_EQ(Text(p.Entries[1].Section), "maybe"); // the bad enabled = line is counted; the section stays enabled
-    EXPECT_TRUE(p.Entries[1].Enabled);
+    EXPECT_EQ(Text(p.Entries[1].Section), "maybe"); // the bad enabled = line is counted; the section stays off
+    EXPECT_FALSE(p.Entries[1].Enabled);
     // outside, [no file], [path], [twice], [same file], enabled = maybe, [unclosed.
     EXPECT_EQ(p.Errors, 7u);
 }
@@ -104,4 +105,34 @@ TEST(ExtensionList, LongFileNamesAreRefused) {
     ASSERT_EQ(p.Entries.size(), 1u);
     EXPECT_EQ(Text(p.Entries[0].File), name);
     EXPECT_EQ(p.Errors, 1u);
+}
+
+// An extension's own file (C:\OXOS\extensions\NAME.ini): its settings are the keys before the first section; the sections are its data.
+TEST(ExtensionOwnIni, SettingsAreTheKeysBeforeTheFirstSection) {
+    std::string file = "; settings\r\nbuttons = back black\nformat = png\n\n[4D530064]\nInfinite Ammo = on\nlater = no\n";
+    XK_TEXT keys[XK_EXTENSION_SETTINGS_MAX], values[XK_EXTENSION_SETTINGS_MAX];
+    ULONG errors = 99;
+    ULONG n = ini_file::ParseOwnSettings(file.data(), (ULONG)file.size(), keys, values, XK_EXTENSION_SETTINGS_MAX, &errors);
+    ASSERT_EQ(n, 2u);
+    EXPECT_EQ(errors, 0u);
+    EXPECT_EQ(Text(keys[0]), "buttons");
+    EXPECT_EQ(Text(values[0]), "back black");
+    EXPECT_EQ(Text(keys[1]), "format");
+    EXPECT_EQ(Text(values[1]), "png");
+}
+
+TEST(ExtensionOwnIni, AFileOfOnlyDataHasNoSettings) {
+    std::string file = "[first]\nkey = value\n";
+    XK_TEXT keys[4], values[4];
+    ULONG errors = 99;
+    EXPECT_EQ(ini_file::ParseOwnSettings(file.data(), (ULONG)file.size(), keys, values, 4, &errors), 0u);
+    EXPECT_EQ(errors, 0u);
+}
+
+TEST(ExtensionOwnIni, TooManySettingsALongValueOrABadLineAreCounted) {
+    std::string file = "a = 1\nb = 2\nc = 3\nnot a setting\nd = " + std::string(XK_EXTENSION_VALUE_MAX + 1, 'x') + "\n";
+    XK_TEXT keys[2], values[2];
+    ULONG errors = 0;
+    EXPECT_EQ(ini_file::ParseOwnSettings(file.data(), (ULONG)file.size(), keys, values, 2, &errors), 2u);
+    EXPECT_EQ(errors, 3u); // c past the limit, the line without '=', d's long value
 }
