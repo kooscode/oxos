@@ -9,7 +9,7 @@ at its own fixed address (ADDRESS, mapped only while it runs) and calls the kern
 kernel's map and given to the loader's link as an absolute symbol at the kernel's address, so its calls and data references go straight to this kernel build. A
 symbol the kernel does not have, or one in the kernel's boot-only sections (freed before the first title, spec/oxos_internal/18), stops the build.
 """
-import argparse, os, re, struct, subprocess, sys, tempfile
+import argparse, glob, os, re, shutil, struct, subprocess, sys, tempfile
 
 
 def kernel_symbols(map_path):
@@ -38,6 +38,15 @@ def discardable_ranges(exe_path):
     return ranges
 
 
+def find_llvm_nm():
+    """llvm-nm of any LLVM version: the plain name on the PATH, else the newest installed one (Ubuntu's llvm packages install only llvm-nm-NN and
+    /usr/lib/llvm-NN/bin/llvm-nm)."""
+    if shutil.which("llvm-nm"):
+        return "llvm-nm"
+    found = glob.glob("/usr/lib/llvm-*/bin/llvm-nm") + glob.glob("/usr/bin/llvm-nm-[0-9]*")
+    return max(found, key=lambda path: int(re.findall(r"\d+", path)[-1])) if found else "llvm-nm"
+
+
 def needed_symbols(objects, nm):
     """The symbols the objects use and do not define."""
     defined, undefined = set(), set()
@@ -58,7 +67,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--linker", default="lld-link")
     ap.add_argument("--cc", default="clang")
-    ap.add_argument("--nm", default="llvm-nm-18")
+    ap.add_argument("--nm", default=find_llvm_nm())
     ap.add_argument("objects", nargs="+")
     a = ap.parse_args()
 

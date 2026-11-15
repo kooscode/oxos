@@ -133,7 +133,9 @@ void NTAPI CompleteRequest(PKAPC Apc, PKNORMAL_ROUTINE *, PVOID *, PVOID *System
     PIO_APC_ROUTINE apcRoutine = irp->Overlay.AsynchronousParameters.UserApcRoutine;
     PVOID apcContext = irp->Overlay.AsynchronousParameters.UserApcContext;
     if (apcRoutine) {
-        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), UserApcKernelRoutine, UserApcRundown, (PKNORMAL_ROUTINE)apcRoutine,
+        // The APC calls it as its normal routine: three 32-bit arguments, stdcall, the same call. Cast through void (*)(), the generic function pointer,
+        // which clang 19+ accepts (-Wcast-function-type-mismatch).
+        KeInitializeApc(&irp->Tail.Apc, KeGetCurrentThread(), UserApcKernelRoutine, UserApcRundown, (PKNORMAL_ROUTINE)(void (*)())apcRoutine,
                         apcRoutine == NtUserIoApcDispatcher ? UserMode : KernelMode, apcContext);
         KeInsertQueueApc(&irp->Tail.Apc, irp->UserIosb, nullptr, 2);
     } else if (port && apcContext) {

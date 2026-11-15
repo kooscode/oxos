@@ -207,7 +207,9 @@ XBAPI NTSTATUS NTAPI NtSetTimerEx(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PT
         KeRemoveQueueDpc(&t->TimerDpc);
         t->ApcAssociated = TimerApcRoutine != nullptr;
         if (TimerApcRoutine) {
-            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), TimerApcKernelRoutine, nullptr, (PKNORMAL_ROUTINE)TimerApcRoutine, ApcMode, TimerContext);
+            // Called as the APC's normal routine (three 32-bit arguments, stdcall); cast through void (*)() for clang 19+ (as in io_requests.cpp).
+            KeInitializeApc(&t->TimerApc, KeGetCurrentThread(), TimerApcKernelRoutine, nullptr, (PKNORMAL_ROUTINE)(void (*)())TimerApcRoutine, ApcMode,
+                            TimerContext);
         }
         KeSetTimerEx(&t->KeTimer, *DueTime, Period, &t->TimerDpc);
         KfLowerIrql(old);

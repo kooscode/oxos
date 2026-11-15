@@ -213,7 +213,7 @@ $(TEST_TITLE).xbe: $(TEST_TITLE).exe $(ROOT)/tools/mkxbe.py
 CROMWELL_DIR    := $(abspath $(ROOT)/third_party/cromwell)
 CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
 MCPX16          ?= 0
-OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) /usr/lib/llvm-18/bin/llvm-objcopy)
+OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) $(lastword $(sort $(wildcard /usr/lib/llvm-*/bin/llvm-objcopy))))  # any LLVM version
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Isrc \

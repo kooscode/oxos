@@ -7,7 +7,8 @@ code is used; the video encoder and NV2A pad calibration tables are the one data
 1.4, Xcalibur on a 1.6, whose image has its own X-codes: `MCPX16=1`). It builds on Linux with clang + lld-link.
 
 ## Setting up
-Tested on Ubuntu 24.04 with clang/lld 18, Python 3.12 and xemu 0.8.136; other Linux distributions work with the same packages under their own names.
+Tested on Ubuntu 24.04 with clang/lld 18 (the kernel, BIOS images and SDK also build with clang/lld 22), Python 3.12 and xemu 0.8.136; other Linux distributions
+work with the same packages under their own names.
 
 1. **Build tools:** `sudo apt install git make clang lld llvm` (`llvm` provides `llvm-objcopy`; the build scripts use the Python 3 that comes with Ubuntu).
 2. **xemu:** download the AppImage from [xemu.app](https://xemu.app) and put it at `~/.local/bin/xemu` (or anywhere on `PATH` as `xemu`):
