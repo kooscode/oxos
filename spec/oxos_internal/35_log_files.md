@@ -10,8 +10,8 @@ to text files on the hard disk instead.
 
 ## 1. Where and how
 - **Folder:** `C:\OXOS\log\` (`\Device\Harddisk0\Partition2\OXOS\log`: C: on a FATX disk, the `C` folder of an exFAT disk). The kernel creates it, with
-  `C:\OXOS` and `C:\OXOS\extensions` (`diagnostics::CreateOxosFolders`), at every cold boot when they are missing (user, 2026-11-14), and again before a line
-  when they were deleted since.
+  `C:\OXOS`, `C:\OXOS\extensions` and `C:\OXOS\cache` (`diagnostics::CreateOxosFolders`), at every cold boot when they are missing (user, 2026-11-14), and again
+  before a line when they were deleted since.
 - **Files:** one per subject, named by its user, e.g. `extensions.log`. Created when missing; lines are appended, never rewritten.
 - **Rotation at 10 MB:** before a line would take `NAME.log` past 10 MB, every old part moves up one (`NAME_2.log` to `NAME_3.log`, ...), `NAME.log` becomes
   `NAME_1.log`, and the line starts a new `NAME.log`. So `NAME.log` is always the current part and `NAME_1.log` the newest old one (user, 2026-11-14). Old parts

@@ -79,7 +79,8 @@ make test_format                # formatting at boot: a blank disk, a deleted-pa
 make test_upload                # the File Manager: upload, create, delete and launch over xemu's network, exFAT and FATX disks
 make test_iso                   # disc images through the ISO launcher: one .iso, a split pair, a .cci, an image over 4 GB
 make test_udf                   # the self-tests with a UDF (DVD-video) disc instead of an XISO
-make test_exfat                 # the self-tests on an exFAT disk (xemu_state/oxos_xemu_exfat/): E: as a folder
+make test_exfat                 # the self-tests on an exFAT disk (xemu_state/oxos_xemu_exfat/): E: as a folder; then a cold boot of the disk
+                                # they left, with the release kernel: X:'s cache format kept across the power-off
 make test_extensions            # kernel extensions: the SDK, its examples and tests/extensions/ on a test disk, a cold boot and two quick reboots
 make -C ../sdk [VERSION=X.Y.Z]  # the kernel extension SDK (../sdk/README.md) into ../build/sdk/oxos_sdk/, its examples built with it; VERSION: the zip
 make test_encoders              # the three video encoders (Conexant, Focus, Xcalibur) on xemu's models: probe, mode sets, options
@@ -270,7 +271,7 @@ console.
 | 37 | The X button opens the File Manager: during the boot splash, or on the No Dashboard Found screen; a boot-only USB host (OHCI, hubs, Xbox pads) | oxos/32 | ✅ xemu (`test_upload`, `test_format`, a virtual pad) |
 | 38 | Launch redirects: `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches | oxos/33 | ✅ unit tests, xemu (`test_relaunch --redirect`), console (debug kit) |
 | 39 | Kernel extensions: `.xos` files loaded before each title (hooks, title events, one run loop, state pages), their loader run from a disk cache, and the kernel extension SDK (`../sdk/`) with the C library and file functions the kernel exports | oxos/34 | ✅ unit tests, xemu (`test_extensions`) |
-| 40 | Log files in `C:\OXOS\log`, rotated at 10 MB; `C:\OXOS`, `log` and `extensions` made at every cold boot | oxos/35 | ✅ xemu (`test`, `test_upload`) |
+| 40 | Log files in `C:\OXOS\log`, rotated at 10 MB; `C:\OXOS`, `log`, `extensions` and `cache` made at every cold boot; exFAT cache partitions' formats kept across a power-off (`cache\oxos_cache_partitions.cache`) | oxos/35, oxos/05 | ✅ xemu (`test`, `test_upload`, `test_exfat`) |
 | 41 | exFAT names follow exFAT's rules: up to 255 characters, Latin-1, no path limit (FATX keeps its 42) | oxos/05, oxos/07 | ✅ xemu (`test_exfat`) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11, `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`,
@@ -285,9 +286,9 @@ are absent in the reference as well).
 - `HalReturnToFirmware` resets through the SMC alone and writes port 0xCF9 only if the console is still running two seconds later; the reference writes 0xCF9 at
   once (`../spec/oxos_internal/22_in_game_reset.md` §7).
 - IRQ 8 (RTC) and IRQ 11 (SMBus), which the reference enables at start-up, stay masked: no RTC interrupts are used and the SMBus is polled.
-- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously, and the serial and cluster size it writes are kept across quick
-  reboots but not a power cycle (`/OXOS/partitions.ini` is not written yet), so a title may format its cache again after a cold boot; exFAT names with
-  characters outside Latin-1 are not shown (the kernel's names are 8-bit), and Latin-1 letters such as é and É compare as different names.
+- exFAT (milestone 19): a title's cache format empties the folder in place, synchronously (the serial and cluster size it writes are kept in
+  `C:\OXOS\cache\oxos_cache_partitions.cache`); exFAT names with characters outside Latin-1 are not shown (the kernel's names are 8-bit), and Latin-1 letters
+  such as é and É compare as different names.
 - No DVD drive (`../spec/oxos_internal/08_no_dvd_drive.md`): the console boots to the dashboard with `\Device\CdRom0` acting as an empty drive, where the
   reference stops with fatal error 10, 11 or 12.
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.

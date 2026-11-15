@@ -299,6 +299,9 @@ extern const HDDFS_FORMAT EXFATFormat;
 // Shared by the two exFAT files: directory_exfat.cpp's slots and folder walks, volume_exfat.cpp's cluster helpers.
 NTSTATUS EXFATMapSlot(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, PUCHAR *Entry, LONGLONG *Block);
 bool EXFATIsCacheFolder(HDDFS_VOLUME *v); // X:, Y: or Z:
+#if XK_BOOT_SELFTEST
+void EXFATForgetCachePartitions(); // the boot self-tests: forget X/Y/Z's formats, as a power-off does (volume_exfat.cpp)
+#endif
 NTSTATUS EXFATWalk(HDDFS_VOLUME *v, HDDFS_FCB *dir, bool Delete, ULONG Depth, ULONG *Used);
 NTSTATUS EXFATCountFolder(HDDFS_VOLUME *v);
 NTSTATUS EXFATZeroCluster(HDDFS_VOLUME *v, ULONG Cluster);

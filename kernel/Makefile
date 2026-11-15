@@ -129,6 +129,8 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),gamepad::WaitForXButton
 BOOT_ENTRIES := $(BOOT_ENTRIES),storage::BlankDiskCountdown,storage::IsDiskBlank,storage::DescribeDisk
 # The kernel extension loader's cache, written at a cold boot from the boot-only copy (extensions/extension_runtime_loader.cpp).
 BOOT_ENTRIES := $(BOOT_ENTRIES),extensions::WriteLoaderCache
+# The cache partitions' formats, read at a cold boot on an exFAT disk (filesystems/hddfs/volume_exfat.cpp); the self-tests call it too.
+BOOT_ENTRIES := $(BOOT_ENTRIES),filesystems::ReadCachePartitions
 # The netboot title's installation (titles/title_netboot.cpp): a package only ever comes with a cold boot.
 BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchNetbootTitle
 # The cold boot's launch choice and the File Manager (titles/title_loader.cpp).
@@ -363,9 +365,16 @@ $(EXFAT_HDD): $(HDD_FETCH)
 	printf 'stale FAT tail test' > $(EXFAT_STATE)/stale.bin
 	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K \
 	    --add /E/XkStale.stale=$(EXFAT_STATE)/stale.bin
+# Then a cold boot of the disk the first run left, with the release kernel (no self-tests to format X: again): the title finds X:'s format from the first
+# boot, kept in C:\OXOS\cache\oxos_cache_partitions.cache (spec/oxos_internal/05 §5).
 test_exfat: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(EXFAT_HDD)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	rm -f $(EXFAT_STATE)/after_first_boot.qcow2
 	python3 -I $(ROOT)/tests/boot_test.py --bios $< $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(BUILD)/oxoskrnl.map \
-	    --hdd $(EXFAT_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
+	    --hdd $(EXFAT_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map --keep-hdd $(EXFAT_STATE)/after_first_boot.qcow2
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin --map $(RELEASE_BUILD)/oxoskrnl.map \
+	    --hdd $(EXFAT_STATE)/after_first_boot.qcow2 --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map --kept-cache-format; \
+	    status=$$?; rm -f $(EXFAT_STATE)/after_first_boot.qcow2; exit $$status
 
 # With a real MCPX boot ROM (MCPX_ROM=...): the dashboard phase again, reached through the overflow trick.
 test_mcpx: $(HDD_FETCH)

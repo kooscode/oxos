@@ -5,7 +5,9 @@
 #include <io/io.h>
 #include <runtime/runtime.h>
 #include <core/core.h>
+#include <memory/memory.h>
 #include <filesystems/filesystems.h>
+#include <filesystems/hddfs/hddfs.h>
 #include <diagnostics/diagnostics.h>
 
 using namespace xk; // the kernel's subsystems as storage::, memory::, ...
@@ -28,6 +30,8 @@ volatile ULONG KiTestEXFATStaleOk, KiTestEXFATPreallocOk;
 volatile ULONG KiTestEXFATLargeOk;
 // exFAT: names of 255 characters, Latin-1 ones among them, created, listed, opened in another case, renamed and deleted (EXFATLongNameTest).
 volatile ULONG KiTestEXFATLongNameOk;
+// exFAT: X:'s format kept in C:\OXOS\cache\oxos_cache_partitions.cache, and X: mounted with it again after the kernel forgot it, as after a power-off.
+volatile ULONG KiTestEXFATKeptFormatOk;
 
 // A path in the title's D: folder reports 2048-byte sectors (spec/oxos_internal/25 §2).
 volatile ULONG KiTestFATXTitleFolderOk;
@@ -332,6 +336,34 @@ static void EXFATFormatTest(PUCHAR buf) {
         NtClose(hv);
     }
     KiTestEXFATFormatOk = ok;
+    // The format on the disk (spec/oxos_internal/05 §3): the file has X:'s serial and cluster size; with them forgotten, as a power-off does, and read back
+    // from the file as a cold boot does, X: mounts again with them.
+    ULONG saved[16] = {};
+    bool kept = Open(&hv, "\\Device\\Harddisk0\\Partition2\\OXOS\\cache\\oxos_cache_partitions.cache", GENERIC_READ, FILE_OPEN,
+                     FILE_NON_DIRECTORY_FILE) == 0;
+    if (kept) {
+        LARGE_INTEGER at = {};
+        kept = NT_SUCCESS(NtReadFile(hv, nullptr, nullptr, nullptr, &iosb, saved, sizeof(saved), &at)) && iosb.Information == 64;
+        NtClose(hv);
+    }
+    kept &= saved[0] == 0x50434F58 && saved[1] == 1 && saved[2 + 3] == 0x12345678 && saved[9 + 3] == 128; // "XOCP", version, X: is partition 3
+    filesystems::EXFATForgetCachePartitions();
+    if (memory::BootPagesPresent())
+        filesystems::ReadCachePartitions();
+    kept &= Open(&hv, "\\Device\\Harddisk0\\Partition3", GENERIC_READ, FILE_OPEN, 0) == 0;
+    if (kept) {
+        NtFsControlFile(hv, nullptr, nullptr, nullptr, &iosb, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0);
+        NtClose(hv);
+        kept = Open(&hv, "\\Device\\Harddisk0\\Partition3\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0;
+    }
+    if (kept) {
+        ULONG size[6] = {}, vol[8] = {};
+        NtQueryVolumeInformationFile(hv, &iosb, size, sizeof(size), FileFsSizeInformation);
+        NtQueryVolumeInformationFile(hv, &iosb, vol, 18, FileFsVolumeInformation);
+        kept = vol[2] == 0x12345678 && size[4] == 128;
+        NtClose(hv);
+    }
+    KiTestEXFATKeptFormatOk = kept;
     // E: is not a cache partition: the header write is refused and nothing changes.
     KiTestEXFATRefuseOk = FormatLikeATitle("\\Device\\Harddisk0\\Partition1", buf) == STATUS_ACCESS_DENIED;
 }

@@ -54,13 +54,13 @@ enum : ULONG {
     I_KeTickCount, I_XeImageFileName, I_ExAllocatePoolWithTag, I_ExFreePool, I_NtOpenFile, I_NtReadFile, I_NtClose,
     I_PsCreateSystemThread, I_NtWaitForSingleObject, I_KeDelayExecutionThread, I_IoCreateSymbolicLink,
     I_XeLoadSection, I_XeUnloadSection, I_XcSHAInit, I_XcSHAUpdate, I_XcSHAFinal, I_MmAllocateContiguousMemory,
-    I_MmPersistContiguousMemory, I_MmFreeContiguousMemory, I_LaunchDataPage, I_HalReturnToFirmware, I_COUNT
+    I_MmPersistContiguousMemory, I_MmFreeContiguousMemory, I_LaunchDataPage, I_HalReturnToFirmware, I_NtQueryVolumeInformationFile, I_COUNT
 };
 extern "C" ULONG XkThunks[I_COUNT + 1] = {
     0x80000000 | 156, 0x80000000 | 326, 0x80000000 | 15,  0x80000000 | 17,  0x80000000 | 202, 0x80000000 | 219,
     0x80000000 | 187, 0x80000000 | 254, 0x80000000 | 233, 0x80000000 | 99,  0x80000000 | 67,  0x80000000 | 327,
     0x80000000 | 328, 0x80000000 | 335, 0x80000000 | 336, 0x80000000 | 337,
-    0x80000000 | 165, 0x80000000 | 178, 0x80000000 | 171, 0x80000000 | 164, 0x80000000 | 49,  0};
+    0x80000000 | 165, 0x80000000 | 178, 0x80000000 | 171, 0x80000000 | 164, 0x80000000 | 49,  0x80000000 | 218, 0};
 #define K(name, type) ((type)XkThunks[I_##name])
 
 // The results boot_test.py reads; each test sets its field to 1 when it passes.
@@ -88,6 +88,9 @@ extern "C" volatile RESULTS XkTitleResults = {};
 extern "C" volatile unsigned int XkTitlePatchA = 0x11111111, XkTitlePatchB = 0x22222222,
                                     XkTitlePatchC = 0x33333333;
 __attribute__((section(".extra"))) extern "C" const char XkExtraData[] = "data from a section loaded on demand";
+// The cache partition X:'s volume serial and sectors per cluster as the title finds them: on an exFAT disk, the format a title gave it before a power-off,
+// kept in C:\OXOS\cache\oxos_cache_partitions.cache (spec/oxos_internal/05 §5; boot_test.py --kept-cache-format checks them).
+extern "C" volatile unsigned int XkTitleCacheSerial = 0, XkTitleCacheSpc = 0;
 
 // --- Helpers (the title has no C library)
 
@@ -223,6 +226,26 @@ extern "C" void __cdecl XkTitleEntry() {
     auto name = (STRING *)XkThunks[I_XeImageFileName];
     for (ULONG i = 0; i < name->Length && i < sizeof(r.ImageName) - 1; i++)
         r.ImageName[i] = name->Buffer[i];
+
+    // X:'s format, as a title that keeps its cache there would read it (FileFsVolumeInformation: the serial at +8; FileFsSizeInformation: the sectors per
+    // allocation unit at +16).
+    {
+        STRING s;
+        Init(&s, "\\Device\\Harddisk0\\Partition3\\");
+        OBJECT_ATTRIBUTES a = {nullptr, &s, 0x40};
+        IO_STATUS_BLOCK iosb;
+        HANDLE h;
+        auto open = K(NtOpenFile, NTSTATUS(NTAPI *)(HANDLE *, ULONG, OBJECT_ATTRIBUTES *, IO_STATUS_BLOCK *, ULONG, ULONG));
+        if (open(&h, 0x80000000 | 0x100000, &a, &iosb, 3, 0x20 | 1) >= 0) {
+            auto query = K(NtQueryVolumeInformationFile, NTSTATUS(NTAPI *)(HANDLE, IO_STATUS_BLOCK *, PVOID, ULONG, ULONG));
+            ULONG volume[8] = {}, size[6] = {};
+            if (query(h, &iosb, volume, 18, 1) >= 0)
+                XkTitleCacheSerial = volume[2];
+            if (query(h, &iosb, size, sizeof(size), 3) >= 0)
+                XkTitleCacheSpc = size[4];
+            K(NtClose, NTSTATUS(NTAPI *)(HANDLE))(h);
+        }
+    }
 
     // Test 2: the clock ticks. KeTickCount (milliseconds) must advance by about 30 during a 30 ms sleep, which needs the timer interrupt and
     // KeDelayExecutionThread to work.

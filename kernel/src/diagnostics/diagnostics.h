@@ -56,8 +56,8 @@ extern volatile ULONG DebugLogPosition;                        // characters wri
 // missing; a log that would pass 10 MB is rotated first (LogName_1.log the newest old part, spec/oxos_internal/35). PASSIVE_LEVEL only (it does nothing at a
 // raised IRQL); nothing is written when the disk has no C: or refuses.
 void AppendLogLine(const char *LogName, const char *Format, ...);
-// C:\OXOS, C:\OXOS\log and C:\OXOS\extensions, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine when its log cannot
-// be opened.
+// C:\OXOS, C:\OXOS\log, C:\OXOS\extensions and C:\OXOS\cache, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine
+// when its log cannot be opened.
 void CreateOxosFolders();
 
 } // namespace xk::diagnostics

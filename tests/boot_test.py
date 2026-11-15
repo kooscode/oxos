@@ -415,6 +415,8 @@ def exfat_format_checks(mon, q):
     clusters = (length - 0x1000 - fat) // cluster
     return {
         "X: formatted through its volume handle: folder emptied, header serial shown": mon.read("KiTestEXFATFormatOk") == 1,
+        "X:'s format kept in C:\\OXOS\\cache\\oxos_cache_partitions.cache, and X: mounted with it after it was forgotten (a power-off)":
+            mon.read("KiTestEXFATKeptFormatOk") == 1,
         "X: reports a 750 MB FATX volume in the format's cluster size, only its root directory in use": spc == 128 and total == clusters and free == total - 1,
         "E: refuses a format through its volume handle": mon.read("KiTestEXFATRefuseOk") == 1,
         "allocations through E: and Y: in turn succeed (the volume check below finds lost bitmap bits)": mon.read("KiTestEXFATCrossOk") == 1,
@@ -600,6 +602,26 @@ def extension_checks(mon, launches, hdd):
         f"plain C extension: {launches} Loads and loaded titles, its setting": p[1] == launches and p[2] == launches and p[5] == 1,
         "the kernel's memcpy, memset, memcmp and 64-bit division for extensions (exports 402-415)": p[3] == 1 and p[4] == 1,
     }
+
+
+def kept_cache_format_checks(mon, title_map):
+    """The second boot of test_exfat's disk, with the release kernel (no self-tests): X:'s format from the first boot (serial 0x12345678, 64 KB clusters,
+    written by the FATX suite's title-style format) must come back from C:\\OXOS\\cache\\oxos_cache_partitions.cache after the cold boot, as the test
+    title reads it (spec/oxos_internal/05 §5)."""
+    if not title_map:
+        return {"test title built": False}
+    syms = map_symbols(title_map)
+    def word(name):
+        return int(mon.hmp(f"x/1wx {syms[name]:#x}").split(":")[1].split()[0], 16)
+    for _ in range(160):  # the title's results are complete once its magic is there
+        if word("_XkTitleResults") == 0x54544B58:
+            break
+        time.sleep(0.25)
+    mon.pause()
+    serial, spc = word("_XkTitleCacheSerial"), word("_XkTitleCacheSpc")
+    mon.resume()
+    return {f"X: after a cold boot keeps the format of the boot before: serial {serial:#x} (0x12345678), {spc} sectors per cluster (128)":
+            serial == 0x12345678 and spc == 128}
 
 
 def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False):
@@ -976,13 +998,13 @@ def upload_checks(mon, port, xbe, fs="exFAT"):
     if fs == "exFAT":
         status, empty = request("GET", "/api/list?path=%2FY")  # a fresh disk: Y: is an empty folder
         checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
-        # C: holds only what the kernel makes at every boot: C:\OXOS, with its log and extensions folders (spec/oxos_internal/34 §3, 35)
+        # C: holds only what the kernel makes at every boot: C:\OXOS, with its log, extensions and cache folders (spec/oxos_internal/34 §3, 35)
         status, c = request("GET", "/api/list?path=%2FC")
         checks[f"C: on a fresh disk holds only the OXOS folder made at boot ({status} {c[:60]!r})"] = \
             status == 200 and [(e["name"], e["dir"]) for e in json.loads(c)] == [("OXOS", True)]
         status, o = request("GET", "/api/list?path=%2FC%2FOXOS")
-        checks[f"C:\\OXOS holds the extensions and log folders made at boot ({status} {o[:80]!r})"] = \
-            status == 200 and sorted((e["name"], e["dir"]) for e in json.loads(o)) == [("extensions", True), ("log", True)]
+        checks[f"C:\\OXOS holds the cache, extensions and log folders made at boot ({status} {o[:80]!r})"] = \
+            status == 200 and sorted((e["name"], e["dir"]) for e in json.loads(o)) == [("cache", True), ("extensions", True), ("log", True)]
     status, _ = request("GET", "/api/list?path=%2FE%2F..")
     checks["'..' in a path is refused (400)"] = status == 400
     status, _ = request("PUT", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin", b"x" * 1000)
@@ -1283,6 +1305,8 @@ def main():
     ap.add_argument("--title", help="the kernel test title's XBE (tests/kernel_test_title), placed on the disc as default.xbe")
     ap.add_argument("--title-map")
     ap.add_argument("--relaunch", action="store_true", help="check the title's quick-reboot relaunch instead")
+    ap.add_argument("--kept-cache-format", action="store_true",
+                    help="a second boot of test_exfat's kept disk: X:'s format from the first boot, as the title reads it after a cold boot")
     ap.add_argument("--extensions", metavar="DIR", help="with --relaunch: the test extensions built in DIR "
                     "(tests/extensions) and an oxos_extensions.ini on the test disk (spec/oxos_internal/34 §9.3)")
     ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\oxos_launch_redirect.ini: "
@@ -1395,6 +1419,8 @@ def main():
                                               pad if a.x_at_error else None)
         elif a.dash:
             results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox, a.xbl)
+        elif a.kept_cache_format:
+            results = {"exFAT cache partitions": kept_cache_format_checks(mon, a.title_map)}
         elif a.relaunch:
             results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions)), "RAM": ram_checks(mon, a.memory)}
             if a.extensions:

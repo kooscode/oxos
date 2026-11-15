@@ -43,7 +43,8 @@ After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT di
   access, as the spec says.
 - **Free-space arithmetic** in titles and the stock dashboard on E:/C: (32-bit wrap): covered by the 2 TB cap; the compatibility pass checks it, and the cap can
   be lowered if a title needs it.
-- **Performance of directory walks** for usage accounting on large folders: cache the totals in `/OXOS/partitions.ini` and update them incrementally.
+- **Performance of directory walks** for usage accounting on large folders: cache the totals in a file in `C:\OXOS\cache\` (next to
+  `oxos_cache_partitions.cache`) and update them incrementally.
 - **Power loss:** exFAT has no journal. Keep writes ordered (data, then bitmap, then directory entry) and mark the volume dirty while mounted, as the exFAT spec
   describes, so a PC's check can repair it.
 

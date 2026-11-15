@@ -96,9 +96,61 @@ NTSTATUS EXFATFreeFile(HDDFS_VOLUME *v, HDDFS_FCB *f) {
 // freshly formatted FATX volume. E:, C: and F: refuse to be formatted this way.
 
 // The serial and sectors per cluster of the last header written to X/Y/Z, shown by later mounts and kept across quick reboots (a title formats, starts another
-// title or the dashboard, and is started again).
+// title or the dashboard, and is started again), and across a power-off in C:\OXOS\cache\oxos_cache_partitions.cache.
 XK_PERSIST static ULONG EXFATFormatSerial[7];
 XK_PERSIST static ULONG EXFATFormatSpc[7];
+
+// --- The cache partitions' formats on the disk (spec/oxos_internal/05 §3): written after a title formats X/Y/Z, outside the driver's lock (the file is on
+// C:, a folder of the same exFAT volume); read at a cold boot (a quick reboot keeps them in the arrays above).
+
+constexpr char CACHE_PARTITIONS_FILE[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\cache\\oxos_cache_partitions.cache";
+constexpr ULONG CACHE_PARTITIONS_MAGIC = 0x50434F58, CACHE_PARTITIONS_VERSION = 1; // "XOCP"
+
+struct CACHE_PARTITIONS {
+    ULONG Magic, Version;
+    ULONG Serial[7], Spc[7]; // EXFATFormatSerial, EXFATFormatSpc
+};
+
+#pragma code_seg(".xkb")
+void ReadCachePartitions() {
+    if (!storage::DiskHasEXFATLayout)
+        return;
+    HANDLE file;
+    if (!NT_SUCCESS(io::OpenFile(CACHE_PARTITIONS_FILE, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &file)))
+        return;
+    CACHE_PARTITIONS saved = {};
+    IO_STATUS_BLOCK iosb;
+    LARGE_INTEGER at;
+    at.QuadPart = 0;
+    bool read = NT_SUCCESS(NtReadFile(file, nullptr, nullptr, nullptr, &iosb, &saved, sizeof(saved), &at)) && iosb.Information == sizeof(saved);
+    NtClose(file);
+    if (!read || saved.Magic != CACHE_PARTITIONS_MAGIC || saved.Version != CACHE_PARTITIONS_VERSION)
+        return;
+    memcpy(EXFATFormatSerial, saved.Serial, sizeof(EXFATFormatSerial));
+    memcpy(EXFATFormatSpc, saved.Spc, sizeof(EXFATFormatSpc));
+}
+#pragma code_seg()
+
+static void WriteCachePartitions() {
+    CACHE_PARTITIONS saved = {CACHE_PARTITIONS_MAGIC, CACHE_PARTITIONS_VERSION, {}, {}};
+    memcpy(saved.Serial, EXFATFormatSerial, sizeof(saved.Serial));
+    memcpy(saved.Spc, EXFATFormatSpc, sizeof(saved.Spc));
+    HANDLE file;
+    if (!NT_SUCCESS(io::CreateFile(CACHE_PARTITIONS_FILE, GENERIC_WRITE, 0, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &file)))
+        return;
+    IO_STATUS_BLOCK iosb;
+    LARGE_INTEGER at;
+    at.QuadPart = 0;
+    NtWriteFile(file, nullptr, nullptr, nullptr, &iosb, &saved, sizeof(saved), &at);
+    NtClose(file);
+}
+
+#if XK_BOOT_SELFTEST
+void EXFATForgetCachePartitions() {
+    memset(EXFATFormatSerial, 0, sizeof(EXFATFormatSerial));
+    memset(EXFATFormatSpc, 0, sizeof(EXFATFormatSpc));
+}
+#endif
 
 // The FATX cluster size a folder partition shows: the one its last format chose, else 16 KB.
 static ULONG EXFATFormattedClusterBytes(HDDFS_VOLUME *v) {
@@ -126,6 +178,7 @@ NTSTATUS EXFATVolumeTransfer(HDDFS_VOLUME *v, PIRP Irp) {
     EXFATFormattedLayout(v, &entrySize, &rootAt);
     LONGLONG metaEnd = rootAt + EXFATFormattedClusterBytes(v);
     NTSTATUS status = STATUS_SUCCESS;
+    bool formatted = false;
     HDDFSAcquireVolume(v);
     if (offset < 0 || offset + length > v->ReportedLength) {
         status = STATUS_INVALID_PARAMETER;
@@ -156,12 +209,15 @@ NTSTATUS EXFATVolumeTransfer(HDDFS_VOLUME *v, PIRP Irp) {
                 EXFATFormatSerial[v->PartitionNumber] = v->SerialNumber = ((PULONG)buffer)[1];
                 ULONG spc = ((PULONG)buffer)[2]; // a FATX mount accepts powers of two from 4 KB to 64 KB clusters
                 EXFATFormatSpc[v->PartitionNumber] = (spc >= 8 && spc <= 128 && !(spc & (spc - 1))) ? spc : 0;
+                formatted = true;
             }
         }
     } else if (offset + length > metaEnd || !EXFATIsCacheFolder(v)) {
         status = STATUS_ACCESS_DENIED; // only the format's own metadata writes are expected
     }
     HDDFSReleaseVolume(v);
+    if (formatted)
+        WriteCachePartitions();
     Irp->IoStatus.Status = status;
     Irp->IoStatus.Information = NT_SUCCESS(status) ? length : 0;
     IofCompleteRequest(Irp, 0);

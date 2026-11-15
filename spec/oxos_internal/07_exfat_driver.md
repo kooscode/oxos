@@ -123,9 +123,11 @@ bit 7 clear is a deleted entry.
   counted.
 - **Usage:** X/Y/Z count their folder's clusters at mount and on each allocation and free; an allocation that would take a folder past 750 MB fails with
   STATUS_DISK_FULL, as a full FATX partition would.
-- **Differences from the storage spec, for now:** the folder is emptied in place, synchronously (no trash folder, no background delete); the recorded serial and
-  cluster size live in memory only (`/OXOS/partitions.ini` is not written yet): they survive quick reboots (title to title) but a cold boot shows the volume's
-  own serial and 16 KB clusters again, so a title may format its cache partition again after a power cycle.
+- **Differences from the storage spec, for now:** the folder is emptied in place, synchronously (no trash folder, no background delete). The recorded serial
+  and cluster size are kept in memory across quick reboots (title to title) and in `C:\OXOS\cache\oxos_cache_partitions.cache` across a power-off (spec 05
+  §5): written after the format once the driver's lock is released (the file is on C:, a folder of the same volume), read by the boot-only
+  `filesystems::ReadCachePartitions` at a cold boot. `make test_exfat` checks it with two boots: the self-tests format X:, then the release kernel cold-boots
+  the disk they left and the kernel test title finds X:'s serial and cluster size (`boot_test.py --kept-cache-format`).
 
 ## 3. Tests
 - `tests/exfat.py` builds GPT disks with an exFAT volume from host folders (the writer) and checks a volume completely (the checker: boot checksums, entry-set

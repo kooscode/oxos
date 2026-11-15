@@ -16,6 +16,10 @@ XBAPI NTSTATUS NTAPI FscSetCacheSize(ULONG NumberOfCachePages);
 
 namespace xk::filesystems {
 
+// The cache partitions' formats from C:\OXOS\cache\oxos_cache_partitions.cache, on an exFAT disk (filesystems/hddfs/volume_exfat.cpp): at a cold boot,
+// boot-only.
+void ReadCachePartitions();
+
 void InitCache();
 // Map the block holding `offset` (read from the device if not cached); *buffer points at `offset` itself. Every map is matched by UnmapCacheBuffer,
 // WriteCacheBuffer or DiscardCacheBuffer.

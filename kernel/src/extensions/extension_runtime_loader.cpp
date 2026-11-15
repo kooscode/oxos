@@ -16,7 +16,7 @@ namespace xk::extensions {
 
 namespace {
 
-constexpr char CACHE_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_extension_loader.cache";
+constexpr char CACHE_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\cache\\oxos_extension_loader.cache";
 constexpr char LIST_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_extensions.ini";
 constexpr ULONG POOL_TAG = 'lvOX';
 constexpr ULONG KERNEL_BASE = 0x80010000;
@@ -45,7 +45,7 @@ void WriteLoaderCache() {
         return;
     auto header = (XK_EXTENSION_LOADER_HEADER *)(KERNEL_BASE + rva);
     HANDLE file;
-    // No extensions folder: no extensions, and nothing to write.
+    // No cache folder (C:\OXOS\cache is made at every cold boot, before this): nothing to write.
     NTSTATUS status = io::CreateFile(CACHE_PATH, GENERIC_WRITE, 0, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &file);
     if (!NT_SUCCESS(status))
         return;

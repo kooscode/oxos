@@ -13,6 +13,7 @@ namespace {
 
 constexpr char OXOS_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS";
 constexpr char LOG_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\log";
+constexpr char CACHE_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\cache"; // the kernel's own caches (extension loader, cache partitions)
 constexpr char EXTENSIONS_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions"; // ready for the first extension (spec/oxos_internal/34 §3)
 // A log is rotated before a line would take it past this size: 10 MB, and 4 KB in self-test builds, where the FATX suite rotates one
 // (tests/kernel_self_tests/fatx.cpp).
@@ -60,7 +61,7 @@ void Rotate(const char *LogName) {
 } // namespace
 
 void CreateOxosFolders() {
-    const char *const folders[] = {OXOS_FOLDER, LOG_FOLDER, EXTENSIONS_FOLDER};
+    const char *const folders[] = {OXOS_FOLDER, LOG_FOLDER, EXTENSIONS_FOLDER, CACHE_FOLDER};
     for (const char *name : folders) {
         HANDLE folder = Open(name, FILE_READ_DATA, FILE_OPEN_IF, FILE_DIRECTORY_FILE);
         if (folder)

@@ -113,7 +113,10 @@ A title formats its cache partition itself, through kernel calls (traced, §8). 
   metadata area returns what a freshly formatted FATX volume holds; beyond it, zeros. (Not seen in the trace; defined so a title that verifies its format gets
   consistent data.)
 - **Any other raw write** (outside the metadata area, or not starting with `FATX` at offset 0) fails with STATUS_ACCESS_DENIED and is logged.
-- The recorded header and the partition's size live in `/OXOS/partitions.ini`, so they survive reboots.
+- The recorded header (its serial and cluster size, for X, Y and Z) lives in `C:\OXOS\cache\oxos_cache_partitions.cache` (exFAT: `/C/OXOS/cache/`), a
+  binary file the kernel writes after each such format and reads at a cold boot, so it survives a power-off (user, 2026-11-14: a cache file next to the
+  extension loader's, not an ini file: nobody edits it). Its layout: `XOCP` magic, version 1, then the 7 serials and the 7 sectors-per-cluster values by
+  partition number (64 bytes).
 
 ## 6. Size and free-space reporting
 Every virtual partition shares the one exFAT volume, so each reports its own size and free space (decided):

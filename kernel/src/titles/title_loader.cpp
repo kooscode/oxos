@@ -826,7 +826,8 @@ void LaunchAtColdBoot() {
     if (hardware::chipset::BootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
         user_interface::ShowFatalError(21);
     hardware::ide::CountDiskPowerCycle();
-    diagnostics::CreateOxosFolders(); // C:\OXOS, C:\OXOS\log and C:\OXOS\extensions exist from every boot on (spec/oxos_internal/34 §3, 35)
+    diagnostics::CreateOxosFolders(); // C:\OXOS and its log, extensions and cache folders exist from every boot on (spec/oxos_internal/34 §3, 35)
+    filesystems::ReadCachePartitions(); // an exFAT disk: X/Y/Z's formats from before a power-off (spec/oxos_internal/05 §3)
     if (RunFileManager())
         return;
     // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).
