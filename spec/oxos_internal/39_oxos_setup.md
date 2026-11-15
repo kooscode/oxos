@@ -38,7 +38,9 @@ so skipping the splash adds no wait (and they would work without an AV pack too,
 |---|---|
 | nothing | the usual boot: the splash and jingle unless skipped in the EEPROM (below), extensions, `oxos_boot.ini`, the dashboard or the disc |
 | **X** only | the File Manager (spec 32) at once |
-| **B** | **safe boot:** no extensions, none of OXOS's ini files (`oxos_boot.ini`, `oxos_extensions.ini`, `oxos_launch_redirect.ini`, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored: the splash shows, and the dashboards are tried in the built-in order (spec 19). Holding **X** during that splash opens the File Manager. Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
+| **B** | **safe boot:** every customization is skipped: no extensions, none of OXOS's ini files (`oxos_boot.ini`, `oxos_extensions.ini`, `oxos_launch_redirect.ini`, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored. The standard splash and jingle show, with **`[ SAFE MODE ]`** in yellow at the top centre; the dashboards are tried in the built-in order (spec 19). Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
+| **B**, then **X** held during the safe boot's splash | safe boot, then the File Manager |
+| **B**, then **A** held during the safe boot's splash | safe boot, then OXOS Setup (`C:\OXOS\oxos_setup.xbe`), to put a setting right |
 | **A** | OXOS Setup |
 
 Safe boot is wider than today's safe mode, which skips only the extensions and keeps launch redirects (spec 34 §3.3, §10): with B, nothing OXOS reads from the
@@ -48,6 +50,18 @@ disk or the EEPROM is used, so a console always starts the way a fresh OXOS inst
 byte of 0xC0–0xFF is free of other dashboards and BIOSes is to check): bit 0 no splash, bit 1 no jingle. The kernel reads the EEPROM before the splash
 (`hardware::chipset::InitEeprom` comes before `boot_splash::StartSplash` in `core/startup.cpp`), so a change applies at the next boot. OXOS Setup's Boot page
 sets it through one kernel call; apps do not write EEPROM bytes themselves. It stays with the console when the disk is changed, and other BIOSes ignore it.
+
+**Writing it safely.** An nxdk app runs in kernel mode and could write any EEPROM byte itself (`HalWriteSMBusValue` to the EEPROM at SMBus address 0xA8),
+but a wrong offset can damage the security section (0x00–0x2F, which holds the encrypted hard-disk key: lost, the console cannot unlock its own drive) or a
+section checksum (factory or user settings reset, wrong video standard or region). So:
+- **One kernel call writes only OXOS's byte**, at the offset the kernel knows: OXOS Setup asks for "skip the splash" or "no jingle", never for an offset. It is
+  either a new OXOS export or an OXOS-only setting number of `ExSaveNonVolatileSetting`, which another kernel refuses instead of writing anything.
+- **The EEPROM is backed up first:** the first time OXOS Setup runs, it saves all 256 bytes to `C:\OXOS\eeprom_backup.bin` (and keeps an existing one).
+  That file is what saves a console whose EEPROM is ever damaged, by OXOS or anything else.
+- **The byte is checked to be free** before it is chosen: none of the stock dashboard, XBL Dashboard, EvoX, XBMC4Gamers, Cerbios or the common EEPROM tools may
+  write it.
+- A power cut during the write can only affect that byte (each takes a few milliseconds); the kernel treats a value it does not recognise as "everything on".
+  Wear is no concern: EEPROMs are rated for about a million writes per byte.
 
 ## 2. How it could be built
 | | Built into the kernel (as the File Manager is) | An XBE in `C:\OXOS\` (`oxos_setup.xbe`), started by the kernel |
