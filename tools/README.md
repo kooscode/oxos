@@ -21,6 +21,7 @@ Python scripts for the build machine (the `kernel/Makefile` targets call them; e
 | `xbe_launcher/` | An nxdk title that launches the XBE named in its disc's `launch.txt` (e.g. `F:\apps\demo\default.xbe`) the way a dashboard does, or shows why it cannot. `make run_xbe XBE=...` builds it and a disc with it, and boots that disc on an exFAT disk. |
 | `fbshot.py` | Boots a BIOS with no disc, waits, and saves the screen (the NV2A scanout surface) as a PNG; for checking what the kernel or dashboard drew without a window. |
 | `qmphmp.py` | Sends monitor (HMP) commands to a running xemu through its QMP socket, with optional `sleep:N` steps; a small helper for poking at a running console by hand. |
+| `regression.py` | The full regression run behind `make regression`: the host unit tests, then every xemu test phase, with one summary of results, checks and times, and a log per phase in `build/regression/` ([`tests/README.md`](../tests/README.md), "Regression run"). |
 | `fetch.py` | Downloads a file and saves it only if its SHA-256 matches the pinned one; the Makefile uses it to fetch the default hard-disk image (`make hdd_image`). Python standard library only. |
 | `xemu.toml.example` | An example xemu configuration file (boot ROM, BIOS, EEPROM and hard-disk paths), for running xemu by hand. |
 

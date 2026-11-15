@@ -696,6 +696,11 @@ test_memory: $(MEMORY_XBE) $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/memory_test.py --bios $(or $(MEMORY_BIOS),$(RELEASE_BUILD)/bios.bin) --xbe $(MEMORY_XBE) \
 	    --both --memory $(or $(MEMORY),64) --hdd $(HDD_IMAGE) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
 
+# The full regression run (tests/README.md, "Regression run"): the host unit tests and every xemu phase above, one after another, with one summary in
+# build/regression/. MCPX_ROM=... is used for test_mcpx only (skipped without it); ONLY=test_exfat,test_iso runs some phases.
+regression:
+	python3 -I $(ROOT)/tools/regression.py $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(ONLY),--only $(ONLY))
+
 # The same session on the reference BIOS (A/B comparison; your own BIOS and boot ROM, never committed). Its own state directory: the stock kernel signs saves
 # with keys OXOS does not have, so the two cannot share saves.
 # Another BIOS to compare with: BIOS_BASE=its image BIOS_NAME=name (state xemu_state/<name>_<INSTANCE>); MEMORY=128 for a 128 MB console (any run target).
@@ -705,4 +710,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso

@@ -14,7 +14,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Big disks:** exFAT (no size limits) and LBA48; FATX disks with extra F:/G: partitions keep working.
 - **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; press the X button for the [OXOS File Manager](#oxos-file-manager) to
   upload files and launch XBEs from any browser.
-- **Titles from Disk/ISO:** Fully suports running Titles of your own discs dumped to HDD, XISO or CCI.
+- **Titles from Disk/ISO:** Fully supports running Titles of your own discs dumped to HDD, XISO or CCI.
 - **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
@@ -24,7 +24,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.
 - **nxdk homebrew:** Fully supports the latest [nxdk](https://github.com/XboxDev/nxdk) and [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) homebrew.
-- **Release Testing:** Every release is tested with over 1,067 regression tests across Host, Xemu and real hardware!
+- **Release Testing:** 1,067 automated tests (host + xemu) plus hardware boots.
 
 ## Try it
 Download the [latest release](https://github.com/kooscode/oxos/releases/latest) (`oxos_vX.Y.Z.zip`) and unzip it.

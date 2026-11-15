@@ -23,6 +23,14 @@ self-test build only), which leave their results in kernel variables that `boot_
 | `make image_test` / `make run_image_test` | Separate: the image test title (`image_test_title/`): a picture decoded on the console, a live status panel and a changing front LED; a quick check that the kernel, a title and video work. |
 | `make test_memory` | Separate (not part of `make test`): how much memory a title is given, as built (the XBE flag "limit to 64 MB", as retail games have it) and with the flag cleared; `MEMORY=128` for a 128 MB console, `MEMORY_BIOS=...` (with `MCPX_ROM=...`) to measure another BIOS. Needs nxdk, like the controller test. |
 
+## Regression run
+`make regression` (in `kernel/`) runs the host unit tests (`tools/unit_tests.sh`) and then every phase above, one after another, about 15 minutes in all
+(`test_exfat` alone about 8). It keeps going after a failure and ends with one summary: result, checks and time per phase, saved with each phase's log in
+`build/regression/`. It fails when any phase fails, or when `test_memory` reports fewer than 15 960 free pages (the stock kernel's on a 64 MB console).
+`MCPX_ROM=...` adds `test_mcpx`; `ONLY=test_exfat,test_iso` runs some phases. `make release` itself runs only the unit tests and `test_dash`.
+
+Run it on request, and after a large change: the file systems, memory, boot, the title loader or quick reboot, or many files at once.
+
 ## Files
 | File | What it is |
 |---|---|
