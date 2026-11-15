@@ -3,7 +3,8 @@
 
 usage: gen_def.py EXPORTS_TSV OUT_DEF
 
-The table has one row per ordinal of the 4627 kernel: ordinal, name, calling convention, argument bytes, kind.
+The table has one row per ordinal of the 4627 kernel: ordinal, name, calling convention, argument bytes, kind, and for an export whose name is not the kernel's
+own symbol, that symbol (kernel_symbol: the SDK's oxos_open_file is the kernel's io::OpenFile, ?OpenFile@io@xk@@...).
 Calling conventions: stdcall, fastcall, cdecl, and compiler: a 64-bit arithmetic helper the compiler calls itself (_alldiv, ...), with its own register
 convention. OXOS exports these and memcpy/memset/memmove/memcmp to kernel extensions at its own ordinals 402-415 (spec/oxos_internal/34 §9.1).
 
@@ -25,12 +26,14 @@ def main():
     lines = ["LIBRARY oxoskrnl.exe", "EXPORTS"]
     count = 0
     for n, line in enumerate(open(tsv).read().splitlines()[1:], 2):
-        ordinal, name, _conv, _args, kind = line.split("\t")[:5]
+        fields = line.split("\t")
+        ordinal, name, _conv, _args, kind = fields[:5]
+        symbol = fields[5] if len(fields) > 5 and fields[5] else name
         if kind not in KINDS:
             sys.exit(f"{tsv}:{n}: unknown kind {kind!r} (one of {', '.join(KINDS)})")
         if kind == "debug":
             continue
-        lines.append(f"    {name:<40} @{int(ordinal)} NONAME{' DATA' if kind == 'data' else ''}")
+        lines.append(f"    {symbol:<40} @{int(ordinal)} NONAME{' DATA' if kind == 'data' else ''}")
         count += 1
     open(out, "w").write("\n".join(lines) + "\n")
     print(f"{out}: {count} exports")

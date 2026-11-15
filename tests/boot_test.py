@@ -553,7 +553,7 @@ def extension_checks(mon, launches, hdd):
         return [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:n]
     pages = extension_state_pages(mon)
     count = len(pages)
-    x = words(pages[0], 14) if count >= 1 else [0] * 14
+    x = words(pages[0], 15) if count >= 1 else [0] * 15
     c = words(pages[1], 3) if count >= 2 else [0] * 3
     p = words(pages[2], 6) if count >= 3 else [0] * 6
     t = words(pages[5], 1) if count >= 6 else [0]  # example_title_event: its launches
@@ -593,7 +593,8 @@ def extension_checks(mon, launches, hdd):
         "events: a load and a loaded title per launch, an exit per quick reboot":
             x[7] >= launches and x[8] == launches and x[9] == launches - 1,
         "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (RunLoop) only chain's": x[10] > 0 and c[2] == x[10] + launches,
-        "settings from oxos_extensions.ini and oxos_read_file": x[12] == 1 and x[13] == 1,
+        "settings from oxos_extensions.ini and oxos_file_read": x[12] == 1 and x[13] == 1,
+        f"the SDK's file and folder functions: create, write, read, list, rename, delete (step {x[14]}; 1 = all)": x[14] == 1,
         f"plain C extension: {launches} Loads and loaded titles, its setting": p[1] == launches and p[2] == launches and p[5] == 1,
         "the kernel's memcpy, memset, memcmp and 64-bit division for extensions (exports 402-415)": p[3] == 1 and p[4] == 1,
     }

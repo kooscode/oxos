@@ -26,7 +26,8 @@ struct SAVED {
     LONG OpenCalls;           // the title's NtOpenFile calls through the hook (not its own: they start below it)
     ULONG LastTitleId;        // the title ID of the last title-loaded event
     ULONG SettingOk;          // oxos_setting("Answer") was "42" at every Start
-    ULONG FileOk;             // oxos_read_file read the extension's own file
+    ULONG FileOk;             // oxos_file_read read the extension's own file
+    ULONG FileOps;            // the file and folder functions' round trip at the first launch: 1 passed, else the first step that failed (2, 3, ...)
 };
 
 static SAVED *Saved;
@@ -60,6 +61,54 @@ static BOOLEAN SameText(const char *A, const char *B) {
     return A && *A == *B;
 }
 
+// The file and folder functions (oxos_sdk.h §4), once: C:\OXOS\extension_test\ with a file and a folder in it, listed, renamed and deleted again. 1 when every
+// step did what it should, else the number of the first one that did not.
+#define TEST_FOLDER "\\Device\\Harddisk0\\Partition2\\OXOS\\extension_test"
+
+// The folder's files are exactly the one named File, and its folders exactly the one named Folder.
+static bool ListsOne(const char *File, const char *Folder) {
+    char **names;
+    uint32_t count;
+    if (!NT_SUCCESS(oxos_file_list(TEST_FOLDER, names, count)))
+        return false;
+    bool ok = count == 1 && strcmp(names[0], File) == 0 && !names[1];
+    oxos_list_free(names);
+    if (!NT_SUCCESS(oxos_directory_list(TEST_FOLDER, names, count)))
+        return false;
+    ok &= count == 1 && strcmp(names[0], Folder) == 0;
+    oxos_list_free(names);
+    return ok;
+}
+
+static ULONG FileAndFolderRoundTrip(void) {
+    ULONG size = 0;
+    if (!NT_SUCCESS(oxos_directory_create(TEST_FOLDER)) || !oxos_directory_exists(TEST_FOLDER) || oxos_file_exists(TEST_FOLDER))
+        return 2;
+    if (oxos_directory_create(TEST_FOLDER) != (NTSTATUS)0xC0000035) // STATUS_OBJECT_NAME_COLLISION: it exists
+        return 3;
+    if (!NT_SUCCESS(oxos_file_write(TEST_FOLDER "\\a.txt", "hello", 5)) || !oxos_file_exists(TEST_FOLDER "\\a.txt") ||
+        oxos_directory_exists(TEST_FOLDER "\\a.txt"))
+        return 4;
+    char data[64];
+    if (!NT_SUCCESS(oxos_file_read(TEST_FOLDER "\\a.txt", data, sizeof(data), &size)) || size != 5 || memcmp(data, "hello", 5) != 0)
+        return 5;
+    if (!NT_SUCCESS(oxos_directory_create(TEST_FOLDER "\\sub")))
+        return 6;
+    if (!ListsOne("a.txt", "sub"))
+        return 7;
+    if (!NT_SUCCESS(oxos_file_rename(TEST_FOLDER "\\a.txt", "b.txt")) || oxos_file_exists(TEST_FOLDER "\\a.txt") ||
+        !oxos_file_exists(TEST_FOLDER "\\b.txt"))
+        return 8;
+    if (!NT_SUCCESS(oxos_directory_rename(TEST_FOLDER "\\sub", "sub2")) || !oxos_directory_exists(TEST_FOLDER "\\sub2"))
+        return 9;
+    if (NT_SUCCESS(oxos_directory_delete(TEST_FOLDER))) // not empty
+        return 10;
+    if (!NT_SUCCESS(oxos_file_delete(TEST_FOLDER "\\b.txt")) || !NT_SUCCESS(oxos_directory_delete(TEST_FOLDER "\\sub2")) ||
+        !NT_SUCCESS(oxos_directory_delete(TEST_FOLDER)) || oxos_directory_exists(TEST_FOLDER))
+        return 11;
+    return 1;
+}
+
 static BOOLEAN ExtensionStart(void) {
     Saved = (SAVED *)oxos_state();
     if (!Saved->Launches) { // the first launch: the page is all zero
@@ -72,12 +121,12 @@ static BOOLEAN ExtensionStart(void) {
         Saved->GenerationMismatch++;
     if (!SameText(oxos_setting("Answer"), "42"))
         Saved->SettingOk = 0;
+    // Its own .xos, read whole: its first bytes. A buffer of 2 bytes is too small, and says how large the file is.
+    UCHAR head[2];
     ULONG size;
-    char *file = oxos_read_file(OWN_FILE, 0x40000, &size);
-    if (file) {
-        Saved->FileOk = size > 2 && file[0] == 'M' && file[1] == 'Z';
-        oxos_free_file(file);
-    }
+    Saved->FileOk = oxos_file_read(OWN_FILE, head, sizeof(head), &size) == (NTSTATUS)0xC0000023 && size > 1024;
+    if (Saved->Launches == 1)
+        Saved->FileOps = FileAndFolderRoundTrip();
     oxos_on_title_loading(CountLoading, &Saved->Loading);
     oxos_on_title_loaded(CountLoaded, &Saved->Loaded);
     oxos_on_title_exiting(CountExiting, &Saved->Exiting);
@@ -93,10 +142,15 @@ static void ExtensionRunLoop(void) {
     Saved->RunLoopCalls++;
     if (OwnFileOpened)
         return;
-    // One NtOpenFile of its own once the chains are linked: it must pass chain.xos's hook (loaded after this one).
+    // One NtOpenFile of its own once the chains are linked: it must pass chain.xos's hook (loaded after this one). Called as the kernel function itself, since
+    // that is what hooks see (oxos_file_open and oxos_file_read open inside the kernel).
     OwnFileOpened = TRUE;
-    ULONG size;
-    oxos_free_file(oxos_read_file(OWN_FILE, 0x40000, &size));
+    OBJECT_STRING name = {(USHORT)strlen(OWN_FILE), (USHORT)(strlen(OWN_FILE) + 1), (PCHAR)OWN_FILE};
+    OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    HANDLE file;
+    if (NT_SUCCESS(NtOpenFile(&file, GENERIC_READ | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT)))
+        NtClose(file);
 }
 
 static void ExtensionTerminate(void) {

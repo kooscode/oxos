@@ -29,6 +29,14 @@ typedef unsigned long ULONG, *PULONG;
 typedef long LONG, NTSTATUS, *PLONG;
 typedef unsigned long long ULONGLONG;
 typedef long long LONGLONG, *PLONGLONG;
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
+typedef signed char int8_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef long long int64_t;
 typedef void VOID, *PVOID;
 typedef PVOID HANDLE, *PHANDLE;
 typedef const char *PCSZ;
@@ -107,10 +115,18 @@ typedef struct _FILE_NETWORK_OPEN_INFORMATION {
 #define GENERIC_READ 0x80000000UL
 #define GENERIC_WRITE 0x40000000UL
 #define SYNCHRONIZE 0x00100000UL
+#define DELETE 0x00010000UL
+#define FILE_READ_ATTRIBUTES 0x80UL
 #define FILE_SHARE_READ 1UL
 #define FILE_SHARE_WRITE 2UL
+#define FILE_SHARE_DELETE 4UL
+#define FILE_SUPERSEDE 0UL // dispositions: what NtCreateFile and oxos_create_file do when the file exists or not
 #define FILE_OPEN 1UL
+#define FILE_CREATE 2UL
+#define FILE_OPEN_IF 3UL
+#define FILE_OVERWRITE 4UL
 #define FILE_OVERWRITE_IF 5UL
+#define FILE_DIRECTORY_FILE 1UL // options
 #define FILE_SYNCHRONOUS_IO_NONALERT 0x20UL
 #define FILE_NON_DIRECTORY_FILE 0x40UL
 #define FileStandardInformation 5UL
@@ -133,6 +149,8 @@ struct unsigned signed int char long short""".split()) | set(SCALAR_TYPES)
 CONVENTION = {"stdcall": "NTAPI", "fastcall": "FASTCALL", "cdecl": "__cdecl"}
 NOT_POINTER_TYPES = {"PS_STATISTICS"}  # names that start with P but are structures (process statistics), not pointers
 INTERNAL = {"OXOSWriteExtensionLog"}  # the SDK's own plumbing (oxos_log), declared where the SDK uses it
+# OXOS's exports for the dashboard's own tools that no extension should call (they erase the hard disk): not declared for extensions.
+NOT_FOR_EXTENSIONS = {"OXOSFormatDisk", "OXOSDeleteAllPartitions"}
 
 
 def decorated(name, convention, arg_bytes, kind):
@@ -227,8 +245,8 @@ def kernel_header(rows, decls, routines, c_names, c_declarations):
     for ordinal, name, convention, arg_bytes, kind in rows:
         if kind != "func" or convention.split("/")[0] not in CONVENTION or name in c_names:
             continue
-        if name in INTERNAL:
-            continue
+        if name in INTERNAL or name in NOT_FOR_EXTENSIONS or name.startswith("oxos_"):
+            continue  # the SDK's own plumbing, or one of the kernel's functions oxos_sdk.h declares under an oxos_ name (kernel_symbol)
         if name not in decls:
             missing.append(name)
             continue

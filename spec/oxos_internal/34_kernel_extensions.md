@@ -2,7 +2,7 @@
 
 Status: **being implemented, 2026-11-13.** In the kernel: the loader (linked on its own, run from a disk cache, §8.1), hooks, events, Start, RunLoop and
 Terminate, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base with its tests (§9, §9.3: `make -C kernel test_extensions`).
-Not yet: the `oxos_write_file` and `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS features as extensions (§10).
+Not yet: `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS features as extensions (§10).
 Sections marked *open* are decisions still to make.
 
 A kernel extension is a DLL, file type `.xos`, that the kernel loads from the hard disk before each title and runs in kernel mode, with the kernel's own rights.
@@ -246,10 +246,12 @@ struct OXOS_CONTEXT {
 | `oxos_setting_number(Key, Default)` | the value of `Key` as a whole decimal number, or `Default` when it is missing or does not start with a digit (user, 2026-11-14: extensions should not each parse digits) |
 | `oxos_launch_number()`, `oxos_kernel_version()` | launches since the cold boot (1 = the cold boot's title); the kernel's version |
 | `oxos_state()` | the state page (§6): never null, all zero at the first launch and when the extension's `Version` changes |
-| `oxos_read_file(Path, MaxSize, &Size)`, `oxos_free_file(Text)` | reads a whole file (a `\Device\...` path) into pool memory, and frees it |
+| `oxos_file_read(Path, Buffer, BufferSize, &Size)`, `oxos_file_write(Path, Data, Size)` | a whole file into the extension's buffer (too small: `STATUS_BUFFER_TOO_SMALL`, `Size` says how large it is), or written (created or replaced) |
+| `oxos_file_open`, `oxos_file_create`, `oxos_file_delete` | the kernel's own `io::OpenFile`, `io::CreateFile`, `io::DeleteFile`, exported as they are at 429-431 (`kernel/exports.tsv`'s `kernel_symbol` column names them; 432 is `io::RenameFile`, for the SDK's renames). A handle is read and written with `NtReadFile`/`NtWriteFile` and closed with `NtClose` |
+| `oxos_file_rename`, `oxos_file_exists`, `oxos_directory_create`, `oxos_directory_delete`, `oxos_directory_rename`, `oxos_directory_exists` | the SDK's, on those: by path (user, 2026-11-14: `oxos_file_*` and `oxos_directory_*` names). Every one of these opens inside the kernel: no extension's hook sees it (§7.1) |
+| `oxos_file_list(Folder, Names, Count)`, `oxos_directory_list(...)`, `oxos_list_free(Names)` | the names of a folder's files, or of its folders: an array of `Count` names (`char **`, a null after the last) in one block of pool memory, which `oxos_list_free` frees (user, 2026-11-14: the usual array-and-count pattern, not callbacks; C++ references, `char **&` and `uint32_t &`, so C extensions do without them). On `NtQueryDirectoryFile`, read twice: counting, then copying |
 | `oxos_hook(Function, Hook)`, `oxos_next(Function)` | hooks a kernel function, named as `oxos_kernel.h` declares it, and passes a call on (§7.1); in `ExtensionStart` only |
 | `oxos_on_title_loading`, `oxos_on_title_loaded`, `oxos_on_title_exiting` `(Callback, UserData)` | registers for an event (§7.2), each with its own typed callback; in `ExtensionStart` only |
-| `oxos_write_file(Path, Buffer, Size)` | *planned:* writes a whole file (created or replaced) |
 | `oxos_resolve_path(DosPath, Buffer, BufferSize)` | *planned:* `E:\Apps\x.xbe` to `\Device\Harddisk0\Partition1\Apps\x.xbe`, the kernel's drive table (spec/oxos_internal/33 §1) |
 
 **The loader's (`OXOS_API`)**, which the SDK's hook and event functions call: a table of `NTAPI` function pointers, starting with its own `Size`. They belong to
@@ -502,7 +504,7 @@ did in their state pages; the test reads those back through `extensions::LoadedE
 | registers the three events, each with its own counter as `UserData`, and counts them | a loading and a loaded title per launch, an exit per quick reboot |
 | `ExtensionRunLoop`: one `NtOpenFile` of its own at its first call, then counts its calls, and any after `ExtensionTerminate` | `RunLoop` is called while the title runs and never after `Terminate`; its own call passes only the extensions below it |
 | `ExtensionTerminate` counts | `Terminate` at each quick reboot |
-| `oxos_setting("Answer")` is `42`; `oxos_read_file` reads its own `.xos` | settings, the SDK's functions and the kernel imports |
+| `oxos_setting("Answer")` is `42`; `oxos_file_read` finds its own `.xos` too large for 2 bytes; at the first launch a folder in `C:\OXOS` with a file and a folder in it, created, written, read, listed, renamed and deleted | settings, the SDK's file and folder functions, the kernel imports |
 
 **Companions:**
 - `chain.xos`, listed after `extension_test`: hooks the same `NtOpenFile` and counts: the title's calls (through extension_test's hook, then this one) and

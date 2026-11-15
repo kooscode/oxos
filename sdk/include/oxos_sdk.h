@@ -57,10 +57,48 @@ const char *oxos_kernel_version(void); // e.g. "0.4.7"
 // extension's Version changes (a new build may keep other data in it). Never null.
 void *oxos_state(void);
 
-// --- 4. Files: a whole file of at most MaxSize bytes (a \Device\... path: C:\ is \Device\Harddisk0\Partition2\), or null. Free it with oxos_free_file.
+// --- 4. Files and folders, by path: a \Device\... path (C:\ is \Device\Harddisk0\Partition2\), any case. Everything here is synchronous, and opens inside
+// the kernel: no extension's hook sees these calls (hooks see what titles call).
 
-char *oxos_read_file(const char *Path, ULONG MaxSize, ULONG *Size);
-void oxos_free_file(char *Text);
+#ifndef OXOS_SDK_IN_KERNEL // the kernel has its own (io::OpenFile, ...)
+
+// A whole file at once. oxos_file_read reads it into Buffer, its length into *Size; a file larger than BufferSize is not read (STATUS_BUFFER_TOO_SMALL, *Size
+// says how large it is).
+NTSTATUS oxos_file_read(const char *Path, void *Buffer, ULONG BufferSize, ULONG *Size);
+NTSTATUS oxos_file_write(const char *Path, const void *Data, ULONG Size); // creates the file, or replaces it
+
+// Open handles: read and write them with NtReadFile and NtWriteFile, close them with NtClose.
+NTSTATUS oxos_file_open(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Options, HANDLE *File); // Options: FILE_NON_DIRECTORY_FILE, ...
+// Creates or opens, as Disposition says (FILE_CREATE, FILE_OPEN_IF, FILE_OVERWRITE_IF, ...); Size, when not 0, is the space a new file starts with.
+NTSTATUS oxos_file_create(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Disposition, ULONG Options, HANDLE *File, ULONGLONG Size);
+NTSTATUS oxos_file_delete(const char *Path);
+
+// NewName: a name, which renames it in its own folder, or a whole path on the same drive, which moves it there. An existing NewName is not replaced.
+NTSTATUS oxos_file_rename(const char *Path, const char *NewName);
+BOOLEAN oxos_file_exists(const char *Path); // a file, not a folder
+
+NTSTATUS oxos_directory_create(const char *Path); // fails when it exists (STATUS_OBJECT_NAME_COLLISION)
+NTSTATUS oxos_directory_delete(const char *Path); // an empty folder
+NTSTATUS oxos_directory_rename(const char *Path, const char *NewName);
+BOOLEAN oxos_directory_exists(const char *Path);
+
+// The names of the files in Folder (oxos_file_list) or of the folders in it (oxos_directory_list): Names gets an array of Count names, each ending in 0.
+// Free the array with oxos_list_free when done (one call frees it all):
+//
+//   char **names;
+//   uint32_t count;
+//   if (NT_SUCCESS(oxos_file_list(Folder, names, count))) {
+//       for (uint32_t i = 0; i < count; i++)
+//           oxos_log("%s", names[i]);
+//       oxos_list_free(names);
+//   }
+#ifdef __cplusplus // C++: references (the SDK's header is also plain C, which has none; C extensions do without these two)
+NTSTATUS oxos_file_list(const char *Folder, char **&Names, uint32_t &Count);
+NTSTATUS oxos_directory_list(const char *Folder, char **&Names, uint32_t &Count);
+#endif
+void oxos_list_free(char **Names);
+
+#endif
 
 // --- 5. Hooks, in ExtensionStart: the title's calls of a kernel function go to the extension's function first
 //

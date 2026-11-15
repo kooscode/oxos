@@ -1,4 +1,4 @@
-ordinal	name	convention	arg_bytes	kind
+ordinal	name	convention	arg_bytes	kind	kernel_symbol
 1	AvGetSavedDataAddress	stdcall	0	func
 2	AvSendTVEncoderOption	stdcall	16	func
 3	AvSetDisplayMode	stdcall	24	func
@@ -394,3 +394,7 @@ ordinal	name	convention	arg_bytes	kind
 426	memchr	cdecl		func
 427	snprintf	cdecl		func
 428	vsnprintf	cdecl		func
+429	oxos_file_open	cdecl		func	?OpenFile@io@xk@@YAJPBDKKKPAPAX@Z
+430	oxos_file_create	cdecl		func	?CreateFile@io@xk@@YAJPBDKKKKPAPAX_K@Z
+431	oxos_file_delete	cdecl		func	?DeleteFile@io@xk@@YAJPBD@Z
+432	oxos_file_rename_handle	cdecl		func	?RenameFile@io@xk@@YAJPAXPBD_N@Z

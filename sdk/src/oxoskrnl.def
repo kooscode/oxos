@@ -394,3 +394,7 @@ EXPORTS
     memchr                                       @426 NONAME
     snprintf                                     @427 NONAME
     vsnprintf                                    @428 NONAME
+    oxos_file_open                               @429 NONAME
+    oxos_file_create                             @430 NONAME
+    oxos_file_delete                             @431 NONAME
+    oxos_file_rename_handle                      @432 NONAME

@@ -15,6 +15,14 @@ typedef unsigned long ULONG, *PULONG;
 typedef long LONG, NTSTATUS, *PLONG;
 typedef unsigned long long ULONGLONG;
 typedef long long LONGLONG, *PLONGLONG;
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
+typedef signed char int8_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef long long int64_t;
 typedef void VOID, *PVOID;
 typedef PVOID HANDLE, *PHANDLE;
 typedef const char *PCSZ;
@@ -93,10 +101,18 @@ typedef struct _FILE_NETWORK_OPEN_INFORMATION {
 #define GENERIC_READ 0x80000000UL
 #define GENERIC_WRITE 0x40000000UL
 #define SYNCHRONIZE 0x00100000UL
+#define DELETE 0x00010000UL
+#define FILE_READ_ATTRIBUTES 0x80UL
 #define FILE_SHARE_READ 1UL
 #define FILE_SHARE_WRITE 2UL
+#define FILE_SHARE_DELETE 4UL
+#define FILE_SUPERSEDE 0UL // dispositions: what NtCreateFile and oxos_create_file do when the file exists or not
 #define FILE_OPEN 1UL
+#define FILE_CREATE 2UL
+#define FILE_OPEN_IF 3UL
+#define FILE_OVERWRITE 4UL
 #define FILE_OVERWRITE_IF 5UL
+#define FILE_DIRECTORY_FILE 1UL // options
 #define FILE_SYNCHRONOUS_IO_NONALERT 0x20UL
 #define FILE_NON_DIRECTORY_FILE 0x40UL
 #define FileStandardInformation 5UL
@@ -408,8 +424,6 @@ OXOS_IMPORT NTSTATUS NTAPI ObOpenObjectByPointer(PVOID Object, POBJECT_TYPE Obje
 OXOS_IMPORT NTSTATUS NTAPI ObReferenceObjectByHandle(HANDLE Handle, POBJECT_TYPE ObjectType, PVOID *ReturnedObject);
 OXOS_IMPORT NTSTATUS NTAPI ObReferenceObjectByName(POBJECT_STRING ObjectName, ULONG Attributes, POBJECT_TYPE ObjectType, PVOID ParseContext, PVOID *Object);
 OXOS_IMPORT NTSTATUS NTAPI ObReferenceObjectByPointer(PVOID Object, POBJECT_TYPE ObjectType);
-OXOS_IMPORT NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds);
-OXOS_IMPORT NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath);
 OXOS_IMPORT ULONG NTAPI PhyGetLinkState(BOOLEAN Verify);
 OXOS_IMPORT NTSTATUS NTAPI PhyInitialize(BOOLEAN ForceReset, PVOID Parameter2);
 OXOS_IMPORT NTSTATUS NTAPI PsCreateSystemThread(PHANDLE ThreadHandle, PHANDLE ThreadId, PVOID StartRoutine, PVOID StartContext, BOOLEAN DebuggerThread);
