@@ -52,12 +52,13 @@ extern volatile ULONG DebugLogPosition;                        // characters wri
 
 // --- Log files (file_log.cpp)
 
-// Appends one line (Format as for RtlVsnprintf, at most 253 characters, then CR LF) to C:\OXOS\log\LogName.log, creating the folder and the file when they are
+// Appends one line (Format as for vsnprintf, at most 253 characters, then CR LF) to C:\OXOS\log\LogName.log, creating the folder and the file when they are
 // missing; a log that would pass 10 MB is rotated first (LogName_1.log the newest old part, spec/oxos_internal/35). PASSIVE_LEVEL only (it does nothing at a
 // raised IRQL); nothing is written when the disk has no C: or refuses.
 void AppendLogLine(const char *LogName, const char *Format, ...);
-// C:\OXOS and C:\OXOS\log, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine when its log cannot be opened.
-void CreateLogFolders();
+// C:\OXOS, C:\OXOS\log and C:\OXOS\extensions, created when missing: at every cold boot (titles::LaunchAtColdBoot), and by AppendLogLine when its log cannot
+// be opened.
+void CreateOxosFolders();
 
 } // namespace xk::diagnostics
 

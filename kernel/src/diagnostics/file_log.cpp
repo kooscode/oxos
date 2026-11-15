@@ -13,6 +13,7 @@ namespace {
 
 constexpr char OXOS_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS";
 constexpr char LOG_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\log";
+constexpr char EXTENSIONS_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions"; // ready for the first extension (spec/oxos_internal/34 §3)
 // A log is rotated before a line would take it past this size: 10 MB, and 4 KB in self-test builds, where the FATX suite rotates one
 // (tests/kernel_self_tests/fatx.cpp).
 constexpr ULONG LOG_ROTATE_BYTES = XK_BOOT_SELFTEST ? 0x1000 : 10 * 1024 * 1024;
@@ -58,8 +59,8 @@ void Rotate(const char *LogName) {
 
 } // namespace
 
-void CreateLogFolders() {
-    const char *const folders[] = {OXOS_FOLDER, LOG_FOLDER};
+void CreateOxosFolders() {
+    const char *const folders[] = {OXOS_FOLDER, LOG_FOLDER, EXTENSIONS_FOLDER};
     for (const char *name : folders) {
         HANDLE folder = Open(name, FILE_READ_DATA, FILE_OPEN_IF, FILE_DIRECTORY_FILE);
         if (folder)
@@ -86,8 +87,8 @@ void AppendLogLine(const char *LogName, const char *Format, ...) {
     for (int pass = 0; pass < 2; pass++) {
         HANDLE file = Open(path, GENERIC_WRITE, FILE_OPEN_IF, FILE_NON_DIRECTORY_FILE);
         if (!file) {
-            // The folders are made at every cold boot (CreateLogFolders); a log written before that, or after they were deleted, makes them here.
-            CreateLogFolders();
+            // The folders are made at every cold boot (CreateOxosFolders); a log written before that, or after they were deleted, makes them here.
+            CreateOxosFolders();
             file = Open(path, GENERIC_WRITE, FILE_OPEN_IF, FILE_NON_DIRECTORY_FILE);
         }
         if (!file)

@@ -381,7 +381,9 @@ reports each extension's image size after its start; *open:* its pool, threads a
   (`XK_EXTENSION_LOADER_HEADER`: magic, the kernel's PE stamp, base, size, entry), and names the header in the kernel's DOS header (offset 0x38). Its pages are
   boot-only: freed before the first title.
 - **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\extensions\oxos_extension_loader.cache` (`extensions::WriteLoaderCache`, boot-only),
-  always: the file is a cache, overwritten with the known-good copy at every cold boot. Without the extensions folder nothing is written.
+  always: the file is a cache, overwritten with the known-good copy at every cold boot. The kernel creates the folder at every cold boot, before it writes the
+  cache (`diagnostics::CreateOxosFolders`, with `C:\OXOS` and `C:\OXOS\log`; user, 2026-11-14: ready for the first extension), so extensions copied there later
+  load at the next launch without a cold boot first.
 - **Run from the cache at every launch** (the cold boot's too): `extensions::LoadExtensions` (`src/extensions/ extension_runtime_loader.cpp`) reads the file
   only when `oxos_extensions.ini` exists, checks the header (magic, this kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps
   them at 0xB0000000 through a temporary page table, calls the entry, then unmaps and frees everything before the title loads. No cache, or one from another

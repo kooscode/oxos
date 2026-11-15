@@ -976,10 +976,13 @@ def upload_checks(mon, port, xbe, fs="exFAT"):
     if fs == "exFAT":
         status, empty = request("GET", "/api/list?path=%2FY")  # a fresh disk: Y: is an empty folder
         checks[f"an empty folder lists as [] ({status} {empty[:40]!r})"] = status == 200 and json.loads(empty) == []
-        # C: holds only what the kernel makes at every boot: C:\OXOS (with its log folder, spec/oxos_internal/35)
+        # C: holds only what the kernel makes at every boot: C:\OXOS, with its log and extensions folders (spec/oxos_internal/34 §3, 35)
         status, c = request("GET", "/api/list?path=%2FC")
         checks[f"C: on a fresh disk holds only the OXOS folder made at boot ({status} {c[:60]!r})"] = \
             status == 200 and [(e["name"], e["dir"]) for e in json.loads(c)] == [("OXOS", True)]
+        status, o = request("GET", "/api/list?path=%2FC%2FOXOS")
+        checks[f"C:\\OXOS holds the extensions and log folders made at boot ({status} {o[:80]!r})"] = \
+            status == 200 and sorted((e["name"], e["dir"]) for e in json.loads(o)) == [("extensions", True), ("log", True)]
     status, _ = request("GET", "/api/list?path=%2FE%2F..")
     checks["'..' in a path is refused (400)"] = status == 400
     status, _ = request("PUT", "/api/file?path=%2FE%2Fdelete%20test%2Fx.bin", b"x" * 1000)
