@@ -1,6 +1,7 @@
 // Boot self-tests for the IDE disk driver (milestone 3c-1). boot_test.py compares the data read here with the HDD image it attached.
 #include <kernel_self_tests.h>
 #include <storage/storage.h>
+#include <objects/objects.h>
 #include <runtime/runtime.h>
 #include <core/core.h>
 
@@ -124,9 +125,15 @@ static void NTAPI IdexControllerThread(PVOID) {
                 KiTestIdexPartitionSig[i][w] = ((PULONG)buf)[w];
         }
     }
-    OBJECT_STRING s1, s2;
-    RtlInitAnsiString(&s1, "\\Device\\Harddisk0\\Partition6");
-    RtlInitAnsiString(&s2, "\\Device\\Harddisk0\\Partition6\\x");
+    // The first partition number the disk's layout does not have (6 on the retail 8 GB disk; a larger one also has F: and G:, spec/cerbios/03 §3), and a
+    // path under it.
+    ULONG absent = 6;
+    while (absent < 15 && storage::DiskPartitions[absent].Length)
+        absent++;
+    char missing[48], missingPath[48];
+    snprintf(missing, sizeof(missing), "\\Device\\Harddisk0\\Partition%lu", absent);
+    snprintf(missingPath, sizeof(missingPath), "%s\\x", missing);
+    OBJECT_STRING s1 = objects::ObjectName(missing), s2 = objects::ObjectName(missingPath);
     PVOID gone;
     KiTestIdexNamesOk = ok && IdexTestOpen(names[1]) == parts[1] && // same device on a second lookup
                         ObReferenceObjectByName(&s1, 0, nullptr, nullptr, &gone) == STATUS_OBJECT_NAME_NOT_FOUND &&
