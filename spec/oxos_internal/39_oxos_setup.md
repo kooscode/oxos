@@ -30,6 +30,25 @@ OXOS's settings are plain files in `C:\OXOS\` today, edited by hand over FTP or 
   it is.
 - Done: back to the boot (the dashboard), or a reboot when a setting needs one.
 
+### 1.1 Buttons at boot, splash or not (user, 2026-11-15)
+The buttons held at a cold boot work whether the splash shows or not: the kernel reads the controllers from the moment USB is up, while the hard disk spins up,
+so skipping the splash adds no wait (and they would work without an AV pack too, which today reads no button).
+
+| Held at a cold boot | What happens |
+|---|---|
+| nothing | the usual boot: the splash and jingle unless skipped in the EEPROM (below), extensions, `oxos_boot.ini`, the dashboard or the disc |
+| **X** only | the File Manager (spec 32) at once |
+| **B** | **safe boot:** no extensions, none of OXOS's ini files (`oxos_boot.ini`, `oxos_extensions.ini`, `oxos_launch_redirect.ini`, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored: the splash shows, and the dashboards are tried in the built-in order (spec 19). Holding **X** during that splash opens the File Manager. Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
+| **A** | OXOS Setup |
+
+Safe boot is wider than today's safe mode, which skips only the extensions and keeps launch redirects (spec 34 §3.3, §10): with B, nothing OXOS reads from the
+disk or the EEPROM is used, so a console always starts the way a fresh OXOS install does.
+
+**Skipping the splash:** one OXOS byte in the EEPROM, outside the sections the kernel uses (security up to 0x2F, factory 0x30–0x5F, user 0x60–0xBF; which
+byte of 0xC0–0xFF is free of other dashboards and BIOSes is to check): bit 0 no splash, bit 1 no jingle. The kernel reads the EEPROM before the splash
+(`hardware::chipset::InitEeprom` comes before `boot_splash::StartSplash` in `core/startup.cpp`), so a change applies at the next boot. OXOS Setup's Boot page
+sets it through one kernel call; apps do not write EEPROM bytes themselves. It stays with the console when the disk is changed, and other BIOSes ignore it.
+
 ## 2. How it could be built
 | | Built into the kernel (as the File Manager is) | An XBE in `C:\OXOS\` (`oxos_setup.xbe`), started by the kernel |
 |---|---|---|

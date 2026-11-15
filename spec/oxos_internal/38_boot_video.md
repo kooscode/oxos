@@ -31,8 +31,8 @@ order = C:\evoxdash.xbe, E:\evoxdash.xbe, C:\xboxdash.xbe, C:\Dashboard\default.
   section keeps today's fixed order (spec 19).
 - **The extension** reads `[boot_video]` with the SDK's file functions.
 - **Not the splash and the jingle:** they start at the very beginning of a cold boot, while the hard disk is still spinning up, before any file can be read
-  (exFAT and FATX are mounted after the disk is up). Options for them would take effect from the next cold boot only, from a copy the kernel keeps where it can
-  read it at power-on (a few bytes of the EEPROM, or the CMOS RAM that already holds OXOS's boot marks): open, §4.
+  (exFAT and FATX are mounted after the disk is up). Skipping them is an OXOS byte in the EEPROM instead, set by OXOS Setup (spec 39 §1.1).
+- **Safe boot (B held at a cold boot, spec 39 §1.1)** ignores `oxos_boot.ini` and the boot video with it.
 
 ## 2. How it works
 - **An extension, `oxos_boot_video.xos`:** its `ExtensionStart` runs before each title (spec 34 §4.3), when nothing else is on the screen. It checks the launch
@@ -60,8 +60,7 @@ The first choice is simpler and certain to keep up; the second takes any MPEG-1 
 - The SDK's screen and audio interface: what an extension may draw and play while no title runs (frame buffer, video mode, the APU's voices), shared with spec
   36 and 39.
 - Splash and video: the video after the OXOS splash, or replacing it (and the jingle).
-- Options for the splash and the jingle (show, sound on/off): only from the next cold boot (§1.1), kept in the EEPROM or the CMOS RAM; which, and who writes
-  them (the kernel after reading `oxos_boot.ini`, or OXOS Setup, spec 39).
+- The splash and jingle switches: in the EEPROM, set by OXOS Setup (spec 39 §1.1); which free byte, to check.
 - Length limit and what happens if the file is missing or damaged (skip, log a line in `extensions.log`).
 - 720p/1080i modes: the video scaled to the mode, or played at 480 lines.
 

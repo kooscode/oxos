@@ -110,6 +110,8 @@ Not loaded:
 - X and B together: the File Manager (which loads none anyway).
 - Limitation: without an AV pack there is no splash and no button is read (as for X today); the extensions then load. The way out is the same as for any file on
   the disk: FTP from a working title, or the disk on a PC.
+- *Planned (user, 2026-11-15; spec/oxos_internal/39 §1.1):* the buttons read with or without the splash, and B becomes **safe boot**: no extensions, none of
+  OXOS's ini files (launch redirects included, unlike §10 today) and no OXOS EEPROM settings; the splash shows, and X during it opens the File Manager.
 
 ### 3.4 A failing extension
 - **Refused by the loader** (bad format, too large, wrong `ApiVersion`, an import other than `oxoskrnl.exe`, a missing kernel ordinal): skipped and logged; the

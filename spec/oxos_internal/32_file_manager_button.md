@@ -8,7 +8,8 @@ X pressed on any controller while the boot splash and jingle run, or on the "No 
 organizing and launching files from a browser. X, not WHITE: the Xbox Live dashboard already uses WHITE held at its start (2026-11-08).
 
 ## 1. When
-- Cold boot only, with an AV pack (the splash runs); a quick reboot never reads the pads.
+- Cold boot only, with an AV pack (the splash runs); a quick reboot never reads the pads. *Planned (spec 39 §1.1):* X held at a cold boot opens the File
+  Manager also when the splash is skipped or there is no AV pack, and during the splash of a safe boot (B).
 - X at any time from the start picture to the end of the jingle (about 4 s). The title thread waits for the splash to end (`boot_splash::WaitForSplash`) before
   it chooses a title, then:
   - X seen: the File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads (`titles::TitleLaunched` 4). Without a network card it cannot
