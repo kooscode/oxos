@@ -285,9 +285,10 @@ release:
 	    cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_1.6_v$(VERSION)_256k.bin && \
 	    cp title_patches/oxos_title_patches.ini $(RELEASE_BUILD)/dist/oxos_title_patches.ini && \
 	    cp $(FTP_SERVER_XBE) $(RELEASE_BUILD)/dist/ftp.xbe && \
+	    cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_BUILD)/dist/THIRD_PARTY_NOTICES.md && \
 	    cd $(RELEASE_BUILD)/dist && \
 	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
-	        oxos_title_patches.ini ftp.xbe && \
+	        oxos_title_patches.ini ftp.xbe THIRD_PARTY_NOTICES.md && \
 	    cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) . && \
 	    sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin \
 	        bios_1.6_v$(VERSION)_256k.bin oxos_title_patches.ini ftp.xbe)

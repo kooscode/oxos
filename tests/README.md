@@ -18,6 +18,8 @@ self-test build only), which leave their results in kernel variables that `boot_
 | `make test_udf` | A UDF (DVD-video style) disc instead of an Xbox one: mounting and reading files from it. |
 | `make test_exfat` | Separate (not part of `make test`): the self-tests on a GPT disk with one exFAT volume (256 GB, sparse, in `xemu_state/oxos_xemu_exfat/`), the test disk's C: and E: copied into folders. The FATX suite runs on E: as a folder of the volume, and X: is formatted the way Halo 2 formats its cache (64 KB clusters) and must then report what a FATX mount of that format reports; afterwards `exfat.py` checks the whole volume (spec/oxos_internal/07_exfat_driver.md). |
 | `make test_lba48` | Separate (not part of `make test`): the self-tests on a 2 TB disk (a sparse copy of the test disk in `xemu_state/oxos_xemu_lba48/`). The kernel writes test sectors either side of the 28-bit limit and at the end of the disk; the test then finds each one at its exact place in the image and checks that the start of the disk is untouched (spec/oxos_internal/04_lba48.md). |
+| `make test_extensions` | Separate: kernel extensions (spec/oxos_internal/34 §9.3). The test extensions (`extensions/`) and the SDK's examples, built with the SDK as it ships, on the test disk with an `oxos_extensions.ini`; over a cold boot and two quick reboots they must keep their state pages and run their hooks, events, run loops and unloads, and the ones that fail, are refused or are not listed must be left out. |
+| `make test_iso` | Separate: the ISO launcher (`tools/iso_launcher`) starts the kernel test title from a disc image on the hard disk, once per kind of image: plain, split in two, CCI, split CCI, and larger than 4 GB (spec/oxos_internal/16). |
 | `make test_mcpx` | Only with `MCPX_ROM=...`: the dashboard phase again, booted through a real MCPX boot ROM. |
 | `make test_controller` | Separate (not part of `make test`): every input of a virtual gamepad reaches an nxdk title (through SDL3's gamepad API) as the right Xbox controller input. Needs cmake, flex, bison and access to `/dev/uinput`. |
 | `make image_test` / `make run_image_test` | Separate: the image test title (`image_test_title/`): a picture decoded on the console, a live status panel and a changing front LED; a quick check that the kernel, a title and video work. |
@@ -26,8 +28,9 @@ self-test build only), which leave their results in kernel variables that `boot_
 ## Regression run
 `make regression` (in `kernel/`) runs the host unit tests (`tools/unit_tests.sh`) and then every phase above, one after another, about 15 minutes in all
 (`test_exfat` alone about 8). It keeps going after a failure and ends with one summary: result, checks and time per phase, saved with each phase's log in
-`build/regression/`. It fails when any phase fails, or when `test_memory` reports fewer than 15 960 free pages (the stock kernel's on a 64 MB console).
-`MCPX_ROM=...` adds `test_mcpx`; `ONLY=test_exfat,test_iso` runs some phases. `make release` itself runs only the unit tests and `test_dash`.
+`build/regression/`. It fails when any phase fails, or when `test_memory` reports fewer than 15 960 free pages on a 64 MB console (OXOS's count; the stock
+kernel gives 15 964, spec/oxos_internal/18 §7). `MCPX_ROM=...` adds `test_mcpx`; `ONLY=test_exfat,test_iso` runs some phases. `make release` itself runs only
+the unit tests and `test_dash`.
 
 Run it on request, and after a large change: the file systems, memory, boot, the title loader or quick reboot, or many files at once.
 
@@ -36,6 +39,8 @@ Run it on request, and after a large change: the file systems, memory, boot, the
 |---|---|
 | `boot_test.py` | The test runner behind every phase except `test_controller`: makes the test disc and a copy of the hard disk, boots the BIOS in xemu, reads the results through xemu's QMP monitor and the kernel's map file, and prints the checks. |
 | `kernel_self_tests/` | The kernel's boot self-tests: test code compiled into the kernel only for the self-test build (`SELFTEST=1`: `make`, `make test`), never into a release. They call kernel internals from inside the running kernel (scheduler, DPCs, timers, interrupts, I/O manager, FATX, DVD, crypto, ...) and leave their results in variables `boot_test.py` reads. `kernel_self_tests.cpp` runs them, one file per subsystem; the kernel starts them from `src/core/startup.cpp` (and holds the title back for the DVD tests in `src/titles/title_loader.cpp`). |
+| `unit/` | The host unit tests of the kernel's core (GoogleTest, a 32-bit Linux build of the kernel's own sources): `tools/unit_tests.sh` runs them. [`unit/README.md`](unit/README.md), spec/oxos_internal/11. |
+| `extensions/` | The test extensions for `make test_extensions`, built with the SDK: a chain of hooks, a failing load, a wrong API version, a slow run loop, an extension in plain C. |
 | `kernel_test_title/` | The kernel test title: a minimal freestanding Xbox "game" run from the test disc. It checks that the kernel loads and starts titles and that the kernel functions games rely on work (clock, memory pool, disc reads, threads, drive letters, on-demand sections, SHA-1), and does the relaunch test. The comment at the top of the file lists each test. |
 | `controller_test_title/` | The controller test title, built with nxdk and SDL3: shows every controller input live and records which inputs arrived, for `controller_test.py`. |
 | `memory_test_title/` | The memory test title, built with nxdk and SDL3: asks the kernel how much memory there is (`MmQueryStatistics`), asks for a contiguous page above 64 MB, then allocates 1 MB blocks until the kernel refuses, noting the physical address of every page; the results are on screen and in a block `memory_test.py` reads. |
@@ -43,6 +48,7 @@ Run it on request, and after a large change: the file systems, memory, boot, the
 | `controller_test.py` | The `make test_controller` runner: boots the controller test title's disc, presses each input of a virtual gamepad and checks what the title received. |
 | `virtual_gamepad.py` | A virtual gamepad through Linux uinput, which xemu sees as an ordinary USB pad. Used by `controller_test.py`, and by `boot_test.py` to press X for the File Manager. |
 | `mkxiso.py` | Builds the Xbox (XDVDFS) test disc: test files plus the kernel test title as `default.xbe`. Can also pack any folder as a disc (used by `tools/debug_app.py`). |
+| `mkcci.py` | Writes a CCI image (compressed disc image, spec/cerbios/07 §4) from an ISO, for `make test_iso`. |
 | `mkudf.py` | Builds the UDF test disc for `make test_udf`, covering the different ways UDF stores files and names. |
 | `fatx.py` | A FATX reader for the Xbox hard-disk partitions, to check files the kernel wrote, and a small writer (`FATXWriter`: folders, files, copying a host folder) for preparing disks: `python3 tests/fatx.py SRC.qcow2 --add "E:\\Folder=host/folder" --out NEW.qcow2`. |
 | `exfat.py` | Builds GPT disks with an exFAT volume (`--from-fatx SRC DST` copies a FATX disk's C: and E:) and checks a volume completely: boot and entry-set checksums, name hashes, FAT chains, no cluster used twice, the allocation bitmap (`--check IMG`, `--ls IMG /path`); `--add /F/dir=HOST` also copies a host file or folder onto a new disk. |

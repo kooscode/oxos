@@ -1,6 +1,7 @@
 # exFAT storage for OXOS: design spec
 
-Status: design, not implemented. Companion plan: `06_exfat_storage_plan.md`. The title behaviour below was traced with OXOS's kernel call tracer (Halo,
+Status: implemented, except memory units (the plan's last phase); the driver is `07_exfat_driver.md`. This is the design it follows. Companion plan:
+`06_exfat_storage_plan.md`. The title behaviour below was traced with OXOS's kernel call tracer (Halo,
 2026-10-18, §8).
 
 ## 1. Goal

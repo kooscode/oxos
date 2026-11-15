@@ -46,6 +46,10 @@ Python scripts for the build machine (the `kernel/Makefile` targets call them; e
 | `check_c_library_use.py` | Runs after every kernel link: fails when OXOS's own code calls one of the Xbox kernel's `Rtl*` string, memory or formatting functions instead of the C library (`kernel/src/runtime/c_library.h`). |
 | `gen_av_tables.py` | Writes the video encoder tables (`kernel/src/hardware/video/video_modes.inc`) from the encoder specs `spec/stock/18_conexant_encoder.md`, `19_focus_encoder.md` and `20_xcalibur_encoder.md` (their register maps), with the NV2A timing of each SD row derived from the encoder's own settings (`spec/oxos_internal/02_display_modes.md` §1). `--out FILE` writes the tables; `--check FILE` fails if FILE is stale. |
 | `check_kernel_layout.py` | Runs after every kernel link: fails when kept code uses a symbol of the boot-only sections (`.xka`, `.xkb`; an inline function or constant the linker took from a boot-only file), or when the initialised `.data` outgrows its quick-reboot copy ([`spec/oxos_internal/18_boot_memory.md`](../spec/oxos_internal/18_boot_memory.md) §5). |
+| `mkucode.py` | Picks the Xbox CPU's microcode updates (platform 4) out of Intel's published microcode files into the include file the kernel loads at boot. |
+| `padcal_check.py` | Checks that OXOS's NV2A pad calibration (`kernel/boot/bl.cpp`) makes exactly the writes of a reference routine (spec/stock/21 §3), running both in the Unicorn CPU emulator with the same inputs. Needs your own reference BIOS; not part of the build. |
+| `nxdk_app.mk` | The build rules every OXOS console app shares (nxdk, SDL3 and `sdl_screen/`): an app's Makefile sets its title and sources and includes it; output goes to `build/<its folder>`. |
+| `unit_tests.sh` | Builds and runs the host unit tests (`tests/unit/`), optionally with coverage; `make release` runs it. |
 | `mkxbe.py` | Converts a PE linked at 0x10000 into an XBE (headers, certificate, section digests); used for the kernel test title (`tests/kernel_test_title`) the boot tests run. |
 
 The tests' own helpers (`tests/boot_test.py`, `tests/mkxiso.py`, `tests/mkudf.py`, `tests/qcow2.py`, ...) live in `tests/`.

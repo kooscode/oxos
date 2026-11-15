@@ -16,6 +16,9 @@ Everything a title does to the disk goes through kernel calls we control. The on
 Both are easy to emulate: a small file for the reserved sectors, and "empty the folder" when a FATX header is written to a virtual partition.
 
 ## Phases
+Status (2026-11-15): phases 1–5 done (spec 07); 6 goes on as titles are tested on exFAT; 7 (memory units) not started; 8 in part: the kernel formats
+a blank disk and makes the folders at boot (spec 30).
+
 1. **GPT and exFAT, read-only.** Read and check the GPT (primary, then backup) or an MBR; mount the exFAT volume; open, read and list files; volume queries.
    Written from the published exFAT specification. Test: a host tool builds an exFAT qcow2 (Python writer in `tests/`, like `tests/fatx.py`), then `make test`
    style checks of directory listings and file contents.
@@ -36,7 +39,7 @@ Both are easy to emulate: a small file for the reserved sectors, and "empty the 
 
 ## Order with other work
 After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT disk needs 48-bit LBA for disks over 128 GiB, but no extended partition tables.
-128 MB RAM is independent and can come first.
+128 MB RAM is independent and can come first (done 2026-11-10, stock spec 09 §10).
 
 ## Risks
 - **Titles with unusual disk use:** raw reads of E:/C:, their own cache handling. The tracer shows these quickly; the fallback is to log and fail the raw

@@ -1,10 +1,11 @@
 # exFAT driver
 
-Status: phases 1-4 of the plan work (GPT/MBR, read-write exFAT, folder partitions with bounded sizes, cache-partition formatting through the volume handle with
-X/Y/Z usage limits; `make test_exfat` passes). Not yet run with a retail title on an exFAT disk until 2026-10-21, when Halo 2 ran from an exFAT USB disk (§2.1);
-memory units are the last phase. The storage design (layout, virtual partitions, cache formatting, size reporting) is `05_exfat_storage_spec.md`; this document
-is the driver: the on-disk format it reads and writes, and how it fits the kernel. The format facts come from Microsoft's published exFAT specification (2019)
-and the UEFI specification (GPT); nothing here comes from another implementation's code.
+Status: phases 1–5 of the plan work (GPT/MBR, read-write exFAT, folder partitions with bounded sizes, cache-partition formatting through the volume handle with
+X/Y/Z usage limits, FATX and exFAT disks side by side; `make test_exfat` passes). Retail titles run from exFAT disks since 2026-10-21, when Halo 2 ran from an
+exFAT USB disk (§2.1); exFAT is the format new disks get (spec 30). Memory units are the last phase, not started. The storage design (layout, virtual
+partitions, cache formatting, size reporting) is `05_exfat_storage_spec.md`; this document is the driver: the on-disk format it reads and writes, and how it
+fits the kernel. The format facts come from Microsoft's published exFAT specification (2019) and the UEFI specification (GPT); nothing here comes from another
+implementation's code.
 
 ## 1. On-disk format (the parts the driver uses)
 All values little-endian. A *sector* is 2^BytesPerSectorShift bytes, a *cluster* 2^(BytesPerSectorShift + SectorsPerClusterShift) bytes.

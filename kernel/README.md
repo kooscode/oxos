@@ -46,15 +46,17 @@ make            # ../build/kernel/self_tests/oxoskrnl.exe + oxoskrnl.map (all bu
 make bios       # ../build/kernel/self_tests/bios.bin: the open BIOS image (our 2BL + reset code, Cromwell X-codes; spec 01 §5);
                 # MCPX16=1: the 1.6 console's image (our own 1.6 X-codes)
 make test       # boot bios.bin in xemu; check every milestone's boot self-tests over QMP
+make regression [MCPX_ROM=...] [ONLY=a,b]  # the full regression run: unit tests and every xemu phase below, one summary
+                                # in ../build/regression/ (about 15 minutes; ../tests/README.md "Regression run")
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
                                 # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip
-                                # (the three images, oxos_title_patches.ini, the FTP server's ftp.xbe) and puts the SDK's
+                                # (the three images, oxos_title_patches.ini, the FTP server's ftp.xbe, THIRD_PARTY_NOTICES.md) and puts the SDK's
                                 # oxos_sdk_vX.Y.Z.zip next to it; the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
-                                # BIOS_BASE=its.bin BIOS_NAME=name (state xemu_state/<name>-<instance>)
+                                # BIOS_BASE=its.bin BIOS_NAME=name (state xemu_state/<name>_<instance>)
                                 # MEMORY=128 on any run target: a 128 MB console
                                 # HD=1 (or HD=480p,720p): HDTV AV pack + EEPROM HD modes, so games use 480p/720p/1080i
                                 # ENCODER=focus|xcalibur: the video encoder xemu presents (default conexant)
@@ -95,8 +97,8 @@ packs the kernel into your own BIOS instead; `STOCK_MCPX` is used by `run_stock`
 ## Running in xemu
 `make run` starts from `xbox_files/hdd/msdash.qcow2` when you have it (a hard disk with the stock Microsoft dashboard, whose Settings set up video modes, clock
 and language), otherwise from the default xemu-dashboard disk; pick another with `PLAY_HDD=...` (the tests use `HDD_IMAGE`, the xemu-dashboard disk unless set).
-It keeps its hard-disk copy and EEPROM in `xemu_state/oxos-<instance>/`: `oxos_msdash`, `oxos_xemu` for the default disk, or `INSTANCE=name` for any other.
-Saves and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run_stock` uses `xemu_state/stock-<instance>/`).
+It keeps its hard-disk copy and EEPROM in `xemu_state/oxos_<instance>/`: `oxos_msdash`, `oxos_xemu` for the default disk, or `INSTANCE=name` for any other.
+Saves and settings survive between runs (`FRESH=1` starts over from the image, which is never written; `make run_stock` uses `xemu_state/stock_<instance>/`).
 
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; titles that support widescreen show 16:9 and the others
 4:3. Change that with `WIDE=0`, `ASPECT=16x9` (auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). With HD modes enabled in the
@@ -163,7 +165,7 @@ from which titles derive their save-signature and System Link keys: with it, sav
 - **The kernel** (`src/`): the reference kernel was studied with Ghidra to write behavioural specifications (`../spec/stock/`), and the kernel is written from
   those specs only. No Microsoft source code, machine code, disassembly, decompiled code or keys are included.
 - **Planned features** (`../spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its features were written up as behavioural
-  specs for OXOS.
+  specs for OXOS. Everything OXOS adds to a stock kernel, implemented and planned: `../spec/oxos_features.md`.
 - **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and EEPROM key handling of
   [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs Cromwell's X-codes, whose "overflow trick" hands control to our
   2BL without any Microsoft key; without a boot ROM (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds
@@ -255,7 +257,7 @@ console.
 | 21 | Real hardware: netboot, flash mapping, CPU set-up, microcode, pad calibration | oxos/09, oxos/13–15, 21 §3 | ✅ console: the dashboard boots |
 | 22 | Virtual discs: XISO, full dumps, CCI, split images (`src/storage/`, ISO launcher) | oxos/16, cerbios/07 | ✅ xemu (`test_iso`); console: Halo 2 |
 | 23 | Boot jingle | oxos/17 | ✅ xemu (`test_dash`), console |
-| 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test_memory`): more free memory than stock |
+| 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test_memory`); more free memory than stock when built (2026-10-27), 1–9 pages less on games since (2026-11-15, oxos/18 §7) |
 | 25 | Dashboard choice: EvoX when installed, else the Xbox dashboard | oxos/19 | ✅ xemu (`test_dash`) |
 | 26 | DRAM refresh check before the kernel runs | oxos/20, oxos/21 | ✅ console: 0 bad boots in 56 (8 in 40 before) |
 | 27 | In-game reset: LT + RT + BACK + BLACK, a power cycle through the SMC | oxos/22 | ✅ xemu, console |
@@ -273,6 +275,7 @@ console.
 | 39 | Kernel extensions: `.xos` files loaded before each title (hooks, title events, one run loop, state pages), their loader run from a disk cache, and the kernel extension SDK (`../sdk/`) with the C library and file functions the kernel exports | oxos/34 | ✅ unit tests, xemu (`test_extensions`) |
 | 40 | Log files in `C:\OXOS\log`, rotated at 10 MB; `C:\OXOS`, `log`, `extensions` and `cache` made at every cold boot; exFAT cache partitions' formats kept across a power-off (`cache\oxos_cache_partitions.cache`) | oxos/35, oxos/05 | ✅ xemu (`test`, `test_upload`, `test_exfat`) |
 | 41 | exFAT names follow exFAT's rules: up to 255 characters, Latin-1, no path limit (FATX keeps its 42) | oxos/05, oxos/07 | ✅ xemu (`test_exfat`) |
+| 42 | 128 MB consoles: the upper 64 MB for titles without the "limit to 64 MB" flag, as the development-kit kernel; MTRRs widened, page tables and GPU instance memory for 128 MB | stock/09 §10 | ✅ xemu (`test_relaunch` at 64 and 128 MB), console (debug kit, 128 MB: a Chihiro title) |
 
 Exports: all 364 functions and variables the 4627 retail kernel exports are implemented (its ordinals 7 and 11, `DbgLoadImageSymbols`/`DbgUnLoadImageSymbols`,
 are absent in the reference as well).
@@ -280,7 +283,8 @@ are absent in the reference as well).
 ## Known deviations (tracked)
 - IRQL masks the PIC eagerly instead of the reference's lazy scheme (equivalent for titles, spec/stock/06 §1). KINTERRUPT.DispatchCode isn't used: the IDT keeps
   fixed per-IRQ stubs.
-- Only 64 MB RAM is supported, like the 4627 kernel.
+- 128 MB consoles: the upper 64 MB is used as the 4627 development-kit kernel uses it (`../spec/stock/09_memory_manager.md` §10); the retail 4627 kernel uses
+  only 64 MB. Titles with the XBE's "limit to 64 MB" flag (retail games) get the low 64 MB, as on a retail kernel.
 - The disk's and DVD drive's start-up waits run at the caller's IRQL, not raised to the IDE interrupt's, so the boot splash shows while a hard disk spins up
   (`../spec/oxos_internal/00_boot_splash.md`).
 - `HalReturnToFirmware` resets through the SMC alone and writes port 0xCF9 only if the console is still running two seconds later; the reference writes 0xCF9 at
@@ -294,4 +298,4 @@ are absent in the reference as well).
 - The LZX compressor (`tools/lzx.py`) is greedy/lazy with verbatim blocks only; the stock stream is somewhat smaller.
 - Video (milestone 20; `../spec/oxos_internal/02_display_modes.md`): the NV2A timing is OXOS's own (derived from each encoder's row for SD, the standards for HD
   and VGA; 1080i per field), not the reference's NV2A/CRTC rows; no wait for the vertical blank phase before a mode change; Macrovision stays off; the Xcalibur
-  is left alone on AV pack events. On hardware so far: the Focus encoder (1.4) in composite.
+  is left alone on AV pack events. On hardware: all three encoders (Conexant on a debug kit, Focus on a 1.4, Xcalibur on a 1.6; since v0.4.0).

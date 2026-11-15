@@ -93,6 +93,8 @@ unattended on a [hardware-in-the-loop rig](docs/hwitl.md).
 - Retail 1.0 – 1.3 consoles are untested (the Conexant encoder is tested on a 1.0 debug kit).
 - Debugging on a real console.
 
+What OXOS adds to a stock kernel, and what is planned next: [`spec/oxos_features.md`](spec/oxos_features.md).
+
 ## Credits and license
 OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0), Intel's Pentium III microcode,
 [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) (MIT), and for its console apps [nxdk](https://github.com/XboxDev/nxdk) with

@@ -5,7 +5,7 @@ usage: regression.py [--mcpx-rom ROM] [--pages N] [--only PHASE,...]
 
 `make -C kernel regression` runs it. Each phase's output goes to build/regression/<phase>.log, and the summary (result, checks and time per phase) is printed
 and saved as build/regression/summary.txt. Every phase runs, also after a failure. Exit status 1 when a phase fails, or when a title is given fewer free
-pages than --pages (default 15960: the stock kernel's, on a 64 MB console).
+pages than --pages (default 15960: OXOS's count on a 64 MB console, so no change loses more; the stock kernel gives 15964, spec/oxos_internal/18 §7).
 
   --mcpx-rom ROM   your MCPX boot ROM dump, for test_mcpx (skipped without one; never committed)
   --pages N        the free pages test_memory must report, at least

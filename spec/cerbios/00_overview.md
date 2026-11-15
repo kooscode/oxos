@@ -153,22 +153,26 @@ text colours, four logo colours, scale); in 3.1.0 field 0x105 is a splash factor
   0x74000000-sector cap).
 
 ## For OXOS: features compared and a suggested order
-| Feature | Cerbios | OXOS today (v0.1.6) | Spec |
+| Feature | Cerbios | OXOS (v0.4.8) | Spec |
 |---|---|---|---|
-| 128 MB RAM | full 128 MB, the upper half for titles without the 64 MB flag | first 64 MB only, as retail | 02 |
-| Large disks, extra partitions | 48-bit LBA, F:/G:, on-disk table | 28-bit LBA, C E X Y Z only | 03 |
+| 128 MB RAM | full 128 MB, the upper half for titles without the 64 MB flag | the same, as the 4627 development-kit kernel (stock spec 09 §10) | 02 |
+| Large disks, extra partitions | 48-bit LBA, F:/G:, on-disk table | 48-bit LBA (oxos 04); F:/G: and the PARTINFO table on FATX disks; exFAT disks of any size (oxos 07) | 03 |
 | Dual HDD | slave disk in the DVD bay | slave is the DVD drive | 05 |
 | UDMA modes 2–6 | configurable per drive | UDMA 2 fixed, as retail | 06 §3 |
-| Safe mode, recovery XBE | Eject at boot, error 9/13, SMC scratch bit | no | 01 §4, 09 §2, 14 §3 |
-| No DVD drive | DRIVESETUP 2 | a missing drive is fatal error 10, as retail | 05 |
-| Virtual discs | ISO, CCI, split images | no | 07 |
-| Configurable dashboard, IGR | yes | fixed `C:\xboxdash.xbe`, no IGR | 08, 09 |
-| Boot animation, splash theme | XBE, XMV, brand logo | one built-in PNG splash | 09 §2 |
-| Front LED, fan, LCD, RTC | yes | retail LED only | 11 |
-| Video overrides, region-free | yes | no | 10 |
+| Safe mode, recovery XBE | Eject at boot, error 9/13, SMC scratch bit | B at boot: no extensions (oxos 34 §3.3); X at boot or on "No Dashboard Found": the File Manager (oxos 32) | 01 §4, 09 §2, 14 §3 |
+| No DVD drive | DRIVESETUP 2 | boots without one (oxos 08) | 05 |
+| Virtual discs | ISO, CCI, split images | ISO, CCI, split images, the same device interface (oxos 16) | 07 |
+| Configurable dashboard, IGR | yes | a fixed list of four dashboards (oxos 19; configurable: proposal, oxos 39); IGR (oxos 22) | 08, 09 |
+| Boot animation, splash theme | XBE, XMV, brand logo | a built-in vector splash and jingle (oxos 00, 17); a user's video: proposal (oxos 38) | 09 §2 |
+| Front LED, fan, LCD, RTC | yes | retail LED only (extensions can drive it) | 11 |
+| Video overrides, region-free | yes | region-free (stock spec 05 §4); no video overrides | 10 |
 | TDATA/UDATA redirect, read-only C:, screenshots | yes | no | 13 |
 | Overclocking, CPU upgrades | yes (with a damage warning) | no | 12 |
-| Revisions | 1.0–1.6b, 256 KB image | 1.0–1.5 (1.6 untested), 1 MB image | |
+| Revisions | 1.0–1.6b, 256 KB image | 1.0–1.6, 256 KB images (a separate one for the 1.6) | |
+
+All of OXOS's own features, implemented and planned: [`../oxos_features.md`](../oxos_features.md).
+
+The suggested order below was written at v0.1.6; most of it is done.
 
 Suggested order: 128 MB RAM first (the most requested, testable in xemu with `mem_limit` 128); then large disks and the extended partitions; then configurable
 dashboard paths and IGR (an everyday BIOS); then UDMA modes and the second disk, no-DVD mode and disc images from the hard disk. Smaller ones fit in between:

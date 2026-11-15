@@ -1,8 +1,8 @@
 # 34. Kernel extensions (OXOS's own)
 
-Status: **being implemented, 2026-11-13.** In the kernel: the loader (linked on its own, run from a disk cache, §8.1), hooks, events, Start, RunLoop and
-Terminate, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base with its tests (§9, §9.3: `make -C kernel test_extensions`).
-Not yet: `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS features as extensions (§10).
+Status: **implemented, released in v0.4.7b (2026-11-15).** In the kernel: the loader (linked on its own, run from a disk cache, §8.1), hooks, events, Start,
+RunLoop and Terminate, state pages, safe mode, the runtime exports for extensions (§9.1), and the SDK's C base with its tests (§9, §9.3: `make -C kernel
+test_extensions`). Not yet: `oxos_resolve_path` (§5.1), naming a crashed extension on the error screen (§3.4), the OXOS features as extensions (§10).
 Sections marked *open* are decisions still to make.
 
 A kernel extension is a DLL, file type `.xos`, that the kernel loads from the hard disk before each title and runs in kernel mode, with the kernel's own rights.
@@ -91,7 +91,7 @@ Comments go on lines of their own: as in the other OXOS ini files, a value is th
 
 ### 3.2 When
 At **every launch**, after the disk is mounted and before the title is chosen and loaded:
-- cold boot: before the disc, the dashboard or a netbooted title (`XepChooseTitle`, `kernel/src/titles/title_loader.cpp`);
+- cold boot: before the disc, the dashboard or a netbooted title (`titles::LaunchAtColdBoot`, `kernel/src/titles/title_loader.cpp`);
 - quick reboot: before `titles::LaunchTitle` reads the launch data page, so an extension sees every title start (§7.2).
 
 A quick reboot restores the kernel's `.data`, zeroes its `.bss` and stops every thread (`quick_reboot.S`). The extensions' images, threads, hooks and events are

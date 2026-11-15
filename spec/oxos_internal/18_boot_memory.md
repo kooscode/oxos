@@ -88,6 +88,24 @@ Free pages, the same runs on both kernels in xemu (64 MB, Conexant):
 
 At Half-Life 2's menu the usage counts match the stock kernel's within a page each (pool +1, image +1, virtual memory −1, contiguous −2).
 
+**Measured again 2026-11-15 (v0.4.8):** OXOS is now behind the stock kernel on every title measured, by 1 to 9 pages (4 to 36 KB). The features added since
+(exFAT, the File Manager's resident parts, the error screens, 128 MB, launch redirects, kernel extensions, log files) each kept the memory test title at the
+same count when they were added, but that count was already below stock. Same runs on both kernels in xemu (64 MB, Conexant, a fresh copy of the
+xemu-dashboard disk; stock = the Complex 4627 BIOS through the MCPX 1.0 ROM); free pages read from `MmGlobalData`'s available-pages counter every 0.5 s:
+
+| | Stock 4627 | OXOS v0.4.8 | |
+|---|---|---|---|
+| Memory test title, at its start | 15 964 | 15 960 | −4 |
+| Half-Life 2, lowest while loading | 5 935 | 5 932 | −3 |
+| Half-Life 2, settled (120 s) | 6 947 | 6 942 | −5 |
+| Halo 2, settled (120 s; also its lowest) | 203 | 196 | −7 |
+| Halo, lowest while loading | 195 | 186 | −9 |
+| Halo, settled (90 s) | 275 | 269 | −6 |
+| xemu dashboard | 12 694 | 12 693 | −1 |
+
+The memory test title's count (15 960) is what `make test_memory` and `make regression` hold OXOS to, so that no change loses more; it is not the stock
+kernel's.
+
 ## 8. Tests
 - `make test_dash`: at least 5 boot-only pages freed, the splash code's page no longer mapped in the page database, the Conexant's tables still mapped.
 - `make test_relaunch`: quick reboots after the pages were freed.
