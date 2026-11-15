@@ -24,7 +24,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.
 - **nxdk homebrew:** Fully supports the latest [nxdk](https://github.com/XboxDev/nxdk) and [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) homebrew.
-- **Release Testing:** Every release is tested with over 940 regression tests across Xemu and real hardware!
+- **Release Testing:** Every release is tested with over 1,067 regression tests across Host, Xemu and real hardware!
 
 ## Try it
 Download the [latest release](https://github.com/kooscode/oxos/releases/latest) (`oxos_vX.Y.Z.zip`) and unzip it.
