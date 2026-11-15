@@ -673,8 +673,8 @@ struct Session {
         RequestLaunch(path, false);
     }
 
-    // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z OXOS and keeps this server's XBE at the same place, then
-    // the server starts again from the new disk (a title launch, so the kernel mounts the new layout). Without YES it only says what it would do.
+    // SITE FORMAT-EXFAT YES: the kernel formats the hard disk as exFAT with the folders C E F X Y Z and C\OXOS and keeps this server's XBE at the same place,
+    // then the server starts again from the new disk (a title launch, so the kernel mounts the new layout). Without YES it only says what it would do.
     void FormatDisk(const std::string &arg) {
         auto format = (FormatDiskRoutine)KernelExport(OrdinalFormatDisk);
         if (!format) {

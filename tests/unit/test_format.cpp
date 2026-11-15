@@ -183,8 +183,12 @@ TEST(Format, TheFoldersAndTheFileAreThere) {
     Reader rd(d);
     ULONG first;
     ULONGLONG size;
-    for (const char *name : {"C", "E", "F", "X", "Y", "Z", "OXOS"})
+    for (const char *name : {"C", "E", "F", "X", "Y", "Z"})
         EXPECT_TRUE(rd.Find(rd.Root, name, &first, &size)) << name;
+    EXPECT_FALSE(rd.Find(rd.Root, "OXOS", &first, &size)) << "OXOS's folder is C:\\OXOS, never at the root";
+    ULONG c;
+    ASSERT_TRUE(rd.Find(rd.Root, "C", &c, &size));
+    EXPECT_TRUE(rd.Find(c, "OXOS", &first, &size)) << "C:\\OXOS";
     ULONG e, ftp;
     ASSERT_TRUE(rd.Find(rd.Root, "E", &e, &size));
     ASSERT_TRUE(rd.Find(e, "ftp", &ftp, &size));

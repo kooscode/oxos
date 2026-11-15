@@ -28,7 +28,7 @@ SECTOR = 512
 PART_START = 2048          # first partition sector (1 MiB)
 RESERVED_AT = 1024         # where the retail reserved area (0x400 sectors) is kept
 BASIC_DATA = bytes.fromhex("A2A0D0EBE5B9334487C068B6B72699C7")
-FOLDERS = ("E", "C", "X", "Y", "Z", "F", "OXOS")
+FOLDERS = ("E", "C", "X", "Y", "Z", "F")  # OXOS keeps its files in C:\OXOS (/C/OXOS), which the kernel makes at boot
 
 
 def crc32(b):

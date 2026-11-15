@@ -371,9 +371,9 @@ static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *
     return status;
 }
 
-// Formats the hard disk as exFAT (GPT, one partition) with the folders C E F X Y Z OXOS. KeepPath (optional): a file on the hard disk, such as the running
-// title (XeImageFileName), copied to the same place on the new disk. The old partitions refuse writes from then on: the caller restarts (a title launch or a
-// reboot) to use the new disk.
+// Formats the hard disk as exFAT (GPT, one partition) with the folders C E F X Y Z and C\OXOS. KeepPath (optional): a file on the hard disk, such as the
+// running title (XeImageFileName), copied to the same place on the new disk. The old partitions refuse writes from then on: the caller restarts (a title launch
+// or a reboot) to use the new disk.
 XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath) {
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         return STATUS_INVALID_PARAMETER;

@@ -34,8 +34,8 @@ The ordinals after them, 402-415, are OXOS's exports for kernel extensions: `mem
   the FAT (the driver insists on a chained bitmap). The FAT is zeroed past the last used cluster.
 - **Up-case table:** OXOS's own rules (Basic Latin, Latin-1, Latin Extended-A, Greek, Cyrillic, full-width Latin), stored compressed (0xFFFF n: n characters map
   to themselves), with its checksum.
-- **Root:** volume label "OXOS", the bitmap and up-case entries, and the folders C, E, F, X, Y, Z, OXOS (the folders the kernel would otherwise create at boot)
-  with the kept file's folders; timestamps from the system time.
+- **Root:** volume label "OXOS", the bitmap and up-case entries, and the folders C, E, F, X, Y, Z, with `C\OXOS` inside C (`C:\OXOS`, which the kernel would
+  otherwise create at boot; OXOS has no folder at the root) with the kept file's folders; timestamps from the system time.
 - **Order:** up-case table, FAT and bitmap, directories, the kept file, the backup boot region, the main boot region, then the GPT (backup first): until the
   protective MBR is written last, the disk is not taken for exFAT.
 

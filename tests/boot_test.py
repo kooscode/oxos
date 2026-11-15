@@ -1077,9 +1077,11 @@ def blank_disk_checks(path, gigabytes):
     except ValueError as e:
         return {**checks, f"exFAT volume ({e})": False}
     names = sorted(x.name for x in v.listdir("/") or [])
+    in_c = [x.name for x in v.listdir("/C") or []]
     checks.update({
         "the partition starts at sector 2048": v.lba == 2048,
-        "folders C E F OXOS X Y Z": names == ["C", "E", "F", "OXOS", "X", "Y", "Z"],
+        "folders C E F X Y Z, none of OXOS's at the root": names == ["C", "E", "F", "X", "Y", "Z"],
+        f"C:\\OXOS is /C/OXOS ({in_c})": "OXOS" in in_c,
         f"volume fills the disk ({v.vol_len * 512 >> 20} MiB of {gigabytes} GiB)": v.vol_len * 512 >= (gigabytes << 30) - (4 << 20),
         f"no problems found by the reader ({', '.join(v.problems) or 'none'})": not v.problems,
     })

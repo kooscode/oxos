@@ -32,8 +32,8 @@ debug serial port. Log in with any user name and password.
   console. PATH is an `.xbe`, or a folder whose `default.xbe` is started (an ISO's folder holding the ISO launcher as `default.xbe` starts the ISO); absolute,
   or relative to the current folder. The server answers `200 Launching ...` and then stops, with the title: `curl ftp://ADDR/ -Q 'SITE LAUNCH
   /F/Applications/demo'`.
-- **SITE FORMAT-EXFAT YES** (OXOS only) turns the hard disk into one exFAT volume with the folders C E F X Y Z OXOS, erasing everything on it (FATX, NTFS,
-  anything). The server keeps its own XBE and starts again from the new disk, so you can start copying right away: `curl ftp://ADDR/ -Q 'SITE FORMAT-EXFAT
+- **SITE FORMAT-EXFAT YES** (OXOS only) turns the hard disk into one exFAT volume with the folders C E F X Y Z (and C\OXOS), erasing everything on it (FATX,
+  NTFS, anything). The server keeps its own XBE and starts again from the new disk, so you can start copying right away: `curl ftp://ADDR/ -Q 'SITE FORMAT-EXFAT
   YES'`. Without `YES` it only says what it would do. ([`spec/oxos_internal/30`](../../spec/oxos_internal/30_disk_format.md))
 - **SITE DELETE-ALL-PARTITIONS YES [SECONDS]** (OXOS only) deletes every partition and reboots; OXOS finds a blank disk at the next boot and formats it as exFAT
   itself, after a countdown of SECONDS (default 0: at once). With netboot, the server is installed and started again.

@@ -61,7 +61,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
   | `/C` | `\Device\Harddisk0\Partition2` | C: | dashboard |
   | `/X`, `/Y`, `/Z` | Partition3, 4, 5 | X:, Y:, Z: | title cache partitions (§5) |
   | `/F` | Partition6 | F: | games and apps: the rest of the disk (§2.1) |
-  | `/OXOS` | none | none | kernel files (settings) |
+  | `/C/OXOS` | in Partition2 | `C:\OXOS` | OXOS's own files (settings, logs, caches, extensions): always addressed as titles would, `C:\OXOS`, so the same paths work on FATX and exFAT; never a folder at the root |
 
   Folder names are matched case-insensitively. A user can copy a title's folder to `/F/Titles/Halo` from a PC and launch it from a dashboard as
   `F:\Titles\Halo\default.xbe`.
@@ -70,7 +70,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
 On FATX disks the extended partitions (F:, G:, and Cerbios's J:–N:) exist because each partition has a size limit. On one exFAT volume every folder shares the
 same free space, so a single F: already offers the whole disk:
 - **F:** (Partition6) is the `/F` folder and reports the volume's full free space (§6). It is a folder, not the volume root, so dashboards don't see the system
-  folders (`/E`, `/C`, `/X`–`/Z`, `/OXOS`) as part of F:.
+  folders (`/E`, `/C`, `/X`–`/Z`) as part of F:.
 - **G: and up** (Partition7+) are not created on an exFAT disk; opening them fails as for a missing partition.
   Dashboards that offer G: simply don't list it.
 
@@ -104,8 +104,8 @@ A title formats its cache partition itself, through kernel calls (traced, §8). 
 2. **IOCTL 0x70000** (geometry) and **IOCTL 0x74004** (partition information) → describe the virtual partition at its retail size (X/Y/Z: 0x177000 sectors = 750
    MB; others as reported in §6), 512-byte sectors.
 3. **Raw write at offset 0** whose data starts with `FATX` → **format**: record the header (signature, serial number at +4, sectors per cluster at +8, root
-   cluster at +12) as the partition's current header, and empty the folder (rename it to `/OXOS/trash/<n>`, create a new empty one, delete the old one in the
-   background).
+   cluster at +12) as the partition's current header, and empty the folder (as built: emptied in place, synchronously, spec 07; the design first had it renamed
+   to a trash folder in `C:\OXOS` and deleted in the background).
 4. **Raw writes after it** inside the metadata area (the allocation table and the root directory: up to the end of the first root cluster, 0x1D000 bytes for a
    750 MB partition with 16 KB clusters) → accepted and dropped.
 5. **FSCTL 0x90020** (dismount) → succeeds; open file handles on the partition are invalidated as for a FATX dismount.
@@ -180,8 +180,8 @@ Design, once confirmed:
   driver, rooted at the volume (or at a `/UDATA` folder when present, so a stick can carry other files).
 - **Names and sizes:** FATX name rules as on the hard disk (§3); size and free space reported in the units titles expect (16 KB blocks), capped (an official
   unit is 8 MB; a proposed cap of 1 GB for sticks).
-- **Raw access:** the name area backed by a small file on the volume (`/OXOS/muname.bin`); a FATX format write turns into "empty the volume's save data", as in
-  §5; other raw writes are refused and logged.
+- **Raw access:** the name area backed by a small file on the volume (`/C/OXOS/muname.bin`, i.e. `C:\OXOS\muname.bin`); a FATX format write turns into "empty
+  the volume's save data", as in §5; other raw writes are refused and logged.
 - **Formatting new units:** a setting chooses FATX (default, so units still work on other consoles) or exFAT.
 - **Compatibility:** an exFAT unit only works under OXOS; units move between consoles more often than hard disks, which is why FATX stays the default.
 

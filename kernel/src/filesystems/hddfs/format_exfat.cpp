@@ -1,5 +1,5 @@
 // Formatting an exFAT volume (spec/oxos_internal/30_disk_format.md): the boot regions, the FAT, the allocation bitmap, the up-case table and the root with the
-// folders C E F X Y Z OXOS (and one file), laid out as the exFAT specification describes; the code and the up-case table's rules are OXOS's own.
+// folders C E F X Y Z and C\OXOS (and one file), laid out as the exFAT specification describes; the code and the up-case table's rules are OXOS's own.
 // storage/disk_format.cpp puts the GPT around it. Every sector goes out through the caller's DISK_FORMAT_IO.
 #include <storage/disk_format.h>
 #include <filesystems/filesystems.h>
@@ -169,33 +169,34 @@ static LONG AddNode(FORMAT_TREE *t, LONG Parent, const char *Name, ULONG Length,
     return (LONG)t->Count++;
 }
 
-// Root, folders and the file in one directory cluster each (a folder's entries: at most 16 sets of up to 7 entries, 3.5 KB, less than any cluster).
-static bool BuildTree(FORMAT_TREE *t, const DISK_FORMAT_FILE *File) {
-    static const char *const folders[] = {"C", "E", "F", "X", "Y", "Z", "OXOS"};
-    t->Count = 0;
-    for (const char *name : folders) {
-        ULONG n = 0;
-        while (name[n])
-            n++;
-        AddNode(t, -1, name, n, true);
-    }
-    if (!File)
-        return true;
-    LONG parent = -1;
-    const char *p = File->Path;
+// The node for Path (names separated by \, from the root), with the folders on its way; Folder: whether its last name is a folder. -1 when it cannot be added.
+static LONG AddPath(FORMAT_TREE *t, const char *Path, bool Folder) {
+    LONG node = -1;
     for (;;) {
         ULONG n = 0;
-        while (p[n] && p[n] != '\\')
+        while (Path[n] && Path[n] != '\\')
             n++;
-        bool last = !p[n];
-        parent = AddNode(t, parent, p, n, !last);
-        if (parent < 0)
-            return false;
-        if (last)
-            break;
-        p += n + 1;
+        bool last = !Path[n];
+        node = AddNode(t, node, Path, n, !last || Folder);
+        if (node < 0 || last)
+            return node;
+        Path += n + 1;
     }
-    t->Nodes[parent].Size = File->Length;
+}
+
+// Root, folders and the file in one directory cluster each (a folder's entries: at most 16 sets of up to 7 entries, 3.5 KB, less than any cluster). OXOS's own
+// folder is C:\OXOS (/C/OXOS), as titles and the kernel name it: never a folder at the volume's root.
+static bool BuildTree(FORMAT_TREE *t, const DISK_FORMAT_FILE *File) {
+    static const char *const folders[] = {"C", "E", "F", "X", "Y", "Z", "C\\OXOS"};
+    t->Count = 0;
+    for (const char *path : folders)
+        AddPath(t, path, true);
+    if (!File)
+        return true;
+    LONG node = AddPath(t, File->Path, false);
+    if (node < 0)
+        return false;
+    t->Nodes[node].Size = File->Length;
     return File->Length != 0;
 }
 
