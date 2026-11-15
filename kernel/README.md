@@ -49,7 +49,7 @@ make test       # boot bios.bin in xemu; check every milestone's boot self-tests
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
                                 # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip
-                                # (the three images, title_patches.ini, the FTP server's ftp.xbe) and puts the SDK's
+                                # (the three images, oxos_title_patches.ini, the FTP server's ftp.xbe) and puts the SDK's
                                 # oxos_sdk_vX.Y.Z.zip next to it; the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
@@ -183,7 +183,7 @@ from which titles derive their save-signature and System Link keys: with it, sav
 | `src/graphics/` | what the kernel draws with: the OXOS font and text (`text.cpp`), the screens' frame buffer, rectangles, centred text and large digits (`screen.cpp`), both resident; and the vector renderer the boot splash draws its scene with (`vector_renderer.cpp`, boot-only) |
 | `src/hardware/` | the console's hardware, one subfolder per part, namespace `xk::hardware::<part>`: `chipset/` (PCI set-up and HAL phase 0, PIC, PIT, CMOS clock, ACPI PM, SMBus and the SMC, EEPROM, string port I/O, the debug serial port's UART driver: spec/oxos_internal/03), `video/` (AV pack, encoders and display modes, the NV2A's set-up: spec/stock/17-20, spec/oxos_internal/24), `ide/` (the IDE channel, hard disk with 28- and 48-bit addressing, DVD drive: spec/stock/04), `ethernet/` (the network card and its PHY; `nic.h` is shared with the 2BL's netboot), `usb/` (the first OHCI controller and the devices on its ports and behind hubs; boot-only, spec/oxos_internal/32), `audio/` (the AC'97 controller and codec; boot-only, for the boot jingle) |
 | `src/in_game_reset/` | the in-game reset: LT + RT + BACK + BLACK in a title power-cycles the console (`xinput_hook.S` watches `XInputGetState`; spec/oxos_internal/22) |
-| `src/ini_file/` | the kernel's ini files in `C:\OXOS`: the line reader (`ini_file.cpp`), the title patches' parser (`title_patcher_ini.cpp`, `title_patches.ini`) the extension list's (`extensions_ini.cpp`, `oxos_extensions.ini`) and the launch redirects' (`launch_redirect_ini.cpp`, `oxos_launch_redirect.ini`); no kernel calls, for the host unit tests |
+| `src/ini_file/` | the kernel's ini files in `C:\OXOS`: the line reader (`ini_file.cpp`), the title patches' parser (`title_patcher_ini.cpp`, `oxos_title_patches.ini`) the extension list's (`extensions_ini.cpp`, `oxos_extensions.ini`) and the launch redirects' (`launch_redirect_ini.cpp`, `oxos_launch_redirect.ini`); no kernel calls, for the host unit tests |
 | `src/io/` | I/O manager: devices, IRPs, files, completion ports |
 | `src/memory/` | page tables, physical pages, system PTEs, contiguous/system memory, pool, title virtual memory |
 | `src/network/` | the network stack on the card's driver (`hardware/ethernet/`): IPv4 with ARP, ping and DHCP (`ip.cpp`), a small TCP server (`tcp.cpp`); boot-only, for the File Manager (spec/oxos_internal/31) |
@@ -197,7 +197,7 @@ from which titles derive their save-signature and System Link keys: with it, sav
 | `Makefile` | the build: the kernel and BIOS images, the release, the boot tests, the xemu sessions and the console apps (its header lists the build kinds) |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |
 | `splash/oxos_splash.svg` | the boot splash: the OXOS logo, fading from metal letters to the glowing green X |
-| `title_patches/title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |
+| `title_patches/oxos_title_patches.ini` | per-game fixes the kernel writes into a title as it loads, from the console's `C:\OXOS\oxos_title_patches.ini` (exFAT: `/C/OXOS/`); copy this file there. Format: [`spec/oxos_internal/25`](../spec/oxos_internal/25_title_compatibility.md) §3 |
 | `../build/` | all build output of the repository, the only folder git ignores for it: `kernel/` one folder per kind of kernel build (`selftest`, `release`, `debug`, `trace_basic`, `trace_full`, `trace_full_64mb`, `netboot`; see the Makefile's header; `make clean` removes it), `tools/` and `tests/` the apps, host tools, unit tests and test extensions, `sdk/` the kernel extension SDK as it ships |
 | `../sdk/` | the kernel extension SDK's source: its headers, functions and examples, built into `../build/sdk/` with `make -C ../sdk` ([`../sdk/README.md`](../sdk/README.md), spec/oxos_internal/34 §9) |
 | `../tests/` | the boot tests, the kernel test title and the controller test ([`../tests/README.md`](../tests/README.md)) |
@@ -260,7 +260,7 @@ console.
 | 27 | In-game reset: LT + RT + BACK + BLACK, a power cycle through the SMC | oxos/22 | ✅ xemu, console |
 | 28 | Large FATX disks: F:/G: from a PARTINFO table, else Cerbios's layout | cerbios/03 | ✅ console: 2 TB XBPartitioner disk |
 | 29 | exFAT on a whole disk (no partition table); main boot region repaired from the backup | oxos/05 §2a | ✅ xemu; console: 2 TB drive |
-| 30 | Title compatibility: physical sort key, D: sector size, title patches from `C:\OXOS\title_patches.ini`, video overlay stopped at each title switch | oxos/25 | ✅ unit tests, xemu (`test`); console |
+| 30 | Title compatibility: physical sort key, D: sector size, title patches from `C:\OXOS\oxos_title_patches.ini`, video overlay stopped at each title switch | oxos/25 | ✅ unit tests, xemu (`test`); console |
 | 31 | GPU start-up settings (clock, memory interface) checked and restored by the 2BL | oxos/26 | ✅ console: every cold boot's dashboard drawn correctly |
 | 32 | The 1.6 console: its own X-codes (memory set-up with EEPROM settings), EEPROM pad calibration, its own image | stock/24, oxos/28 | ✅ console (1.6): dashboard, games |
 | 33 | Overlapped hard-disk transfers report STATUS_PENDING as the reference does; RtlNtStatusToDosError as the reference | stock/04b, stock/13 | ✅ unit tests, xemu, console (1.6): a game that streams with overlapped reads |

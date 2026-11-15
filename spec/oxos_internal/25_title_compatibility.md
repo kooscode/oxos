@@ -51,11 +51,11 @@ the kernel writes patches into the loaded game, taken from a file, so any title 
 - **Tests:** host unit tests `tests/unit/test_title_patcher_ini.cpp` (the format, and the shipped file parses without an error); boot self-test "title patches"
   (boot_test.py puts a patch file for the test title on the test disk: a matching section changes a variable, a section for another certificate version leaves
   another one alone, a patch whose current bytes are not there leaves a third one alone, and a patch below the image is skipped).
-- **Shipped file:** `kernel/title_patches/title_patches.ini`, with the Cerbios fixes (spec/cerbios/13 §7), including the two sector-size fixes (which the kernel
-  also covers, §2) and the archive-position fix of spec/cerbios/13 §7.9 (§1). Its current bytes: at 0x1C930D `8B F0 56 E8 00 F0 03 00` (mov esi, eax; push esi;
-  call the sort-key routine at 0x208315, from the code around it); at 0x20831B the library routine's `56 8D 45 08 50 FF 35 30 C7 34 00 83 CE FF` (the same
-  routine of another title of that library version, with this game's import slot for IoFileObjectType, 0x34C730). The other three are not known and are blind
-  patches under a `match =` line.
+- **Shipped file:** `kernel/title_patches/oxos_title_patches.ini`, with the Cerbios fixes (spec/cerbios/13 §7), including the two sector-size fixes (which the
+  kernel also covers, §2) and the archive-position fix of spec/cerbios/13 §7.9 (§1). Its current bytes: at 0x1C930D `8B F0 56 E8 00 F0 03 00` (mov esi, eax;
+  push esi; call the sort-key routine at 0x208315, from the code around it); at 0x20831B the library routine's `56 8D 45 08 50 FF 35 30 C7 34 00 83 CE FF` (the
+  same routine of another title of that library version, with this game's import slot for IoFileObjectType, 0x34C730). The other three are not known and are
+  blind patches under a `match =` line.
 - **OXOS fixes in the shipped file** (marked in it as not from Cerbios): the same title's Xbox Live sign-in picks a security gateway at random from the list the
   service returns, `random % count`, with no check for an empty list (0x213B46, `div ecx`): with no gateways returned it stops with a divide error (bug check
   0x1E, 0xC0000094). The patch at 0x213AD6 retargets the `jbe` that is taken only for a count of 0 (`76 4B` > `76 94`) to the routine's own failure path (state
@@ -63,8 +63,8 @@ the kernel writes patches into the loaded game, taken from a file, so any title 
   the patch written sign-in no longer stops the title.
 
 ### 3.1 The file
-`C:\OXOS\title_patches.ini`, read through `\Device\Harddisk0\Partition2`. On a FATX disk that is C:; on an exFAT disk it is `/C/OXOS/title_patches.ini`. Text,
-at most 1 MB, lines ending in LF or CR LF:
+`C:\OXOS\oxos_title_patches.ini`, read through `\Device\Harddisk0\Partition2`. On a FATX disk that is C:; on an exFAT disk it is
+`/C/OXOS/oxos_title_patches.ini`. Text, at most 1 MB, lines ending in LF or CR LF:
 
 ```ini
 ; a comment (also after a section header or a patch)

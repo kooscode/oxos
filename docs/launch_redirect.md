@@ -21,7 +21,7 @@ behind them are in [`spec/oxos_internal/33_launch_redirect.md`](../spec/oxos_int
    - `source`: the XBE titles try to start. `target`: the XBE to start instead.
    - The name in the brackets is yours to choose; it shows in the serial log.
 3. **Copy it to `C:\OXOS\oxos_launch_redirect.ini`.** On an exFAT disk that is `/C/OXOS/oxos_launch_redirect.ini` (the File Manager shows it as `/C/OXOS`).
-   Create the `OXOS` folder if it is not there; `title_patches.ini` goes in the same folder.
+   Create the `OXOS` folder if it is not there; `oxos_title_patches.ini` goes in the same folder.
 4. **That is all.** The file is read each time a title launches another XBE, so a change counts from the next launch, with no reboot.
 5. **Try it:** do what starts the original (in the example, choose Xbox Live in the dashboard). Your target starts.
 

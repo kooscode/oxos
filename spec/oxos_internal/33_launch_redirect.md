@@ -2,7 +2,7 @@
 
 Status: implemented 2026-11-12; the file renamed from `launch_redirect.ini` to `oxos_launch_redirect.ini` on 2026-11-13 (OXOS's own files get the `oxos_`
 prefix). Code: `kernel/src/ini_file/launch_redirect_ini.cpp` (the file's parser, `src/ini_file/launch_redirect_ini.h`), on the ini line reader it shares with
-title_patches.ini (`kernel/src/ini_file/ini_file.cpp`, `src/ini_file/ini_file.h`, spec/oxos_internal/25 §3.1); `kernel/src/titles/title_loader.cpp`
+oxos_title_patches.ini (`kernel/src/ini_file/ini_file.cpp`, `src/ini_file/ini_file.h`, spec/oxos_internal/25 §3.1); `kernel/src/titles/title_loader.cpp`
 (`titles::RedirectLaunch`, in `titles::LaunchTitle`, and `titles::ReadOxosFile`, which reads both files).
 
 When a title starts another XBE (`XLaunchNewImage`, `XLaunchXBE`), the kernel can start a different XBE in its place, named in a file on the hard disk. The
@@ -12,8 +12,8 @@ changing the dashboard.
 User guide: [`docs/launch_redirect.md`](../../docs/launch_redirect.md).
 
 ## 1. The file
-`C:\OXOS\oxos_launch_redirect.ini`, read through `\Device\Harddisk0\Partition2`, next to `title_patches.ini` (spec/oxos_internal/25 §3.1): C: on a FATX disk,
-`/C/OXOS/oxos_launch_redirect.ini` on an exFAT disk. Text, at most 64 KB, lines ending in LF or CR LF:
+`C:\OXOS\oxos_launch_redirect.ini`, read through `\Device\Harddisk0\Partition2`, next to `oxos_title_patches.ini` (spec/oxos_internal/25 §3.1): C: on a FATX
+disk, `/C/OXOS/oxos_launch_redirect.ini` on an exFAT disk. Text, at most 64 KB, lines ending in LF or CR LF:
 
 ```ini
 ; a comment (a line of its own)

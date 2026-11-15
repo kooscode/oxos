@@ -449,7 +449,7 @@ TITLE_PATCHES = False  # set when the disk copy carries the test title's patch f
 
 
 def write_title_patches(hdd_copy, title, title_map):
-    """C:\\OXOS\\title_patches.ini for the test title (spec/oxos_internal/25 §3), on a FATX test disk."""
+    """C:\\OXOS\\oxos_title_patches.ini for the test title (spec/oxos_internal/25 §3), on a FATX test disk."""
     global TITLE_PATCHES
     q = Qcow2(hdd_copy)
     try:
@@ -466,7 +466,7 @@ def write_title_patches(hdd_copy, title, title_map):
             f"patch = FFF0: 00 > 90 ; below the image: skipped\r\n"
             f"[{tid:08X}/{version + 1}]\r\npatch = {syms['_XkTitlePatchB']:X}: 22 22 22 22 > B0 B0 B0 B0\r\n")
     w.makedirs("OXOS")
-    w.write_file("OXOS\\title_patches.ini", text.encode())
+    w.write_file("OXOS\\oxos_title_patches.ini", text.encode())
     q.save(hdd_copy + ".new")
     os.replace(hdd_copy + ".new", hdd_copy)
     TITLE_PATCHES = True

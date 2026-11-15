@@ -31,7 +31,7 @@ Download the [latest release](https://github.com/kooscode/oxos/releases/latest) 
 **xemu:** in *Machine → Settings → System*, set *Flash (BIOS) File* to `bios_vX.Y.Z.bin` and leave *MCPX Boot ROM File* empty. Use the free
 [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk or your own disk image.
 
-**Console:** flash the image for your revision to a modchip bank. Copy `title_patches.ini` to `C:\OXOS\` for the per-title fixes.
+**Console:** flash the image for your revision to a modchip bank. Copy `oxos_title_patches.ini` to `C:\OXOS\` for the per-title fixes.
 
 | Console | Image |
 |---|---|

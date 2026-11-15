@@ -86,7 +86,7 @@ static NTSTATUS OpenImage(HANDLE *h) {
     return NtOpenFile(h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
-// --- Kernel files in C:\OXOS (title_patches.ini, oxos_launch_redirect.ini): C: on a FATX disk, /C/OXOS on an
+// --- Kernel files in C:\OXOS (oxos_title_patches.ini, oxos_launch_redirect.ini): C: on a FATX disk, /C/OXOS on an
 // exFAT disk
 
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
@@ -116,7 +116,7 @@ char *ReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *St
     return text;
 }
 
-// --- Title patches from C:\OXOS\title_patches.ini (spec/oxos_internal/25 §3): read once per title load, written into
+// --- Title patches from C:\OXOS\oxos_title_patches.ini (spec/oxos_internal/25 §3): read once per title load, written into
 // each section whenever it is read from the image (at load for preloaded sections, later through XeLoadSection).
 
 static PUCHAR PatchRecords; // this title's records (ini_file::ParseTitlePatches), or null
@@ -131,10 +131,10 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
     constexpr ULONG MAX_PATCH_FILE = 0x100000;
     ULONG got;
     NTSTATUS status;
-    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
+    char *text = ReadOxosFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
     if (!text) {
         if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
-            XK_SERIAL("patches: title_patches.ini not read: %#lx\n", status);
+            XK_SERIAL("patches: oxos_title_patches.ini not read: %#lx\n", status);
         return; // no file: no patches
     }
     // A record is never more than twice its line ("patch=1:00" makes 12 bytes, "name=" 8).

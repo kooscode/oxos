@@ -182,7 +182,7 @@ TEST(Patches, NoNewlineAtTheEnd) {
 // The file shipped in kernel/title_patches parses without a single bad line, checks 4 bytes or more, and never has fewer new bytes than original ones (shorter
 // NEW is allowed, but not used there, for readability; longer only where the rest of the original is not known).
 TEST(Patches, ShippedFileParses) {
-    std::string path = XK_KERNEL_DIR "/title_patches/title_patches.ini";
+    std::string path = XK_KERNEL_DIR "/title_patches/oxos_title_patches.ini";
     FILE *f = fopen(path.c_str(), "rb");
     ASSERT_NE(f, nullptr) << path;
     std::string text;

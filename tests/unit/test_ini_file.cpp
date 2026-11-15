@@ -1,4 +1,4 @@
-// The kernel's ini line reader (kernel/src/ini_file/ini_file.cpp), shared by title_patches.ini (spec/oxos_internal/25 §3.1), oxos_launch_redirect.ini
+// The kernel's ini line reader (kernel/src/ini_file/ini_file.cpp), shared by oxos_title_patches.ini (spec/oxos_internal/25 §3.1), oxos_launch_redirect.ini
 // (spec/oxos_internal/33 §1) and oxos_extensions.ini (spec/oxos_internal/34).
 #include "kernel_test.h"
 
