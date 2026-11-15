@@ -90,7 +90,7 @@ static USHORT NameHash(const char *Name, ULONG Length) {
 // A file or folder's entry set (File, Stream extension, Name entries) at At; returns the number of entries.
 static ULONG EntrySet(PUCHAR At, const char *Name, ULONG Length, bool Folder, ULONG FirstCluster, ULONGLONG Size, ULONG Timestamp) {
     ULONG names = (Length + 14) / 15, count = 2 + names;
-    RtlZeroMemory(At, count * 32);
+    memset(At, 0, count * 32);
     At[0] = ENTRY_FILE;
     At[1] = (UCHAR)(count - 1);
     storage::StoreLittleEndian16(At + 4, Folder ? 0x10 : 0x20);
@@ -161,8 +161,8 @@ static LONG AddNode(FORMAT_TREE *t, LONG Parent, const char *Name, ULONG Length,
             return -1;
     }
     FORMAT_NODE *n = &t->Nodes[t->Count];
-    RtlZeroMemory(n, sizeof(*n));
-    RtlCopyMemory(n->Name, Name, Length);
+    memset(n, 0, sizeof(*n));
+    memcpy(n->Name, Name, Length);
     n->Length = Length;
     n->Parent = Parent;
     n->Folder = Folder;
@@ -277,7 +277,7 @@ static NTSTATUS WriteFatAndBitmap(const FORMAT_GEOMETRY *g, const FORMAT_RUNS *r
     ULONGLONG lba = ClusterLba(g, BitmapCluster);
     for (ULONG done = 0; done < sectors;) {
         ULONG n = sectors - done < SCRATCH_SECTORS ? sectors - done : SCRATCH_SECTORS;
-        RtlZeroMemory(Scratch, DISK_FORMAT_SCRATCH);
+        memset(Scratch, 0, DISK_FORMAT_SCRATCH);
         for (ULONG c = 2 + done * 4096; c < r->Next && c < 2 + (done + n) * 4096; c++)
             Scratch[(c - 2 - done * 4096) / 8] |= (UCHAR)(1 << ((c - 2) & 7));
         NTSTATUS status = Io->Write(Io->Context, lba + done, Scratch, n);
@@ -310,12 +310,12 @@ static ULONG FolderEntries(const FORMAT_TREE *t, LONG Parent, PUCHAR At, ULONG T
 
 // The boot region (12 sectors) at Lba: boot sector, 8 extended boot sectors, OEM parameters, a reserved sector and the checksum sector.
 static NTSTATUS WriteBootRegion(const FORMAT_GEOMETRY *g, ULONG Serial, ULONG RootCluster, ULONGLONG Lba, const DISK_FORMAT_IO *Io, PUCHAR Scratch) {
-    RtlZeroMemory(Scratch, 12 * 512);
+    memset(Scratch, 0, 12 * 512);
     PUCHAR b = Scratch;
     b[0] = 0xEB;
     b[1] = 0x76;
     b[2] = 0x90;
-    RtlCopyMemory(b + 3, "EXFAT   ", 8);
+    memcpy(b + 3, "EXFAT   ", 8);
     storage::StoreLittleEndian64(b + 64, g->Start);
     storage::StoreLittleEndian64(b + 72, g->Sectors);
     storage::StoreLittleEndian32(b + 80, g->FatOffset);
@@ -377,14 +377,14 @@ NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULO
 
     // The up-case table (still in Scratch).
     ULONG upcaseSectors = (upcaseBytes + 511) / 512;
-    RtlZeroMemory(Scratch + upcaseBytes, upcaseSectors * 512 - upcaseBytes);
+    memset(Scratch + upcaseBytes, 0, upcaseSectors * 512 - upcaseBytes);
     NTSTATUS status = Io->Write(Io->Context, ClusterLba(&g, upcaseCluster), Scratch, upcaseSectors);
     if (NT_SUCCESS(status))
         status = WriteFatAndBitmap(&g, &runs, bitmapCluster, Io, Scratch);
 
     // The root: label, bitmap, up-case table, then the folders.
     if (NT_SUCCESS(status)) {
-        RtlZeroMemory(Scratch, DISK_FORMAT_SCRATCH);
+        memset(Scratch, 0, DISK_FORMAT_SCRATCH);
         PUCHAR e = Scratch;
         e[0] = ENTRY_LABEL;
         e[1] = 4;
@@ -407,7 +407,7 @@ NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULO
     for (ULONG i = 0; i < tree.Count && NT_SUCCESS(status); i++) {
         const FORMAT_NODE *n = &tree.Nodes[i];
         if (n->Folder) {
-            RtlZeroMemory(Scratch, DISK_FORMAT_SCRATCH);
+            memset(Scratch, 0, DISK_FORMAT_SCRATCH);
             ULONG bytes = FolderEntries(&tree, (LONG)i, Scratch, Timestamp);
             status = WriteDirectory(&g, n->FirstCluster, bytes ? bytes : 512, Io, Scratch);
             continue;
@@ -417,8 +417,8 @@ NTSTATUS EXFATFormatVolume(ULONGLONG Start, ULONGLONG Sectors, ULONG Serial, ULO
         if (whole)
             status = Io->Write(Io->Context, lba, File->Data, whole);
         if (NT_SUCCESS(status) && tail) {
-            RtlZeroMemory(Scratch, 512);
-            RtlCopyMemory(Scratch, File->Data + whole * 512, tail);
+            memset(Scratch, 0, 512);
+            memcpy(Scratch, File->Data + whole * 512, tail);
             status = Io->Write(Io->Context, lba + whole, Scratch, 1);
         }
     }

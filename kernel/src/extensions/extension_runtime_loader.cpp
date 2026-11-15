@@ -44,16 +44,12 @@ void WriteLoaderCache() {
     if (!rva)
         return;
     auto header = (XK_EXTENSION_LOADER_HEADER *)(KERNEL_BASE + rva);
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, CACHE_PATH);
-    OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE file;
     // No extensions folder: no extensions, and nothing to write.
-    NTSTATUS status = NtCreateFile(&file, GENERIC_WRITE | SYNCHRONIZE, &attributes, &iosb, nullptr, 0, 0, FILE_OVERWRITE_IF,
-                                   FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = io::CreateFile(CACHE_PATH, GENERIC_WRITE, 0, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &file);
     if (!NT_SUCCESS(status))
         return;
+    IO_STATUS_BLOCK iosb;
     LARGE_INTEGER at;
     at.QuadPart = 0;
     status = NtWriteFile(file, nullptr, nullptr, nullptr, &iosb, header, sizeof(*header) + header->Size, &at);
@@ -74,11 +70,7 @@ void LoadExtensions() {
         WriteLoaderCache();
     // Without the list there is nothing to load (and the cache is not read), unless the last launch's state pages are still kept: the loader then frees them
     // (§6).
-    OBJECT_STRING listName;
-    RtlInitAnsiString(&listName, LIST_PATH);
-    OBJECT_ATTRIBUTES list = {nullptr, &listName, OBJ_CASE_INSENSITIVE};
-    FILE_NETWORK_OPEN_INFORMATION info;
-    if (!StateIndexPage && !NT_SUCCESS(NtQueryFullAttributesFile(&list, &info)))
+    if (!StateIndexPage && !io::PathExists(LIST_PATH))
         return;
     ULONG got;
     NTSTATUS status;
@@ -98,8 +90,8 @@ void LoadExtensions() {
     auto table = (ULONG *)MmAllocateContiguousMemory(PAGE_SIZE);
     ULONG *pde = memory::PdeAddress(XK_EXTENSION_LOADER_BASE);
     if (pages && table && !*pde) {
-        RtlCopyMemory(pages, header + 1, size);
-        RtlZeroMemory(table, PAGE_SIZE);
+        memcpy(pages, header + 1, size);
+        memset(table, 0, PAGE_SIZE);
         for (ULONG at = 0; at < size; at += PAGE_SIZE)
             table[at >> PAGE_SHIFT] = MmGetPhysicalAddress(pages + at) | PAGE_RW;
         *pde = MmGetPhysicalAddress(table) | PAGE_RW;

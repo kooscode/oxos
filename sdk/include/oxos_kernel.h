@@ -19,6 +19,7 @@ typedef void VOID, *PVOID;
 typedef PVOID HANDLE, *PHANDLE;
 typedef const char *PCSZ;
 typedef ULONG ULONG_PTR, SIZE_T, *PSIZE_T, ACCESS_MASK;
+typedef __SIZE_TYPE__ size_t;
 typedef ULONG PHYSICAL_ADDRESS;
 typedef CHAR KPROCESSOR_MODE;
 typedef __builtin_va_list va_list;
@@ -508,11 +509,45 @@ OXOS_IMPORT BOOLEAN NTAPI XcVerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, 
 OXOS_IMPORT NTSTATUS NTAPI XeLoadSection(XBE_SECTION_HEADER *Section);
 OXOS_IMPORT NTSTATUS NTAPI XeUnloadSection(XBE_SECTION_HEADER *Section);
 
-// The kernel's memory functions (OXOS's own exports 402-405), which the compiler also calls for copies.
-void *memcpy(void *Destination, const void *Source, SIZE_T Count);
-void *memmove(void *Destination, const void *Source, SIZE_T Count);
-void *memset(void *Destination, int Value, SIZE_T Count);
-int memcmp(const void *A, const void *B, SIZE_T Count);
+// --- The C library: the kernel's own (OXOS's exports 402-405 and 417-439), as OXOS's own code uses it. Plain C names, not hookable.
+
+// Memory: the compiler also calls memcpy and memset for copies and zeroing.
+void *memcpy(void *Destination, const void *Source, size_t Count);
+void *memmove(void *Destination, const void *Source, size_t Count);
+void *memset(void *Destination, int Value, size_t Count);
+int memcmp(const void *A, const void *B, size_t Count);
+void *memchr(const void *Memory, int Value, size_t Count); // the first, or null
+
+// Strings. Compares by bytes; "case" means ASCII letters.
+size_t strlen(const char *Text);
+size_t strnlen(const char *Text, size_t Max);
+int strcmp(const char *A, const char *B);
+int strncmp(const char *A, const char *B, size_t Count);
+int strcasecmp(const char *A, const char *B); // any case
+int strncasecmp(const char *A, const char *B, size_t Count);
+char *strchr(const char *Text, int Character);    // the first, or null
+char *strrchr(const char *Text, int Character);   // the last, or null
+char *strstr(const char *Text, const char *Part); // the first, or null
+// Copies with the buffer's whole size: the result always ends in 0, and the length of the text it was meant to hold is returned (>= Size: cut short).
+size_t strlcpy(char *Buffer, const char *Text, size_t Size);
+size_t strlcat(char *Buffer, const char *Text, size_t Size);
+
+// Numbers: base 0 reads 0x... as hexadecimal and 0... as octal; *End (when given) is set after the last digit read.
+long strtol(const char *Text, char **End, int Base);
+unsigned long strtoul(const char *Text, char **End, int Base);
+int atoi(const char *Text);
+
+// Characters: ASCII.
+int tolower(int Character);
+int toupper(int Character);
+int isdigit(int Character);
+int isspace(int Character);
+int isalpha(int Character);
+int isalnum(int Character);
+
+// Formatting, as C99: the output always ends in 0 (when Size > 0); returns the length the whole text has, so >= Size when cut short.
+int snprintf(char *Buffer, size_t Size, const char *Format, ...);
+int vsnprintf(char *Buffer, size_t Size, const char *Format, va_list Args);
 
 // Data: milliseconds since the console started (it counts up by one each millisecond, and wraps after 49 days).
 OXOS_IMPORT extern volatile ULONG KeTickCount;

@@ -77,15 +77,15 @@ static ULONG ReceiveWindow(const NETP_CONNECTION *c) {
 // Received bytes into the receive ring, and out of it, in at most two copies each (where the ring wraps).
 static void RingPut(NETP_CONNECTION *c, const UCHAR *Data, ULONG Length) {
     ULONG tail = (c->RxStart + c->RxCount) % RX_SIZE, first = Length < RX_SIZE - tail ? Length : RX_SIZE - tail;
-    RtlCopyMemory(c->Rx + tail, Data, first);
-    RtlCopyMemory(c->Rx, Data + first, Length - first);
+    memcpy(c->Rx + tail, Data, first);
+    memcpy(c->Rx, Data + first, Length - first);
     c->RxCount += Length;
 }
 
 static void RingTake(NETP_CONNECTION *c, PUCHAR Out, ULONG Length) {
     ULONG first = Length < RX_SIZE - c->RxStart ? Length : RX_SIZE - c->RxStart;
-    RtlCopyMemory(Out, c->Rx + c->RxStart, first);
-    RtlCopyMemory(Out + first, c->Rx, Length - first);
+    memcpy(Out, c->Rx + c->RxStart, first);
+    memcpy(Out + first, c->Rx, Length - first);
     c->RxStart = (c->RxStart + Length) % RX_SIZE;
     c->RxCount -= Length;
 }
@@ -95,7 +95,7 @@ bool StartTcp() {
     Connections = (NETP_CONNECTION *)MmAllocateSystemMemory(size, PAGE_READWRITE);
     if (!Connections)
         return false;
-    RtlZeroMemory(Connections, NET_TCP_CONNECTIONS * sizeof(NETP_CONNECTION));
+    memset(Connections, 0, NET_TCP_CONNECTIONS * sizeof(NETP_CONNECTION));
     PUCHAR buffers = (PUCHAR)(Connections + NET_TCP_CONNECTIONS);
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS; i++) {
         Connections[i].Rx = buffers + i * (RX_SIZE + TX_SIZE);
@@ -134,11 +134,11 @@ static void SendSegment(const UCHAR *Mac, const UCHAR *Ip, USHORT PeerPort, ULON
         StoreBigEndian16(t + 22, MSS);
     }
     if (Length)
-        RtlCopyMemory(t + header, Data, Length);
+        memcpy(t + header, Data, Length);
     // The checksum covers a pseudo-header: both addresses, the protocol and the segment's length.
     UCHAR pseudo[12];
-    RtlCopyMemory(pseudo, IpAddress, 4);
-    RtlCopyMemory(pseudo + 4, Ip, 4);
+    memcpy(pseudo, IpAddress, 4);
+    memcpy(pseudo + 4, Ip, 4);
     pseudo[8] = 0;
     pseudo[9] = NET_TCP;
     StoreBigEndian16(pseudo + 10, (USHORT)(header + Length));
@@ -210,13 +210,13 @@ static void NewConnection(const UCHAR *Mac, const UCHAR *Ip, const UCHAR *t, ULO
     }
     UCHAR generation = c->Generation;
     PUCHAR rx = c->Rx, tx = c->Tx;
-    RtlZeroMemory(c, sizeof(*c));
+    memset(c, 0, sizeof(*c));
     c->Generation = generation;
     c->Rx = rx;
     c->Tx = tx;
     c->State = TcpSynReceived;
-    RtlCopyMemory(c->PeerMac, Mac, 6);
-    RtlCopyMemory(c->PeerIp, Ip, 4);
+    memcpy(c->PeerMac, Mac, 6);
+    memcpy(c->PeerIp, Ip, 4);
     c->PeerPort = port;
     c->PeerMss = 536; // the default without the option
     for (ULONG i = 20; i + 1 < HeaderLength;) { // options: MSS
@@ -253,7 +253,7 @@ static void Acknowledged(NETP_CONNECTION *c, ULONG Ack, ULONG Window) {
     ULONG data = acked - (finAcked ? 1 : 0);
     if (data > c->TxCount)
         data = c->TxCount;
-    RtlMoveMemory(c->Tx, c->Tx + data, c->TxCount - data);
+    memmove(c->Tx, c->Tx + data, c->TxCount - data);
     c->TxCount -= data;
     c->SndUna = Ack;
     c->SndWindow = Window;
@@ -268,8 +268,8 @@ void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, 
         return;
     ULONG headerLength = (t[12] >> 4) * 4;
     UCHAR pseudo[12];
-    RtlCopyMemory(pseudo, SourceIp, 4);
-    RtlCopyMemory(pseudo + 4, IpAddress, 4);
+    memcpy(pseudo, SourceIp, 4);
+    memcpy(pseudo + 4, IpAddress, 4);
     pseudo[8] = 0;
     pseudo[9] = NET_TCP;
     StoreBigEndian16(pseudo + 10, (USHORT)Length);
@@ -279,7 +279,7 @@ void TcpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UCHAR *t, 
     NETP_CONNECTION *c = nullptr;
     for (ULONG i = 0; i < NET_TCP_CONNECTIONS && !c; i++) {
         NETP_CONNECTION *k = &Connections[i];
-        if (k->State != TcpFree && k->PeerPort == port && RtlCompareMemory(k->PeerIp, SourceIp, 4) == 4)
+        if (k->State != TcpFree && k->PeerPort == port && memcmp(k->PeerIp, SourceIp, 4) == 0)
             c = k;
     }
     if (!c)
@@ -394,7 +394,7 @@ ULONG SendTcp(LONG Id, const void *Data, ULONG Size) {
     if (!c || c->FinQueued)
         return 0;
     ULONG n = Size < TX_SIZE - c->TxCount ? Size : TX_SIZE - c->TxCount;
-    RtlCopyMemory(c->Tx + c->TxCount, Data, n);
+    memcpy(c->Tx + c->TxCount, Data, n);
     c->TxCount += n;
     TransmitConnection(c);
     return n;

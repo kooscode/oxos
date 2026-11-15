@@ -59,7 +59,7 @@ NTSTATUS ReadDiskSectors(ULONGLONG Lba, PVOID Buffer, ULONG Length) {
 static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last, bool Lenient = false) {
     static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
                                         0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
-    if (!NT_SUCCESS(ReadDiskSectors(Lba, Sector, 512)) || RtlCompareMemory(Sector, "EFI PART", 8) != 8)
+    if (!NT_SUCCESS(ReadDiskSectors(Lba, Sector, 512)) || memcmp(Sector, "EFI PART", 8) != 0)
         return false;
     ULONG size = *(PULONG)(Sector + 12), crc = *(PULONG)(Sector + 16);
     if (size < 92 || size > 512)
@@ -80,7 +80,7 @@ static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLON
         (Lenient || Crc32(entries, count * entrySize) == entriesCrc)) {
         for (ULONG i = 0; i < count && !found; i++) {
             PUCHAR e = entries + i * entrySize;
-            if (RtlCompareMemory(e, basicData, 16) == 16) {
+            if (memcmp(e, basicData, 16) == 0) {
                 *Start = *(ULONGLONG *)(e + 32);
                 *Last = *(ULONGLONG *)(e + 40);
                 found = *Last >= *Start;
@@ -121,9 +121,9 @@ static bool DiskReadPartitionTable(PUCHAR Sector) {
     const ULONGLONG places[] = {0, n - 8, n - 1};
     for (ULONGLONG lba : places) {
         if (!NT_SUCCESS(ReadDiskSectors(lba, Sector, 512)) ||
-            RtlCompareMemory(Sector, "****PARTINFO****", 16) != 16)
+            memcmp(Sector, "****PARTINFO****", 16) != 0)
             continue;
-        RtlZeroMemory(DiskPartitions, sizeof(DiskPartitions));
+        memset(DiskPartitions, 0, sizeof(DiskPartitions));
         for (ULONG i = 0; i < 14; i++) {
             PUCHAR e = Sector + 0x30 + 0x20 * i;
             ULONGLONG start = *(PULONG)(e + 0x14) | (ULONGLONG)*(PUSHORT)(e + 0x1C) << 32;
@@ -229,8 +229,8 @@ static void DiskReadLayout() {
         auto sector = (PUCHAR)ExAllocatePoolWithTag(512, 'tyLI');
         ULONGLONG start = 0, last = 0;
         bool found = false, pcTable = false;
-        if (sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55 && RtlCompareMemory(sector, "****PARTINFO****",
-            16) != 16) {
+        if (sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) && *(PUSHORT)(sector + 510) == 0xAA55 && memcmp(sector, "****PARTINFO****",
+            16) != 0) {
             if (sector[446 + 4] == 0xEE) { // protective MBR: GPT, the primary header, else the backup
                 pcTable = true;
                 const ULONGLONG headers[] = {1, hardware::ide::DiskLengthInSectors - 1};
@@ -257,12 +257,12 @@ static void DiskReadLayout() {
         // The partition must start after the reserved-area copy, end inside the disk and hold exFAT.
         found = found && start >= 2048 && last < hardware::ide::DiskLengthInSectors &&
                 NT_SUCCESS(ReadDiskSectors(start, sector, 512)) &&
-                RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8;
+                memcmp(sector + 3, "EXFAT   ", 8) == 0;
         // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk): used when its FAT starts at sector 2048 or later, so the
         // reserved-area copy (1024-2047) sits in the unused space after the two 12-sector boot regions. Boot sector: VolumeLength (sectors) at 72, FatOffset
         // (sectors) at 80.
         if (!found && sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) &&
-            RtlCompareMemory(sector + 3, "EXFAT   ", 8) == 8) {
+            memcmp(sector + 3, "EXFAT   ", 8) == 0) {
             ULONGLONG length = *(ULONGLONG *)(sector + 72);
             ULONG fatOffset = *(PULONG)(sector + 80);
             XK_SERIAL("disk: exFAT on the whole disk: %#llx sectors, FAT at sector %#lx\n", length, fatOffset);
@@ -311,7 +311,7 @@ void DetectDiskLayout() {
                 DiskCountdown("Unsupported Hard Disk Found", what, IDEX_COUNTDOWN, 2);
                 if (NT_SUCCESS(DiskFormat(nullptr))) {
                     DiskHasForeignLayout = FALSE;
-                    RtlZeroMemory(DiskPartitions, sizeof(DiskPartitions));
+                    memset(DiskPartitions, 0, sizeof(DiskPartitions));
                     DiskReadLayout();
                 }
             }
@@ -330,33 +330,21 @@ void DetectDiskLayout() {
 static NTSTATUS ReadKeptFile(PCSZ KeepPath, char *Path, ULONG PathSize, PUCHAR *Data, ULONG *Length, ULONG *Allocated) {
     static const char prefix[] = "\\device\\harddisk0\\partition";
     static const char drives[] = "?ECXYZF";
-    ULONG i = 0;
-    for (; prefix[i]; i++) {
-        char c = KeepPath[i];
-        if ((c >= 'A' && c <= 'Z' ? c + 0x20 : c) != prefix[i])
-            return STATUS_OBJECT_PATH_NOT_FOUND;
-    }
-    ULONG number = 0;
-    while (KeepPath[i] >= '0' && KeepPath[i] <= '9')
-        number = number * 10 + (KeepPath[i++] - '0');
+    if (strncasecmp(KeepPath, prefix, sizeof(prefix) - 1) != 0)
+        return STATUS_OBJECT_PATH_NOT_FOUND;
+    ULONG i = sizeof(prefix); // after the partition's one digit
+    ULONG number = (ULONG)(KeepPath[i - 1] - '0');
     if (number < 1 || number > 6 || KeepPath[i] != '\\')
         return STATUS_OBJECT_PATH_NOT_FOUND;
-    ULONG n = 0;
-    Path[n++] = drives[number];
-    for (; KeepPath[i] && n + 1 < PathSize; i++)
-        Path[n++] = KeepPath[i];
-    if (KeepPath[i])
+    Path[0] = drives[number];
+    if (strlcpy(Path + 1, KeepPath + i, PathSize - 1) >= PathSize - 1)
         return STATUS_OBJECT_NAME_INVALID;
-    Path[n] = 0;
 
-    ANSI_STRING name;
-    RtlInitAnsiString(&name, KeepPath);
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = io::OpenFile(KeepPath, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &h);
     if (!NT_SUCCESS(status))
         return status;
+    IO_STATUS_BLOCK iosb;
     FILE_NETWORK_OPEN_INFORMATION info;
     status = NtQueryInformationFile(h, &iosb, &info, sizeof(info), FileNetworkOpenInformation);
     if (NT_SUCCESS(status) && (info.EndOfFile.QuadPart <= 0 || info.EndOfFile.QuadPart > (64 << 20)))

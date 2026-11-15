@@ -17,7 +17,7 @@ void oxos_log(const char *Format, ...) {
     char text[224];
     va_list args;
     va_start(args, Format);
-    RtlVsnprintf(text, sizeof(text), Format, args);
+    vsnprintf(text, sizeof(text), Format, args);
     va_end(args);
     OXOSWriteExtensionLog(oxos_context, text); // the kernel adds "[name] " and writes it where oxos_context->LogTarget says
 }
@@ -31,23 +31,17 @@ void oxos_set_log_target(ULONG Target) {
 const char *oxos_setting(const char *Key) {
     for (ULONG i = 0; i < oxos_context->SettingCount; i++) {
         const char *key = oxos_context->Settings[i].Key;
-        ULONG n = 0;
-        while (key && key[n] && Key[n] && (key[n] | 0x20) == (Key[n] | 0x20))
-            n++;
-        if (key && !key[n] && !Key[n])
+        if (key && strcasecmp(key, Key) == 0)
             return oxos_context->Settings[i].Value;
     }
     return nullptr;
 }
 
 ULONG oxos_setting_number(const char *Key, ULONG Default) {
-    const char *digit = oxos_setting(Key);
-    if (!digit || *digit < '0' || *digit > '9')
+    const char *text = oxos_setting(Key);
+    if (!text || !isdigit(*text))
         return Default;
-    ULONG value = 0;
-    for (; *digit >= '0' && *digit <= '9'; digit++)
-        value = value * 10 + static_cast<ULONG>(*digit - '0');
-    return value;
+    return strtoul(text, nullptr, 10);
 }
 
 ULONG oxos_launch_number(void) {
@@ -66,8 +60,8 @@ void *oxos_state(void) {
 
 char *oxos_read_file(const char *Path, ULONG MaxSize, ULONG *Size) {
     *Size = 0;
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, Path);
+    USHORT length = static_cast<USHORT>(strlen(Path));
+    OBJECT_STRING name = {length, static_cast<USHORT>(length + 1), const_cast<char *>(Path)}; // the kernel's file functions take counted names
     OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
     IO_STATUS_BLOCK iosb;
     HANDLE file;

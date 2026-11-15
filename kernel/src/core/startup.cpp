@@ -67,18 +67,18 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     // Take the keys, then erase the 2BL image (0x6000 bytes at 0x80400000), as the stock kernel does. A quick reboot keeps memory: the keys come from the
     // persisted copy and nothing is erased.
     bool quick = KiQuickRebootFlag;
-    RtlCopyMemory(XboxEEPROMKey, bootKeys, 16);
-    RtlCopyMemory(CertKey, bootKeys + 16, 16);
+    memcpy(XboxEEPROMKey, bootKeys, 16);
+    memcpy(CertKey, bootKeys + 16, 16);
     if (!quick) {
-        RtlCopyMemory(KiPersistedBootKeys, bootKeys, 32);
+        memcpy(KiPersistedBootKeys, bootKeys, 32);
         EepromKeyStateCount = 0;
         auto ext = (const ULONG *)(bootKeys + 32);
         if (arg0 == XK_OPEN_BOOT_MAGIC && ext[0] == XK_KEY_STATES_MAGIC) {
             ULONG n = ext[1] < 8 ? ext[1] : 8;
-            RtlCopyMemory(EepromKeyStates, ext + 2, n * sizeof(EepromKeyStates[0]));
+            memcpy(EepromKeyStates, ext + 2, n * sizeof(EepromKeyStates[0]));
             EepromKeyStateCount = n;
         }
-        RtlZeroMemory((PVOID)0x80400000, 0x6000);
+        memset((PVOID)0x80400000, 0, 0x6000);
     }
 
     KiBootStep("processor");

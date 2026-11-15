@@ -54,7 +54,7 @@ NTSTATUS HDDFSMapBlock(HDDFS_VOLUME *v, LONGLONG Offset, PUCHAR *Data) {
         return status;
     if (HDDFSHeldCount == HDDFS_MAX_HELD) {
         UnmapCacheBuffer(HDDFSHeld[0].Buffer);
-        RtlMoveMemory(HDDFSHeld, HDDFSHeld + 1, (HDDFS_MAX_HELD - 1) * sizeof(HDDFSHeld[0]));
+        memmove(HDDFSHeld, HDDFSHeld + 1, (HDDFS_MAX_HELD - 1) * sizeof(HDDFSHeld[0]));
         HDDFSHeldCount--;
     }
     HDDFSHeld[HDDFSHeldCount++] = {p, v, block};
@@ -310,18 +310,8 @@ bool HDDFSIsValidName(const OBJECT_STRING *Name) {
     return true;
 }
 
-static CHAR HDDFSUpper(CHAR c) {
-    return c >= 'a' && c <= 'z' ? (CHAR)(c - 0x20) : c;
-}
-
 bool HDDFSNameEqual(const CHAR *a, ULONG alen, const CHAR *b, ULONG blen) {
-    if (alen != blen)
-        return false;
-    for (ULONG i = 0; i < alen; i++) {
-        if (HDDFSUpper(a[i]) != HDDFSUpper(b[i]))
-            return false;
-    }
-    return true;
+    return alen == blen && strncasecmp(a, b, alen) == 0;
 }
 
 bool HDDFSWildcardMatch(const CHAR *mask, ULONG mlen, const CHAR *name, ULONG nlen) {
@@ -336,7 +326,7 @@ bool HDDFSWildcardMatch(const CHAR *mask, ULONG mlen, const CHAR *name, ULONG nl
     }
     if (!nlen)
         return false;
-    if (*mask != '?' && HDDFSUpper(*mask) != HDDFSUpper(*name))
+    if (*mask != '?' && toupper(*mask) != toupper(*name))
         return false;
     return HDDFSWildcardMatch(mask + 1, mlen - 1, name + 1, nlen - 1);
 }

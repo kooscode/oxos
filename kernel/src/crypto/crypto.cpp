@@ -68,7 +68,7 @@ void NTAPI UpdateSHA(PUCHAR pbSHAContext, const UCHAR *pbInput, ULONG dwInputLen
     c->CountLow = low;
     while (dwInputLength) {
         ULONG n = 64 - used < dwInputLength ? 64 - used : dwInputLength;
-        RtlCopyMemory(c->Buffer + used, pbInput, n);
+        memcpy(c->Buffer + used, pbInput, n);
         used += n;
         pbInput += n;
         dwInputLength -= n;
@@ -103,7 +103,7 @@ void NTAPI ComputeHMAC(const UCHAR *pbKeyMaterial, ULONG cbKeyMaterial, const UC
         UpdateSHA(ctx, pbKeyMaterial, cbKeyMaterial);
         FinishSHA(ctx, key);
     } else {
-        RtlCopyMemory(key, pbKeyMaterial, cbKeyMaterial);
+        memcpy(key, pbKeyMaterial, cbKeyMaterial);
     }
     UCHAR pad[64];
     for (int i = 0; i < 64; i++)

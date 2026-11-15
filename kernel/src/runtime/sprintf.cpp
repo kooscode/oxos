@@ -224,6 +224,26 @@ static int FormatText(RTLP_OUT &o, const char *f, va_list ap) {
     return (int)o.Used;
 }
 
+// --- The C library's (c_library.h): the output always ends in 0 when Size > 0; the result is the whole text's length.
+
+extern "C" int XK_C(vsnprintf)(char *Buffer, size_t Size, const char *Format, va_list Args) {
+    RTLP_OUT o = {Buffer, Size, 0};
+    int n = FormatText(o, Format, Args);
+    if (Size)
+        Buffer[(ULONG)n < Size ? n : Size - 1] = 0;
+    return n;
+}
+
+extern "C" int XK_C(snprintf)(char *Buffer, size_t Size, const char *Format, ...) {
+    va_list ap;
+    va_start(ap, Format);
+    int n = XK_C(vsnprintf)(Buffer, Size, Format, ap);
+    va_end(ap);
+    return n;
+}
+
+// --- The Xbox kernel's, for titles: _snprintf's rules (-1 when the output was cut short, and then no 0 at its end).
+
 XBAPI int __cdecl RtlVsnprintf(char *Buffer, SIZE_T Size, const char *Format, va_list Args) {
     RTLP_OUT o = {Buffer, Size, 0};
     int n = FormatText(o, Format, Args);

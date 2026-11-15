@@ -19,7 +19,7 @@ ULONG Crc32(const UCHAR *Data, ULONG Length) {
 
 NTSTATUS WriteZeroSectors(const DISK_FORMAT_IO *Io, PUCHAR Scratch, ULONGLONG Lba, ULONGLONG Count) {
     constexpr ULONG chunk = DISK_FORMAT_SCRATCH / 512;
-    RtlZeroMemory(Scratch, DISK_FORMAT_SCRATCH);
+    memset(Scratch, 0, DISK_FORMAT_SCRATCH);
     while (Count) {
         ULONG n = Count < chunk ? (ULONG)Count : chunk;
         NTSTATUS status = Io->Write(Io->Context, Lba, Scratch, n);
@@ -51,8 +51,8 @@ NTSTATUS DeleteAllPartitions(ULONGLONG DiskSectors, const ULONGLONG *Extra, ULON
             status = WriteZeroSectors(Io, Scratch, lba, 128);
     }
     if (NT_SUCCESS(status)) {
-        RtlZeroMemory(Scratch, 512);
-        RtlCopyMemory(Scratch, BlankDiskMarker, sizeof(BlankDiskMarker));
+        memset(Scratch, 0, 512);
+        memcpy(Scratch, BlankDiskMarker, sizeof(BlankDiskMarker));
         StoreLittleEndian32(Scratch + 16, CountdownSeconds);
         status = Io->Write(Io->Context, DISK_FORMAT_MARKER, Scratch, 1);
     }
@@ -174,14 +174,6 @@ static const char *MbrTypeName(UCHAR Type) {
     }
 }
 
-static bool SameText(const char *a, const char *b) {
-    while (*a && *a == *b) {
-        a++;
-        b++;
-    }
-    return *a == *b;
-}
-
 ULONG DescribeDisk(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scratch, char *Out, ULONG Size) {
     ULONG n = 0;
     auto append = [&](const char *text) {
@@ -194,7 +186,7 @@ ULONG DescribeDisk(ULONGLONG DiskSectors, const DISK_FORMAT_IO *Io, PUCHAR Scrat
     ULONG count = 0;
     auto name = [&](const char *text) {
         for (ULONG i = 0; i < count; i++) {
-            if (SameText(names[i], text))
+            if (strcmp(names[i], text) == 0)
                 return;
         }
         append(count ? ", " : "");
@@ -288,8 +280,8 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     Guid(diskGuid, &seed);
     // The entry array (32 sectors) at Scratch + 1024.
     PUCHAR entries = Scratch + 1024;
-    RtlZeroMemory(Scratch, 1024 + 32 * 512);
-    RtlCopyMemory(entries, basicData, 16);
+    memset(Scratch, 0, 1024 + 32 * 512);
+    memcpy(entries, basicData, 16);
     Guid(entries + 16, &seed);
     StoreLittleEndian64(entries + 32, Start);
     StoreLittleEndian64(entries + 40, Start + Sectors - 1);
@@ -300,15 +292,15 @@ static NTSTATUS WriteGpt(ULONGLONG DiskSectors, ULONGLONG Start, ULONGLONG Secto
     // The headers at Scratch + 512 (primary, then rewritten for the backup).
     auto header = [&](ULONGLONG self, ULONGLONG other, ULONGLONG entriesLba) {
         PUCHAR h = Scratch + 512;
-        RtlZeroMemory(h, 512);
-        RtlCopyMemory(h, "EFI PART", 8);
+        memset(h, 0, 512);
+        memcpy(h, "EFI PART", 8);
         StoreLittleEndian32(h + 8, 0x00010000);
         StoreLittleEndian32(h + 12, 92);
         StoreLittleEndian64(h + 24, self);
         StoreLittleEndian64(h + 32, other);
         StoreLittleEndian64(h + 40, 34);
         StoreLittleEndian64(h + 48, DiskSectors - 34);
-        RtlCopyMemory(h + 56, diskGuid, 16);
+        memcpy(h + 56, diskGuid, 16);
         StoreLittleEndian64(h + 72, entriesLba);
         StoreLittleEndian32(h + 80, 128);
         StoreLittleEndian32(h + 84, 128);

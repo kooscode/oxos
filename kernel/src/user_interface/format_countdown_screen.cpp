@@ -19,7 +19,7 @@ static void DrawSeconds(ULONG *Screen, ULONG Seconds) {
     graphics::DrawLargeDigit(Screen, 250, 72, Seconds / 10 % 10);
     graphics::ClearRectangle(Screen, graphics::SCREEN_LEFT, COUNTDOWN_LINE, graphics::SCREEN_WIDTH - 2 * graphics::SCREEN_LEFT, 16);
     char line[graphics::SCREEN_LINE_CHARS + 1];
-    RtlSnprintf(line, sizeof(line), "In %lu s OXOS erases it and formats it as", Seconds);
+    snprintf(line, sizeof(line), "In %lu s OXOS erases it and formats it as", Seconds);
     graphics::DrawText(Screen, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, COUNTDOWN_LINE, line, 2, graphics::COLOR_WHITE);
 }
 
@@ -34,10 +34,10 @@ void ShowFormatCountdown(const char *Title, const char *What, ULONG Seconds) {
     graphics::DrawScreenTitle(screen, 204, Title);
     char lines[8][graphics::SCREEN_LINE_CHARS + 1] = {};
     hardware::ide::DiskModelLine(lines[0], sizeof(lines[0]));
-    RtlSnprintf(lines[1], sizeof(lines[1]), "Size: %lu GB", (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
-    RtlSnprintf(lines[2], sizeof(lines[2]), "Holds: %s", What);
-    RtlSnprintf(lines[5], sizeof(lines[5]), "exFAT, with all required folders.");
-    RtlSnprintf(lines[7], sizeof(lines[7]), "  !! TURN OFF POWER TO SKIP FORMATTING !!");
+    snprintf(lines[1], sizeof(lines[1]), "Size: %lu GB", (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
+    snprintf(lines[2], sizeof(lines[2]), "Holds: %s", What);
+    snprintf(lines[5], sizeof(lines[5]), "exFAT, with all required folders.");
+    snprintf(lines[7], sizeof(lines[7]), "  !! TURN OFF POWER TO SKIP FORMATTING !!");
     for (ULONG i = 0; i < 8; i++) {
         graphics::DrawText(screen, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, 244 + i * graphics::SCREEN_LINE, lines[i], 2,
                            i < 3 ? graphics::COLOR_TEXT : graphics::COLOR_WHITE);

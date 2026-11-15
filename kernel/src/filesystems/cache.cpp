@@ -205,7 +205,7 @@ NTSTATUS MapEmptyCacheBuffer(FSCACHE_EXTENSION *ext, LONGLONG offset, PVOID *buf
         MoveToCacheTail(e);
     }
     SetCacheWritable(CacheVirtualAddress(e), true);
-    RtlFillMemory((PVOID)CacheVirtualAddress(e), PAGE_SIZE, 0xFF);
+    memset((PVOID)CacheVirtualAddress(e), 0xFF, PAGE_SIZE);
     *buffer = (PVOID)CacheVirtualAddress(e);
     Unlock();
     return STATUS_SUCCESS;
@@ -308,7 +308,7 @@ NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, UL
             ULONG n = PAGE_SIZE - (ULONG)(offset & (PAGE_SIZE - 1));
             if (n > length)
                 n = length;
-            RtlCopyMemory(out, data, n);
+            memcpy(out, data, n);
             UnmapCacheBuffer(data);
             offset += n;
             out += n;
@@ -322,7 +322,7 @@ NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, UL
         if (!NT_SUCCESS(status))
             return status;
         ULONG n = PAGE_SIZE - (ULONG)(offset & (PAGE_SIZE - 1));
-        RtlCopyMemory(out, data, n);
+        memcpy(out, data, n);
         UnmapCacheBuffer(data);
         offset += n;
         out += n;
@@ -339,7 +339,7 @@ NTSTATUS CachedRead(FSCACHE_EXTENSION *ext, UCHAR fileFlags, LONGLONG offset, UL
     status = MapCacheBuffer(ext, offset, FALSE, &data);
     if (!NT_SUCCESS(status))
         return status;
-    RtlCopyMemory(out, data, length);
+    memcpy(out, data, length);
     UnmapCacheBuffer(data);
     return STATUS_SUCCESS;
 }
@@ -357,7 +357,7 @@ static NTSTATUS GrowCache(ULONG pages) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     if (CachePages)
-        RtlCopyMemory(elements, CacheElementArray, CachePages * sizeof(FSC_ELEMENT));
+        memcpy(elements, CacheElementArray, CachePages * sizeof(FSC_ELEMENT));
     for (ULONG i = CachePages; i < pages; i++, va += PAGE_SIZE) {
         elements[i] = {0, nullptr, va, {}};
         SetCacheIndex(va, i);

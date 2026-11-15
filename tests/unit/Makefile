@@ -33,8 +33,8 @@ KERNEL_SOURCES := \
     src/core/thread.cpp src/core/timer.cpp src/core/wait.cpp \
     src/memory/init.cpp src/memory/memory.cpp src/memory/pool.cpp src/memory/virtual.cpp \
     src/objects/object_manager.cpp src/objects/handle_objects.cpp \
-    src/runtime/memory.cpp src/runtime/runtime.cpp src/runtime/sprintf.cpp src/runtime/status.cpp \
-    src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
+    src/runtime/c_library.cpp src/runtime/c_library_extensions.cpp src/runtime/memory.cpp src/runtime/runtime.cpp src/runtime/sprintf.cpp \
+    src/runtime/status.cpp src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
     src/hardware/chipset/interrupts_timers.cpp src/hardware/chipset/port_io.cpp src/graphics/vector_renderer.cpp src/user_interface/error_screen_text.cpp \
     src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
     src/extensions/extension_parser.cpp \

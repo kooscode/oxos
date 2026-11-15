@@ -104,10 +104,10 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 # all of it). Every kernel header (each folder of src/ holds its own): a source file is rebuilt when one changes.
 KERNEL_HEADERS := $(wildcard src/*/*.h src/*/*/*.h)
 # The extension loader's files (src/extensions/extension_loader.cpp, extension_parser.cpp and src/ini_file/extensions_ini.cpp) are linked on their own, below,
-# not into the kernel.
+# not into the kernel. src/runtime/c_library_extensions.cpp is not in the kernel either: the SDK's library has it (tools/gen_oxos_sdk.py).
 EXTENSION_LOADER_SRCS := $(addprefix src/extensions/,extension_loader.cpp extension_parser.cpp) \
                          src/ini_file/extensions_ini.cpp
-CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) $(EXTENSION_LOADER_SRCS), \
+CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) $(EXTENSION_LOADER_SRCS) src/runtime/c_library_extensions.cpp, \
                          $(wildcard src/*/*.cpp src/*/*/*.cpp))
 ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
 # The boot self-tests: test code in tests/kernel_self_tests, compiled into SELFTEST=1 kernels only.
@@ -187,6 +187,7 @@ $(BUILD)/oxoskrnl.exe: $(OBJS) $(BUILD)/oxoskrnl.def
 endif
 	python3 -I $(ROOT)/tools/check_kernel_layout.py --exe $@ --map $(BUILD)/oxoskrnl.map --boot-objs $(BOOT_OBJS) \
 	    --boot-entries $(BOOT_ENTRIES) --data-copy $(KI_DATA_COPY_SIZE) $(OBJS) || { rm -f $@; exit 1; }
+	python3 -I $(ROOT)/tools/check_c_library_use.py $(ROOT) || { rm -f $@; exit 1; }
 
 # Kernel test title (tests/kernel_test_title): a minimal freestanding "game" the boot tests run from a disc to check the title loader and the kernel functions
 # titles rely on. PE at 0x10000 -> XBE.
@@ -403,7 +404,8 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv src $(ROOT)/sdk/src/oxoskrnl.def $(ROOT)/sdk/include/oxos_kernel.h $(ROOT)/sdk/src/kernel_table_check.c
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv src $(ROOT)/sdk/src/oxoskrnl.def $(ROOT)/sdk/include/oxos_kernel.h \
+	    $(ROOT)/sdk/src/kernel_table_check.c $(ROOT)/sdk/src/oxos_c_library.cpp
 	$(MAKE) -C $(ROOT)/sdk
 	mkdir -p $(TEST_EXTENSIONS_DIR)
 	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)

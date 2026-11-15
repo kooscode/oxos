@@ -56,7 +56,7 @@ static NTSTATUS HDDFSOpenFcb(HDDFS_VOLUME *v, PIO_STACK_LOCATION s, HDDFS_FCB *f
         IoRemoveShareAccess(fo, &f->ShareAccess);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    RtlZeroMemory(ccb, sizeof(*ccb));
+    memset(ccb, 0, sizeof(*ccb));
     f->ReferenceCount++;
     f->CleanupCount++;
     fo->FsContext = f;
@@ -367,10 +367,10 @@ static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLO
             status = HDDFSMapBlock(v, block, &data);
             if (NT_SUCCESS(status)) {
                 if (write) {
-                    RtlCopyMemory(data + start, buffer, run);
+                    memcpy(data + start, buffer, run);
                     status = HDDFSWriteBlockRange(v, block, start, run);
                 } else {
-                    RtlCopyMemory(buffer, data + start, run);
+                    memcpy(buffer, data + start, run);
                 }
             }
         }
@@ -570,7 +570,7 @@ static NTSTATUS NTAPI HDDFSFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP
     HDDFSFillTimes(f, times);
     switch (s->Parameters.QueryFile.FileInformationClass) {
     case FileBasicInformation:
-        RtlCopyMemory(out, times, 32);
+        memcpy(out, times, 32);
         *(PULONG)(out + 32) = HDDFSAttributesOut(f->Attributes);
         info = 40;
         break;
@@ -607,7 +607,7 @@ static NTSTATUS NTAPI HDDFSFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP
         break;
     }
     case FileNetworkOpenInformation: {
-        RtlCopyMemory(out, times, 32);
+        memcpy(out, times, 32);
         auto p = (PULONG)(out + 32);
         *(ULONGLONG *)p = HDDFSAllocationSize(v, f);
         p[2] = f->FileSize;
@@ -619,8 +619,8 @@ static NTSTATUS NTAPI HDDFSFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIRP
     }
     case FileAllInformation: {
         // Basic, Standard, Internal, Ea, Access, Position, Mode, Alignment, Name.
-        RtlZeroMemory(out, 0x68);
-        RtlCopyMemory(out, times, 32);
+        memset(out, 0, 0x68);
+        memcpy(out, times, 32);
         *(PULONG)(out + 32) = HDDFSAttributesOut(f->Attributes);
         *(ULONGLONG *)(out + 40) = HDDFSAllocationSize(v, f);
         *(PULONG)(out + 48) = f->FileSize;
@@ -685,7 +685,7 @@ static NTSTATUS HDDFSRename(HDDFS_VOLUME *v, HDDFS_FCB *f, PFILE_OBJECT target, 
     }
     if (same || dir == f->Parent) {
         f->NameLength = (UCHAR)element.Length;
-        RtlCopyMemory(f->Name, element.Buffer, element.Length);
+        memcpy(f->Name, element.Buffer, element.Length);
         return HDDFSFlushFcb(v, f);
     }
     // Move: new entry in the target directory, then drop the old one (the clusters move with it).
@@ -700,7 +700,7 @@ static NTSTATUS HDDFSRename(HDDFS_VOLUME *v, HDDFS_FCB *f, PFILE_OBJECT target, 
     f->Parent = dir;
     f->DirentIndex = index;
     f->NameLength = (UCHAR)element.Length;
-    RtlCopyMemory(f->Name, element.Buffer, element.Length);
+    memcpy(f->Name, element.Buffer, element.Length);
     HDDFSDereferenceFcb(oldParent);
     if (NT_SUCCESS(status))
         status = HDDFSFlushFcb(v, f);
@@ -805,7 +805,7 @@ static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP
             ccb->Mask[0] = '*';
             if (mask && mask->Length && mask->Length <= FATX_MAX_NAME + 2) {
                 ccb->MaskLength = (UCHAR)mask->Length;
-                RtlCopyMemory(ccb->Mask, mask->Buffer, mask->Length);
+                memcpy(ccb->Mask, mask->Buffer, mask->Length);
             }
         }
         first = true;
@@ -836,7 +836,7 @@ static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP
         if (any && offset + need > len)
             break;
         PUCHAR p = out + offset;
-        RtlZeroMemory(p, fixed);
+        memset(p, 0, fixed);
         ULONG nameLen = e->FileNameLength, room = len - offset - fixed;
         if (cls == FileDirectoryInformation) {
             *(PULONG)(p + 4) = ccb->NextIndex;
@@ -856,7 +856,7 @@ static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP
         }
         if (any)
             *(PULONG)(out + lastEntry) = offset - lastEntry;
-        RtlCopyMemory(p + fixed, e->FileName, nameLen < room ? nameLen : room);
+        memcpy(p + fixed, e->FileName, nameLen < room ? nameLen : room);
         lastEntry = offset;
         used = offset + fixed + (nameLen < room ? nameLen : room);
         any = true;
@@ -885,13 +885,9 @@ void HDDFSRememberTitleFolder() {
     if (HDDFSTitleFolderHandle) // the previous one (the boot self-tests call this before the title does)
         NtClose(HDDFSTitleFolderHandle), HDDFSTitleFolderHandle = nullptr;
     HDDFSTitleFolder = nullptr;
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, "\\??\\D:\\");
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE h;
-    if (!NT_SUCCESS(NtOpenFile(&h, 0x0001 /*FILE_LIST_DIRECTORY*/ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                               FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+    if (!NT_SUCCESS(io::OpenFile("\\??\\D:\\", 0x0001 /*FILE_LIST_DIRECTORY*/, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_DIRECTORY_FILE,
+                                 &h)))
         return;
     PFILE_OBJECT fo;
     if (NT_SUCCESS(ObReferenceObjectByHandle(h, &IoFileObjectType, (PVOID *)&fo))) {
@@ -930,7 +926,7 @@ static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject
             status = STATUS_INFO_LENGTH_MISMATCH;
             break;
         }
-        RtlZeroMemory(out, 18);
+        memset(out, 0, 18);
         *(PULONG)(out + 8) = v->SerialNumber;
         info = 18;
         break;
@@ -983,7 +979,7 @@ static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject
         ((PULONG)out)[2] = 4;
         info = 12;
         if (len >= 16) {
-            RtlCopyMemory(out + 12, "FATX", 4);
+            memcpy(out + 12, "FATX", 4);
             info = 16;
         } else {
             status = (NTSTATUS)0x80000005;

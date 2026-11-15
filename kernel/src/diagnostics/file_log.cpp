@@ -19,22 +19,15 @@ constexpr ULONG LOG_ROTATE_BYTES = XK_BOOT_SELFTEST ? 0x1000 : 10 * 1024 * 1024;
 
 // The path of part Part of log LogName: NAME.log for part 0, NAME_N.log for part N. False when it does not fit.
 bool LogPath(char (&Path)[96], const char *LogName, ULONG Part) {
-    int n = Part ? RtlSnprintf(Path, sizeof(Path), "%s\\%s_%lu.log", LOG_FOLDER, LogName, Part) : RtlSnprintf(Path, sizeof(Path), "%s\\%s.log", LOG_FOLDER,
+    int n = Part ? snprintf(Path, sizeof(Path), "%s\\%s_%lu.log", LOG_FOLDER, LogName, Part) : snprintf(Path, sizeof(Path), "%s\\%s.log", LOG_FOLDER,
                  LogName);
     return n > 0 && n < (int)sizeof(Path);
 }
 
 // Opens Path (Access, CreateDisposition, CreateOptions as for NtCreateFile); the handle, or null.
 HANDLE Open(const char *Path, ACCESS_MASK Access, ULONG Disposition, ULONG Options) {
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, Path);
-    OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE handle;
-    ULONG attribute = Options & FILE_DIRECTORY_FILE ? FILE_ATTRIBUTE_DIRECTORY : 0;
-    NTSTATUS status = NtCreateFile(&handle, Access | SYNCHRONIZE, &attributes, &iosb, nullptr, attribute, 0, Disposition,
-                                   Options | FILE_SYNCHRONOUS_IO_NONALERT);
-    return NT_SUCCESS(status) ? handle : nullptr;
+    return NT_SUCCESS(io::CreateFile(Path, Access, 0, Disposition, Options, &handle)) ? handle : nullptr;
 }
 
 // Renames From to To, replacing To.
@@ -42,14 +35,7 @@ void Rename(const char *From, const char *To) {
     HANDLE file = Open(From, DELETE, FILE_OPEN, FILE_NON_DIRECTORY_FILE);
     if (!file)
         return;
-    struct {
-        BOOLEAN ReplaceIfExists;
-        HANDLE RootDirectory;
-        OBJECT_STRING FileName;
-    } rename = {TRUE, nullptr, {}};
-    RtlInitAnsiString(&rename.FileName, To);
-    IO_STATUS_BLOCK iosb;
-    NtSetInformationFile(file, &iosb, &rename, sizeof(rename), FileRenameInformation);
+    io::RenameFile(file, To, true);
     NtClose(file);
 }
 
@@ -87,7 +73,7 @@ void AppendLogLine(const char *LogName, const char *Format, ...) {
     char line[256];
     __builtin_va_list args;
     __builtin_va_start(args, Format);
-    int length = RtlVsnprintf(line, sizeof(line) - 2, Format, args);
+    int length = vsnprintf(line, sizeof(line) - 2, Format, args);
     __builtin_va_end(args);
     if (length < 0 || length > (int)sizeof(line) - 3)
         length = sizeof(line) - 3;

@@ -49,7 +49,7 @@ NTSTATUS EXFATZeroCluster(HDDFS_VOLUME *v, ULONG Cluster) {
         PUCHAR data;
         status = HDDFSMapBlock(v, base + off, &data);
         if (NT_SUCCESS(status)) {
-            RtlZeroMemory(data, HDDFS_BLOCK_SIZE);
+            memset(data, 0, HDDFS_BLOCK_SIZE);
             status = HDDFSWriteBlockRange(v, base + off, 0, HDDFS_BLOCK_SIZE);
         }
     }
@@ -198,7 +198,7 @@ void EXFATVolumeSize(HDDFS_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsP
 // --- Mount
 
 static void EXFATInitFcb(HDDFS_FCB *f, ULONG Flags) {
-    RtlZeroMemory(f, sizeof(*f));
+    memset(f, 0, sizeof(*f));
     InitializeListHead(&f->SiblingLink);
     InitializeListHead(&f->ChildList);
     f->Flags = Flags;
@@ -222,7 +222,7 @@ static bool EXFATReadBootRegion(HDDFS_VOLUME *v, ULONG Base, PUCHAR Boot, NTSTAT
         else if (i >= 11 * 512 && data[0] != (UCHAR)(sum >> ((i & 3) * 8)))
             return false; // the checksum sector repeats the sum
     }
-    return RtlCompareMemory(Boot + 3, "EXFAT   ", 8) == 8 && *(USHORT *)(Boot + 510) == 0xAA55;
+    return memcmp(Boot + 3, "EXFAT   ", 8) == 0 && *(USHORT *)(Boot + 510) == 0xAA55;
 }
 
 // Read the boot sector, the root's bitmap and up-case entries, and count the free clusters (the lock is held).
@@ -246,11 +246,11 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
             status = HDDFSMapBlock(v, (12 + sector) * 512, &data);
             if (!NT_SUCCESS(status))
                 break;
-            RtlCopyMemory(copy, data, 512);
+            memcpy(copy, data, 512);
             status = HDDFSMapBlock(v, sector * 512, &data);
             if (!NT_SUCCESS(status))
                 break;
-            RtlCopyMemory(data, copy, 512);
+            memcpy(data, copy, 512);
             status = HDDFSWriteBlockRange(v, sector * 512 & ~(HDDFS_BLOCK_SIZE - 1), sector * 512 & (HDDFS_BLOCK_SIZE - 1), 512);
         }
         XK_SERIAL("exfat: main boot region restored from the backup: %#lx\n", status);
@@ -448,7 +448,7 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
             r->EXFATDirLength = e.EXFATDirLength;
             r->DirentIndex = index;
             r->NameLength = e.FileNameLength;
-            RtlCopyMemory(r->Name, e.FileName, e.FileNameLength);
+            memcpy(r->Name, e.FileName, e.FileNameLength);
             r->CreationTime = e.CreationTime;
             r->LastWriteTime = e.LastWriteTime;
             r->LastAccessTime = e.LastAccessTime;

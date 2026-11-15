@@ -17,7 +17,7 @@ volatile ULONG DebugLogPosition;
 void LogLineArgs(const char *Format, __builtin_va_list Args) {
     BootMark(Format);
     char line[256];
-    int length = RtlVsnprintf(line, sizeof(line), Format, Args);
+    int length = vsnprintf(line, sizeof(line), Format, Args);
     if (length < 0 || length >= (int)sizeof(line))
         length = sizeof(line) - 1;
     ULONG flags = save_flags_cli(); // whole lines: another processor or interrupt does not cut into one

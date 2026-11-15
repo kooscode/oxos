@@ -17,7 +17,7 @@
   title's name there.
 - **The event and the run loop together:** the event only notes that the LED is wanted, and when; `ExtensionRunLoop` turns it orange a second later, since
   the kernel turns the LED green just after the event, as the title starts.
-- **Kernel functions:** an extension calls any kernel function by name, as `oxos_kernel.h` declares it: here `RtlEqualString` compares the names, and
-  `HalWriteSMBusValue` sets the LED (the SMC, on the SMBus at 0x20).
+- **Kernel functions:** an extension calls any kernel function by name, as `oxos_kernel.h` declares it: here `strcasecmp` (the kernel's C library) compares
+  the names, and `HalWriteSMBusValue` sets the LED (the SMC, on the SMBus at 0x20).
 
 Build and install as [the SDK's README](../../README.md) says, with this folder's `oxos_extensions.ini`.

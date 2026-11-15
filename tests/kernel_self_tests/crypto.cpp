@@ -69,20 +69,20 @@ static void NTAPI XcControllerThread(PVOID) {
     XcKeyTable(0, table, key);
     XcBlockCrypt(0, out, plain, table, 1);
     XcBlockCrypt(0, back, out, table, 0);
-    bool ok = RtlCompareMemory(out, expect, 8) == 8 && RtlCompareMemory(back, plain, 8) == 8;
+    bool ok = memcmp(out, expect, 8) == 0 && memcmp(back, plain, 8) == 0;
     // 3DES with three equal keys is single DES.
-    RtlCopyMemory(key + 8, key, 8);
-    RtlCopyMemory(key + 16, key, 8);
+    memcpy(key + 8, key, 8);
+    memcpy(key + 16, key, 8);
     XcKeyTable(1, table, key);
     XcBlockCrypt(1, out, plain, table, 1);
-    ok &= RtlCompareMemory(out, expect, 8) == 8;
+    ok &= memcmp(out, expect, 8) == 0;
     // CBC round trip over 32 bytes.
     UCHAR data[32], enc[32], dec[32], iv1[8] = {1, 2, 3, 4, 5, 6, 7, 8}, iv2[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     for (int i = 0; i < 32; i++)
         data[i] = (UCHAR)(i * 13);
     XcBlockCryptCBC(1, 32, enc, data, table, 1, iv1);
     XcBlockCryptCBC(1, 32, dec, enc, table, 0, iv2);
-    ok &= RtlCompareMemory(dec, data, 32) == 32 && RtlCompareMemory(iv1, iv2, 8) == 8;
+    ok &= memcmp(dec, data, 32) == 0 && memcmp(iv1, iv2, 8) == 0;
     UCHAR parity[2] = {0x00, 0x01};
     XcDESKeyParity(parity, 2);
     ok &= parity[0] == 0x01 && parity[1] == 0x01;
@@ -100,12 +100,12 @@ static void NTAPI XcControllerThread(PVOID) {
     for (int i = 0; i < 40; i++)
         msg[i] = (UCHAR)(i + 1);
     ok = XcPKGetKeyLen((PUCHAR)TestPubKey) == 72 && XcPKEncPublic((PUCHAR)TestPubKey, msg, ct) && XcPKDecPrivate((PUCHAR)TestPrvKey, ct, pt) &&
-         RtlCompareMemory(pt, msg, 72) == 72;
+         memcmp(pt, msg, 72) == 0;
     KiTestXcRsaOk = ok;
 
     // PKCS#1 signature: valid for the digest, invalid for another one.
     UCHAR wrong[20];
-    RtlCopyMemory(wrong, TestDigest, 20);
+    memcpy(wrong, TestDigest, 20);
     wrong[0] ^= 1;
     KiTestXcPkcs1Ok = XcVerifyPKCS1Signature((PUCHAR)TestSignature, (PUCHAR)TestPubKey, (PUCHAR)TestDigest) && !XcVerifyPKCS1Signature((PUCHAR)TestSignature,
                       (PUCHAR)TestPubKey, wrong);

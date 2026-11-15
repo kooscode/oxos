@@ -6,6 +6,7 @@
 //   target = E:\Apps\XBLive\default.xbe    the XBE started instead
 #include <ini_file/launch_redirect_ini.h>
 #include <ini_file/ini_file.h>
+#include <runtime/c_library.h>
 
 namespace xk::ini_file {
 
@@ -17,18 +18,6 @@ constexpr char DVD_DRIVE[] = "\\Device\\CdRom0";
 constexpr char PARTITION[] = "\\Device\\Harddisk0\\Partition";
 constexpr char DRIVES[] = "CEFGXYZ";
 constexpr char PARTITIONS[] = "2167345";
-
-char Upper(char c) {
-    return c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
-}
-
-bool SamePath(const char *A, const char *B) {
-    for (; *A && *B; A++, B++) {
-        if (Upper(*A) != Upper(*B))
-            return false;
-    }
-    return *A == *B;
-}
 
 // One section while it is read: what it has given so far.
 struct SECTION {
@@ -56,7 +45,7 @@ bool RedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_
     ULONG n = 0;
     ULONG at = 0;
     if (Length >= 2 && Path[1] == ':') {
-        const char letter = Upper(Path[0]);
+        const char letter = static_cast<char>(toupper(Path[0]));
         const char *device = letter == 'D' ? DVD_DRIVE : nullptr;
         char partition = 0;
         for (ULONG i = 0; DRIVES[i]; i++) {
@@ -67,8 +56,7 @@ bool RedirectDevicePath(const char *Path, ULONG Length, char (&Out)[XE_REDIRECT_
         }
         if (!device)
             return false;
-        for (; *device; device++)
-            Out[n++] = *device;
+        n = strlcpy(Out, device, sizeof(Out));
         if (partition)
             Out[n++] = partition;
         at = 2;
@@ -109,8 +97,7 @@ bool LookUpRedirect(const char *Text, ULONG Length, const char *Path, XE_REDIREC
             }
             section.Open = true;
             ULONG n = line.TextLength < XE_REDIRECT_MAX_NAME ? line.TextLength : XE_REDIRECT_MAX_NAME;
-            for (ULONG i = 0; i < n; i++)
-                section.Redirect.Name[i] = line.Text[i];
+            memcpy(section.Redirect.Name, line.Text, n);
             section.Redirect.Name[n] = 0;
             continue;
         }
@@ -130,11 +117,10 @@ bool LookUpRedirect(const char *Text, ULONG Length, const char *Path, XE_REDIREC
         }
         if (isSource) {
             section.HasSource = true;
-            section.SourceMatches = SamePath(device, Path);
+            section.SourceMatches = strcasecmp(device, Path) == 0;
         } else {
             section.HasTarget = true;
-            for (ULONG i = 0; i <= XE_REDIRECT_MAX_PATH; i++)
-                section.Redirect.Target[i] = device[i];
+            memcpy(section.Redirect.Target, device, sizeof(device));
         }
     }
     if (CloseSection(section, Errors) && !found) {

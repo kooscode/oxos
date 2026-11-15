@@ -1,5 +1,6 @@
 // The kernel's ini files: the line reader (src/ini_file/ini_file.h).
 #include <ini_file/ini_file.h>
+#include <runtime/c_library.h>
 
 namespace xk::ini_file {
 
@@ -23,9 +24,9 @@ void Trim(const char *&From, const char *&To) {
 
 // [name] with only blanks or a comment after the ']'.
 void ReadSection(const char *From, const char *To, INI_LINE *Line) {
-    const char *close = From + 1;
-    while (close < To && *close != ']')
-        close++;
+    auto close = static_cast<const char *>(memchr(From + 1, ']', static_cast<size_t>(To - From - 1)));
+    if (!close)
+        close = To;
     Line->Text = From + 1;
     Line->TextLength = static_cast<ULONG>(close - Line->Text);
     Line->Kind = INI_LINE_KIND::BAD_SECTION;
@@ -62,9 +63,9 @@ void ReadKey(const char *From, const char *To, INI_LINE *Line) {
 bool NextLine(INI_READER *Reader, INI_LINE *Line) {
     while (Reader->Next < Reader->End) {
         const char *from = Reader->Next;
-        const char *to = from;
-        while (to < Reader->End && *to != '\n')
-            to++;
+        auto to = static_cast<const char *>(memchr(from, '\n', static_cast<size_t>(Reader->End - from)));
+        if (!to)
+            to = Reader->End;
         Reader->Next = to + 1;
         Trim(from, to);
         if (from == to || IsComment(*from))
@@ -79,12 +80,7 @@ bool NextLine(INI_READER *Reader, INI_LINE *Line) {
 }
 
 bool IsKey(const INI_LINE &Line, const char *Word) {
-    ULONG i = 0;
-    for (; i < Line.TextLength && Word[i]; i++) {
-        if ((Line.Text[i] | 0x20) != Word[i])
-            return false;
-    }
-    return i == Line.TextLength && !Word[i];
+    return Line.TextLength == strlen(Word) && strncasecmp(Line.Text, Word, Line.TextLength) == 0;
 }
 
 } // namespace xk::ini_file

@@ -108,6 +108,13 @@ namespace xk::objects {
 
 void InitObjectManager();
 NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
+
+// Names as the object manager keeps them (a length and the text, no 0 needed), made from a C string; OXOS's own code passes C strings to the functions below.
+inline OBJECT_STRING ObjectName(const char *Text) {
+    USHORT length = (USHORT)strlen(Text);
+    return {length, (USHORT)(length + 1), (PCHAR)Text};
+}
+POBJECT_DIRECTORY CreateDirectory(const char *Path); // a permanent object directory (\Device, \Device\Virtual0), or null; object_manager.cpp
 // Waitable dispatcher header for an object (applies the type's DefaultObject rule).
 PVOID GetWaitableObject(PVOID Object);
 

@@ -6,7 +6,7 @@
 namespace xk::io {
 
 XBAPI void NTAPI IoInitializeIrp(PIRP Irp, USHORT PacketSize, CCHAR StackSize) {
-    RtlZeroMemory(Irp, PacketSize);
+    memset(Irp, 0, PacketSize);
     Irp->Type = 6;
     Irp->Size = PacketSize;
     Irp->StackCount = StackSize;
@@ -168,13 +168,13 @@ XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost) {
             PDEVICE_OBJECT upper = Irp->CurrentLocation == Irp->StackCount + 1 ? nullptr : (stack + 1)->DeviceObject;
             PIO_COMPLETION_ROUTINE routine = stack->CompletionRoutine;
             PVOID context = stack->Context;
-            RtlZeroMemory(stack, sizeof(*stack));
+            memset(stack, 0, sizeof(*stack));
             if (routine(upper, Irp, context) == STATUS_MORE_PROCESSING_REQUIRED)
                 return;
         } else {
             if (Irp->PendingReturned && Irp->CurrentLocation <= Irp->StackCount)
                 IoMarkIrpPending(Irp);
-            RtlZeroMemory(stack, sizeof(*stack));
+            memset(stack, 0, sizeof(*stack));
         }
     }
 

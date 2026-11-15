@@ -51,7 +51,7 @@ ULONG SplashRamPhysical, SplashRamSize;
 static void DrawSplashLabel(ULONG *img) {
     static const char hint[] = "[ Hold  X  for File Manager - "; // the X drawn as the button (DrawText)
     char label[64];
-    RtlCopyMemory(label, hint, sizeof(hint));
+    memcpy(label, hint, sizeof(hint));
     ULONG n = sizeof(hint) - 1;
     graphics::VersionLabel(label + n, sizeof(label) - n - 3);
     while (label[n])
@@ -135,11 +135,11 @@ static ULONG LoadSplash(ULONG *img) {
 }
 
 static void NTAPI SplashThread(PVOID) {
-    RtlZeroMemory(SplashScreen, SPLASH_PITCH * SPLASH_H);
+    memset(SplashScreen, 0, SPLASH_PITCH * SPLASH_H);
     SplashStatus = LoadSplash(SplashImage);
     XK_SERIAL("splash: image status %#lx\n", SplashStatus);
     if (SplashStatus) { // no scene: the emblem and the name
-        RtlZeroMemory(SplashImage, SPLASH_PITCH * SPLASH_H);
+        memset(SplashImage, 0, SPLASH_PITCH * SPLASH_H);
         DrawEmblem(SplashImage);
         graphics::DrawCentredText(SplashImage, 330, "OXOS", 6, 0xA8B4A0);
         SplashSource = 1;

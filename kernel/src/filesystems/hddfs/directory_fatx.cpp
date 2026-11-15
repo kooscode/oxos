@@ -26,7 +26,7 @@ static NTSTATUS FATXMapDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Index, FATX
             PUCHAR data;
             status = HDDFSMapBlock(v, base + off, &data);
             if (NT_SUCCESS(status)) {
-                RtlFillMemory(data, HDDFS_BLOCK_SIZE, FATX_DIRENT_NEVER_USED2);
+                memset(data, FATX_DIRENT_NEVER_USED2, HDDFS_BLOCK_SIZE);
                 status = HDDFSWriteBlockRange(v, base + off, 0, HDDFS_BLOCK_SIZE);
             }
         }
@@ -60,7 +60,7 @@ static bool FATXIsLive(const FATX_DIRENT *e) {
 }
 
 static void FATXEntryFromDirent(HDDFS_ENTRY *out, const FATX_DIRENT *e) {
-    RtlZeroMemory(out, sizeof(*out));
+    memset(out, 0, sizeof(*out));
     *(FATX_DIRENT *)out = *e;
 }
 
@@ -112,7 +112,7 @@ NTSTATUS FATXInitDirectory(HDDFS_VOLUME *v, ULONG *First) {
         PUCHAR data;
         status = HDDFSMapBlock(v, base + off, &data);
         if (NT_SUCCESS(status)) {
-            RtlFillMemory(data, HDDFS_BLOCK_SIZE, FATX_DIRENT_NEVER_USED2);
+            memset(data, FATX_DIRENT_NEVER_USED2, HDDFS_BLOCK_SIZE);
             status = HDDFSWriteBlockRange(v, base + off, 0, HDDFS_BLOCK_SIZE);
         }
     }
@@ -143,11 +143,11 @@ NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *
         if (!end && e->FileNameLength != FATX_DIRENT_DELETED)
             continue;
         ULONG now = HDDFSCurrentTimestamp();
-        RtlZeroMemory(e, sizeof(*e));
+        memset(e, 0, sizeof(*e));
         e->FileNameLength = (UCHAR)Name->Length;
         e->FileAttributes = Attributes;
-        RtlCopyMemory(e->FileName, Name->Buffer, Name->Length);
-        RtlFillMemory(e->FileName + Name->Length, FATX_MAX_NAME - Name->Length, 0xFF);
+        memcpy(e->FileName, Name->Buffer, Name->Length);
+        memset(e->FileName + Name->Length, 0xFF, FATX_MAX_NAME - Name->Length);
         e->FirstCluster = FirstCluster;
         e->CreationTime = e->LastWriteTime = e->LastAccessTime = now;
         status = FATXWriteDirent(v, block, e);
@@ -159,7 +159,7 @@ NTSTATUS FATXCreateDirent(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *
             LONGLONG nextBlock;
             status = FATXMapDirent(v, dir, i + 1, &next, &nextBlock, true);
             if (NT_SUCCESS(status) && !FATXIsEnd(next)) {
-                RtlFillMemory(next, sizeof(*next), FATX_DIRENT_NEVER_USED2);
+                memset(next, FATX_DIRENT_NEVER_USED2, sizeof(*next));
                 status = FATXWriteDirent(v, nextBlock, next);
             }
             if (!NT_SUCCESS(status) && status != (NTSTATUS)0xC000007F)
@@ -184,7 +184,7 @@ NTSTATUS FATXFlushFcb(HDDFS_VOLUME *v, HDDFS_FCB *f) {
     e->LastWriteTime = f->LastWriteTime;
     e->LastAccessTime = f->LastAccessTime;
     e->FileNameLength = f->NameLength;
-    RtlCopyMemory(e->FileName, f->Name, f->NameLength);
+    memcpy(e->FileName, f->Name, f->NameLength);
     f->Flags &= ~FCB_DIRENT_DIRTY;
     return FATXWriteDirent(v, block, e);
 }

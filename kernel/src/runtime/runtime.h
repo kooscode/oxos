@@ -3,26 +3,14 @@
 #include <runtime/types.h>
 #include <core/core.h>
 
-#ifdef XK_HOST_TEST // host unit tests: the C library's (its size_t)
-XBAPI void *memset(void *dst, int c, __SIZE_TYPE__ n);
-XBAPI void *memcpy(void *dst, const void *src, __SIZE_TYPE__ n);
-XBAPI void *memmove(void *dst, const void *src, __SIZE_TYPE__ n);
-XBAPI int memcmp(const void *a, const void *b, __SIZE_TYPE__ n);
-#else
-XBAPI void *memset(void *dst, int c, SIZE_T n);
-XBAPI void *memcpy(void *dst, const void *src, SIZE_T n);
-XBAPI void *memmove(void *dst, const void *src, SIZE_T n);
-XBAPI int memcmp(const void *a, const void *b, SIZE_T n);
-#endif
+#include <runtime/c_library.h> // memcpy, strlen, snprintf, ...: what OXOS's own code uses
+
+// --- The Xbox kernel's Rtl* exports, for titles only: OXOS's own code uses the C library (c_library.h)
 
 XBAPI void NTAPI RtlZeroMemory(PVOID Destination, SIZE_T Length);
 XBAPI void NTAPI RtlFillMemory(PVOID Destination, ULONG Length, UCHAR Fill);
 XBAPI void NTAPI RtlMoveMemory(PVOID Destination, const VOID *Source, SIZE_T Length);
 XBAPI SIZE_T NTAPI RtlCompareMemory(const VOID *Source1, const VOID *Source2, SIZE_T Length);
-
-static inline void RtlCopyMemory(PVOID dst, const VOID *src, SIZE_T n) {
-    memcpy(dst, src, n);
-}
 
 typedef struct _TIME_FIELDS {
     SHORT Year, Month, Day, Hour, Minute, Second, Milliseconds, Weekday;

@@ -55,13 +55,13 @@ static ULONG FatalDetails(ULONG Code, char (*lines)[XK_FATAL_LINE + 1]) {
         if (lines[n][0])
             n++;
         if (Code == 9 && hardware::ide::DiskLengthInSectors) // it answered: too small
-            RtlSnprintf(lines[n++], sizeof(lines[0]), "Size: %lu GB (8 GB needed)", (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
+            snprintf(lines[n++], sizeof(lines[0]), "Size: %lu GB (8 GB needed)", (ULONG)(hardware::ide::DiskLengthInSectors / 1953125));
         else
-            RtlSnprintf(lines[n++], sizeof(lines[0]), "Disk status: 0x%02X", hardware::ide::DiskLastStatus);
+            snprintf(lines[n++], sizeof(lines[0]), "Disk status: 0x%02X", hardware::ide::DiskLastStatus);
     } else if (Code > 13 && Code < 20) {
-        RtlSnprintf(lines[n++], sizeof(lines[0]), "Dashboard launch reason: %lu", Code - 13);
+        snprintf(lines[n++], sizeof(lines[0]), "Dashboard launch reason: %lu", Code - 13);
     } else if (!(Code >= 20 && Code <= 21) && Code != 13) {
-        RtlSnprintf(lines[n++], sizeof(lines[0]), "Code: %lu (0x%lX)", Code, Code);
+        snprintf(lines[n++], sizeof(lines[0]), "Code: %lu (0x%lX)", Code, Code);
     }
     return n;
 }
@@ -133,16 +133,16 @@ static void DrawBugCheck(ULONG *fb, ULONG Code, const ULONG_PTR *P) {
     graphics::DrawScreenTitle(fb, 96, "Kernel Stopped");
     char lines[8][XK_FATAL_LINE + 1];
     ULONG n = 0;
-    RtlSnprintf(lines[n++], sizeof(lines[0]), "Bug check 0x%08lX", Code);
+    snprintf(lines[n++], sizeof(lines[0]), "Bug check 0x%08lX", Code);
     if (Code == 0x1E) // KMODE_EXCEPTION_NOT_HANDLED: the exception code and the instruction
-        RtlSnprintf(lines[n++], sizeof(lines[0]), "Exception 0x%08lX at 0x%08lX", P[0], P[1]);
-    RtlSnprintf(lines[n++], sizeof(lines[0]), "Parameters: 0x%08lX 0x%08lX", P[0], P[1]);
-    RtlSnprintf(lines[n++], sizeof(lines[0]), "            0x%08lX 0x%08lX", P[2], P[3]);
+        snprintf(lines[n++], sizeof(lines[0]), "Exception 0x%08lX at 0x%08lX", P[0], P[1]);
+    snprintf(lines[n++], sizeof(lines[0]), "Parameters: 0x%08lX 0x%08lX", P[0], P[1]);
+    snprintf(lines[n++], sizeof(lines[0]), "            0x%08lX 0x%08lX", P[2], P[3]);
     if (ULONG title = TitleIdText())
-        RtlSnprintf(lines[n++], sizeof(lines[0]), "Title: %08lX", title);
+        snprintf(lines[n++], sizeof(lines[0]), "Title: %08lX", title);
     lines[n++][0] = 0;
-    RtlSnprintf(lines[n++], sizeof(lines[0]), "Take a photo of this screen for a bug report,");
-    RtlSnprintf(lines[n++], sizeof(lines[0]), "then turn the console off and on again.");
+    snprintf(lines[n++], sizeof(lines[0]), "Take a photo of this screen for a bug report,");
+    snprintf(lines[n++], sizeof(lines[0]), "then turn the console off and on again.");
     ULONG y = 160;
     for (ULONG i = 0; i < n; i++, y += graphics::SCREEN_LINE)
         graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, lines[i], 2, i < n - 2 ? graphics::COLOR_TEXT : graphics::COLOR_GREY);
@@ -181,8 +181,8 @@ void ShowBugCheck(ULONG Code, const ULONG_PTR *Parameters) {
         KfLowerIrql(PASSIVE_LEVEL);
     HalWriteSMBusValue(0x20, 0x08, FALSE, 0xE1); // LED sequence, then LED mode "custom"
     HalWriteSMBusValue(0x20, 0x07, FALSE, 1);
-    RtlZeroMemory(core::CertKey, sizeof(core::CertKey));
-    RtlZeroMemory(KiPersistedBootKeys + 16, 16);
+    memset(core::CertKey, 0, sizeof(core::CertKey));
+    memset(KiPersistedBootKeys + 16, 0, 16);
     RecordError(Code);
     // The sound must stop: left running, the sound controller replays the jingle's last buffers in a loop. On the boot thread, which is the idle thread during
     // start-up (the disk's errors, a title launch from it), nothing else runs once it halts and it must never wait: the controller is stopped at once. Any

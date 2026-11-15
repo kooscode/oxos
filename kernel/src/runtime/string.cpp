@@ -5,7 +5,7 @@
 namespace xk::runtime {
 
 XBAPI CHAR NTAPI RtlUpperChar(CHAR Character) {
-    return (Character >= 'a' && Character <= 'z') ? (CHAR)(Character - 'a' + 'A') : Character;
+    return (CHAR)toupper((UCHAR)Character);
 }
 
 XBAPI CHAR NTAPI RtlLowerChar(CHAR Character) {
@@ -13,11 +13,7 @@ XBAPI CHAR NTAPI RtlLowerChar(CHAR Character) {
 }
 
 XBAPI void NTAPI RtlInitAnsiString(PANSI_STRING DestinationString, PCSZ SourceString) {
-    USHORT len = 0;
-    if (SourceString) {
-        while (SourceString[len])
-            len++;
-    }
+    USHORT len = SourceString ? (USHORT)strlen(SourceString) : 0;
     DestinationString->Buffer = (PCHAR)SourceString;
     DestinationString->Length = len;
     DestinationString->MaximumLength = SourceString ? (USHORT)(len + 1) : 0;
@@ -80,7 +76,7 @@ XBAPI void NTAPI RtlCopyString(PANSI_STRING DestinationString, const ANSI_STRING
         return;
     }
     USHORT n = SourceString->Length < DestinationString->MaximumLength ? SourceString->Length : DestinationString->MaximumLength;
-    RtlCopyMemory(DestinationString->Buffer, SourceString->Buffer, n);
+    memcpy(DestinationString->Buffer, SourceString->Buffer, n);
     DestinationString->Length = n;
 }
 

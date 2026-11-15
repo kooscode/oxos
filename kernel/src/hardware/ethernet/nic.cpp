@@ -57,9 +57,9 @@ bool StartCard(ULONG LinkWait) {
         static const UCHAR fallback[6] = {0x02, 0x58, 0x42, 0x4F, 0x58, 0x31};
         if (!NT_SUCCESS(ExQueryNonVolatileSetting(0x101, &type, MacAddress, sizeof(MacAddress), &length)) ||
             !(MacAddress[0] | MacAddress[1] | MacAddress[2] | MacAddress[3] | MacAddress[4] | MacAddress[5]))
-            RtlCopyMemory(MacAddress, fallback, sizeof(MacAddress));
+            memcpy(MacAddress, fallback, sizeof(MacAddress));
     }
-    RtlZeroMemory(DescriptorRing, PAGE_SIZE);
+    memset(DescriptorRing, 0, PAGE_SIZE);
     for (ULONG i = 0; i < RX_COUNT; i++)
         ReceiveDescriptor()[i] = {MmGetPhysicalAddress(FrameBufferAt(i)), (USHORT)NIC_BUFFER, NIC_RX_AVAIL};
     ReceiveHead = TransmitNext = 0;

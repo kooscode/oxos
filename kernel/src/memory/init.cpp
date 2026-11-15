@@ -159,7 +159,7 @@ ULONG AllocatePage(ULONG usage, ULONG *ownerPte, bool zero) {
     ULONG alias = MM_SYSTEM_PHYSICAL_MAP | (pfn << PAGE_SHIFT);
     if (zero) { // through a temporary mapping at 0x80000000|PA, as the reference
         PteArray[pfn] = (pfn << PAGE_SHIFT) | PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
-        RtlZeroMemory((PVOID)alias, PAGE_SIZE);
+        memset((PVOID)alias, 0, PAGE_SIZE);
         XK_MARK("mark: mm: page zeroed");
     }
     PteArray[pfn] = BusyEntry(usage, usage == MmVirtualPageTableUsage ? nullptr : ownerPte);
@@ -406,7 +406,7 @@ static void InsertPteRun(ULONG *start, ULONG count, PVOID caller = nullptr, PVOI
         XK_SERIAL("*** mm: system PTEs %p (+%lu, va %08lx) freed while (partly) free; callers %p %p\n", start, count, (ULONG)start << 10, caller, caller2);
         return;
     }
-    RtlZeroMemory(start, count * 4);
+    memset(start, 0, count * 4);
     ULONG next = *link & ~3u;
     if (next != MM_PTE_LIST_END && start + count == RunNext(next)) { // join the following run
         ULONG *following = RunNext(next);
@@ -458,7 +458,7 @@ PVOID ReserveSystemPtes(ULONG count) {
                     SetRun(run + count, length - count, next);
                     *link = (*link & 3) | (ULONG)(run + count);
                 }
-                RtlZeroMemory(run, count * 4);
+                memset(run, 0, count * 4);
                 KfLowerIrql(old);
                 return (PVOID)((ULONG)run << 10);
             }
@@ -645,7 +645,7 @@ void InitMemoryManager(bool QuickReboot) {
     //    On a quick reboot this array is also the live page table for 0x80000000 (the kernel re-enters on its own page directory), so each entry is written
     //    once with its final value: clearing the kernel's own entries first, even briefly, unmaps the code and stack running this loop as soon as a cached
     //    translation is evicted.
-    RtlZeroMemory(AllocatedPagesByUsage, sizeof(AllocatedPagesByUsage));
+    memset(AllocatedPagesByUsage, 0, sizeof(AllocatedPagesByUsage));
     ULONG persisted = 0;
     for (ULONG pfn = 0; pfn <= HighestPhysicalPage; pfn++) {
         ULONG pte = 0;

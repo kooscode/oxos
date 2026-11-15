@@ -42,9 +42,9 @@ static void RamTransfer(PIRP irp) {
     if (len > RAM_SIZE - offset)
         len = RAM_SIZE - offset;
     if (s->MajorFunction == IRP_MJ_READ)
-        RtlCopyMemory(irp->UserBuffer, RamData() + offset, len);
+        memcpy(irp->UserBuffer, RamData() + offset, len);
     else
-        RtlCopyMemory(RamData() + offset, irp->UserBuffer, len);
+        memcpy(RamData() + offset, irp->UserBuffer, len);
     if (s->FileObject->Flags & FO_SYNCHRONOUS_IO)
         s->FileObject->CurrentByteOffset.QuadPart = offset + len;
     irp->IoStatus.Status = STATUS_SUCCESS;
@@ -71,7 +71,7 @@ static NTSTATUS NTAPI RamDispatch(PDEVICE_OBJECT dev, PIRP irp) {
             break;
         POBJECT_STRING n = s->Parameters.Create.RemainingName;
         ULONG len = n->Length < sizeof(LastRemaining) - 1 ? n->Length : sizeof(LastRemaining) - 1;
-        RtlCopyMemory(LastRemaining, n->Buffer, len);
+        memcpy(LastRemaining, n->Buffer, len);
         LastRemaining[len] = 0;
         LastRelated = s->FileObject->RelatedFileObject;
         Creates = Creates + 1;
@@ -109,7 +109,7 @@ static NTSTATUS NTAPI RamDispatch(PDEVICE_OBJECT dev, PIRP irp) {
     case IRP_MJ_QUERY_INFORMATION:
         if (s->Parameters.QueryFile.FileInformationClass == FileStandardInformation) {
             auto p = (PULONG)irp->UserBuffer; // {AllocationSize, EndOfFile, NumberOfLinks, DeletePending, Directory}
-            RtlZeroMemory(p, 24);
+            memset(p, 0, 24);
             p[0] = p[2] = RAM_SIZE;
             p[4] = 1;
             irp->IoStatus.Information = 24;

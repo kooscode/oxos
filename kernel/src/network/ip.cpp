@@ -54,18 +54,18 @@ PUCHAR IpPayload() {
 
 void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Protocol, ULONG Length) {
     PUCHAR e = BuildingFrame, h = BuildingFrame + 14;
-    RtlCopyMemory(e, DestinationMac, 6);
-    RtlCopyMemory(e + 6, hardware::ethernet::MacAddress, 6);
+    memcpy(e, DestinationMac, 6);
+    memcpy(e + 6, hardware::ethernet::MacAddress, 6);
     StoreBigEndian16(e + 12, ETHERTYPE_IP);
-    RtlZeroMemory(h, NET_IP_HEADER);
+    memset(h, 0, NET_IP_HEADER);
     h[0] = 0x45; // IPv4, 20-byte header
     StoreBigEndian16(h + 2, (USHORT)(NET_IP_HEADER + Length));
     StoreBigEndian16(h + 4, NextIpId++);
     StoreBigEndian16(h + 6, 0x4000); // don't fragment
     h[8] = 64;                       // time to live
     h[9] = Protocol;
-    RtlCopyMemory(h + 12, IpAddress, 4);
-    RtlCopyMemory(h + 16, DestinationIp, 4);
+    memcpy(h + 12, IpAddress, 4);
+    memcpy(h + 16, DestinationIp, 4);
     StoreBigEndian16(h + 10, FoldChecksum(Checksum(h, NET_IP_HEADER, 0)));
     hardware::ethernet::SendFrame(14 + NET_IP_HEADER + Length);
 }
@@ -74,20 +74,20 @@ void SendIp(const UCHAR *DestinationMac, const UCHAR *DestinationIp, UCHAR Proto
 
 static void ArpReceived(const UCHAR *a, ULONG Length) {
     bool request = Length >= 28 && LoadBigEndian16(a) == 1 && LoadBigEndian16(a + 2) == ETHERTYPE_IP && a[4] == 6 && a[5] == 4 && LoadBigEndian16(a + 6) == 1;
-    if (!request || AddressState < NetLeased || RtlCompareMemory(a + 24, IpAddress, 4) != 4)
+    if (!request || AddressState < NetLeased || memcmp(a + 24, IpAddress, 4) != 0)
         return;
     PUCHAR reply = hardware::ethernet::NextFrameBuffer();
     if (!reply)
         return;
-    RtlCopyMemory(reply, a + 8, 6); // to the asker
-    RtlCopyMemory(reply + 6, hardware::ethernet::MacAddress, 6);
+    memcpy(reply, a + 8, 6); // to the asker
+    memcpy(reply + 6, hardware::ethernet::MacAddress, 6);
     StoreBigEndian16(reply + 12, ETHERTYPE_ARP);
     PUCHAR r = reply + 14;
-    RtlCopyMemory(r, a, 6);     // hardware and protocol types and sizes, as asked
+    memcpy(r, a, 6);     // hardware and protocol types and sizes, as asked
     StoreBigEndian16(r + 6, 2); // reply
-    RtlCopyMemory(r + 8, hardware::ethernet::MacAddress, 6);
-    RtlCopyMemory(r + 14, IpAddress, 4);
-    RtlCopyMemory(r + 18, a + 8, 10); // the asker's MAC and IP address
+    memcpy(r + 8, hardware::ethernet::MacAddress, 6);
+    memcpy(r + 14, IpAddress, 4);
+    memcpy(r + 18, a + 8, 10); // the asker's MAC and IP address
     hardware::ethernet::SendFrame(14 + 28);
 }
 
@@ -99,7 +99,7 @@ static void IcmpReceived(const UCHAR *SourceMac, const UCHAR *SourceIp, const UC
     PUCHAR r = IpPayload();
     if (!r)
         return;
-    RtlCopyMemory(r, m, Length);
+    memcpy(r, m, Length);
     r[0] = 0; // echo reply
     StoreBigEndian16(r + 2, 0);
     StoreBigEndian16(r + 2, FoldChecksum(Checksum(r, Length, 0)));
@@ -117,19 +117,19 @@ static void SendDhcp(UCHAR Type) {
         return; // sent again after DHCP_RETRY_MS
     PUCHAR b = u + 8;
     ULONG length = 236 + 4;
-    RtlZeroMemory(b, 300);
+    memset(b, 0, 300);
     b[0] = 1; // a request
     b[1] = 1; // Ethernet
     b[2] = 6;
     StoreBigEndian32(b + 4, DhcpXid);
     StoreBigEndian16(b + 10, 0x8000); // answer by broadcast: we have no address yet
-    RtlCopyMemory(b + 28, hardware::ethernet::MacAddress, 6);
+    memcpy(b + 28, hardware::ethernet::MacAddress, 6);
     StoreBigEndian32(b + 236, 0x63825363); // the DHCP magic cookie
     PUCHAR o = b + length;
     auto option = [&](UCHAR code, const UCHAR *value, UCHAR size) {
         o[0] = code;
         o[1] = size;
-        RtlCopyMemory(o + 2, value, size);
+        memcpy(o + 2, value, size);
         o += 2 + size;
     };
     option(53, &Type, 1);
@@ -150,7 +150,7 @@ static void SendDhcp(UCHAR Type) {
     StoreBigEndian16(u + 4, (USHORT)(8 + length));
     StoreBigEndian16(u + 6, 0); // no UDP checksum
     UCHAR none[4] = {};
-    RtlCopyMemory(IpAddress, none, 4);
+    memcpy(IpAddress, none, 4);
     SendIp(BroadcastMac, BroadcastIp, NET_UDP, 8 + length);
 }
 
@@ -178,11 +178,11 @@ static void DhcpReceived(const UCHAR *b, ULONG Length) {
     if (!type)
         return;
     if (*type == DHCP_OFFER && DhcpSent == DHCP_DISCOVER && server) {
-        RtlCopyMemory(OfferedIp, b + 16, 4);
-        RtlCopyMemory(DhcpServer, server, 4);
+        memcpy(OfferedIp, b + 16, 4);
+        memcpy(DhcpServer, server, 4);
         SendDhcp(DHCP_REQUEST);
     } else if (*type == DHCP_ACK && DhcpSent == DHCP_REQUEST) {
-        RtlCopyMemory(IpAddress, b + 16, 4);
+        memcpy(IpAddress, b + 16, 4);
         AddressState = NetLeased;
     } else if (*type == DHCP_NAK) {
         SendDhcp(DHCP_DISCOVER);
@@ -193,7 +193,7 @@ static void DhcpReceived(const UCHAR *b, ULONG Length) {
 static void PollDhcp() {
     ULONG now = hardware::ethernet::Milliseconds();
     if (now - DhcpStartMs >= DHCP_GIVE_UP_MS) {
-        RtlCopyMemory(IpAddress, FixedIp, 4);
+        memcpy(IpAddress, FixedIp, 4);
         AddressState = NetFixed;
     } else if (now - DhcpSentMs >= DHCP_RETRY_MS) {
         SendDhcp(DhcpSent == DHCP_REQUEST ? DHCP_REQUEST : DHCP_DISCOVER);
@@ -215,8 +215,8 @@ void FrameReceived(const UCHAR *Frame, ULONG Length) {
     if ((h[0] >> 4) != 4 || headerLength < NET_IP_HEADER || total < headerLength || 14 + total > Length || (LoadBigEndian16(h + 6) & 0x3FFF) ||
         FoldChecksum(Checksum(h, headerLength, 0)))
         return;
-    bool forUs = AddressState >= NetLeased && RtlCompareMemory(h + 16, IpAddress, 4) == 4;
-    bool broadcast = RtlCompareMemory(h + 16, BroadcastIp, 4) == 4;
+    bool forUs = AddressState >= NetLeased && memcmp(h + 16, IpAddress, 4) == 0;
+    bool broadcast = memcmp(h + 16, BroadcastIp, 4) == 0;
     const UCHAR *p = h + headerLength;
     ULONG length = total - headerLength;
     // DHCP comes before we have an address.
@@ -279,7 +279,7 @@ void IpAddressText(char *Text, ULONG Size) {
             Text[0] = 0;
         return;
     }
-    RtlSnprintf(Text, Size, "%u.%u.%u.%u", IpAddress[0], IpAddress[1], IpAddress[2], IpAddress[3]);
+    snprintf(Text, Size, "%u.%u.%u.%u", IpAddress[0], IpAddress[1], IpAddress[2], IpAddress[3]);
 }
 
 } // namespace xk::network

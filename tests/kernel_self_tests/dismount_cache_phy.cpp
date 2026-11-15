@@ -169,7 +169,7 @@ static void NTAPI MiscControllerThread(PVOID) {
         if (ok) {
             FILE_SEGMENT_ELEMENT out[4] = {}, in[4] = {};
             for (ULONG i = 0; i < 3; i++) {
-                RtlFillMemory(pages + i * PAGE_SIZE, PAGE_SIZE, (UCHAR)(0xA0 + i));
+                memset(pages + i * PAGE_SIZE, (UCHAR)(0xA0 + i), PAGE_SIZE);
                 out[i].Buffer = pages + i * PAGE_SIZE;
                 in[i].Buffer = pages + (5 - i) * PAGE_SIZE;
             }

@@ -275,9 +275,9 @@ static void DvdSignSecuritySector(PUCHAR sector) {
     PUCHAR sig = sector + 0x4E3;
     for (ULONG i = 0; i < 20; i++)
         sig[i] = sector[0x4CF + 19 - i];
-    RtlCopyMemory(sig + 20, sha1Prefix, sizeof(sha1Prefix));
+    memcpy(sig + 20, sha1Prefix, sizeof(sha1Prefix));
     sig[35] = 0;
-    RtlFillMemory(sig + 36, 254 - 36, 0xFF);
+    memset(sig + 36, 0xFF, 254 - 36);
     sig[254] = 1;
     sig[255] = 0;
 }
@@ -285,13 +285,13 @@ static void DvdSignSecuritySector(PUCHAR sector) {
 // An emulated security sector for the running title: its certificate timestamp at +0x4AB, the SHA-1 of the length (dword 0x4CB) and the 0x4CB bytes at +4 at
 // +0x4CF (as titles compute it), no challenge table.
 static void DvdBuildSecuritySector(PUCHAR sector) {
-    RtlZeroMemory(sector, SECURITY_SECTOR_SIZE);
+    memset(sector, 0, SECURITY_SECTOR_SIZE);
     sector[4] = 1; // the disc's id byte, as in the emulated mode page (byte 13)
     auto header = (PUCHAR)0x10000; // the running XBE's header; not mapped while no title is loaded
     if (MmIsAddressValid(header + 0x118) && *(ULONG *)header == 0x48454258 /*XBEH*/) {
         auto cert = *(PUCHAR *)(header + 0x118);
         if (MmIsAddressValid(cert) && MmIsAddressValid(cert + 7))
-            RtlCopyMemory(sector + 0x4AB, cert + 4, 4);
+            memcpy(sector + 0x4AB, cert + 4, 4);
     }
     UCHAR sha[116];
     ULONG length = 0x4CB;
@@ -318,7 +318,7 @@ void EmulatedDvdSecurityReply(const UCHAR *cdb, PUCHAR data, ULONG length, NTSTA
         static const UCHAR page[28] = {0, 0x1A, 0, 0, 0, 0, 0, 0, 0x3E, 0x12, 1, 1, 1, 1};
         *got = length < sizeof(page) ? length : sizeof(page);
         if (data)
-            RtlCopyMemory(data, page, *got);
+            memcpy(data, page, *got);
     } else if (DvdIsSecurityRead(cdb)) {
         if (!data || length < SECURITY_SECTOR_SIZE) {
             *status = STATUS_INVALID_PARAMETER;
@@ -400,7 +400,7 @@ static void DvdControl(PIRP Irp) {
             return;
         }
         // Always the 12-byte ATAPI packet: CdbLength is ignored, as the reference does (callers commonly leave it 0).
-        RtlCopyMemory(cdb, p->Cdb, 12);
+        memcpy(cdb, p->Cdb, 12);
         if (!DvdEmulateSecurity(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength, &status, &got)) {
             status = AtapiPio(cdb, (PUCHAR)p->DataBuffer, p->DataTransferLength,
                               p->DataIn == 0 /*SCSI_IOCTL_DATA_OUT*/, &got);
@@ -431,14 +431,14 @@ static NTSTATUS DvdPassThrough(const UCHAR *cdb, PVOID data, ULONG length, bool 
     p.DataIn = dataIn;
     p.DataTransferLength = length;
     p.DataBuffer = data;
-    RtlCopyMemory(p.Cdb, cdb, 12);
+    memcpy(p.Cdb, cdb, 12);
     return IoSynchronousDeviceIoControlRequest(IOCTL_SCSI_PASS_THROUGH_DIRECT, DvdDeviceObject, &p, sizeof(p), nullptr, 0, nullptr, FALSE);
 }
 
 // MODE SENSE(10), the 28-byte security page; byte 11 must be 1.
 static NTSTATUS DvdSecurityPage(PUCHAR page) {
     static const UCHAR cdb[12] = {0x5A, 0, 0x3E, 0, 0, 0, 0, 0, 0x1C};
-    RtlZeroMemory(page, 28);
+    memset(page, 0, 28);
     NTSTATUS status = DvdPassThrough(cdb, page, 28, true);
     if (!NT_SUCCESS(status))
         return status == STATUS_TOO_MANY_SECRETS ? STATUS_UNRECOGNIZED_MEDIA_ : status;
@@ -457,14 +457,14 @@ static NTSTATUS DvdChallenge(const UCHAR *sector, const UCHAR *entry, bool first
     page[13] = sector[4];
     page[14] = 1;
     page[15] = entry[1];
-    RtlCopyMemory(page + 16, entry + 2, 4);
+    memcpy(page + 16, entry + 2, 4);
     static const UCHAR select[12] = {0x55, 0, 0, 0, 0, 0, 0, 0, 0x1C};
     NTSTATUS status = DvdPassThrough(select, page, 28, false);
     if (NT_SUCCESS(status)) {
         static const UCHAR sense[12] = {0x5A, 0, 0x3E, 0, 0, 0, 0, 0, 0x1C};
         status = DvdPassThrough(sense, page, 28, true);
     }
-    if (NT_SUCCESS(status) && (!page[12] || RtlCompareMemory(page + 20, entry + 7, 4) != 4))
+    if (NT_SUCCESS(status) && (!page[12] || memcmp(page + 20, entry + 7, 4) != 0))
         status = STATUS_TOO_MANY_SECRETS;
     return status;
 }
@@ -487,7 +487,7 @@ static NTSTATUS DvdAuthenticate() {
     if (!sector)
         return STATUS_INSUFFICIENT_RESOURCES;
     static const UCHAR read[12] = {0xAD, 0, 0xFF, 0x02, 0xFD, 0xFF, 0xFE, 0, 0x06, 0x64, 0, 0xC0};
-    RtlZeroMemory(sector, SECURITY_SECTOR_SIZE);
+    memset(sector, 0, SECURITY_SECTOR_SIZE);
     status = DvdPassThrough(read, sector, SECURITY_SECTOR_SIZE, true);
     DvdAuthStatus = status;
     if (NT_SUCCESS(status)) {
@@ -499,7 +499,7 @@ static NTSTATUS DvdAuthenticate() {
         XcSHAFinal(sha, digest);
         // The digest must match; the reference also checks an RSA signature over it with Microsoft's public key, which this open kernel does not carry
         // (spec/stock/04 §3a).
-        if (page[13] == sector[4] && RtlCompareMemory(digest, sector + 0x4CF, 20) == 20) {
+        if (page[13] == sector[4] && memcmp(digest, sector + 0x4CF, 20) == 0) {
             XcSHAInit(sha);
             XcSHAUpdate(sha, sector + 0x4A3, 0x2C);
             XcSHAFinal(sha, digest);
@@ -750,16 +750,13 @@ void InitDvdDrive() {
     KfLowerIrql(old);
     XK_SERIAL("dvd: %s (step %lu)\n", DvdAbsentReason ? "no drive" : "drive found", DvdAbsentReason);
 
-    OBJECT_STRING name, link;
-    RtlInitAnsiString(&name, "\\Device\\CdRom0");
-    RtlInitAnsiString(&link, "\\??\\CdRom0:");
     PDEVICE_OBJECT dev;
     objects::TraceSymbolicLink = 1;
-    NTSTATUS created = IoCreateDevice(&DvdDriverObject, 0, &name, FILE_DEVICE_CD_ROM, FALSE, &dev);
+    NTSTATUS created = io::CreateDevice(&DvdDriverObject, 0, "\\Device\\CdRom0", FILE_DEVICE_CD_ROM, &dev);
     objects::TraceSymbolicLink = 0;
     XK_SERIAL("dvd: IoCreateDevice %#lx; IRQ 14 taken %lu\n", created, core::IrqCounts[14]);
     objects::TraceSymbolicLink = 1;
-    NTSTATUS linked = NT_SUCCESS(created) ? IoCreateSymbolicLink(&link, &name) : created;
+    NTSTATUS linked = NT_SUCCESS(created) ? io::CreateLink("\\??\\CdRom0:", "\\Device\\CdRom0") : created;
     objects::TraceSymbolicLink = 0;
     if (!NT_SUCCESS(created) || !NT_SUCCESS(linked))
         user_interface::ShowFatalError(0x10E5F);

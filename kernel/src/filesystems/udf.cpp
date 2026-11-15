@@ -123,7 +123,7 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
     if (f->Embedded) {
         NTSTATUS status = UdfReadSector(v->TargetDevice, v->PartitionStart + f->IcbBlock, v->Block);
         if (NT_SUCCESS(status))
-            RtlCopyMemory(out, v->Block + f->EmbeddedOffset + offset, length);
+            memcpy(out, v->Block + f->EmbeddedOffset + offset, length);
         return status;
     }
     ULONG base = 0;
@@ -135,7 +135,7 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
         }
         ULONG within = offset - base, run = e->Length - within < length ? e->Length - within : length;
         if (e->Block == 0xFFFFFFFF) {
-            RtlZeroMemory(out, run);
+            memset(out, 0, run);
         } else if (cached) {
             ULONG first = e->Block + within / UDF_BLOCK, last = e->Block + (within + run - 1) / UDF_BLOCK;
             if (first >= v->PartitionLength || last >= v->PartitionLength)
@@ -161,7 +161,7 @@ static NTSTATUS UdfReadData(UDF_VOLUME *v, UDF_FCB *f, ULONG offset, PUCHAR out,
                 } else {
                     status = IoSynchronousFsdRequest(IRP_MJ_READ, v->TargetDevice, v->Block, UDF_BLOCK, &o);
                     if (NT_SUCCESS(status))
-                        RtlCopyMemory(out, v->Block + skip, n);
+                        memcpy(out, v->Block + skip, n);
                 }
                 if (!NT_SUCCESS(status))
                     return status;
@@ -246,18 +246,8 @@ static NTSTATUS UdfLoadDirectory(UDF_VOLUME *v, UDF_FCB *dir, PUCHAR *data) {
     return status;
 }
 
-static CHAR UdfUpper(CHAR c) {
-    return c >= 'a' && c <= 'z' ? (CHAR)(c - 0x20) : c;
-}
-
 static bool UdfSameName(const CHAR *a, ULONG al, const CHAR *b, ULONG bl) {
-    if (al != bl)
-        return false;
-    for (ULONG i = 0; i < al; i++) {
-        if (UdfUpper(a[i]) != UdfUpper(b[i]))
-            return false;
-    }
-    return true;
+    return al == bl && strncasecmp(a, b, al) == 0;
 }
 
 static NTSTATUS UdfLookup(UDF_VOLUME *v, UDF_FCB *dir, const CHAR *name, ULONG len, UDF_ENTRY *e, ULONG *where) {
@@ -299,7 +289,7 @@ static NTSTATUS UdfComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0
 static UDF_FCB *UdfNewFcb(UDF_VOLUME *v) {
     auto f = (UDF_FCB *)ExAllocatePoolWithTag(sizeof(UDF_FCB), 'fcdU');
     if (f) {
-        RtlZeroMemory(f, sizeof(*f));
+        memset(f, 0, sizeof(*f));
         InsertTailList(&v->Fcbs, &f->Link);
     }
     return f;
@@ -384,7 +374,7 @@ static NTSTATUS UdfCreate(UDF_VOLUME *v, PIRP Irp, ULONG_PTR *info) {
         f->IcbBlock = e.Icb;
         f->EntryOffset = where;
         f->NameLength = e.NameLength;
-        RtlCopyMemory(f->Name, e.Name, e.NameLength);
+        memcpy(f->Name, e.Name, e.NameLength);
         status = UdfLoadFileEntry(v, f);
     }
     if (NT_SUCCESS(status) && f->Directory && (options & FILE_NON_DIRECTORY_FILE))
@@ -401,7 +391,7 @@ static NTSTATUS UdfCreate(UDF_VOLUME *v, PIRP Irp, ULONG_PTR *info) {
         UdfFreeFcb(f);
         return status;
     }
-    RtlZeroMemory(ccb, sizeof(*ccb));
+    memset(ccb, 0, sizeof(*ccb));
     fo->FsContext = f;
     fo->FsContext2 = ccb;
     *info = FILE_OPENED;
@@ -481,7 +471,7 @@ static NTSTATUS NTAPI UdfFsdQueryInformation(PDEVICE_OBJECT, PIRP Irp) {
         *(PULONG)(out + 32) = UdfAttributes(f);
         return UdfComplete(Irp, STATUS_SUCCESS, 40);
     case FileStandardInformation:
-        RtlZeroMemory(out, 24);
+        memset(out, 0, 24);
         ((PULONG)out)[0] = alloc;
         ((PULONG)out)[2] = f->Size;
         ((PULONG)out)[4] = 1;
@@ -495,7 +485,7 @@ static NTSTATUS NTAPI UdfFsdQueryInformation(PDEVICE_OBJECT, PIRP Irp) {
         *(PLARGE_INTEGER)out = fo->CurrentByteOffset;
         return UdfComplete(Irp, STATUS_SUCCESS, 8);
     case FileNetworkOpenInformation:
-        RtlZeroMemory(out, 56);
+        memset(out, 0, 56);
         for (int i = 0; i < 4; i++)
             ((PLARGE_INTEGER)out)[i] = f->Time;
         ((PULONG)out)[8] = alloc;
@@ -526,7 +516,7 @@ static bool UdfMatch(const CHAR *m, ULONG ml, const CHAR *n, ULONG nl) {
         }
         return false;
     }
-    return nl && (*m == '?' || UdfUpper(*m) == UdfUpper(*n)) && UdfMatch(m + 1, ml - 1, n + 1, nl - 1);
+    return nl && (*m == '?' || toupper(*m) == toupper(*n)) && UdfMatch(m + 1, ml - 1, n + 1, nl - 1);
 }
 
 static NTSTATUS NTAPI UdfFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
@@ -548,7 +538,7 @@ static NTSTATUS NTAPI UdfFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP I
         ccb->Mask[0] = '*';
         if (mask && mask->Length && mask->Length <= sizeof(ccb->Mask)) {
             ccb->MaskLength = (UCHAR)mask->Length;
-            RtlCopyMemory(ccb->Mask, mask->Buffer, mask->Length);
+            memcpy(ccb->Mask, mask->Buffer, mask->Length);
         }
         first = true;
     }
@@ -586,7 +576,7 @@ static NTSTATUS NTAPI UdfFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP I
             }
             ccb->NextOffset = next;
             auto p = (PUCHAR)Irp->UserBuffer;
-            RtlZeroMemory(p, 0x40);
+            memset(p, 0, 0x40);
             *(PULONG)(p + 4) = at;
             for (int i = 0; i < 4; i++)
                 ((PLARGE_INTEGER)(p + 8))[i] = child.Time;
@@ -595,7 +585,7 @@ static NTSTATUS NTAPI UdfFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP I
             *(PULONG)(p + 0x38) = UdfAttributes(&child);
             *(PULONG)(p + 0x3C) = e.NameLength;
             ULONG room = len - 0x40, copy = e.NameLength < room ? e.NameLength : room;
-            RtlCopyMemory(p + 0x40, e.Name, copy);
+            memcpy(p + 0x40, e.Name, copy);
             used = 0x40 + copy;
             status = copy < e.NameLength ? (NTSTATUS)0x80000005 : STATUS_SUCCESS;
             break;
@@ -636,12 +626,12 @@ static NTSTATUS NTAPI UdfFsdQueryVolume(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         out[0] = 0x80000;
         out[1] = 255;
         out[2] = 3; // FILE_READ_ONLY_VOLUME
-        RtlCopyMemory(out + 3, "UDF", 3);
+        memcpy(out + 3, "UDF", 3);
         return UdfComplete(Irp, STATUS_SUCCESS, 15);
     case FileFsVolumeInformation:
         if (len < 18)
             return UdfComplete(Irp, STATUS_INFO_LENGTH_MISMATCH);
-        RtlZeroMemory(out, 18);
+        memset(out, 0, 18);
         return UdfComplete(Irp, STATUS_SUCCESS, 18);
     default:
         return UdfComplete(Irp, STATUS_INVALID_PARAMETER);
@@ -701,7 +691,7 @@ static NTSTATUS UdfRecognize(PDEVICE_OBJECT target, ULONG sectors, PUCHAR b) {
             return status;
         UCHAR code = 0;
         for (auto &id : UdfVrsIds) {
-            if (RtlCompareMemory(b + 1, id.Id, 5) == 5)
+            if (memcmp(b + 1, id.Id, 5) == 0)
                 code = id.Code;
         }
         if (!code)
@@ -752,7 +742,7 @@ static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, 
             pvdOk = *(USHORT *)(b + 56) < 2 && *(ULONG *)(b + 64) == 1 && *(ULONG *)(b + 68) == 1 && UdfIsCs0(b + 200) && UdfIsCs0(b + 264);
         } else if (id == TAG_PD && seq >= pdSeq) {
             pdSeq = seq;
-            pdOk = RtlCompareMemory(b + 25, "+NSR02", 6) == 6;
+            pdOk = memcmp(b + 25, "+NSR02", 6) == 0;
             if (pdOk) {
                 *partStart = *(ULONG *)(b + 188);
                 *partLength = *(ULONG *)(b + 192);
@@ -762,11 +752,11 @@ static NTSTATUS UdfReadVds(PDEVICE_OBJECT target, ULONG length, ULONG location, 
             lvdSeq = seq;
             ULONG mapTable = *(ULONG *)(b + 264);
             USHORT revision = *(USHORT *)(b + 240);
-            lvdOk = ((mapTable + 0x1BB) & ~3u) <= UDF_BLOCK && *(ULONG *)(b + 212) == UDF_BLOCK && RtlCompareMemory(b + 217, "*OSTA UDF Compliant", 19) == 19 &&
+            lvdOk = ((mapTable + 0x1BB) & ~3u) <= UDF_BLOCK && *(ULONG *)(b + 212) == UDF_BLOCK && memcmp(b + 217, "*OSTA UDF Compliant", 19) == 0 &&
                     revision >= 0x100 && revision <= 0x150 && UdfIsCs0(b + 20) && *(ULONG *)(b + 268) < 2 && mapTable > 5 && b[440] == 1 && b[441] == 6 &&
                     *(USHORT *)(b + 442) < 2;
             if (lvdOk) {
-                RtlCopyMemory(fsd, b + 248, 16);
+                memcpy(fsd, b + 248, 16);
                 lvdNumber = *(USHORT *)(b + 444);
             }
         } else if (id == TAG_TERMINATOR) {

@@ -41,7 +41,7 @@ static void KiInitializeContextThread(PKTHREAD t, ULONG tlsDataSize, PKSYSTEM_RO
     ULONG tlsSize = (tlsDataSize + 3) & ~3u;
     ULONG *sp = (ULONG *)((UCHAR *)t->StackBase - NPX_FRAME_LENGTH - tlsSize);
     t->TlsData = tlsSize ? sp : nullptr;
-    RtlZeroMemory(sp, tlsSize);
+    memset(sp, 0, tlsSize);
 
     *--sp = (ULONG)startContext;
     *--sp = (ULONG)startRoutine;

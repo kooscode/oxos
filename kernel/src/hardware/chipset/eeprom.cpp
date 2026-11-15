@@ -138,7 +138,7 @@ XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PV
         LockEeprom();
         NTSTATUS status = LoadEeprom();
         if (NT_SUCCESS(status))
-            RtlCopyMemory(Value, EepromImage, n);
+            memcpy(Value, EepromImage, n);
         UnlockEeprom();
         return status;
     }
@@ -157,8 +157,8 @@ XBAPI NTSTATUS NTAPI ExQueryNonVolatileSetting(ULONG ValueIndex, PULONG Type, PV
             *Type = s->Type;
             if (ResultLength)
                 *ResultLength = s->Size;
-            RtlZeroMemory(Value, ValueLength);
-            RtlCopyMemory(Value, EepromImage + secOffset + s->Offset, s->Size);
+            memset(Value, 0, ValueLength);
+            memcpy(Value, EepromImage + secOffset + s->Offset, s->Size);
         }
     }
     UnlockEeprom();
@@ -188,11 +188,11 @@ XBAPI NTSTATUS NTAPI ExSaveNonVolatileSetting(ULONG ValueIndex, ULONG Type, PVOI
     UCHAR section[0x60];
     status = LoadEeprom();
     if (NT_SUCCESS(status)) {
-        RtlCopyMemory(section, EepromImage + secOffset, secSize);
+        memcpy(section, EepromImage + secOffset, secSize);
         if (EepromChecksum(section, secSize) != 0xFFFFFFFF)
-            RtlZeroMemory(section, secSize); // a corrupt user section starts over
-        RtlZeroMemory(section + s->Offset, s->Size);
-        RtlCopyMemory(section + s->Offset, Value, ValueLength);
+            memset(section, 0, secSize); // a corrupt user section starts over
+        memset(section + s->Offset, 0, s->Size);
+        memcpy(section + s->Offset, Value, ValueLength);
         *(ULONG *)section = 0;
         *(ULONG *)section = ~EepromChecksum(section, secSize);
         status = WriteEeprom(secOffset, secSize, section);
@@ -212,12 +212,12 @@ static void HmacFromStates(const ULONG *states, const UCHAR *data, ULONG length,
     } ctx; // the XcSHA context layout
     UCHAR inner[20];
     XcSHAInit((PUCHAR)&ctx);
-    RtlCopyMemory(ctx.State, states, 20);
+    memcpy(ctx.State, states, 20);
     ctx.CountLow = 64;
     XcSHAUpdate((PUCHAR)&ctx, data, length);
     XcSHAFinal((PUCHAR)&ctx, inner);
     XcSHAInit((PUCHAR)&ctx);
-    RtlCopyMemory(ctx.State, states + 5, 20);
+    memcpy(ctx.State, states + 5, 20);
     ctx.CountLow = 64;
     XcSHAUpdate((PUCHAR)&ctx, inner, 20);
     XcSHAFinal((PUCHAR)&ctx, digest);
@@ -230,7 +230,7 @@ static bool DecryptEepromSecurity(const ULONG *states, PUCHAR plain) {
         HmacFromStates(states, EepromImage, 20, rc4Key);
     else
         XcHMAC(XboxEEPROMKey, 16, EepromImage, 20, nullptr, 0, rc4Key);
-    RtlCopyMemory(plain, EepromImage + 20, 28);
+    memcpy(plain, EepromImage + 20, 28);
     XcRC4Key(rc4, 20, rc4Key);
     XcRC4Crypt(rc4, 28, plain);
     if (states)
@@ -258,7 +258,7 @@ void InitEeprom() {
     }
     if (!ok)
         return; // unknown EEPROM revision or key: keep the defaults
-    RtlCopyMemory(XboxHDKey, plain + 8, 16);
+    memcpy(XboxHDKey, plain + 8, 16);
     titles::ConsoleGameRegion = *(ULONG *)(plain + 24);
     EepromSecurityValid = 1;
 }
@@ -267,21 +267,17 @@ void InitEeprom() {
 XBAPI NTSTATUS NTAPI ExReadWriteRefurbInfo(PULONG RefurbInfo, ULONG ValueLength, BOOLEAN DoWrite) {
     if (ValueLength != 16)
         return STATUS_INVALID_PARAMETER_;
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, "\\Device\\Harddisk0\\partition0");
-    OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, (DoWrite ? GENERIC_WRITE : 0) | GENERIC_READ | SYNCHRONIZE, &attrs, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                 FILE_SYNCHRONOUS_IO_ALERT);
+    NTSTATUS status = io::OpenFile("\\Device\\Harddisk0\\partition0", (DoWrite ? GENERIC_WRITE : 0) | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, &h);
     if (!NT_SUCCESS(status))
         return status;
+    IO_STATUS_BLOCK iosb;
     auto sector = (PULONG)ExAllocatePoolWithTag(512, 'frxE');
     if (!sector) {
         NtClose(h);
         return (NTSTATUS)0xC000009A;
     }
-    RtlZeroMemory(sector, 512);
+    memset(sector, 0, 512);
     LARGE_INTEGER offset;
     offset.QuadPart = 0x600;
     if (!DoWrite) {

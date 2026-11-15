@@ -90,7 +90,7 @@ bool Start() {
     HostPage = (USB_HOST_PAGE *)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, 0x3FFFFFF, PAGE_SIZE, PAGE_READWRITE | PAGE_NOCACHE);
     if (!HostPage)
         return false;
-    RtlZeroMemory(HostPage, PAGE_SIZE);
+    memset(HostPage, 0, PAGE_SIZE);
     for (ULONG i = 0; i < USB_HOST_PIPES; i++)
         PipePacketSize[i] = 0;
     ULONG interval = Register(HC_FM_INTERVAL) & 0x3FFF;
@@ -175,16 +175,16 @@ LONG ControlTransfer(const USB_DEVICE &Device, UCHAR RequestType, UCHAR Request,
     USB_HOST_PAGE &page = *HostPage;
     bool in = RequestType & 0x80;
     UCHAR setup[8] = {RequestType, Request, (UCHAR)Value, (UCHAR)(Value >> 8), (UCHAR)Index, (UCHAR)(Index >> 8), (UCHAR)Length, (UCHAR)(Length >> 8)};
-    RtlCopyMemory(page.Setup, setup, sizeof(setup));
+    memcpy(page.Setup, setup, sizeof(setup));
     if (!in && Length)
-        RtlCopyMemory(page.ControlData, Data, Length);
+        memcpy(page.ControlData, Data, Length);
     OHCI_TD *setupTd = &page.ControlTds[0], *dataTd = &page.ControlTds[1], *statusTd = &page.ControlTds[2],
             *tail = &page.ControlTds[3];
     FillTd(*setupTd, TD_SETUP | TD_DATA0, page.Setup, 8, Length ? dataTd : statusTd);
     if (Length)
         FillTd(*dataTd, (in ? TD_IN | TD_ROUNDING : TD_OUT) | TD_DATA1, page.ControlData, Length, statusTd);
     FillTd(*statusTd, (in ? TD_OUT : TD_IN) | TD_DATA1, nullptr, 0, tail);
-    RtlZeroMemory(tail, sizeof(*tail));
+    memset(tail, 0, sizeof(*tail));
     page.Control.Info = Device.Address | (Device.LowSpeed ? ED_LOW_SPEED : 0) | (ULONG)Device.MaxPacket0 << 16;
     page.Control.TailP = PhysicalAddress(tail);
     page.Control.HeadP = PhysicalAddress(setupTd);
@@ -202,7 +202,7 @@ LONG ControlTransfer(const USB_DEVICE &Device, UCHAR RequestType, UCHAR Request,
         return -1;
     ULONG moved = !Length || !dataTd->Cbp ? Length : dataTd->Cbp - PhysicalAddress(page.ControlData);
     if (in && moved)
-        RtlCopyMemory(Data, page.ControlData, moved);
+        memcpy(Data, page.ControlData, moved);
     return (LONG)moved;
 }
 
@@ -212,7 +212,7 @@ LONG ControlTransfer(const USB_DEVICE &Device, UCHAR RequestType, UCHAR Request,
 static void QueueRead(ULONG Pipe, ULONG Which) {
     USB_HOST_PAGE &page = *HostPage;
     OHCI_TD &td = page.PipeTds[Pipe][Which], &tail = page.PipeTds[Pipe][Which ^ 1];
-    RtlZeroMemory(&tail, sizeof(tail));
+    memset(&tail, 0, sizeof(tail));
     FillTd(td, TD_ROUNDING, page.PipeData[Pipe][Which], PipePacketSize[Pipe], &tail);
     PipeQueuedTd[Pipe] = Which;
     page.Pipes[Pipe].TailP = PhysicalAddress(&tail);
@@ -256,7 +256,7 @@ LONG ReadPipe(ULONG Pipe, PVOID Data, ULONG Size) {
     ULONG length = td.Cbp ? td.Cbp - PhysicalAddress(buffer) : PipePacketSize[Pipe];
     if (length > Size)
         length = Size;
-    RtlCopyMemory(Data, buffer, length);
+    memcpy(Data, buffer, length);
     QueueRead(Pipe, which ^ 1);
     return (LONG)length;
 }

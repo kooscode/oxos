@@ -382,3 +382,15 @@ EXPORTS
     _allshr                                      @414 NONAME
     _aullshr                                     @415 NONAME
     _OXOSWriteExtensionLog@8                     @416 NONAME
+    strlen                                       @417 NONAME
+    strnlen                                      @418 NONAME
+    strcmp                                       @419 NONAME
+    strncmp                                      @420 NONAME
+    strcasecmp                                   @421 NONAME
+    strncasecmp                                  @422 NONAME
+    strlcpy                                      @423 NONAME
+    toupper                                      @424 NONAME
+    isdigit                                      @425 NONAME
+    memchr                                       @426 NONAME
+    snprintf                                     @427 NONAME
+    vsnprintf                                    @428 NONAME

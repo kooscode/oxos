@@ -137,7 +137,7 @@ static void NTAPI FATXControllerThread(PVOID) {
     ok &= NtWriteFile(hf, nullptr, nullptr, nullptr, &iosb, buf, 5000, nullptr) == 0 && iosb.Information == 5000;
     ok &= NtWriteFile(hf, nullptr, nullptr, nullptr, &iosb, buf + 5000, big - 5000, nullptr) == 0;
     NtClose(hf);
-    RtlZeroMemory(buf, big);
+    memset(buf, 0, big);
     ok &= Open(&hf, "\\Device\\Harddisk0\\Partition1\\XkTest\\HELLO.TXT", GENERIC_READ, FILE_OPEN, 0) == 0;
     ok &= NtReadFile(hf, nullptr, nullptr, nullptr, &iosb, buf, big + 100, nullptr) == 0 && iosb.Information == big;
     for (ULONG i = 0; ok && i < big; i++)
@@ -268,20 +268,20 @@ static NTSTATUS FormatLikeATitle(PCSZ volume, PUCHAR buf) {
     // 64 KB clusters, as Halo 2 formats its cache partition.
     ULONG entries = (ULONG)(pi.PartitionLength.QuadPart >> 16) + 1, fat = (entries * 2 + 0xFFF) & ~0xFFFu;
     LARGE_INTEGER at = {};
-    RtlZeroMemory(buf, 0x1000);
+    memset(buf, 0, 0x1000);
     ((PULONG)buf)[0] = 0x58544146; // "FATX"
     ((PULONG)buf)[1] = 0x12345678;
     ((PULONG)buf)[2] = 128;
     ((PULONG)buf)[3] = 1;
     if (NT_SUCCESS(status))
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
-    RtlZeroMemory(buf, 0x1000);
+    memset(buf, 0, 0x1000);
     for (ULONG off = 0; NT_SUCCESS(status) && off < fat; off += 0x1000) {
         ((PULONG)buf)[0] = off ? 0 : 0xFFFFFFF8;
         at.QuadPart = 0x1000 + off;
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
     }
-    RtlFillMemory(buf, 0x1000, 0xFF);
+    memset(buf, 0xFF, 0x1000);
     for (ULONG off = 0; NT_SUCCESS(status) && off < 0x10000; off += 0x1000) {
         at.QuadPart = 0x1000 + fat + off;
         status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &at);
@@ -301,7 +301,7 @@ static void EXFATFormatTest(PUCHAR buf) {
         NtClose(h);
     ok &= Open(&h, "\\Device\\Harddisk0\\Partition3\\XkCache\\junk.bin", GENERIC_WRITE, FILE_OVERWRITE_IF, 0) == 0;
     if (ok) {
-        RtlFillMemory(buf, 0x10000, 0x5A);
+        memset(buf, 0x5A, 0x10000);
         LARGE_INTEGER zero = {};
         ok = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x10000, &zero) == 0;
         NtClose(h);
@@ -349,7 +349,7 @@ static void EXFATCrossFolderTest(PUCHAR buf) {
         NtClose(h);
     ok &= Open(&h, "\\Device\\Harddisk0\\Partition4\\XkCross.bin", GENERIC_WRITE, FILE_CREATE, 0) == 0;
     if (ok) {
-        RtlFillMemory(buf, 0x1000, 0xC5);
+        memset(buf, 0xC5, 0x1000);
         LARGE_INTEGER zero = {};
         ok = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, &zero) == 0;
         NtClose(h);
@@ -381,9 +381,9 @@ static void EXFATLengthTest(PUCHAR buf) {
         ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, grown, &at)) && iosb.Information == grown;
         // The file now spans 4 clusters: 3 more than before. A driver that follows the stale chain takes only 1.
         ok &= FreeClusters(hv) + 3 == before;
-        RtlZeroMemory(buf + grown, grown);
-        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf + grown, grown, &at)) && iosb.Information == grown && RtlCompareMemory(buf,
-              buf + grown, grown) == grown;
+        memset(buf + grown, 0, grown);
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf + grown, grown, &at)) && iosb.Information == grown && memcmp(buf,
+              buf + grown, grown) == 0;
         NtClose(h);
     }
     KiTestEXFATStaleOk = ok;
@@ -399,7 +399,7 @@ static void EXFATLengthTest(PUCHAR buf) {
                                  FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT));
     if (ok) {
         ok = FreeClusters(hv) == before; // nothing allocated yet
-        RtlFillMemory(buf, 100, 'p');
+        memset(buf, 'p', 100);
         ok &= NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, nullptr));
         LARGE_INTEGER more;
         more.QuadPart = 512 * 1024;
@@ -443,12 +443,12 @@ static void EXFATLargeFileTest(PUCHAR buf) {
         LARGE_INTEGER at;
         at.QuadPart = (LONGLONG)across;
         ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, acrossLength, &at)) && iosb.Information == acrossLength;
-        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, acrossLength, &at)) && RtlCompareMemory(buf, check,
-              acrossLength) == acrossLength;
-        RtlFillMemory(buf, pastLength, 'L');
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, acrossLength, &at)) && memcmp(buf, check,
+              acrossLength) == 0;
+        memset(buf, 'L', pastLength);
         at.QuadPart = (LONGLONG)past;
         ok &= NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buf, pastLength, &at));
-        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, pastLength, &at)) && RtlCompareMemory(buf, check, pastLength) == pastLength;
+        ok &= NT_SUCCESS(NtReadFile(h, nullptr, nullptr, nullptr, &iosb, check, pastLength, &at)) && memcmp(buf, check, pastLength) == 0;
         ULONGLONG allocation, size;
         ok &= StandardSizes(h, &allocation, &size) && size == grown && allocation == (grown + cluster - 1) / cluster * cluster;
         ok &= FreeClusters(hv) + (grown + cluster - 1) / cluster == before;

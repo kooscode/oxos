@@ -16,6 +16,11 @@ state and each constant where the rules say it is, and trust every comment to de
   (`sdk/examples/example_*/`) are C++.
 - The kernel and the 2BL are freestanding: no exceptions, no RTTI, no standard library, no static constructors. The kernel is built `-Oz` on purpose (free
   memory for titles); a readability change must not cost code size.
+- OXOS is its own kernel, not Windows NT. Strings, memory and formatting use the C library, under its standard names (`kernel/src/runtime/c_library.h`:
+  `strlen`, `strcmp`, `strcasecmp`, `strlcpy`, `memcpy`, `memset`, `memchr`, `snprintf`, ...), not hand-written loops; files, devices and links are named
+  with C strings (`io::OpenFile`, `io::CreateFile`, `io::DeleteFile`, `io::RenameFile`, `io::CreateDevice`, `io::CreateLink`, `objects::CreateDirectory`).
+  The Xbox kernel's `Rtl*` string, memory and formatting exports are for titles only: `tools/check_c_library_use.py` fails the build when OXOS's own code
+  calls one (user, 2026-11-14). A C function the kernel does not use itself goes in `runtime/c_library_extensions.cpp`, which only the SDK carries.
 - Constants are `constexpr`, not `#define` (Core Guidelines ES.31). Macros are for build options (`XK_DEBUG_SERIAL`, `XK_BOOT_SELFTEST`) and for what only a
   macro can do (`XK_SERIAL`, `XK_SIZE`, the unit-test `TEST`).
 - Layouts shared with titles, hardware or the reference kernel are checked at compile time: `XK_SIZE`, `XK_OFFSET`, `static_assert`.

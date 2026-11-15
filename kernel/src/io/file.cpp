@@ -155,7 +155,7 @@ NTSTATUS NTAPI ParseDevice(PVOID ParseObject, POBJECT_TYPE ObjectType, ULONG Att
         op->FinalStatus = status;
         return status;
     }
-    RtlZeroMemory(fo, sizeof(*fo));
+    memset(fo, 0, sizeof(*fo));
     fo->Type = 5;
     fo->RelatedFileObject = op->RelatedFileObject;
     if (op->CreateOptions & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT)) {
@@ -930,6 +930,43 @@ XBAPI void NTAPI NtUserIoApcDispatcher(PVOID ApcContext, PIO_STATUS_BLOCK IoStat
     else
         bytes = IoStatusBlock->Information;
     ((void(NTAPI *)(ULONG, ULONG, PIO_STATUS_BLOCK))ApcContext)(error, bytes, IoStatusBlock);
+}
+
+// --- OXOS's own files, by path (io.h)
+
+NTSTATUS CreateFile(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Disposition, ULONG Options, HANDLE *File, ULONGLONG Size) {
+    OBJECT_STRING name = objects::ObjectName(Path);
+    OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    IO_STATUS_BLOCK iosb;
+    LARGE_INTEGER allocation;
+    allocation.QuadPart = (LONGLONG)Size;
+    ULONG fileAttributes = Options & FILE_DIRECTORY_FILE ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
+    return NtCreateFile(File, Access | SYNCHRONIZE, &attributes, &iosb, Size ? &allocation : nullptr, fileAttributes, Share, Disposition,
+                        Options | FILE_SYNCHRONOUS_IO_NONALERT);
+}
+
+NTSTATUS OpenFile(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Options, HANDLE *File) {
+    return CreateFile(Path, Access, Share, FILE_OPEN, Options, File);
+}
+
+NTSTATUS DeleteFile(const char *Path) {
+    OBJECT_STRING name = objects::ObjectName(Path);
+    OBJECT_ATTRIBUTES attributes = {nullptr, &name, OBJ_CASE_INSENSITIVE};
+    return NtDeleteFile(&attributes);
+}
+
+NTSTATUS RenameFile(HANDLE File, const char *NewName, bool Replace) {
+    FILE_RENAME_INFORMATION rename = {Replace, nullptr, objects::ObjectName(NewName)};
+    IO_STATUS_BLOCK iosb;
+    return NtSetInformationFile(File, &iosb, &rename, sizeof(rename), FileRenameInformation);
+}
+
+bool PathExists(const char *Path) {
+    HANDLE file;
+    if (!NT_SUCCESS(OpenFile(Path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, &file)))
+        return false;
+    NtClose(file);
+    return true;
 }
 
 } // namespace xk::io

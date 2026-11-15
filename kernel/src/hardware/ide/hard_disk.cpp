@@ -28,7 +28,7 @@ void DiskModelLine(char *Line, ULONG Size) {
     while (n && HalDiskModelNumber.Buffer[n - 1] == ' ')
         n--;
     if (n)
-        RtlSnprintf(Line, Size, "Disk: %.*s", (int)(n > 39 ? 39 : n), HalDiskModelNumber.Buffer);
+        snprintf(Line, Size, "Disk: %.*s", (int)(n > 39 ? 39 : n), HalDiskModelNumber.Buffer);
     else
         Line[0] = 0;
 }
@@ -415,13 +415,10 @@ static NTSTATUS NTAPI DiskParseDirectory(PVOID ParseObject, POBJECT_TYPE ObjectT
     while (p < end && *p != '\\')
         p++;
     OBJECT_STRING rest = {(USHORT)(end - p), (USHORT)(end - p), (PCHAR)p};
-    static const char prefix[] = "partition";
     ULONG len = (ULONG)(p - element), number = 0;
-    bool ok = len > 9;
-    for (ULONG i = 0; ok && i < 9; i++)
-        ok = (element[i] | 0x20) == prefix[i];
+    bool ok = len > 9 && strncasecmp(element, "partition", 9) == 0;
     for (ULONG i = 9; ok && i < len; i++) {
-        ok = element[i] >= '0' && element[i] <= '9';
+        ok = isdigit(element[i]);
         number = number * 10 + (element[i] - '0');
     }
     if (!ok || number >= IDE_MAX_PARTITIONS)
@@ -478,8 +475,8 @@ static NTSTATUS DiskExecutePassThrough(ATA_PASS_THROUGH *p);
 // follow-up commands).
 static void DiskUnlock(const UCHAR *Password) {
     UCHAR block[512]; // on the boot stack: a static buffer would cost a resident image page (spec/stock/09 §7)
-    RtlZeroMemory(block, sizeof(block));
-    RtlCopyMemory(block + 2, Password, 32);
+    memset(block, 0, sizeof(block));
+    memcpy(block + 2, Password, 32);
     ATA_PASS_THROUGH p = {};
     p.IdeReg.bCommandReg = 0xF2;
     p.IdeReg.bHostSendsData = TRUE;
@@ -524,7 +521,7 @@ void CountDiskPowerCycle() {
         bool foundFATX = false;
         for (ULONG n = 1; sector && n <= 2 && !foundFATX; n++) {
             foundFATX = storage::DiskPartitions[n].Length && NT_SUCCESS(storage::ReadDiskSectors(storage::DiskPartitions[n].Start, sector, 512)) &&
-                        RtlCompareMemory(sector, "FATX", 4) == 4;
+                        memcmp(sector, "FATX", 4) == 0;
         }
         if (sector)
             ExFreePool(sector);
@@ -595,8 +592,7 @@ void InitDisk() {
     XK_SERIAL("disk: %.40s, %lu sectors%s, security %#x, status %#x\n", DiskModel, (ULONG)DiskLengthInSectors, DiskSupportsLba48 ? " (LBA48)" : "",
               DiskSecurityWord, DiskLastStatus);
 
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, "\\Device\\Harddisk0");
+    OBJECT_STRING name = objects::ObjectName("\\Device\\Harddisk0");
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     PVOID dir;
     HANDLE h;

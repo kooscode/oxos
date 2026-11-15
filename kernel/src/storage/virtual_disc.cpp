@@ -113,7 +113,7 @@ bool Lz4Decode(const UCHAR *src, ULONG srcLen, PUCHAR dst, ULONG dstLen) {
         }
         if (n > srcLen - ip || n > dstLen - op)
             return false;
-        RtlCopyMemory(dst + op, src + ip, n);
+        memcpy(dst + op, src + ip, n);
         ip += n;
         op += n;
         if (ip == srcLen) // the last sequence has literals only
@@ -245,7 +245,7 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
         static const UCHAR toc[12] = {0, 0x12, 1, 1, 0, 0x14, 1, 0, 0, 0, 2, 0};
         if (outLen < sizeof(toc))
             return Complete(Irp, STATUS_INVALID_DEVICE_REQUEST);
-        RtlCopyMemory(out, toc, sizeof(toc));
+        memcpy(out, toc, sizeof(toc));
         return Complete(Irp, STATUS_SUCCESS, sizeof(toc));
     }
     case IOCTL_CDROM_GET_DRIVE_GEOMETRY: {
@@ -324,9 +324,7 @@ void Unmount(ULONG n) {
         KeDelayExecutionThread(KernelMode, FALSE, &t);
     }
     if (s->LinkMade) {
-        OBJECT_STRING link;
-        RtlInitAnsiString(&link, SavedVirtualDiscs[n - 1].Link);
-        IoDeleteSymbolicLink(&link);
+        io::DeleteLink(SavedVirtualDiscs[n - 1].Link);
         s->LinkMade = FALSE;
     }
     for (ULONG i = 0; i < s->Parts; i++) {
@@ -337,7 +335,7 @@ void Unmount(ULONG n) {
     if (s->Block)
         ExFreePool(s->Block);
     s->Block = nullptr;
-    RtlZeroMemory(s->Part, sizeof(s->Part));
+    memset(s->Part, 0, sizeof(s->Part));
     s->Parts = 0;
     XK_SERIAL("vd: slot %lu unmounted\n", n);
 }
@@ -348,12 +346,7 @@ void UnmountAll() {
 }
 
 NTSTATUS OpenPart(const CHAR *Path, HANDLE *File, ULONGLONG *Size) {
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, Path);
-    OBJECT_ATTRIBUTES oa = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
-    NTSTATUS status = NtCreateFile(File, GENERIC_READ | SYNCHRONIZE, &oa, &iosb, nullptr, 0, FILE_SHARE_READ, FILE_OPEN,
-                                   FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = io::OpenFile(Path, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, File);
     if (!NT_SUCCESS(status))
         return status;
     struct {
@@ -361,6 +354,7 @@ NTSTATUS OpenPart(const CHAR *Path, HANDLE *File, ULONGLONG *Size) {
         ULONG NumberOfLinks;
         BOOLEAN DeletePending, Directory;
     } info = {};
+    IO_STATUS_BLOCK iosb;
     status = NtQueryInformationFile(*File, &iosb, &info, sizeof(info), FileStandardInformation);
     if (!NT_SUCCESS(status)) {
         NtClose(*File);
@@ -416,8 +410,8 @@ NTSTATUS Attach(ULONG n) {
         // A full disc dump: the game partition's volume descriptor (sector 32 of it) starts and ends with the magic.
         auto sector = (PUCHAR)ExAllocatePoolWithTag(VD_SECTOR, 'sCdV');
         if (sector) {
-            if (NT_SUCCESS(ReadFile(s->Part[0].File, VD_GAME_PARTITION + 32 * VD_SECTOR, sector, VD_SECTOR)) && RtlCompareMemory(sector, "MICROSOFT*XBOX*MEDIA",
-                20) == 20 && RtlCompareMemory(sector + VD_SECTOR - 20, "MICROSOFT*XBOX*MEDIA", 20) == 20) {
+            if (NT_SUCCESS(ReadFile(s->Part[0].File, VD_GAME_PARTITION + 32 * VD_SECTOR, sector, VD_SECTOR)) && memcmp(sector, "MICROSOFT*XBOX*MEDIA",
+                20) == 0 && memcmp(sector + VD_SECTOR - 20, "MICROSOFT*XBOX*MEDIA", 20) == 0) {
                 s->Skip = VD_GAME_PARTITION;
                 s->Length -= VD_GAME_PARTITION;
             }
@@ -428,10 +422,8 @@ NTSTATUS Attach(ULONG n) {
         status = STATUS_UNRECOGNIZED_MEDIA_;
     if (NT_SUCCESS(status) && !s->Device) {
         CHAR name[32];
-        RtlSnprintf(name, sizeof(name), "\\Device\\Virtual0\\Image%lu", n);
-        OBJECT_STRING os;
-        RtlInitAnsiString(&os, name);
-        status = IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &os, FILE_DEVICE_CD_ROM, FALSE, &s->Device);
+        snprintf(name, sizeof(name), "\\Device\\Virtual0\\Image%lu", n);
+        status = io::CreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), name, FILE_DEVICE_CD_ROM, &s->Device);
         if (NT_SUCCESS(status)) {
             *(PULONG)s->Device->DeviceExtension = n;
             s->Device->Flags |= DO_DIRECT_IO | 0x40;
@@ -451,7 +443,7 @@ NTSTATUS Attach(ULONG n) {
         if (s->Block)
             ExFreePool(s->Block);
         s->Block = nullptr;
-        RtlZeroMemory(s->Part, sizeof(s->Part));
+        memset(s->Part, 0, sizeof(s->Part));
         s->Parts = 0;
         saved->InUse = 0;
         XK_SERIAL("vd: slot %lu: %s failed %#lx\n", n, saved->Path[0], status);
@@ -460,14 +452,10 @@ NTSTATUS Attach(ULONG n) {
     // The image's own link, unless it names the drive (which already reaches the image).
     s->LinkMade = FALSE;
     if (saved->Link[0]) {
-        OBJECT_STRING link, target;
-        RtlInitAnsiString(&link, saved->Link);
-        if (RtlCompareMemory(saved->Link, "\\Device\\CdRom0", 15) != 15 &&
-            RtlCompareMemory(saved->Link, "\\??\\CdRom0:", 12) != 12) {
+        if (strcmp(saved->Link, "\\Device\\CdRom0") != 0 && strcmp(saved->Link, "\\??\\CdRom0:") != 0) {
             CHAR name[32];
-            RtlSnprintf(name, sizeof(name), "\\Device\\Virtual0\\Image%lu", n);
-            RtlInitAnsiString(&target, name);
-            s->LinkMade = NT_SUCCESS(IoCreateSymbolicLink(&link, &target));
+            snprintf(name, sizeof(name), "\\Device\\Virtual0\\Image%lu", n);
+            s->LinkMade = NT_SUCCESS(io::CreateLink(saved->Link, name));
         }
     }
     s->Mounted = TRUE;
@@ -491,7 +479,7 @@ bool CopyName(const UCHAR *Field, CHAR *Out) {
         return true;
     if (!str->Buffer || !MmIsAddressValid(str->Buffer) || !MmIsAddressValid(str->Buffer + n - 1))
         return false;
-    RtlCopyMemory(Out, str->Buffer, n);
+    memcpy(Out, str->Buffer, n);
     Out[n] = 0;
     return true;
 }
@@ -515,7 +503,7 @@ NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
         return STATUS_INVALID_DEVICE_REQUEST;
     }
     VD_SAVED *saved = &SavedVirtualDiscs[Slot - 1];
-    RtlZeroMemory(saved, sizeof(*saved));
+    memset(saved, 0, sizeof(*saved));
     saved->Type = type;
     saved->Parts = In[0];
     for (ULONG i = 0; i < saved->Parts; i++) {
@@ -613,22 +601,15 @@ void InitVirtualDiscs() {
     KeInitializeEvent(&VirtualDiscMountLock, SynchronizationEvent, TRUE);
     for (auto &s : VirtualDiscSlots)
         KeInitializeEvent(&s.Lock, SynchronizationEvent, TRUE);
-    OBJECT_STRING dir, name, link;
-    RtlInitAnsiString(&dir, "\\Device\\Virtual0");
-    OBJECT_ATTRIBUTES oa = {nullptr, &dir, OBJ_CASE_INSENSITIVE | OBJ_PERMANENT};
-    HANDLE h;
-    if (NT_SUCCESS(NtCreateDirectoryObject(&h, &oa)))
-        NtClose(h);
-    RtlInitAnsiString(&name, "\\Device\\Virtual0\\Image0");
+    objects::CreateDirectory("\\Device\\Virtual0");
     // Not a mountable type: opening \Device\CdRom1 reaches this driver directly.
-    if (!NT_SUCCESS(IoCreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), &name, FILE_DEVICE_UNKNOWN, FALSE, &VirtualDiscControl)))
+    const char *control = "\\Device\\Virtual0\\Image0";
+    if (!NT_SUCCESS(io::CreateDevice(&VirtualDiscDriverObject, sizeof(ULONG), control, FILE_DEVICE_UNKNOWN, &VirtualDiscControl)))
         return;
     *(PULONG)VirtualDiscControl->DeviceExtension = 0;
     VirtualDiscControl->Flags &= ~DO_DEVICE_INITIALIZING;
-    RtlInitAnsiString(&link, "\\Device\\CdRom1");
-    IoCreateSymbolicLink(&link, &name);
-    RtlInitAnsiString(&link, "\\??\\CdRom1:");
-    IoCreateSymbolicLink(&link, &name);
+    io::CreateLink("\\Device\\CdRom1", control);
+    io::CreateLink("\\??\\CdRom1:", control);
 }
 
 // The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come back.

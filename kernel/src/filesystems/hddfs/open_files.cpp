@@ -18,13 +18,13 @@ HDDFS_FCB *HDDFSCreateFcb(HDDFS_FCB *Parent, const HDDFS_ENTRY *e, ULONG Index) 
     auto f = (HDDFS_FCB *)ExAllocatePoolWithTag(sizeof(HDDFS_FCB), 'fxtF');
     if (!f)
         return nullptr;
-    RtlZeroMemory(f, sizeof(*f));
+    memset(f, 0, sizeof(*f));
     InitializeListHead(&f->ChildList);
     f->Parent = Parent;
     f->Flags = (e->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? FCB_DIRECTORY : 0;
     f->Attributes = e->FileAttributes;
     f->NameLength = e->FileNameLength;
-    RtlCopyMemory(f->Name, e->FileName, e->FileNameLength);
+    memcpy(f->Name, e->FileName, e->FileNameLength);
     f->FirstCluster = e->FirstCluster;
     f->FileSize = (f->Flags & FCB_DIRECTORY) ? 0 : e->FileSize;
     f->FileSizeHigh = (f->Flags & FCB_DIRECTORY) ? 0 : e->FileSizeHigh;

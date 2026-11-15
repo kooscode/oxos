@@ -72,7 +72,7 @@ volatile ULONG Serving;        // 1 while the server runs (read by the boot test
 static void ShowStatus(const char *Format, ...) {
     va_list args;
     __builtin_va_start(args, Format);
-    RtlVsnprintf(Server->Status, STATUS_SIZE, Format, args);
+    vsnprintf(Server->Status, STATUS_SIZE, Format, args);
     __builtin_va_end(args);
 }
 
@@ -96,10 +96,10 @@ static void UpdateScreen() {
                           : network::NetworkState() == NetAsking ? "Asking the network for an address..." : nullptr;
     const char *status = Server->Status[0] ? Server->Status : network;
     char shown[sizeof(Server->Shown)];
-    RtlSnprintf(shown, sizeof(shown), "%s|%s", address, status ? status : "Waiting for a browser.");
+    snprintf(shown, sizeof(shown), "%s|%s", address, status ? status : "Waiting for a browser.");
     for (ULONG i = 0; i < sizeof(shown); i++) {
         if (shown[i] != Server->Shown[i]) {
-            RtlCopyMemory(Server->Shown, shown, sizeof(shown));
+            memcpy(Server->Shown, shown, sizeof(shown));
             user_interface::ShowFileManagerScreen(address, status ? status : "Waiting for a browser.");
             return;
         }
@@ -171,7 +171,7 @@ static bool NtPathOf(const char *Path, char *Out, ULONG Size) {
         drive++;
     if (!drives[drive])
         return false;
-    ULONG n = (ULONG)RtlSnprintf(Out, Size, "\\Device\\Harddisk0\\Partition%u", partitions[drive]);
+    ULONG n = (ULONG)snprintf(Out, Size, "\\Device\\Harddisk0\\Partition%u", partitions[drive]);
     const ULONG prefix = n;
     const char *p = Path + 2;
     while (*p) { // each "/part"
@@ -198,17 +198,10 @@ static bool NtPathOf(const char *Path, char *Out, ULONG Size) {
     return true;
 }
 
-// Opens or creates NtPath; Size, when not 0, is the allocation a new file starts with (an upload's length: its clusters are allocated once, not with every
-// write).
+// Opens or creates NtPath, shared for reading and writing; Size, when not 0, is the allocation a new file starts with (an upload's length: its clusters are
+// allocated once, not with every write).
 static NTSTATUS OpenFile(const char *NtPath, ACCESS_MASK Access, ULONG Disposition, ULONG Options, HANDLE *h, ULONGLONG Size = 0) {
-    ANSI_STRING name;
-    RtlInitAnsiString(&name, NtPath);
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
-    LARGE_INTEGER allocation;
-    allocation.QuadPart = (LONGLONG)Size;
-    return NtCreateFile(h, Access | SYNCHRONIZE, &a, &iosb, Size ? &allocation : nullptr, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        Disposition, Options | FILE_SYNCHRONOUS_IO_NONALERT);
+    return io::CreateFile(NtPath, Access, FILE_SHARE_READ | FILE_SHARE_WRITE, Disposition, Options, h, Size);
 }
 
 // The folders on the way to NtPath's last part, created where missing.
@@ -238,7 +231,7 @@ static void Reply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const char *
                          : Code == 409 ? "Conflict"
                          : Code == 411 ? "Length Required" : Code == 431 ? "Request Header Fields Too Large"
                                                                          : "Internal Server Error";
-    r->HeaderLength = (ULONG)RtlSnprintf(r->Header, sizeof(r->Header),
+    r->HeaderLength = (ULONG)snprintf(r->Header, sizeof(r->Header),
                                          "HTTP/1.1 %lu %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n"
                                          "Cache-Control: no-store\r\nConnection: close\r\n\r\n",
                                          Code, reason, Type, Length);
@@ -252,7 +245,7 @@ static void Reply(UPLOADP_REQUEST *r, ULONG Code, const char *Type, const char *
 static void ReplyText(UPLOADP_REQUEST *r, ULONG Code, const char *Format, ...) {
     va_list args;
     __builtin_va_start(args, Format);
-    ULONG n = (ULONG)RtlVsnprintf(r->Json, sizeof(r->Json), Format, args);
+    ULONG n = (ULONG)vsnprintf(r->Json, sizeof(r->Json), Format, args);
     __builtin_va_end(args);
     Reply(r, Code, "text/plain; charset=utf-8", r->Json, n);
 }
@@ -276,9 +269,9 @@ static void HandleList(UPLOADP_REQUEST *r) {
     auto entry = [&](const char *name, ULONG length, bool folder, ULONGLONG size) {
         if (n + length + 64 >= sizeof(r->Json)) // a folder too large for one reply: the rest is left out
             return;
-        n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "%s{\"name\":\"", n > 1 ? "," : "");
+        n += (ULONG)snprintf(r->Json + n, sizeof(r->Json) - n, "%s{\"name\":\"", n > 1 ? "," : "");
         JsonName(r, &n, name, length);
-        n += (ULONG)RtlSnprintf(r->Json + n, sizeof(r->Json) - n, "\",\"dir\":%s,\"size\":%llu}", folder ? "true" : "false", size);
+        n += (ULONG)snprintf(r->Json + n, sizeof(r->Json) - n, "\",\"dir\":%s,\"size\":%llu}", folder ? "true" : "false", size);
     };
     r->Json[n++] = '[';
     if (r->Path[0] == '/' && !r->Path[1]) { // the drives that exist
@@ -345,7 +338,7 @@ static void ShowPath(const char *Path, char *Out, ULONG Size) {
 // "FATX", "exFAT", or "none" (a PC disk without an exFAT volume).
 static void HandleDiskInfo(UPLOADP_REQUEST *r) {
     const char *fs = storage::DiskHasEXFATLayout ? "exFAT" : storage::DiskHasForeignLayout ? "none" : "FATX";
-    ULONG n = (ULONG)RtlSnprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs, hardware::ide::DiskLengthInSectors * 512);
+    ULONG n = (ULONG)snprintf(r->Json, sizeof(r->Json), "{\"fs\":\"%s\",\"bytes\":%llu}", fs, hardware::ide::DiskLengthInSectors * 512);
     Reply(r, 200, "application/json", r->Json, n);
 }
 
@@ -388,10 +381,7 @@ static void HandleRename(UPLOADP_REQUEST *r, const char *Target) {
     HANDLE h;
     NTSTATUS status = OpenFile(r->NtPath, DELETE, FILE_OPEN, 0, &h);
     if (NT_SUCCESS(status)) {
-        FILE_RENAME_INFORMATION info = {FALSE, nullptr, {}};
-        RtlInitAnsiString(&info.FileName, name);
-        IO_STATUS_BLOCK iosb;
-        status = NtSetInformationFile(h, &iosb, &info, sizeof(info), FileRenameInformation);
+        status = io::RenameFile(h, name, false);
         NtClose(h);
     }
     if (!NT_SUCCESS(status)) {
@@ -411,10 +401,7 @@ static void HandleRename(UPLOADP_REQUEST *r, const char *Target) {
 static void HandleDelete(UPLOADP_REQUEST *r) {
     if (!r->Path[2] || !r->Path[3]) // "/E" or "/E/"
         return ReplyText(r, 403, "Cannot delete %s (%s)", r->Shown, TopName());
-    ANSI_STRING name;
-    RtlInitAnsiString(&name, r->NtPath);
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    NTSTATUS status = NtDeleteFile(&a);
+    NTSTATUS status = io::DeleteFile(r->NtPath);
     if (!NT_SUCCESS(status)) {
         StatusPath("Delete failed:", r->Shown);
         if (status == STATUS_DIRECTORY_NOT_EMPTY_)
@@ -474,10 +461,8 @@ static const char *RequestHeader(const UPLOADP_REQUEST *r, const char *Name) {
     for (ULONG i = 0; i + 2 < r->HeadLength; i++) {
         if (r->Head[i] != '\n')
             continue;
-        ULONG k = 0;
-        while (Name[k] && (r->Head[i + 1 + k] | 0x20) == (Name[k] | 0x20))
-            k++;
-        if (!Name[k] && r->Head[i + 1 + k] == ':') {
+        ULONG k = strlen(Name);
+        if (strncasecmp(r->Head + i + 1, Name, k) == 0 && r->Head[i + 1 + k] == ':') {
             const char *v = r->Head + i + 2 + k;
             while (*v == ' ')
                 v++;
@@ -537,7 +522,7 @@ static void DispatchRequest(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
     StartUpload(r, bytes, expect && IsWord(expect, "100-continue"));
     // Body bytes that came with the head.
     ULONG n = BodyLength < r->Remaining ? BodyLength : (ULONG)r->Remaining;
-    RtlCopyMemory(r->Chunk, Body, n);
+    memcpy(r->Chunk, Body, n);
     r->ChunkUsed = n;
     r->Remaining -= n;
 }
@@ -546,7 +531,7 @@ static void DispatchRequest(UPLOADP_REQUEST *r, const char *Body, ULONG BodyLeng
 static void LaunchNow(UPLOADP_REQUEST *r) {
     if (Server->LaunchReady)
         return;
-    RtlCopyMemory(Server->Launch, r->NtPath, PATH_SIZE);
+    memcpy(Server->Launch, r->NtPath, PATH_SIZE);
     Server->LaunchReady = true;
     r->Launch = false;
 }
@@ -615,7 +600,7 @@ bool Start(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
         Server = (UPLOADP_SERVER *)MmAllocateSystemMemory(sizeof(UPLOADP_SERVER), PAGE_READWRITE);
         if (!Server)
             return false;
-        RtlZeroMemory(Server, sizeof(UPLOADP_SERVER));
+        memset(Server, 0, sizeof(UPLOADP_SERVER));
         if (!network::StartNetwork()) {
             MmFreeSystemMemory(Server, sizeof(UPLOADP_SERVER));
             Server = nullptr;
@@ -652,7 +637,7 @@ bool Start(NTSTATUS LastLaunch, char *LaunchPath, ULONG Size) {
         UpdateScreen();
         if (Server->LaunchReady) {
             Serving = 0;
-            RtlSnprintf(LaunchPath, Size, "%s", Server->Launch);
+            snprintf(LaunchPath, Size, "%s", Server->Launch);
             XK_SERIAL("upload: launching %s\n", LaunchPath);
             return true;
         }

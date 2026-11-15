@@ -42,7 +42,7 @@ extern ULONG MachineCheckBanks;                 // the CPU's machine-check banks
 // --- The debug log (serial_log.cpp): the kernel's, titles' (DbgPrint, OutputDebugString) and extensions' (oxos_log) debug lines, to the in-memory ring and
 // the debug serial port; SERIAL=1 builds only (a release kernel's LogLine does nothing)
 
-// One line, Format as for RtlVsnprintf (at most 255 characters): its start-up mark, then the ring and the serial port.
+// One line, Format as for vsnprintf (at most 255 characters): its start-up mark, then the ring and the serial port.
 void LogLine(const char *Format, ...);
 void LogLineArgs(const char *Format, __builtin_va_list Args); // the same, for a caller holding a va_list (DbgPrint)
 #if XK_DEBUG_SERIAL

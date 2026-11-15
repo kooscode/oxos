@@ -60,11 +60,8 @@ static void Example_TitleLoaded_Callback(const OXOS_TITLE_LOADED *Title, void *U
     if (!ledTitle)
         return;
 
-    // Is this the title "led_title" names (any case)? Compared with the kernel's own RtlEqualString. Then ask the run loop for the orange LED.
-    ANSI_STRING loaded, wanted;
-    RtlInitAnsiString(&loaded, Title->TitleName);
-    RtlInitAnsiString(&wanted, ledTitle);
-    if (RtlEqualString(&loaded, &wanted, TRUE)) {
+    // Is this the title "led_title" names (any case)? Then ask the run loop for the orange LED.
+    if (strcasecmp(Title->TitleName, ledTitle) == 0) {
         memcpy(LedTitle, Title->TitleName, sizeof(LedTitle));
         LedWantedAt = KeTickCount;
         LedWanted = TRUE;

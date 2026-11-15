@@ -73,14 +73,6 @@ static void ReleaseNetbootPackage() {
         memory::FreeContiguousPage(pfn);
 }
 
-static NTSTATUS OpenOrCreate(HANDLE *h, const char *path, ULONG disposition, ULONG options) {
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, path);
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
-    return NtCreateFile(h, GENERIC_WRITE | SYNCHRONIZE, &a, &iosb, nullptr, 0, 0, disposition, FILE_SYNCHRONOUS_IO_NONALERT | options);
-}
-
 static void PackageTitleName(char *out, const char *in, ULONG max) { // a NUL-padded name, '\\' and ':' refused
     ULONG i = 0;
     for (; i < max - 1 && in[i]; i++)
@@ -103,9 +95,9 @@ bool LaunchNetbootTitle() {
     auto entries = (const PackageEntry *)(header + 1);
     char title[16], dir[96], path[192];
     PackageTitleName(title, header->Name, sizeof(title));
-    RtlSnprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s", title);
+    snprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s", title);
     HANDLE h;
-    NTSTATUS status = OpenOrCreate(&h, dir, FILE_OPEN_IF, FILE_DIRECTORY_FILE);
+    NTSTATUS status = io::CreateFile(dir, GENERIC_WRITE, 0, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
     if (NT_SUCCESS(status))
         NtClose(h);
     XK_SERIAL("netboot title: %s, %lu files, %lu bytes -> E:\\%s (folder %#lx)\n", title, header->Count, NetbootPackageSize, title, status);
@@ -118,8 +110,8 @@ bool LaunchNetbootTitle() {
         }
         char name[64];
         PackageTitleName(name, e.Name, sizeof(name));
-        RtlSnprintf(path, sizeof(path), "%s\\%s", dir, name);
-        status = OpenOrCreate(&h, path, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE);
+        snprintf(path, sizeof(path), "%s\\%s", dir, name);
+        status = io::CreateFile(path, GENERIC_WRITE, 0, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE, &h);
         if (NT_SUCCESS(status)) {
             IO_STATUS_BLOCK iosb;
             LARGE_INTEGER at = {};
@@ -133,17 +125,14 @@ bool LaunchNetbootTitle() {
     if (!written)
         return false;
     // D: is the title's folder, as for a title launched from the hard disk.
-    OBJECT_STRING link, target;
-    RtlInitAnsiString(&link, "\\??\\D:");
-    RtlInitAnsiString(&target, dir);
-    bool linked = NT_SUCCESS(IoCreateSymbolicLink(&link, &target));
-    RtlSnprintf(path, sizeof(path), "%s\\%s.xbe", dir, title);
+    bool linked = NT_SUCCESS(io::CreateLink("\\??\\D:", dir));
+    snprintf(path, sizeof(path), "%s\\%s.xbe", dir, title);
     status = LoadImage(path, FALSE);
     XK_SERIAL("netboot title: launch %s: %#lx\n", path, status);
     if (NT_SUCCESS(status))
         return true;
     if (linked)
-        IoDeleteSymbolicLink(&link);
+        io::DeleteLink("\\??\\D:");
     return false;
 }
 

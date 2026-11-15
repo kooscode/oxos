@@ -30,9 +30,9 @@ static void DrawFileManagerState(ULONG *Screen, const char *Address, const char 
     char line[graphics::SCREEN_LINE_CHARS + 1];
     graphics::ClearRectangle(Screen, 0, ADDRESS_LINE, graphics::SCREEN_WIDTH, 24);
     if (Address && Address[0])
-        RtlSnprintf(line, sizeof(line), "http://%s/", Address);
+        snprintf(line, sizeof(line), "http://%s/", Address);
     else
-        RtlSnprintf(line, sizeof(line), "(no network address yet)");
+        snprintf(line, sizeof(line), "(no network address yet)");
     graphics::DrawCentredText(Screen, ADDRESS_LINE, line, 3, COLOR_GREEN);
     graphics::ClearRectangle(Screen, 0, STATUS_LINE, graphics::SCREEN_WIDTH, 16);
     graphics::DrawCentredText(Screen, STATUS_LINE, Status ? Status : "", 2, graphics::COLOR_GREY);

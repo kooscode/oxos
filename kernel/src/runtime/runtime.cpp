@@ -201,7 +201,7 @@ XBAPI NTSTATUS NTAPI RtlAppendStringToString(PSTRING Destination, const STRING *
         return STATUS_SUCCESS;
     if (Destination->Length + Source->Length > Destination->MaximumLength)
         return STATUS_BUFFER_TOO_SMALL_;
-    RtlMoveMemory(Destination->Buffer + Destination->Length, Source->Buffer, Source->Length);
+    memmove(Destination->Buffer + Destination->Length, Source->Buffer, Source->Length);
     Destination->Length = (USHORT)(Destination->Length + Source->Length);
     return STATUS_SUCCESS;
 }
@@ -211,7 +211,7 @@ XBAPI NTSTATUS NTAPI RtlAppendUnicodeStringToString(PUNICODE_STRING Destination,
         return STATUS_SUCCESS;
     if (Destination->Length + Source->Length > Destination->MaximumLength)
         return STATUS_BUFFER_TOO_SMALL_;
-    RtlMoveMemory((PUCHAR)Destination->Buffer + Destination->Length, Source->Buffer, Source->Length);
+    memmove((PUCHAR)Destination->Buffer + Destination->Length, Source->Buffer, Source->Length);
     Destination->Length = (USHORT)(Destination->Length + Source->Length);
     if (Destination->Length + 2 <= Destination->MaximumLength)
         Destination->Buffer[Destination->Length / 2] = 0;
@@ -232,7 +232,7 @@ XBAPI void NTAPI RtlCopyUnicodeString(PUNICODE_STRING Destination, const UNICODE
         return;
     }
     USHORT n = Source->Length < Destination->MaximumLength ? Source->Length : Destination->MaximumLength;
-    RtlMoveMemory(Destination->Buffer, Source->Buffer, n);
+    memmove(Destination->Buffer, Source->Buffer, n);
     Destination->Length = n;
     if (n + 2 <= Destination->MaximumLength)
         Destination->Buffer[n / 2] = 0;
@@ -248,7 +248,7 @@ XBAPI BOOLEAN NTAPI RtlCreateUnicodeString(PUNICODE_STRING DestinationString, PC
     auto buf = (PWSTR)ExAllocatePoolWithTag(bytes, 'grtS');
     if (!buf)
         return FALSE;
-    RtlMoveMemory(buf, SourceString, bytes);
+    memmove(buf, SourceString, bytes);
     DestinationString->Buffer = buf;
     DestinationString->Length = (USHORT)(bytes - 2);
     DestinationString->MaximumLength = (USHORT)bytes;
@@ -423,7 +423,7 @@ XBAPI NTSTATUS NTAPI RtlIntegerToChar(ULONG Value, ULONG Base, LONG OutputLength
     ULONG n = FormatUnsigned(Value, Base, digits);
     if ((LONG)n > OutputLength)
         return STATUS_BUFFER_OVERFLOW_;
-    RtlCopyMemory(String, digits, n);
+    memcpy(String, digits, n);
     if ((LONG)n < OutputLength)
         String[n] = 0;
     return STATUS_SUCCESS;

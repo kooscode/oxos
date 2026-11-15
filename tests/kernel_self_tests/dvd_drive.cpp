@@ -45,9 +45,9 @@ static void UdfSuite(PUCHAR buf) {
     KiTestUdfVobLength = got;
     KiTestUdfIfoSum = DvdReadAll("\\Device\\CdRom0\\video_ts\\video_ts.ifo", buf, 0x50000, &got);
     DvdReadAll("\\??\\CdRom0:\\VIDEO_TS\\small.txt", buf, 100, &got);
-    KiTestUdfSmallOk = got == 9 && RtlCompareMemory(buf, "hello udf", 9) == 9;
+    KiTestUdfSmallOk = got == 9 && memcmp(buf, "hello udf", 9) == 0;
     DvdReadAll("\\Device\\CdRom0\\wide", buf, 100, &got);
-    KiTestUdfWideOk = got == 16 && RtlCompareMemory(buf, "sixteen-bit name", 16) == 16;
+    KiTestUdfWideOk = got == 16 && memcmp(buf, "sixteen-bit name", 16) == 0;
     // Volume attributes and a read at an offset.
     HANDLE h;
     IO_STATUS_BLOCK iosb;
@@ -55,7 +55,7 @@ static void UdfSuite(PUCHAR buf) {
     if (ok) {
         UCHAR attr[32];
         ok &= NtQueryVolumeInformationFile(h, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
-              *(PULONG)(attr + 8) == 3 && RtlCompareMemory(attr + 12, "UDF", 3) == 3;
+              *(PULONG)(attr + 8) == 3 && memcmp(attr + 12, "UDF", 3) == 0;
         LARGE_INTEGER off;
         off.QuadPart = 4;
         ok &= NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buf, 100, &off) == 0 && iosb.Information == 9 && buf[0] == 'r' && buf[8] == 'e';
@@ -108,8 +108,8 @@ static void NTAPI DvdControllerThread(PVOID) {
         HANDLE hr;
         UCHAR attr[32];
         if (buf && DvdOpen(&hr, "\\Device\\CdRom0\\", FILE_READ_DATA, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
-            bool udf = NtQueryVolumeInformationFile(hr, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 && RtlCompareMemory(attr + 12, "UDF",
-                       3) == 3;
+            bool udf = NtQueryVolumeInformationFile(hr, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 && memcmp(attr + 12, "UDF",
+                       3) == 0;
             NtClose(hr);
             if (udf) {
                 UdfSuite(buf);
@@ -146,7 +146,7 @@ static void NTAPI DvdControllerThread(PVOID) {
             ULONG internal[2] = {};
             PFILE_OBJECT fo;
             bool key = NtQueryVolumeInformationFile(h2, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
-                       *(PULONG)(attr + 8) == 4 && RtlCompareMemory(attr + 12, "GDFX", 4) == 4 &&
+                       *(PULONG)(attr + 8) == 4 && memcmp(attr + 12, "GDFX", 4) == 0 &&
                        NtQueryInformationFile(h2, &iosb, internal, sizeof(internal), FileInternalInformation) == 0 &&
                        internal[0] && ObReferenceObjectByHandle(h2, &IoFileObjectType, (PVOID *)&fo) == 0;
             if (key) {

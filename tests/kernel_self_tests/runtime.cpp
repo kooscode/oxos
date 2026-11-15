@@ -97,7 +97,7 @@ static void NTAPI RtlControllerThread(PVOID) {
     for (int i = 0; i < 63; i++)
         KiTestRtlSprintfOut[i] = b[i];
     bool ok = StrEq(b, "-42|   ab|1f  |0000BEEF|z|12345678901234");
-    ok &= RtlSnprintf(b, 4, "%s", "abcdef") == -1 && b[0] == 'a' && b[3] == 'd';
+    ok &= RtlSnprintf(b, 4, "%s", "abcdef") == -1 && b[0] == 'a' && b[3] == 'd'; // the titles' rules: -1 when cut short
     UNICODE_STRING us;
     RtlInitUnicodeString(&us, (PCWSTR)L"wide");
     RtlSprintf(b, "%S %wZ %.2s %%", L"wz", &us, "xyz");

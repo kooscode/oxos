@@ -6,7 +6,7 @@
 namespace xk::filesystems {
 
 static void FATXInitFcb(HDDFS_FCB *f, ULONG Flags) {
-    RtlZeroMemory(f, sizeof(*f));
+    memset(f, 0, sizeof(*f));
     InitializeListHead(&f->SiblingLink);
     InitializeListHead(&f->ChildList);
     f->Flags = Flags;

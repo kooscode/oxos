@@ -93,15 +93,12 @@ static NTSTATUS OpenImage(HANDLE *h) {
 // STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be read.
 char *ReadOxosFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status) {
     *Got = 0;
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, Path);
-    OBJECT_ATTRIBUTES a = {nullptr, &name, OBJ_CASE_INSENSITIVE};
-    IO_STATUS_BLOCK iosb;
     HANDLE h;
-    NTSTATUS status = NtOpenFile(&h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    NTSTATUS status = io::OpenFile(Path, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &h);
     *Status = status;
     if (!NT_SUCCESS(status))
         return nullptr;
+    IO_STATUS_BLOCK iosb;
     ULONG info[6] = {}; // FILE_STANDARD_INFORMATION: EndOfFile at +8
     status = NtQueryInformationFile(h, &iosb, info, sizeof(info), FileStandardInformation);
     ULONG size = info[2];
@@ -158,7 +155,7 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
         at += ini_file::PatchRecordSize(r);
         if (r->Kind == XE_PATCH_NAME) {
             CHAR line[XE_PATCH_MAX_NAME + 1];
-            RtlCopyMemory(line, r + 1, r->Length);
+            memcpy(line, r + 1, r->Length);
             line[r->Length] = 0;
             XK_SERIAL("patches: %s\n", line);
             continue;
@@ -195,10 +192,10 @@ static void ApplyPatches(const XBE_SECTION_HEADER *s) {
             auto check = (PUCHAR)(r->Check ? r->Check : r->Address);
             // Already there first: a patch checked against another place must not be written twice (its match bytes may still be there when an earlier patch of
             // the section has not changed them).
-            if (RtlCompareMemory(target, ini_file::PatchData(r), r->Length) == r->Length) {
+            if (memcmp(target, ini_file::PatchData(r), r->Length) == 0) {
                 XK_SERIAL("patches: %#lx: already there\n", r->Address);
-            } else if (RtlCompareMemory(check, ini_file::PatchOriginal(r), r->OriginalLength) == r->OriginalLength) {
-                RtlCopyMemory(target, ini_file::PatchData(r), r->Length);
+            } else if (memcmp(check, ini_file::PatchOriginal(r), r->OriginalLength) == 0) {
+                memcpy(target, ini_file::PatchData(r), r->Length);
                 XK_SERIAL("patches: %#lx: %u bytes written\n", r->Address, r->Length);
             } else {
                 XK_SERIAL("patches: %#lx: the %s bytes differ: not written\n", r->Address, r->Check ? "match" : "current");
@@ -221,7 +218,7 @@ static NTSTATUS LoadXbeSection(HANDLE file, XBE_SECTION_HEADER *s) {
         status = ReadWholeFile(file, (PVOID)s->VirtualAddress, s->SizeOfRawData, s->PointerToRawData);
     if (NT_SUCCESS(status)) {
         if (s->VirtualSize > s->SizeOfRawData)
-            RtlZeroMemory((PUCHAR)s->VirtualAddress + s->SizeOfRawData, s->VirtualSize - s->SizeOfRawData);
+            memset((PUCHAR)s->VirtualAddress + s->SizeOfRawData, 0, s->VirtualSize - s->SizeOfRawData);
         UCHAR ctx[116], digest[20];
         ULONG raw = s->SizeOfRawData;
         XcSHAInit(ctx);
@@ -366,7 +363,7 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
     XeImageFileName.Buffer = (PCHAR)ExAllocatePoolWithTag(n + 1, 'nFeX');
     if (!XeImageFileName.Buffer)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RtlCopyMemory(XeImageFileName.Buffer, Path, n + 1);
+    memcpy(XeImageFileName.Buffer, Path, n + 1);
     XeImageFileName.Length = (USHORT)n;
     XeImageFileName.MaximumLength = (USHORT)(n + 1);
 
@@ -400,7 +397,7 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         XK_SERIAL("load: headers committed %#lx\n", status);
     }
     if (NT_SUCCESS(status)) {
-        RtlCopyMemory((PVOID)XBE_BASE, head, got < sizeOfHeaders ? got : sizeOfHeaders);
+        memcpy((PVOID)XBE_BASE, head, got < sizeOfHeaders ? got : sizeOfHeaders);
         XK_MARK("mark: load: first page copied");
         if (sizeOfHeaders > got)
             status = ReadWholeFile(h, (PVOID)(XBE_BASE + got), sizeOfHeaders - got, got);
@@ -509,15 +506,15 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         // Per-title keys: HMAC(certificate key, title key).
         UCHAR mac[20];
         XcHMAC(core::CertKey, 16, (PUCHAR)cert + 0xB0, 16, nullptr, 0, mac);
-        RtlCopyMemory(XboxLANKey, mac, 16);
+        memcpy(XboxLANKey, mac, 16);
         XcHMAC(core::CertKey, 16, (PUCHAR)cert + 0xC0, 16, nullptr, 0, mac);
-        RtlCopyMemory(XboxSignatureKey, mac, 16);
+        memcpy(XboxSignatureKey, mac, 16);
         for (int i = 0; i < 16; i++) {
             XcHMAC(core::CertKey, 16, (PUCHAR)cert + 0xD0 + 16 * i, 16, nullptr, 0, mac);
-            RtlCopyMemory(XboxAlternateSignatureKeys[i], mac, 16);
+            memcpy(XboxAlternateSignatureKeys[i], mac, 16);
         }
         if (!(region & 0x80000000))
-            RtlZeroMemory(XboxEEPROMKey, 16); // retail titles never see the EEPROM key
+            memset(XboxEEPROMKey, 0, 16); // retail titles never see the EEPROM key
         // A 128 MB console's upper half, unless the XBE asks for the 64 MB limit (spec/stock/09 §10).
         if (!(XbeField(0x124) & XBE_INIT_LIMIT_64_MB))
             memory::AllowUpperMemory();
@@ -595,7 +592,7 @@ static void LaunchDashboardWithReason(ULONG Reason, ULONG Code) {
     if (LaunchDataPage) {
         MmPersistContiguousMemory(LaunchDataPage, 0x1000, TRUE);
         auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
-        RtlZeroMemory(ldp, 0x1000);
+        memset(ldp, 0, 0x1000);
         ldp->LaunchDataType = 1;
         ldp->DashboardReason = Reason;
         ldp->DashboardCode = Code;
@@ -620,13 +617,15 @@ static bool ShowPlainDashboardError(NTSTATUS s) {
 // Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0); the link is removed again when the image
 // does not load.
 static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength) {
-    OBJECT_STRING link;
-    RtlInitAnsiString(&link, "\\??\\D:");
-    OBJECT_STRING folder = {(USHORT)FolderLength, (USHORT)FolderLength, (PCHAR)Path};
-    bool linked = FolderLength && NT_SUCCESS(IoCreateSymbolicLink(&link, &folder));
+    char folder[256];
+    bool linked = false;
+    if (FolderLength && FolderLength < sizeof(folder)) {
+        strlcpy(folder, Path, FolderLength + 1);
+        linked = NT_SUCCESS(io::CreateLink("\\??\\D:", folder));
+    }
     NTSTATUS status = LoadImage(Path, FALSE);
     if (!NT_SUCCESS(status) && linked)
-        IoDeleteSymbolicLink(&link);
+        io::DeleteLink("\\??\\D:");
     return status;
 }
 
@@ -674,7 +673,7 @@ static void LaunchTitle(ULONG Reason) {
         // A. A title asked for another title.
         ldp->Flags |= 1;
         CHAR path[361];
-        RtlCopyMemory(path, ldp->LaunchPath, 360);
+        memcpy(path, ldp->LaunchPath, 360);
         path[360] = 0;
         if (ldp->LaunchDataType == 0xFFFFFFFF)
             FreeLaunchDataPage();
@@ -739,7 +738,7 @@ static void PrepareToEnterTitle() {
     PVOID page = MmAllocateContiguousMemoryEx(0x1000, 0, kernelPhys - 1, 0, PAGE_READWRITE);
     if (!page)
         return;
-    RtlCopyMemory(page, LaunchDataPage, 0x1000);
+    memcpy(page, LaunchDataPage, 0x1000);
     MmPersistContiguousMemory(page, 0x1000, TRUE);
     PVOID old = LaunchDataPage;
     LaunchDataPage = page;

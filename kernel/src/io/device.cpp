@@ -36,7 +36,7 @@ XBAPI NTSTATUS NTAPI IoCreateDevice(PDRIVER_OBJECT DriverObject, ULONG DeviceExt
     NTSTATUS status = ObCreateObject(&IoDeviceObjectType, DeviceName ? &attrs : nullptr, size, (PVOID *)&dev);
     if (!NT_SUCCESS(status))
         return status;
-    RtlZeroMemory(dev, size);
+    memset(dev, 0, size);
     dev->Type = 3;
     dev->Size = (USHORT)size;
     dev->DriverObject = DriverObject;
@@ -209,10 +209,10 @@ XBAPI void NTAPI IoSetShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareA
     ComputeAccess(DesiredAccess, DesiredShareAccess, FileObject);
     PFILE_OBJECT f = FileObject;
     if (f->ReadAccess || f->WriteAccess || f->DeleteAccess) {
-        RtlZeroMemory(ShareAccess, sizeof(*ShareAccess));
+        memset(ShareAccess, 0, sizeof(*ShareAccess));
         AddShare(f, ShareAccess);
     } else {
-        RtlZeroMemory(ShareAccess, sizeof(*ShareAccess));
+        memset(ShareAccess, 0, sizeof(*ShareAccess));
     }
 }
 
@@ -274,6 +274,23 @@ XBAPI NTSTATUS NTAPI IoDismountVolumeByName(POBJECT_STRING DeviceName) {
         ObfDereferenceObject(dev);
     }
     return status;
+}
+
+// --- OXOS's own devices and links, by name (io.h)
+
+NTSTATUS CreateLink(const char *Link, const char *Target) {
+    OBJECT_STRING link = objects::ObjectName(Link), target = objects::ObjectName(Target);
+    return objects::CreateSymbolicLink(&link, &target);
+}
+
+NTSTATUS DeleteLink(const char *Link) {
+    OBJECT_STRING link = objects::ObjectName(Link);
+    return IoDeleteSymbolicLink(&link);
+}
+
+NTSTATUS CreateDevice(PDRIVER_OBJECT Driver, ULONG ExtensionSize, const char *Name, ULONG Type, PDEVICE_OBJECT *Device) {
+    OBJECT_STRING name = objects::ObjectName(Name);
+    return IoCreateDevice(Driver, ExtensionSize, &name, Type, FALSE, Device);
 }
 
 } // namespace xk::io

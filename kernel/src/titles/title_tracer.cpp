@@ -252,7 +252,7 @@ ULONG XkTraceWrap(USHORT ordinal, ULONG target) {
         XkTraceRing = (volatile ULONG(*)[XK_TRACE_WORDS])MmAllocateContiguousMemory(XK_TRACE_RING * XK_TRACE_WORDS * 4);
         // The count survives a quick reboot but this ring does not: clear it, so older entries read as empty.
         if (XkTraceRing)
-            RtlZeroMemory((PVOID)XkTraceRing, XK_TRACE_RING * XK_TRACE_WORDS * 4);
+            memset((PVOID)XkTraceRing, 0, XK_TRACE_RING * XK_TRACE_WORDS * 4);
 #endif
     }
     if (!stubs || used == XK_TRACE_MAX_IMPORTS)

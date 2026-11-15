@@ -382,3 +382,15 @@ ordinal	name	convention	arg_bytes	kind
 414	_allshr	compiler		func
 415	_aullshr	compiler		func
 416	OXOSWriteExtensionLog	stdcall	8	func
+417	strlen	cdecl		func
+418	strnlen	cdecl		func
+419	strcmp	cdecl		func
+420	strncmp	cdecl		func
+421	strcasecmp	cdecl		func
+422	strncasecmp	cdecl		func
+423	strlcpy	cdecl		func
+424	toupper	cdecl		func
+425	isdigit	cdecl		func
+426	memchr	cdecl		func
+427	snprintf	cdecl		func
+428	vsnprintf	cdecl		func

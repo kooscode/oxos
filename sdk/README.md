@@ -57,6 +57,9 @@ serial port of a debug kernel.
   run on the title's threads, possibly several at once: count with `InterlockedIncrement`, not `++`.
 - **Hooks and events are made in `ExtensionStart`** only.
 - **Every kernel function** is in `include/oxos_kernel.h`, with its types; an extension calls any of them by name.
+- **The C library:** `strlen`, `strcmp`, `strcasecmp`, `strncasecmp`, `strchr`, `strstr`, `strlcpy`, `strlcat`, `snprintf`, `strtoul`, `memcpy`, `memset`,
+  `toupper`, `isdigit`, ... under their usual names (`oxos_kernel.h` lists them). The kernel's own and the SDK's library share one implementation. The Xbox
+  kernel's `Rtl*` functions are there for hooking what titles call; an extension's own code uses the C library.
 - **No floating point** in kernel code: the kernel does not save those registers for extensions (the SDK's build rules turn it off).
 
 ## In the SDK

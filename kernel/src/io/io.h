@@ -418,6 +418,18 @@ extern IO_FILE_SYSTEM RegisteredFileSystems;
 
 void InitIoSystem();
 
+// OXOS's own files, by path (io/file.cpp): every handle is synchronous (SYNCHRONIZE and FILE_SYNCHRONOUS_IO_NONALERT are added), names any case.
+NTSTATUS OpenFile(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Options, HANDLE *File);
+// Disposition and Options as NtCreateFile takes them; Size, when not 0, is the space a new file starts with.
+NTSTATUS CreateFile(const char *Path, ACCESS_MASK Access, ULONG Share, ULONG Disposition, ULONG Options, HANDLE *File, ULONGLONG Size = 0);
+NTSTATUS DeleteFile(const char *Path); // a file or an empty folder
+NTSTATUS RenameFile(HANDLE File, const char *NewName, bool Replace);
+bool PathExists(const char *Path);
+// Devices and links, by name (io/device.cpp).
+NTSTATUS CreateDevice(PDRIVER_OBJECT Driver, ULONG ExtensionSize, const char *Name, ULONG Type, PDEVICE_OBJECT *Device);
+NTSTATUS CreateLink(const char *Link, const char *Target); // a permanent symbolic link, Link to Target
+NTSTATUS DeleteLink(const char *Link);
+
 // Inside the I/O manager (io/device.cpp, io/file.cpp, io/io_requests.cpp).
 void DereferenceDevice(PDEVICE_OBJECT DeviceObject);
 void NTAPI CloseFileObject(PVOID Object, ULONG SystemHandleCount);

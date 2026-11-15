@@ -43,7 +43,7 @@ XBAPI NTSTATUS NTAPI PsCreateSystemThreadEx(PHANDLE ThreadHandle, ULONG ThreadEx
     NTSTATUS status = ObCreateObject(&PsThreadObjectType, nullptr, size, (PVOID *)&t);
     if (!NT_SUCCESS(status))
         return status;
-    RtlZeroMemory(t, size);
+    memset(t, 0, size);
     InitializeListHead(&t->ReaperListEntry);
     InitializeListHead(&t->IrpList);
     ULONG stackSize = (KernelStackSize + 0xFFF) & ~0xFFFu;

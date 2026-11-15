@@ -334,7 +334,7 @@ title -> [savewatch] NtCreateFile -> oxos_next -> [netlog] NtCreateFile -> oxos_
   must not wait or call anything that does.
 - **Not hookable** (`oxos_hook` returns FALSE; `HookFunction` returns `STATUS_NOT_SUPPORTED`): the 34 data exports (`KeTickCount`, `LaunchDataPage`, ...: an
   extension reads or writes them directly); `KeGetCurrentIrql`, `KfRaiseIrql`, `KfLowerIrql`, `KeRaiseIrqlToDpcLevel` (called at every IRQL, in titles'
-  interrupt paths); `HalReturnToFirmware` (use the title-exiting event); OXOS's runtime exports for extensions, 402-415 (§9.1: titles never import them).
+  interrupt paths); `HalReturnToFirmware` (use the title-exiting event); OXOS's runtime exports for extensions, 402-428 (§9.1: titles never import them).
 - **Kernel internals that are not exports** (`titles::LaunchTitle`, the exFAT driver, the scheduler) are not hookable; extensions reach them through events
   (§7.2) and the kernel facts (§5.2). *Later, if a use needs it:* hooks that also catch the kernel's own calls, as a separate API (patching the function's first
   instructions, with a generated trampoline).
@@ -427,6 +427,7 @@ oxos_sdk/
 | `src/oxos_sdk.cpp` | the SDK's functions of §5.1 (C names), built into `lib/oxos_sdk.lib` |
 | `src/oxoskrnl.def` | **generated**: every `oxoskrnl.exe` export by ordinal; the import library is made from it (`lld-link /lib /def:`) |
 | `src/kernel_table_check.c` | **generated**: the address of every function of `oxos_kernel.h`; the SDK's build links it against the import library, so a prototype that does not match its export fails there |
+| `src/oxos_c_library.cpp` | **generated**: the kernel's `runtime/c_library_extensions.cpp`, the C functions the kernel does not have itself (§9.1), built into `lib/oxos_sdk.lib` one section per function, so an extension links only those it calls |
 | `oxos_extension.mk` | the build rules extensions include (below); they take the library from the package's `lib/`, so extensions are built only with the SDK as it ships, never from its source |
 | `Makefile`, `make_sdk_package.py` | build the SDK as it ships into `build/sdk/oxos_sdk/` (the library, the headers, the rest copied), check the kernel table, then build each example from that package, as a user builds it, into `build/sdk/examples/NAME/`, and with `VERSION` the zip; for the SDK's maintainers (a POSIX shell and Python) |
 | `examples/example_run_loop`, `example_kernel_hook`, `example_title_event` | the examples to start from, each named for what it shows, in C++ (like all of OXOS; C extensions are supported, not shown), each with its Makefile, a sample `oxos_extensions.ini` and a README |
@@ -442,6 +443,7 @@ never exported these (titles link their own C library), so OXOS exports them at 
 |---|---|---|
 | 402-405 | `memcpy`, `memset`, `memmove`, `memcmp` (`cdecl`) | the compiler calls them for copies and zeroing, even with `-fno-builtin` |
 | 406-415 | `_allmul`, `_alldiv`, `_aulldiv`, `_allrem`, `_aullrem`, `_alldvrm`, `_aulldvrm`, `_allshl`, `_allshr`, `_aullshr` | the compiler's 64-bit arithmetic helpers for the `i386-pc-win32` target, each with its own register convention (`kernel/src/arch/int64.S`) |
+| 417-428 | `strlen`, `strnlen`, `strcmp`, `strncmp`, `strcasecmp`, `strncasecmp`, `strlcpy`, `toupper`, `isdigit`, `memchr`, `snprintf`, `vsnprintf` (`cdecl`) | the C library OXOS's own code uses (`kernel/src/runtime/c_library.h`, user, 2026-11-14: "a small C runtime in the kernel, used by the kernel and by extensions alike", not the Xbox kernel's `Rtl*` functions, which are for titles). The C functions the kernel does not use itself (`strchr`, `strrchr`, `strstr`, `strlcat`, `strtol`, `strtoul`, `atoi`, `tolower`, `isspace`, `isalpha`, `isalnum`) are in `runtime/c_library_extensions.cpp`, which the SDK's library carries (`src/oxos_c_library.cpp`, generated) instead of the kernel, so the resident kernel keeps stock's size; `oxos_kernel.h` declares both groups alike |
 | 416 | `OXOSWriteExtensionLog(Context, Text)` (`stdcall`) | one line of `oxos_log`, `[SECTION] Text`, to where `Context->LogTarget` says: the debug log (`diagnostics::LogLine`) and/or `C:\OXOS\log\extensions.log` (spec/oxos_internal/35); extensions name no file, so they cannot write outside it. The SDK's own: `oxos_kernel.h` leaves it out |
 
 `kernel/exports.tsv` lists them with the convention `cdecl` or `compiler`. They cost the resident kernel 4 bytes each in its export table, and `memcmp`.

@@ -1,33 +1,19 @@
 // The extension list file's parser (spec/oxos_internal/34 §3.1), on the ini line reader the kernel's other files use (ini_file/ini_file.cpp).
 #include <ini_file/extensions_ini.h>
 #include <ini_file/ini_file.h>
+#include <runtime/c_library.h>
 
 namespace xk::ini_file {
 
 namespace {
 
-char Lower(char c) {
-    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
-}
-
 bool SameText(const XK_TEXT &A, const XK_TEXT &B) {
-    if (A.Length != B.Length)
-        return false;
-    for (ULONG i = 0; i < A.Length; i++) {
-        if (Lower(A.Text[i]) != Lower(B.Text[i]))
-            return false;
-    }
-    return true;
+    return A.Length == B.Length && strncasecmp(A.Text, B.Text, A.Length) == 0;
 }
 
-// A value written in lower case letters, in any case.
+// The value is Word, in any case.
 bool ValueIs(const INI_LINE &Line, const char *Word) {
-    ULONG i = 0;
-    for (; i < Line.ValueLength && Word[i]; i++) {
-        if (Lower(Line.Value[i]) != Word[i])
-            return false;
-    }
-    return i == Line.ValueLength && !Word[i];
+    return Line.ValueLength == strlen(Word) && strncasecmp(Line.Value, Word, Line.ValueLength) == 0;
 }
 
 // A file name in the extensions folder: no path, not too long.

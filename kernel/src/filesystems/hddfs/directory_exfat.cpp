@@ -52,7 +52,7 @@ static NTSTATUS EXFATWriteSlot(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, cons
         status = HDDFSMapBlock(v, block, &base);
     if (!NT_SUCCESS(status))
         return status;
-    RtlCopyMemory(e, Data, 32);
+    memcpy(e, Data, 32);
     return HDDFSWriteBlockRange(v, block, (ULONG)(e - base), 32);
 }
 
@@ -70,7 +70,7 @@ static NTSTATUS EXFATReadSet(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, EXFAT_
         status = EXFATMapSlot(v, dir, Slot + i, &e, &block);
         if (!NT_SUCCESS(status))
             return status == STATUS_END_OF_FILE ? STATUS_FILE_CORRUPT_ERROR_ : status;
-        RtlCopyMemory(Set->e[i], e, 32);
+        memcpy(Set->e[i], e, 32);
     }
     if (Set->e[1][0] != EXFAT_ENTRY_STREAM ||
         EXFATSetChecksum(Set->e[0], Set->Count * 32) != *(USHORT *)(Set->e[0] + 2))
@@ -104,7 +104,7 @@ static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *
         XK_SERIAL("exfat: file at cluster %#lx: valid data length %#llx of %#llx\n", *(const ULONG *)(st + 20), valid, length);
     }
 #endif
-    RtlZeroMemory(Out, sizeof(*Out));
+    memset(Out, 0, sizeof(*Out));
     for (ULONG i = 0; i < nameLength; i++) {
         const UCHAR *n = s->e[2 + i / 15];
         if (n[0] != EXFAT_ENTRY_NAME)
@@ -140,7 +140,7 @@ static void EXFATBuildSet(EXFAT_SET *Set, const CHAR *Name, ULONG NameLength, UC
                           ULONGLONG Length, bool NoFatChain) {
     ULONG names = (NameLength + 14) / 15;
     Set->Count = 2 + names;
-    RtlZeroMemory(Set->e, Set->Count * 32);
+    memset(Set->e, 0, Set->Count * 32);
     UCHAR *f = Set->e[0], *st = Set->e[1];
     f[0] = EXFAT_ENTRY_FILE;
     f[1] = (UCHAR)(Set->Count - 1);
@@ -379,7 +379,7 @@ bool EXFATMayAllocate(HDDFS_VOLUME *v, ULONG Count) {
 
 // A directory's or file's allocation as a temporary FCB (from its entry set).
 static void EXFATFcbFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_FCB *f) {
-    RtlZeroMemory(f, sizeof(*f));
+    memset(f, 0, sizeof(*f));
     InitializeListHead(&f->ChildList);
     const UCHAR *st = s->e[1];
     ULONGLONG length = *(const ULONGLONG *)(st + 24);

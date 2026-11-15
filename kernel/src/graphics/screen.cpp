@@ -21,7 +21,7 @@ void FillRectangle(ULONG *Screen, ULONG X, ULONG Y, ULONG Width, ULONG Height, U
 
 void ClearRectangle(ULONG *Screen, ULONG X, ULONG Y, ULONG Width, ULONG Height) {
     for (ULONG j = Y; j < Y + Height; j++)
-        RtlZeroMemory(Screen + j * SCREEN_WIDTH + X, Width * 4);
+        memset(Screen + j * SCREEN_WIDTH + X, 0, Width * 4);
 }
 
 void DrawLargeDigit(ULONG *Screen, ULONG X, ULONG Y, ULONG Digit) {
@@ -49,7 +49,7 @@ void DrawCentredText(ULONG *Screen, ULONG Y, const char *Text, ULONG Scale, ULON
 }
 
 void StartScreen(ULONG *Screen) {
-    RtlZeroMemory(Screen, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
+    memset(Screen, 0, SCREEN_WIDTH * SCREEN_HEIGHT * 4);
     char header[48] = "OXOS ";
     VersionLabel(header + 5, sizeof(header) - 5);
     DrawCentredText(Screen, 36, header, 2, COLOR_GREY);

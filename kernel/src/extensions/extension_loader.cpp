@@ -74,25 +74,7 @@ STATE_INDEX *&StateIndex() {
     return *reinterpret_cast<STATE_INDEX **>(&StateIndexPage);
 }
 
-// A, as kept in the index (at most Max characters), equals B (compared as far as the index keeps it).
-bool SameText(const char *A, const char *B, ULONG Max) {
-    ULONG i = 0;
-    for (; i < Max && A[i] && A[i] == B[i]; i++) {
-        // Compare up to the first difference or the end.
-    }
-    return i == Max || A[i] == B[i];
-}
-
-// Copies Text into an index field of Max characters and its 0.
-void CopyText(char *Field, const char *Text, ULONG Max) {
-    ULONG n = 0;
-    for (; n < Max && Text[n]; n++)
-        Field[n] = Text[n];
-    Field[n] = 0;
-}
-
 } // namespace
-
 
 // Checks the state index at the start of a launch: none after a cold boot, a new one when its contents are not intact (the pages it named stay lost until the
 // next cold boot).
@@ -117,10 +99,10 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
     STATE_INDEX *index = StateIndex();
     for (ULONG i = 0; index && i < index->Count; i++) {
         STATE_INDEX_ENTRY &e = index->Entries[i];
-        if (SameText(e.Name, Name, STATE_NAME_MAX) && !e.Used) {
-            if (!SameText(e.Version, Version, STATE_VERSION_MAX)) {
-                RtlZeroMemory(e.Page, PAGE_SIZE);
-                CopyText(e.Version, Version, STATE_VERSION_MAX);
+        if (strncmp(e.Name, Name, STATE_NAME_MAX) == 0 && !e.Used) {
+            if (strncmp(e.Version, Version, STATE_VERSION_MAX) != 0) {
+                memset(e.Page, 0, PAGE_SIZE);
+                strlcpy(e.Version, Version, sizeof(e.Version));
             }
             e.Used = TRUE;
             return e.Page;
@@ -130,7 +112,7 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
         index = (STATE_INDEX *)MmAllocateContiguousMemory(PAGE_SIZE);
         if (!index)
             return nullptr;
-        RtlZeroMemory(index, PAGE_SIZE);
+        memset(index, 0, PAGE_SIZE);
         index->Magic = STATE_INDEX_MAGIC;
         MmPersistContiguousMemory(index, PAGE_SIZE, TRUE);
         StateIndex() = index;
@@ -140,11 +122,11 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
     PVOID page = MmAllocateContiguousMemory(PAGE_SIZE);
     if (!page)
         return nullptr;
-    RtlZeroMemory(page, PAGE_SIZE);
+    memset(page, 0, PAGE_SIZE);
     MmPersistContiguousMemory(page, PAGE_SIZE, TRUE);
     STATE_INDEX_ENTRY &e = index->Entries[index->Count++];
-    CopyText(e.Name, Name, STATE_NAME_MAX);
-    CopyText(e.Version, Version, STATE_VERSION_MAX);
+    strlcpy(e.Name, Name, sizeof(e.Name));
+    strlcpy(e.Version, Version, sizeof(e.Version));
     e.Page = page;
     e.Used = TRUE;
     return page;
@@ -194,8 +176,8 @@ constexpr ULONG NOT_HOOKABLE[] = {
     160, // KfRaiseIrql
     161, // KfLowerIrql
 };
-// OXOS's runtime exports for extensions (memcpy, ..., the compiler's 64-bit helpers): titles never import them.
-constexpr ULONG RUNTIME_ORDINALS_FIRST = 402, RUNTIME_ORDINALS_LAST = 415;
+// OXOS's runtime exports for extensions (the C library, the compiler's 64-bit helpers, the log line): titles never import them.
+constexpr ULONG RUNTIME_ORDINALS_FIRST = 402, RUNTIME_ORDINALS_LAST = 428;
 
 // The kernel image's code section: a data export lies outside it.
 bool IsKernelCode(ULONG Address) {
@@ -307,7 +289,7 @@ char *PoolText(const XK_TEXT &Text) {
     auto copy = (char *)ExAllocatePoolWithTag(Text.Length + 1, POOL_TAG);
     if (!copy)
         return nullptr;
-    RtlCopyMemory(copy, Text.Text, Text.Length);
+    memcpy(copy, Text.Text, Text.Length);
     copy[Text.Length] = 0;
     return copy;
 }
@@ -331,8 +313,8 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     char *section = PoolText(Entry.Section);
     const char *name = section ? section : "?";
     char path[sizeof(FOLDER) + XK_EXTENSION_FILE_NAME_MAX];
-    RtlCopyMemory(path, FOLDER, sizeof(FOLDER) - 1);
-    RtlCopyMemory(path + sizeof(FOLDER) - 1, Entry.File.Text, Entry.File.Length);
+    memcpy(path, FOLDER, sizeof(FOLDER) - 1);
+    memcpy(path + sizeof(FOLDER) - 1, Entry.File.Text, Entry.File.Length);
     path[sizeof(FOLDER) - 1 + Entry.File.Length] = 0;
 
     ULONG size;
@@ -466,7 +448,7 @@ extern "C" void XkExtensionLoaderEntry() {
     auto slots = (IMPORT_SLOTS *)ExAllocatePoolWithTag(sizeof(IMPORT_SLOTS), POOL_TAG);
     LoadedExtensions = (XK_EXTENSIONS_STATE *)ExAllocatePoolWithTag(sizeof(XK_EXTENSIONS_STATE), POOL_TAG);
     if (entries && slots && LoadedExtensions) {
-        RtlZeroMemory(LoadedExtensions, sizeof(XK_EXTENSIONS_STATE));
+        memset(LoadedExtensions, 0, sizeof(XK_EXTENSIONS_STATE));
         KeInitializeEvent(&LoadedExtensions->LoopStop, NotificationEvent, FALSE);
         LoadedExtensions->LoopExtension = XK_NO_EXTENSION;
         LoadedExtensions->Kernel.Size = sizeof(OXOS_KERNEL_INFO);

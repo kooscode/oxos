@@ -171,7 +171,7 @@ static ULONG NTAPI PKEncPublic(PUCHAR pbPubKey, PUCHAR pbInput, PUCHAR pbOutput)
         return 0;
     ULONG n = KeyWords(k);
     if (k->PublicExponent == 1) {
-        RtlCopyMemory(pbOutput, pbInput, n * 4);
+        memcpy(pbOutput, pbInput, n * 4);
         return 1;
     }
     if (BnCompare((const ULONG *)pbInput, (const ULONG *)k->Modulus, n) >= 0)
@@ -179,7 +179,7 @@ static ULONG NTAPI PKEncPublic(PUCHAR pbPubKey, PUCHAR pbInput, PUCHAR pbOutput)
     auto e = (ULONG *)ExAllocatePoolWithTag(n * 4, 'xpcX');
     if (!e)
         return 0;
-    RtlZeroMemory(e, n * 4);
+    memset(e, 0, n * 4);
     e[0] = k->PublicExponent;
     BOOLEAN ok = BnModExp((ULONG *)pbOutput, (const ULONG *)pbInput, e, (const ULONG *)k->Modulus, n);
     ExFreePool(e);
@@ -192,7 +192,7 @@ static ULONG NTAPI PKDecPrivate(PUCHAR pbPrvKey, PUCHAR pbInput, PUCHAR pbOutput
         return 0;
     ULONG n = KeyWords(k);
     if (k->PublicExponent == 1) {
-        RtlCopyMemory(pbOutput, pbInput, n * 4);
+        memcpy(pbOutput, pbInput, n * 4);
         return 1;
     }
     // modulus, prime1, prime2, exponent1, exponent2, coefficient (keylen/2 each), private exponent.
@@ -213,15 +213,15 @@ static BOOLEAN NTAPI VerifyPKCS1Signature(PUCHAR pbSig, PUCHAR pbPubKey, PUCHAR 
     if (!buf)
         return FALSE;
     PUCHAR in = buf + k->KeyLength + 8;
-    RtlZeroMemory(in, k->KeyLength);
-    RtlCopyMemory(in, pbSig, (k->BitLength + 7) / 8);
+    memset(in, 0, k->KeyLength);
+    memcpy(in, pbSig, (k->BitLength + 7) / 8);
     BOOLEAN ok = (BOOLEAN)PKEncPublic(pbPubKey, in, buf);
     for (ULONG i = 0; ok && i < 20; i++)
         ok = buf[i] == pbDigest[19 - i];
     ULONG pos = 20;
     static const UCHAR sha1Prefix[] = {0x14, 0x04, 0x00, 0x05, 0x1A, 0x02, 0x03, 0x0E, // DigestInfo for SHA-1,
                                        0x2B, 0x05, 0x06, 0x09, 0x30, 0x21, 0x30};       // reversed
-    if (ok && RtlCompareMemory(buf + 20, sha1Prefix, sizeof(sha1Prefix)) == sizeof(sha1Prefix))
+    if (ok && memcmp(buf + 20, sha1Prefix, sizeof(sha1Prefix)) == 0)
         pos += sizeof(sha1Prefix);
     ULONG last = k->DataLength;
     ok = ok && buf[pos] == 0 && buf[last] == 0 && buf[last - 1] == 1;
@@ -375,14 +375,14 @@ static void NTAPI BlockCryptCBC(ULONG dwCipher, ULONG dwInputLength, PUCHAR pbOu
             for (int i = 0; i < 8; i++)
                 block[i] = pbInput[off + i] ^ pbFeedback[i];
             BlockCrypt(dwCipher, pbOutput + off, block, pbKeyTable, 1);
-            RtlCopyMemory(pbFeedback, pbOutput + off, 8);
+            memcpy(pbFeedback, pbOutput + off, 8);
         } else {
             UCHAR saved[8];
-            RtlCopyMemory(saved, pbInput + off, 8);
+            memcpy(saved, pbInput + off, 8);
             BlockCrypt(dwCipher, block, pbInput + off, pbKeyTable, 0);
             for (int i = 0; i < 8; i++)
                 pbOutput[off + i] = block[i] ^ pbFeedback[i];
-            RtlCopyMemory(pbFeedback, saved, 8);
+            memcpy(pbFeedback, saved, 8);
         }
     }
 }
@@ -471,7 +471,7 @@ XBAPI void NTAPI XcUpdateCrypto(CRYPTO_VECTOR *pNewVector, PUCHAR pROMHash) {
             dst[i] = src[i];
     }
     if (pROMHash)
-        RtlZeroMemory(pROMHash, 64);
+        memset(pROMHash, 0, 64);
 }
 
 } // namespace xk::crypto

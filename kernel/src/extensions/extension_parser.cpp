@@ -1,6 +1,7 @@
 // PE images for kernel extensions (spec/oxos_internal/34 §8). Offsets are the PE/COFF format's (Microsoft's "PE Format" specification): the file header after
 // the "PE\0\0" signature, the 32-bit optional header after it, its data directories, then the section table.
 #include <extensions/extension_parser.h>
+#include <runtime/c_library.h>
 
 namespace xk::extensions {
 
@@ -73,20 +74,12 @@ void Directory(const HEADERS &H, ULONG Index, ULONG *Rva, ULONG *Length) {
 
 // A zero-terminated string at Rva of the mapped image, compared with Name ignoring the case of letters.
 bool NameIs(const UCHAR *Image, ULONG ImageSize, ULONG Rva, const char *Name, bool AnyCase) {
-    for (ULONG i = 0;; i++) {
-        if (!Inside(Rva, i + 1, ImageSize))
-            return false;
-        char c = static_cast<char>(Image[Rva + i]);
-        char n = Name[i];
-        if (AnyCase) {
-            c = c >= 'A' && c <= 'Z' ? static_cast<char>(c + 32) : c;
-            n = n >= 'A' && n <= 'Z' ? static_cast<char>(n + 32) : n;
-        }
-        if (c != n)
-            return false;
-        if (!c)
-            return true;
-    }
+    if (Rva >= ImageSize)
+        return false;
+    auto text = reinterpret_cast<const char *>(Image + Rva);
+    if (strnlen(text, ImageSize - Rva) == ImageSize - Rva) // no 0 before the image's end
+        return false;
+    return (AnyCase ? strcasecmp(text, Name) : strcmp(text, Name)) == 0;
 }
 
 } // namespace

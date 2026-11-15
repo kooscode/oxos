@@ -183,7 +183,7 @@ static ULONG ComputeHashIndex(const OBJECT_STRING *name) {
 static int DriveLetterIndex(const OBJECT_STRING *name) {
     if (name->Length != 2 || name->Buffer[1] != ':')
         return -1;
-    CHAR c = RtlUpperChar(name->Buffer[0]);
+    int c = toupper(name->Buffer[0]);
     return (c >= 'A' && c <= 'Z') ? c - 'A' : -1;
 }
 
@@ -200,7 +200,7 @@ static PVOID LookupElementNameInDirectory(POBJECT_DIRECTORY dir, const OBJECT_ST
             XK_SERIAL("*** ob: hash chain loops in directory %p (looking up '%.*s')\n", dir, (int)element->Length, element->Buffer);
             return nullptr;
         }
-        if (!RtlEqualString(&n->Name, element, TRUE))
+        if (n->Name.Length != element->Length || strncasecmp(n->Name.Buffer, element->Buffer, element->Length) != 0)
             continue;
         PVOID o = (POBJECT_HEADER)(n + 1) + 1;
         if (follow && OBJECT_TO_OBJECT_HEADER(o)->Type == &ObSymbolicLinkObjectType)
@@ -267,10 +267,10 @@ static NTSTATUS Reparse(POBJECT_SYMBOLIC_LINK link, const OBJECT_STRING *rest, b
     auto buf = (PCHAR)ExAllocatePoolWithTag(len ? len : 1, 'prbO');
     if (!buf)
         return STATUS_INSUFFICIENT_RESOURCES_OB;
-    RtlCopyMemory(buf, link->LinkTarget.Buffer, link->LinkTarget.Length);
+    memcpy(buf, link->LinkTarget.Buffer, link->LinkTarget.Length);
     if (separator) {
         buf[link->LinkTarget.Length] = '\\';
-        RtlCopyMemory(buf + link->LinkTarget.Length + 1, rest->Buffer, rest->Length);
+        memcpy(buf + link->LinkTarget.Length + 1, rest->Buffer, rest->Length);
     }
     OBJECT_STRING name = {(USHORT)len, (USHORT)len, buf};
     NTSTATUS status = LookupObjectNameEx(nullptr, &name, Attributes, ObjectType, ParseContext, Object, Depth + 1, false, nullptr);
@@ -397,7 +397,7 @@ XBAPI NTSTATUS NTAPI ObCreateObject(POBJECT_TYPE ObjectType, POBJECT_ATTRIBUTES 
     info->Directory = nullptr;
     info->Name.Buffer = (PCHAR)(h + 1) + body;
     info->Name.Length = info->Name.MaximumLength = len;
-    RtlCopyMemory(info->Name.Buffer, name->Buffer + start, len);
+    memcpy(info->Name.Buffer, name->Buffer + start, len);
     *Object = h + 1;
     return STATUS_SUCCESS;
 }
@@ -638,7 +638,7 @@ XBAPI NTSTATUS NTAPI NtCreateDirectoryObject(PHANDLE DirectoryHandle, POBJECT_AT
         *DirectoryHandle = nullptr;
         return status;
     }
-    RtlZeroMemory(dir, sizeof(OBJECT_DIRECTORY));
+    memset(dir, 0, sizeof(OBJECT_DIRECTORY));
     return ObInsertObject(dir, ObjectAttributes, 0, DirectoryHandle);
 }
 
@@ -673,7 +673,7 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryObject(HANDLE DirectoryHandle, PVOID Buffer
             info->Name.Buffer = (PCHAR)(info + 1);
             info->Name.Length = found->Name.Length;
             info->Name.MaximumLength = (USHORT)(found->Name.Length + 1);
-            RtlCopyMemory(info->Name.Buffer, found->Name.Buffer, found->Name.Length);
+            memcpy(info->Name.Buffer, found->Name.Buffer, found->Name.Length);
             info->Name.Buffer[found->Name.Length] = 0;
             info->Type = ((POBJECT_HEADER)(found + 1))->Type->PoolTag;
             *Context = wanted + 1;
@@ -721,7 +721,7 @@ NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) 
         ObfDereferenceObject(link);
         return STATUS_INSUFFICIENT_RESOURCES_OB;
     }
-    RtlCopyMemory(link->LinkTarget.Buffer, TargetName->Buffer, TargetName->Length);
+    memcpy(link->LinkTarget.Buffer, TargetName->Buffer, TargetName->Length);
     link->LinkTarget.Buffer[TargetName->Length] = 0;
     link->LinkTarget.Length = TargetName->Length;
     link->LinkTarget.MaximumLength = (USHORT)(TargetName->Length + 1);
@@ -753,7 +753,7 @@ XBAPI NTSTATUS NTAPI NtQuerySymbolicLinkObject(HANDLE LinkHandle, POBJECT_STRING
     if (len > LinkTarget->MaximumLength) {
         status = STATUS_BUFFER_TOO_SMALL;
     } else {
-        RtlCopyMemory(LinkTarget->Buffer, link->LinkTarget.Buffer, len);
+        memcpy(LinkTarget->Buffer, link->LinkTarget.Buffer, len);
         LinkTarget->Length = len;
         if (len < LinkTarget->MaximumLength)
             LinkTarget->Buffer[len] = 0;
@@ -764,13 +764,12 @@ XBAPI NTSTATUS NTAPI NtQuerySymbolicLinkObject(HANDLE LinkHandle, POBJECT_STRING
 
 // --- Initialisation (spec/stock/02 §2.4): root, \??, \Device, \Win32NamedObjects.
 
-static POBJECT_DIRECTORY CreatePermanentDirectory(PCSZ path) {
-    OBJECT_STRING name;
-    RtlInitAnsiString(&name, path);
+POBJECT_DIRECTORY CreateDirectory(const char *Path) {
+    OBJECT_STRING name = ObjectName(Path);
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     HANDLE h;
     if (!NT_SUCCESS(NtCreateDirectoryObject(&h, &attrs)))
-        KeBugCheck(0x5E); // OBJECT_INITIALIZATION_FAILED
+        return nullptr;
     POBJECT_DIRECTORY dir;
     ObReferenceObjectByHandle(h, &ObDirectoryObjectType, (PVOID *)&dir);
     NtClose(h);
@@ -788,11 +787,13 @@ void InitObjectManager() {
     PVOID root;
     if (!NT_SUCCESS(ObCreateObject(&ObDirectoryObjectType, nullptr, sizeof(OBJECT_DIRECTORY), &root)))
         KeBugCheck(0x5E);
-    RtlZeroMemory(root, sizeof(OBJECT_DIRECTORY));
+    memset(root, 0, sizeof(OBJECT_DIRECTORY));
     RootDirectoryObject = (POBJECT_DIRECTORY)root; // holds its creation reference forever
-    DosDevicesDirectoryObject = CreatePermanentDirectory("\\??");
-    CreatePermanentDirectory("\\Device");
-    Win32NamedObjectsDirectoryObject = CreatePermanentDirectory("\\Win32NamedObjects");
+    DosDevicesDirectoryObject = CreateDirectory("\\??");
+    POBJECT_DIRECTORY devices = CreateDirectory("\\Device");
+    Win32NamedObjectsDirectoryObject = CreateDirectory("\\Win32NamedObjects");
+    if (!DosDevicesDirectoryObject || !devices || !Win32NamedObjectsDirectoryObject)
+        KeBugCheck(0x5E); // OBJECT_INITIALIZATION_FAILED
 }
 
 } // namespace xk::objects

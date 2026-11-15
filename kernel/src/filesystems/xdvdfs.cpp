@@ -76,7 +76,7 @@ static NTSTATUS XdvdfsReadDirect(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer
         if (!NT_SUCCESS(status))
             return status;
         ULONG n = XDVDFS_SECTOR - within < length ? XDVDFS_SECTOR - within : length;
-        RtlCopyMemory(out, v->Bounce + within, n);
+        memcpy(out, v->Bounce + within, n);
         offset += n;
         out += n;
         length -= n;
@@ -91,17 +91,11 @@ static NTSTATUS XdvdfsRead(XDVDFS_VOLUME *v, LONGLONG offset, PVOID buffer, ULON
 
 // --- Directories: each is a binary tree of entries, sorted case-insensitively
 
-static CHAR XdvdfsUpper(CHAR c) {
-    return c >= 'a' && c <= 'z' ? (CHAR)(c - 0x20) : c;
-}
-
 // Tree order: case-insensitive byte compare, a prefix sorts first.
 static int XdvdfsCompare(const CHAR *a, ULONG al, const CHAR *b, ULONG bl) {
-    for (ULONG i = 0; i < al && i < bl; i++) {
-        UCHAR x = (UCHAR)XdvdfsUpper(a[i]), y = (UCHAR)XdvdfsUpper(b[i]);
-        if (x != y)
-            return x < y ? -1 : 1;
-    }
+    int order = strncasecmp(a, b, al < bl ? al : bl);
+    if (order)
+        return order;
     return al == bl ? 0 : al < bl ? -1 : 1;
 }
 
@@ -188,13 +182,13 @@ static XDVDFS_FCB *XdvdfsNewFcb(XDVDFS_VOLUME *v, const XDVDFS_ENTRY *e, ULONG w
     auto f = (XDVDFS_FCB *)ExAllocatePoolWithTag(sizeof(XDVDFS_FCB), 'fdvX');
     if (!f)
         return nullptr;
-    RtlZeroMemory(f, sizeof(*f));
+    memset(f, 0, sizeof(*f));
     f->ReferenceCount = 1;
     f->StartSector = e->StartSector;
     f->Size = e->Size;
     f->Attributes = e->Attributes;
     f->NameLength = e->NameLength;
-    RtlCopyMemory(f->Name, e->Name, e->NameLength);
+    memcpy(f->Name, e->Name, e->NameLength);
     f->EntryOffset = where;
     f->Directory = (e->Attributes & 0x10) != 0;
     InsertTailList(&v->Fcbs, &f->Link);
@@ -235,7 +229,7 @@ static NTSTATUS XdvdfsCreate(XDVDFS_VOLUME *v, PIRP Irp, ULONG_PTR *info) {
         e.Size = dir->Size;
         e.Attributes = dir->Attributes;
         e.NameLength = dir->NameLength;
-        RtlCopyMemory(e.Name, dir->Name, dir->NameLength);
+        memcpy(e.Name, dir->Name, dir->NameLength);
         where = dir->EntryOffset;
     } else if (rest.Buffer[0] != '\\') {
         return STATUS_OBJECT_NAME_INVALID;
@@ -286,7 +280,7 @@ static NTSTATUS XdvdfsCreate(XDVDFS_VOLUME *v, PIRP Irp, ULONG_PTR *info) {
         ExFreePool(f);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    RtlZeroMemory(ccb, sizeof(*ccb));
+    memset(ccb, 0, sizeof(*ccb));
     fo->FsContext = f;
     fo->FsContext2 = ccb;
     *info = FILE_OPENED;
@@ -385,7 +379,7 @@ static NTSTATUS NTAPI XdvdfsFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIR
         *(PULONG)(out + 32) = XdvdfsAttributes(f->Attributes);
         return XdvdfsComplete(Irp, STATUS_SUCCESS, 40);
     case FileStandardInformation:
-        RtlZeroMemory(out, 24);
+        memset(out, 0, 24);
         ((PULONG)out)[0] = alloc;
         ((PULONG)out)[2] = f->Size;
         ((PULONG)out)[4] = 1;
@@ -399,7 +393,7 @@ static NTSTATUS NTAPI XdvdfsFsdQueryInformation(PDEVICE_OBJECT DeviceObject, PIR
         *(PLARGE_INTEGER)out = fo->CurrentByteOffset;
         return XdvdfsComplete(Irp, STATUS_SUCCESS, 8);
     case FileNetworkOpenInformation:
-        RtlZeroMemory(out, 56);
+        memset(out, 0, 56);
         for (int i = 0; i < 4; i++)
             ((PLARGE_INTEGER)out)[i] = v->Time;
         ((PULONG)out)[8] = alloc;
@@ -430,7 +424,7 @@ static bool XdvdfsMatch(const CHAR *m, ULONG ml, const CHAR *n, ULONG nl) {
         }
         return false;
     }
-    return nl && (*m == '?' || XdvdfsUpper(*m) == XdvdfsUpper(*n)) && XdvdfsMatch(m + 1, ml - 1, n + 1, nl - 1);
+    return nl && (*m == '?' || toupper(*m) == toupper(*n)) && XdvdfsMatch(m + 1, ml - 1, n + 1, nl - 1);
 }
 
 static NTSTATUS NTAPI XdvdfsFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
@@ -452,7 +446,7 @@ static NTSTATUS NTAPI XdvdfsFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIR
         ccb->Mask[0] = '*';
         if (mask && mask->Length && mask->Length <= sizeof(ccb->Mask)) {
             ccb->MaskLength = (UCHAR)mask->Length;
-            RtlCopyMemory(ccb->Mask, mask->Buffer, mask->Length);
+            memcpy(ccb->Mask, mask->Buffer, mask->Length);
         }
         first = true;
     }
@@ -479,7 +473,7 @@ static NTSTATUS NTAPI XdvdfsFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIR
             break;
         }
         auto p = (PUCHAR)Irp->UserBuffer;
-        RtlZeroMemory(p, 0x40);
+        memset(p, 0, 0x40);
         *(PULONG)(p + 4) = where;
         for (int i = 0; i < 4; i++)
             ((PLARGE_INTEGER)(p + 8))[i] = v->Time;
@@ -489,7 +483,7 @@ static NTSTATUS NTAPI XdvdfsFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIR
         *(PULONG)(p + 0x38) = XdvdfsAttributes(e.Attributes);
         *(PULONG)(p + 0x3C) = e.NameLength;
         ULONG room = len - 0x40, copy = e.NameLength < room ? e.NameLength : room;
-        RtlCopyMemory(p + 0x40, e.Name, copy);
+        memcpy(p + 0x40, e.Name, copy);
         used = 0x40 + copy;
         status = copy < e.NameLength ? (NTSTATUS)0x80000005 : STATUS_SUCCESS;
         break;
@@ -528,12 +522,12 @@ static NTSTATUS NTAPI XdvdfsFsdQueryVolume(PDEVICE_OBJECT DeviceObject, PIRP Irp
         out[0] = 0x80000;
         out[1] = 255;
         out[2] = 4; // FILE_READ_ONLY_VOLUME
-        RtlCopyMemory(out + 3, "GDFX", 4);
+        memcpy(out + 3, "GDFX", 4);
         return XdvdfsComplete(Irp, STATUS_SUCCESS, 18);
     case FileFsVolumeInformation:
         if (len < 18)
             return XdvdfsComplete(Irp, STATUS_INFO_LENGTH_MISMATCH);
-        RtlZeroMemory(out, 18);
+        memset(out, 0, 18);
         *(PLARGE_INTEGER)out = v->Time;
         return XdvdfsComplete(Irp, STATUS_SUCCESS, 18);
     default:

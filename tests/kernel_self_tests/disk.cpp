@@ -74,7 +74,7 @@ static void IdexLba48Test(PDEVICE_OBJECT disk, PUCHAR buf) {
     }
     // Writes overlap (the 256 KB one covers the four single sectors): a sector holds the last write's tag.
     for (auto &w : writes) {
-        RtlZeroMemory(buf, w.count * 512);
+        memset(buf, 0, w.count * 512);
         ok &= NT_SUCCESS(IdexTestRead(disk, buf, w.count * 512, (LONGLONG)w.lba << 9));
         for (ULONG n = 0; ok && n < w.count; n++) {
             auto p = (PULONG)(buf + n * 512);
@@ -145,7 +145,7 @@ static void NTAPI IdexControllerThread(PVOID) {
     }
 
     // Two 128 KB DMA chunks in one request, buffer from non-contiguous pool pages too.
-    RtlFillMemory(buf, 0x40000, 0xCC);
+    memset(buf, 0xCC, 0x40000);
     KiTestIdexBigOk = NT_SUCCESS(IdexTestRead(parts[1], buf, 0x40000, 0));
     ULONG sum = 0;
     for (ULONG i = 0; i < 0x40000 / 4; i++)
@@ -158,7 +158,7 @@ static void NTAPI IdexControllerThread(PVOID) {
     for (ULONG i = 0; i < 0x1000; i++)
         w[i] = (UCHAR)(i * 7 + 3);
     ok = NT_SUCCESS(IdexTestRead(parts[0], w, 0x1000, 0x3F0LL * 512, IRP_MJ_WRITE));
-    RtlZeroMemory(buf, 0x1000);
+    memset(buf, 0, 0x1000);
     ok &= NT_SUCCESS(IdexTestRead(parts[0], buf, 0x1000, 0x3F0LL * 512));
     for (ULONG i = 0; ok && i < 0x1000; i++)
         ok = buf[i] == (UCHAR)(i * 7 + 3);
@@ -191,7 +191,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         p.IdeReg.bCommandReg = 0xEC;
         p.DataBufferSize = 512;
         p.DataBuffer = buf;
-        RtlZeroMemory(buf, 512);
+        memset(buf, 0, 512);
         ULONG got = 0;
         ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p), &got, FALSE) == STATUS_SUCCESS &&
                                                   got == sizeof(p);
@@ -205,7 +205,7 @@ static void NTAPI IdexControllerThread(PVOID) {
         p.IdeReg.bHostSendsData = TRUE;
         p.DataBufferSize = 512;
         p.DataBuffer = buf;
-        RtlZeroMemory(buf, 512);
+        memset(buf, 0, 512);
         ok &= IoSynchronousDeviceIoControlRequest(IOCTL_IDE_PASS_THROUGH, parts[0], &p, sizeof(p), &p, sizeof(p), nullptr, FALSE) == STATUS_SUCCESS;
         KiTestIdexPassThroughOk = ok;
     }
