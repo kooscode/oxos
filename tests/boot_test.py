@@ -422,6 +422,8 @@ def exfat_format_checks(mon, q):
         "an allocation size allocates nothing past the length (create and set-allocation)": mon.read("KiTestEXFATPreallocOk") == 1,
         "a file grows past 4 GB, reads back, shrinks and opens again for writing":
             mon.read("KiTestEXFATLargeOk") == 1,
+        "exFAT names: 255 characters, Latin-1 too, listed whole, opened in capitals, renamed, deleted; 256 refused (43 on FATX)":
+            mon.read("KiTestEXFATLongNameOk") == 1,
     }
 
 

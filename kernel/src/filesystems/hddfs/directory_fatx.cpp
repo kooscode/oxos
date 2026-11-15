@@ -61,7 +61,14 @@ static bool FATXIsLive(const FATX_DIRENT *e) {
 
 static void FATXEntryFromDirent(HDDFS_ENTRY *out, const FATX_DIRENT *e) {
     memset(out, 0, sizeof(*out));
-    *(FATX_DIRENT *)out = *e;
+    out->FileNameLength = e->FileNameLength;
+    out->FileAttributes = e->FileAttributes;
+    memcpy(out->FileName, e->FileName, FATX_MAX_NAME);
+    out->FirstCluster = e->FirstCluster;
+    out->FileSize = e->FileSize;
+    out->CreationTime = e->CreationTime;
+    out->LastWriteTime = e->LastWriteTime;
+    out->LastAccessTime = e->LastAccessTime;
 }
 
 NTSTATUS FATXLookup(HDDFS_VOLUME *v, HDDFS_FCB *dir, const OBJECT_STRING *Name, HDDFS_ENTRY *Found, ULONG *Index) {

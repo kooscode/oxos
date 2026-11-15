@@ -78,9 +78,9 @@ same free space, so a single F: already offers the whole disk:
 - Each `PartitionN` (N ≥ 1) is a **virtual partition**: a device whose file system is the exFAT driver rooted at that partition's folder. Opening
   `\Device\Harddisk0\Partition1\TDATA\4d530004` opens `/E/TDATA/4d530004`.
 - Symbolic links (`\??\T:`, `\??\U:`, `\??\Z:`, `\??\D:` …) work unchanged: they point at those device paths.
-- **File-name rules stay FATX's** so titles see the errors they expect: at most 42 characters, the FATX character set, case-insensitive, case-preserving. ANSI
-  names are stored as UTF-16 (Latin-1 mapping). Files exFAT allows but FATX does not (longer names, other characters, written from a PC) are still listed and
-  opened: names longer than 42 characters are listed but cannot be created by titles.
+- **File names follow exFAT's rules, not FATX's** (user, 2026-11-14: no FATX limits on exFAT): up to 255 characters, any character from 0x20 up but
+  `" * / : < > ? \ |`, case-insensitive, case-preserving, for titles, the dashboard and extensions alike. ANSI names are stored as UTF-16 (Latin-1 mapping); a
+  name with characters beyond Latin-1 (written from a PC) cannot be shown through the kernel's 8-bit names and stays hidden (spec 07 §2).
 - **Timestamps:** exFAT keeps 10 ms resolution and a UTC offset; the driver converts to and from the FATX/NT times the kernel APIs return.
 - **File sizes:** up to the exFAT limit; the APIs already carry 64-bit sizes and offsets.
 

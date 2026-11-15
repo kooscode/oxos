@@ -105,7 +105,7 @@ static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Informat
             return STATUS_OBJECT_NAME_INVALID;
         dir = &v->RootFcb;
     }
-    if (rest.Length > FATX_MAX_PATH)
+    if (!v->IsEXFAT && rest.Length > FATX_MAX_PATH)
         return STATUS_OBJECT_NAME_INVALID;
     bool trailingSlash = rest.Length > 1 && rest.Buffer[rest.Length - 1] == '\\';
     if (trailingSlash)
@@ -140,7 +140,7 @@ static NTSTATUS HDDFSCommonCreate(HDDFS_VOLUME *v, PIRP Irp, ULONG_PTR *Informat
     }
     for (;;) {
         HDDFSSplitElement(&rest, &element);
-        if (!HDDFSIsValidName(&element)) {
+        if (!HDDFSIsValidName(v, &element)) {
             status = STATUS_OBJECT_NAME_INVALID;
             break;
         }
@@ -654,7 +654,7 @@ static NTSTATUS HDDFSRename(HDDFS_VOLUME *v, HDDFS_FCB *f, PFILE_OBJECT target, 
     HDDFS_FCB *dir = target ? HDDFSFcbOf(target) : f->Parent;
     while (rest.Length) // final element of the new name
         HDDFSSplitElement(&rest, &element);
-    if (!dir || !HDDFSIsValidName(&element) || (f->Flags & FCB_ROOT))
+    if (!dir || !HDDFSIsValidName(v, &element) || (f->Flags & FCB_ROOT))
         return STATUS_OBJECT_NAME_INVALID;
     for (HDDFS_FCB *p = dir; p; p = p->Parent) {
         if (p == f)
@@ -803,8 +803,8 @@ static NTSTATUS NTAPI HDDFSFsdDirectoryControl(PDEVICE_OBJECT DeviceObject, PIRP
             ccb->HaveMask = TRUE;
             ccb->MaskLength = 1;
             ccb->Mask[0] = '*';
-            if (mask && mask->Length && mask->Length <= FATX_MAX_NAME + 2) {
-                ccb->MaskLength = (UCHAR)mask->Length;
+            if (mask && mask->Length && mask->Length <= HDDFS_MAX_NAME + 2) {
+                ccb->MaskLength = mask->Length;
                 memcpy(ccb->Mask, mask->Buffer, mask->Length);
             }
         }
@@ -975,7 +975,7 @@ static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject
             break;
         }
         ((PULONG)out)[0] = 2; // FILE_CASE_PRESERVED_NAMES
-        ((PULONG)out)[1] = FATX_MAX_NAME;
+        ((PULONG)out)[1] = v->IsEXFAT ? HDDFS_MAX_NAME : FATX_MAX_NAME;
         ((PULONG)out)[2] = 4;
         info = 12;
         if (len >= 16) {

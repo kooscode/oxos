@@ -76,10 +76,12 @@ bit 7 clear is a deleted entry.
 - **One dispatcher.** The FATX request dispatcher (create, cleanup, close, read/write, information, directories, volume queries, dismount) serves both formats.
   It already defines the behaviour titles rely on; the on-disk details sit behind the volume and directory layers, which have a FATX and an exFAT implementation
   chosen per volume.
-- **Neutral entries.** The layers exchange a 64-byte entry (name up to 42 characters, attributes, first cluster, size, FATX-style timestamps) so the dispatcher
-  stays unchanged; exFAT-only state (entry-set length, NoFatChain) lives in the FCB.
-- **Names:** an exFAT name is visible to titles when it is 1–42 characters, all in Latin-1 and valid by the FATX rules; others are skipped when enumerating and
-  are not found by lookups (they stay on the disk untouched). Comparisons up-case through the volume's up-case table for characters below 0x100.
+- **Neutral entries.** The layers exchange an entry (`HDDFS_ENTRY`: attributes, first cluster, size, FATX-style timestamps, exFAT's entry-set fields and a
+  name of up to 255 characters, last so the other fields keep short offsets) so the dispatcher stays unchanged; the FCB holds the same, its name last too.
+- **Names: exFAT's own rules on exFAT** (user, 2026-11-14: no FATX limits on exFAT): 1–255 characters, any character from 0x20 up except
+  `" * / : < > ? \ |`; FATX volumes keep FATX's (1–42 characters, 0x20–0x7E). The kernel's names are 8-bit, so an exFAT name is shown when all its characters
+  are Latin-1 (below 0x100); one with others is skipped when enumerating and not found by lookups (it stays on the disk untouched). No path limit on exFAT
+  (FATX's is 250 characters). `FileFsAttributeInformation` reports 255 as the longest name on exFAT.
 - **Sizes:** 64-bit (`HDDFS_FCB::FileSizeHigh` holds the high dword). Files of 4 GB or more, such as disc images (spec 16 §4), are read, written, grown, shrunk,
   overwritten, renamed, moved and deleted like any other file; growing past 4 GB is refused only on FATX (STATUS_DISK_FULL), whose sizes are 32-bit. The entry
   set keeps the 64-bit length; a file holds at most 2^32 − 1 clusters. Directories stay below 4 GB.

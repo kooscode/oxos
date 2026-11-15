@@ -293,14 +293,15 @@ void HDDFSVolumeSize(HDDFS_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsP
 
 // --- Names and timestamps
 
-bool HDDFSIsValidName(const OBJECT_STRING *Name) {
-    if (Name->Length < 1 || Name->Length > FATX_MAX_NAME)
+// FATX: 1-42 characters from 0x20 to 0x7E. exFAT: 1-255 characters, any from 0x20 up (the names are Latin-1). Neither: " * / : < > ? \ |, "." or "..".
+bool HDDFSIsValidName(const HDDFS_VOLUME *v, const OBJECT_STRING *Name) {
+    if (Name->Length < 1 || Name->Length > (v->IsEXFAT ? HDDFS_MAX_NAME : FATX_MAX_NAME))
         return false;
     if (Name->Buffer[0] == '.' && (Name->Length == 1 || (Name->Length == 2 && Name->Buffer[1] == '.')))
         return false;
     for (ULONG i = 0; i < Name->Length; i++) {
         UCHAR c = (UCHAR)Name->Buffer[i];
-        if (c < 0x20 || c > 0x7E)
+        if (c < 0x20 || (c > 0x7E && !v->IsEXFAT))
             return false;
         for (const char *bad = "\"*/:<>?\\|"; *bad; bad++) {
             if (c == (UCHAR)*bad)

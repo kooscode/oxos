@@ -88,12 +88,12 @@ static NTSTATUS EXFATWriteSet(HDDFS_VOLUME *v, HDDFS_FCB *dir, ULONG Slot, EXFAT
     return STATUS_SUCCESS;
 }
 
-// A set as titles see it: a FATX-valid name of at most 42 characters (all below 0x80, the FATX character set). Files of 4 GB or more (disc images) keep their
-// size's high dword in FileSizeHigh; directories must stay below 4 GB. Other sets stay on the disk untouched and are invisible.
+// A set as the kernel shows it: an exFAT-valid name (HDDFSIsValidName) whose characters are all Latin-1, since the kernel's names are 8-bit. Files of 4 GB or
+// more (disc images) keep their size's high dword in FileSizeHigh; directories must stay below 4 GB. Other sets stay on the disk untouched and are invisible.
 static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *Out) {
     const UCHAR *f = s->e[0], *st = s->e[1];
     ULONG nameLength = st[3];
-    if (nameLength < 1 || nameLength > FATX_MAX_NAME || 2 + (nameLength + 14) / 15 > s->Count)
+    if (nameLength < 1 || 2 + (nameLength + 14) / 15 > s->Count)
         return false;
     USHORT attributes = *(const USHORT *)(f + 4);
     ULONGLONG length = *(const ULONGLONG *)(st + 24);
@@ -110,12 +110,12 @@ static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *
         if (n[0] != EXFAT_ENTRY_NAME)
             return false;
         USHORT c = *(const USHORT *)(n + 2 + 2 * (i % 15));
-        if (c >= 0x80)
+        if (c > 0xFF)
             return false;
         Out->FileName[i] = (CHAR)c;
     }
     OBJECT_STRING name = {(USHORT)nameLength, (USHORT)nameLength, Out->FileName};
-    if (!HDDFSIsValidName(&name))
+    if (!HDDFSIsValidName(v, &name))
         return false;
     bool isDir = attributes & FILE_ATTRIBUTE_DIRECTORY;
     Out->FileNameLength = (UCHAR)nameLength;
@@ -153,7 +153,7 @@ static void EXFATBuildSet(EXFAT_SET *Set, const CHAR *Name, ULONG NameLength, UC
     st[3] = (UCHAR)NameLength;
     USHORT hash = 0;
     for (ULONG i = 0; i < NameLength; i++) {
-        USHORT c = EXFATDisk.Upcase[(UCHAR)Name[i]];
+        USHORT c = EXFATDisk->Upcase[(UCHAR)Name[i]];
         hash = (USHORT)(((hash >> 1) | (hash << 15)) + (c & 0xFF));
         hash = (USHORT)(((hash >> 1) | (hash << 15)) + (c >> 8));
         UCHAR *n = Set->e[2 + i / 15];

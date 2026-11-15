@@ -26,6 +26,8 @@ volatile ULONG KiTestEXFATStaleOk, KiTestEXFATPreallocOk;
 
 // exFAT: a file grows past 4 GB, shrinks, and takes writes after it is opened again (EXFATLargeFileTest).
 volatile ULONG KiTestEXFATLargeOk;
+// exFAT: names of 255 characters, Latin-1 ones among them, created, listed, opened in another case, renamed and deleted (EXFATLongNameTest).
+volatile ULONG KiTestEXFATLongNameOk;
 
 // A path in the title's D: folder reports 2048-byte sectors (spec/oxos_internal/25 §2).
 volatile ULONG KiTestFATXTitleFolderOk;
@@ -60,6 +62,7 @@ static void EXFATFormatTest(PUCHAR buf);
 static void EXFATCrossFolderTest(PUCHAR buf);
 static void EXFATLengthTest(PUCHAR buf);
 static void EXFATLargeFileTest(PUCHAR buf);
+static void EXFATLongNameTest(PUCHAR buf);
 
 static void NTAPI FATXControllerThread(PVOID) {
     while (!KiTestIdexDone)
@@ -191,8 +194,13 @@ static void NTAPI FATXControllerThread(PVOID) {
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\keep.bin", GENERIC_READ, FILE_OPEN,
                FILE_DIRECTORY_FILE) == (NTSTATUS)0xC0000103; // STATUS_NOT_A_DIRECTORY
     ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\bad*name", GENERIC_READ, FILE_OPEN_IF, 0) == STATUS_OBJECT_NAME_INVALID;
-    ok &= Open(&hx, "\\Device\\Harddisk0\\Partition1\\a23456789012345678901234567890123456789012x", GENERIC_READ, FILE_OPEN_IF,
-               0) == STATUS_OBJECT_NAME_INVALID; // 43 characters
+    // A name one character too long: 43 on FATX, 256 on exFAT (EXFATLongNameTest creates the longest that fits).
+    char tooLong[29 + 256 + 1];
+    ULONG tooLongLength = storage::DiskHasEXFATLayout ? 256 : 43;
+    memcpy(tooLong, "\\Device\\Harddisk0\\Partition1\\", 29);
+    memset(tooLong + 29, 'a', tooLongLength);
+    tooLong[29 + tooLongLength] = 0;
+    ok &= Open(&hx, tooLong, GENERIC_READ, FILE_OPEN_IF, 0) == STATUS_OBJECT_NAME_INVALID;
     // One doubled separator is accepted (as the reference); a tripled one is not.
     bool doubled = Open(&hx, "\\Device\\Harddisk0\\Partition1\\XkTest\\\\keep.bin", GENERIC_READ, FILE_OPEN, 0) == STATUS_SUCCESS;
     if (doubled)
@@ -250,6 +258,7 @@ static void NTAPI FATXControllerThread(PVOID) {
         EXFATCrossFolderTest(buf);
         EXFATLengthTest(buf);
         EXFATLargeFileTest(buf);
+        EXFATLongNameTest(buf);
     }
     ExFreePool(buf);
     KiTestFATXDone = 1;
@@ -470,4 +479,54 @@ static void EXFATLargeFileTest(PUCHAR buf) {
     }
     KiTestEXFATLargeOk = ok;
     NtClose(hv);
+}
+
+// E:\ (spec/oxos_internal/05 §3: exFAT's own name rules): a file whose name has 255 characters, with an e acute (0xE9) in it, is written, found in a listing
+// with its whole name, opened by its name in capitals, renamed to another 255-character name and deleted.
+static void EXFATLongNameTest(PUCHAR buf) {
+    constexpr ULONG PREFIX = 29, LENGTH = 255; // "\Device\Harddisk0\Partition1\"
+    char path[PREFIX + LENGTH + 1], upper[PREFIX + LENGTH + 1], renamed[PREFIX + LENGTH + 1];
+    memcpy(path, "\\Device\\Harddisk0\\Partition1\\", PREFIX);
+    for (ULONG i = 0; i < LENGTH; i++)
+        path[PREFIX + i] = i == 7 ? (char)0xE9 : (char)('a' + i % 26);
+    path[PREFIX + LENGTH] = 0;
+    memcpy(upper, path, sizeof(path));
+    memcpy(renamed, path, sizeof(path));
+    for (ULONG i = PREFIX; i < PREFIX + LENGTH; i++)
+        upper[i] = (char)toupper((UCHAR)upper[i]);
+    renamed[PREFIX + LENGTH - 1] = 'Z';
+    HANDLE h;
+    IO_STATUS_BLOCK iosb;
+    bool ok = Open(&h, path, GENERIC_WRITE, FILE_CREATE, FILE_NON_DIRECTORY_FILE) == 0;
+    if (ok) {
+        LARGE_INTEGER at;
+        at.QuadPart = 0;
+        ok = NT_SUCCESS(NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, (PVOID)"long", 4, &at));
+        NtClose(h);
+    }
+    // The root's listing has it, with all 255 characters.
+    bool listed = false;
+    if (ok && Open(&h, "\\Device\\Harddisk0\\Partition1\\", GENERIC_READ, FILE_OPEN, FILE_DIRECTORY_FILE) == 0) {
+        for (BOOLEAN first = TRUE; !listed; first = FALSE) {
+            if (!NT_SUCCESS(NtQueryDirectoryFile(h, nullptr, nullptr, nullptr, &iosb, buf, 0x1000, FileDirectoryInformation, nullptr, first)))
+                break;
+            for (PUCHAR e = buf;; e += *(PULONG)e) {
+                listed |= *(PULONG)(e + 0x3C) == LENGTH && memcmp(e + 0x40, path + PREFIX, LENGTH) == 0 && *(PULONG)(e + 0x28) == 4;
+                if (!*(PULONG)e)
+                    break;
+            }
+        }
+        NtClose(h);
+    }
+    ok &= listed;
+    // Opened in capitals (the ASCII letters; exFAT compares names in any case), renamed, gone under its old name, deleted.
+    ok &= Open(&h, upper, GENERIC_READ | DELETE, FILE_OPEN, FILE_NON_DIRECTORY_FILE) == 0;
+    if (ok) {
+        FILE_RENAME_INFORMATION rename = {FALSE, nullptr, objects::ObjectName(renamed + PREFIX)};
+        ok = NT_SUCCESS(NtSetInformationFile(h, &iosb, &rename, sizeof(rename), FileRenameInformation));
+        NtClose(h);
+    }
+    ok &= Open(&h, path, GENERIC_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE) == STATUS_OBJECT_NAME_NOT_FOUND;
+    ok &= NT_SUCCESS(io::DeleteFile(renamed)) && Open(&h, renamed, GENERIC_READ, FILE_OPEN, 0) == STATUS_OBJECT_NAME_NOT_FOUND;
+    KiTestEXFATLongNameOk = ok;
 }

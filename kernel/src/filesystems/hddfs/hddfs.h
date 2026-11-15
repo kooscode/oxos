@@ -14,7 +14,7 @@ namespace xk::filesystems {
 // --- FATX's on-disk format. Its name limits apply on exFAT volumes too: titles expect them.
 
 constexpr ULONG FATX_SIGNATURE = 0x58544146; // "FATX"
-constexpr ULONG FATX_MAX_NAME = 42, FATX_MAX_PATH = 250;
+constexpr ULONG FATX_MAX_NAME = 42, FATX_MAX_PATH = 250; // FATX's own limits: exFAT volumes have exFAT's (HDDFS_MAX_NAME, no path limit)
 constexpr UCHAR FATX_DIRENT_NEVER_USED = 0x00, FATX_DIRENT_NEVER_USED2 = 0xFF, FATX_DIRENT_DELETED = 0xE5;
 
 struct FATX_DIRENT {
@@ -41,13 +41,25 @@ constexpr ULONG FILE_SUPERSEDED = 0, FILE_OPENED = 1, FILE_CREATED = 2, FILE_OVE
 // EXFATFlags: the file's clusters are consecutive; its FAT entries are not used.
 constexpr UCHAR EXFAT_NOFATCHAIN = 0x01;
 
-// A directory entry as the layers exchange it: the FATX fields, plus what an exFAT entry set adds.
-struct HDDFS_ENTRY : FATX_DIRENT {
+// The longest name: exFAT's (FATX's is FATX_MAX_NAME).
+constexpr ULONG HDDFS_MAX_NAME = 255;
+
+// A directory entry as the layers exchange it: the fields both formats have, what an exFAT entry set adds, and a name as long as exFAT's (last, so the other
+// fields stay at short offsets).
+struct HDDFS_ENTRY {
+    UCHAR FileNameLength;
+    UCHAR FileAttributes;
+    ULONG FirstCluster;
+    ULONG FileSize;
+    ULONG CreationTime;
+    ULONG LastWriteTime;
+    ULONG LastAccessTime;
     UCHAR EXFATFlags;         // EXFAT_NOFATCHAIN
     UCHAR EXFATEntries;       // entries in the set (file, stream, names)
     ULONG EXFATAllocClusters; // clusters allocated (DataLength rounded up)
     ULONG EXFATDirLength;     // directories: DataLength
     ULONG FileSizeHigh;       // exFAT files of 4 GB or more: the size's high dword
+    CHAR FileName[HDDFS_MAX_NAME];
 };
 
 constexpr ULONG FCB_DIRECTORY = 0x02, FCB_DELETE_PENDING = 0x10, FCB_ROOT = 0x20, FCB_VOLUME = 0x40, FCB_DIRENT_DIRTY = 0x80,
@@ -66,7 +78,6 @@ struct HDDFS_FCB {
     SHARE_ACCESS ShareAccess;
     UCHAR Attributes;
     UCHAR NameLength;
-    CHAR Name[FATX_MAX_NAME];
     ULONG FileSize;
     ULONG DirentIndex;                   // position of the entry in the parent directory
     ULONG CreationTime, LastWriteTime, LastAccessTime;
@@ -74,6 +85,7 @@ struct HDDFS_FCB {
     UCHAR EXFATFlags, EXFATEntries;      // exFAT (HDDFS_ENTRY)
     ULONG EXFATAllocClusters, EXFATDirLength;
     ULONG FileSizeHigh;                  // exFAT: files of 4 GB or more (FATX sizes are 32-bit)
+    CHAR Name[HDDFS_MAX_NAME];           // last: the other fields stay at short offsets
 };
 
 XK_OFFSET(HDDFS_FCB, FirstCluster, 0x1C);
@@ -86,8 +98,8 @@ inline ULONGLONG HDDFSFileSize64(const HDDFS_FCB *f) {
 struct HDDFS_CCB {
     ULONG NextIndex;
     BOOLEAN HaveMask;
-    UCHAR MaskLength;
-    CHAR Mask[FATX_MAX_NAME + 2];
+    USHORT MaskLength;
+    CHAR Mask[HDDFS_MAX_NAME + 2];
 };
 
 struct HDDFS_ALLOC {
@@ -168,7 +180,7 @@ void HDDFSVolumeSize(HDDFS_VOLUME *v, ULONG *Total, ULONG *Free, ULONG *SectorsP
 NTSTATUS HDDFSSetFileSize(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONGLONG NewSize); // grow or shrink the file's chain
 
 // Names (FATX's rules, on both formats) and timestamps (FATX's format in the FCB).
-bool HDDFSIsValidName(const OBJECT_STRING *Name);
+bool HDDFSIsValidName(const HDDFS_VOLUME *v, const OBJECT_STRING *Name); // the volume's format's rules
 bool HDDFSNameEqual(const CHAR *a, ULONG alen, const CHAR *b, ULONG blen);
 bool HDDFSWildcardMatch(const CHAR *mask, ULONG mlen, const CHAR *name, ULONG nlen);
 ULONG HDDFSCurrentTimestamp();
@@ -255,7 +267,7 @@ struct EXFAT_DISK {
     USHORT Upcase[256];
     HDDFS_FCB Root; // the volume's root directory (it has no entry set)
 };
-extern EXFAT_DISK EXFATDisk;
+extern EXFAT_DISK *EXFATDisk; // from the first exFAT mount (volume_exfat.cpp)
 
 // Directory entry types and an entry set as read from the disk.
 constexpr UCHAR EXFAT_ENTRY_END = 0x00, EXFAT_ENTRY_BITMAP = 0x81, EXFAT_ENTRY_UPCASE = 0x82, EXFAT_ENTRY_FILE = 0x85, EXFAT_ENTRY_STREAM = 0xC0,

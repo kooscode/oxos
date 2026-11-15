@@ -6,7 +6,7 @@
 
 namespace xk::filesystems {
 
-EXFAT_DISK EXFATDisk;
+EXFAT_DISK *EXFATDisk; // the exFAT disk's state, in pool memory from its first mount: a FATX console never has one
 // The exFAT disk's one key in the file system cache, shared by all its folder volumes (HDDFS_VOLUME::Cache).
 static FSCACHE_EXTENSION EXFATDiskCache;
 
@@ -382,6 +382,12 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     }
     if (!NT_SUCCESS(status))
         return status;
+    if (!EXFATDisk) {
+        EXFATDisk = (EXFAT_DISK *)ExAllocatePoolWithTag(sizeof(EXFAT_DISK), 'dxtF');
+        if (!EXFATDisk)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        memset(EXFATDisk, 0, sizeof(EXFAT_DISK));
+    }
     PDEVICE_OBJECT dev;
     status = IoCreateDevice(&HDDFSDriverObject, sizeof(HDDFS_VOLUME), nullptr, 8 /*FILE_DEVICE_DISK_FILE_SYSTEM*/, FALSE, &dev);
     if (!NT_SUCCESS(status))
@@ -398,8 +404,8 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     v->IsEXFAT = TRUE;
     v->Format = &EXFATFormat;
     v->FirstClusterNumber = 2;
-    v->EXFATDisk = &EXFATDisk;
-    v->Alloc = &EXFATDisk.Alloc;
+    v->EXFATDisk = EXFATDisk;
+    v->Alloc = &EXFATDisk->Alloc;
     v->PartitionNumber = target.PartitionNumber;
     v->PartitionLength = volume.PartitionLength.QuadPart;
     v->ReportedLength = target.PartitionLength.QuadPart;
@@ -412,15 +418,15 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
     v->RootFcb.Attributes = FILE_ATTRIBUTE_DIRECTORY;
 
     HDDFSAcquireVolume(v);
-    status = EXFATDisk.Mounted ? STATUS_SUCCESS : EXFATMountDisk(v);
+    status = EXFATDisk->Mounted ? STATUS_SUCCESS : EXFATMountDisk(v);
     if (NT_SUCCESS(status)) {
-        v->ClusterShift = EXFATDisk.ClusterShift;
-        v->BytesPerCluster = EXFATDisk.BytesPerCluster;
-        v->NumberOfClusters = EXFATDisk.ClusterCount;
-        v->FatByteOffset = EXFATDisk.FatByteOffset;
+        v->ClusterShift = EXFATDisk->ClusterShift;
+        v->BytesPerCluster = EXFATDisk->BytesPerCluster;
+        v->NumberOfClusters = EXFATDisk->ClusterCount;
+        v->FatByteOffset = EXFATDisk->FatByteOffset;
         v->FatEntryShift = 2;
-        v->DataByteOffset = EXFATDisk.HeapByteOffset;
-        v->SerialNumber = EXFATDisk.Serial;
+        v->DataByteOffset = EXFATDisk->HeapByteOffset;
+        v->SerialNumber = EXFATDisk->Serial;
         // The folder: found in the volume's root, or created there.
         ULONG length = 0;
         while (Folder[length])
@@ -428,14 +434,14 @@ NTSTATUS EXFATMountVolume(PDEVICE_OBJECT Target, PCSZ Folder) {
         OBJECT_STRING name = {(USHORT)length, (USHORT)length, (PCHAR)Folder};
         HDDFS_ENTRY e;
         ULONG index;
-        status = EXFATLookup(v, &EXFATDisk.Root, &name, &e, &index);
+        status = EXFATLookup(v, &EXFATDisk->Root, &name, &e, &index);
         if (status == STATUS_OBJECT_NAME_NOT_FOUND) {
             ULONG first = 0;
             status = EXFATInitDirectory(v, &first);
             if (NT_SUCCESS(status))
-                status = EXFATCreateDirent(v, &EXFATDisk.Root, &name, FILE_ATTRIBUTE_DIRECTORY, first, &index);
+                status = EXFATCreateDirent(v, &EXFATDisk->Root, &name, FILE_ATTRIBUTE_DIRECTORY, first, &index);
             if (NT_SUCCESS(status))
-                status = EXFATReadEntry(v, &EXFATDisk.Root, index, &e);
+                status = EXFATReadEntry(v, &EXFATDisk->Root, index, &e);
         }
         if (NT_SUCCESS(status) && !(e.FileAttributes & FILE_ATTRIBUTE_DIRECTORY))
             status = STATUS_UNRECOGNIZED_VOLUME;
