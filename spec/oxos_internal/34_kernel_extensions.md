@@ -175,6 +175,24 @@ refuses a descriptor whose `Context` does not point inside the extension's own i
    it has taken so far. The state page is already in memory and needs no saving; `Terminate` is for closing files and network connections. *Open:* whether
    `Terminate` runs on a full reset or power-off (it does not today).
 
+### 4.3a Run-once extensions (proposal, 2026-11-15)
+*Proposal, not implemented (user, 2026-11-15: "extensions have the ability to run once and exit and free up memory for things like trainers and other
+usecases where extensions have a finite lifespan").* Many extensions only prepare a launch: install a trainer (spec/oxos_internal/37), play a boot video
+(spec/oxos_internal/38), patch a title once it is loaded. Once that is done their code is dead weight for the whole title. A run-once extension says so, and
+the kernel frees it before the title's first instruction.
+
+- **How an extension asks:** `.Flags = OXOS_RUN_ONCE` in its descriptor (§4.1; `Flags` is defined for this).
+- **Its life in one launch:** `Start()` as for every extension (§4.3 step 2), then its title-loading and title-loaded events (§7.2), then the kernel unloads
+  it, right after the title-loaded event and before the title starts. Its image, context and any pool it did not hand on are freed: the title gets that memory.
+- **What it cannot have:** a `RunLoop`, a `Terminate`, the title-exiting event, or hooks (§7.1): each would call into freed code. The loader refuses such a
+  descriptor, and `oxos_hook` fails for it (logged in `extensions.log`).
+- **What it leaves behind:** memory it allocated for the title with `MmAllocateContiguousMemory` (a trainer's block, for instance) stays for the whole title,
+  as XBMC4Gamers' trainer block does; the next launch's memory start-up reclaims it, like everything that is not persisted. Its state page (§6) stays, as for
+  every extension.
+- **Every launch:** it is loaded again before the next title, like every extension; one that should act only once per cold boot keeps that in its state page
+  and returns `FALSE` from `Start` afterwards.
+- **What the title gains:** the extension's image and pool (a few KB to tens of KB each); with only run-once extensions no run-loop thread is started either.
+
 ### 4.4 An extension
 The SDK's three examples show the parts one at a time (`sdk/examples`), each named for what it shows, and each logs its start and its end: `example_run_loop` (a
 `RunLoop` that keeps time, a number setting), `example_kernel_hook` (a hook on `NtOpenFile`) and `example_title_event` (a title event with user data, the state

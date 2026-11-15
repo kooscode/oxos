@@ -15,10 +15,10 @@ OXOS's settings are plain files in `C:\OXOS\` today, edited by hand over FTP or 
 
 | Page | What it manages | Stored in |
 |---|---|---|
-| Dashboard | which dashboard starts, in order; replaces the fixed list of spec 19 (the list stays the default) | `oxos_settings.ini` (new) |
+| Dashboard | which dashboard starts, in order; replaces the fixed list of spec 19 (the list stays the default) | `oxos_boot.ini` `[dashboard]` (spec 38 §1.1) |
 | Extensions | each one on/off, its order, its settings (the ini keys of its section) | `oxos_extensions.ini` |
 | Trainers | per title: trainer on/off, its cheats, ask before the game or not (spec 37) | `oxos_trainers.ini` |
-| Boot | the boot video on cold boot / quick reboot (spec 38), the jingle on/off | `oxos_extensions.ini`, `oxos_settings.ini` |
+| Boot | the boot video on cold boot / quick reboot (spec 38); the splash and jingle on/off, from the next cold boot (spec 38 §1.1) | `oxos_boot.ini` |
 | Titles | title patches on/off, launch redirects (list, add, remove) | `oxos_title_patches.ini`, `oxos_launch_redirect.ini` |
 | Video and audio | the console's own settings: video standard, widescreen, 480p/720p/1080i, audio | the EEPROM (as the Xbox dashboard sets them) |
 | Toasts, in-game reset | toasts on/off (spec 36), the in-game reset on/off | `oxos_settings.ini` |
@@ -43,8 +43,8 @@ missing. The release zip would ship it next to `ftp.xbe`.
 
 ## 3. Kernel changes it needs
 - A at boot (`kernel/src/gamepad/gamepad.cpp`, as X and B).
-- `oxos_settings.ini`: the kernel reads the dashboard order (spec 19) and the other kernel options from it at boot, with today's behaviour as the default when
-  the file or a key is missing.
+- `oxos_boot.ini` (spec 38 §1.1): the kernel reads the dashboard order (spec 19) from it, and `oxos_settings.ini` the other kernel options, with today's
+  behaviour as the default when the file or a key is missing.
 - EEPROM settings are written the way the Xbox dashboard writes them (`ExSaveNonVolatileSetting`, its checksums).
 
 ## 4. Open

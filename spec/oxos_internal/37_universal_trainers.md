@@ -45,7 +45,9 @@ Rapid Fire = off
 ## 3. Where the code lives
 Universal Trainers run only for users who want them, so by spec 34 §10 they belong in an extension, `oxos_trainer.xos`, rather than the kernel: its
 title-loading event finds the trainer and redirects, its title-loaded event installs it. It needs from the extension interface: replacing the launch's XBE path
-(the title-loading event, as `oxos_nettitle.xos` will, spec 34 §10) and memory that stays while the title runs. Safe mode (B at boot) turns it off with the
+(the title-loading event, as `oxos_nettitle.xos` will, spec 34 §10) and memory that stays while the title runs. It is a run-once extension (spec 34 §4.3a): it
+installs the trainer in the title-loaded event and is unloaded before the game starts. Only the trainer stays resident, in its own block (a trainer's hooks
+jump into its code, so the trainer itself cannot be freed while the game runs; Halo 2's is 1.3 KB, one 4 KB page). Safe mode (B at boot) turns it off with the
 other extensions.
 
 ## 4. Things to settle before building it
