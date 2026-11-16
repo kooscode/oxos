@@ -51,9 +51,10 @@ make regression [MCPX_ROM=...] [ONLY=a,b]  # the full regression run: unit tests
                                 # in ../build/regression/ (about 15 minutes; ../tests/README.md "Regression run")
 make SELFTEST=0 # build without the boot self-tests
 make release [VERSION=X.Y.Z]  # a release: all unit tests, the 1 MB and 256 KB release images and the 1.6 console's
-                                # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip
-                                # (the three images, oxos_title_patches.ini, the FTP server's ftp.xbe, THIRD_PARTY_NOTICES.md) and puts the SDK's
-                                # oxos_sdk_vX.Y.Z.zip next to it; the splash shows vX.Y.Z (else DEV)
+                                # 256 KB image, make test_dash; VERSION packs ../build/kernel/release/dist/oxos_vX.Y.Z.zip (make release_zip:
+                                # OXOS/ as it goes on C:\ with the three images in OXOS/bios/, the FTP server in OXOS/apps/, the shipped
+                                # extensions and the trainers; THIRD_PARTY_NOTICES.md; spec/oxos_disk_layout.md) and puts the SDK's oxos_sdk_vX.Y.Z.zip next
+                                # to it; the splash shows vX.Y.Z (else DEV)
                                 # SKIP_TESTS=1: no tests, for fast iterations (not with VERSION)
 make run [ISO=game.iso]  # interactive xemu session (release build, HDD copy)
 make run_stock [ISO=game.iso]  # the same session on the reference BIOS (A/B comparison); another BIOS:
@@ -84,6 +85,7 @@ make test_iso                   # disc images through the ISO launcher: one .iso
 make test_udf                   # the self-tests with a UDF (DVD-video) disc instead of an XISO
 make test_exfat                 # the self-tests on an exFAT disk (xemu_state/oxos_xemu_exfat/): E: as a folder; then a cold boot of the disk
                                 # they left, with the release kernel: X:'s cache format kept across the power-off
+make extensions                 # the kernel extensions OXOS ships (extensions/NAME/), built with the SDK, into ../build/kernel/extensions/
 make test_extensions            # kernel extensions: the SDK, its examples and tests/extensions/ on a test disk, a cold boot and two quick reboots
 make -C ../sdk [VERSION=X.Y.Z]  # the kernel extension SDK (../sdk/README.md) into ../build/sdk/oxos_sdk/, its examples built with it; VERSION: the zip
 make test_encoders              # the three video encoders (Conexant, Focus, Xcalibur) on xemu's models: probe, mode sets, options
@@ -197,6 +199,7 @@ from which titles derive their save-signature and System Link keys: with it, sav
 | `src/titles/` | the title (XBE) loader and launcher (`title_loader.cpp`), netboot titles (`title_netboot.cpp`); the kernel call tracer (`title_tracer.cpp`, trace builds only) |
 | `src/user_interface/` | the kernel's own screens (spec/oxos_internal/29), drawn with `graphics/`: the fatal error (with its LED sequence and EEPROM error history), No Dashboard Found and the bug check (`error_screens.cpp`, their text in `error_screen_text.cpp`), the countdown before a disk is formatted (`format_countdown_screen.cpp`) and the OXOS File Manager's screen (`file_manager_screen.cpp`). The boot splash is in `boot_splash/` |
 | `src/webserver/` | the OXOS File Manager: a web page that uploads, creates and deletes files and folders and launches an XBE (`webserver.cpp`, `webpage.cpp`); boot-only, spec/oxos_internal/31 |
+| `extensions/` | the kernel extensions OXOS ships, one folder each, built with the extension SDK as it ships like anyone's (`make extensions`, into `../build/kernel/extensions/`): `oxos_trainers/` (Universal Trainers, spec/oxos_internal/37) |
 | `boot/` | the open image's X-code wrapper (Cromwell's table, with write checks added at build time), reset code and 2BL (spec 01 §5): `start.S` and `bl.cpp`, with `netboot.cpp` in `NETBOOT=1` images (the network boot, spec/oxos_internal/09); `bl.h` holds what they share |
 | `Makefile` | the build: the kernel and BIOS images, the release, the boot tests, the xemu sessions and the console apps (its header lists the build kinds) |
 | `exports.tsv` | the export table: every ordinal of the 4627 kernel with name, calling convention, argument bytes and kind (`func`, `data`, or `debug` for the two debugger-only exports, kept for a future debug build); `../tools/gen_def.py` turns it into the linker's `.def` |

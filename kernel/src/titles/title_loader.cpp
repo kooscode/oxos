@@ -35,6 +35,7 @@ constexpr ULONG XBE_SECTION_WRITABLE = 1, XBE_SECTION_PRELOAD = 2, XBE_SECTION_H
 constexpr ULONG XBE_INIT_LIMIT_64_MB = 4; // header +0x124 (init flags): the title keeps to 64 MB on a 128 MB console
 constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_ORDINAL_NOT_FOUND = (NTSTATUS)0xC0000138,
                    STATUS_REGION_MISMATCH = (NTSTATUS)0xC0050001, STATUS_MEDIA_MISMATCH = (NTSTATUS)0xC0050002;
+constexpr NTSTATUS STATUS_REPARSE = 0x00000104; // LoadImage: an extension starts another XBE in its place
 
 struct XBE_SECTION_HEADER {
     ULONG Flags, VirtualAddress, VirtualSize, PointerToRawData, SizeOfRawData, SectionName;
@@ -528,9 +529,17 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
     return status;
 }
 
-NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard) {
+// Path's title-loading event (spec/oxos_internal/34 §7.2), then Path. Target (XE_REDIRECT_MAX_PATH + 1 bytes), for a launch an extension may redirect: when
+// one names an XBE there (oxos_title_redirect), Path is not loaded and the result is STATUS_REPARSE.
+NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target) {
     XK_SERIAL("load %s: start\n", Path);
-    extensions::TitleLoading(Path, Dashboard);
+    if (Target)
+        Target[0] = 0;
+    extensions::TitleLoading(Path, Dashboard, Target, XE_REDIRECT_MAX_PATH + 1);
+    if (Target && Target[0]) {
+        XK_SERIAL("load %s: an extension starts %s in its place\n", Path, Target);
+        return STATUS_REPARSE;
+    }
     NTSTATUS status = LoadImageFile(Path, Dashboard);
     XK_SERIAL("load %s: %#lx\n", Path, status);
     return status;
@@ -614,16 +623,37 @@ static bool ShowPlainDashboardError(NTSTATUS s) {
            s == (NTSTATUS)0xC00000A3 || s == (NTSTATUS)0xC000014F;
 }
 
+// The length of Path's folder: up to its last '\'.
+static ULONG PathFolderLength(PCSZ Path) {
+    ULONG folder = 0;
+    for (ULONG i = 0; Path[i]; i++) {
+        if (Path[i] == '\\')
+            folder = i;
+    }
+    return folder;
+}
+
 // Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0); the link is removed again when the image
-// does not load.
-static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength) {
+// does not load. Redirectable (a launch through the launch data page): an extension may start another XBE in its place (spec/oxos_internal/34 §7.2), which
+// is then loaded as a launch redirect's target is (spec/oxos_internal/33 §3: its own folder as D:), and Path as asked when it does not load.
+static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength, bool Redirectable = false) {
     char folder[256];
     bool linked = false;
     if (FolderLength && FolderLength < sizeof(folder)) {
         strlcpy(folder, Path, FolderLength + 1);
         linked = NT_SUCCESS(io::CreateLink("\\??\\D:", folder));
     }
-    NTSTATUS status = LoadImage(Path, FALSE);
+    char target[XE_REDIRECT_MAX_PATH + 1];
+    NTSTATUS status = LoadImage(Path, FALSE, Redirectable ? target : nullptr);
+    if (status == STATUS_REPARSE) {
+        if (linked)
+            io::DeleteLink("\\??\\D:");
+        status = LoadFromFolder(target, PathFolderLength(target));
+        if (NT_SUCCESS(status))
+            return status;
+        XK_SERIAL("load: the extension's target did not load (%#lx); starting %s\n", status, Path);
+        return LoadFromFolder(Path, FolderLength);
+    }
     if (!NT_SUCCESS(status) && linked)
         io::DeleteLink("\\??\\D:");
     return status;
@@ -649,12 +679,7 @@ static bool RedirectLaunch(PCSZ Path) {
     if (!found)
         return false;
     XK_SERIAL("redirect: [%s] %s -> %s\n", redirect.Name, Path, redirect.Target);
-    ULONG folder = 0;
-    for (ULONG i = 0; redirect.Target[i]; i++) {
-        if (redirect.Target[i] == '\\')
-            folder = i;
-    }
-    status = LoadFromFolder(redirect.Target, folder);
+    status = LoadFromFolder(redirect.Target, PathFolderLength(redirect.Target));
     if (NT_SUCCESS(status))
         return true;
     XK_SERIAL("redirect: target did not load (%#lx); starting %s\n", status, Path);
@@ -695,7 +720,7 @@ static void LaunchTitle(ULONG Reason) {
             TitleLaunched = 3;
             return;
         }
-        status = LoadFromFolder(path, folder);
+        status = LoadFromFolder(path, folder, true);
         if (NT_SUCCESS(status)) {
             TitleLaunched = 3;
             return;

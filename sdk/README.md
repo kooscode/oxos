@@ -115,7 +115,7 @@ serial port of a debug kernel.
 | State page | `oxos_state()`: 4 KB that keep their contents from one launch to the next, until the next cold boot (all zero at first, and for a new `Version`) |
 | Files and folders | `oxos_file_read`, `oxos_file_write` (a whole file), `oxos_file_open`, `oxos_file_create`, `oxos_file_delete`, `oxos_file_rename`, `oxos_file_exists`, `oxos_file_list`; `oxos_directory_create`, `oxos_directory_delete`, `oxos_directory_rename`, `oxos_directory_exists`, `oxos_directory_list`; `oxos_list_free` |
 | Hooks | `oxos_hook(NtOpenFile, My_NtOpenFile)` and `oxos_next(NtOpenFile)(...)` (in `ExtensionStart`) |
-| Title events | `oxos_on_title_loading`, `oxos_on_title_loaded`, `oxos_on_title_exiting` (in `ExtensionStart`) |
+| Title events | `oxos_on_title_loading`, `oxos_on_title_loaded`, `oxos_on_title_exiting` (in `ExtensionStart`); `oxos_title_redirect` starts another XBE in place of a title being loaded |
 | The C library | `strlen`, `strcmp`, `strcasecmp`, `strchr`, `strstr`, `strlcpy`, `snprintf`, `strtoul`, `memcpy`, `memset`, `toupper`, `isdigit`, ... under their usual names |
 | The kernel | every function of the Xbox kernel, by name, as `include/oxos_kernel.h` declares it (`NtReadFile`, `KeTickCount`, `HalWriteSMBusValue`, ...) |
 

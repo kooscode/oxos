@@ -8,7 +8,7 @@
 
 namespace xk::graphics {
 
-#ifdef _WIN32 // the kernel: boot-only code, freed before the first title starts (spec/oxos_internal/18)
+#if defined(_WIN32) && !defined(XK_VECTOR_RENDERER_IN_APP) // the kernel: boot-only code, freed before the first title starts (spec/oxos_internal/18)
 #pragma code_seg(".xkb")
 #pragma const_seg(".xka$y")
 #endif

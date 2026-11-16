@@ -95,11 +95,11 @@ static void FireEvent(ULONG Event, PVOID Data) {
     }
 }
 
-void TitleLoading(PCSZ Path, BOOLEAN Dashboard) {
+void TitleLoading(PCSZ Path, BOOLEAN Dashboard, char *Target, ULONG TargetSize) {
     if (!LoadedExtensions)
         return;
     ULONG kind = !KiQuickRebootFlag ? OXOS_LAUNCH_COLD_BOOT : Dashboard ? OXOS_LAUNCH_DASHBOARD : OXOS_LAUNCH_TITLE;
-    OXOS_TITLE_LOADING data = {sizeof(data), Path, kind, LaunchDataPage};
+    OXOS_TITLE_LOADING data = {sizeof(data), Path, kind, LaunchDataPage, Target, Target ? TargetSize : 0};
     FireEvent(OXOS_EVENT_TITLE_LOADING, &data);
 }
 

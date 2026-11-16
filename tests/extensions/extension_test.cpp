@@ -30,6 +30,8 @@ struct SAVED {
     ULONG FileOps;            // the file and folder functions' round trip at the first launch: 1 passed, else the first step that failed (2, 3, ...)
     ULONG OwnSettingsOk;      // the settings of extension_test.ini at every Start: "own" there, and "both" from there, not from oxos_extensions.ini
     ULONG DataOk;             // oxos_ini_section at the first launch: 1 passed, else the first step that failed (2, 3, ...)
+    ULONG TrainerMark;        // the test title's XkTitleTrainerMark, read when it exits (the setting trainer_mark gives its address)
+    ULONG TrainerLaunches;    // exits of the test title (the setting trainer_title) at which it was read
 };
 
 static SAVED *Saved;
@@ -51,8 +53,16 @@ static void CountLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
     Saved->LastTitleId = Title->TitleId;
 }
 
+// The title-exiting event: the title is still in memory. In the test title (the setting trainer_title), the mark its trainer wrote before it started
+// (oxos_trainers.xos ran it, the setting trainer_mark gives its address).
 static void CountExiting(const OXOS_TITLE_EXITING *Title, void *UserData) {
     ++*(ULONG *)UserData;
+    ULONG markAddress = strtoul(oxos_setting("trainer_mark") ? oxos_setting("trainer_mark") : "0", nullptr, 16);
+    ULONG markTitle = strtoul(oxos_setting("trainer_title") ? oxos_setting("trainer_title") : "0", nullptr, 16);
+    if (markAddress && Saved->LastTitleId == markTitle) {
+        Saved->TrainerMark = *(volatile ULONG *)markAddress;
+        Saved->TrainerLaunches++;
+    }
 }
 
 static BOOLEAN SameText(const char *A, const char *B) {

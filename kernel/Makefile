@@ -266,9 +266,9 @@ bios_256k: $(BUILD)/bios_256k.bin
 
 # A release, in order, stopping at the first failure: every host unit test (tools/unit_tests.sh), the release images (1 MB and 256 KB, no self-tests, no serial
 # log), the dashboard test on them (make test_dash), and a check that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also packs the release file
-# build/kernel/release/dist/oxos_vX.Y.Z.zip: bios_vX.Y.Z.bin, bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin, the title patches
-# (title_patches/oxos_title_patches.ini) and the FTP server (tools/ftp_server, as ftp.xbe; built with nxdk, which `make nxdk` fetches), puts the kernel
-# extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip, from sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the
+# build/kernel/release/dist/oxos_vX.Y.Z.zip (release_zip, below: the three images, the FTP server, built with nxdk, which `make nxdk` fetches, the title
+# patches, the shipped extensions and the trainers, in the C:\OXOS layout), puts the kernel extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip,
+# from sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the
 # dashboard test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
@@ -277,21 +277,32 @@ release:
 	$(MAKE) BUILD=$(RELEASE16_BUILD) SELFTEST=0 MCPX16=1 $(RELEASE16_BUILD)/bios_256k.bin
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
-	$(if $(VERSION),$(MAKE) ftp_server)
+	$(if $(VERSION),$(MAKE) ftp_server extensions)
 	$(if $(VERSION),$(MAKE) -C $(ROOT)/sdk VERSION=$(VERSION))
-	$(if $(VERSION),rm -rf $(RELEASE_BUILD)/dist && mkdir -p $(RELEASE_BUILD)/dist && \
-	    cp $(RELEASE_BUILD)/bios.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION).bin && \
-	    cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_v$(VERSION)_256k.bin && \
-	    cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_BUILD)/dist/bios_1.6_v$(VERSION)_256k.bin && \
-	    cp title_patches/oxos_title_patches.ini $(RELEASE_BUILD)/dist/oxos_title_patches.ini && \
-	    cp $(FTP_SERVER_XBE) $(RELEASE_BUILD)/dist/ftp.xbe && \
-	    cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_BUILD)/dist/THIRD_PARTY_NOTICES.md && \
-	    cd $(RELEASE_BUILD)/dist && \
-	    zip -q -X oxos_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin bios_1.6_v$(VERSION)_256k.bin \
-	        oxos_title_patches.ini ftp.xbe THIRD_PARTY_NOTICES.md && \
-	    cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) . && \
-	    sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip bios_v$(VERSION).bin bios_v$(VERSION)_256k.bin \
-	        bios_1.6_v$(VERSION)_256k.bin oxos_title_patches.ini ftp.xbe)
+	$(if $(VERSION),$(MAKE) release_zip VERSION=$(VERSION))
+
+# The release zip, oxos_vVERSION.zip (spec/oxos_disk_layout.md, "The release zip"): OXOS\ as it goes on the console's C:\ (C:\OXOS), with the three BIOS
+# images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server, oxos_ftp.xbe), the extensions OXOS ships (oxos_extensions.ini enabling them), the
+# trainer pack in OXOS\trainers\ and the folders the kernel makes; the third-party notices beside it. The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and
+# their SHA-256 sums are in build/kernel/release/dist.
+RELEASE_DIST := $(RELEASE_BUILD)/dist
+RELEASE_OXOS := $(RELEASE_DIST)/zip/OXOS
+release_zip:
+	$(if $(VERSION),,$(error release_zip needs VERSION))
+	rm -rf $(RELEASE_DIST)
+	mkdir -p $(RELEASE_OXOS)/bios $(RELEASE_OXOS)/apps $(RELEASE_OXOS)/extensions $(RELEASE_OXOS)/trainers $(RELEASE_OXOS)/log $(RELEASE_OXOS)/cache
+	cp $(RELEASE_BUILD)/bios.bin $(RELEASE_OXOS)/bios/bios_v$(VERSION).bin
+	cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_OXOS)/bios/bios_v$(VERSION)_256k.bin
+	cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_OXOS)/bios/bios_1.6_v$(VERSION)_256k.bin
+	cp extensions/oxos_extensions.ini title_patches/oxos_title_patches.ini $(RELEASE_OXOS)/
+	set -e; for name in $(SHIPPED_EXTENSIONS); do cp $(SHIPPED_EXTENSIONS_DIR)/$$name/$$name.* \
+	    $(RELEASE_OXOS)/extensions/; done
+	cp $(ROOT)/third_party/xbox_trainers/trainers/*.etm $(RELEASE_OXOS)/trainers/
+	cp $(FTP_SERVER_XBE) $(RELEASE_OXOS)/apps/oxos_ftp.xbe
+	cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_DIST)/zip/
+	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip OXOS THIRD_PARTY_NOTICES.md
+	cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) $(RELEASE_DIST)/
+	cd $(RELEASE_DIST) && sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip zip/OXOS/bios/*.bin zip/OXOS/oxos_title_patches.ini zip/OXOS/apps/*.xbe
 
 # The image to flash once for network boots (tools/netboot/README.md): its 2BL asks tools/netboot/netboot.py for a kernel at every power-on and boots its own (a
 # serial-log build) when no PC answers.
@@ -407,10 +418,23 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 $$run || exit 1; \
 	done
 
-# Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions) and the SDK's example, built with the SDK as it ships
-# (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks, events,
-# RunLoops and Unloads (and log a slow RunLoop in C:\OXOS\log\extensions.log), and leave out the ones that fail, are refused or are not listed. The SDK's import
-# definitions are brought up to date with exports.tsv first (sdk/src/oxoskrnl.def, committed with it when they change).
+# The kernel extensions OXOS ships (kernel/extensions/NAME/, one folder each), built with the extension SDK as it ships, like anyone's extension, into
+# build/kernel/extensions/NAME/; an extension's app (NAME/app/, an nxdk app) is built too and copied there as NAME.xbe. oxos_trainers (Universal Trainers,
+# spec/oxos_internal/37) also gets its oxos_trainers.ini, generated from the trainer pack.
+SHIPPED_EXTENSIONS := $(notdir $(patsubst %/,%,$(wildcard extensions/*/)))
+SHIPPED_EXTENSIONS_DIR := $(abspath $(ROOT)/build/kernel/extensions)
+extensions: $(NXDK_READY)
+	$(MAKE) -C $(ROOT)/sdk
+	set -e; for name in $(SHIPPED_EXTENSIONS); do mkdir -p $(SHIPPED_EXTENSIONS_DIR)/$$name; \
+	    $(MAKE) -C extensions/$$name OXOS_OUT=$(SHIPPED_EXTENSIONS_DIR)/$$name; \
+	    if [ -d extensions/$$name/app ]; then $(NXDK_ENV) $(MAKE) -C extensions/$$name/app -j8; \
+	        cp $(SHIPPED_EXTENSIONS_DIR)/$$name/app/bin/default.xbe $(SHIPPED_EXTENSIONS_DIR)/$$name/$$name.xbe; fi; done
+	python3 -I $(ROOT)/tools/gen_trainers_ini.py $(ROOT)/third_party/xbox_trainers $(SHIPPED_EXTENSIONS_DIR)/oxos_trainers/oxos_trainers.ini
+
+# Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions), the SDK's examples and the shipped extensions, built with the SDK as
+# it ships (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks,
+# events, RunLoops and Unloads (and log a slow RunLoop in C:\OXOS\log\extensions.log), and leave out the ones that fail, are refused or are not listed. The
+# SDK's import definitions are brought up to date with exports.tsv first (sdk/src/oxoskrnl.def, committed with it when they change).
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
@@ -420,6 +444,8 @@ test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	mkdir -p $(TEST_EXTENSIONS_DIR)
 	$(MAKE) -C $(ROOT)/tests/extensions OXOS_OUT=$(TEST_EXTENSIONS_DIR)
 	cp $(ROOT)/build/sdk/examples/*/*.xos $(TEST_EXTENSIONS_DIR)/
+	$(MAKE) extensions
+	cp $(SHIPPED_EXTENSIONS_DIR)/*/*.xos $(SHIPPED_EXTENSIONS_DIR)/*/*.xbe $(TEST_EXTENSIONS_DIR)/
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
 	    --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR)
@@ -711,4 +737,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression extensions release_zip nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso

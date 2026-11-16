@@ -35,6 +35,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ✅ Title compatibility and title patches | answers games expect; per-title patches from `oxos_title_patches.ini` | [25](oxos_internal/25_title_compatibility.md) |
 | ✅ Launch redirects | `oxos_launch_redirect.ini` starts another XBE in place of one a title launches | [33](oxos_internal/33_launch_redirect.md) |
 | ✅ Trainers from dashboards | the title-start call dashboards patch for trainers (XBMC4Gamers); the trainer pack | [23](oxos_internal/23_trainer_hook.md), [trainer pack](../third_party/xbox_trainers/README.md) |
+| ✅ Universal Trainers | a game's trainer and chosen cheats from any dashboard, disc image or disc; a trainer menu before the game (`oxos_trainers.xbe`) or `oxos_trainers.ini` (extension `oxos_trainers.xos`) | [37](oxos_internal/37_universal_trainers.md) |
 | ✅ In-game reset | LT + RT + BACK + BLACK reboots from any title | [22](oxos_internal/22_in_game_reset.md) |
 
 ### On the console
@@ -59,7 +60,6 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 ## Planned
 | Feature | What it will do | Status | Spec |
 |---|---|---|---|
-| ⬜ Universal Trainers | a trainer menu before any game that has a trainer: trainer and each cheat on/off, remembered per game; no dashboard needed (extension `oxos_trainers.xos`) | proposal (2026-11-15) | [37](oxos_internal/37_universal_trainers.md) |
 | ⬜ Boot video | a video of the user's choice from `C:\OXOS\boot_videos\` before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
 | ⬜ Boot buttons and safe boot | X, B and A work with or without the splash; B is a safe boot (no extensions, no OXOS ini files or EEPROM settings, the standard splash with `[ SAFE MODE ]`, default dashboard; X or A during it for the File Manager or Setup); skip the splash with an EEPROM setting | proposal (2026-11-15) | [39 §1.1](oxos_internal/39_oxos_setup.md) |

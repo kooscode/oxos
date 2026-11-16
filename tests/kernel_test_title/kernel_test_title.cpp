@@ -87,6 +87,9 @@ extern "C" volatile RESULTS XkTitleResults = {};
 // one for B (in a section for another certificate version) and one for C whose original bytes are not the ones there.
 extern "C" volatile unsigned int XkTitlePatchA = 0x11111111, XkTitlePatchB = 0x22222222,
                                     XkTitlePatchC = 0x33333333;
+// Universal Trainers (spec/oxos_internal/37): boot_test.py --extensions installs a trainer for this title that writes 0xC0DE0001 here when its first cheat is on
+// (0xC0DE0000 when off); extension_test.xos reads it as the title exits.
+extern "C" volatile unsigned int XkTitleTrainerMark = 0x77777777;
 __attribute__((section(".extra"))) extern "C" const char XkExtraData[] = "data from a section loaded on demand";
 // The cache partition X:'s volume serial and sectors per cluster as the title finds them: on an exFAT disk, the format a title gave it before a power-off,
 // kept in C:\OXOS\cache\oxos_cache_partitions.cache (spec/oxos_internal/05 §5; boot_test.py --kept-cache-format checks them).

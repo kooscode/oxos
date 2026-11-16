@@ -11,8 +11,9 @@ namespace xk::extensions {
 void LoadExtensions();
 // The address a title's import of Ordinal is resolved to: the first extension's hook, else Target (§7.1).
 ULONG ResolveTitleImport(ULONG Ordinal, ULONG Target);
-// OXOS_EVENT_TITLE_LOADING for the XBE the kernel is about to load (§7.2); Dashboard as titles::LoadImage's.
-void TitleLoading(PCSZ Path, BOOLEAN Dashboard);
+// OXOS_EVENT_TITLE_LOADING for the XBE the kernel is about to load (§7.2); Dashboard as titles::LoadImage's. Target (TargetSize bytes, empty), when this load
+// may be redirected: an extension's oxos_title_redirect writes the XBE to load instead there.
+void TitleLoading(PCSZ Path, BOOLEAN Dashboard, char *Target, ULONG TargetSize);
 // OXOS_EVENT_TITLE_LOADED for the XBE now at 0x00010000, before its entry point runs.
 void TitleLoaded();
 // The title quick-reboots (HalReturnToFirmware(2)): OXOS_EVENT_TITLE_EXITING, then the run loop's end (up to 500 ms for the RunLoop call in progress) and each extension's Unload (§4.3).

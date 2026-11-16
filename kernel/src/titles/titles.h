@@ -24,7 +24,7 @@ bool ServeFileManager();
 // kept from the memory manager until then.
 void ReadNetbootTitle();
 bool LaunchNetbootTitle();                        // boot-only: call it only while memory::BootPagesPresent()
-NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard); // load an XBE (titles/title_loader.cpp); the caller enters it
+NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target = nullptr); // load an XBE (titles/title_loader.cpp); the caller enters it
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
 // STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be read (titles/title_loader.cpp; the kernel's files in C:\OXOS).
 char *ReadOXOSFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status);

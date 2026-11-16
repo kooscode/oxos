@@ -385,9 +385,17 @@ event's data, typed, and the `UserData` it was registered with. Called in `oxos_
 
 | Event | When | The callback gets | It may |
 |---|---|---|---|
-| title loading (`OXOS_TITLE_LOADING`) | before the XBE is loaded: after `oxos_launch_redirect.ini` (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them (version 1: replacing the XBE path is left to launch redirects, spec/oxos_internal/33) |
+| title loading (`OXOS_TITLE_LOADING`) | before the XBE is loaded: after `oxos_launch_redirect.ini` (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them; for a launch through the launch data page, start another XBE in its place (`oxos_title_redirect`, below) |
 | title loaded (`OXOS_TITLE_LOADED`) | the XBE is loaded and its thunks resolved, before its entry point | the title ID, name (plain text: the kernel turns the certificate's UTF-16 into 41 bytes of ASCII, others as `?`; user, 2026-11-14), certificate, XBE header, base | read or patch the title's image (as `oxos_title_patches.xos` does, §10) |
 | title exiting (`OXOS_TITLE_EXITING`) | the title calls `HalReturnToFirmware(2)` to start another XBE or the dashboard; the title is still in memory | the launch data page the title wrote | read it, or change the next launch |
+
+**Redirecting a launch (`oxos_title_redirect`, kernel 0.4.10):** in the title-loading event of a launch through the launch data page (a title or a dashboard
+started the XBE), an extension may name another XBE to start in its place. The kernel does not load the asked-for XBE, and loads the target as a launch
+redirect's (spec/oxos_internal/33 §3): its own folder as D:, the launch data page unchanged (its `LaunchPath` still names what was asked for), and the
+title-loading event for the target too, which cannot be redirected again. If the target does not load, the asked-for XBE is loaded. The first extension (in
+load order) that redirects wins; the cold boot's title, a return to the dashboard and a launch redirect's target cannot be redirected (`Target` is null).
+`OXOS_TITLE_LOADING` carries `Target` and `TargetSize` for it (kernels before 0.4.10 leave them out: `Size` is smaller, and `oxos_title_redirect` returns
+FALSE). First user: Universal Trainers (spec/oxos_internal/37), which starts its menu in place of a game that has a trainer.
 
 *Open:* events for the disk (mounted, formatted), the network (link up), and the controllers.
 
@@ -591,7 +599,7 @@ extension = oxos_title_patches.xos
 
 | Feature | Today | As an extension | Needs from §5/§7 |
 |---|---|---|---|
-| **Title patches** (`oxos_title_patches.ini`, spec/oxos_internal/25 §3; `title_patcher_ini.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the trainers zip with its patch file, **`oxos_title_patches.ini`** (the kernel's own file today, renamed in v0.4.7; user, 2026-11-14), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in the title-loaded event | the title-loaded event (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos_next(XeLoadSection)` has read it |
+| **Title patches** (`oxos_title_patches.ini`, spec/oxos_internal/25 §3; `title_patcher_ini.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the release zip (`OXOS/extensions/`) with its patch file, **`oxos_title_patches.ini`** (the kernel's own file today, renamed in v0.4.7; user, 2026-11-14), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in the title-loaded event | the title-loaded event (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos_next(XeLoadSection)` has read it |
 | **Netbooted title** (`title_netboot.cpp`, spec/oxos_internal/09 §7) | in the kernel, 981 bytes resident | `oxos_nettitle.xos`; installs the package as `E:\NAME\` and replaces the launch's XBE path with it | the netboot package's address and size in the kernel facts (§5.2; the kernel still keeps those pages from the memory manager); the title-loading event replaces the path |
 | **Call tracer** (`title_tracer.cpp`, `trace.S`, spec/oxos_internal/01) | a separate kernel build, `TRACE_IMPORTS=1/2` | `oxos_tracer.xos`, listed first in `oxos_extensions.ini` so it sees the title's calls first; release kernels can be traced | `oxos_hook` with its own assembly stubs for every hookable ordinal (the stubs keep the registers and jump to `Next`); its ring outside the memory manager at a fixed physical address with 128 MB, as `TRACE_IMPORTS=2` does |
 

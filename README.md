@@ -15,7 +15,8 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; press the X button for the [OXOS File Manager](#oxos-file-manager) to
   upload files and launch XBEs from any browser.
 - **Titles from Disk/ISO:** Fully supports running Titles of your own discs dumped to HDD, XISO or CCI.
-- **Trainers, title patches:** Supports trainers, and patches any title from an .ini file!
+- **Universal Trainers:** A [trainer menu](#universal-trainers) before any game that has a trainer, from any dashboard or disc image; 505 trainers included.
+- **Title patches:** Patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
@@ -24,15 +25,21 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.
 - **nxdk homebrew:** Fully supports the latest [nxdk](https://github.com/XboxDev/nxdk) and [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) homebrew.
-- **Release Testing:** 1,067 automated tests (host + xemu) plus hardware boots.
+- **Release Testing:** 1,080 automated tests (host + xemu) plus hardware boots.
 
 ## Try it
-Download the [latest release](https://github.com/kooscode/oxos/releases/latest) (`oxos_vX.Y.Z.zip`) and unzip it.
+Download the [latest release](https://github.com/kooscode/oxos/releases/latest) (`oxos_vX.Y.Z.zip`) and unzip it: the BIOS images are in `OXOS/bios/`.
 
 **xemu:** in *Machine → Settings → System*, set *Flash (BIOS) File* to `bios_vX.Y.Z.bin` and leave *MCPX Boot ROM File* empty. Use the free
 [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) disk or your own disk image.
 
-**Console:** flash the image for your revision to a modchip bank. Copy `oxos_title_patches.ini` to `C:\OXOS\` for the per-title fixes.
+**Console:** flash the image for your revision to a modchip bank. Then copy the zip's whole `OXOS` folder to `C:\` (on an exFAT disk: `/C/`), for Universal
+Trainers and the per-title fixes:
+- **easiest:** hold **X** while the console boots, open the web address it shows in a browser, go to `C:` and upload the whole `OXOS` folder
+  ([OXOS File Manager](#oxos-file-manager));
+- **or by FTP:** start `OXOS/apps/oxos_ftp.xbe` and copy the folder with any FTP client.
+
+When updating, keep your own `.ini` files (they hold your settings).
 
 | Console | Image |
 |---|---|
@@ -72,14 +79,23 @@ same network to:
 It is built into the kernel and its memory is freed when a title starts, so games lose nothing. There is no log-in: anyone on the local network can use it while
 it is on screen. [Details](spec/oxos_internal/32_file_manager_button.md).
 
-**For whole disks, FTP:** each release includes `ftp.xbe`, the OXOS FTP server ([`tools/ftp_server`](tools/ftp_server)). Upload it with the File Manager and
+**For whole disks, FTP:** each release includes the OXOS FTP server, `OXOS/apps/oxos_ftp.xbe` ([`tools/ftp_server`](tools/ftp_server)). Upload it with the File Manager and
 launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move and delete across the disk, several clients at once, at about 8 – 10 MB/s.
+
+## Universal Trainers
+<img width="100%" src="docs/oxos_trainers_halo2.jpg" alt="The OXOS Trainers menu before Halo 2: its title image, the trainer and each cheat with a switch, and Start Game">
+
+Start a game that has a trainer, from any dashboard or launcher: the trainer menu comes first. Switch the trainer and the cheats you want on, then
+**Start Game** (A). Games without a trainer start as always.
+- 505 trainers come with the release, in `C:\OXOS\trainers\`; each game's settings are kept in `C:\OXOS\extensions\oxos_trainers.ini`.
+- Works from every dashboard and with disc images; XBMC4Gamers' own trainers keep working.
+- [Details](spec/oxos_internal/37_universal_trainers.md).
 
 ## Games and disks
 - **exFAT:** format the disk as exFAT on a PC, or let OXOS do it: a blank or non-Xbox disk is formatted at boot after a 30 s countdown (turn the console off to
   keep it). The drives are folders at the disk's root: `/C`, `/E`, `/F`, ... ([details](spec/oxos_internal/30_disk_format.md)).
 - **Game folders:** [`tools/oxos_isonator`](tools/oxos_isonator) turns a disc image into a folder that dashboards such as XBMC4Gamers list as the game itself.
-- **Trainers:** XBMC4Gamers trainers (.etm, .xbtf) work as on a modded stock BIOS; a pack is in
+- **Trainers:** [Universal Trainers](#universal-trainers) for any dashboard; XBMC4Gamers trainers (.etm, .xbtf) also work as on a modded stock BIOS. The pack:
   [`third_party/xbox_trainers`](third_party/xbox_trainers/README.md).
 
 OXOS includes no games: make the images from discs you own.

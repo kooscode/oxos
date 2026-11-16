@@ -5,11 +5,12 @@ What each release file contains besides OXOS's own code (GPL-2.0, see `LICENSE`)
 
 | Release file | Third-party material | Section |
 |---|---|---|
-| `bios_*.bin` (in `oxos_vX.Y.Z.zip`) | Intel's CPU microcode; Cromwell's X-codes and EEPROM key states; hardware tables | [BIOS images](#bios-images) |
-| `ftp.xbe` (in `oxos_vX.Y.Z.zip`) | nxdk, lwIP, the Nuvoton USB host library, PDCLib, LLVM libc++, SDL 3 and nxdk-sdl3 | [The FTP server](#the-ftp-server-ftpxbe) |
-| `oxos_title_patches.ini` (in `oxos_vX.Y.Z.zip`) | none: OXOS's own | |
+| `OXOS/bios/bios_*.bin` (in `oxos_vX.Y.Z.zip`) | Intel's CPU microcode; Cromwell's X-codes and EEPROM key states; hardware tables | [BIOS images](#bios-images) |
+| `OXOS/apps/oxos_ftp.xbe` (in `oxos_vX.Y.Z.zip`; `ftp.xbe` up to v0.4.9) | nxdk, lwIP, the Nuvoton USB host library, PDCLib, LLVM libc++, SDL 3 and nxdk-sdl3 | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
+| `OXOS/extensions/oxos_trainers.xbe` (in `oxos_vX.Y.Z.zip`, from v0.4.10) | the same, without the network parts (nxdk's network driver, lwIP) | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
+| `OXOS/trainers/*.etm` (in `oxos_vX.Y.Z.zip`, from v0.4.10) | game trainers by members of the Xbox scene | [Game trainers](#game-trainers-oxostrainers) |
+| `OXOS/oxos_title_patches.ini`, `OXOS/oxos_extensions.ini`, `OXOS/extensions/oxos_trainers.xos` and `.ini` | none: OXOS's own | |
 | `oxos_sdk_vX.Y.Z.zip` | none: OXOS's own, under the MIT licence (`sdk/LICENSE`) | |
-| `xbox_trainers.zip` | game trainers by members of the Xbox scene | [Game trainers](#game-trainers-xbox_trainerszip) |
 
 ## BIOS images
 
@@ -72,14 +73,17 @@ pinned in `kernel/Makefile`.
 The video encoder and NV2A memory pad calibration tables are functional hardware constants taken from retail BIOS images; see
 [`dmca_compliance.md`](dmca_compliance.md).
 
-## The FTP server (`ftp.xbe`)
+## The FTP server and the trainer menu (`oxos_ftp.xbe`, `oxos_trainers.xbe`)
 
-`ftp.xbe` ([`tools/ftp_server`](tools/ftp_server)) is built with [nxdk](https://github.com/XboxDev/nxdk) and
+`oxos_trainers.xbe` (Universal Trainers' menu, [`kernel/extensions/oxos_trainers/app`](kernel/extensions/oxos_trainers/app)) is built the same way and links
+the same parts as `oxos_ftp.xbe` below, except the network ones (nxdk's network driver and lwIP glue, lwIP): it reads the disk, draws and reads the controllers.
+
+`oxos_ftp.xbe` ([`tools/ftp_server`](tools/ftp_server); `ftp.xbe` up to v0.4.9) is built with [nxdk](https://github.com/XboxDev/nxdk) and
 [SDL 3](https://www.libsdl.org) through [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3), at the commits pinned in `kernel/Makefile` (forks
 `kooscode/nxdk` and `kooscode/nxdk-sdl3`). The parts below are the ones linked into it (checked with the linker's list of the library members it uses, nxdk
 d1e7004, nxdk-sdl3 62455b7, SDL 3.4.18, lwIP 2.2.1); nxdk's other libraries (zlib, libpng, libjpeg, SDL 2) are not in it.
 
-| Part | What it does in `ftp.xbe` | Licence | Copyright |
+| Part | What it does in `oxos_ftp.xbe` | Licence | Copyright |
 |---|---|---|---|
 | nxdk: `winapi`, `xboxrt`, `hal`, `nxdk`, `pbkit` | Windows-style API, run-time support, hardware access, the GPU | MIT | the nxdk and OpenXDK contributors (below) |
 | nxdk network driver and lwIP glue (`nvnetdrv`, `nforceif`) | the network card | MIT; BSD-3-Clause | Stefan Schmidt, Ryan Wendland; Swedish Institute of Computer Science, Matt Borgerson |
@@ -337,7 +341,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-## Game trainers (`xbox_trainers.zip`)
+## Game trainers (`OXOS/trainers/`)
+
+From v0.4.10 the release zip holds the 505 trainers of `third_party/xbox_trainers/trainers/` in `OXOS/trainers/`, for Universal Trainers; up to v0.4.9 the
+pack was its own `xbox_trainers.zip`.
+
 
 `third_party/xbox_trainers/` holds 998 game trainers (.etm) for XBMC4Gamers, from the Internet Archive's "Xbox Original ETM Trainers" collection
 (https://archive.org/details/ETMTrainers). They are de-duplicated and renamed, with their contents unmodified. They were written by members of the Xbox scene

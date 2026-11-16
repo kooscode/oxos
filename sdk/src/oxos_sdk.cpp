@@ -426,6 +426,14 @@ static BOOLEAN RegisterEvent(ULONG Event, PVOID Callback, void *UserData) {
     return oxos_context->Api && NT_SUCCESS(oxos_context->Api->RegisterEvent(oxos_context, Event, Callback, UserData));
 }
 
+BOOLEAN oxos_title_redirect(const OXOS_TITLE_LOADING *Title, const char *Path) {
+    ULONG length = strlen(Path);
+    if (Title->Size < sizeof(OXOS_TITLE_LOADING) || !Title->Target || Title->Target[0] || length >= Title->TargetSize)
+        return FALSE;
+    memcpy(Title->Target, Path, length + 1);
+    return TRUE;
+}
+
 BOOLEAN oxos_on_title_loading(void (*Callback)(const OXOS_TITLE_LOADING *Title, void *UserData), void *UserData) {
     return RegisterEvent(OXOS_EVENT_TITLE_LOADING, reinterpret_cast<PVOID>(Callback), UserData);
 }

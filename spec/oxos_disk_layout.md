@@ -1,7 +1,12 @@
 # OXOS disk layout: every file and folder OXOS uses
 
-One page for every file and folder OXOS reads or writes, today and planned, each with its spec. ✅ exists today, ⬜ planned. Keep it current: a feature that
-adds a file adds it here, with its spec.
+One page for every file and folder OXOS reads or writes, today and planned, each with its spec:
+
+✅  = exists today.
+
+⬜  = planned.
+
+[  Keep it current: a feature that adds a file adds it here, with its spec. ]
 
 ## The rules
 - **Everything OXOS keeps on the hard disk is in `C:\OXOS`** (`\Device\Harddisk0\Partition2\OXOS`; `/C/OXOS/` on an exFAT disk): the same path on FATX and
@@ -18,31 +23,34 @@ adds a file adds it here, with its spec.
 ```
 C:\OXOS\                                  ✅ made at every cold boot
 ├── oxos_settings.ini                     ⬜ the kernel's options: [dashboard] order, toasts, in-game reset (38, 39)
-├── oxos_settings.xbe                     ⬜ OXOS Setup: hold A at boot (39)
 ├── oxos_extensions.ini                   ✅ which extensions load, in which order, enabled (34)
 ├── oxos_launch_redirect.ini              ✅ launch redirects (33)
-├── oxos_title_patches.ini                ✅ per-title patches, from the release zip (25); to extensions\ when title patches become one (34 §10)
+├── oxos_title_patches.ini                ✅ per-title patches (25) / Will move to extensions (34 §10)
 ├── oxos_eeprom_backup.bin                ⬜ all 256 EEPROM bytes, saved by OXOS Setup before it changes one (39)
+│
+├── apps\                                 ✅ OXOS's apps (from the release zip)
+│   ├── oxos_ftp.xbe                      ✅ the OXOS FTP server (tools/ftp_server)
+│   └── oxos_settings.xbe                 ⬜ OXOS Setup: hold A at boot (39)
 │
 ├── extensions\                           ✅ made at every cold boot; each extension with its own .ini of the same name
 │   ├── <anyone's>.xos + <same>.ini       ✅ the extension and its own settings (top) and data ([sections]) (34 §3.1)
 │   ├── oxos_title_patches.xos            ⬜ title patches (34 §10)
 │   ├── oxos_nettitle.xos                 ⬜ netboot titles (34 §10)
 │   ├── oxos_tracer.xos                   ⬜ kernel call tracer (34 §10)
-│   ├── oxos_trainers.xos                 ⬜ Universal Trainers, run-once (37)
-│   ├── oxos_trainers.ini                 ⬜   trainer and cheats per title
-│   ├── oxos_trainers.xbe                 ⬜   the trainer menu
+│   ├── oxos_trainers.xos                 ✅ Universal Trainers (37)
+│   ├── oxos_trainers.ini                 ✅ trainer and cheats per title ID
+│   ├── oxos_trainers.xbe                 ✅ the trainer menu, before a game that has a trainer
 │   ├── oxos_boot_video.xos               ⬜ boot video, run-once (38)
-│   ├── oxos_boot_video.ini               ⬜   cold_boot, quick_reboot, skippable
+│   ├── oxos_boot_video.ini               ⬜ cold_boot, quick_reboot, skippable
 │   ├── oxos_screenshots.xos              ⬜ screenshots (40)
-│   ├── oxos_screenshots.ini              ⬜   buttons, format
+│   ├── oxos_screenshots.ini              ⬜ buttons, format
 │   ├── oxos_debugger.xos                 ⬜ homebrew debugging on a real console (41)
 │   ├── oxos_playtime.xos                 ⬜ play time (42)
-│   └── oxos_playtime.ini                 ⬜   save_every, skip
+│   └── oxos_playtime.ini                 ⬜ save_every, skip
 │
-├── trainers\                             ⬜ .etm trainers for Universal Trainers (37)
+├── trainers\                             ✅ .etm trainers for Universal Trainers (37)
 ├── boot_videos\                          ⬜ boot videos, converted on a PC (38)
-├── screenshots\<title ID>\<date time>.png  ⬜ (40)
+├── screenshots\<titleID>\<datetime>.png  ⬜ (40)
 ├── playtime\                             ⬜ (42)
 │   ├── oxos_playtime.txt                 totals per title, never cleared (oxos_playtime.new while being replaced)
 │   └── oxos_playtime.log                 sessions to send (oxos_playtime.sending while the XBL Dashboard uploads)
@@ -69,6 +77,24 @@ C:\OXOS\                                  ✅ made at every cold boot
 | 40 | [Screenshots](oxos_internal/40_screenshots.md) |
 | 41 | [Homebrew debugging on a real console](oxos_internal/41_remote_debugging.md) |
 | 42 | [Play time](oxos_internal/42_play_time.md) |
+
+## The release zip
+`oxos_vX.Y.Z.zip` (`make -C kernel release VERSION=X.Y.Z`, the `release_zip` target) holds `C:\OXOS` as it is installed: copy its `OXOS` folder to `C:\`
+(`/C/` on an exFAT disk). When updating, keep your own `.ini` files (`oxos_extensions.ini`, `extensions\oxos_trainers.ini`): the zip's are the defaults.
+
+```
+oxos_vX.Y.Z.zip
+├── OXOS\
+│   ├── bios\                             bios_vX.Y.Z.bin (1 MB), bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin: to flash, not used from the disk
+│   ├── apps\                             oxos_ftp.xbe, the OXOS FTP server
+│   ├── oxos_extensions.ini               the shipped extensions, enabled (kernel/extensions/oxos_extensions.ini)
+│   ├── oxos_title_patches.ini
+│   ├── extensions\                       oxos_trainers.xos, oxos_trainers.xbe, oxos_trainers.ini (every trainer off)
+│   ├── trainers\                         the trainer pack's 505 .etm files
+│   ├── log\                              empty, as the kernel makes it
+│   └── cache\                            empty, as the kernel makes it
+└── THIRD_PARTY_NOTICES.md
+```
 
 ## On a USB stick used as a memory unit ⬜
 Everything about a memory unit is on the unit itself; nothing is kept on the console's hard disk (spec [05 §9](oxos_internal/05_exfat_storage_spec.md)). A

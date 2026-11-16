@@ -40,7 +40,7 @@ so skipping the splash adds no wait (and they would work without an AV pack too,
 | **X** only | the File Manager (spec 32) at once |
 | **B** | **safe boot:** every customization is skipped: no extensions, none of OXOS's ini files (`oxos_settings.ini`, `oxos_extensions.ini` and the extensions' own, `oxos_launch_redirect.ini`, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored. The standard splash and jingle show, with **`[ SAFE MODE ]`** in yellow at the top centre; the dashboards are tried in the built-in order (spec 19). Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
 | **B**, then **X** held during the safe boot's splash | safe boot, then the File Manager |
-| **B**, then **A** held during the safe boot's splash | safe boot, then OXOS Setup (`C:\OXOS\oxos_settings.xbe`), to put a setting right |
+| **B**, then **A** held during the safe boot's splash | safe boot, then OXOS Setup (`C:\OXOS\apps\oxos_settings.xbe`), to put a setting right |
 | **A** | OXOS Setup |
 
 Safe boot is wider than today's safe mode, which skips only the extensions and keeps launch redirects (spec 34 §3.3, §10): with B, nothing OXOS reads from the
@@ -64,15 +64,15 @@ section checksum (factory or user settings reset, wrong video standard or region
   Wear is no concern: EEPROMs are rated for about a million writes per byte.
 
 ## 2. How it could be built
-| | Built into the kernel (as the File Manager is) | An XBE in `C:\OXOS\` (`oxos_settings.xbe`), started by the kernel |
+| | Built into the kernel (as the File Manager is) | An XBE in `C:\OXOS\apps\` (`oxos_settings.xbe`), started by the kernel |
 |---|---|---|
 | Works on a blank or broken disk | yes | no: the File Manager stays the way out (spec 32) |
 | Kernel size and title memory | grows the kernel; the code must be boot-only (freed before titles, spec 18) | none |
 | Look and abilities | the kernel's own text screens | nxdk + SDL3 (`tools/sdl_screen`), like the other OXOS apps: richer, quicker to build |
 | Updating it | a BIOS flash | copy a file |
 
-The XBE is the likely choice, with the kernel's part kept small: read A at boot, start `C:\OXOS\oxos_settings.xbe`, and fall back to the File Manager when it is
-missing. The release zip would ship it next to `ftp.xbe`.
+The XBE is the likely choice, with the kernel's part kept small: read A at boot, start `C:\OXOS\apps\oxos_settings.xbe`, and fall back to the File Manager when it is
+missing. The release zip would ship it in `OXOS\apps\`, next to the FTP server (`oxos_ftp.xbe`).
 
 ## 3. Kernel changes it needs
 - A at boot (`kernel/src/gamepad/gamepad.cpp`, as X and B).

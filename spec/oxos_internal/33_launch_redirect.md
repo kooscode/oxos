@@ -47,6 +47,8 @@ feature.
 - **Not redirected:** a cold boot (the disc, the dashboard, a netbooted title), a return to the dashboard (a page with no path, `XLaunchNewImage(NULL)`), and
   launches from the OXOS File Manager.
 - **Once per launch:** the target is not looked up again, so two sections cannot send a launch around in a loop.
+- **Extensions** can redirect such a launch too, from the title-loading event (`oxos_title_redirect`, spec/oxos_internal/34 §7.2): after this file, when no
+  section matched. The target is loaded the same way (§3, §4).
 - **No file, no matching section:** the launch goes ahead unchanged. The file is read at each launch through the page, so a changed file counts from the next
   launch.
 

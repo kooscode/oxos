@@ -174,6 +174,8 @@ typedef struct OXOS_TITLE_LOADING { // the kernel is about to load an XBE (each 
     const char *Path;     // \Device\...\name.xbe
     ULONG LaunchKind;     // OXOS_LAUNCH_*
     PVOID LaunchDataPage; // the launch data page, or null
+    char *Target;         // where oxos_title_redirect writes; null when this load cannot be redirected (kernels before 0.4.10 leave both out)
+    ULONG TargetSize;
 } OXOS_TITLE_LOADING;
 
 typedef struct OXOS_TITLE_LOADED { // the XBE is loaded; it has not started yet
@@ -194,6 +196,13 @@ typedef struct OXOS_TITLE_EXITING { // the title is starting another title or th
 BOOLEAN oxos_on_title_loading(void (*Callback)(const OXOS_TITLE_LOADING *Title, void *UserData), void *UserData);
 BOOLEAN oxos_on_title_loaded(void (*Callback)(const OXOS_TITLE_LOADED *Title, void *UserData), void *UserData);
 BOOLEAN oxos_on_title_exiting(void (*Callback)(const OXOS_TITLE_EXITING *Title, void *UserData), void *UserData);
+
+// In the title-loading event: starts the XBE at Path (\Device\...) in place of Title->Path, as a launch redirect does (spec/oxos_internal/33 §3): the target
+// gets the launch data page unchanged (its LaunchPath still names what was asked for) and its own folder as D:, and goes through the title-loading event
+// itself (it cannot be redirected again). If it does not load, Title->Path is loaded as asked. Only a launch through the launch data page can be redirected (a
+// title or a dashboard started Title->Path; not the cold boot's title, the dashboard after a title, or a launch redirect's own target). FALSE when this one
+// cannot be, when an extension loaded earlier has already redirected it, or when Path is longer than 359 characters.
+BOOLEAN oxos_title_redirect(const OXOS_TITLE_LOADING *Title, const char *Path);
 
 // --- How the macros above work: nothing here to use
 

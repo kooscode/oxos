@@ -1,6 +1,7 @@
 // The vector renderer (src/graphics/vector_renderer.cpp; the scene format is in spec/oxos_internal/00_boot_splash.md §1.1): draws the shapes
 // tools/svg_splash.py makes from an SVG into a 640x480 picture, once for the start of the boot splash's animation and once for its end. Integer arithmetic only
-// and no kernel dependencies, so the same file builds into the kernel, the host preview tool (tools/vsplash) and the unit tests.
+// and no kernel dependencies, so the same file builds into the kernel, the host preview tool (tools/vsplash), the unit tests and oxos_trainers.xbe
+// (kernel/extensions/oxos_trainers/app, built with XK_VECTOR_RENDERER_IN_APP: no kernel section pragmas).
 #pragma once
 
 namespace xk::graphics::vector_renderer {
