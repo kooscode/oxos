@@ -84,7 +84,7 @@ it is on screen. [Details](spec/oxos_internal/32_file_manager_button.md).
 launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move and delete across the disk, several clients at once, at about 8 – 10 MB/s.
 
 ## Universal Trainers
-<img width="100%" src="docs/oxos_trainers_halo2.jpg" alt="The OXOS Trainers menu before Halo 2: its title image, the trainer and each cheat with a switch, and Start Game">
+<img width="100%" src="docs/oxos_trainers_halo2.jpg" alt="The OXOS Universal Trainers menu before Halo 2: its title image, the trainer and each cheat with a switch, and Start Game">
 
 Start a game that has a trainer, from any dashboard, launcher or disc: the trainer menu comes first. Switch the trainer and the cheats you want on, then
 **Start Game** (A). Games without a trainer start as always.

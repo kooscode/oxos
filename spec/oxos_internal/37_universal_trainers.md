@@ -84,7 +84,7 @@ An nxdk + SDL3 app (`kernel/extensions/oxos_trainers/app/`), started by `oxos_tr
 
 Measured on the console (2026-11-15, serial log): the decision in step 1 takes about 50 ms for a game with a section, in a 200 KB ini.
 
-**The look:** the OXOS letters over "TRAINERS" (`app/oxos_trainers_logo.svg`, drawn by the kernel's vector renderer, `kernel/src/graphics/vector_renderer.cpp`,
+**The look:** the OXOS letters over "UNIVERSAL TRAINERS" (`app/oxos_trainers_logo.svg`, drawn by the kernel's vector renderer, `kernel/src/graphics/vector_renderer.cpp`,
 from the scene `tools/svg_splash.py` makes at build time); the X turns from metal to green as in the boot splash. A grid and sparks behind, the title image in
 a turning reticle, a "+N" badge (a trainer with N cheats), the cheats with switches, a KEY tag on in-game-key cheats.
 
