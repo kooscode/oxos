@@ -15,8 +15,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Blank disk to dashboard without a PC:** New disks are formatted as exFAT at boot; press the X button for the [OXOS File Manager](#oxos-file-manager) to
   upload files and launch XBEs from any browser.
 - **Titles from Disk/ISO:** Fully supports running Titles of your own discs dumped to HDD, XISO or CCI.
-- **Universal Trainers:** A [trainer menu](#universal-trainers) before any game that has a trainer, from any dashboard or disc, on a console or in xemu; 505
-  trainers included.
+- **Universal Trainers:** Loads a [trainer menu](#universal-trainers) for games matching any of 1,000 trainers included.
 - **Title patches:** Patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
@@ -90,7 +89,7 @@ Start a game that has a trainer, from any dashboard, launcher or disc: the train
 **Start Game** (A). Games without a trainer start as always.
 - **Consoles and xemu:** works on a real Xbox and in [xemu](https://xemu.app), also with an ISO loaded through xemu's **Load Disc** (copy the `OXOS` folder
   to xemu's `C:` as on a console).
-- 505 trainers come with the release, in `C:\OXOS\trainers\`; each game's settings are kept in `C:\OXOS\extensions\oxos_trainers.ini`.
+- ~1,000 trainers come with the release, in `C:\OXOS\trainers\`; each game's settings are kept in `C:\OXOS\extensions\oxos_trainers.ini`.
 - Works from every dashboard, with disc images and with original discs; XBMC4Gamers' own trainers keep working.
 - [Details](spec/oxos_internal/37_universal_trainers.md).
 
