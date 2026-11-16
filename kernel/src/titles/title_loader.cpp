@@ -634,8 +634,9 @@ static ULONG PathFolderLength(PCSZ Path) {
 }
 
 // Loads Path with \??\D: linked to its first FolderLength characters, the folder it is started from (none when 0); the link is removed again when the image
-// does not load. Redirectable (a launch through the launch data page): an extension may start another XBE in its place (spec/oxos_internal/34 §7.2), which
-// is then loaded as a launch redirect's target is (spec/oxos_internal/33 §3: its own folder as D:), and Path as asked when it does not load.
+// does not load. Redirectable (a launch through the launch data page, or the disc started without one): an extension may start another XBE in its place
+// (spec/oxos_internal/34 §7.2), which is then loaded as a launch redirect's target is (spec/oxos_internal/33 §3: its own folder as D:), and Path as asked
+// when it does not load.
 static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength, bool Redirectable = false) {
     char folder[256];
     bool linked = false;
@@ -734,7 +735,7 @@ static void LaunchTitle(ULONG Reason) {
         }
         ULONG tray, before, after;
         HalReadSMCTrayState(&tray, &before);
-        status = LoadImage("\\Device\\CdRom0\\default.xbe", FALSE);
+        status = LoadFromFolder("\\Device\\CdRom0\\default.xbe", 0, !LaunchDataPage); // an extension may start its menu in the disc's place
         if (NT_SUCCESS(status)) {
             TitleLaunched = 1;
             return;

@@ -104,19 +104,31 @@ bool SameText(const std::string &a, const char *b) {
 
 // --- The game: the launch data page it was started with
 
+constexpr char OWN_NAME[] = "\\oxos_trainers.xbe";
+
 LAUNCH_DATA_PAGE SavedPage; // the page as the game's launcher wrote it, put back to start the game
 char GamePath[sizeof(SavedPage.Header.szLaunchPath)];
 
-// The game this menu was started for, from the launch data page's path ("\Device\...\folder;name.xbe"). False without one: the menu was started on its own.
+// The game this menu was started for, from the launch data page's path ("\Device\...\folder;name.xbe"). Without a page, the disc: oxos_trainers.xos starts
+// the menu in its place when the console starts it with no page (at power-on, a disc loaded in xemu), and the page made for it here has type 0xFFFFFFFF, which
+// the kernel frees as it starts the disc, so the game still gets no launch data. False when the menu was started on its own (a page that names nothing,
+// or the menu).
 bool ReadLaunchPage() {
-    if (!LaunchDataPage || !LaunchDataPage->Header.szLaunchPath[0])
+    if (!LaunchDataPage) {
+        std::memset(&SavedPage, 0, sizeof(SavedPage));
+        SavedPage.Header.dwLaunchDataType = 0xFFFFFFFF;
+        std::snprintf(SavedPage.Header.szLaunchPath, sizeof(SavedPage.Header.szLaunchPath), "\\Device\\CdRom0;default.xbe");
+    } else if (LaunchDataPage->Header.szLaunchPath[0]) {
+        std::memcpy(&SavedPage, LaunchDataPage, sizeof(SavedPage));
+    } else {
         return false;
-    std::memcpy(&SavedPage, LaunchDataPage, sizeof(SavedPage));
+    }
     std::snprintf(GamePath, sizeof(GamePath), "%s", SavedPage.Header.szLaunchPath);
     char *folderEnd = std::strchr(GamePath, ';');
     if (folderEnd)
         *folderEnd = '\\';
-    return true;
+    std::size_t length = std::strlen(GamePath), own = std::strlen(OWN_NAME);
+    return length < own || SDL_strcasecmp(GamePath + length - own, OWN_NAME) != 0; // a dashboard started the menu itself
 }
 
 // Starts the game as it was started before this menu: its launch data page as the launcher wrote it (the kernel's "already tried" flag cleared) and a quick
@@ -482,7 +494,8 @@ SDL_FColor FadeColour(SDL_FColor colour, float alpha) {
 
 // The OXOS palette (kernel/splash/oxos_splash.svg).
 const SDL_FColor GREEN = MakeColour(0x8BE31F), LIGHT_GREEN = MakeColour(0xC9F58A), PALE_GREEN = MakeColour(0xF4FFE6), DARK_GREEN = MakeColour(0x3C7A0C);
-const SDL_FColor DEEP_GREEN = MakeColour(0x0B1F04), METAL = MakeColour(0x5E6B58), TEXT = MakeColour(0xE6F2DE), DIM_TEXT = MakeColour(0x8FA58A), AMBER = MakeColour(0xFFC23D);
+const SDL_FColor DEEP_GREEN = MakeColour(0x0B1F04), METAL = MakeColour(0x5E6B58), TEXT = MakeColour(0xE6F2DE), DIM_TEXT = MakeColour(0x8FA58A);
+const SDL_FColor AMBER = MakeColour(0xFFC23D);
 
 float SmoothStep(float t) {
     t = std::clamp(t, 0.0f, 1.0f);
@@ -565,7 +578,8 @@ void FillRounded(float x, float y, float w, float h, float r, SDL_FColor top, SD
 }
 
 void StrokeRounded(float x, float y, float w, float h, float r, float width, SDL_FColor colour, SDL_BlendMode blend = SDL_BLENDMODE_BLEND) {
-    StrokeOutline(MakeRoundedOutline(x, y, w, h, r), MakeRoundedOutline(x + width, y + width, w - 2 * width, h - 2 * width, std::max(0.0f, r - width)), colour, blend);
+    std::vector<SDL_FPoint> inner = MakeRoundedOutline(x + width, y + width, w - 2 * width, h - 2 * width, std::max(0.0f, r - width));
+    StrokeOutline(MakeRoundedOutline(x, y, w, h, r), inner, colour, blend);
 }
 
 // A soft light around a rounded rectangle: rings fading outwards, added to what is there.
@@ -1108,7 +1122,8 @@ void DrawHints(float t) {
 // Start Game chosen: the screen flashes, says what starts, and fades to black.
 void DrawStarting(float t) {
     float since = t - Menu.StartingAt;
-    FillDown(0, 0, WIDTH, HEIGHT, FadeColour(PALE_GREEN, std::max(0.0f, 0.6f - since * 3)), FadeColour(GREEN, std::max(0.0f, 0.4f - since * 2)), SDL_BLENDMODE_ADD);
+    SDL_FColor flashTop = FadeColour(PALE_GREEN, std::max(0.0f, 0.6f - since * 3)), flashBottom = FadeColour(GREEN, std::max(0.0f, 0.4f - since * 2));
+    FillDown(0, 0, WIDTH, HEIGHT, flashTop, flashBottom, SDL_BLENDMODE_ADD);
     FillDown(0, 0, WIDTH, HEIGHT, MakeColour(0, SmoothStep(since / 0.7f)), MakeColour(0, SmoothStep(since / 0.7f)));
     if (!Menu.HaveTrainer)
         return;

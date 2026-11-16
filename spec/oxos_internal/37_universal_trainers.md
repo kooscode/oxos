@@ -18,8 +18,8 @@ Universal Trainers, OXOS does it for every launch, from any dashboard, the File 
    switches. A game without a trainer starts directly, with no screen and no wait.
 3. The game starts with its trainer when it is switched on. `C:\OXOS\log\extensions.log` says so: `[oxos_trainers] Halo 2: trainer Halo 2.etm applied, 2
    of 13 cheats on.` Only when XBMC4Gamers launches the game with its own trainer installed does OXOS leave it to XBMC4Gamers (spec 23 §5).
-4. The settings can also be edited in `oxos_trainers.ini` (§2). A game that is the cold boot's title (a disc in the drive at power-on) gets no menu (§4a) but
-   its trainer as the ini says.
+4. A disc the console starts by itself (in the drive at power-on, or loaded with xemu's "Load Disc") gets the menu too (§4a, step 2).
+5. The settings can also be edited in `oxos_trainers.ini` (§2).
 
 ## 2. The settings file
 `C:\OXOS\extensions\oxos_trainers.ini`, the extension's own (spec 34 §3.1), generated from the trainer pack by `tools/gen_trainers_ini.py`
@@ -76,8 +76,8 @@ An nxdk + SDL3 app (`kernel/extensions/oxos_trainers/app/`), started by `oxos_tr
 
 | Step | Where | What |
 |---|---|---|
-| 1. Which game | the title-loading event, a launch through the launch data page | read the XBE's title ID from its file (the image header and certificate, about 0.2 KB) before it is loaded; nothing more for an nxdk program (`CXBE`: the ISO launcher, homebrew), a title without a section or trainer file, or with XBMC4Gamers' hook installed |
-| 2. Redirect | `oxos_title_redirect` (spec 34 §7.2) | `C:\OXOS\extensions\oxos_trainers.xbe` in the game's place, when it exists; the state page remembers the game and this launch |
+| 1. Which game | the title-loading event, of a launch through the launch data page or of the disc | read the XBE's title ID from its file (the image header and certificate, about 0.2 KB) before it is loaded; nothing more for an nxdk program (`CXBE`: the ISO launcher, homebrew), a title without a section or trainer file, or with XBMC4Gamers' hook installed |
+| 2. Redirect | `oxos_title_redirect` (spec 34 §7.2) | `C:\OXOS\extensions\oxos_trainers.xbe` in the game's place, when it exists; the state page remembers the game and this launch. Also for the disc the console starts by itself, with no launch data page (power-on, xemu's "Load Disc"; 2026-11-15, v0.4.10b): the menu then takes the game to be `\Device\CdRom0\default.xbe`, and starts it with a page of type 0xFFFFFFFF, which the kernel frees as it starts the disc, so the game gets no launch data, as before |
 | 3. The menu | the app | reads the game's path from the launch data page (unchanged by the redirect), the game's XBE for its name and title image (`$$XTIMAGE`, else `E:\UDATA\<title ID>\TitleImage.xbx`; XPR0, DXT1/3/5 or 32-bit), its section and trainer |
 | 4. Start Game | the app | writes the section's changed values (only the values; a missing line is added at the section's end), puts back the launch data page as it was given (the kernel's "tried" flag cleared) and quick-reboots, as a dashboard starts a title |
 | 5. Through | the title-loading event | the launch right after the menu's, of the game it was started for, is not redirected; the title-loaded event runs the trainer as the section now says |
@@ -100,7 +100,6 @@ a turning reticle, a "+N" badge (a trainer with N cheats), the cheats with switc
 
 ## 6. Later
 - **All games' settings** from OXOS Setup (spec 39): the menu for any game with a trainer, without starting it.
-- **The cold boot's title:** a menu for a disc in the drive at power-on (the kernel would start the menu, with a launch data page made for it).
 - **Run-once** (spec 34 §4.3a): unload the extension (7 KB) once the trainer is installed; only the trainer stays.
 - **Several trainers for one title:** the pack's `variants/` (other regions, versions, cheat counts); today the section's `trainer =` names one.
 - **Wrong game version:** for the 32 trainers without their own check, record the XBE timestamp each was made for and refuse a mismatch.

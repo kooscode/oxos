@@ -393,7 +393,8 @@ event's data, typed, and the `UserData` it was registered with. Called in `oxos_
 started the XBE), an extension may name another XBE to start in its place. The kernel does not load the asked-for XBE, and loads the target as a launch
 redirect's (spec/oxos_internal/33 §3): its own folder as D:, the launch data page unchanged (its `LaunchPath` still names what was asked for), and the
 title-loading event for the target too, which cannot be redirected again. If the target does not load, the asked-for XBE is loaded. The first extension (in
-load order) that redirects wins; the cold boot's title, a return to the dashboard and a launch redirect's target cannot be redirected (`Target` is null).
+load order) that redirects wins. The disc the console starts without a launch data page (at power-on, or after a quick reboot without one) can be redirected too
+(kernel 0.4.10b); the dashboard, a netbooted title and a launch redirect's target cannot (`Target` is null).
 `OXOS_TITLE_LOADING` carries `Target` and `TargetSize` for it (kernels before 0.4.10 leave them out: `Size` is smaller, and `oxos_title_redirect` returns
 FALSE). First user: Universal Trainers (spec/oxos_internal/37), which starts its menu in place of a game that has a trainer.
 

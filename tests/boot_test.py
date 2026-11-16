@@ -18,7 +18,7 @@ import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
 from controller_test import xemu_env  # noqa: E402
-from virtual_gamepad import VirtualPad  # noqa: E402
+from virtual_gamepad import XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 
 def map_symbols(path):
@@ -524,7 +524,7 @@ OWN_INI_FILES = {
 TRAINERS_INI = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS kernel test title\r\ntrainer = xktest.etm\r\ntrainer_enabled = no\r\n"
                 "1. Write the mark = yes\r\n2. Unused = no\r\n")
 TRAINER_MENU_PATH = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_trainers.xbe"
-TRAINER_MENU_KEYS = (("HATY", 1), ("A", 1), ("START", 1))  # at the menu: down to the trainer's switch, switch it on, start the game
+TRAINER_MENU_KEYS = (("HATY", 1), ("A", 1), ("START", 1))  # at the relaunch's menu: down to the trainer's switch, switch it on, start the game
 
 
 def image_file_name(mon):
@@ -534,17 +534,17 @@ def image_file_name(mon):
     return raw.split(b"\0")[0].decode("latin-1")
 
 
-def use_trainer_menu(mon, pad):
-    """Waits for the trainer menu (oxos_trainers.xos starts it in place of the test title's relaunch), then presses TRAINER_MENU_KEYS on the virtual pad.
-    True when the menu came up."""
+def use_trainer_menu(mon, pad, reboots, keys):
+    """Waits for the trainer menu (oxos_trainers.xos starts it in place of the test title) after at least `reboots` quick reboots, then presses `keys` on the
+    virtual pad. True when the menu came up."""
     for _ in range(300):
-        if mon.read("KiQuickRebootCount") >= 1 and image_file_name(mon) == TRAINER_MENU_PATH:
+        if mon.read("KiQuickRebootCount") >= reboots and image_file_name(mon) == TRAINER_MENU_PATH:
             break
         time.sleep(0.1)
     else:
         return False
     time.sleep(4)  # the menu draws its logo, then reads the pad
-    for control, value in TRAINER_MENU_KEYS:
+    for control, value in keys:
         pad.set(control, value)
         time.sleep(0.15)
         pad.set(control, 0)
@@ -668,7 +668,7 @@ def extension_checks(mon, launches, hdd):
         "end line at each title's end": hook_lines[0::3] == [hook_start] * launches and hook_lines[2::3] == [hook_end] * (launches - 1) and
             len(hook_counts) == launches - 1 and all(hook_counts),
         f"example_title_event: {launches} launches in its state page; the title's name and the one before it": t[0] == launches and
-            '[example_title_event] "OXOS kernel test title" is starting, the first title since the cold boot.' in lines and
+            '[example_title_event] "OXOS Trainers" is starting, the first title since the cold boot.' in lines and  # the menu, before the disc
             any(l.startswith('[example_title_event] ') and 'the title before it was "OXOS kernel test title"' in l for l in lines),
         "example_title_event: the LED orange from its RunLoop, for the title led_title names (any case)":
             '[example_title_event] "OXOS kernel test title": the LED is orange.' in lines,
@@ -679,8 +679,9 @@ def extension_checks(mon, launches, hdd):
         "settings from oxos_extensions.ini and oxos_file_read": x[12] == 1 and x[13] == 1,
         "settings from the extension's own extension_test.ini, which win over its oxos_extensions.ini section": x[15] == 1,
         f"data: oxos_ini_section reads one section of a 28 KB extension_test.ini, keys with spaces; a missing section (step {x[16]}; 1 = all)": x[16] == 1,
-        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the relaunch, which switched the trainer on in oxos_trainers.ini; the "
-        f"trainer then ran with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})": x[17] == 0xC0DE0001 and x[18] == 2 and
+        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc and at the relaunch, which switched the trainer on in "
+        f"oxos_trainers.ini; the trainer then ran with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})": x[17] == 0xC0DE0001 and
+            x[18] == 2 and "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\default.xbe)." in lines and
             "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\media\\second.xbe)." in lines and
             lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest.etm applied, 1 of 2 cheats on.") == 1 and
             ini.replace(b"trainer_enabled = yes", b"trainer_enabled = no") == TRAINERS_INI.encode() and b"trainer_enabled = yes" in ini,
@@ -724,9 +725,10 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
         if mon.read("titles::TitleLaunched"):
             break
         time.sleep(0.25)
-    # With the extensions, the trainer menu comes up in place of the relaunch (one more quick reboot before the second run): pad drives it.
-    menu = 1 if pad else 0
-    menu_shown = use_trainer_menu(mon, pad) if pad else False
+    # With the extensions, the trainer menu comes up in place of the disc at the cold boot (START: the title as it is set) and of the relaunch (the trainer
+    # switched on): two more quick reboots, both before the second run. pad drives it.
+    menu = 2 if pad else 0
+    menu_shown = pad and use_trainer_menu(mon, pad, 0, (("START", 1),)) and use_trainer_menu(mon, pad, 2, TRAINER_MENU_KEYS)
     for i in range(160):  # includes the quick reboot into media\second.xbe
         v = mon.hmp(f"x/1wx {base:#x}")
         if os.environ.get("XK_DEBUG"):
@@ -785,7 +787,8 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
             "\\??\\D: -> launch directory": words[26] == 1,
         }
         if pad:
-            checks["the trainer menu (oxos_trainers.xbe) in place of the relaunch; the second run got the launch page as the first run wrote it"] = menu_shown
+            checks["the trainer menu (oxos_trainers.xbe) in place of the disc at the cold boot and of the relaunch; the second run got the launch page as the "
+                   "first run wrote it"] = bool(menu_shown)
     else:
         checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
     if TITLE_PATCHES and not relaunch:  # after a relaunch the dashboard runs: the title's memory is gone
@@ -1481,7 +1484,8 @@ def main():
         + (f"hdd_path = '{hdd_copy}'\n" if a.hdd or a.blank_hdd else "")
         + ("" if a.no_disc else f"dvd_path = '{dvd}'\n")
         + (f"\n[net]\nenable = true\nbackend = 'nat'\n[net.nat]\n"
-           f"forward_ports = [{{host = {a.upload}, guest = 80, protocol = 'tcp'}}]\n" if a.upload else ""))
+           f"forward_ports = [{{host = {a.upload}, guest = 80, protocol = 'tcp'}}]\n" if a.upload else "")
+        + (XEMU_PORT1_BINDING if a.upload or a.x_at_error or a.extensions else ""))
     log = open(os.path.join(work, "xemu.log"), "w")
     serial_log = os.path.join(work, "serial.log")
     serial_args = ["-device", "lpc47m157", "-serial", f"file:{serial_log}"] if a.serial else []
@@ -1521,7 +1525,7 @@ def main():
             results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions), pad=pad if a.extensions else None),
                        "RAM": ram_checks(mon, a.memory)}
             if a.extensions:
-                results["extensions"] = extension_checks(mon, 4, hdd_copy)  # with the trainer menu's launch
+                results["extensions"] = extension_checks(mon, 5, hdd_copy)  # with the trainer menu's two launches
         elif a.iso_launch:
             results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:

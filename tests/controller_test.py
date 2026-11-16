@@ -10,7 +10,7 @@ usage: controller_test.py --bios BIOS --iso controller_test_title.iso [--mcpx-ro
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from virtual_gamepad import VPAD_PRODUCT, VPAD_VENDOR, VirtualPad  # noqa: E402
+from virtual_gamepad import VPAD_PRODUCT, VPAD_VENDOR, XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 ANALOG = ["A", "B", "X", "Y", "BLACK", "WHITE", "LT", "RT"]
 DIGITAL = ["UP", "DOWN", "LEFT", "RIGHT", "START", "BACK", "LS", "RS"]
@@ -117,7 +117,7 @@ def main():
         "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\ndvd_path = '{os.path.abspath(a.iso)}'\n"
-        + (f"hdd_path = '{hdd}'\n" if a.hdd else ""))
+        + (f"hdd_path = '{hdd}'\n" if a.hdd else "") + XEMU_PORT1_BINDING)
     pad = VirtualPad()  # before xemu starts, so it is bound to a controller port at startup
     log = open(os.path.join(work, "xemu.log"), "w")
     env = xemu_env()

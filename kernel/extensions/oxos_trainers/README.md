@@ -51,5 +51,6 @@ trainer_enabled = yes
 - **XBMC4Gamers:** a game started from XBMC4Gamers with one of its own trainers installed (its hook in the kernel) gets XBMC4Gamers' trainer, not this one.
 - **ISO launchers and homebrew:** an nxdk program (its XBE's one library entry is `CXBE`) never gets a trainer or the menu, also when it carries a game's
   title ID, as OXOS's ISO launcher does: the menu and the trainer come with the game the launcher starts.
-- **The cold boot's title** (a disc in the drive at power-on) gets no menu, only its trainer as the ini says.
+- **A disc the console starts by itself** (in the drive at power-on, or loaded with xemu's "Load Disc"): the menu comes first too. With no launch data page,
+  the menu takes the game to be the disc, and starts it with a page the kernel frees as it starts the disc, so the game gets no launch data, as before.
 - Trainers that need a dashboard's helper routines (none in the pack) are not run.
