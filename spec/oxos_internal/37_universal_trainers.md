@@ -193,15 +193,20 @@ game can be chosen at once:
    the file, `trainer_enabled = no`, every cheat as in the file). A file OXOS cannot use (not a trainer, no title ID, needs a dashboard's helper routines) gets
    `FILE = why` in `[unusable trainers]`, so it is not read again. The build is read from plain code only (`cmp` with the timestamp at 0x10114); a trainer whose
    check is encoded gets `unknown` (the pack's own trainers have theirs from the index).
-4. Write the ini once, when something was added (an empty or missing ini gets a first line saying what it is). A new trainer for a section without a
-   `trainer =` becomes its trainer. Files that are gone are left in the ini (their section still names them; the menu says the file cannot be
-   read).
-5. Write how long each part took to `C:\OXOS\log\oxos_trainers_scan.log`, with `logging_enabled = yes` (step 3 of §1).
+4. Remove the lines of the files the ini names that are gone from the folder (user, 2026-11-17: delete a trainer file and the menu forgets it; only those
+   lines change, no other trainer is read). Their `trainer N` and `[unusable trainers]` lines go. A section whose `trainer =` file is gone gets the first of
+   its other trainers that can be read, switched off, with that trainer's cheats (as the menu writes a choice; the old cheat choices belonged to the deleted
+   trainer); a section left without any trainer is removed, with the blank line and comment lines right above it, so the menu no longer comes up for that
+   game (a menu already started for it starts the game at once). Nothing is removed when the folder cannot be listed to its end. A file copied back later
+   is new again (step 3).
+5. Write the ini once, when something changed (an empty or missing ini gets a first line saying what it is). A new trainer for a section without a
+   `trainer =` becomes its trainer.
+6. Write how long each part took to `C:\OXOS\log\oxos_trainers_scan.log`, with `logging_enabled = yes` (step 3 of §1).
 
 Started on its own (from a dashboard, with no game), the menu then shows "TRAINER REFRESH COMPLETE" (or "TRAINERS UP TO DATE"), how many trainers it added,
-how many files are no usable trainers and how many there are, and A leaves to the dashboard: the way from an empty ini to every trainer in it (in xemu: an
+how many files are no usable trainers, how many deleted trainers it removed and how many there are, and A leaves to the dashboard: the way from an empty ini to every trainer in it (in xemu: an
 empty ini and the 1,084 trainers, 551 sections built in 1.3 s; 14 s on the console). Starting any game that has a section does the same for the trainers
-that came since.
+that came or went since.
 
 With more than 50 new trainers the menu opens its screen first and shows "TRAINER REFRESH IN PROGRESS", "NEW TRAINERS: 838 OF 1076" and a progress bar while it
 reads them, redrawn about ten times a second, instead of a black screen (user, 2026-11-16).

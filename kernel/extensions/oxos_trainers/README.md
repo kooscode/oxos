@@ -20,6 +20,11 @@ extension = oxos_trainers.xos
 enabled = yes
 ```
 
+## Adding and removing trainers
+Copy `.etm` files into `C:\OXOS\trainers\`, or delete them there. The menu compares the folder with `oxos_trainers.ini` each time it starts: it adds the
+new files and removes the lines of deleted ones (a game left without any trainer loses its section, and the menu no longer comes up for it). Start a game
+that has a trainer, or start `oxos_trainers.xbe` on its own from a dashboard, which shows how many trainers it added and removed.
+
 ## Turning a trainer on
 Start the game from a dashboard, a launcher or the File Manager: the menu comes first. Switch the trainer and the cheats you want on (D-pad, A), then Start Game.
 The menu writes them to `oxos_trainers.ini`, which can also be edited by hand: it has a section for every title the pack has a trainer for, named by the title

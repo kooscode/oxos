@@ -522,15 +522,24 @@ OWN_INI_FILES = {
 
 
 # The test title's section: two trainers (xktest.etm writes the mark 0xC0DE0001, xktest_two.etm 0xC0DE0002), the first one set, with a keys line the
-# extension must not take for a switch. A third, xktest_new.etm (0xC0DE0003), is on the disk but not in the ini: the menu's scan adds it.
+# extension must not take for a switch. A third, xktest_new.etm (0xC0DE0003), is on the disk but not in the ini: the menu's scan adds it. xktest_gone.etm is
+# in the ini but not on the disk (deleted): the scan removes its trainer 3 line, the section of a title it was the only trainer of (with the blank line and
+# comment above it), and gives the title it was chosen for its other trainer, off.
 TRAINERS_INI = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS kernel test title\r\ntrainer = xktest.etm\r\ntrainer_enabled = no\r\n"
                 "1. Write the mark = yes\r\n1 keys = RIGHT STICK + D-PAD DOWN\r\n2. Unused = no\r\n"
-                "trainer 1 = xktest.etm | build any | keys 1: RIGHT STICK + D-PAD DOWN\r\ntrainer 2 = xktest_two.etm | build any\r\n")
-# The section as the menu leaves it: the scan's trainer 3, and the second trainer chosen and switched on with its cheat 1 (TRAINER_MENU_KEYS).
+                "trainer 1 = xktest.etm | build any | keys 1: RIGHT STICK + D-PAD DOWN\r\ntrainer 2 = xktest_two.etm | build any\r\n"
+                "trainer 3 = xktest_gone.etm | build any\r\n"
+                "\r\n; its only trainer deleted\r\n[584B00FF]\r\ntitle = Gone\r\ntrainer = xktest_gone.etm\r\ntrainer_enabled = yes\r\n1. Cheat = yes\r\n"
+                "\r\n; its chosen trainer deleted\r\n[584B00FE]\r\ntitle = Chosen again\r\ntrainer = xktest_gone.etm\r\ntrainer_enabled = yes\r\n"
+                "1. Cheat = yes\r\ntrainer 1 = xktest_gone.etm | build any\r\ntrainer 2 = xktest_two.etm | build any\r\n")
+# The ini as the menu leaves it: the scan's trainer 4 and the deleted trainer's lines gone; the second trainer chosen and switched on with its cheat 1
+# (TRAINER_MENU_KEYS).
 TRAINERS_INI_AFTER = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS kernel test title\r\ntrainer = xktest_two.etm\r\ntrainer_enabled = yes\r\n"
                       "1. Write the mark = yes\r\n2. Unused = no\r\n"
                       "trainer 1 = xktest.etm | build any | keys 1: RIGHT STICK + D-PAD DOWN\r\ntrainer 2 = xktest_two.etm | build any\r\n"
-                      "trainer 3 = xktest_new.etm | build unknown\r\n")
+                      "trainer 4 = xktest_new.etm | build unknown\r\n"
+                      "\r\n; its chosen trainer deleted\r\n[584B00FE]\r\ntitle = Chosen again\r\ntrainer = xktest_two.etm\r\ntrainer_enabled = no\r\n"
+                      "1. Write the mark = no\r\n2. Unused = no\r\ntrainer 2 = xktest_two.etm | build any\r\n")
 TRAINER_MENU_PATH = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_trainers.xbe"
 # At the relaunch's menu: right to the second trainer, down to the trainer's switch and on, down to cheat 1 and on, start the game.
 TRAINER_MENU_KEYS = (("HATX", 1), ("HATY", 1), ("A", 1), ("HATY", 1), ("A", 1), ("START", 1))
@@ -693,9 +702,9 @@ def extension_checks(mon, launches, hdd):
         "settings from oxos_extensions.ini and oxos_file_read": x[12] == 1 and x[13] == 1,
         "settings from the extension's own extension_test.ini, which win over its oxos_extensions.ini section": x[15] == 1,
         f"data: oxos_ini_section reads one section of a 28 KB extension_test.ini, keys with spaces; a missing section (step {x[16]}; 1 = all)": x[16] == 1,
-        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc (its scan adding the trainer new on the disk) and at the "
-        f"relaunch, which chose the second trainer and switched it on in oxos_trainers.ini; that trainer then ran with its cheat 1 on (mark {x[17]:#x} at the "
-        f"test title's last exit, of {x[18]})": x[17] == 0xC0DE0002 and
+        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc (its scan adding the trainer new on the disk and removing "
+        f"the deleted one's lines) and at the relaunch, which chose the second trainer and switched it on in oxos_trainers.ini; that trainer then ran "
+        f"with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})": x[17] == 0xC0DE0002 and
             x[18] == 2 and "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\default.xbe)." in lines and
             "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\media\\second.xbe)." in lines and
             lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest_two.etm applied, 1 of 2 cheats on.") == 1 and

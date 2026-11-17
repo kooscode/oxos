@@ -598,10 +598,10 @@ struct EDIT {
     std::string Text;      // by this
 };
 
-// Text with the edits made, in the order of their place in it (edits at the same place in the order given).
+// Text with the edits made, in the order of their place in it; at one place the added text (no bytes replaced) first, then in the order given.
 std::string MakeEdits(const std::string &text, std::vector<EDIT> &edits) {
     std::stable_sort(edits.begin(), edits.end(), [](const EDIT &a, const EDIT &b) {
-        return a.At < b.At;
+        return a.At < b.At || (a.At == b.At && a.Bytes == 0 && b.Bytes != 0);
     });
     std::string edited;
     std::size_t copied = 0;
@@ -671,14 +671,16 @@ bool WriteOtherTrainer(bool enabled, const CHOICE &choice, const std::vector<boo
     return WriteEdits(edits);
 }
 
-// --- New trainers: the trainers folder against the ini, first thing at every start of the menu (spec/oxos_internal/37 §7.3)
+// --- New and deleted trainers: the trainers folder against the ini, first thing at every start of the menu (spec/oxos_internal/37 §7.3)
 //
 // A first pass lists the folder's file names and the names the ini knows (trainer =, trainer N =, the [unusable trainers] section); only the files it does not
 // know are read. Each is added to the section of each title ID it lists, as that title's next "trainer N" (the section's own trainer becoming trainer 1), or
-// gets a new section; a file OXOS cannot use as a trainer gets a line in [unusable trainers], so it is not read again. The ini is written once, when something
-// was added, before the game's section is read: a trainer copied in for this game can be chosen at once. With more than NEW_TRAINERS_SHOWN new files the
-// menu shows a refresh screen meanwhile (ShowRefresh). How long each part took is written to C:\OXOS\log\oxos_trainers_scan.log when the extension's
-// section of oxos_extensions.ini says logging_enabled = yes.
+// gets a new section; a file OXOS cannot use as a trainer gets a line in [unusable trainers], so it is not read again. The lines of names whose files are
+// gone are removed (RemoveDeletedTrainers): a section whose trainer = file is gone gets another of its trainers, switched off (RechooseTrainers), and a
+// section left without any is removed, so the menu no longer comes up for that game. The ini is written once, when something changed, before the game's
+// section is read: a trainer copied in for this game can be chosen at once. With more than NEW_TRAINERS_SHOWN new files the menu shows a refresh screen
+// meanwhile (ShowRefresh). How long each part took is written to C:\OXOS\log\oxos_trainers_scan.log when the extension's section of oxos_extensions.ini
+// says logging_enabled = yes.
 
 constexpr char TRAINERS_FOLDER_NAME[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\trainers";
 constexpr char SCAN_LOG_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\log\\oxos_trainers_scan.log";
@@ -711,9 +713,11 @@ bool IsLoggingEnabled() {
     return false;
 }
 
-// The names of the .etm files in C:\OXOS\trainers.
-std::vector<std::string> ListTrainerFiles() {
-    std::vector<std::string> names;
+constexpr NTSTATUS LISTING_ENDED = static_cast<NTSTATUS>(0x80000006); // STATUS_NO_MORE_FILES: a folder listing's end
+constexpr NTSTATUS LISTING_EMPTY = static_cast<NTSTATUS>(0xC000000F); // STATUS_NO_SUCH_FILE: the first query of an empty folder
+
+// The names of the .etm files in C:\OXOS\trainers: false when the folder could not be read to its end (no file is then taken for deleted).
+bool ListTrainerFiles(std::vector<std::string> &names) {
     ANSI_STRING name;
     RtlInitAnsiString(&name, TRAINERS_FOLDER_NAME);
     OBJECT_ATTRIBUTES attributes;
@@ -722,11 +726,15 @@ std::vector<std::string> ListTrainerFiles() {
     HANDLE folder;
     if (!NT_SUCCESS(NtOpenFile(&folder, FILE_LIST_DIRECTORY | SYNCHRONIZE, &attributes, &iosb, FILE_SHARE_READ,
                                FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
-        return names;
+        return false;
     alignas(8) static unsigned char buffer[16384];
+    bool complete = false;
     for (bool first = true;; first = false) {
-        if (!NT_SUCCESS(NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, first)))
-            break; // STATUS_NO_MORE_FILES at the end
+        NTSTATUS status = NtQueryDirectoryFile(folder, nullptr, nullptr, nullptr, &iosb, buffer, sizeof(buffer), FileDirectoryInformation, nullptr, first);
+        if (!NT_SUCCESS(status)) {
+            complete = status == LISTING_ENDED || status == LISTING_EMPTY;
+            break;
+        }
         for (ULONG offset = 0;;) {
             auto entry = reinterpret_cast<FILE_DIRECTORY_INFORMATION *>(buffer + offset);
             std::string file(entry->FileName, entry->FileNameLength);
@@ -738,7 +746,7 @@ std::vector<std::string> ListTrainerFiles() {
         }
     }
     NtClose(folder);
-    return names;
+    return complete;
 }
 
 std::string MakeLowerCase(std::string text) {
@@ -800,6 +808,16 @@ struct SCANNED_SECTION {
     std::size_t End = 0;         // after its last key line: where lines are added
     std::string Trainer;         // its trainer =
     unsigned LastNumber = 0;     // its highest "trainer N"
+    std::size_t Start = 0;       // where it begins when it is removed: the blank line and comment lines right above its [header], or the header
+    bool Removed = false;        // removed by this scan: none of its trainers is left
+};
+
+// A line of the ini that names a trainer file.
+struct LISTED_LINE {
+    std::string File;            // the file's name, lower case
+    std::size_t Start, End;      // the line, its line end included
+    std::size_t Section;         // its section, in SCAN::Sections
+    bool Chosen;                 // trainer = (else trainer N =, or a line of [unusable trainers])
 };
 
 struct SCAN {
@@ -807,8 +825,11 @@ struct SCAN {
     std::string LineEnd = "\r\n";                      // as the file has them
     std::vector<std::pair<std::string, SCANNED_SECTION>> Sections; // by name, lower case
     std::vector<std::string> Known;                    // the trainer file names the ini knows, lower case
-    std::vector<EDIT> Edits;                           // the lines added
+    std::vector<LISTED_LINE> Listed;                   // the lines that name them
+    std::vector<EDIT> Edits;                           // the lines added and removed
     std::size_t Unusable = 0;                          // of the new files, those [unusable trainers] got
+    std::size_t Deleted = 0;                           // the files the ini names that are gone from the folder
+    std::vector<std::string> Rechoose;                 // the sections whose trainer = file is gone, but not all their trainers
 };
 
 // What the last scan found, for the menu started on its own (DrawRefreshDone).
@@ -816,6 +837,7 @@ struct SCAN_RESULT {
     std::size_t Files = 0;    // trainer files in the folder
     std::size_t Added = 0;    // new ones added to the ini as trainers
     std::size_t Unusable = 0; // new ones OXOS cannot use
+    std::size_t Deleted = 0;  // files the ini named that are gone, their lines removed
     bool Written = true;      // the ini was written, or did not need to be
 };
 
@@ -823,7 +845,7 @@ SCAN_RESULT ScanResult;
 
 SCANNED_SECTION *FindScannedSection(SCAN &scan, const std::string &name) {
     for (auto &section : scan.Sections) {
-        if (section.first == name)
+        if (section.first == name && !section.second.Removed)
             return &section.second;
     }
     return nullptr;
@@ -838,6 +860,7 @@ void ReadScannedIni(SCAN &scan) {
     std::size_t size = scan.Ini.size();
     SCANNED_SECTION *section = nullptr;
     bool unusable = false;
+    std::size_t above = std::string::npos; // the blank line and comment lines right above this line: where they start
     for (std::size_t line = 0; line < size;) {
         const char *newline = static_cast<const char *>(std::memchr(text + line, '\n', size - line));
         std::size_t end = newline ? newline - text + 1 : size, start = line;
@@ -848,7 +871,8 @@ void ReadScannedIni(SCAN &scan) {
         if (first == '[') {
             const char *close = static_cast<const char *>(std::memchr(text + start, ']', end - start));
             if (close) {
-                scan.Sections.push_back({MakeLowerCase(std::string(text + start + 1, close)), SCANNED_SECTION{end, "", 0}});
+                std::size_t removalStart = above == std::string::npos ? line : above;
+                scan.Sections.push_back({MakeLowerCase(std::string(text + start + 1, close)), SCANNED_SECTION{end, "", 0, removalStart}});
                 section = &scan.Sections.back().second;
                 unusable = scan.Sections.back().first == UNUSABLE_SECTION;
             }
@@ -863,16 +887,27 @@ void ReadScannedIni(SCAN &scan) {
                         value.pop_back();
                     value = TrimText(value);
                     unsigned number = TrainerLineNumber(key);
-                    if (unusable)
+                    std::size_t index = scan.Sections.size() - 1;
+                    if (unusable) {
                         scan.Known.push_back(MakeLowerCase(key));
+                        scan.Listed.push_back({scan.Known.back(), line, end, index, false});
+                    }
                     if (SameText(key, "trainer"))
                         section->Trainer = value;
                     section->LastNumber = std::max(section->LastNumber, number);
-                    if (!unusable && (number || SameText(key, "trainer")))
+                    if (!unusable && (number || SameText(key, "trainer"))) {
                         scan.Known.push_back(MakeLowerCase(TrimText(value.substr(0, value.find('|')))));
+                        scan.Listed.push_back({scan.Known.back(), line, end, index, number == 0});
+                    }
                 }
             }
         }
+        if (first == '\r' || first == '\n')
+            above = line;
+        else if (first == ';' || first == '#')
+            above = above == std::string::npos ? line : above;
+        else
+            above = std::string::npos;
         line = end;
     }
 }
@@ -946,6 +981,67 @@ void AddTrainer(SCAN &scan, const std::string &file) {
     }
 }
 
+// The lines of the trainer files the ini names that are gone from the folder (present: the folder's names, lower case, sorted), removed. A section whose
+// trainer = file is gone keeps its other trainers and gets one of them after the ini is written (RechooseTrainers); with none left it is removed.
+void RemoveDeletedTrainers(SCAN &scan, const std::vector<std::string> &present) {
+    auto isGone = [&](const LISTED_LINE &listed) {
+        return !std::binary_search(present.begin(), present.end(), listed.File);
+    };
+    std::vector<std::string> gone;
+    for (const LISTED_LINE &listed : scan.Listed) {
+        if (isGone(listed))
+            gone.push_back(listed.File);
+    }
+    std::sort(gone.begin(), gone.end());
+    scan.Deleted = std::unique(gone.begin(), gone.end()) - gone.begin();
+    if (!scan.Deleted)
+        return;
+    for (std::size_t s = 0; s < scan.Sections.size(); s++) {
+        bool chosenGone = false, otherLeft = false;
+        for (const LISTED_LINE &listed : scan.Listed) {
+            if (listed.Section != s)
+                continue;
+            if (listed.Chosen)
+                chosenGone = isGone(listed);
+            else if (!isGone(listed))
+                otherLeft = true;
+        }
+        if (!chosenGone)
+            continue;
+        SCANNED_SECTION &section = scan.Sections[s].second;
+        if (otherLeft) {
+            scan.Rechoose.push_back(scan.Sections[s].first);
+            continue;
+        }
+        scan.Edits.push_back({section.Start, section.End - section.Start, ""});
+        section.Removed = true;
+    }
+    for (const LISTED_LINE &listed : scan.Listed) {
+        if (isGone(listed) && !listed.Chosen && !scan.Sections[listed.Section].second.Removed)
+            scan.Edits.push_back({listed.Start, listed.End - listed.Start, ""});
+    }
+}
+
+// Each section whose trainer = file is gone: the first of its trainers that can be read becomes its trainer, switched off, with that trainer's cheats as
+// its file has them and its keys (written as the menu writes a choice). False when a section could not be written.
+bool RechooseTrainers(const std::vector<std::string> &sections) {
+    bool written = true;
+    for (const std::string &name : sections) {
+        SectionKeys.clear();
+        const KEY_LINE *current = ReadSection(std::strtoul(name.c_str(), nullptr, 16)) ? FindKey("trainer") : nullptr;
+        if (!current)
+            continue;
+        for (CHOICE &choice : ReadChoices(current->Value)) {
+            if (!ReadTrainer(choice.File.c_str(), choice.Trainer))
+                continue;
+            written = WriteOtherTrainer(false, choice, choice.Trainer.Defaults, choice.Keys) && written;
+            break;
+        }
+    }
+    SectionKeys.clear();
+    return written;
+}
+
 // The scan: false only when the ini could not be written. With more than NEW_TRAINERS_SHOWN new trainers, showProgress (when given) is called before each
 // is read and once at the end, with how many are done of how many.
 bool ScanTrainers(void (*showProgress)(std::size_t done, std::size_t total)) {
@@ -961,12 +1057,20 @@ bool ScanTrainers(void (*showProgress)(std::size_t done, std::size_t total)) {
         return std::string(text);
     };
     ULONGLONG start = now();
-    std::vector<std::string> files = ListTrainerFiles();
+    std::vector<std::string> files;
+    bool complete = ListTrainerFiles(files);
     ULONGLONG listed = now();
     SCAN scan;
     ReadWholeFile(INI_PATH, scan.Ini);
     ReadScannedIni(scan);
     std::sort(scan.Known.begin(), scan.Known.end());
+    if (complete) {
+        std::vector<std::string> present;
+        for (const std::string &file : files)
+            present.push_back(MakeLowerCase(file));
+        std::sort(present.begin(), present.end());
+        RemoveDeletedTrainers(scan, present);
+    }
     std::vector<std::string> added;
     for (const std::string &file : files) {
         if (!std::binary_search(scan.Known.begin(), scan.Known.end(), MakeLowerCase(file)))
@@ -988,12 +1092,15 @@ bool ScanTrainers(void (*showProgress)(std::size_t done, std::size_t total)) {
         scan.Edits.insert(scan.Edits.begin(), {0, 0, first + scan.LineEnd});
     }
     bool written = scan.Edits.empty() || WriteWholeFile(INI_PATH, MakeEdits(scan.Ini, scan.Edits));
-    ScanResult = {files.size(), added.size() - scan.Unusable, scan.Unusable, written};
+    if (written)
+        written = RechooseTrainers(scan.Rechoose);
+    ScanResult = {files.size(), added.size() - scan.Unusable, scan.Unusable, scan.Deleted, written};
     ULONGLONG done = now();
     std::string log = "Trainer scan: " + std::to_string(files.size()) + " files listed in " + milliseconds(start, listed) + " ms; the ini (" +
                       std::to_string(scan.Ini.size() / 1024) + " KB, " + std::to_string(scan.Known.size()) + " names) read and compared in " +
                       milliseconds(listed, compared) + " ms; " + std::to_string(added.size()) + " new read and added in " + milliseconds(compared, read) +
-                      " ms; " + (scan.Edits.empty() ? "nothing to write" : written ? "ini written" : "ini NOT written") + " in " + milliseconds(read, done) +
+                      " ms; " + std::to_string(scan.Deleted) + " deleted removed; " +
+                      (scan.Edits.empty() ? "nothing to write" : written ? "ini written" : "ini NOT written") + " in " + milliseconds(read, done) +
                       " ms. Total " + milliseconds(start, done) + " ms.\r\n";
     if (IsLoggingEnabled())
         WriteWholeFile(SCAN_LOG_PATH, log);
@@ -1345,6 +1452,7 @@ enum ITEM { START_ITEM = 0, TRAINER_ITEM = 1, FIRST_CHEAT = 2 };
 
 struct MENU {
     bool HaveGame = false, HaveTrainer = false;
+    bool HaveSection = false;      // the ini has the game's section (the scan removes it when all the game's trainers were deleted)
     const char *Problem = nullptr; // why there is no trainer to set (the screen says so; A starts the game)
     GAME Game;
     TRAINER Trainer;
@@ -1401,7 +1509,8 @@ void LoadMenu() {
         ReadSavedGamesImage(Menu.Game);
     if (!DecodeTitleImage(Menu.Game.Image, Menu.Picture))
         Menu.Picture = {};
-    const KEY_LINE *file = ReadSection(Menu.Game.TitleId) ? FindKey("trainer") : nullptr;
+    Menu.HaveSection = ReadSection(Menu.Game.TitleId);
+    const KEY_LINE *file = Menu.HaveSection ? FindKey("trainer") : nullptr;
     if (!file || !ReadTrainer(file->Value.c_str(), Menu.Trainer)) {
         Menu.Problem = file ? "Its trainer file cannot be read." : "No trainer for this game.";
         return;
@@ -1920,7 +2029,7 @@ void ShowRefresh(std::size_t done, std::size_t total) {
 // folder (spec/oxos_internal/37 §7.3).
 void DrawRefreshDone(float t) {
     float appear = SmoothStep((t - 0.2f) / 0.5f);
-    const char *title = ScanResult.Added || ScanResult.Unusable ? "TRAINER REFRESH COMPLETE" : "TRAINERS UP TO DATE";
+    const char *title = ScanResult.Added || ScanResult.Unusable || ScanResult.Deleted ? "TRAINER REFRESH COMPLETE" : "TRAINERS UP TO DATE";
     DrawGlowingText((WIDTH - MeasureText(title, 2)) / 2, 190, 2, FadeColour(PALE_GREEN, appear), FadeColour(GREEN, 0.15f * appear), title);
     std::vector<std::string> lines;
     char line[64];
@@ -1930,6 +2039,10 @@ void DrawRefreshDone(float t) {
     }
     if (ScanResult.Unusable) {
         std::snprintf(line, sizeof(line), "%u FILES ARE NOT USABLE TRAINERS", static_cast<unsigned>(ScanResult.Unusable));
+        lines.push_back(line);
+    }
+    if (ScanResult.Deleted) {
+        std::snprintf(line, sizeof(line), "%u DELETED TRAINERS REMOVED", static_cast<unsigned>(ScanResult.Deleted));
         lines.push_back(line);
     }
     std::snprintf(line, sizeof(line), "%u TRAINERS IN C:\\OXOS\\TRAINERS", static_cast<unsigned>(ScanResult.Files));
@@ -2018,8 +2131,8 @@ int main() {
     }
     ScanTrainers(screen ? ShowRefresh : nullptr);
     LoadMenu();
-    if (!screen)
-        StartGame(Menu.HaveGame); // no screen: the game as it was asked for
+    if (!screen || (Menu.HaveGame && !Menu.HaveSection))
+        StartGame(Menu.HaveGame); // no screen, or no trainers left for the game: the game as it was asked for
     if (!Menu.Picture.Pixels.empty())
         Menu.Image = MakeTexture(Menu.Picture, SDL_BLENDMODE_BLEND);
     Uint64 start = SDL_GetTicks(), last = start;
