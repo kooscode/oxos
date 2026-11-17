@@ -298,6 +298,92 @@ TEST(RtlSync, ReadWriteLockReadersShareWritersExclude) {
 
 // --- Interlocked operations, S-lists, arithmetic
 
+// The race the page-fault restart is for (spec/stock/13 "S-lists", spec/stock/14 "Page faults"): this thread's pop reads the header {X, ...}, another thread
+// pops X and frees its page before this one reads X's Next. Played here: X's page is freed with the header still on X, so the pop's read of X's Next faults;
+// at the restart the other thread's pop is done (the header moves on to Y), and the pop starts over and takes Y.
+static SLIST_HEADER RacedList;
+static SINGLE_LIST_ENTRY RacedSecond;
+static int RacedRestarts;
+
+TEST(RtlRuntime, SListPopStartsOverWhenItsEntryWasFreed) {
+    auto page = (SINGLE_LIST_ENTRY *)MmAllocateSystemMemory(PAGE_SIZE, PAGE_READWRITE);
+    ASSERT_NE(page, nullptr);
+    RacedList = {};
+    RacedRestarts = 0;
+    InterlockedPushEntrySList(&RacedList, &RacedSecond);
+    InterlockedPushEntrySList(&RacedList, page); // the list: X (in the page), Y; Depth 2, Sequence 2
+    MmFreeSystemMemory(page, PAGE_SIZE);         // X's memory is gone, the header still names it
+    host::OnSListPopRestart = [] {
+        RacedRestarts++;
+        RacedList.Next.Next = &RacedSecond; // the other thread's pop of X: Depth - 1, Sequence + 1
+        RacedList.Depth = 1;
+        RacedList.Sequence = 3;
+    };
+    ASSERT_TRUE(host::InterruptsEnabled());
+    PSINGLE_LIST_ENTRY popped = InterlockedPopEntrySList(&RacedList);
+    host::OnSListPopRestart = nullptr;
+    EXPECT_EQ(RacedRestarts, 1) << "the read of the freed entry's Next faulted once and the pop started over";
+    EXPECT_EQ(popped, &RacedSecond);
+    EXPECT_EQ(RacedList.Next.Next, nullptr);
+    EXPECT_EQ(RacedList.Depth, 0);
+    EXPECT_EQ(RacedList.Sequence, 4);
+}
+
+// Only that read, and only with interrupts on (with them off the reference bug-checks 0xA instead), starts a pop over.
+TEST(RtlRuntime, OnlyThePopsReadOfNextIsRestarted) {
+    extern char KiSListPopRead[], KiSListPopRestart[];
+    ULONG eip = (ULONG)KiSListPopRead;
+    EXPECT_TRUE(KiRestartSListPop(eip, true));
+    EXPECT_EQ(eip, (ULONG)KiSListPopRestart);
+    eip = (ULONG)KiSListPopRead;
+    EXPECT_FALSE(KiRestartSListPop(eip, false));
+    EXPECT_EQ(eip, (ULONG)KiSListPopRead);
+    eip = (ULONG)KiSListPopRead + 2;
+    EXPECT_FALSE(KiRestartSListPop(eip, true));
+    EXPECT_EQ(eip, (ULONG)KiSListPopRead + 2);
+}
+
+// The S-list functions against spec/stock/13's words, step by step: a model list and the header's second DWORD, which push adds 0x10001 to, pop 0xFFFF, and
+// flush clears with the rest. Random pushes, pops and flushes over 64 entries; after each the result, the whole header and the pushed entry's link agree.
+TEST(RtlRuntime, SListsFollowTheSpec) {
+    SLIST_HEADER h = {};
+    SINGLE_LIST_ENTRY entries[64];
+    std::vector<PSINGLE_LIST_ENTRY> model; // the list, first entry last
+    uint32_t second = 0;                   // the header's second DWORD: Depth | Sequence << 16
+    bool listed[64] = {};
+    uint32_t x = 12345;
+    for (int step = 0; step < 100000; step++) {
+        x = x * 1664525 + 1013904223;
+        unsigned op = (x >> 8) % 16, which = (x >> 16) % 64;
+        PSINGLE_LIST_ENTRY first = model.empty() ? nullptr : model.back();
+        if (op < 8 && !listed[which]) {
+            PSINGLE_LIST_ENTRY entry = &entries[which];
+            ASSERT_EQ(InterlockedPushEntrySList(&h, entry), first) << "step " << step;
+            ASSERT_EQ(entry->Next, first) << "step " << step;
+            model.push_back(entry);
+            listed[which] = true;
+            second += 0x10001;
+        } else if (op < 15) {
+            ASSERT_EQ(InterlockedPopEntrySList(&h), first) << "step " << step;
+            if (first) {
+                model.pop_back();
+                listed[first - entries] = false;
+                second += 0xFFFF;
+            }
+        } else {
+            ASSERT_EQ(InterlockedFlushSList(&h), first) << "step " << step;
+            if (first) {
+                for (PSINGLE_LIST_ENTRY e : model)
+                    listed[e - entries] = false;
+                model.clear();
+                second = 0;
+            }
+        }
+        ASSERT_EQ(h.Next.Next, model.empty() ? nullptr : model.back()) << "step " << step;
+        ASSERT_EQ((uint32_t)(h.Alignment >> 32), second) << "step " << step;
+    }
+}
+
 TEST(RtlRuntime, InterlockedAndSLists) {
     volatile LONG v = 5;
     EXPECT_EQ(InterlockedIncrement(&v), 6);
@@ -312,16 +398,23 @@ TEST(RtlRuntime, InterlockedAndSLists) {
     LONGLONG x = 20, c = 10;
     EXPECT_EQ(ExInterlockedCompareExchange64(&q, &x, &c), 10);
     EXPECT_EQ(q, 20);
+    // S-lists as the reference keeps them (spec/stock/13): push Depth + 1 and Sequence + 1, pop Depth - 1 and Sequence + 1, flush clears the whole header.
     SLIST_HEADER h = {};
     SINGLE_LIST_ENTRY e[3];
     EXPECT_EQ(InterlockedPushEntrySList(&h, &e[0]), nullptr);
     EXPECT_EQ(InterlockedPushEntrySList(&h, &e[1]), &e[0]);
+    EXPECT_EQ(e[1].Next, &e[0]);
     InterlockedPushEntrySList(&h, &e[2]);
     EXPECT_EQ(h.Depth, 3);
+    EXPECT_EQ(h.Sequence, 3);
     EXPECT_EQ(InterlockedPopEntrySList(&h), &e[2]);
+    EXPECT_EQ(h.Next.Next, &e[1]);
+    EXPECT_EQ(h.Depth, 2);
+    EXPECT_EQ(h.Sequence, 4) << "a pop counts in the sequence too";
     EXPECT_EQ(InterlockedFlushSList(&h), &e[1]);
-    EXPECT_EQ(h.Depth, 0);
+    EXPECT_EQ(h.Alignment, 0u) << "flush clears Next, Depth and Sequence";
     EXPECT_EQ(InterlockedPopEntrySList(&h), nullptr);
+    EXPECT_EQ(InterlockedFlushSList(&h), nullptr);
     EXPECT_EQ(RtlUlongByteSwap(0x11223344), 0x44332211u);
     EXPECT_EQ(RtlUshortByteSwap(0x1122), 0x2211);
     LARGE_INTEGER a;

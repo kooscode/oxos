@@ -27,6 +27,7 @@ extern "C" {
 volatile uint32_t HostIf; // EFLAGS.IF of the fake CPU (0x200 = interrupts enabled); also used by host_asm.S
 void host_irq_trampoline();
 void KiDispatchHardwareInterrupt(unsigned long irq);
+bool KiRestartSListPop(unsigned long &Eip, bool InterruptsOn);
 }
 
 namespace host {
@@ -34,6 +35,8 @@ namespace host {
 volatile uint32_t Cr0 = 0x80010031, Cr2, Cr3 = 0xF000, Cr4 = 0x610;
 volatile uint64_t PageFills, TlbFlushes, ClockInterrupts;
 volatile uint32_t KernelFaultAddress;
+void (*volatile OnSListPopRestart)();
+volatile uint64_t SListPopRestarts;
 
 static int PhysFd = -1, DevFd = -1;
 static uint8_t *PhysView;
@@ -508,6 +511,15 @@ static void OnFault(int sig, siginfo_t *si, void *ctx) {
         bool write = uc->uc_mcontext.gregs[REG_ERR] & 2;
         if (Fill(addr, write))
             return;
+        // As the kernel's trap handler does first (KiDispatchTrap): the S-list pop's read of an entry popped and freed meanwhile starts the pop over.
+        unsigned long eip = (unsigned long)uc->uc_mcontext.gregs[REG_EIP];
+        if (KiRestartSListPop(eip, HostIf & 0x200)) {
+            uc->uc_mcontext.gregs[REG_EIP] = (greg_t)eip;
+            SListPopRestarts = SListPopRestarts + 1;
+            if (OnSListPopRestart)
+                OnSListPopRestart();
+            return;
+        }
         KernelFaultAddress = addr;
         Cr2 = addr;
         Die(uc, write ? "kernel page fault (write to an unmapped or read-only page)" : "kernel page fault (read)", addr);

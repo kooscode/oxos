@@ -85,7 +85,7 @@ void RunStress(unsigned loads, const char *what) {
     Stop = false;
     Rounds = Errors = ShortThreads = 0;
     ULONG available = memory::AvailablePages, blocks = memory::PoolBlocks;
-    uint64_t delivered = host::AsyncDelivered, pended = host::AsyncPended;
+    uint64_t delivered = host::AsyncDelivered, pended = host::AsyncPended, restarts = host::SListPopRestarts;
     PKTHREAD a = Spawn([=] { Load(1, loads); }, 8), b = Spawn([=] { Load(2, loads); }, 8);
     host::SetAsyncInterrupts(50);
     timespec t0, t;
@@ -99,8 +99,9 @@ void RunStress(unsigned loads, const char *what) {
     Join(a);
     Join(b);
     host::SetAsyncInterrupts(0);
-    printf("  [%s] %lu rounds, %lu short threads; clock interrupts at a kernel instruction %llu, left pending %llu\n", what, Rounds.load(), ShortThreads.load(),
-           (unsigned long long)(host::AsyncDelivered - delivered), (unsigned long long)(host::AsyncPended - pended));
+    printf("  [%s] %lu rounds, %lu short threads; clock interrupts at a kernel instruction %llu, left pending %llu; S-list pops started over %llu\n", what,
+           Rounds.load(), ShortThreads.load(), (unsigned long long)(host::AsyncDelivered - delivered), (unsigned long long)(host::AsyncPended - pended),
+           (unsigned long long)(host::SListPopRestarts - restarts));
     EXPECT_EQ(Errors.load(), 0u) << "memory written by the load came back different";
     EXPECT_GT(Rounds.load(), 0u);
     EXPECT_GT(host::AsyncDelivered - delivered, 0u) << "no interrupt landed inside kernel code";

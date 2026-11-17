@@ -40,6 +40,11 @@ extern volatile uint64_t PageFills, TlbFlushes;
 void FlushTlb();
 // True if the harness's last fault was a genuine kernel page fault (an unmapped or write-protected access).
 extern volatile uint32_t KernelFaultAddress;
+// Called when a page fault in the S-list pop was answered by starting the pop over (KiRestartSListPop), before the pop runs again: a test plays the other
+// thread there, which popped the entry first. Null: nothing called.
+extern void (*volatile OnSListPopRestart)();
+// How many pops were started over that way since the program started.
+extern volatile uint64_t SListPopRestarts;
 
 // Bug checks: a test sets BugCheckCatcher to catch the next one (see EXPECT_BUGCHECK in kernel_test.h).
 extern jmp_buf *BugCheckCatcher;

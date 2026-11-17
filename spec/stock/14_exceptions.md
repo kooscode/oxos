@@ -27,6 +27,17 @@ a plain int3 (vector 3, parameter 0 = 0), is dispatched as an ordinary exception
 the faulting code had them enabled. NMI and double fault are task gates (halt). An exception that no handler takes → **bug check 0x1E**
 (KMODE_EXCEPTION_NOT_HANDLED: code, address, parameters).
 
+## Page faults (vector 14)
+The handler (entry code at 0x8001b728–0x8001b7fc; evidence: REA read_bytes `ev_e70cc07f…`, `ev_466be909…` and a disassembly of those bytes) builds the trap
+frame, reads CR2 and enables interrupts. Then:
+1. The faulting code had interrupts off (EFlags.IF clear, trap frame +0x44): unless the flag at 0x8003ab20 is set, bug check **0xA** (IRQL_NOT_LESS_OR_EQUAL:
+   CR2, 0xFF, write, EIP).
+2. `MmAccessFault(write, CR2, trap frame)` (0x8001f58c). Success: return from the trap, the instruction runs again.
+3. On failure, when the faulting EIP (trap frame +0x3C) is **0x80012c76**, the S-list pop's read of the first entry's Next (spec 13, "S-lists"): EIP becomes
+   **0x80012c64**, the pop's read of the header, and the trap returns. The pop then starts over with the header as it is now; the entry whose memory went away
+   was already taken by another pop, which changed the header.
+4. Any other failure: the exception of the table above (STATUS_ACCESS_VIOLATION, parameters {write, CR2}); other MmAccessFault statuses have their own paths.
+
 ## Dispatch
 - **Walk the registration chain at FS:[0]:** {Next, Handler}, ending at 0xFFFFFFFF. Each handler is called cdecl as (record, frame, context,
   &dispatcherContext), **under a guard frame** (0x80022934): for the call, the dispatcher links a registration {Next = FS:[0], guard handler 0x8002297E, the
@@ -53,6 +64,9 @@ the faulting code had them enabled. NMI and double fault are task gates (halt). 
   frame pointers).
 
 ## Implementation notes
+- OXOS has no MmAccessFault (no page is ever brought in on demand), so step 2 never succeeds; the S-list check (step 3) runs for every page fault taken with
+  interrupts on, before the exception is dispatched. OXOS's pop is written with the same two instruction places, exported as labels (KiSListPopRestart,
+  KiSListPopRead), because the restart depends on them.
 - A context with a different stack pointer is resumed by building {eax, ebx, eip, cs, eflags} below the target ESP and executing `iret` (ring 0, no stack
   switch).
 - Exception depth is capped at 8 (bug check beyond). The reference's stack-limit checks on each frame (STATUS_BAD_STACK) and STATUS_INVALID_UNWIND_TARGET for a

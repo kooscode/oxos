@@ -31,43 +31,89 @@ XBAPI LONG FASTCALL InterlockedCompareExchange(volatile LONG *Destination, LONG 
     return Comparand;
 }
 
-static bool CompareAndSwap64(volatile ULONGLONG *p, ULONGLONG *expected, ULONGLONG value) {
-    return __atomic_compare_exchange_n(p, expected, value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+// --- S-lists (spec/stock/13, "S-lists"): the 8-byte header {Next, Depth, Sequence} is read and replaced whole with cmpxchg8b, again from the compare's result
+// until no other update came first. Written in assembly: the page-fault handler restarts a pop whose read of the first entry's Next faulted (the entry was
+// popped and freed by another thread meanwhile), so the pop's header read and that read are labelled (KiSListPopRestart, KiSListPopRead).
+
+#define XK_ASM_TEXT(text) #text
+#define XK_ASM_PREFIXED(prefix, name) XK_ASM_TEXT(prefix) #name
+#define XK_ASM_LABEL(name) XK_ASM_PREFIXED(__USER_LABEL_PREFIX__, name) // the symbol a C name has on this target (_name on the console, name on the host)
+
+extern "C" char KiSListPopRestart[], KiSListPopRead[];
+
+// Written from spec/stock/13 "S-lists". Every function keeps the header's address in ESI. cmpxchg8b compares EDX:EAX (the header as read: the second DWORD,
+// then Next) with the header and, when equal, stores ECX:EBX (the new header); otherwise it loads the header into EDX:EAX and the loop starts over from it.
+
+// Push: the entry's Next = the first entry; 0x10001 added to the second DWORD (Depth + 1, Sequence + 1). Returns the old first entry.
+XBAPI __attribute__((naked)) PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER /*ListHead*/, PSINGLE_LIST_ENTRY /*ListEntry*/) {
+    __asm__("pushl %esi\n"
+            "pushl %ebx\n"
+            "movl %ecx, %esi\n"        // the header
+            "movl %edx, %ebx\n"        // the entry: the new Next
+            "movl 4(%esi), %edx\n"     // the second DWORD
+            "movl (%esi), %eax\n"      // Next
+            "1:\n"
+            "movl %eax, (%ebx)\n"      // the entry's Next = the first entry
+            "movl %edx, %ecx\n"
+            "addl $0x10001, %ecx\n"
+            "lock cmpxchg8b (%esi)\n"
+            "jne 1b\n"
+            "popl %ebx\n"
+            "popl %esi\n"
+            "ret\n");
 }
 
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER ListHead, PSINGLE_LIST_ENTRY ListEntry) {
-    SLIST_HEADER old, now;
-    old.Alignment = ListHead->Alignment;
-    do {
-        ListEntry->Next = old.Next.Next;
-        now.Next.Next = ListEntry;
-        now.Depth = (USHORT)(old.Depth + 1);
-        now.Sequence = (USHORT)(old.Sequence + 1);
-    } while (!CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
-    return old.Next.Next;
+// Pop: NULL when empty; else the first entry, its Next becoming the first and 0xFFFF added to the second DWORD (Depth - 1, Sequence + 1). The read of the first
+// entry's Next is KiSListPopRead; a page fault there starts the pop over at KiSListPopRestart, the header read (KiRestartSListPop).
+XBAPI __attribute__((naked)) PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER /*ListHead*/) {
+    __asm__("pushl %esi\n"
+            "pushl %ebx\n"
+            "movl %ecx, %esi\n"        // the header
+            ".globl " XK_ASM_LABEL(KiSListPopRestart) "\n"
+            XK_ASM_LABEL(KiSListPopRestart) ":\n"
+            "movl 4(%esi), %edx\n"     // the second DWORD
+            "movl (%esi), %eax\n"      // Next: the first entry
+            "1:\n"
+            "testl %eax, %eax\n"
+            "je 2f\n"                  // empty: NULL
+            "movl %edx, %ecx\n"
+            "addl $0xFFFF, %ecx\n"
+            ".globl " XK_ASM_LABEL(KiSListPopRead) "\n"
+            XK_ASM_LABEL(KiSListPopRead) ":\n"
+            "movl (%eax), %ebx\n"      // the first entry's Next: the new first entry
+            "lock cmpxchg8b (%esi)\n"
+            "jne 1b\n"
+            "2:\n"
+            "popl %ebx\n"
+            "popl %esi\n"
+            "ret\n");
 }
 
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER ListHead) {
-    SLIST_HEADER old, now;
-    old.Alignment = ListHead->Alignment;
-    do {
-        if (!old.Next.Next)
-            return nullptr;
-        now.Next.Next = old.Next.Next->Next;
-        now.Depth = (USHORT)(old.Depth - 1);
-        now.Sequence = old.Sequence;
-    } while (!CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
-    return old.Next.Next;
+// Flush: NULL when empty; else the whole header becomes 0 (Next, Depth and Sequence) and the old first entry is returned.
+XBAPI __attribute__((naked)) PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER /*ListHead*/) {
+    __asm__("pushl %esi\n"
+            "pushl %ebx\n"
+            "movl %ecx, %esi\n"        // the header
+            "movl 4(%esi), %edx\n"     // the second DWORD
+            "movl (%esi), %eax\n"      // Next
+            "1:\n"
+            "testl %eax, %eax\n"
+            "je 2f\n"                  // empty: NULL, the header unchanged
+            "xorl %ecx, %ecx\n"
+            "xorl %ebx, %ebx\n"
+            "lock cmpxchg8b (%esi)\n"
+            "jne 1b\n"
+            "2:\n"
+            "popl %ebx\n"
+            "popl %esi\n"
+            "ret\n");
 }
 
-XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead) {
-    SLIST_HEADER old, now;
-    old.Alignment = ListHead->Alignment;
-    do {
-        now.Alignment = 0;
-        now.Sequence = old.Sequence;
-    } while (old.Next.Next && !CompareAndSwap64(&ListHead->Alignment, &old.Alignment, now.Alignment));
-    return old.Next.Next;
+XBAPI bool KiRestartSListPop(ULONG &Eip, bool InterruptsOn) {
+    if (!InterruptsOn || Eip != (ULONG)KiSListPopRead)
+        return false;
+    Eip = (ULONG)KiSListPopRestart;
+    return true;
 }
 
 XBAPI LONGLONG FASTCALL ExInterlockedCompareExchange64(volatile LONGLONG *Destination, PLONGLONG Exchange, PLONGLONG Comparand) {

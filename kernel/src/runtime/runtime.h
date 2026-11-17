@@ -59,6 +59,9 @@ typedef union _SLIST_HEADER {
 XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER ListHead, PSINGLE_LIST_ENTRY ListEntry);
 XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER ListHead);
 XBAPI PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead);
+// A page fault at Eip (with interrupts on at the fault, InterruptsOn) that is the pop's read of the first entry's Next: Eip moves back to the pop's header read
+// and true is returned, so the trap returns and the pop starts over (spec/stock/14, "Page faults"). The trap handler, and the host tests' fault handler, ask.
+XBAPI bool KiRestartSListPop(ULONG &Eip, bool InterruptsOn);
 
 // --- Strings (string.cpp, runtime.cpp). Object names are ANSI counted strings on the Xbox.
 

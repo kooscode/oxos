@@ -23,6 +23,17 @@ implemented (milestone 5a).**
   caller a fresh FPU state (FNINIT, MXCSR 0x1F80).
 
 ## Behaviour
+- **S-lists** (InterlockedFlushSList 56 at 0x80012ca4, InterlockedPopEntrySList 57 at 0x80012c60, InterlockedPushEntrySList 58 at 0x80012c84; fastcall, the
+  header in ECX; evidence: REA procedure_assembly `ev_31ebd6be…` (pop), `ev_553e6d78…` (push), `ev_e123a5bf…` (flush)). The 8-byte SLIST_HEADER is {Next
+  (DWORD: the first entry), Depth (WORD), Sequence (WORD)}; each function reads it (the second DWORD, then Next) and replaces all 8 bytes with one `cmpxchg8b`,
+  starting over from the compare's result when another update came first. No LOCK prefix: one CPU.
+  - **Push(header, entry)** (entry in EDX): entry->Next = the first entry; Depth + 1 and Sequence + 1 (one add of 0x10001 to the second DWORD). Returns the old
+    first entry.
+  - **Pop(header)**: NULL when the list is empty. Otherwise the new first entry is the first entry's Next, read at **0x80012c76**, and the second DWORD gets
+    0xFFFF added: **Depth − 1 and Sequence + 1**. Returns the entry taken. Between the header read and that read of Next the thread can be preempted, and
+    another can pop the same entry and free its memory; the read then faults, and the page-fault handler starts the pop over from its header read
+    (**0x80012c64**; spec 14, "Page faults"). Callers such as the pool's lookaside lists (spec 09 §5) pop without any lock and rely on this.
+  - **Flush(header)**: NULL when the list is empty, else the whole header becomes 0 (Next, Depth **and Sequence**) and the old first entry is returned.
 - KeSetEventBoostPriority(event, &thread): no waiter → set the event; otherwise the first waiter gets a new quantum and is released with increment 1 (the event
   stays non-signalled). The woken thread is returned.
 - ExReadWriteRefurbInfo(info, 16, write): sector 3 (offset 0x600) of `\Device\Harddisk0\partition0`: {'RBRF' 0x52465242, first-boot time, power-cycle count}. A

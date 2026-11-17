@@ -157,6 +157,9 @@ static ULONG FloatStatusCode(UCHAR vector) {
 }
 
 extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
+    // A page fault in the S-list pop's read of an entry another thread popped and freed meanwhile: the pop starts over (spec/stock/14, "Page faults").
+    if (Frame->Vector == 14 && KiRestartSListPop(Frame->Eip, Frame->EFlags & 0x200))
+        return;
     EXCEPTION_RECORD record = {};
     record.ExceptionAddress = (PVOID)Frame->Eip;
     ULONG vector = Frame->Vector;
