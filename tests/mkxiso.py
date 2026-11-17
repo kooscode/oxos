@@ -166,6 +166,8 @@ if __name__ == "__main__":
     # mkxiso.py OUT.iso                                the test image above
     # mkxiso.py OUT.iso --add NAME=FILE --text NAME=TEXT ...   an image of just those files (e.g. make run_xbe)
     import sys
+    if len(sys.argv) < 2 or sys.argv[1].startswith("-"):  # no OUT.iso (a "--help" would otherwise become the image's file name)
+        sys.exit("usage: mkxiso.py OUT.iso [--add NAME=FILE] [--text NAME=TEXT] ...  (no options: the test image)")
     args = sys.argv[2:]
     if not args:
         build(sys.argv[1])
