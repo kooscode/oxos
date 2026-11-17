@@ -117,10 +117,11 @@ void oxos_list_free(char **Names);
 // --- 4a. Data: one [section] of the extension's own NAME.ini, read from the disk when asked
 //
 // oxos_ini_section reads the file now, from the disk, and keeps only Section (any case): Keys gets an array of Count keys and values, in the file's order,
-// in one block of memory that oxos_ini_free frees. The rest of the file is never held in memory, however large it is. Each call reads the file again, so
-// read a section once (in ExtensionStart or a title event) and keep what you need. Only where the disk may be read: ExtensionStart, ExtensionRunLoop,
-// ExtensionTerminate and the title events, never in a hook (STATUS_INVALID_DEVICE_STATE above PASSIVE_LEVEL). A key is the text before '=' (spaces allowed),
-// its value the rest of the line. STATUS_OBJECT_NAME_NOT_FOUND when the file or the section does not exist.
+// in one block of memory that oxos_ini_free frees: the strings oxos_ini_value returns too, so use or copy them first. The rest of the file is never held
+// in memory, however large it is. Each call reads the file again, so read a section once (in ExtensionStart or a title event) and keep what you need.
+// Only where the disk may be read: ExtensionStart, ExtensionRunLoop, ExtensionTerminate and the title events, never in a hook (STATUS_INVALID_DEVICE_STATE
+// above PASSIVE_LEVEL). A key is the text before '=' (spaces allowed), its value the rest of the line. STATUS_OBJECT_NAME_NOT_FOUND when the file or the
+// section does not exist.
 //
 //   OXOS_INI_KEY *keys;
 //   uint32_t count;

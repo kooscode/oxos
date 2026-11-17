@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Write oxos_trainers.ini, Universal Trainers' settings (spec/oxos_internal/37), from the trainer pack: one section per title with a trainer, every trainer off.
+"""Write oxos_trainers.ini, Universal Trainers' settings (spec/oxos_internal/37), from the trainer pack: one section per title with a trainer, every
+trainer off.
 
 usage: gen_trainers_ini.py PACK OUT
 
-PACK is third_party/xbox_trainers: its trainers/ (one .etm per game) and index.csv (the game's name for each file). OUT is the ini to write. Each section is a
-title ID (8 hex digits, what the kernel knows of the running title), with the game's name, the trainer file (in C:\\OXOS\\trainers\\ on the console),
-trainer_enabled = no, and one line per cheat, "N. name = yes/no", its number in the trainer and its default there. The extension reads the number; the name is
-only for the reader, so names that repeat or have odd characters cannot confuse it. A trainer for several title IDs (regions) gets a section for each ID no
-other trainer is the main one for. Python standard library only.
+PACK is third_party/xbox_trainers: its trainers/ (the .etm files) and index.csv (for each file: its game's name, its title IDs, the builds it fits,
+the titles it is the default trainer of, and the buttons of its in-game-key cheats). OUT is the ini to write. Each section is a title ID (8 hex digits, what
+the kernel knows of the running title), with the game's name, the default trainer file (in C:\\OXOS\\trainers\\ on the console), trainer_enabled = no,
+and one line per cheat, "N. name = yes/no", its number in the trainer and its default there. A cheat switched during the game has "N keys = BUTTON +
+BUTTON" after it (several combinations separated by commas). A title with several trainers lists them all, "trainer N = FILE | build TIMESTAMP | keys
+N: BUTTON + BUTTON; ...", its default first: the menu switches between them. The extension reads only trainer = and the "N." lines, by number; the names are
+only for the reader, so names that repeat or have odd characters cannot confuse it. Python standard library only.
 """
 import csv, os, struct, sys
 
@@ -16,10 +19,9 @@ def dword(data, offset):
     return struct.unpack_from("<I", data, offset)[0]
 
 
-def read_trainer(path):
-    """(title IDs, the trainer's name, its author, [(cheat name, default)]) of an .etm file."""
+def read_cheats(path):
+    """(the trainer's name, its author, [(cheat name, default)]) of an .etm file."""
     data = open(path, "rb").read()
-    ids = [t for t in struct.unpack_from("<III", data, dword(data, 0x12)) if t]
     texts, at = [], dword(data, 0x0E)
     while at + 4 <= len(data) and dword(data, at):
         start = dword(data, at)
@@ -27,7 +29,7 @@ def read_trainer(path):
         at += 4
     switches = dword(data, 0x0A)
     cheats = [(name, data[switches + i] != 0) for i, name in enumerate(texts[2:])]
-    return ids, texts[0] if texts else "", texts[1] if len(texts) > 1 else "", cheats
+    return texts[0] if texts else "", texts[1] if len(texts) > 1 else "", cheats
 
 
 def clean(text):
@@ -36,54 +38,66 @@ def clean(text):
     return text.lstrip("[;#").strip() or "(no name)"
 
 
+def read_keys(text):
+    """{cheat number: "BUTTON + BUTTON, ..."} from index.csv's keys column, "9 = BACK; 12 = RIGHT STICK+D-PAD DOWN"."""
+    keys = {}
+    for item in filter(None, (part.strip() for part in text.split(";"))):
+        number, combos = item.split("=", 1)
+        keys[int(number)] = ", ".join(" + ".join(button.strip() for button in combo.split("+")) for combo in combos.split(","))
+    return keys
+
+
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__.split("\n\n")[1])
     pack, out = sys.argv[1], sys.argv[2]
-    names = {}
     with open(os.path.join(pack, "index.csv"), newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if row["folder"] == "trainers":
-                names[row["file"]] = (os.path.splitext(row["file"])[0], int(row["title_id"], 16))
-    trainers = {}
-    for file in sorted(os.listdir(os.path.join(pack, "trainers"))):
-        if file.lower().endswith(".etm") and file in names:
-            trainers[file] = read_trainer(os.path.join(pack, "trainers", file))
-    # Each title ID once: first the trainers whose main ID it is, then the other IDs trainers list (other regions).
-    sections = {}
-    for file, (game, main_id) in names.items():
-        if file in trainers:
-            sections.setdefault(main_id, file)
-    for file, (ids, _, _, _) in trainers.items():
-        for title_id in ids:
-            sections.setdefault(title_id, file)
-    ordered = sorted(sections.items(), key=lambda s: (names[s[1]][0].lower(), s[0]))
+        rows = list(csv.DictReader(f))
+    sections = []
+    for row in rows:
+        for title_id in row["default_for"].split():
+            sections.append((row["game"].lower(), title_id, row))
+    sections.sort(key=lambda s: (s[0], s[1]))
 
     lines = [
         "; Generated by tools/gen_trainers_ini.py from the trainer pack (third_party/xbox_trainers); edit the copy on the console.",
-        "; C:\\OXOS\\extensions\\oxos_trainers.ini: Universal Trainers, the settings of oxos_trainers.xos (next to it). The trainers are in C:\\OXOS\\trainers\\.",
+        "; C:\\OXOS\\extensions\\oxos_trainers.ini: Universal Trainers, the settings of oxos_trainers.xos (next to it).",
+        "; The trainers are in C:\\OXOS\\trainers\\.",
         ";",
         "; One [section] per title, named by its title ID. A title's trainer runs when the title starts, if its section says trainer_enabled = yes;",
         "; each cheat is on with \"N. name = yes\" and off with \"= no\" (N is the cheat's number in the trainer; the name is only for you).",
-        "; A trainer is made for one version of a game: if it does nothing or the game crashes, turn it off again.",
+        "; \"N keys\" lists the controller buttons that switch cheat N during the game, pressed together (RIGHT STICK, LEFT STICK: press the stick in);",
+        "; combinations separated by commas each do something of their own (up and down, for example). The menu shows them.",
+        "; A title with several trainers lists them all, \"trainer N = FILE | build TIMESTAMP | keys N: BUTTON + BUTTON; ...\": the game build it is made",
+        "; for (the XBE's timestamp; any = every build; hidden, unknown = not known) and its key cheats. The menu switches between them with LEFT and",
+        "; RIGHT, and writes the one chosen in trainer = with its cheat and key lines. A trainer is made for one version of a game: on another it does",
+        "; nothing or the game crashes. The menu adds trainers copied into C:\\OXOS\\trainers\\ when it starts.",
         "; Started from XBMC4Gamers with one of its own trainers, a title gets XBMC4Gamers' trainer, not this one.",
         "",
     ]
-    for title_id, file in ordered:
-        game = names[file][0]
-        ids, trainer_name, author, cheats = trainers[file]
-        lines.append(f"; {clean(game)}: {clean(trainer_name)}" + (f", {clean(author)}" if author.strip() else ""))
-        lines.append(f"[{title_id:08X}]")
-        lines.append(f"title = {clean(game)}")
-        lines.append(f"trainer = {file}")
+    for _, title_id, row in sections:
+        trainer_name, author, cheats = read_cheats(os.path.join(pack, "trainers", row["file"]))
+        lines.append(f"; {clean(row['game'])}: {clean(trainer_name)}" + (f", {clean(author)}" if author.strip() else ""))
+        lines.append(f"[{title_id}]")
+        lines.append(f"title = {clean(row['game'])}")
+        lines.append(f"trainer = {row['file']}")
         lines.append("trainer_enabled = no")
+        keys = read_keys(row["keys"])
         for number, (name, default) in enumerate(cheats, 1):
             lines.append(f"{number}. {clean(name)} = {'yes' if default else 'no'}")
+            if number in keys:
+                lines.append(f"{number} keys = {keys[number]}")
+        # The title's trainers: its default first, then the most cheats first.
+        choices = [row] + sorted((r for r in rows if r is not row and title_id in r["title_ids"].split()), key=lambda r: (-int(r["cheats"]), r["file"]))
+        if len(choices) > 1:
+            for number, choice in enumerate(choices, 1):
+                keys = "; ".join(f"{n}: {k}" for n, k in sorted(read_keys(choice["keys"]).items()))
+                lines.append(f"trainer {number} = {choice['file']} | build {choice['builds']}" + (f" | keys {keys}" if keys else ""))
         lines.append("")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", newline="\r\n", encoding="ascii") as f:
         f.write("\n".join(lines))
-    print(f"{out}: {len(ordered)} titles from {len(trainers)} trainers")
+    print(f"{out}: {len(sections)} titles from {len(rows)} trainers")
 
 
 if __name__ == "__main__":

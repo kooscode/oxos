@@ -343,11 +343,12 @@ limitations under the License.
 
 ## Game trainers (`OXOS/trainers/`)
 
-From v0.4.10 the release zip holds the 505 trainers of `third_party/xbox_trainers/trainers/` in `OXOS/trainers/`, for Universal Trainers; up to v0.4.9 the
+From v0.4.10 the release zip holds the trainers of `third_party/xbox_trainers/trainers/` in `OXOS/trainers/`, for Universal Trainers; up to v0.4.9 the
 pack was its own `xbox_trainers.zip`.
 
 
-`third_party/xbox_trainers/` holds 998 game trainers (.etm) for XBMC4Gamers, from the Internet Archive's "Xbox Original ETM Trainers" collection
-(https://archive.org/details/ETMTrainers). They are de-duplicated and renamed, with their contents unmodified. They were written by members of the Xbox scene
+`third_party/xbox_trainers/` holds 1,084 game trainers (.etm), most from the Internet Archive's "Xbox Original ETM Trainers" collection
+(https://archive.org/details/ETMTrainers), 127 from two other trainer packs of the Xbox scene. They are de-duplicated and renamed, with their contents
+unmodified (the .xbtf ones unwrapped to the ETM inside). They were written by members of the Xbox scene
 (each trainer names its authors) and carry no licence terms; they are not covered by OXOS's licence. An author who wants a trainer removed can open an issue.
 Details: `third_party/xbox_trainers/README.md`.

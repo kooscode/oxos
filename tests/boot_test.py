@@ -521,10 +521,19 @@ OWN_INI_FILES = {
 }
 
 
+# The test title's section: two trainers (xktest.etm writes the mark 0xC0DE0001, xktest_two.etm 0xC0DE0002), the first one set, with a keys line the
+# extension must not take for a switch. A third, xktest_new.etm (0xC0DE0003), is on the disk but not in the ini: the menu's scan adds it.
 TRAINERS_INI = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS kernel test title\r\ntrainer = xktest.etm\r\ntrainer_enabled = no\r\n"
-                "1. Write the mark = yes\r\n2. Unused = no\r\n")
+                "1. Write the mark = yes\r\n1 keys = RIGHT STICK + D-PAD DOWN\r\n2. Unused = no\r\n"
+                "trainer 1 = xktest.etm | build any | keys 1: RIGHT STICK + D-PAD DOWN\r\ntrainer 2 = xktest_two.etm | build any\r\n")
+# The section as the menu leaves it: the scan's trainer 3, and the second trainer chosen and switched on with its cheat 1 (TRAINER_MENU_KEYS).
+TRAINERS_INI_AFTER = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS kernel test title\r\ntrainer = xktest_two.etm\r\ntrainer_enabled = yes\r\n"
+                      "1. Write the mark = yes\r\n2. Unused = no\r\n"
+                      "trainer 1 = xktest.etm | build any | keys 1: RIGHT STICK + D-PAD DOWN\r\ntrainer 2 = xktest_two.etm | build any\r\n"
+                      "trainer 3 = xktest_new.etm | build unknown\r\n")
 TRAINER_MENU_PATH = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_trainers.xbe"
-TRAINER_MENU_KEYS = (("HATY", 1), ("A", 1), ("START", 1))  # at the relaunch's menu: down to the trainer's switch, switch it on, start the game
+# At the relaunch's menu: right to the second trainer, down to the trainer's switch and on, down to cheat 1 and on, start the game.
+TRAINER_MENU_KEYS = (("HATX", 1), ("HATY", 1), ("A", 1), ("HATY", 1), ("A", 1), ("START", 1))
 
 
 def image_file_name(mon):
@@ -552,14 +561,14 @@ def use_trainer_menu(mon, pad, reboots, keys):
     return True
 
 
-def make_test_trainer(title_id, mark_address):
-    """A trainer (.etm, format 1, spec/oxos_internal/37) of our own for the test title: two cheats, both off in the file; its code writes 0xC0DE0001 to the
-    test title's XkTitleTrainerMark when cheat 1 is on, 0xC0DE0000 when off. Entered with ebp at the trainer, as a dashboard's stub enters it."""
+def make_test_trainer(title_id, mark_address, mark=0xC0DE0001):
+    """A trainer (.etm, format 1, spec/oxos_internal/37) of our own for the test title: two cheats, both off in the file; its code writes mark to the test
+    title's XkTitleTrainerMark when cheat 1 is on, 0xC0DE0000 when off. Entered with ebp at the trainer, as a dashboard's stub enters it."""
     switches, texts, ids, entry = 0x40, 0x50, 0x68, 0x20
     names = [b"OXOS test trainer", b"boot_test.py", b"Write the mark", b"Unused"]
     code = (b"\x80\xBD" + struct.pack("<I", switches) + b"\x00"            # cmp byte [ebp + switches], 0
             + b"\x74\x0B"                                                  # je off
-            + b"\xC7\x05" + struct.pack("<II", mark_address, 0xC0DE0001) + b"\xC3"  # mov dword [mark], 0xC0DE0001; ret
+            + b"\xC7\x05" + struct.pack("<II", mark_address, mark) + b"\xC3"        # mov dword [mark_address], mark; ret
             + b"\xC7\x05" + struct.pack("<II", mark_address, 0xC0DE0000) + b"\xC3") # off: mov dword [mark], 0xC0DE0000; ret
     data = bytearray(0x100)
     data[entry:entry + len(code)] = code
@@ -581,12 +590,14 @@ def write_extensions(hdd_copy, folder, title_map=None):
     w = FATXWriter(q, "C")
     w.makedirs("OXOS\\extensions")
     w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
-    # Universal Trainers for the test title (0x584B0001): its section has the trainer off and its cheat 1 on (off in the trainer file). The trainer menu
-    # (oxos_trainers.xbe) comes up at the relaunch, where boot_test switches the trainer on (TRAINER_MENU_KEYS); extension_test.xos reads the mark the trainer
-    # writes (its settings trainer_mark and trainer_title).
+    # Universal Trainers for the test title (0x584B0001): its section has the first trainer set, off, and its cheat 1 on (off in the trainer file). The
+    # trainer menu (oxos_trainers.xbe) comes up at the cold boot (its scan adds xktest_new.etm) and at the relaunch, where boot_test picks the second trainer
+    # and switches it and its cheat 1 on (TRAINER_MENU_KEYS); extension_test.xos reads the mark the trainer writes (its settings trainer_mark, trainer_title).
     mark = map_symbols(title_map)["_XkTitleTrainerMark"] if title_map else 0
     w.makedirs("OXOS\\trainers")
     w.write_file("OXOS\\trainers\\xktest.etm", make_test_trainer(0x584B0001, mark))
+    w.write_file("OXOS\\trainers\\xktest_two.etm", make_test_trainer(0x584B0001, mark, 0xC0DE0002))
+    w.write_file("OXOS\\trainers\\xktest_new.etm", make_test_trainer(0x584B0001, mark, 0xC0DE0003))
     w.write_file("OXOS\\extensions\\oxos_trainers.ini", TRAINERS_INI.encode())
     w.write_file("OXOS\\extensions\\oxos_trainers.xbe", open(os.path.join(folder, "oxos_trainers.xbe"), "rb").read())
     for name, text in OWN_INI_FILES.items():
@@ -679,12 +690,13 @@ def extension_checks(mon, launches, hdd):
         "settings from oxos_extensions.ini and oxos_file_read": x[12] == 1 and x[13] == 1,
         "settings from the extension's own extension_test.ini, which win over its oxos_extensions.ini section": x[15] == 1,
         f"data: oxos_ini_section reads one section of a 28 KB extension_test.ini, keys with spaces; a missing section (step {x[16]}; 1 = all)": x[16] == 1,
-        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc and at the relaunch, which switched the trainer on in "
-        f"oxos_trainers.ini; the trainer then ran with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})": x[17] == 0xC0DE0001 and
+        f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc (its scan adding the trainer new on the disk) and at the "
+        f"relaunch, which chose the second trainer and switched it on in oxos_trainers.ini; that trainer then ran with its cheat 1 on (mark {x[17]:#x} at the "
+        f"test title's last exit, of {x[18]})": x[17] == 0xC0DE0002 and
             x[18] == 2 and "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\default.xbe)." in lines and
             "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\media\\second.xbe)." in lines and
-            lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest.etm applied, 1 of 2 cheats on.") == 1 and
-            ini.replace(b"trainer_enabled = yes", b"trainer_enabled = no") == TRAINERS_INI.encode() and b"trainer_enabled = yes" in ini,
+            lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest_two.etm applied, 1 of 2 cheats on.") == 1 and
+            ini == TRAINERS_INI_AFTER.encode(),
         "example_title_event: its title's greeting from the data section of its own ini":
             '[example_title_event] "OXOS kernel test title": Hello from the data section.' in lines,
         f"the SDK's file and folder functions: create, write, read, list, rename, delete (step {x[14]}; 1 = all)": x[14] == 1,

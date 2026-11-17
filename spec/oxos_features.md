@@ -60,6 +60,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 ## Planned
 | Feature | What it will do | Status | Spec |
 |---|---|---|---|
+| ✅ Trainers found automatically | the menu adds new `.etm` files to `oxos_trainers.ini` at every start (or on its own from a dashboard); the player picks among a title's trainers, those for another build marked; a title update gets the menu, not the disc | built 2026-11-16; the extension choosing the fitting trainer by itself is a proposal | [37 §7](oxos_internal/37_universal_trainers.md) |
 | ⬜ Boot video | a video of the user's choice from `C:\OXOS\boot_videos\` before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
 | ⬜ Boot buttons and safe boot | X, B and A work with or without the splash; B is a safe boot (no extensions, no OXOS ini files or EEPROM settings, the standard splash with `[ SAFE MODE ]`, default dashboard; X or A during it for the File Manager or Setup); skip the splash with an EEPROM setting | proposal (2026-11-15) | [39 §1.1](oxos_internal/39_oxos_setup.md) |

@@ -90,7 +90,7 @@ oxos_vX.Y.Z.zip
 │   ├── oxos_extensions.ini               the shipped extensions, enabled (kernel/extensions/oxos_extensions.ini)
 │   ├── oxos_title_patches.ini
 │   ├── extensions\                       oxos_trainers.xos, oxos_trainers.xbe, oxos_trainers.ini (every trainer off)
-│   ├── trainers\                         the trainer pack's 505 .etm files
+│   ├── trainers\                         the trainer pack's 1,084 .etm files
 │   ├── log\                              empty, as the kernel makes it
 │   └── cache\                            empty, as the kernel makes it
 └── THIRD_PARTY_NOTICES.md

@@ -99,6 +99,25 @@ static BOOLEAN TitleBuiltWithNXDK(const UCHAR *XbeHeader) {
     return count == 1 && library && memcmp(library, "CXBE", 4) == 0;
 }
 
+// --- Title updates (spec/oxos_internal/37 §7.5): a game started from its disc (or an image of it, or its folder) looks for an update in its title data
+// folder, E:\TDATA\<title ID>\$u\: when contentmeta.xbx there describes it, the game starts $u\<its own XBE's name> in its place (the XDK's start-up code in
+// the game does this, before the game itself runs). So the menu and the trainer wait for that launch: the build that really runs is the update's.
+
+// The XBE at Path, of TitleId, is about to start its title update: it is not in the update folder itself, and the folder holds contentmeta.xbx and an XBE
+// of Path's name.
+static BOOLEAN StartsItsUpdate(const char *Path, ULONG TitleId) {
+    char folder[64], file[160];
+    snprintf(folder, sizeof(folder), "\\Device\\Harddisk0\\Partition1\\TDATA\\%08lx\\$u\\", TitleId);
+    if (strncasecmp(Path, folder, strlen(folder)) == 0)
+        return FALSE;
+    const char *name = strrchr(Path, '\\');
+    snprintf(file, sizeof(file), "%scontentmeta.xbx", folder);
+    if (!oxos_file_exists(file))
+        return FALSE;
+    snprintf(file, sizeof(file), "%s%s", folder, name ? name + 1 : Path);
+    return oxos_file_exists(file);
+}
+
 // --- The title's section of oxos_trainers.ini, and the trainer it names
 
 constexpr char TRAINERS_FOLDER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\trainers\\"; // C:\OXOS\trainers, where the trainers are
@@ -151,7 +170,7 @@ static UCHAR *LoadTrainer(const char *Title, const char *File, ULONG *Size) {
 
 // The title-loaded event: its trainer, when its section says so.
 static void TitleLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
-    if (TitleBuiltWithNXDK((const UCHAR *)Title->XbeHeader))
+    if (TitleBuiltWithNXDK((const UCHAR *)Title->XbeHeader) || StartsItsUpdate(Title->Path, Title->TitleId))
         return;
     OXOS_INI_KEY *keys;
     uint32_t count;
@@ -193,10 +212,10 @@ static void TitleLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
     ULONG on = 0;
     for (ULONG i = 0; i < cheats; i++)
         on += switches[i] ? 1 : 0;
-    oxos_ini_free(keys);
 
     RunTrainer(trainer, ReadDword(trainer, size, ETM_ENTRY));
     oxos_log("%s: trainer %s applied, %lu of %lu cheats on.", Title->TitleName, file, on, cheats);
+    oxos_ini_free(keys); // after the log: file is in keys
 }
 
 // --- The trainer menu (app/): oxos_trainers.xbe, started in place of a game that has a trainer
@@ -259,6 +278,10 @@ static void TitleLoading(const OXOS_TITLE_LOADING *Title, void *UserData) {
     if (!ReadTitleId(Title->Path, titleId) || !ReadSection(titleId, keys, count, file))
         return;
     oxos_ini_free(keys);
+    if (StartsItsUpdate(Title->Path, titleId)) {
+        oxos_log("%08lX: the title update in E:\\TDATA\\%08lx\\$u starts next: the trainer menu comes with it (%s).", titleId, titleId, Title->Path);
+        return;
+    }
     if (XBMCHookInstalled() || !oxos_title_redirect(Title, MENU_PATH))
         return;
     state->MenuLaunch = launch;

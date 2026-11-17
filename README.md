@@ -86,10 +86,15 @@ launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move
 <img width="100%" src="docs/oxos_trainers_halo2.jpg" alt="The OXOS Universal Trainers menu before Halo 2: its title image, the trainer and each cheat with a switch, and Start Game">
 
 Start a game that has a trainer, from any dashboard, launcher or disc: the trainer menu comes first. Switch the trainer and the cheats you want on, then
-**Start Game** (A). Games without a trainer start as always.
+**Start Game** (A), or BACK for the dashboard. Games without a trainer start as always.
 - **Consoles and xemu:** works on a real Xbox and in [xemu](https://xemu.app), also with an ISO loaded through xemu's **Load Disc** (copy the `OXOS` folder
   to xemu's `C:` as on a console).
 - ~1,000 trainers come with the release, in `C:\OXOS\trainers\`; each game's settings are kept in `C:\OXOS\extensions\oxos_trainers.ini`.
+- Cheats switched during the game show their buttons in the menu: Halo 2's Cloaked is BACK, its Jump 2x as high RIGHT STICK + D-PAD DOWN.
+- Games with several trainers (Halo 2 has 8): LEFT and RIGHT pick one; a trainer made for another version of the game is marked as not compatible and stays off.
+- New trainers: copy `.etm` files into `C:\OXOS\trainers\`; the menu adds them the next time it starts (0.15 s at each start with the 1,084). Started on
+  its own from a dashboard (`C:\OXOS\extensions\oxos_trainers.xbe`), it adds them and says how many: also the way to build the settings from nothing.
+- Games with a title update in `E:\TDATA`: the menu comes once, for the update the game restarts into, not for the disc.
 - Works from every dashboard, with disc images and with original discs; XBMC4Gamers' own trainers keep working.
 - [Details](spec/oxos_internal/37_universal_trainers.md).
 

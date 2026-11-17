@@ -2,16 +2,18 @@
 """Screenshots of xemu running a BIOS: boots it with an optional disc, files of your own on the hard disk's C:, and a virtual controller that presses buttons
 between the screenshots. For checking screens (the dashboard, the trainer menu, error screens) without anyone at the PC.
 
-usage: xemu_screenshot.py BIOS OUT [--iso GAME.iso] [--hdd HDD.qcow2] [--put LOCAL=C:\\PATH ...] [--steps STEPS] [--save-hdd FILE]
+usage: xemu_screenshot.py BIOS OUT [--iso GAME.iso] [--hdd HDD.qcow2] [--eeprom FILE] [--put LOCAL=C:\\PATH ...] [--steps STEPS] [--save-hdd FILE]
 
 OUT is the screenshots' name: OUT_1.png, OUT_2.png, ... (640x480). STEPS is a comma-separated list, run in order:
 - wait:SECONDS   wait (boot, a game starting, an animation);
 - shot           save the next screenshot;
 - BUTTON[:N]     press a controller button N times (default 1): A, B, X, Y, BLACK (RB), WHITE (LB), BACK, START, LS, RS (stick clicks),
                  UP, DOWN, LEFT, RIGHT (D-pad).
-Default: "wait:30,shot". --put copies a file onto C: of a copy of the hard disk (FATX), creating folders; repeat it for more files. The --hdd image itself is
-never written (default: the xemu-dashboard disk, `make -C kernel hdd_image`). --save-hdd keeps the disk as xemu left it, to read what the console wrote
-(tests/fatx.py: FATX(Qcow2(FILE), "C").read_file("OXOS\\extensions\\oxos_trainers.ini")).
+Default: "wait:30,shot". --put copies a file onto C: (or E:, F:, ...) of a copy of the hard disk (FATX), creating folders and replacing a file
+that is there; repeat it for more files.
+The --hdd image itself is never written (default: the xemu-dashboard disk, `make -C kernel hdd_image`). --save-hdd keeps the disk as xemu left it, to
+read what the console wrote (tests/fatx.py: FATX(Qcow2(FILE), "C").read_file("OXOS\\extensions\\oxos_trainers.ini")). --eeprom starts from a copy of
+an EEPROM (default: a new one): the one the disk was used with (tools/run.py --state keeps both), for content signed with its key, such as a title update.
 
 Example: the trainer menu before Halo 2, at its Cloaked cheat:
   xemu_screenshot.py build/kernel/release/bios.bin /tmp/menu --iso xiso/Halo2/halo2-xiso.iso \\
@@ -58,14 +60,20 @@ def read_steps(text):
 
 
 def write_files(hdd, files):
-    """Copies each LOCAL=C:\\PATH onto C: of the disk image hdd (FATX)."""
+    """Copies each LOCAL=X:\\PATH onto drive X: of the disk image hdd (FATX: C, E, F, ...; no drive letter means C:), replacing a file already there."""
     image = Qcow2(hdd)
-    disk = FATXWriter(image, "C")
+    disks = {}
     for item in files:
         local, _, target = item.partition("=")
-        path = target.split(":", 1)[1].lstrip("\\") if ":" in target else target.lstrip("\\")
+        drive, path = (target[0].upper(), target[2:]) if len(target) > 1 and target[1] == ":" else ("C", target)
+        path = path.lstrip("\\")
+        if drive not in disks:
+            disks[drive] = FATXWriter(image, drive)
+        disk = disks[drive]
         if "\\" in path:
             disk.makedirs(path.rsplit("\\", 1)[0])
+        if disk.lookup(path):
+            disk.delete_entry(path)  # replaced: a new build over the one on the disk
         disk.write_file(path, open(local, "rb").read())
     image.save(hdd + ".new")
     os.replace(hdd + ".new", hdd)
@@ -91,8 +99,9 @@ def main():
     ap.add_argument("out", help="screenshot name: OUT_1.png, OUT_2.png, ...")
     ap.add_argument("--iso", help="disc image for the DVD drive")
     ap.add_argument("--hdd", default=os.path.join(root, "third_party/xemu_dashboard/xemu_dashboard.qcow2"), help="hard-disk image (copied, never written)")
-    ap.add_argument("--put", action="append", default=[], metavar="LOCAL=C:\\PATH", help="a file to copy onto C: (repeatable)")
+    ap.add_argument("--put", action="append", default=[], metavar="LOCAL=C:\\PATH", help="a file to copy onto C:, E:, ... (repeatable)")
     ap.add_argument("--steps", default="wait:30,shot", help="wait:S, shot and button presses, comma-separated")
+    ap.add_argument("--eeprom", help="EEPROM to start from (copied, never written)")
     ap.add_argument("--save-hdd", metavar="FILE", help="keep the disk as xemu left it")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     a = ap.parse_args()
@@ -104,7 +113,10 @@ def main():
     sock = os.path.join(tempfile.gettempdir(), os.path.basename(work) + ".sock")  # short: a Unix socket path has at most 107 characters
     hdd = os.path.join(work, "hdd.qcow2")
     shutil.copyfile(a.hdd, hdd)
-    write_files(hdd, a.put)
+    if a.put:
+        write_files(hdd, a.put)
+    if a.eeprom:
+        shutil.copyfile(a.eeprom, os.path.join(work, "eeprom.bin"))
     cfg = os.path.join(work, "xemu.toml")
     open(cfg, "w").write(
         f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '64'\n\n[sys.files]\nbootrom_path = ''\n"
