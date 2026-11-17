@@ -15,9 +15,10 @@ The --hdd image itself is never written (default: the xemu-dashboard disk, `make
 read what the console wrote (tests/fatx.py: FATX(Qcow2(FILE), "C").read_file("OXOS\\extensions\\oxos_trainers.ini")). --eeprom starts from a copy of
 an EEPROM (default: a new one): the one the disk was used with (tools/run.py --state keeps both), for content signed with its key, such as a title update.
 
-Example: the trainer menu before Halo 2, at its Cloaked cheat:
+Example: the trainer menu before Halo 2, at its Cloaked cheat (the release's oxos_extensions.ini has the extension off, so with one that turns it on):
+  printf '[oxos_trainers]\\r\\nextension = oxos_trainers.xos\\r\\nenabled = yes\\r\\n' > /tmp/extensions.ini
   xemu_screenshot.py build/kernel/release/bios.bin /tmp/menu --iso xiso/Halo2/halo2-xiso.iso \\
-      --put kernel/extensions/oxos_extensions.ini=C:\\OXOS\\oxos_extensions.ini \\
+      --put /tmp/extensions.ini=C:\\OXOS\\oxos_extensions.ini \\
       --put build/kernel/extensions/oxos_trainers/oxos_trainers.xos=C:\\OXOS\\extensions\\oxos_trainers.xos \\
       --put build/kernel/extensions/oxos_trainers/app/bin/default.xbe=C:\\OXOS\\extensions\\oxos_trainers.xbe \\
       --put build/kernel/extensions/oxos_trainers/oxos_trainers.ini=C:\\OXOS\\extensions\\oxos_trainers.ini \\

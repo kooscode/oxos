@@ -87,7 +87,7 @@ oxos_vX.Y.Z.zip
 ├── OXOS\
 │   ├── bios\                             bios_vX.Y.Z.bin (1 MB), bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin: to flash, not used from the disk
 │   ├── apps\                             oxos_ftp.xbe, the OXOS FTP server
-│   ├── oxos_extensions.ini               the shipped extensions, enabled (kernel/extensions/oxos_extensions.ini)
+│   ├── oxos_extensions.ini               the shipped extensions, listed, off (kernel/extensions/oxos_extensions.ini)
 │   ├── oxos_title_patches.ini
 │   ├── extensions\                       oxos_trainers.xos, oxos_trainers.xbe, oxos_trainers.ini (every trainer off)
 │   ├── trainers\                         the trainer pack's 1,084 .etm files

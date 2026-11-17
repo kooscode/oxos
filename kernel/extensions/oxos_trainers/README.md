@@ -12,7 +12,7 @@ Design: [`spec/oxos_internal/37_universal_trainers.md`](../../../spec/oxos_inter
 | `oxos_trainers.ini` (generated next to it from the trainer pack) | `C:\OXOS\extensions\oxos_trainers.ini` |
 | the trainers (`third_party/xbox_trainers/trainers/*.etm`) | `C:\OXOS\trainers\` |
 
-and in `C:\OXOS\oxos_extensions.ini`:
+and in `C:\OXOS\oxos_extensions.ini` (the release lists it with `enabled = no`: change it to `yes`):
 
 ```ini
 [oxos_trainers]

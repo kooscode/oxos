@@ -12,7 +12,8 @@ Universal Trainers, OXOS does it for every launch, from any dashboard, the File 
 
 ## 1. What the user sees
 1. Install (once): `oxos_trainers.xos`, `oxos_trainers.xbe` and `oxos_trainers.ini` in `C:\OXOS\extensions\`, the trainers in `C:\OXOS\trainers\`, and
-   the extension listed with `enabled = yes` in `C:\OXOS\oxos_extensions.ini` (spec 34 §3).
+   the extension listed with `enabled = yes` in `C:\OXOS\oxos_extensions.ini` (spec 34 §3). The release ships all of it, with `enabled = no` (user,
+   2026-11-16: a screen before most games, also where no trainer fits the game's version, is in the way for players who do not use trainers).
 2. A game that has a trainer is started from a dashboard, a launcher or the File Manager: the **trainer menu** comes first (§4a). It shows the game's title
    image and name, the trainer, and a switch for the trainer and for each cheat. **Start Game** is selected, so A starts the game as set; the D-pad moves, A
    switches. A game without a trainer starts directly, with no screen and no wait.

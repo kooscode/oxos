@@ -282,7 +282,7 @@ release:
 	$(if $(VERSION),$(MAKE) release_zip VERSION=$(VERSION))
 
 # The release zip, oxos_vVERSION.zip (spec/oxos_disk_layout.md, "The release zip"): OXOS\ as it goes on the console's C:\ (C:\OXOS), with the three BIOS
-# images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server, oxos_ftp.xbe), the extensions OXOS ships (oxos_extensions.ini enabling them), the
+# images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server, oxos_ftp.xbe), the extensions OXOS ships (oxos_extensions.ini listing them, off), the
 # trainer pack in OXOS\trainers\ and the folders the kernel makes; the third-party notices beside it. The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and
 # their SHA-256 sums are in build/kernel/release/dist.
 RELEASE_DIST := $(RELEASE_BUILD)/dist

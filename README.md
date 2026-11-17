@@ -16,6 +16,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
   upload files and launch XBEs from any browser.
 - **Titles from Disk/ISO:** Fully supports running Titles of your own discs dumped to HDD, XISO or CCI.
 - **Universal Trainers:** Loads a [trainer menu](#universal-trainers) for games matching any of 1,000 trainers included.
+  Off as shipped: one line turns it on.
 - **Title patches:** Patches any title from an .ini file!
 - **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
   one ([how to use it](docs/launch_redirect.md)).
@@ -84,6 +85,8 @@ launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move
 
 ## Universal Trainers
 <img width="100%" src="docs/oxos_trainers_halo2.jpg" alt="The OXOS Universal Trainers menu before Halo 2: its title image, the trainer and each cheat with a switch, and Start Game">
+
+**Off as shipped:** to turn it on, set `enabled = yes` under `[oxos_trainers]` in `C:\OXOS\oxos_extensions.ini`.
 
 Start a game that has a trainer, from any dashboard, launcher or disc: the trainer menu comes first. Switch the trainer and the cheats you want on, then
 **Start Game** (A), or BACK for the dashboard. Games without a trainer start as always.
