@@ -101,7 +101,9 @@ Read data once, in `ExtensionStart` or a title event, and keep what you need: ev
 the extension's section of `oxos_extensions.ini` (how it was done before) keep working for the keys `NAME.ini` does not set.
 
 `oxos_log` lines go to `C:\OXOS\log\extensions.log` (read it over FTP or with the File Manager; it moves to `extensions_1.log` at 10 MB), and to the debug
-serial port of a debug kernel.
+serial port of a debug kernel, **only when the extension's section of `oxos_extensions.ini` says `logging_enabled = yes`**. Logging is off unless turned
+on: without that line, or with `logging_enabled = no`, the extension logs nothing anywhere, whatever `oxos_set_log_target` asked. The SDK and the kernel
+apply it, so the extension needs no code for it; the SDK's `oxos_extensions.ini` turns it on for the examples.
 
 ## 6. What an extension can use
 `include/oxos_sdk.h` explains each part where it is declared.

@@ -498,18 +498,18 @@ def write_launch_redirect(hdd_copy):
 # examples, and slow_loop, whose first RunLoop after the cold boot takes 600 ms), two the kernel must unload or refuse, one switched off, one without the
 # enabled = yes an extension needs to load (a copy of chain, which would load), and one in the folder that the list does not name.
 EXTENSIONS_INI = ("; boot_test.py --extensions\r\n"
-                  "[extension_test]\r\nextension = extension_test.xos\r\nenabled = yes\r\nanswer = 42\r\nboth = from the section\r\n"
+                  "[extension_test]\r\nextension = extension_test.xos\r\nenabled = yes\r\nanswer = 42\r\nboth = from the section\r\nlogging_enabled = no\r\n"
                   "[chain]\r\nextension = chain.xos\r\nenabled = yes\r\n"
                   "[plain C]\r\nextension = plain_c.xos\r\nenabled = yes\r\ngreeting = hello\r\n"
-                  "[example_run_loop]\r\nextension = example_run_loop.xos\r\nenabled = yes\r\n"
-                  "[example_kernel_hook]\r\nextension = example_kernel_hook.xos\r\nenabled = yes\r\n"
-                  "[example_title_event]\r\nextension = example_title_event.xos\r\nenabled = yes\r\n"
+                  "[example_run_loop]\r\nextension = example_run_loop.xos\r\nenabled = yes\r\nlogging_enabled = yes\r\n"
+                  "[example_kernel_hook]\r\nextension = example_kernel_hook.xos\r\nenabled = yes\r\nlogging_enabled = yes\r\n"
+                  "[example_title_event]\r\nextension = example_title_event.xos\r\nenabled = yes\r\nlogging_enabled = yes\r\n"
                   "[slow_loop]\r\nextension = slow_loop.xos\r\nenabled = yes\r\n"
                   "[failload]\r\nextension = failload.xos\r\nenabled = yes\r\n"
                   "[badversion]\r\nextension = badversion.xos\r\nenabled = yes\r\n"
                   "[switched off]\r\nextension = disabled.xos\r\nenabled = no\r\n"
                   "[no enabled line]\r\nextension = notenabled.xos\r\n"
-                  "[oxos_trainers]\r\nextension = oxos_trainers.xos\r\nenabled = yes\r\n")
+                  "[oxos_trainers]\r\nextension = oxos_trainers.xos\r\nenabled = yes\r\nlogging_enabled = yes\r\n")
 # The extensions' own ini files, next to them (spec/oxos_internal/34 §3.1): settings at the top, data sections after them. extension_test's has 300 sections
 # of padding before the one it reads (past the first 16 KB, many 4 KB reads); its "both" is also in its oxos_extensions.ini section, where it must lose.
 OWN_INI_FILES = {
@@ -673,6 +673,9 @@ def extension_checks(mon, launches, hdd):
         "slow_loop's 600 ms RunLoop at the cold boot; the loop went on calling RunLoop in the later launches": s[1] == launches and s[2] <= 1 and s[3] > 2,
         "C:\\OXOS\\log\\extensions.log: 'extension slow_loop delayed extension loop by N ms' for it, once, 500 < N < 2000": len(delays) == 1 and delays[0] and
             500 < int(delays[0][1]) < 2000,
+        "logging_enabled = no in extension_test's section, though it asks for the file and the serial port (oxos_set_log_target), and plain C without the "
+        "line: none of their lines in extensions.log; the examples, with logging_enabled = yes, log there":
+            not any(l.startswith("[extension_test]") for l in lines) and not any(l.startswith("[plain C]") for l in lines) and any(l.startswith("[example_kernel_hook] ") for l in lines),
         "example_run_loop: '1 s into this title.' from its RunLoop; at each title's end how long it ran": "[example_run_loop] 1 s into this title." in lines and
             sum(bool(re.fullmatch(r"\[example_run_loop\] This title ran \d+ s\.", l)) for l in lines) == launches - 1,
         f"example_kernel_hook: its start line at each of the {launches} launches (oxos_log's default: the file and the serial port); its NtOpenFile count and "

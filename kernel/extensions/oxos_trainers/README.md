@@ -39,7 +39,10 @@ trainer_enabled = yes
 
 - `trainer_enabled = yes` runs the trainer; each cheat is `N. name = yes` or `no`. The number N is what counts: it is the cheat's number in the trainer, and the
   name is only for you.
-- The log line in `C:\OXOS\log\extensions.log` says what happened: `[oxos_trainers] Halo 2: trainer Halo 2.etm applied, 2 of 13 cheats on.`
+- The log line in `C:\OXOS\log\extensions.log` says what happened: `[oxos_trainers] Halo 2: trainer Halo 2.etm applied, 2 of 13 cheats on.` The extension
+  logs only with `logging_enabled = yes` under `[oxos_trainers]` in `oxos_extensions.ini` (the release ships `no`). That turns on both `extensions.log` and
+  `oxos_trainers_scan.log`, which the on-screen trainer menu writes when it scans for trainers. Without it, nothing is logged anywhere, not even on a debug
+  kernel's serial port.
 - A trainer patches one version of a game. If it does nothing, or the game crashes, turn it off again (or try that game's trainer in the pack's `variants/`).
 
 ## What it does, and does not do

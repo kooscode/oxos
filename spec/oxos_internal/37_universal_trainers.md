@@ -18,7 +18,9 @@ Universal Trainers, OXOS does it for every launch, from any dashboard, the File 
    image and name, the trainer, and a switch for the trainer and for each cheat. **Start Game** is selected, so A starts the game as set; the D-pad moves, A
    switches. A game without a trainer starts directly, with no screen and no wait.
 3. The game starts with its trainer when it is switched on. `C:\OXOS\log\extensions.log` says so: `[oxos_trainers] Halo 2: trainer Halo 2.etm applied, 2
-   of 13 cheats on.` Only when XBMC4Gamers launches the game with its own trainer installed does OXOS leave it to XBMC4Gamers (spec 23 §5).
+   of 13 cheats on.`, when the extension's section of `oxos_extensions.ini` has `logging_enabled = yes` (spec 34 §5.1); the release ships `no` (user,
+   2026-11-16: a line at every game kept filling the log). Only when XBMC4Gamers launches the game with its own trainer installed does OXOS leave it to
+   XBMC4Gamers (spec 23 §5).
 4. A disc the console starts by itself (in the drive at power-on, or loaded with xemu's "Load Disc") gets the menu too (§4a, step 2).
 5. The settings can also be edited in `oxos_trainers.ini` (§2).
 
@@ -194,7 +196,7 @@ game can be chosen at once:
 4. Write the ini once, when something was added (an empty or missing ini gets a first line saying what it is). A new trainer for a section without a
    `trainer =` becomes its trainer. Files that are gone are left in the ini (their section still names them; the menu says the file cannot be
    read).
-5. Write how long each part took to `C:\OXOS\log\oxos_trainers_scan.log`.
+5. Write how long each part took to `C:\OXOS\log\oxos_trainers_scan.log`, with `logging_enabled = yes` (step 3 of §1).
 
 Started on its own (from a dashboard, with no game), the menu then shows "TRAINER REFRESH COMPLETE" (or "TRAINERS UP TO DATE"), how many trainers it added,
 how many files are no usable trainers and how many there are, and A leaves to the dashboard: the way from an empty ini to every trainer in it (in xemu: an
@@ -276,7 +278,8 @@ A console, and a game folder on the hard disk as the disc, are still to be tried
 ### 7.5a A game whose build has no trainer: the player can see why
 With §7.4 a title that has trainers, but none for the build on this console, starts with no menu, which is right; but the player has no way to know why. So:
 - **The extension logs it** at that launch, one line in `C:\OXOS\log\extensions.log` (no other disk write in the title-loading event):
-  `[oxos_trainers] 55530041: trainers for this title, none for its build 421A8501.`
+  `[oxos_trainers] 55530041: trainers for this title, none for its build 421A8501.` (The release has the extension's log off, `logging_enabled = no`:
+  this needs a place of its own.)
 - **The menu, started on its own,** reads those lines and shows them under the scan's result (§7.3): "No trainer for the build on this console:" and one line
   per title (its name from the ini section, the build), the latest first, each title once. A title that has since got a fitting trainer (a new `.etm`) is
   left out.

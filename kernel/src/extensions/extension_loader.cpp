@@ -350,6 +350,17 @@ void LoadSettings(const XK_EXTENSION_ENTRY &Entry, const char *Name, OXOS_CONTEX
     Context.INIPath = PoolText({iniPath, (ULONG)strlen(iniPath)});
 }
 
+// The extension's oxos_log lines may go anywhere: its settings say logging_enabled = yes (§3.1). Without it the log target starts empty, and the SDK's
+// oxos_log writes nothing afterwards either, whatever oxos_set_log_target asks.
+bool IsLoggingEnabled(const OXOS_CONTEXT &Context) {
+    for (ULONG i = 0; i < Context.SettingCount; i++) {
+        const OXOS_SETTING &setting = Context.Settings[i];
+        if (setting.Key && setting.Value && strcasecmp(setting.Key, "logging_enabled") == 0)
+            return strcasecmp(setting.Value, "yes") == 0;
+    }
+    return false;
+}
+
 } // namespace
 
 // Loads the extension Entry names as LoadedExtensions->Extensions[Count] and calls its Load; true when it stays. *ImagesBytes counts the loaded images' sizes
@@ -426,7 +437,7 @@ static bool LoadExtension(const XK_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots, 
     context.State = statePage;
     context.Api = &LOADER_API;
     context.Kernel = &state->Kernel;
-    context.LogTarget = OXOS_LOG_SERIAL | OXOS_LOG_FILE;
+    context.LogTarget = IsLoggingEnabled(context) ? OXOS_LOG_SERIAL | OXOS_LOG_FILE : 0;
 
     *descriptor->Context = &context; // the SDK's oxos_context: its functions read this launch's context from there
     if (!descriptor->Start()) {

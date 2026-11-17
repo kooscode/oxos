@@ -35,7 +35,8 @@ extern "C" {
 // --- 2. Logging
 
 // One line, as printf formats it, after "[name] " (the extension's section in oxos_extensions.ini). It goes to C:\OXOS\log\extensions.log and to the debug
-// serial port, which only debug kernels have.
+// serial port, which only debug kernels have, and only when the extension's section of oxos_extensions.ini says "logging_enabled = yes" (the user's choice,
+// which the extension need not read). Without it, or with no: no line anywhere, whatever oxos_set_log_target asks.
 void oxos_log(const char *Format, ...);
 
 #define OXOS_LOG_SERIAL 1

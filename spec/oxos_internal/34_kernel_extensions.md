@@ -86,6 +86,10 @@ Comments go on lines of their own: as in the other OXOS ini files, a value is th
 - **`extension =`** (required): the `.xos` file's name in the extensions folder (no path, no subfolders).
 - **`enabled = yes`** (required to load it; user, 2026-11-15): an extension is off unless its section says `enabled = yes`. Missing, `no` or anything else
   (counted as a line not understood) leaves it off, so an extension never loads by accident and can be switched off without deleting it or its settings.
+- **`logging_enabled = yes`** (user, 2026-11-16: per extension, the user's choice; 2026-11-17: off means off, the serial port too, and off unless turned
+  on): its `oxos_log` lines go where the extension's log target says. Missing, `no` or anything else: the extension logs nothing, neither
+  `C:\OXOS\log\extensions.log` nor the debug serial port, whatever it asked with `oxos_set_log_target`. The extension does nothing for it (§5.1): it is
+  passed on as one of its settings, and the kernel and the SDK apply it.
 - **Settings and data: the extension's own file, `C:\OXOS\extensions\NAME.ini`, next to `NAME.xos`** (the same name; implemented 2026-11-15, user: "less
   crowded root"). It holds two kinds of things, read two ways:
 
@@ -273,8 +277,8 @@ struct OXOS_CONTEXT {
 
 | Function | What it does |
 |---|---|
-| `oxos_log(Format, ...)` | one line, as printf formats it, prefixed with the extension's section name, to where the log target says: the kernel's debug log (the serial port of a `SERIAL=1` kernel; a release kernel keeps nothing of it), `C:\OXOS\log\extensions.log` (spec/oxos_internal/35; at `PASSIVE_LEVEL` only), or both. The kernel adds the name and sends it on (export 416, §9.1) |
-| `oxos_set_log_target(Target)` | where `oxos_log` writes from then on: `OXOS_LOG_SERIAL`, `OXOS_LOG_FILE` or both; at any time. The kernel starts each extension at both (user, 2026-11-14: a release kernel has no serial output, so the serial half costs nothing there, and a debug or trace kernel prints the lines too) |
+| `oxos_log(Format, ...)` | one line, as printf formats it, prefixed with the extension's section name, to where the log target says: the kernel's debug log (the serial port of a `SERIAL=1` kernel; a release kernel keeps nothing of it), `C:\OXOS\log\extensions.log` (spec/oxos_internal/35; at `PASSIVE_LEVEL` only), or both. The kernel adds the name and sends it on (export 416, §9.1). Only with `logging_enabled = yes` in the extension's section (§3.1); without it nothing at all: the loader starts the target empty, and the SDK's `oxos_log` returns before writing (the export itself does not read settings: resident code costs title memory, and a check there cost a page) |
+| `oxos_set_log_target(Target)` | where `oxos_log` writes from then on: `OXOS_LOG_SERIAL`, `OXOS_LOG_FILE` or both; at any time. The kernel starts each extension with `logging_enabled = yes` at both (user, 2026-11-14: a release kernel has no serial output, so the serial half costs nothing there, and a debug or trace kernel prints the lines too), and at neither without it, which a target set here does not overrule |
 | `oxos_setting(Key)` | the value of the setting `Key` (any case), or null: the top of the extension's own `NAME.ini`, then its section in `oxos_extensions.ini` (§3.1). In memory: any time, hooks included. The kernel owns the text, valid until the title ends |
 | `oxos_setting_number(Key, Default)` | the value of `Key` as a whole decimal number, or `Default` when it is missing or does not start with a digit (user, 2026-11-14: extensions should not each parse digits) |
 | `oxos_ini_section(Section, Keys, Count)`, `oxos_ini_value(Keys, Count, Key)`, `oxos_ini_free(Keys)` | data (§3.1): one `[Section]` of the extension's own `NAME.ini` (any case), read from the disk at this call, 4 KB at a time, so the file never sits in memory: an array of its keys and values (keys may have spaces) in one block `oxos_ini_free` frees; `STATUS_OBJECT_NAME_NOT_FOUND` without the file or the section; `STATUS_INVALID_DEVICE_STATE` above `PASSIVE_LEVEL` (never from a hook). C++ only, as `oxos_file_list` |

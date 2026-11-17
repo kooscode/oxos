@@ -16,6 +16,11 @@ OXOS_CONTEXT *oxos_context;
 // --- Logging
 
 void oxos_log(const char *Format, ...) {
+    // Only with logging_enabled = yes in the extension's settings (its oxos_extensions.ini section). Without it, or with any other value: no line at all,
+    // neither the file nor the serial port, whatever oxos_set_log_target asked for, and also on kernels that do not check it themselves.
+    const char *logging = oxos_setting("logging_enabled");
+    if (!logging || strcasecmp(logging, "yes") != 0)
+        return;
     char text[224];
     va_list args;
     va_start(args, Format);

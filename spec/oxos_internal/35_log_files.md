@@ -28,7 +28,7 @@ to text files on the hard disk instead.
 | File | Written by | Lines |
 |---|---|---|
 | `extensions.log` | the extension run loop (spec/oxos_internal/34 §4.3) | `extension NAME delayed extension loop by N ms`: a `RunLoop` call that took over 500 ms, or one still running 500 ms after the title asked to end |
-| `extensions.log` | extensions, through `oxos_log` with `OXOS_LOG_FILE` (spec/oxos_internal/34 §5.1; export 416, `OXOSWriteExtensionLog`, which writes only this log) | `[SECTION] text`, as on the serial port |
+| `extensions.log` | extensions, through `oxos_log` with `OXOS_LOG_FILE` (spec/oxos_internal/34 §5.1; export 416, `OXOSWriteExtensionLog`, which writes only this log), only when the extension's section of `oxos_extensions.ini` says `logging_enabled = yes` (without it not on the serial port either) | `[SECTION] text`, as on the serial port |
 | `selftest.log` | the FATX self-test suite (self-test builds only) | 50 numbered lines, to check the rotation |
 
 ## 3. Open

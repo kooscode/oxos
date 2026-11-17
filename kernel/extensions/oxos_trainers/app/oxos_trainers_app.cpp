@@ -677,12 +677,39 @@ bool WriteOtherTrainer(bool enabled, const CHOICE &choice, const std::vector<boo
 // know are read. Each is added to the section of each title ID it lists, as that title's next "trainer N" (the section's own trainer becoming trainer 1), or
 // gets a new section; a file OXOS cannot use as a trainer gets a line in [unusable trainers], so it is not read again. The ini is written once, when something
 // was added, before the game's section is read: a trainer copied in for this game can be chosen at once. With more than NEW_TRAINERS_SHOWN new files the
-// menu shows a refresh screen meanwhile (ShowRefresh). How long each part took is written to C:\OXOS\log\oxos_trainers_scan.log.
+// menu shows a refresh screen meanwhile (ShowRefresh). How long each part took is written to C:\OXOS\log\oxos_trainers_scan.log when the extension's
+// section of oxos_extensions.ini says logging_enabled = yes.
 
 constexpr char TRAINERS_FOLDER_NAME[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\trainers";
 constexpr char SCAN_LOG_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\log\\oxos_trainers_scan.log";
 constexpr char UNUSABLE_SECTION[] = "unusable trainers";
 constexpr std::size_t NEW_TRAINERS_SHOWN = 50; // more new trainers than this: the refresh screen while they are read
+
+constexpr char EXTENSIONS_INI_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_extensions.ini";
+
+// The menu may write its log file: the extension's section of oxos_extensions.ini, [oxos_trainers], says logging_enabled = yes (spec 34 §5.1, the
+// same switch the kernel and the SDK apply to the extension's oxos_log lines).
+bool IsLoggingEnabled() {
+    std::string ini;
+    if (!ReadWholeFile(EXTENSIONS_INI_PATH, ini))
+        return false;
+    bool inside = false;
+    for (std::size_t line = 0; line < ini.size();) {
+        std::size_t end = ini.find('\n', line);
+        end = end == std::string::npos ? ini.size() : end + 1;
+        std::string text = ini.substr(line, end - line);
+        while (!text.empty() && (text.back() == '\r' || text.back() == '\n'))
+            text.pop_back();
+        text = TrimText(text);
+        std::size_t equals = text.find('=');
+        if (!text.empty() && text[0] == '[')
+            inside = SameText(text, "[oxos_trainers]");
+        else if (inside && equals != std::string::npos && SameText(TrimText(text.substr(0, equals)), "logging_enabled"))
+            return SameText(TrimText(text.substr(equals + 1)), "yes");
+        line = end;
+    }
+    return false;
+}
 
 // The names of the .etm files in C:\OXOS\trainers.
 std::vector<std::string> ListTrainerFiles() {
@@ -968,7 +995,8 @@ bool ScanTrainers(void (*showProgress)(std::size_t done, std::size_t total)) {
                       milliseconds(listed, compared) + " ms; " + std::to_string(added.size()) + " new read and added in " + milliseconds(compared, read) +
                       " ms; " + (scan.Edits.empty() ? "nothing to write" : written ? "ini written" : "ini NOT written") + " in " + milliseconds(read, done) +
                       " ms. Total " + milliseconds(start, done) + " ms.\r\n";
-    WriteWholeFile(SCAN_LOG_PATH, log);
+    if (IsLoggingEnabled())
+        WriteWholeFile(SCAN_LOG_PATH, log);
     return written;
 }
 

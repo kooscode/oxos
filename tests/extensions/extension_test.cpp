@@ -165,6 +165,7 @@ static BOOLEAN ExtensionStart(void) {
     oxos_on_title_loading(CountLoading, &Saved->Loading);
     oxos_on_title_loaded(CountLoaded, &Saved->Loaded);
     oxos_on_title_exiting(CountExiting, &Saved->Exiting);
+    oxos_set_log_target(OXOS_LOG_SERIAL | OXOS_LOG_FILE); // asks for both: its section's logging_enabled = no must still keep every line out
     oxos_log("launch %lu, generation %lu", Saved->Launches, oxos_launch_number());
     return oxos_hook(NtOpenFile, CountNtOpenFile);
 }
