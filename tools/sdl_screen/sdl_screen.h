@@ -65,7 +65,7 @@ void Poll(void (*onEvent)(const SDL_Event &event) = nullptr);
 // True while the button is down on any controller.
 bool Held(SDL_GamepadButton button);
 
-// True when the button went down on any controller between the last two Polls (once per press).
+// True when the button went down on any controller between the last two Polls (once per press), also when it was let go again before the last Poll.
 bool Pressed(SDL_GamepadButton button);
 
 } // namespace sdl_screen

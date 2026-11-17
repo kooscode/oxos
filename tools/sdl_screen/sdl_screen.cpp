@@ -30,6 +30,8 @@ SDL_FRect ScreenPictureWhere;
 // The buttons down on any controller, at the last Poll and at the one before (bit n: SDL_GamepadButton n).
 Uint32 ButtonsNow;
 Uint32 ButtonsBefore;
+// The buttons that went down between the last two Polls, from SDL's button-down events: also a press let go before the last Poll, which the two states miss.
+Uint32 ButtonsWentDown;
 
 // --- Text
 
@@ -235,9 +237,12 @@ void ShowForever() {
 
 void Poll(void (*onEvent)(const SDL_Event &event)) {
     SDL_Event event;
+    ButtonsWentDown = 0;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_EVENT_GAMEPAD_ADDED)
             OpenGamepad(event.gdevice.which);
+        if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && event.gbutton.button < 32)
+            ButtonsWentDown |= 1u << event.gbutton.button;
         if (onEvent)
             onEvent(event);
     }
@@ -250,7 +255,7 @@ bool Held(SDL_GamepadButton button) {
 }
 
 bool Pressed(SDL_GamepadButton button) {
-    return (ButtonsNow & ~ButtonsBefore) & (1u << button);
+    return ((ButtonsNow & ~ButtonsBefore) | ButtonsWentDown) & (1u << button);
 }
 
 } // namespace sdl_screen
