@@ -240,3 +240,10 @@ Each tool's invocation and options are in its README (folders) or its docstring 
 - `pkill -f PATTERN` also matches the shell running it when the pattern is in its own command line; match the process name (`pkill -x xemu`) instead.
 - A Unix socket path over 107 characters fails (`AF_UNIX path too long`): put sockets in `/tmp`.
 - xemu needs `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1` to read a controller while its window has no focus (`tests/controller_test.py`, `xemu_env`).
+- **xemu sometimes freezes outright** (every thread waiting, 0 % CPU, no QMP answer); a test waiting on it once held a release build for 7 hours. The tests
+  give up after 60 s without a QMP answer (`[FAIL] xemu: ... (xemu froze)`) and `make regression` stops a phase after 30 minutes (`tests/README.md`); a
+  frozen run is not a kernel failure, run it again.
+  - **Anything new that waits gets a limit:** a QMP or socket read (`settimeout`), a subprocess (`timeout=`), a polling loop (a deadline). Never wait for
+    ever on xemu, a console or the network.
+  - **Watch long background runs** (`make release`, a regression, a console test): check that the log still moves. Unchanged for several minutes: look (`ps`,
+    xemu's CPU time) instead of waiting; an AppImage xemu shows as `AppRun` in `ps`, so `pkill -x xemu` misses it: kill the test's xemu by its PID.

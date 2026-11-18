@@ -48,19 +48,30 @@ def xemu_env():
                 SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=f"0x{VPAD_VENDOR:04x}/0x{VPAD_PRODUCT:04x}")
 
 
+# Seconds a test waits for xemu to answer a QMP command. xemu answers within a second or two (a 64 MB pmemsave included), but now and then it freezes outright
+# (every thread waiting, no CPU used, nothing answered), and a test waiting for the answer then waited for ever: a release build stood 7 hours (2026-11-18).
+QMP_TIMEOUT = 60
+
+
 def qmp(path, command, **arguments):
-    s = socket.socket(socket.AF_UNIX)
-    s.connect(path)
-    f = s.makefile("rw")
-    f.readline()
-    for msg in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments}):
-        f.write(json.dumps(msg) + "\n")
-        f.flush()
-        while True:
-            r = json.loads(f.readline())
-            if "return" in r or "error" in r:
-                break
-    s.close()
+    """Send one QMP command to the xemu listening on path and return its answer (the whole reply: "return" or "error"). Without an answer within
+    QMP_TIMEOUT seconds the test fails (exits), so the caller's cleanup stops xemu."""
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(QMP_TIMEOUT)
+        s.connect(path)
+        f = s.makefile("rw")
+        f.readline()
+        for msg in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments}):
+            f.write(json.dumps(msg) + "\n")
+            f.flush()
+            while True:
+                r = json.loads(f.readline())
+                if "return" in r or "error" in r:
+                    break
+        s.close()
+    except TimeoutError:  # converted here: callers catch OSError (TimeoutError's base) for other reasons
+        sys.exit(f"  [FAIL] xemu: no answer to QMP {command} within {QMP_TIMEOUT} s (xemu froze)\nRESULT: FAIL")
     return r
 
 

@@ -8,30 +8,15 @@ prints the measurements. With --both it runs the title twice: as built (the flag
 usage: memory_test.py --bios BIOS --xbe default.xbe [--memory 64|128] [--both | --no-limit] [--mcpx-rom MCPX]
                       [--hdd HDD] [--xemu PATH]
 """
-import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
+import argparse, os, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkxiso  # noqa: E402
+from controller_test import qmp  # noqa: E402  (fails the test when xemu does not answer: it froze)
 
 MAGIC = b"XKMEMTST\x01\x00\x00\x00"
 FIELDS = ("Done InitFlags TotalPages AvailablePages HighContiguous Blocks Bytes PagesAbove64MB HighestPhysical "
           "FailStatus TotalPagesEnd AvailablePagesEnd").split()
-
-
-def qmp(path, command, **arguments):
-    s = socket.socket(socket.AF_UNIX)
-    s.connect(path)
-    f = s.makefile("rw")
-    f.readline()
-    for msg in ({"execute": "qmp_capabilities"}, {"execute": command, "arguments": arguments}):
-        f.write(json.dumps(msg) + "\n")
-        f.flush()
-        while True:
-            r = json.loads(f.readline())
-            if "return" in r or "error" in r:
-                break
-    s.close()
-    return r
 
 
 def results(sock, work, addr):

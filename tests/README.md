@@ -33,6 +33,11 @@ self-test build only), which leave their results in kernel variables that `boot_
 kernel gives 15 964, spec/oxos_internal/18 §7). `MCPX_ROM=...` adds `test_mcpx`; `ONLY=test_exfat,test_iso` runs some phases. `make release` itself runs only
 the unit tests and `test_dash`.
 
+xemu now and then freezes outright: every thread waiting, no CPU used, nothing answered on its QMP socket. So that a test fails instead of waiting for ever,
+the test scripts give up on a QMP command after 60 s (`QMP_TIMEOUT` in `controller_test.py`, which `boot_test.py` and `memory_test.py` share) with
+`[FAIL] xemu: no answer ... (xemu froze)` and stop xemu, and `make regression` stops a phase still running after 30 minutes (`PHASE_LIMIT_MINUTES` in
+`tools/regression.py`). A frozen run is not a kernel failure: run it again.
+
 Run it on request, and after a large change: the file systems, memory, boot, the title loader or quick reboot, or many files at once.
 
 ## Files

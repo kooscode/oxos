@@ -8,7 +8,7 @@ usage: boot_test.py --bios build/kernel/self_tests/bios.bin --map build/kernel/s
 """
 import argparse
 import hashlib
-import hmac, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time
+import hmac, json, os, re, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from qcow2 import Qcow2
@@ -17,7 +17,7 @@ from fatx import FATX, FATXWriter  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
-from controller_test import xemu_env  # noqa: E402
+from controller_test import qmp, xemu_env  # noqa: E402
 from virtual_gamepad import XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 
@@ -35,18 +35,7 @@ class Monitor:
         self.path, self.syms = path, syms
 
     def hmp(self, cmd):
-        s = socket.socket(socket.AF_UNIX)
-        s.connect(self.path)
-        f = s.makefile("rw")
-        f.readline()
-        f.write('{"execute":"qmp_capabilities"}\n'); f.flush(); f.readline()
-        f.write(json.dumps({"execute": "human-monitor-command", "arguments": {"command-line": cmd}}) + "\n")
-        f.flush()
-        while True:
-            r = json.loads(f.readline())
-            if "return" in r or "error" in r:
-                break
-        s.close()
+        r = qmp(self.path, "human-monitor-command", **{"command-line": cmd})  # fails the test when xemu does not answer (it froze)
         return r.get("return", r)
 
     def addr(self, name):

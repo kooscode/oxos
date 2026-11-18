@@ -4,14 +4,15 @@
 usage: regression.py [--mcpx-rom ROM] [--pages N] [--only PHASE,...]
 
 `make -C kernel regression` runs it. Each phase's output goes to build/regression/<phase>.log, and the summary (result, checks and time per phase) is printed
-and saved as build/regression/summary.txt. Every phase runs, also after a failure. Exit status 1 when a phase fails, or when a title is given fewer free
-pages than --pages (default 15960: OXOS's count on a 64 MB console, so no change loses more; the stock kernel gives 15964, spec/oxos_internal/18 §7).
+and saved as build/regression/summary.txt. Every phase runs, also after a failure; a phase still running after 30 minutes is stopped (with its xemu) and
+fails. Exit status 1 when a phase fails, or when a title is given fewer free pages than --pages (default 15960: OXOS's count on a 64 MB console, so no change
+loses more; the stock kernel gives 15964, spec/oxos_internal/18 §7).
 
   --mcpx-rom ROM   your MCPX boot ROM dump, for test_mcpx (skipped without one; never committed)
   --pages N        the free pages test_memory must report, at least
   --only A,B       run only these phases (names as in the summary; "unit_tests" for the host unit tests)
 """
-import argparse, os, re, subprocess, sys, time
+import argparse, os, re, signal, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "regression")
@@ -26,14 +27,32 @@ XEMU_PHASES = ["test", "test_mcpx", "test_exfat", "test_lba48", "test_extensions
 MAKE_VARIABLES = ("MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES", "MAKELEVEL", "MCPX_ROM", "ONLY")
 
 
+# Minutes a phase may take before it is stopped and fails. The longest, test_exfat, takes about 8; the limit is for a phase that would otherwise wait for ever
+# (an xemu that froze while a test waited on something other than its QMP answer, which the tests time out themselves).
+PHASE_LIMIT_MINUTES = 30
+
+
 def run_phase(name, command, log_path):
-    """Run one phase; return (exit status, seconds, its output)."""
+    """Run one phase; return (exit status, seconds, its output, whether it was stopped at PHASE_LIMIT_MINUTES)."""
     start = time.monotonic()
     env = {key: value for key, value in os.environ.items() if key not in MAKE_VARIABLES}
+    # Its own process group, so that stopping it also stops the make, test script and xemu under it.
+    proc = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                            start_new_session=True)
+    stopped = False
+    try:
+        output, _ = proc.communicate(timeout=PHASE_LIMIT_MINUTES * 60)
+    except subprocess.TimeoutExpired:
+        stopped = True
+        os.killpg(proc.pid, signal.SIGKILL)
+        try:
+            output, _ = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:  # something outside the group still holds the output open
+            output = ""
+        output += f"\n{name}: stopped after {PHASE_LIMIT_MINUTES} minutes\n"
     with open(log_path, "w") as log:
-        proc = subprocess.run(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
-        log.write(proc.stdout)
-    return proc.returncode, time.monotonic() - start, proc.stdout
+        log.write(output)
+    return proc.returncode, time.monotonic() - start, output, stopped
 
 
 def check_unit_tests(output):
@@ -71,8 +90,8 @@ def main():
             print(f"{name}: skipped, no MCPX ROM", flush=True)
             continue
         print(f"{name}: running", flush=True)
-        status, seconds, output = run_phase(name, command, os.path.join(OUT, f"{name}.log"))
-        note = ""
+        status, seconds, output, stopped = run_phase(name, command, os.path.join(OUT, f"{name}.log"))
+        note = f"stopped after {PHASE_LIMIT_MINUTES} min" if stopped else ""
         if name == "unit_tests":
             passed, failed = check_unit_tests(output)
             checks = f"{passed} tests"
@@ -83,7 +102,7 @@ def main():
             ok = status == 0 and failed == 0 and "RESULT: FAIL" not in output
             if name == "test_memory":
                 pages = [int(p) for p in re.findall(r"(\d+) available \(", output)]
-                note = f"free pages {min(pages) if pages else 'not found'} (need {args.pages})"
+                note = (note + "; " if note else "") + f"free pages {min(pages) if pages else 'not found'} (need {args.pages})"
                 ok = ok and bool(pages) and min(pages) >= args.pages
         if failed:
             checks += f", {failed} failed"
