@@ -84,6 +84,7 @@ are the defaults.
 
 ```
 oxos_vX.Y.Z.zip
+├── README.txt                            how to install: flash the image, copy the OXOS folder as it is to C:\ (kernel/settings/release_readme.txt)
 ├── OXOS\
 │   ├── bios\                             bios_vX.Y.Z.bin (1 MB), bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin: to flash, not used from the disk
 │   ├── apps\                             oxos_ftp.xbe (the OXOS FTP server), oxos_boot_video.xbe (the boot video player)

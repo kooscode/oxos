@@ -297,7 +297,8 @@ release:
 # The release zip, oxos_vVERSION.zip (spec/oxos_disk_layout.md, "The release zip"): OXOS\ as it goes on the console's C:\ (C:\OXOS), with the three BIOS
 # images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server oxos_ftp.xbe, the boot video player oxos_boot_video.xbe), the settings
 # (oxos_settings.ini with the boot video on, oxos_title_patches.ini), the OXOS boot video in OXOS\boot_videos\ (splash/oxos_boot_video.mpg), the extensions
-# OXOS ships (oxos_extensions.ini listing them, off), the trainer pack in OXOS\trainers\ and the folders the kernel makes; the third-party notices beside it.
+# OXOS ships (oxos_extensions.ini listing them, off), the trainer pack in OXOS\trainers\ and the folders the kernel makes; beside it README.txt (how to
+# install: settings/release_readme.txt, the version filled in, Windows line ends) and the third-party notices.
 # The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and their SHA-256 sums are in
 # build/kernel/release/dist.
 RELEASE_DIST := $(RELEASE_BUILD)/dist
@@ -318,7 +319,8 @@ release_zip:
 	cp $(OXOS_FTP_XBE) $(RELEASE_OXOS)/apps/oxos_ftp.xbe
 	cp $(OXOS_BOOT_VIDEO_XBE) $(RELEASE_OXOS)/apps/oxos_boot_video.xbe
 	cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_DIST)/zip/
-	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip OXOS THIRD_PARTY_NOTICES.md
+	sed -e 's/@VERSION@/$(VERSION)/g' -e 's/$$/\r/' settings/release_readme.txt > $(RELEASE_DIST)/zip/README.txt
+	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip README.txt OXOS THIRD_PARTY_NOTICES.md
 	cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) $(RELEASE_DIST)/
 	cd $(RELEASE_DIST) && sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip zip/OXOS/bios/*.bin zip/OXOS/oxos_title_patches.ini zip/OXOS/apps/*.xbe
 

@@ -9,9 +9,12 @@ tools in [`tools/README.md`](tools/README.md); the specifications in [`spec/`](s
   on every piece of state, lines within 160 characters, format names in capitals (`FATXLookup`), `OXOS` or `oxos`, never `Oxos`. The only `.c` file is
   `tests/extensions/plain_c.c`.
 - **Plain GNU make**, no CMake. All build output goes under `build/`.
-- **Clean room:** behaviour comes from the specifications in `spec/` and from observing hardware, never from leaked Microsoft code.
+- **Clean room:** behaviour comes from the specifications in `spec/` and from observing hardware, never from disassembled or other source code.
 - **Everything OXOS puts on a console is named `oxos_...`** (`C:\OXOS\extensions\oxos_trainers.ini`), with descriptive names a user understands.
 - Screen text is short: a title and a line or a list.
+- **Research, experiments and pilots live in `experimental/`** (git-ignored): notes, research specs (REA's included), trial code and proof-of-concept
+  patches. Nothing from there is committed or cited. Once the user is good with a proof of concept, its findings are written as a new spec in `spec/`, the
+  implementation is cleaned up, and only then committed. Do not commit code that may not end up in the project.
 
 ## Build
 ```sh
@@ -141,7 +144,9 @@ claude mcp add rea --scope user -e GHIDRA_INSTALL_DIR=/path/to/ghidra -e JAVA_HO
 ```
 Restart Claude Code afterwards; `claude mcp list` should show `rea: ... ✔ Connected`. Ghidra's first analysis of a binary takes minutes.
 
-1. **A subagent with REA writes a spec** into `spec/stock/`, `spec/cerbios/` or `spec/evox/` (next free number, listed in `spec/README.md`).
+1. **A subagent with REA writes a research spec** into `experimental/` (not `spec/`, and not listed in `spec/README.md`). Once the findings are clear and the
+   implementation built from them works, the spec is written into `spec/stock/`, `spec/cerbios/` or `spec/evox/` (next free number, listed in
+   `spec/README.md`) and committed with the implementation.
 2. **The main agent implements from the spec only.** It does not open the reference binaries or read REA's output itself; a gap in the spec goes back to
    the subagent as a question, and the answer goes into the spec.
 
@@ -155,12 +160,13 @@ order with its value, what was checked and ruled out, the versions compared).
 **The hand-off prompt** (Agent tool), in short:
 ```text
 Using the REA MCP tools, study <behaviour> in <binary, version, sha256> (compare <other versions>). Write a clean-room behavioural spec to
-spec/<stock|cerbios|evox>/NN_<name>.md in the style and detail of spec/stock/23_boot_hardware_setup.md: sources and hashes, what was searched, then the
+experimental/<stock|cerbios|evox>_NN_<name>.md in the style and detail of spec/stock/23_boot_hardware_setup.md: sources and hashes, what was searched, then the
 behaviour as numbered steps and tables (conditions, constants, register values, data formats, error paths), citing the reference's addresses. Answer
 these questions: <list>. NO code of any kind: no disassembly, no decompiled or pseudocode, no instruction sequences, no code bytes; describe what it does,
 not how it is written. Report back: the spec's path, a summary of its findings, and what stays unknown.
 ```
-Then implement from the spec, cite it in the code's comments (`spec/stock/NN §x`), and test the behaviour against it.
+Then build a proof of concept from that research spec and test it (on xemu, then the console). When the user is good with it: write the spec into `spec/`,
+clean the implementation up, cite the `spec/` spec in its comments (`spec/stock/NN §x`, never `experimental/`), and commit both together.
 
 ## Run and look at it
 - **Interactive:** `make -C kernel run` (xemu with the dashboard disk), or `python3 tools/run.py build/kernel/release/bios.bin --iso GAME.iso`.
