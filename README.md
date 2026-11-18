@@ -5,7 +5,7 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 
 [![The OXOS boot screen: click to play the video](docs/oxos_video_preview.jpg)](docs/demo_video.md)
 
-*From Blank Disk to XB Live Dashboard in seconds!! (click to play)*
+*Sharp boot splash with bootup video and trainer in action!! (click to play)*
 
 ## Highlights
 - **Every console revision, 1.0 to 1.6:** Conexant, Focus and Xcalibur video encoders, composite to 1080i.
