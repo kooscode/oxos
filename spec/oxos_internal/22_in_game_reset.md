@@ -92,9 +92,10 @@ Status: design only. The power cycle of §6 stays until the tests of §8.6 pass.
   back in the dashboard in a moment, without the BIOS, the splash or the drives' start-up. Every title that exits to the dashboard takes the same path.
 - In OXOS (`kernel/src/hardware/chipset/smbus.cpp`), `HalReturnToFirmware(2)` runs the shutdown notifications the title registered
   (`HalRegisterShutdownNotification`; its graphics and sound libraries stop their hardware), then `KiQuickReboot`: `KiQuickRebootQuiesce` masks both PICs, stops
-  the IDE bus master, resets both USB host controllers into USBRESET (spec 25 §5), turns the GPU's interrupts off and the NIC's transmitter off; the kernel
-  re-enters from its in-memory image with `.data` restored from its quick-reboot copy and `.persist` kept (spec/stock/02 §1, spec 18 §4). HAL phase 0 stops
-  every bus master again (spec 10). Title selection then takes branch A of spec/stock/05 §2: an empty launch path starts the dashboard (spec 19), and type
+  the IDE bus master, resets both USB host controllers into USBRESET (spec 25 §5), turns the GPU's interrupts off and the NIC's transmitter and receiver off
+  (spec 25 §7); the kernel re-enters from its in-memory image with `.data` restored from its quick-reboot copy and `.persist` kept (spec/stock/02 §1, spec 18
+  §4). HAL phase 0 then only reprograms the interrupt controller and stops the video overlay (spec 25 §4); the cold boot's bus-master stop (spec 10) does not
+  run. Title selection then takes branch A of spec/stock/05 §2: an empty launch path starts the dashboard (spec 19), and type
   0xFFFFFFFF frees the page first (no launch data for the dashboard).
 - Cerbios's IGRDASH combo (LT RT START BACK) does the same: page cleared, first dword 0xFFFFFFFF, quick reboot, after suspending every other thread of the
   title's process at raised IRQL (spec/cerbios/08 §4). Its IGRGAME combo is a quick reboot that restarts the disc's title instead.

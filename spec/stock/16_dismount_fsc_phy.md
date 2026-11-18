@@ -39,7 +39,10 @@ Evidence: `ev_f30ee26f…` (0x8001ceca FscGetCacheSize, 0x8001d09e FscInvalidate
   cache, the whole pages directly into the caller's buffer, and the short tail through the cache. When the caller's length covers the file's end rounded up to a
   sector (0x8002b4e0), the direct part is rounded up to whole sectors (the device fills the buffer to the sector's end). Non-cached opens bypass the cache
   (spec/stock/04c).
-- FATX maps FAT and directory blocks (map, modify, write the covering sectors from the buffer, unmap); file data in whole sectors goes straight to the device.
+- FATX maps FAT and directory blocks (map, modify, write the covering sectors from the buffer, unmap); file data in whole sectors goes straight to the device,
+  except a cached read of a file opened for random access, which is copied out of cache buffers (observed 2026-11-17 on the 4627 kernel in xemu: a title reads
+  16 KB of such a file into pages it reserved but has not committed; the read returns STATUS_SUCCESS with 0x4000 bytes, the pages are committed afterwards by
+  the title's exception handler, and physical page 0, where a transfer to an uncommitted page would land, is unchanged: the processor copied the data).
 
 **Ours.** `src/filesystems/cache.cpp` has the same structure, page accounting (16 cache pages at boot, usage 8, read-only mapping, element index in the page
 database, relocatable), eviction order, size changes, read-or-direct decision and sector rounding; FATX, XDVDFS (file data and directory entries) and UDF (file

@@ -249,9 +249,14 @@ extern "C" void KiQuickRebootQuiesce() {
         hc[1] = 0; // HcControl: USBRESET, every list off
     }
     *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
-    // NIC: transmitter off only. Resetting the whole NIC here (receiver, TxRxControl, rings: tried 2026-10-29) left it in a state the next title's network
-    // start-up waited on forever (XBMC4Gamers started by EvoX's dashboard).
-    *(volatile ULONG *)0xFEF00084 = 0;
+    // NIC: transmitter and receiver off (spec/oxos_internal/25 §7). A receiver left on writes every frame the network sends into the receive buffers of the
+    // title that just ended, memory the next title is given. Resetting the whole NIC here (TxRxControl, rings: tried 2026-10-29) left it in a state the next
+    // title's network start-up waited on forever (XBMC4Gamers started by EvoX's dashboard).
+    *(volatile ULONG *)0xFEF00084 = 0; // NvTxControl
+    *(volatile ULONG *)0xFEF00094 = 0; // NvRxControl
+    for (int i = 0; i < 100000 && (*(volatile ULONG *)0xFEF00098 & 1); i++) {
+        // Wait for a frame being received to finish (NvRxStatus busy; bounded).
+    }
 }
 
 // Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at once: 4 (fatal error) first leaves scratch 2

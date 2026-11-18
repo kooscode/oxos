@@ -157,3 +157,21 @@ frame's handler for ever, and the title stayed on its loading screen.
   kept): after the first unwind the chain read `D0090C10 → D0090C90 → D0091528 → D0091528 → …`.
 - **Checked:** the Modxo console: before, the test title stopped on its loading screen at that point every time (twice); with the guard frames it creates the
   match and carries on. 158 host unit tests pass.
+
+## 7. The network receiver at a title switch
+Before the quick reboot that starts the next title, the kernel turns the NIC's receiver off as well as its transmitter. A quick reboot does not run the
+cold boot's bus-master stop (spec 10): HAL phase 0 only reprograms the interrupt controller and stops the video overlay (§4), so this step is the only one
+between two titles. A receiver left on keeps taking every frame the network sends (broadcasts, ARP, the end of an FTP session) and writes it, with its
+descriptor, into the receive ring of the title that just ended. That memory is free for the next title, and the writes go on until the next title starts
+the network itself, if it ever does.
+- **Seen with:** a title started by the OXOS FTP server (`SITE LAUNCH`). About 3 s in, its background copy of the disc's compressed archives to its cache
+  drive stops with a zlib error ("incorrect data check" or "invalid block type") in the first archive it unpacks. Every disc read had delivered the image's
+  bytes (a sum per read, compared with the image on the PC); the bytes changed afterwards, in the unpacker's memory. The title records the failure and, at the
+  front end (skipping the intro, or its end), formats its cache drive and shows its "dirty disc" screen. xemu, where nothing sends the console frames, never
+  showed it.
+- **Code:** `kernel/src/hardware/chipset/smbus.cpp` `KiQuickRebootQuiesce`: NvTxControl (0x084) ← 0, NvRxControl (0x094) ← 0, then up to 100000 reads of
+  NvRxStatus (0x098) until bit 0 (a frame being received) is clear. The rings and TxRxControl are left alone: a full reset there left the NIC in a state a
+  title's network start-up waited on forever (XBMC4Gamers started by EvoX's dashboard, 2026-10-29). The next title that uses the network programs its own
+  rings and turns the receiver on again.
+- **Checked:** the Modxo console (dev kit, exFAT disk), that title started by the FTP server: before, the dirty-disc screen on every run; with the receiver off,
+  the copy carries on and the front end comes up.

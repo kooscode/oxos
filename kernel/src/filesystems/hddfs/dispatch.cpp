@@ -332,7 +332,8 @@ static NTSTATUS NTAPI HDDFSFsdClose(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
 
 // --- Read / write
 
-static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length) {
+// throughCache: every byte goes through the block cache; nothing is transferred straight between the disk and the caller's buffer.
+static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length, bool throughCache = false) {
     while (length) {
         ULONG within = (ULONG)offset & (v->BytesPerCluster - 1), cluster;
         NTSTATUS status = HDDFSClusterAtIndex(v, f, (ULONG)(offset >> v->ClusterShift), &cluster);
@@ -352,7 +353,7 @@ static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLO
             run = length;
         LONGLONG disk = HDDFSClusterOffset(v, cluster) + within;
         ULONG mask = v->SectorSize - 1;
-        if (!(disk & mask) && !(run & mask) && !((ULONG)buffer & 3)) {
+        if (!throughCache && !(disk & mask) && !(run & mask) && !((ULONG)buffer & 3)) {
             if (write)
                 HDDFSInvalidateRange(v, disk, run);
             status = HDDFSDeviceIo(v, write ? IRP_MJ_WRITE : IRP_MJ_READ, disk, buffer, run);
@@ -384,9 +385,10 @@ static NTSTATUS HDDFSTransfer(HDDFS_VOLUME *v, HDDFS_FCB *f, bool write, ULONGLO
 }
 
 // Scatter/gather: one page-sized piece of the transfer per segment element (spec/stock/11 §5).
-static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length) {
+static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool write, ULONGLONG offset, PUCHAR buffer, ULONG length,
+                                 bool throughCache = false) {
     if (!Irp->SegmentArray)
-        return HDDFSTransfer(v, f, write, offset, buffer, length);
+        return HDDFSTransfer(v, f, write, offset, buffer, length, throughCache);
     for (ULONG i = 0; length; i++) {
         ULONG run = length < PAGE_SIZE ? length : PAGE_SIZE;
         NTSTATUS status = HDDFSTransfer(v, f, write, offset, (PUCHAR)Irp->SegmentArray[i].Buffer, run);
@@ -509,7 +511,11 @@ static NTSTATUS NTAPI HDDFSFsdReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
             ULONGLONG left = size - (ULONGLONG)offset.QuadPart;
             done = left < length ? (ULONG)left : length;
             pend = asyncNoCache;
-            status = HDDFSTransferIrp(v, f, Irp, false, (ULONGLONG)offset.QuadPart, buffer, done);
+            // A cached read of a file opened for random access is copied out of cache buffers in full, as the reference (spec/stock/16, reads). The
+            // processor then writes the caller's buffer itself, so a title that reserves memory and commits each page from its exception handler when it is
+            // first touched gets its data, where a disk transfer would leave pages it has not committed yet empty.
+            bool throughCache = !(Irp->Flags & IRP_NOCACHE) && !Irp->SegmentArray && (fo->Flags & FO_RANDOM_ACCESS);
+            status = HDDFSTransferIrp(v, f, Irp, false, (ULONGLONG)offset.QuadPart, buffer, done, throughCache);
             if (!NT_SUCCESS(status))
                 done = 0;
         }
