@@ -98,7 +98,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     boot_splash::TakeSplashRecord(quick); // boot/bl.cpp's splash record at 0x2380, before the memory manager
     KiBootStep("memory manager");
     memory::InitMemoryManager(quick);
-    diagnostics::ReportMachineChecksAtBoot();
+    diagnostics::ReportMachineChecksAtBoot(quick);
     diagnostics::ReportNvPads("after the memory manager");
     diagnostics::ReportRefresh();
     diagnostics::ReportPreviousBootMarks();
@@ -135,7 +135,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     hardware::video::InitVideo();
     if (!quick)
         hardware::chipset::InitSmcColdBoot();
-    // The splash (and its jingle) before the IDE set-up: a hard disk or DVD drive can take seconds to spin up after power-on, and the drive waits run at this
+    // The splash before the IDE set-up: a hard disk or DVD drive can take seconds to spin up after power-on, and the drive waits run at this
     // thread's IRQL, so the splash shows meanwhile (spec/oxos_internal/00).
     if (!quick)
         boot_splash::StartSplash();

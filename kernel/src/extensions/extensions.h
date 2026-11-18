@@ -1,14 +1,16 @@
 // Kernel extensions (spec/oxos_internal/34): .xos DLLs from C:\OXOS\extensions\, loaded in the order of C:\OXOS\oxos_extensions.ini before each title. What the
-// title launcher and the rest of the kernel call. The loader's image is described in extension_loader.h, the state the loader and the runtime share in
-// extension_state.h.
+// title launcher and the rest of the kernel call. The loader is a kernel module (kernel/modules/extension_loader.cpp, spec/oxos_internal/43); the state the
+// loader and the runtime share is in extension_state.h.
 #pragma once
 #include <core/core.h>
 #include <runtime/types.h>
 
 namespace xk::extensions {
 // Runs the extension loader (§8.1) for this launch: it loads the extensions of oxos_extensions.ini, calls each one's Load and starts the run loop (§3.2, §4.3).
-// Called once per launch by the title launcher, before the title is chosen; nothing in safe mode or without the list.
+// Called once per launch by the title launcher, before the title is chosen; nothing in safe mode, without the list or without the kernel modules.
 void LoadExtensions();
+// The loader itself (kernel/modules/extension_loader.cpp, in the kernel modules' image): what LoadExtensions calls through the modules' table.
+void LoadListedExtensions();
 // The address a title's import of Ordinal is resolved to: the first extension's hook, else Target (§7.1).
 ULONG ResolveTitleImport(ULONG Ordinal, ULONG Target);
 // OXOS_EVENT_TITLE_LOADING for the XBE the kernel is about to load (§7.2); Dashboard as titles::LoadImage's. Target (TargetSize bytes, empty), when this load

@@ -242,10 +242,10 @@ OXOS_IMPORT LONG FASTCALL InterlockedCompareExchange(volatile LONG *Destination,
 OXOS_IMPORT LONG FASTCALL InterlockedDecrement(volatile LONG *Addend);
 OXOS_IMPORT LONG FASTCALL InterlockedExchange(volatile LONG *Target, LONG Value);
 OXOS_IMPORT LONG FASTCALL InterlockedExchangeAdd(volatile LONG *Addend, LONG Value);
-OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER ListHead);
+OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedFlushSList(PSLIST_HEADER /*ListHead*/);
 OXOS_IMPORT LONG FASTCALL InterlockedIncrement(volatile LONG *Addend);
-OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER ListHead);
-OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER ListHead, PSINGLE_LIST_ENTRY ListEntry);
+OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedPopEntrySList(PSLIST_HEADER /*ListHead*/);
+OXOS_IMPORT PSINGLE_LIST_ENTRY FASTCALL InterlockedPushEntrySList(PSLIST_HEADER /*ListHead*/, PSINGLE_LIST_ENTRY /*ListEntry*/);
 OXOS_IMPORT PIRP NTAPI IoAllocateIrp(CCHAR StackSize);
 OXOS_IMPORT PIRP NTAPI IoBuildAsynchronousFsdRequest(ULONG MajorFunction, PDEVICE_OBJECT DeviceObject, PVOID Buffer, ULONG Length, PLARGE_INTEGER StartingOffset, PIO_STATUS_BLOCK IoStatusBlock);
 OXOS_IMPORT PIRP NTAPI IoBuildDeviceIoControlRequest(ULONG IoControlCode, PDEVICE_OBJECT DeviceObject, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength, BOOLEAN InternalDeviceIoControl, PKEVENT Event, PIO_STATUS_BLOCK IoStatusBlock);

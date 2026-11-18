@@ -19,6 +19,9 @@ void PrepareBootDisplay();
 void LoadBootGamma();
 void VideoTablesInUse(ULONG_PTR *Start, ULONG_PTR *End);
 void SmcSetOutputs(bool Enable);
+// A frame buffer on screen that its owner has handed over (the boot splash's, kept for the boot video player): freed by the next AvSetDisplayMode that
+// scans out another one.
+void KeepScreenUntilNextMode(PVOID Screen);
 extern volatile UCHAR EncoderAddress;
 extern volatile ULONG EncoderProgrammed; // diagnostics: the last mode word whose encoder registers were written
 extern volatile ULONG EncoderMismatches; // diagnostics: registers that read back differently after that mode set

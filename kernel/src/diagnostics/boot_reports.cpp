@@ -55,8 +55,8 @@ void TakeBootLoaderRecords(bool Quick) {
 #endif
 }
 
-// Machine checks stay off, as in the reference (spec/stock/23 §1: CR4.MCE clear, no MCG_CTL or MCi_CTL write). The banks are only read: what they hold at boot
-// (errors logged before the last reset) goes to the debug log.
+// Machine checks stay off, as in the reference (spec/stock/23 §1: CR4.MCE clear, no MCG_CTL or MCi_CTL write). What the banks hold at boot goes to the debug
+// log; at a cold boot they are then cleared (spec/oxos_internal/14), so a bank that holds something at a later boot is a new error since then.
 ULONG MachineCheckBanks;
 
 void ReportMachineCheckBanks(const char *When) {
@@ -145,7 +145,7 @@ void ReportNvPads([[maybe_unused]] const char *When) {
 #endif
 }
 
-void ReportMachineChecksAtBoot() {
+void ReportMachineChecksAtBoot(bool Quick) {
     ULONG a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
     XK_SERIAL("cpu: signature %08lx, microcode revision %lu\n", a, core::MicrocodeRevision);
@@ -153,6 +153,12 @@ void ReportMachineChecksAtBoot() {
         return;
     MachineCheckBanks = (ULONG)rdmsr(0x179) & 0xFF;
     ReportMachineCheckBanks("at boot");
+    // A cold boot's banks hold the CPU's power-on contents or what the boot ROM's start left (a different error code at every power-on, the same on good and
+    // bad boots, never one added by the kernel): cleared, they no longer come back at every quick reboot. Writing 0 is the only write MCi_STATUS takes.
+    if (!Quick) {
+        for (ULONG i = 0; i < MachineCheckBanks; i++)
+            wrmsr(0x401 + 4 * i, 0);
+    }
 }
 
 } // namespace xk::diagnostics

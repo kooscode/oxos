@@ -4,7 +4,9 @@
 // The 2BL's stack lives in memory we are about to wipe, so switch to our own stack first.
 
 #define BOOT_STACK_SIZE 0x3000
-#define KI_DATA_COPY_SIZE 0x600 // the initialised .data (tools/check_kernel_layout.py checks that it fits)
+// The initialised .data's copy for quick reboots: exactly its size (0x520 on 2026-11-17), as it is resident memory titles count on. Larger .data fails the
+// build (tools/check_kernel_layout.py); raise this with it, and check test_memory's free pages.
+#define KI_DATA_COPY_SIZE 0x520
 
     .text
     .globl _KernelEntry

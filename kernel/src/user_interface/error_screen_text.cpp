@@ -39,13 +39,12 @@ static const char *const HelpNoDisk[] = {
     nullptr,
 };
 
-// Codes 13-20: the dashboards tried (titles/title_loader.cpp, in its order), and the way to the File Manager (error_screens.cpp, NoDashboardError).
+// Codes 13-20 (the title says it: No Dashboard Found): where the kernel looked, oxos_settings.ini's dashboards and then the stock one (titles/title_loader.cpp,
+// spec/oxos_internal/19), and the way to the File Manager (error_screens.cpp, NoDashboardError).
 static const char *const HelpNoDashboard[] = {
-    "Tried:",
-    "  C:\\evoxdash.xbe",
-    "  E:\\evoxdash.xbe",
-    "  C:\\xboxdash.xbe",
-    "  C:\\Dashboard\\default.xbe",
+    "No dashboard could be loaded.",
+    "Check C:\\OXOS\\oxos_settings.ini",
+    "or add the default C:\\xboxdash.xbe.",
     "",
     "[ Press  X  to launch Web File Manager ]", // the X drawn as the button (graphics::DrawText)
     nullptr,

@@ -115,7 +115,7 @@ Status: design only. The power cycle of §6 stays until the tests of §8.6 pass.
 | LT + RT + BACK + WHITE | 0xE020 | the power cycle of §6, for a title that leaves the hardware in a state a quick reboot cannot recover from |
 
 Differences from today's reset, for the user:
-- Faster: no BIOS, splash, jingle or drive spin-up; the dashboard is up in a few seconds.
+- Faster: no BIOS, splash or drive spin-up; the dashboard is up in a few seconds.
 - A netbooted console stays on the kernel it is running and goes to the dashboard: it does not ask the PC again, and a netbooted title (spec 09 §7) does not
   start again (its package was used at the cold boot).
 - A mounted disc image is unmounted (§8.4 step 2), as with the power cycle.

@@ -18,8 +18,12 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Universal Trainers:** Loads a [trainer menu](#universal-trainers) for games matching any of 1,000 trainers included.
   Off as shipped: one line turns it on.
 - **Title patches:** Patches any title from an .ini file!
-- **Launch redirects:** `C:\OXOS\oxos_launch_redirect.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live updater instead of the old
-  one ([how to use it](docs/launch_redirect.md)).
+- **Your dashboard:** `C:\OXOS\oxos_settings.ini` lists the dashboards to start, in order (EvoX, the XBL Dashboard, ... as shipped); none there: the
+  stock `C:\xboxdash.xbe`.
+- **Boot video:** OXOS's own intro plays straight after the boot logo, on by default; or a video of your choice; any button skips it
+  (`[boot_video]` in `C:\OXOS\oxos_settings.ini`; [make your own](docs/boot_video.md)).
+- **Launch redirects:** `[launch_redirect]` in `C:\OXOS\oxos_settings.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live
+  updater instead of the old one ([how to use it](docs/launch_redirect.md)).
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
 - **In-Game Reset (IGR):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK).
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
@@ -54,7 +58,7 @@ Tested on a 1.4 (Focus), an MCPX 1.1 console, a 1.6 (Xcalibur) and a Conexant de
 <table>
 <tr>
 <td width="50%"><img width="100%" src="docs/oxos_format_drive.png" alt="Blank Hard Disk Found: a countdown before OXOS formats the disk as exFAT"></td>
-<td width="50%"><img width="100%" src="docs/oxos_no_dashboard.png" alt="No Dashboard Found: the dashboards tried, and Press X to launch Web File Manager"></td>
+<td width="50%"><img width="100%" src="docs/oxos_no_dashboard.png" alt="No Dashboard Found: no dashboard could be loaded, check C:\OXOS\oxos_settings.ini or add the default C:\xboxdash.xbe; Press X to launch Web File Manager"></td>
 </tr>
 <tr>
 <td align="center"><em>1. A blank disk is formatted as exFAT</em></td>
@@ -70,7 +74,7 @@ Tested on a 1.4 (Focus), an MCPX 1.1 console, a 1.6 (Xcalibur) and a Conexant de
 </tr>
 </table>
 
-Press **X** on a controller while the boot logo and jingle play, or on the "No Dashboard Found" screen: OXOS shows a web address. Open it in any browser on the
+Press **X** on a controller while the boot logo shows, or on the "No Dashboard Found" screen: OXOS shows a web address. Open it in any browser on the
 same network to:
 - browse the drives;
 - upload single files or whole folders (a complete dashboard in one go, about 11 MB/s);
@@ -80,8 +84,9 @@ same network to:
 It is built into the kernel and its memory is freed when a title starts, so games lose nothing. There is no log-in: anyone on the local network can use it while
 it is on screen. [Details](spec/oxos_internal/32_file_manager_button.md).
 
-**For whole disks, FTP:** each release includes the OXOS FTP server, `OXOS/apps/oxos_ftp.xbe` ([`tools/ftp_server`](tools/ftp_server)). Upload it with the File Manager and
-launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move and delete across the disk, several clients at once, at about 8 – 10 MB/s.
+**For whole disks, FTP:** each release includes the OXOS FTP server, `OXOS/apps/oxos_ftp.xbe` ([`apps/oxos_ftp`](apps/oxos_ftp)). Upload it with the File
+Manager and launch it there, then use any FTP client (FileZilla, WinSCP, lftp) to copy, move and delete across the disk, several clients at once, at about 8 –
+10 MB/s.
 
 ## Universal Trainers
 

@@ -6,8 +6,8 @@ run-time library are tested directly on a PC, in seconds, with coverage. Impleme
 ## 1. What is built
 - The kernel's own sources, unchanged apart from `XK_HOST_TEST` hooks (§4): `core/` (APCs, bug checks, clock, DPCs, events, IRQL and interrupts, FPU state,
   queues, scheduler, threads, system threads, timers, waits, processor tables), `memory/` (all), `objects/` (all), `runtime/` (all but `int64.cpp`),
-  `hardware/chipset/interrupts_timers.cpp`, `graphics/vector_renderer.cpp`, `ini_file/title_patcher_ini.cpp`, `ini_file/launch_redirect_ini.cpp`,
-  `ini_file/ini_file.cpp`.
+  `hardware/chipset/interrupts_timers.cpp`; and the code the kernel shares (`shared/`, built as the kernel builds it): `graphics/vector_renderer.cpp` and
+  `ini_file/` (the line reader and the parsers of `oxos_settings.ini`, `oxos_extensions.ini`, `oxos_title_patches.ini`).
 - 32-bit (`-m32`): the kernel's types assume 32-bit `long` and pointers. Kernel sources keep `-ffreestanding`, `-fno-builtin`, no SSE/MMX, as the real build.
 - Linked statically and not position independent: no shared libraries or binary in the kernel's address windows.
 - Each run boots the kernel once; the tests run in order on one kernel thread (§3) and leave the kernel as they found it (pages, pool, handles, queues).

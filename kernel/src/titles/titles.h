@@ -10,6 +10,15 @@ XBAPI OBJECT_STRING XeImageFileName;    // the running title's XBE (\Device\...)
 
 namespace xk::titles {
 
+// An XBE section header (spec/stock/05 §2), as the title loader and the title patcher module (kernel/modules/title_patcher.cpp) read it.
+struct XBE_SECTION_HEADER {
+    ULONG Flags, VirtualAddress, VirtualSize, PointerToRawData, SizeOfRawData, SectionName;
+    ULONG SectionReferenceCount;
+    USHORT *HeadSharedPageReferenceCount, *TailSharedPageReferenceCount;
+    UCHAR SectionDigest[20];
+};
+static_assert(sizeof(XBE_SECTION_HEADER) == 0x38);
+
 extern ULONG ConsoleGameRegion;      // the console's game region (from the EEPROM; all regions until it is read)
 extern ULONG DiscTitleId;            // the title pinned to the current game disc (0 = none)
 extern UCHAR TitleDiscAuthenticated; // the disc in the drive passed the DVD authentication

@@ -1,7 +1,8 @@
 // Boot splash (the reference's INIT-section animation is not reproduced): on cold boot a system thread fades in a 640x480 32 bpp picture from the vector scene
-// that tools/mkbios.py stores in flash (spec/oxos_internal/00_boot_splash.md), drawn twice (the start and the end of a cross-fade), or, without one, a drawn
-// emblem and caption. The title launcher waits for it, turns the screen off and frees its memory before the title starts; the title turns the screen on with
-// its first frame.
+// that tools/mkbios.py stores in flash (spec/oxos_internal/00_boot_splash.md), or, without one, a drawn emblem and caption, and holds it for a few seconds
+// while the controllers are read (X: the File Manager, B: safe mode). No animation and no sound since 2026-11-17 (user: "remove the boot animation and jingle,
+// just fast fade the splash, keep it there for a while then move on"). The title launcher waits for it, turns the screen off and frees its memory before the
+// title starts; the title turns the screen on with its first frame.
 #include <boot_splash/boot_splash.h>
 #include <diagnostics/diagnostics.h>
 #include <core/core.h>
@@ -13,7 +14,6 @@
 
 #include <gamepad/gamepad.h>
 #include <graphics/graphics.h>
-#include <boot_splash/jingle.h>
 #include <graphics/vector_renderer.h>
 
 namespace xk::boot_splash {
@@ -23,13 +23,11 @@ namespace xk::boot_splash {
 #pragma code_seg(".xkb")
 
 constexpr ULONG SPLASH_W = 640, SPLASH_H = 480, SPLASH_PITCH = SPLASH_W * 4;
-// The timeline, from the screen coming on (spec/oxos_internal/00 §2): a short fade from black to the start picture (the metal logo; the emblem has only the one
-// picture), which stays until SPLASH_LOGO_MS; then the jingle starts and the picture cross-fades to the end picture (the green X and its glow), reaching it as
-// the jingle's build-up lands on its final chord (jingle::ClimaxMs after its start); the end picture then stays until the jingle's final chord has died away
-// (jingle::LengthMs), before the first title starts. A frame about every 40 ms while anything changes.
+// The timeline, from the screen coming on (spec/oxos_internal/00 §2): a fast fade from black to the picture (a frame about every 40 ms), then the picture held
+// until SPLASH_SHOW_MS, before the first title starts.
 constexpr ULONG SPLASH_FRAME_MS = 40;
-constexpr ULONG SPLASH_INTRO_MS = 500;  // the fade from black
-constexpr ULONG SPLASH_LOGO_MS = 1000;  // the start picture alone (the fade included), before the jingle
+constexpr ULONG SPLASH_FADE_MS = 300;  // the fade from black
+constexpr ULONG SPLASH_SHOW_MS = 4000; // the picture on screen (the fade included): the time to hold X or B
 
 // "XKSPLASH", version 2 (1 was a PNG, no longer supported), length, CRC-32 (the scene's own checks are used instead), then the scene: tools/mkbios.py puts it
 // in flash bank 1 of a 1 MiB image, else in the boot bank; the 2BL copies it into RAM for the kernel.
@@ -37,10 +35,9 @@ constexpr ULONG SPLASH_HEADER = 20;
 
 static KEVENT SplashDone;                      // the splash has finished (at once without an AV pack)
 static PKTHREAD SplashThreadObject;            // waited for before the title starts, so its stack is freed by then
-static ULONG *SplashScreen, *SplashImage;  // the scanned-out frame; the end picture
-static ULONG *HalpSplashStart;                     // a vector splash's start picture; else none
+static ULONG *SplashScreen, *SplashImage;      // the scanned-out frame; the picture
 volatile ULONG SplashFrames;                   // frames shown (boot tests)
-volatile ULONG SplashFadeMs, SplashFullMs; // the fade's planned length, and when full intensity was drawn
+volatile ULONG SplashFullMs;                   // when the fade reached the full picture, after the screen came on (boot tests)
 volatile ULONG SplashSource;                   // 1 = drawn emblem, 2 = the vector scene from flash (boot tests)
 volatile ULONG SplashStatus; // the scene: 0 = drawn, else why not (header 0x100+, 0x200 + the renderer's check)
 // The 2BL's copy of the scene in RAM (TakeSplashRecord), freed once it has been drawn.
@@ -89,20 +86,15 @@ static void DrawEmblem(ULONG *img) {
     }
 }
 
-// A vector scene: the end picture into img, the start picture into HalpSplashStart (when there is memory for it; else only the end picture is faded in). 0 =
-// drawn.
+// A vector scene: its end picture (the green X and its glow; the scene's start picture is not used) into img. 0 = drawn.
 static ULONG DrawVectorSplash(const UCHAR *Scene, ULONG Size, ULONG *img) {
     unsigned scratchSize;
-    if (unsigned step = graphics::vector_renderer::Check(Scene, Size, &scratchSize))
+    if (unsigned step = oxos::graphics::vector_renderer::Check(Scene, Size, &scratchSize))
         return 0x200 + step;
     auto scratch = MmAllocateContiguousMemoryEx(scratchSize, 0, 0xFFFFFF, 0, PAGE_READWRITE);
     if (!scratch)
         return 0x103;
-    graphics::vector_renderer::Render(Scene, Size, graphics::vector_renderer::END, (unsigned *)img, scratch);
-    HalpSplashStart = (ULONG *)MmAllocateContiguousMemoryEx(SPLASH_PITCH * SPLASH_H, 0, 0xFFFFFF, 0, PAGE_READWRITE);
-    if (HalpSplashStart) {
-        graphics::vector_renderer::Render(Scene, Size, graphics::vector_renderer::START, (unsigned *)HalpSplashStart, scratch);
-    }
+    oxos::graphics::vector_renderer::Render(Scene, Size, oxos::graphics::vector_renderer::END, (unsigned *)img, scratch);
     MmFreeContiguousMemory(scratch);
     SplashSource = 2;
     return 0;
@@ -145,8 +137,6 @@ static void NTAPI SplashThread(PVOID) {
         SplashSource = 1;
     }
     DrawSplashLabel(SplashImage);
-    if (HalpSplashStart)
-        DrawSplashLabel(HalpSplashStart);
     // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
     hardware::video::PrepareBootDisplay();
     graphics::ShowScreen(MmGetPhysicalAddress(SplashScreen));
@@ -164,11 +154,6 @@ static void NTAPI SplashThread(PVOID) {
             XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
         }
     }
-    const ULONG climaxMs = jingle::ClimaxMs();
-    const ULONG *from = HalpSplashStart ? HalpSplashStart : SplashImage; // the start picture
-    SplashFadeMs = climaxMs;
-    const ULONG endMs = jingle::LengthMs(); // the end picture stays until the jingle has died away
-    XK_SERIAL("splash: logo for %lu ms, then the jingle and a cross-fade of %lu ms, held to %lu ms\n", SPLASH_LOGO_MS, climaxMs, endMs);
     // Sleeps, reading the controllers about every 10 ms meanwhile (spec/oxos_internal/32 §2).
     auto sleepMs = [](ULONG ms) {
         for (ULONG left = ms; left;) {
@@ -180,53 +165,36 @@ static void NTAPI SplashThread(PVOID) {
             left -= step;
         }
     };
-    // Draws the mix of the start and end pictures (mix 0-256) at brightness level (0-256).
-    auto draw = [&](ULONG level, ULONG mix) {
+    // Draws the picture at brightness level (0-256).
+    auto draw = [&](ULONG level) {
         for (ULONG i = 0; i < SPLASH_W * SPLASH_H; i++) {
-            ULONG p = SplashImage[i], q = from[i];
-            if (!p && !q)
+            ULONG p = SplashImage[i];
+            if (!p)
                 continue;
             ULONG out = 0;
             for (ULONG sh = 0; sh < 24; sh += 8) {
-                ULONG c = ((q >> sh & 0xFF) * (256 - mix) + (p >> sh & 0xFF) * mix) >> 8;
-                out |= (c * level >> 8) << sh;
+                out |= (((p >> sh & 0xFF) * level) >> 8) << sh;
             }
             SplashScreen[i] = out;
         }
         SplashFrames = SplashFrames + 1;
     };
-    // 1. The fade from black to the start picture, which then stays until SPLASH_LOGO_MS.
     const ULONGLONG shown = KeQueryInterruptTime(); // 100 ns units
-    auto sinceMs = [](ULONGLONG from100ns) { return (ULONG)((KeQueryInterruptTime() - from100ns) / 10000); };
-    for (ULONG ms; (ms = sinceMs(shown)) < SPLASH_INTRO_MS;) {
-        draw(ms * 256 / SPLASH_INTRO_MS, 0);
-        sleepMs(SPLASH_INTRO_MS - ms < SPLASH_FRAME_MS ? SPLASH_INTRO_MS - ms : SPLASH_FRAME_MS);
+    auto sinceMs = [](ULONGLONG from100ns) {
+        return (ULONG)((KeQueryInterruptTime() - from100ns) / 10000);
+    };
+    // 1. The fade from black.
+    for (ULONG ms; (ms = sinceMs(shown)) < SPLASH_FADE_MS;) {
+        draw(ms * 256 / SPLASH_FADE_MS);
+        sleepMs(SPLASH_FADE_MS - ms < SPLASH_FRAME_MS ? SPLASH_FADE_MS - ms : SPLASH_FRAME_MS);
     }
-    draw(256, 0);
-    // The controllers are set up while the start picture stands still (it blocks for a few hundred milliseconds), then read until the jingle ends: X opens the
-    // File Manager (spec/oxos_internal/32).
+    draw(256);
+    SplashFullMs = sinceMs(shown);
+    // 2. The picture held: the controllers are set up (it blocks for a few hundred milliseconds), then read until the splash ends: X opens the File Manager
+    // (spec/oxos_internal/32), B starts in safe mode (spec/oxos_internal/34 §3.3).
     gamepad::StartWatchingControllers();
-    if (ULONG ms = sinceMs(shown); ms < SPLASH_LOGO_MS)
-        sleepMs(SPLASH_LOGO_MS - ms);
-    // 2. The jingle, and the cross-fade to the end picture (smoothstep: eases in and out), there at the climax.
-    PlayBootSound();
-    const ULONGLONG jingleStart = KeQueryInterruptTime();
-    XK_SERIAL("splash: jingle started\n");
-    for (;;) {
-        ULONG ms = sinceMs(jingleStart);
-        if (ms >= climaxMs) {
-            draw(256, 256);
-            SplashFullMs = ms;
-            break;
-        }
-        ULONG u = ms * 256 / climaxMs;
-        draw(256, u * u * (768 - 2 * u) / 65536);
-        sleepMs(climaxMs - ms < SPLASH_FRAME_MS ? climaxMs - ms : SPLASH_FRAME_MS);
-    }
-    XK_SERIAL("splash: faded in\n");
-    // 3. The end picture, held.
-    if (ULONG ms = sinceMs(jingleStart); ms < endMs)
-        sleepMs(endMs - ms);
+    if (ULONG ms = sinceMs(shown); ms < SPLASH_SHOW_MS)
+        sleepMs(SPLASH_SHOW_MS - ms);
     XK_SERIAL("splash: shown\n");
     gamepad::StopWatchingControllers();
     KeSetEvent(&SplashDone, 0, FALSE);
@@ -248,7 +216,6 @@ void StartSplash() {
         return;
     }
     KeResetEvent(&SplashDone);
-    StartBootSound(); // synthesizing before the splash thread needs it
     SplashThreadObject = core::CreateSystemThread(SplashThread, nullptr, 0, 8);
 }
 
@@ -265,11 +232,13 @@ static void HalpFreeBootPages() {
     memory::FreeBootPages(start, end);
 }
 
-// Wait for the splash and the jingle to end, turn the screen off and free the splash's memory. StopSplash keeps the boot-only pages: the format countdown and
+// Wait for the splash to end, turn the screen off and free the splash's memory. StopSplash keeps the boot-only pages: the format countdown and
 // the upload server take the screen and still run from them (spec/oxos_internal/30 §4, 31 §6). EndSplash, before a title starts, frees them too, so the title
 // gets the whole budget (spec/stock/09 §7; the reference frees its boot animation's framebuffer, in its INIT section, too); the title's display-mode change and
 // first frame turn the screen on again.
-void StopSplash() {
+// KeepPicture (EndSplash): the scanned-out frame is not blanked or freed here but handed to the video code, which frees it at the next mode set that shows
+// another frame buffer.
+static void FinishSplash(bool KeepPicture) {
     if (!SplashScreen)
         return;
     KeWaitForSingleObject(&SplashDone, Executive, KernelMode, FALSE, nullptr);
@@ -278,21 +247,26 @@ void StopSplash() {
         ObfDereferenceObject(SplashThreadObject);
         SplashThreadObject = nullptr;
     }
-    EndBootSound(); // the jingle has ended and the audio controller is stopped
     // Screen off until the title shows its first frame: its graphics set-up writes the memory the splash is scanned out of (and, freed below, may reuse it),
     // which garbled the last splash frame on screen. A title's display-mode change leaves the screen off too and turns it on itself (option 9 with 0,
     // spec/stock/22).
-    AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
-    if (HalpSplashStart)
-        MmFreeContiguousMemory(HalpSplashStart);
+    if (KeepPicture) {
+        hardware::video::KeepScreenUntilNextMode(SplashScreen);
+    } else {
+        AvSendTVEncoderOption((PVOID)0xFD000000, 9, 1, nullptr);
+        MmFreeContiguousMemory(SplashScreen);
+    }
     MmFreeContiguousMemory(SplashImage);
-    MmFreeContiguousMemory(SplashScreen);
-    SplashScreen = SplashImage = HalpSplashStart = nullptr;
+    SplashScreen = SplashImage = nullptr;
 }
 
-void EndSplash() {
-    StopSplash();
-    HalpFreeBootPages(); // the splash and the jingle have ended: the boot-only code goes
+void StopSplash() {
+    FinishSplash(false);
+}
+
+void EndSplash(bool KeepPicture) {
+    FinishSplash(KeepPicture);
+    HalpFreeBootPages(); // the splash has ended: the boot-only code goes
 }
 
 // --- The 2BL's splash record (boot/bl.cpp: 'OXSP', physical address, size at physical 0x2380), taken on a cold boot

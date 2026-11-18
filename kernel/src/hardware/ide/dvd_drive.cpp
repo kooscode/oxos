@@ -685,7 +685,7 @@ static void DvdReset() {
 // Bring the drive up (device 1): 0 = ready, else the step that found no drive (1 select, 2 busy, 3 transfer mode, 4 IDENTIFY PACKET). Called at the channel's
 // IRQL. A drive that answers but is not ready yet (a DVD drive still starting up when the boot is fast) is reset and tried again, for about 30 s in all (the
 // reference's busy wait). Waits for device 1 to be ready for its first command: 0, or why there is no drive (1 nothing on the bus, 2 still busy after 30 s).
-// Runs at the caller's IRQL (OXOS: the reference waits raised), so the boot splash and jingle keep running while a drive starts up; it only reads the alternate
+// Runs at the caller's IRQL (OXOS: the reference waits raised), so the boot splash keeps running while a drive starts up; it only reads the alternate
 // status. Its limits follow the clock, as other threads take the processor meanwhile.
 static ULONG DvdWaitReady() {
     outb(IDE_DRIVE, 0xB0);

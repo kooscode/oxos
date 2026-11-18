@@ -104,6 +104,7 @@ def main():
     ap.add_argument("--steps", default="wait:30,shot", help="wait:S, shot and button presses, comma-separated")
     ap.add_argument("--eeprom", help="EEPROM to start from (copied, never written)")
     ap.add_argument("--save-hdd", metavar="FILE", help="keep the disk as xemu left it")
+    ap.add_argument("--serial", metavar="FILE", help="write the debug serial port to FILE (a SERIAL=1 kernel's log, titles' DbgPrint)")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     a = ap.parse_args()
     if not os.environ.get("DISPLAY"):
@@ -124,7 +125,8 @@ def main():
         f"flashrom_path = '{os.path.abspath(a.bios)}'\neeprom_path = '{os.path.join(work, 'eeprom.bin')}'\nhdd_path = '{hdd}'\n"
         + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING)
     pad = VirtualPad()  # before xemu starts, so xemu binds it to controller port 1
-    xemu = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"], stdout=open(os.path.join(work, "xemu.log"), "w"),
+    serial = ["-device", "lpc47m157", "-serial", f"file:{os.path.abspath(a.serial)}"] if a.serial else []
+    xemu = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"] + serial, stdout=open(os.path.join(work, "xemu.log"), "w"),
                             stderr=subprocess.STDOUT, env=xemu_env())
     shots = 0
     try:

@@ -400,9 +400,14 @@ static NTSTATUS HDDFSTransferIrp(HDDFS_VOLUME *v, HDDFS_FCB *f, PIRP Irp, bool w
 
 #if XK_DEBUG_SERIAL
 // Debug (serial builds): a title that reads the same thing again and again. The last 8 reads are kept; when a read repeats the one before it exactly, they are
-// printed once, then the repeat count at each power of two.
+// printed once, then the repeat count at each power of two. Each keeps a copy of the file's name and size: its FCB may be closed and freed by the time the
+// log is printed (a dashboard's repeated read after a quick reboot stopped a serial kernel on a freed FCB, 2026-11-17).
+constexpr ULONG READ_LOG_NAME = 32; // characters of the file's name kept
 struct HDDFS_READ_LOG {
-    HDDFS_FCB *Fcb;
+    HDDFS_FCB *Fcb;            // which file (compared, never followed)
+    char Name[READ_LOG_NAME];  // its name, cut to READ_LOG_NAME characters
+    ULONG NameLength;
+    ULONG FileSize;
     ULONGLONG Offset;
     ULONG Length, Done;
     NTSTATUS Status;
@@ -417,8 +422,8 @@ static void HDDFSLogRead(HDDFS_FCB *f, ULONGLONG offset, ULONG length, NTSTATUS 
         if (HDDFSRepeats == 1) {
             for (ULONG i = HDDFSReadCount > 8 ? HDDFSReadCount - 8 : 0; i < HDDFSReadCount; i++) {
                 HDDFS_READ_LOG &r = HDDFSReadLog[i & 7];
-                XK_SERIAL("hddfs: read %.*s size %lx offset %lx length %lx -> %08lx, %lx bytes\n", (int)r.Fcb->NameLength, r.Fcb->Name, r.Fcb->FileSize,
-                          (ULONG)r.Offset, r.Length, (ULONG)r.Status, r.Done);
+                XK_SERIAL("hddfs: read %.*s size %lx offset %lx length %lx -> %08lx, %lx bytes\n", (int)r.NameLength, r.Name, r.FileSize, (ULONG)r.Offset,
+                          r.Length, (ULONG)r.Status, r.Done);
             }
         }
         if (!(HDDFSRepeats & (HDDFSRepeats - 1))) {
@@ -428,7 +433,15 @@ static void HDDFSLogRead(HDDFS_FCB *f, ULONGLONG offset, ULONG length, NTSTATUS 
         return;
     }
     HDDFSRepeats = 0;
-    HDDFSReadLog[HDDFSReadCount++ & 7] = {f, offset, length, done, status};
+    HDDFS_READ_LOG &entry = HDDFSReadLog[HDDFSReadCount++ & 7];
+    entry.Fcb = f;
+    entry.NameLength = f->NameLength < READ_LOG_NAME ? f->NameLength : READ_LOG_NAME;
+    memcpy(entry.Name, f->Name, entry.NameLength);
+    entry.FileSize = f->FileSize;
+    entry.Offset = offset;
+    entry.Length = length;
+    entry.Done = done;
+    entry.Status = status;
 }
 #endif
 

@@ -1,6 +1,6 @@
 // The kernel's graphics (src/graphics/): the OXOS font and text (text.cpp), and the frame buffer and shapes of the kernel's own screens (screen.cpp): the error
 // screens, the format countdown and the File Manager's screen draw with them, and the boot splash with the text. Resident: those screens can come up after the
-// boot-only code is freed. The vector renderer the splash draws its scene with (vector_renderer.cpp) is in graphics/vector_renderer.h.
+// boot-only code is freed. The vector renderer the splash draws its scene with is shared/graphics/vector_renderer.h (oxos::graphics).
 #pragma once
 #include <runtime/types.h>
 

@@ -1,4 +1,4 @@
-// Title patch file parser (spec/oxos_internal/25 §3, kernel/src/ini_file/title_patcher_ini.cpp).
+// Title patch file parser (spec/oxos_internal/25 §3, shared/ini_file/title_patcher_ini.cpp).
 #include "kernel_test.h"
 
 #include <cstdio>
@@ -12,35 +12,35 @@ using namespace xk; // the kernel's subsystems as storage::, titles::, ...
 
 namespace {
 struct Rec {
-    USHORT Kind;
-    ULONG Address;
-    std::vector<UCHAR> Original, Data;
-    ULONG Check;
+    uint16_t Kind;
+    uint32_t Address;
+    std::vector<uint8_t> Original, Data;
+    uint32_t Check;
 };
 
-std::vector<Rec> Parse(const std::string &text, ULONG title, ULONG version, XE_PATCH_COUNTS *c = nullptr, ULONG room = 4096) {
-    std::vector<UCHAR> out(room + 1, 0xCC);
-    XE_PATCH_COUNTS counts;
-    ULONG used =
-        ini_file::ParseTitlePatches(text.data(), (ULONG)text.size(), title, version, out.data(), room, &counts);
+std::vector<Rec> Parse(const std::string &text, uint32_t title, uint32_t version, INI_PATCH_COUNTS *c = nullptr, uint32_t room = 4096) {
+    std::vector<uint8_t> out(room + 1, 0xCC);
+    INI_PATCH_COUNTS counts;
+    uint32_t used =
+        oxos::ini_file::ParseTitlePatches(text.data(), (uint32_t)text.size(), title, version, out.data(), room, &counts);
     EXPECT_LE(used, room);
     EXPECT_EQ(out[room], 0xCC) << "wrote past the output";
     if (c)
         *c = counts;
     std::vector<Rec> recs;
-    for (ULONG at = 0; at < used;) {
-        auto r = (const XE_PATCH_RECORD *)(out.data() + at);
-        auto o = ini_file::PatchOriginal(r), d = ini_file::PatchData(r);
-        recs.push_back({r->Kind, r->Address, std::vector<UCHAR>(o, o + r->OriginalLength), std::vector<UCHAR>(d, d + r->Length), r->Check});
-        at += ini_file::PatchRecordSize(r);
+    for (uint32_t at = 0; at < used;) {
+        auto r = (const INI_PATCH_RECORD *)(out.data() + at);
+        auto o = oxos::ini_file::PatchOriginal(r), d = oxos::ini_file::PatchData(r);
+        recs.push_back({r->Kind, r->Address, std::vector<uint8_t>(o, o + r->OriginalLength), std::vector<uint8_t>(d, d + r->Length), r->Check});
+        at += oxos::ini_file::PatchRecordSize(r);
     }
     return recs;
 }
 
-std::vector<UCHAR> B(std::initializer_list<int> v) {
-    std::vector<UCHAR> out;
+std::vector<uint8_t> B(std::initializer_list<int> v) {
+    std::vector<uint8_t> out;
     for (int x : v)
-        out.push_back((UCHAR)x);
+        out.push_back((uint8_t)x);
     return out;
 }
 
@@ -57,12 +57,12 @@ const char *const File = "; OXOS title patches\r\n"
 } // namespace
 
 TEST(Patches, TitleWithoutVersionMatchesEveryVersion) {
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     auto r = Parse(File, 0x4D4A000C, 7, &c);
     ASSERT_EQ(r.size(), 2u);
-    EXPECT_EQ(r[0].Kind, XE_PATCH_NAME);
+    EXPECT_EQ(r[0].Kind, INI_PATCH_NAME);
     EXPECT_EQ(std::string(r[0].Data.begin(), r[0].Data.end()), "Ultra Bust-A-Move: intro");
-    EXPECT_EQ(r[1].Kind, XE_PATCH_BYTES);
+    EXPECT_EQ(r[1].Kind, INI_PATCH_BYTES);
     EXPECT_EQ(r[1].Address, 0x506D7u);
     EXPECT_EQ(r[1].Original, B({0xE8, 0xD4, 0x64, 0x00}));
     EXPECT_EQ(r[1].Data, B({0xEB, 0x08}));
@@ -87,7 +87,7 @@ TEST(Patches, VersionedSectionsOnlyMatchTheirVersion) {
 }
 
 TEST(Patches, BadLinesAreCountedAndSkipped) {
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     auto r = Parse("[ABC]\n"
                    "patch = 1000: E > 90\n"     // odd digit count
                    "patch = 1000 90 > 90\n"     // no colon
@@ -110,7 +110,7 @@ TEST(Patches, BadLinesAreCountedAndSkipped) {
 }
 
 TEST(Patches, OutputThatDoesNotFitIsAnError) {
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     auto r = Parse("[1]\npatch=10:00>01\npatch=20:00>02\n", 1, 0, &c, 16); // room for one 16-byte record
     ASSERT_EQ(r.size(), 1u);
     EXPECT_EQ(r[0].Address, 0x10u);
@@ -118,21 +118,21 @@ TEST(Patches, OutputThatDoesNotFitIsAnError) {
 }
 
 TEST(Patches, LongestPatchAndName) {
-    std::string bytes(2 * XE_PATCH_MAX_BYTES, 'A');
+    std::string bytes(2 * INI_PATCH_MAX_BYTES, 'A');
     std::string name(200, 'n');
     auto r = Parse("[1]\nname = " + name + "\npatch = 10: " + bytes + " > " + bytes + "\npatch = 10: " + bytes + "AA > 90\npatch = 10: 90 > " + bytes + "AA\n",
                        1, 0, nullptr, 1 << 16);
     ASSERT_EQ(r.size(), 2u);
-    EXPECT_EQ(r[0].Data.size(), XE_PATCH_MAX_NAME) << "names are cut";
-    EXPECT_EQ(r[1].Original.size(), XE_PATCH_MAX_BYTES);
-    EXPECT_EQ(r[1].Data.size(), XE_PATCH_MAX_BYTES) << "one byte too many, on either side, is an error";
+    EXPECT_EQ(r[0].Data.size(), INI_PATCH_MAX_NAME) << "names are cut";
+    EXPECT_EQ(r[1].Original.size(), INI_PATCH_MAX_BYTES);
+    EXPECT_EQ(r[1].Data.size(), INI_PATCH_MAX_BYTES) << "one byte too many, on either side, is an error";
 }
 
 TEST(Patches, SpacesAndTabsBetweenBytesDoNotMatter) {
     auto want = B({0xF0, 0xF4, 0xB7, 0xC9});
     for (const char *line : {"patch = 10: F0 F4 B7 C9 > F0F4B7C9", "patch = 10: F0F4B7C9>F0 F4 B7 C9",
                              "patch\t=\t10:\tF0\tF4  \t B7C9   >   F0F4 B7\t\tC9\t; comment", "patch=0x10:f0f4b7c9>f0f4b7c9\r"}) {
-        XE_PATCH_COUNTS c;
+        INI_PATCH_COUNTS c;
         auto r = Parse(std::string("[1]\n") + line + "\n", 1, 0, &c);
         ASSERT_EQ(r.size(), 1u) << line;
         EXPECT_EQ(r[0].Address, 0x10u) << line;
@@ -140,13 +140,13 @@ TEST(Patches, SpacesAndTabsBetweenBytesDoNotMatter) {
         EXPECT_EQ(r[0].Data, want) << line;
         EXPECT_EQ(c.Errors, 0u) << line;
     }
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     EXPECT_TRUE(Parse("[1]\npatch = 10: F 0 > 90\n", 1, 0, &c).empty()) << "a byte's two digits stay together";
     EXPECT_EQ(c.Errors, 1u);
 }
 
 TEST(Patches, MatchLineChecksPatchesWithoutOriginalBytes) {
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     auto r = Parse("[1]\n"
                    "match = 1000: 8B F0 56 E8\n"
                    "patch = 1000: 8B F0 56 E8 00 F0 03 00 > B8 7C D0 07 00 90 90 90\n"
@@ -182,7 +182,7 @@ TEST(Patches, NoNewlineAtTheEnd) {
 // The file shipped in kernel/title_patches parses without a single bad line, checks 4 bytes or more, and never has fewer new bytes than original ones (shorter
 // NEW is allowed, but not used there, for readability; longer only where the rest of the original is not known).
 TEST(Patches, ShippedFileParses) {
-    std::string path = XK_KERNEL_DIR "/title_patches/oxos_title_patches.ini";
+    std::string path = XK_KERNEL_DIR "/settings/oxos_title_patches.ini";
     FILE *f = fopen(path.c_str(), "rb");
     ASSERT_NE(f, nullptr) << path;
     std::string text;
@@ -190,16 +190,16 @@ TEST(Patches, ShippedFileParses) {
     for (size_t n; (n = fread(buf, 1, sizeof(buf), f)) > 0;)
         text.append(buf, n);
     fclose(f);
-    XE_PATCH_COUNTS c;
+    INI_PATCH_COUNTS c;
     auto r = Parse(text, 0x41560010, 2, &c, 1 << 16); // Wolfenstein: seven one-byte patches
     EXPECT_EQ(c.Errors, 0u);
     EXPECT_EQ(c.Sections, 1u);
     EXPECT_EQ(c.Patches, 7u);
-    for (ULONG title : {0x4D4A000Cu, 0x56550013u, 0x4541038Bu, 0x4D530031u, 0x56550041u, 0x48450001u, 0x53430007u,
+    for (uint32_t title : {0x4D4A000Cu, 0x56550013u, 0x4541038Bu, 0x4D530031u, 0x56550041u, 0x48450001u, 0x53430007u,
                         0x56550039u, 0x45410042u, 0x434D0050u}) {
-        XE_PATCH_COUNTS t;
+        INI_PATCH_COUNTS t;
         for (auto &p : Parse(text, title, 1, &t, 1 << 16)) {
-            if (p.Kind == XE_PATCH_BYTES) {
+            if (p.Kind == INI_PATCH_BYTES) {
                 EXPECT_GE(p.Original.size(), 4u) << std::hex << title << " " << p.Address << ": check 4 bytes or more";
                 if (!p.Check) { // a patch checked against its section's match line has no bytes of its own
                     EXPECT_GE(p.Data.size(),

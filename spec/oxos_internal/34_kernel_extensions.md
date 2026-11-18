@@ -47,11 +47,11 @@ restarts the kernel (§3.2). Only the state page carries over.
 ## 3. Loading
 
 ### 3.1 `oxos_extensions.ini`: which extensions, in which order
-**Without `C:\OXOS\oxos_extensions.ini`, no extension is loaded**, whatever is in the folder; as with `oxos_launch_redirect.ini` and the patch file, nothing
+**Without `C:\OXOS\oxos_extensions.ini`, no extension is loaded**, whatever is in the folder; as with launch redirects and the patch file, nothing
 happens without the file (decided 2026-11-13).
 
 - **The file:** `C:\OXOS\oxos_extensions.ini` (`\Device\Harddisk0\Partition2\OXOS\oxos_extensions.ini`; `/C/OXOS/oxos_extensions.ini` on an exFAT disk), text,
-  at most 64 KB, read with the ini reader the other OXOS files use (`kernel/src/ini_file/ini_file.cpp`, the same format rules: sections, `key = value`, `;` and
+  at most 64 KB, read with the ini reader the other OXOS files use (`shared/ini_file/ini_file.cpp`, the same format rules: sections, `key = value`, `;` and
   `#` comments, LF or CR LF).
 - **The extensions:** `C:\OXOS\extensions\` (`/C/OXOS/extensions/` on exFAT). Only files named in the ini are read; other files in the folder are ignored, so an
   extension can keep its data next to it.
@@ -366,7 +366,7 @@ title -> [savewatch] NtCreateFile -> oxos_next -> [netlog] NtCreateFile -> oxos_
 - A hooked call costs one jump (the stub) and one call more than an unhooked one.
 
 **Rules:**
-- **Titles only:** only the title's kernel imports are redirected. The kernel's own calls inside itself (reading `oxos_launch_redirect.ini`, the I/O manager
+- **Titles only:** only the title's kernel imports are redirected. The kernel's own calls inside itself (reading `oxos_settings.ini`, the I/O manager
   calling a driver) are never hooked.
 - **When:** hooks are made in `Start`, before the title's thunks are resolved, and hold for that whole title. A hook made later is refused. Nothing needs to be
   unhooked: the next launch starts without hooks.
@@ -389,7 +389,7 @@ event's data, typed, and the `UserData` it was registered with. Called in `oxos_
 
 | Event | When | The callback gets | It may |
 |---|---|---|---|
-| title loading (`OXOS_TITLE_LOADING`) | before the XBE is loaded: after `oxos_launch_redirect.ini` (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them; for a launch through the launch data page, start another XBE in its place (`oxos_title_redirect`, below) |
+| title loading (`OXOS_TITLE_LOADING`) | before the XBE is loaded: after the launch redirects (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them; for a launch through the launch data page, start another XBE in its place (`oxos_title_redirect`, below) |
 | title loaded (`OXOS_TITLE_LOADED`) | the XBE is loaded and its thunks resolved, before its entry point | the title ID, name (plain text: the kernel turns the certificate's UTF-16 into 41 bytes of ASCII, others as `?`; user, 2026-11-14), certificate, XBE header, base | read or patch the title's image (as `oxos_title_patches.xos` does, §10) |
 | title exiting (`OXOS_TITLE_EXITING`) | the title calls `HalReturnToFirmware(2)` to start another XBE or the dashboard; the title is still in memory | the launch data page the title wrote | read it, or change the next launch |
 
@@ -421,31 +421,26 @@ keep exactly the memory they had (the parity rule, spec/oxos_internal/18): the l
 created for the first extension). With extensions, titles lose their size, and a title that needs nearly all of its 64 MB can fail to start. The serial log
 reports each extension's image size after its start; *open:* its pool, threads and state page too, and showing it in the File Manager.
 
-**The loader is not resident: it is linked on its own and run from a cache file on the disk** (decided 2026-11-13):
-- **Built on its own.** The loader's sources (`kernel/src/extensions/`: `extension_loader.cpp`, `extension_parser.cpp`;
-  `kernel/src/ini_file/extensions_ini.cpp`; `oxos_extensions.ini`, PE loading, relocation, import binding, chains, the state-page index, `HookFunction`,
-  `RegisterEvent`) are compiled like the kernel but are not part of its link. `tools/link_extension_loader.py` links them at the fixed address 0xB0000000
-  (`XK_EXTENSION_LOADER_BASE`, a page directory entry nothing else uses) and gives each kernel symbol they use as an absolute symbol at this kernel's address,
-  from the kernel's map: the loader calls the kernel directly. A symbol in the kernel's boot-only sections stops the build.
-- **In the kernel image.** `tools/mkbios.py --extension-loader` appends it to the kernel image after the boot-only sections, behind a 20-byte header
-  (`XK_EXTENSION_LOADER_HEADER`: magic, the kernel's PE stamp, base, size, entry), and names the header in the kernel's DOS header (offset 0x38). Its pages are
-  boot-only: freed before the first title.
-- **Cached on the disk.** At a cold boot the kernel writes it to `C:\OXOS\cache\oxos_extension_loader.cache` (`extensions::WriteLoaderCache`, boot-only),
-  always: the file is a cache, overwritten with the known-good copy at every cold boot. The kernel creates `C:\OXOS\cache` (the kernel's own caches) and
-  `C:\OXOS\extensions` at every cold boot, before it writes the cache (`diagnostics::CreateOXOSFolders`, with `C:\OXOS` and `C:\OXOS\log`; user,
-  2026-11-14), so extensions copied there later load at the next launch without a cold boot first.
-- **Run from the cache at every launch** (the cold boot's too): `extensions::LoadExtensions` (`src/extensions/ extension_runtime_loader.cpp`) reads the file
-  only when `oxos_extensions.ini` exists, checks the header (magic, this kernel's stamp, base, sizes), copies the image into temporary contiguous pages, maps
-  them at 0xB0000000 through a temporary page table, calls the entry, then unmaps and frees everything before the title loads. No cache, or one from another
-  kernel: no extensions at that launch (logged).
+**The loader is not resident: it is a kernel module** (decided 2026-11-13 as a loader of its own; one of the kernel modules since 2026-11-17,
+spec/oxos_internal/43):
+- **Built with the other modules.** The loader's sources (`kernel/modules/extension_loader.cpp`, `extension_parser.cpp`; `shared/ini_file/extensions_ini.cpp`;
+  `oxos_extensions.ini`, PE loading, relocation, import binding, chains, the state-page index, `HookFunction`, `RegisterEvent`) are compiled like the kernel
+  and linked into the kernel modules' image at 0xB0000000 against this kernel's addresses (`tools/link_kernel_modules.py`); the loader calls the kernel
+  directly. Its function is `extensions::LoadListedExtensions`, in the modules' table.
+- **In the kernel image and cached on the disk** as the modules are (spec 43 §2): appended in the boot-only pages; written to
+  `C:\OXOS\cache\oxos_kernel.cache` at every cold boot. The kernel creates `C:\OXOS\cache` (the kernel's own caches) and `C:\OXOS\extensions` at every
+  cold boot, before it writes the cache (`diagnostics::CreateOXOSFolders`, with `C:\OXOS` and `C:\OXOS\log`; user, 2026-11-14), so extensions copied there
+  later load at the next launch without a cold boot first.
+- **Run at every launch** (the cold boot's too): `extensions::LoadExtensions` (resident, `extension_runtime.cpp`) calls the loader through the modules' table
+  when `oxos_extensions.ini` exists (or the last launch's state pages are kept), not in safe mode. The modules are mapped for the launch and freed before the
+  title starts (spec 43 §3). No modules (no cache, or one from another kernel): no extensions at that launch (logged).
 - **Not from the flash.** Reading the flash while the kernel runs coincided with RAM bits changing on the Modxo console (2026-10-28, `kernel/boot/bl.cpp`), and
   some modchips hide themselves after the boot; a copy kept in RAM instead would cost about as much as the resident loader. So the flash is not read after the
-  boot, and the loader is not compressed (nothing extra goes into the flash).
-- **Netboot:** the image the 2BL downloads holds the loader like a flashed one; the cold boot writes the cache.
+  boot, and the image is not compressed (nothing extra goes into the flash).
+- **Netboot:** the image the 2BL downloads holds the modules like a flashed one; the cold boot writes the cache.
 - **Resident in the kernel** stays what runs while the title runs (`extension_runtime.cpp`: the hooked imports, the three events, the end of a title, the run
-  loop thread) and the loader's runner (`extension_runtime_loader.cpp`): about 1.1 KB. To keep every page titles had, the cold boot's launch choice and the
-  netboot title's installation moved to the boot-only pages in the same change (spec/oxos_internal/18 §2). Checked: the memory test title starts with 15 960
-  free pages (xemu, 64 MB), as before kernel extensions.
+  loop thread). To keep every page titles had, the cold boot's launch choice and the netboot title's installation moved to the boot-only pages when the loader
+  left the kernel (spec/oxos_internal/18 §2). Checked: the memory test title starts with 15 960 free pages (xemu, 64 MB), as before kernel extensions.
 
 ## 9. The SDK: building an extension
 Extension writers do not need nxdk. nxdk's runtime (its C library, `winapi`, heaps, threads, SDL) is made for a title: it allocates title memory, sets up
@@ -587,33 +582,27 @@ is deleted between launches (§6). Without `oxos_extensions.ini` nothing loads: 
 Decided 2026-11-13. What runs only for some users, or only on development consoles, leaves the kernel and becomes an extension; what must always work stays in
 the kernel.
 
-**Stays in the kernel:** launch redirects (spec/oxos_internal/33: guaranteed to work with only `oxos_launch_redirect.ini`, also in safe mode) and therefore the
-ini reader (`ini_file.cpp`, which `oxos_extensions.ini` and the loader share); the trainer hook instruction (spec/oxos_internal/23: dashboards search the kernel
+**Stays in the kernel:** launch redirects (spec/oxos_internal/33: guaranteed to work with only `oxos_settings.ini`, also in safe mode), as a kernel module
+since 2026-11-17 (spec/oxos_internal/43), with the ini reader; the trainer hook instruction (spec/oxos_internal/23: dashboards search the kernel
 image for it); the in-game reset; the title compatibility answers (spec/oxos_internal/25 §1-2: games need them to run at all); virtual discs; the error screens;
 the File Manager (the way out of a broken extension).
 
 **Names (decided 2026-11-13; the ini's place 2026-11-15):** every extension OXOS provides is `C:\OXOS\extensions\oxos_NAME.xos`, its section in
 `oxos_extensions.ini` is `[oxos_NAME]`, and its settings and data file is `C:\OXOS\extensions\oxos_NAME.ini`, next to it (§3.1). Extensions from others use any
-other name; the `oxos_` prefix is OXOS's. Kernel features keep their files (`oxos_launch_redirect.ini`).
-
-```ini
-; oxos_extensions.ini for the title patches (in the trainers zip)
-[oxos_title_patches]
-extension = oxos_title_patches.xos
-```
+other name; the `oxos_` prefix is OXOS's. Kernel features keep their files (`oxos_settings.ini`, `oxos_title_patches.ini`).
 
 | Feature | Today | As an extension | Needs from §5/§7 |
 |---|---|---|---|
-| **Title patches** (`oxos_title_patches.ini`, spec/oxos_internal/25 §3; `title_patcher_ini.cpp`, `titles::LoadPatches`) | in the kernel, 1 704 bytes resident plus the records | `oxos_title_patches.xos`, shipped in the release zip (`OXOS/extensions/`) with its patch file, **`oxos_title_patches.ini`** (the kernel's own file today, renamed in v0.4.7; user, 2026-11-14), and an `oxos_extensions.ini` that lists it; reads `C:\OXOS\oxos_title_patches.ini` in the title-loaded event | the title-loaded event (the title's ID, version, section headers) patches the preloaded sections; a hook on `XeLoadSection` (327) patches a section after `oxos_next(XeLoadSection)` has read it |
-| **Netbooted title** (`title_netboot.cpp`, spec/oxos_internal/09 §7) | in the kernel, 981 bytes resident | `oxos_nettitle.xos`; installs the package as `E:\NAME\` and replaces the launch's XBE path with it | the netboot package's address and size in the kernel facts (§5.2; the kernel still keeps those pages from the memory manager); the title-loading event replaces the path |
+| **Title patches** (`oxos_title_patches.ini`, spec/oxos_internal/25 §3) | ~~an extension~~: **a kernel module** since 2026-11-17 (`kernel/modules/title_patcher.cpp`, spec/oxos_internal/43): out of the resident kernel without an extension's costs (always on, no listing); writing the records into sections stays resident | — | — |
+| **Netbooted title** (`title_netboot.cpp`, spec/oxos_internal/09 §7) | boot-only code since the loader left the kernel (2026-11-13): no resident cost, nothing to move | — | — |
 | **Call tracer** (`title_tracer.cpp`, `trace.S`, spec/oxos_internal/01) | a separate kernel build, `TRACE_IMPORTS=1/2` | `oxos_tracer.xos`, listed first in `oxos_extensions.ini` so it sees the title's calls first; release kernels can be traced | `oxos_hook` with its own assembly stubs for every hookable ordinal (the stubs keep the registers and jump to `Next`); its ring outside the memory manager at a fixed physical address with 128 MB, as `TRACE_IMPORTS=2` does |
 
 - **Netboot packages carry extensions:** a development console should not need a prepared disk. `netboot.py` adds `.xos` files to the title package
   (`--extension FILE`, and `oxos_nettitle.xos` by itself with `--title`); the loader loads the package's extensions first, in the order given, in addition to
   `oxos_extensions.ini` and also without it. Only a netbooted kernel does this.
-- **Consequences, accepted:** title patches and trainers' patching need `oxos_title_patches.xos` installed and listed; safe mode (B) turns them off with the
-  other extensions. The kernel's tracer builds (`TRACE_IMPORTS`) are retired once `oxos_tracer.xos` records the same.
-- **Memory:** about 2.7 KB less resident kernel in release builds (patches and the netboot title), which also pays for the extensions' resident code (§8.1).
+- **Consequences, accepted:** the kernel's tracer builds (`TRACE_IMPORTS`) are retired once `oxos_tracer.xos` records the same.
+- **Memory:** title patches, launch redirects, the dashboard order and the kernel settings left the resident kernel as kernel modules instead (2026-11-17,
+  spec/oxos_internal/43: about 4 KB), without needing an extension.
 
 ### 10.1 Proposed extensions (not decided)
 - **GDB remote debugging (`gdbstub.xos`)**: debug a title (an nxdk game netbooted with its `.xos`, §10) from `gdb` on a PC with the GDB remote protocol:

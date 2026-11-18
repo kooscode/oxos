@@ -4,14 +4,14 @@ Status: implemented 2026-11-08. Code: `kernel/src/hardware/usb/` (the USB contro
 `kernel/src/boot_splash/splash.cpp` (when the pads are read), `kernel/src/titles/title_loader.cpp` (what happens then),
 `kernel/src/user_interface/error_screens.cpp` (No Dashboard Found), `kernel/src/webserver/` (the File Manager and its screen, spec/oxos_internal/31).
 
-X pressed on any controller while the boot splash and jingle run, or on the "No Dashboard Found" screen, opens the OXOS File Manager: a web page for uploading,
+X pressed on any controller while the boot splash is shown, or on the "No Dashboard Found" screen, opens the OXOS File Manager: a web page for uploading,
 organizing and launching files from a browser. X, not WHITE: the Xbox Live dashboard already uses WHITE held at its start (2026-11-08).
 
 ## 1. When
 - Cold boot only, with an AV pack (the splash runs); a quick reboot never reads the pads. *Planned (spec 39 §1.1):* X held at a cold boot opens the File
   Manager also when the splash is skipped or there is no AV pack, and during the splash of a safe boot (B).
-- X at any time from the start picture to the end of the jingle (about 4 s). The title thread waits for the splash to end (`boot_splash::WaitForSplash`) before
-  it chooses a title, then:
+- X at any time from the end of the splash's fade-in to the end of the splash (about 3.5 s; 4 s after the screen came on, spec 00 §2). The title thread waits
+  for the splash to end (`boot_splash::WaitForSplash`) before it chooses a title, then:
   - X seen: the File Manager (spec/oxos_internal/31) until a browser launches an XBE that loads (`titles::TitleLaunched` 4). Without a network card it cannot
     run: the title is chosen as usual.
   - Otherwise: the usual title (spec/stock/03 §4).
@@ -23,8 +23,8 @@ organizing and launching files from a browser. X, not WHITE: the Xbox Live dashb
 
 ## 2. In the splash thread
 No thread of its own: the splash thread mostly sleeps between frames.
-- After the fade-in, while the start picture stands still (0.5 s before the jingle): `gamepad::StartWatchingControllers` finds and sets up the pads (§3, §4). It
-  blocks; a few hundred milliseconds with one controller.
+- After the fade-in, while the picture stands still: `gamepad::StartWatchingControllers` finds and sets up the pads (§3, §4). It blocks; a few hundred
+  milliseconds with one controller.
 - Every sleep of the splash after that reads the pads about every 10 ms (`gamepad::PollControllers`), without waiting.
 - Before the splash signals its end: `gamepad::StopWatchingControllers` (§3).
 

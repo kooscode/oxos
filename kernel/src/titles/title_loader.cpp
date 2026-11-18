@@ -4,6 +4,7 @@
 #include <user_interface/user_interface.h>
 #include <io/io.h>
 #include <extensions/extensions.h>
+#include <kernel_modules/kernel_modules.h>
 #include <ini_file/launch_redirect_ini.h>
 #include <ini_file/title_patcher_ini.h>
 #include <core/core.h>
@@ -37,13 +38,6 @@ constexpr NTSTATUS STATUS_INVALID_IMAGE_FORMAT = (NTSTATUS)0xC000007B, STATUS_OR
                    STATUS_REGION_MISMATCH = (NTSTATUS)0xC0050001, STATUS_MEDIA_MISMATCH = (NTSTATUS)0xC0050002;
 constexpr NTSTATUS STATUS_REPARSE = 0x00000104; // LoadImage: an extension starts another XBE in its place
 
-struct XBE_SECTION_HEADER {
-    ULONG Flags, VirtualAddress, VirtualSize, PointerToRawData, SizeOfRawData, SectionName;
-    ULONG SectionReferenceCount;
-    USHORT *HeadSharedPageReferenceCount, *TailSharedPageReferenceCount;
-    UCHAR SectionDigest[20];
-};
-static_assert(sizeof(XBE_SECTION_HEADER) == 0x38);
 
 static ULONG XbeField(ULONG offset) {
     return *(ULONG *)(XBE_BASE + offset);
@@ -87,7 +81,7 @@ static NTSTATUS OpenImage(HANDLE *h) {
     return NtOpenFile(h, GENERIC_READ | SYNCHRONIZE, &a, &iosb, FILE_SHARE_READ, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
 }
 
-// --- Kernel files in C:\OXOS (oxos_title_patches.ini, oxos_launch_redirect.ini): C: on a FATX disk, /C/OXOS on an
+// --- Kernel files in C:\OXOS (oxos_settings.ini, oxos_title_patches.ini): C: on a FATX disk, /C/OXOS on an
 // exFAT disk
 
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
@@ -120,62 +114,18 @@ char *ReadOXOSFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *St
 // --- Title patches from C:\OXOS\oxos_title_patches.ini (spec/oxos_internal/25 §3): read once per title load, written into
 // each section whenever it is read from the image (at load for preloaded sections, later through XeLoadSection).
 
-static PUCHAR PatchRecords; // this title's records (ini_file::ParseTitlePatches), or null
+static PUCHAR PatchRecords; // this title's records (the title patcher module), or null
 static ULONG PatchFileSize;
 
+// This title's records, built by the title patcher module (kernel/modules/title_patcher.cpp); without the kernel modules, none.
 static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *Sections, ULONG Count) {
     if (PatchRecords) {
         ExFreePool(PatchRecords);
         PatchRecords = nullptr;
         PatchFileSize = 0;
     }
-    constexpr ULONG MAX_PATCH_FILE = 0x100000;
-    ULONG got;
-    NTSTATUS status;
-    char *text = ReadOXOSFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_title_patches.ini", MAX_PATCH_FILE, 'tPeX', &got, &status);
-    if (!text) {
-        if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
-            XK_SERIAL("patches: oxos_title_patches.ini not read: %#lx\n", status);
-        return; // no file: no patches
-    }
-    // A record is never more than twice its line ("patch=1:00" makes 12 bytes, "name=" 8).
-    ULONG room = 2 * got + 16;
-    auto out = (PUCHAR)ExAllocatePoolWithTag(room, 'rPeX');
-    XE_PATCH_COUNTS counts = {};
-    ULONG used = out ? ini_file::ParseTitlePatches(text, got, TitleId, Version, out, room, &counts) : 0;
-    ExFreePool(text);
-    XK_SERIAL("patches: title %08lx version %lu: %lu sections, %lu patches, %lu lines not understood\n", TitleId, Version, counts.Sections, counts.Patches,
-              counts.Errors);
-    if (!used) {
-        if (out)
-            ExFreePool(out);
-        return;
-    }
-    for (ULONG at = 0; at < used;) {
-        auto r = (XE_PATCH_RECORD *)(out + at);
-        at += ini_file::PatchRecordSize(r);
-        if (r->Kind == XE_PATCH_NAME) {
-            CHAR line[XE_PATCH_MAX_NAME + 1];
-            memcpy(line, r + 1, r->Length);
-            line[r->Length] = 0;
-            XK_SERIAL("patches: %s\n", line);
-            continue;
-        }
-        // The patch, and the match bytes it is checked against, inside one section (so both are loaded when the patch is applied).
-        bool inside = false;
-        for (ULONG i = 0; i < Count && !inside; i++) {
-            ULONG va = Sections[i].VirtualAddress, size = Sections[i].VirtualSize;
-            inside = r->Address >= va && r->Address - va + ini_file::PatchSpan(r) <= size && (!r->Check || (r->Check >= va &&
-                     r->Check - va + r->OriginalLength <= size));
-        }
-        if (!inside) {
-            XK_SERIAL("patches: %#lx (%lu bytes) is not inside one section of the title%s: skipped\n", r->Address, ini_file::PatchSpan(r),
-                      r->Check ? " with its match bytes" : "");
-            r->Kind = 0xFFFF;
-        }
-    }
-    PatchRecords = out;
-    PatchFileSize = used;
+    if (kernel_modules::Modules)
+        kernel_modules::Modules->BuildTitlePatches(TitleId, Version, Sections, Count, &PatchRecords, &PatchFileSize);
 }
 
 // A patch is written only where its current bytes are: so never into another build of the title, nor into a launcher that carries the title's identity
@@ -184,19 +134,19 @@ static void LoadPatches(ULONG TitleId, ULONG Version, const XBE_SECTION_HEADER *
 static void ApplyPatches(const XBE_SECTION_HEADER *s) {
     for (ULONG pass = 0; pass < 2; pass++) {
         for (ULONG at = 0; at < PatchFileSize;) {
-            auto r = (XE_PATCH_RECORD *)(PatchRecords + at);
-            at += ini_file::PatchRecordSize(r);
-            if (r->Kind != XE_PATCH_BYTES || !r->Check != (pass == 1) || r->Address < s->VirtualAddress ||
-                r->Address - s->VirtualAddress + ini_file::PatchSpan(r) > s->VirtualSize)
+            auto r = (INI_PATCH_RECORD *)(PatchRecords + at);
+            at += oxos::ini_file::PatchRecordSize(r);
+            if (r->Kind != INI_PATCH_BYTES || !r->Check != (pass == 1) || r->Address < s->VirtualAddress ||
+                r->Address - s->VirtualAddress + oxos::ini_file::PatchSpan(r) > s->VirtualSize)
                 continue;
             auto target = (PUCHAR)r->Address;
             auto check = (PUCHAR)(r->Check ? r->Check : r->Address);
             // Already there first: a patch checked against another place must not be written twice (its match bytes may still be there when an earlier patch of
             // the section has not changed them).
-            if (memcmp(target, ini_file::PatchData(r), r->Length) == 0) {
+            if (memcmp(target, oxos::ini_file::PatchData(r), r->Length) == 0) {
                 XK_SERIAL("patches: %#lx: already there\n", r->Address);
-            } else if (memcmp(check, ini_file::PatchOriginal(r), r->OriginalLength) == 0) {
-                memcpy(target, ini_file::PatchData(r), r->Length);
+            } else if (memcmp(check, oxos::ini_file::PatchOriginal(r), r->OriginalLength) == 0) {
+                memcpy(target, oxos::ini_file::PatchData(r), r->Length);
                 XK_SERIAL("patches: %#lx: %u bytes written\n", r->Address, r->Length);
             } else {
                 XK_SERIAL("patches: %#lx: the %s bytes differ: not written\n", r->Address, r->Check ? "match" : "current");
@@ -529,13 +479,13 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
     return status;
 }
 
-// Path's title-loading event (spec/oxos_internal/34 §7.2), then Path. Target (XE_REDIRECT_MAX_PATH + 1 bytes), for a launch an extension may redirect: when
+// Path's title-loading event (spec/oxos_internal/34 §7.2), then Path. Target (INI_REDIRECT_MAX_PATH + 1 bytes), for a launch an extension may redirect: when
 // one names an XBE there (oxos_title_redirect), Path is not loaded and the result is STATUS_REPARSE.
 NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target) {
     XK_SERIAL("load %s: start\n", Path);
     if (Target)
         Target[0] = 0;
-    extensions::TitleLoading(Path, Dashboard, Target, XE_REDIRECT_MAX_PATH + 1);
+    extensions::TitleLoading(Path, Dashboard, Target, INI_REDIRECT_MAX_PATH + 1);
     if (Target && Target[0]) {
         XK_SERIAL("load %s: an extension starts %s in its place\n", Path, Target);
         return STATUS_REPARSE;
@@ -547,18 +497,14 @@ NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target) {
 
 // --- Launch (spec/stock/05 §1-3, §5)
 
-volatile ULONG TitleLaunched; // 1 = disc title, 2 = dashboard, 3 = from the LaunchDataPage, 4 = from the File Manager
+volatile ULONG TitleLaunched; // 1 = disc title, 2 = dashboard, 3 = from the LaunchDataPage, 4 = from the File Manager, 5 = the boot video player
 volatile ULONG LaunchReason;           // the cold-boot pre-launch check result (§1)
 volatile ULONG DashboardLaunchData[3]; // diagnostics: {type, reason, code} as last written for the dashboard
 
-// The dashboard: EvoX's when it is installed (C:\evoxdash.xbe, or E:\evoxdash.xbe), else the Xbox dashboard (C:\xboxdash.xbe), else C:\Dashboard\default.xbe
-// (where the XBL Dashboard installs its loader). The first that loads is started (spec/oxos_internal/19_dashboard_choice.md).
-static const char *const Dashboards[] = {
-    "\\Device\\Harddisk0\\Partition2\\evoxdash.xbe",
-    "\\Device\\Harddisk0\\Partition1\\evoxdash.xbe",
-    "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe",
-    "\\Device\\Harddisk0\\Partition2\\Dashboard\\default.xbe",
-};
+// The dashboard (spec/oxos_internal/19_dashboard_choice.md): the ones C:\OXOS\oxos_settings.ini's [dashboard] lists, in order (the dashboard resolver module,
+// kernel/modules/dashboard_resolver.cpp; not in safe mode, nor without the kernel modules), then the Xbox dashboard, C:\xboxdash.xbe, as the stock kernel
+// starts it.
+constexpr char STOCK_DASHBOARD[] = "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe";
 
 // The launch data page's layout (one 4 KB page; the fields the kernel reads).
 struct LAUNCH_DATA_PAGE {
@@ -575,10 +521,8 @@ struct LAUNCH_DATA_PAGE {
 static_assert(sizeof(LAUNCH_DATA_PAGE) == 0x1000);
 
 static void LaunchDashboard() {
-    for (const char *path : Dashboards) {
-        if (NT_SUCCESS(LoadImage(path, TRUE)))
-            return;
-    }
+    if ((kernel_modules::Modules && kernel_modules::Modules->LoadListedDashboard()) || NT_SUCCESS(LoadImage(STOCK_DASHBOARD, TRUE)))
+        return;
     if (!KiQuickRebootFlag) {
         auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
         ULONG code = 13;
@@ -644,7 +588,7 @@ static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength, bool Redirectable 
         strlcpy(folder, Path, FolderLength + 1);
         linked = NT_SUCCESS(io::CreateLink("\\??\\D:", folder));
     }
-    char target[XE_REDIRECT_MAX_PATH + 1];
+    char target[INI_REDIRECT_MAX_PATH + 1];
     NTSTATUS status = LoadImage(Path, FALSE, Redirectable ? target : nullptr);
     if (status == STATUS_REPARSE) {
         if (linked)
@@ -660,31 +604,49 @@ static NTSTATUS LoadFromFolder(PCSZ Path, ULONG FolderLength, bool Redirectable 
     return status;
 }
 
-// --- Launch redirects from C:\OXOS\oxos_launch_redirect.ini (spec/oxos_internal/33)
+// --- Launch redirects from C:\OXOS\oxos_settings.ini's [launch_redirect] (spec/oxos_internal/33)
 
-// Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names it: true once the target is loaded. False
-// when there is no file or no section for Path, or the target does not load (the caller then starts Path as asked, §4).
+// Starts the redirect file's target in place of Path (the launch page's image, a device path) when a section names it (the launch redirect module,
+// kernel/modules/launch_redirect.cpp): true once the target is loaded. False when there is no file, no section for Path or no kernel modules, or the target
+// does not load (the caller then starts Path as asked, §4).
 static bool RedirectLaunch(PCSZ Path) {
-    constexpr ULONG MAX_REDIRECT_FILE = 0x10000;
-    ULONG got;
-    NTSTATUS status;
-    char *text = ReadOXOSFile("\\Device\\Harddisk0\\Partition2\\OXOS\\oxos_launch_redirect.ini", MAX_REDIRECT_FILE, 'rLeX', &got, &status);
-    if (!text)
+    char target[INI_REDIRECT_MAX_PATH + 1];
+    if (!kernel_modules::Modules || !kernel_modules::Modules->FindLaunchRedirect(Path, target, sizeof(target)))
         return false;
-    XE_REDIRECT redirect;
-    ULONG errors;
-    bool found = ini_file::LookUpRedirect(text, got, Path, &redirect, &errors);
-    ExFreePool(text);
-    if (errors)
-        XK_SERIAL("redirect: oxos_launch_redirect.ini: %lu lines not understood\n", errors);
-    if (!found)
-        return false;
-    XK_SERIAL("redirect: [%s] %s -> %s\n", redirect.Name, Path, redirect.Target);
-    status = LoadFromFolder(redirect.Target, PathFolderLength(redirect.Target));
+    NTSTATUS status = LoadFromFolder(target, PathFolderLength(target));
     if (NT_SUCCESS(status))
         return true;
     XK_SERIAL("redirect: target did not load (%#lx); starting %s\n", status, Path);
     return false;
+}
+
+// --- The boot video (spec/oxos_internal/38 §2): its player, C:\OXOS\apps\oxos_boot_video.xbe, runs in place of the title; when it quick-reboots, the title
+// is chosen as it would have been without it. The player leaves the launch data page as it found it. oxos_settings.ini's [boot_video] is read at the cold
+// boot only, by the kernel settings module (ReadBootVideoSwitches); its two switches are kept for the quick reboots.
+
+constexpr char BOOT_VIDEO_PLAYER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\apps\\oxos_boot_video.xbe";
+
+// [boot_video]'s switches (XK_BOOT_VIDEO_*), read at the cold boot by the kernel settings module; 0 in safe mode. They survive quick reboots.
+XK_PERSIST volatile ULONG BootVideoSwitches;
+
+// What the player runs in place of; it survives the player's quick reboot.
+enum BOOT_VIDEO_PLACE : ULONG {
+    BOOT_VIDEO_NONE = 0,         // the player is not running
+    BOOT_VIDEO_COLD_BOOT = 1,    // the cold boot's title: the dashboard (boot flag 0x08) or the disc, else the dashboard
+    BOOT_VIDEO_QUICK_REBOOT = 2, // a quick reboot's: the disc or the dashboard, as the launch data page says
+    BOOT_VIDEO_TITLE = 3,        // the cold boot's LaunchTitle(reason): the disc, else the dashboard, with the first-boot reason in bits 8 and up
+};
+XK_PERSIST volatile ULONG BootVideoPlace;
+
+// Loads the player (its folder as D:) in place of the title; true once it is loaded.
+static bool LoadBootVideoPlayer(ULONG Place) {
+    NTSTATUS status = LoadFromFolder(BOOT_VIDEO_PLAYER, PathFolderLength(BOOT_VIDEO_PLAYER));
+    XK_SERIAL("boot video: player %#lx\n", status);
+    if (!NT_SUCCESS(status))
+        return false;
+    BootVideoPlace = Place;
+    TitleLaunched = 5;
+    return true;
 }
 
 // §2. Returns with TitleLaunched set once an image is loaded (or does not return).
@@ -755,9 +717,31 @@ static void LaunchTitle(ULONG Reason) {
     LaunchDashboardWithReason(1, status == STATUS_REGION_MISMATCH ? 3 : status == STATUS_MEDIA_MISMATCH ? 5 : 1);
 }
 
-// Just before the title runs: the splash ends, and the LaunchDataPage moves below the kernel, out of the title's way (spec/stock/05 §5).
+// A quick reboot's title. After the cold boot's boot video, the title that cold boot chose: the dashboard for boot flag 0x08, else the disc or the dashboard
+// (as without launch data). Else, with boot_video_always = yes, the player first, unless a title asked for a title (a launch path not yet tried). Else what
+// the launch data page asks for.
+static void LaunchAfterQuickReboot() {
+    ULONG place = BootVideoPlace;
+    BootVideoPlace = BOOT_VIDEO_NONE;
+    if ((place & 0xFF) == BOOT_VIDEO_TITLE) {
+        LaunchReason = place >> 8;
+        return LaunchTitle(LaunchReason);
+    }
+    if (place == BOOT_VIDEO_COLD_BOOT && (hardware::chipset::BootFlags & 0x08)) {
+        TitleLaunched = 2;
+        return LaunchDashboard();
+    }
+    auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+    bool titleAsked = ldp && ldp->LaunchPath[0] && !(ldp->Flags & 1);
+    if (place == BOOT_VIDEO_NONE && (BootVideoSwitches & XK_BOOT_VIDEO_ALWAYS) && !titleAsked && LoadBootVideoPlayer(BOOT_VIDEO_QUICK_REBOOT))
+        return;
+    LaunchTitle(0);
+}
+
+// Just before the title runs: the splash ends (for the boot video player its picture stays on screen until the player's mode set, spec/oxos_internal/38
+// §2), and the LaunchDataPage moves below the kernel, out of the title's way (spec/stock/05 §5).
 static void PrepareToEnterTitle() {
-    boot_splash::EndSplash();
+    boot_splash::EndSplash(BootVideoPlace != BOOT_VIDEO_NONE);
     if (!LaunchDataPage)
         return;
     ULONG kernelPhys = MmGetPhysicalAddress((PVOID)0x80010000);
@@ -841,6 +825,20 @@ static void WaitForTray() {
     }
 }
 
+// The boot video's switches from oxos_settings.ini's [boot_video] (spec/oxos_internal/38 §1, the kernel settings module), for this cold boot and its quick
+// reboots; none in safe mode or without the kernel modules.
+static void ReadBootVideoSwitches() {
+    BootVideoSwitches = !extensions::SafeMode && kernel_modules::Modules ? kernel_modules::Modules->ReadBootVideoSwitches() : 0;
+}
+
+// LaunchTitle(Reason), after the boot video when [boot_video] turns it on (user, 2026-11-17: "if enabled, play the boot video always"): the player's
+// quick reboot then makes this launch (LaunchAfterQuickReboot, BOOT_VIDEO_TITLE).
+static void LaunchTitleAfterBootVideo(ULONG Reason) {
+    if ((BootVideoSwitches & XK_BOOT_VIDEO_ENABLED) && LoadBootVideoPlayer(BOOT_VIDEO_TITLE | Reason << 8))
+        return;
+    LaunchTitle(Reason);
+}
+
 // Cold boot with X pressed during the splash (spec/oxos_internal/32): the File Manager instead of a title. False without the press, or when the network card
 // cannot be used (the title is then chosen as usual).
 static bool RunFileManager() {
@@ -853,17 +851,22 @@ void LaunchAtColdBoot() {
         user_interface::ShowFatalError(21);
     hardware::ide::CountDiskPowerCycle();
     diagnostics::CreateOXOSFolders(); // C:\OXOS and its log, extensions and cache folders exist from every boot on (spec/oxos_internal/34 §3, 35)
+    kernel_modules::WriteKernelModulesCache(); // for the quick reboots (spec/oxos_internal/43)
     filesystems::ReadCachePartitions(); // an exFAT disk: X/Y/Z's formats from before a power-off (spec/oxos_internal/05 §3)
     if (RunFileManager())
         return;
     // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).
     extensions::SafeMode = gamepad::BButtonPressed != 0;
+    ReadBootVideoSwitches();
     extensions::LoadExtensions();
+    ULONG reason = CheckFirstBoot();
+    XK_SERIAL("launch: cold boot: boot flags %#lx, region %#lx, first-boot reason %#lx, boot video switches %#lx\n", hardware::chipset::BootFlags,
+              ConsoleGameRegion, reason, BootVideoSwitches);
     if ((hardware::chipset::BootFlags & 4) || (ConsoleGameRegion & 0x80000000))
-        return LaunchTitle(0);
-    LaunchReason = CheckFirstBoot();
+        return LaunchTitleAfterBootVideo(0);
+    LaunchReason = reason;
     if (LaunchReason)
-        return LaunchTitle(LaunchReason);
+        return LaunchTitleAfterBootVideo(LaunchReason);
     // A title delivered by netboot runs instead of the dashboard the boot flags would choose (spec/oxos_internal/09_netboot.md §7).
     if (LaunchNetbootTitle()) {
         TitleLaunched = 1;
@@ -874,6 +877,10 @@ void LaunchAtColdBoot() {
         return LaunchDashboardWithReason(5, 0);
     if (hardware::chipset::BootFlags & 0x40)
         return WaitForTray();
+    // The boot video's player first, when oxos_settings.ini asks for it (its quick reboot then starts this title, LaunchAfterQuickReboot).
+    BootVideoPlace = BOOT_VIDEO_NONE;
+    if ((BootVideoSwitches & XK_BOOT_VIDEO_ENABLED) && LoadBootVideoPlayer(BOOT_VIDEO_COLD_BOOT))
+        return;
     if (hardware::chipset::BootFlags & 0x08)
         return LaunchDashboard();
     LaunchTitle(0);
@@ -891,13 +898,16 @@ static void NTAPI TitleThread(PVOID, PVOID) {
     }
 #endif
     storage::RestoreVirtualDiscMounts();
+    // The kernel modules for this launch (spec/oxos_internal/43): the extension loader, the settings, launch redirects, the dashboards and title patches.
+    kernel_modules::LoadKernelModules();
     if (KiQuickRebootFlag) {
         extensions::LoadExtensions();
-        LaunchTitle(0);
+        LaunchAfterQuickReboot();
     } else {
         LaunchAtColdBoot();
     }
     extensions::TitleLoaded();
+    kernel_modules::UnloadKernelModules();
     filesystems::HDDFSRememberTitleFolder();
     PrepareToEnterTitle();
     hardware::chipset::SetBootLed(0x0F); // solid green: the title (dashboard or game) is starting

@@ -163,7 +163,7 @@ text colours, four logo colours, scale); in 3.1.0 field 0x105 is a splash factor
 | No DVD drive | DRIVESETUP 2 | boots without one (oxos 08) | 05 |
 | Virtual discs | ISO, CCI, split images | ISO, CCI, split images, the same device interface (oxos 16) | 07 |
 | Configurable dashboard, IGR | yes | a fixed list of four dashboards (oxos 19; configurable: proposal, oxos 39); IGR (oxos 22) | 08, 09 |
-| Boot animation, splash theme | XBE, XMV, brand logo | a built-in vector splash and jingle (oxos 00, 17); a user's video: proposal (oxos 38) | 09 §2 |
+| Boot animation, splash theme | XBE, XMV, brand logo | a built-in vector splash (oxos 00); a user's video: proposal (oxos 38) | 09 §2 |
 | Front LED, fan, LCD, RTC | yes | retail LED only (extensions can drive it) | 11 |
 | Video overrides, region-free | yes | region-free (stock spec 05 §4); no video overrides | 10 |
 | TDATA/UDATA redirect, read-only C:, screenshots | yes | no | 13 |

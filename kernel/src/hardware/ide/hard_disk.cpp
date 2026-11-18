@@ -542,7 +542,7 @@ void InitDisk() {
     // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviations:
     // - a disk that is no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as XboxDev/cromwell does; some drives and SATA
     //   bridges only set DRDY once they have seen a command. Only a disk still busy after 30 s is fatal error 7;
-    // - the wait runs at the caller's IRQL (the reference raises first), so the boot splash and jingle keep running while a hard disk spins up; it only reads
+    // - the wait runs at the caller's IRQL (the reference raises first), so the boot splash keeps running while a hard disk spins up; it only reads
     //   the alternate status, and the interrupt handler only acknowledges an interrupt nobody expects. Its limits follow the clock, as other threads take the
     //   processor meanwhile.
     const ULONGLONG start = KeQueryInterruptTime();

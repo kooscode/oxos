@@ -1,4 +1,9 @@
-# 17. Boot jingle
+# 17. Boot jingle (removed)
+
+**Removed 2026-11-17** (user: "remove the boot animation and jingle ... that should also save some code space"): the synthesizer, the player, the kernel's
+AC'97 driver (`kernel/src/hardware/audio/`) and `tools/jingle` are gone; the splash is one picture (spec 00 §2). This spec records what was built. Its §2, the
+AC'97 controller's registers and the codec's start, is still the reference for the boot video player's sound (`shared/video_player/sound_output.cpp`, spec 38
+§4).
 
 OXOS addition. On cold boot the splash (spec/oxos_internal/00_boot_splash) comes with a short, original piece of music for cellos, bass and drums, as the retail
 boot animation comes with its sound. Implemented 2026-10-27. Code: `kernel/src/boot_splash/jingle.cpp` (the synthesizer and the score),

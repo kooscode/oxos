@@ -32,6 +32,25 @@ Anything else (for example a full `\Device\...` path) is used unchanged.
    - If none loads: (cold boot) front LED pattern 0xE1 and **fatal error 13** (or 13 + the reason in the launch data at dword 0x100, when a type-1 page is
      present), then HalReturnToFirmware 4.
 
+### 2.1 The XMV boot animation (`BootAnims\XMV Player\BootAnim.xbe`, "BootAnim V1.2")
+Studied 2026-11-17 in the Cerbios 3.1.0 Beta release (the XBE flattened to its memory image at 0x10000; REA/Ghidra evidence `ev_97620c16…` strings,
+`ev_06aa95fc…` decompilation of 0x11160, 0x1ecd5 and 0x1fd7d, `ev_4d85fc31…` the callers of HalReturnToFirmware; the rest from its disassembly).
+- **What it is built with:** an XDK title, its library list XAPILIB, D3D8, D3DX8, XGRAPHC, XBOXKRNL, **XMV**, LIBCP, LIBC and DSOUND, all version 1.0.5933.
+  The video is played by the XDK's own XMV library (section `XMV`, 0x43220), which is why it plays `.xmv` files: no decoder of its own.
+- **Files:** it links `BOOTANIM:` to its own folder (`\??\BOOTANIM:`; "Cannot create Symbolic Link" logged if it fails) and reads `BOOTANIM:\bootanim.ini`:
+  `[Calibration] Enabled` (true = the screen is blue while it waits) and `Ticks`, `[Jukebox] Enabled`. With the jukebox off it plays
+  `BOOTANIM:\DefaultAnim.xmv`; on, a random `.xmv` from `BOOTANIM:\Jukebox\` ("randomIndex is %i"; "No XMVs exist in Jukebox" when there is none).
+- **The wait before the video:** always `Ticks` × 250 ms (0x1ddf3: `Ticks` × 0xFA passed to a sleep, logged "Waiting %i ms to Play"), then 50 ms more, then
+  playback. The calibration setting only colours the screen during that wait; it is there for TVs that take time to show the new picture.
+- **Playback and skipping** (0x11840): the video plays on a thread of its own (start 0x112b0); the main thread waits on it 16 ms at a time and reads the four
+  controllers each time: a controller whose input field (offset 0x50 of its 0xE0-byte record) is set stops the video (0x118d0–0x118f9). At the end a "played"
+  flag is set (+0x188, 0x11916).
+- **After the video** (0x1df10–0x1df28): with the flag set, if a controller holds a certain button (0x11160: any of the four records connected with its
+  button byte at offset 7 set) it starts `D:\Cerbios\Recovery\default.xbe` with `D:` linked to `\Device\Harddisk0\Partition1` ("Recovery XBE not found …
+  falling back to firmware" if absent); otherwise it calls **HalReturnToFirmware(2), a quick reboot, without writing launch data**. Cerbios then takes the
+  path of §2 step 3: the disc, else the dashboard. (The boot animation runs on cold boots only, so the quick reboot does not start it again.)
+- **Errors:** a file it cannot play logs "Failed to play XMV @ %s. Make sure the XMV is in the correct format" and shows an error screen (0x126e0).
+
 ## 3. The XBE loader
 Given a path (and whether it is a system XBE: dashboard or boot animation):
 - **XOnline redirect:** if XONLINEDASHREDIR is set and the path is `\Device\Harddisk0\Partition2\XODash\xonlinedash.xbe`, `…\XODash\xonlinedash_original.xbe` is
@@ -58,5 +77,4 @@ Given a path (and whether it is a system XBE: dashboard or boot animation):
 - The dashboard chain (configured path, recovery, stock path) is the part users rely on; the boot animation is optional.
 
 ## Open
-- How the boot animation hands over (expected: a quick reboot with launch data, as titles do).
 - The loader's handling of a non-system XBE when the caller passes its third argument (a disc-only rule; returns STATUS 0xC000003A for some regions).

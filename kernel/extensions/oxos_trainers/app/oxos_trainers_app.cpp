@@ -4,7 +4,7 @@
 // the game with the settings as they are. Changed switches are written to the game's section of C:\OXOS\extensions\oxos_trainers.ini first; then the page is
 // put back and the game started through it, a launch oxos_trainers.xos lets through, and the trainer runs as the section says.
 //
-// The logo is oxos_trainers_logo.svg, drawn by the kernel's vector renderer (kernel/src/graphics/vector_renderer.cpp); everything else is drawn with SDL's
+// The logo is oxos_trainers_logo.svg, drawn by the kernel's vector renderer (shared/graphics/vector_renderer.cpp); everything else is drawn with SDL's
 // renderer every frame, text in SDL's debug font.
 #include <hal/xbox.h>
 #include <windows.h>
@@ -1321,7 +1321,7 @@ constexpr int LOGO_HEIGHT = 104;
 SDL_Texture *LogoStart, *LogoEnd; // the logo's two pictures, added to what is under them
 
 void MakeLogo() {
-    namespace vr = xk::graphics::vector_renderer;
+    namespace vr = oxos::graphics::vector_renderer;
     unsigned scratchBytes = 0;
     if (vr::Check(OXOS_TRAINERS_LOGO_SCENE, sizeof(OXOS_TRAINERS_LOGO_SCENE), &scratchBytes))
         return;

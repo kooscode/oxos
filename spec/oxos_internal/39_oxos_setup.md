@@ -4,9 +4,9 @@ Status: **proposal**, not implemented (user, 2026-11-15: "an oxos custom global 
 into our setup/config/dash where you can manage all kinds of kernel options like the enabling of extensions, trainers, primary dashboard (we hardcode them
 now)"). Nothing here is decided until the user says so.
 
-OXOS's settings are plain files in `C:\OXOS\` today, edited by hand over FTP or the File Manager: `oxos_extensions.ini`, `oxos_launch_redirect.ini`,
-`oxos_title_patches.ini`, and soon each extension's own ini file in `C:\OXOS\extensions\` (spec 34 §3.1). Some choices have no file at all: which dashboard
-starts is a fixed list in the kernel (spec 19). OXOS Setup is one screen for all of them, opened by holding a button at boot.
+OXOS's settings are plain files in `C:\OXOS\` today, edited by hand over FTP or the File Manager: `oxos_settings.ini` (the dashboards, spec 19; the boot
+video, spec 38), `oxos_extensions.ini`, `oxos_title_patches.ini`, and soon each extension's own ini file in
+`C:\OXOS\extensions\` (spec 34 §3.1). OXOS Setup is one screen for all of them, opened by holding a button at boot.
 
 ## 1. What the user sees
 - **Hold A during the boot splash** (X opens the File Manager, spec 32; B is safe mode, spec 34 §3.3; A is free): OXOS Setup starts instead of the dashboard.
@@ -15,11 +15,11 @@ starts is a fixed list in the kernel (spec 19). OXOS Setup is one screen for all
 
 | Page | What it manages | Stored in |
 |---|---|---|
-| Dashboard | which dashboard starts, in order; replaces the fixed list of spec 19 (the list stays the default) | `oxos_settings.ini` `[dashboard]` (spec 38 §1.1) |
+| Dashboard | which dashboards start, in order (spec 19: `dashboard_1` ... `dashboard_8`, then `C:\xboxdash.xbe`) | `oxos_settings.ini` `[dashboard]` (spec 38 §1.1) |
 | Extensions | each one on/off, its order, its settings (the ini keys of its section) | `oxos_extensions.ini` |
 | Trainers | per title: trainer on/off, its cheats, ask before the game or not (spec 37) | `extensions\oxos_trainers.ini` |
-| Boot | the boot video on cold boot / quick reboot (spec 38); the splash and jingle on/off, from the next cold boot (spec 38 §1.1) | `extensions\oxos_boot_video.ini`; the EEPROM |
-| Titles | title patches on/off, launch redirects (list, add, remove) | `oxos_title_patches.ini`, `oxos_launch_redirect.ini` |
+| Boot | the boot video: on/off, the file, after every reboot or cold boots only (spec 38); the splash on/off, from the next cold boot (§1.1) | `oxos_settings.ini` `[boot_video]`; the EEPROM |
+| Titles | title patches on/off, launch redirects (list, add, remove) | `oxos_title_patches.ini`, `oxos_settings.ini` `[launch_redirect]` |
 | Video and audio | the console's own settings: video standard, widescreen, 480p/720p/1080i, audio | the EEPROM (as the Xbox dashboard sets them) |
 | Toasts, in-game reset | toasts on/off (spec 36), the in-game reset on/off | `oxos_settings.ini` |
 | Disk | cache partitions (X/Y/Z) cleared, disk format (spec 30), free space | the disk |
@@ -36,9 +36,9 @@ so skipping the splash adds no wait (and they would work without an AV pack too,
 
 | Held at a cold boot | What happens |
 |---|---|
-| nothing | the usual boot: the splash and jingle unless skipped in the EEPROM (below), extensions, `oxos_settings.ini`, the dashboard or the disc |
+| nothing | the usual boot: the splash unless skipped in the EEPROM (below), extensions, `oxos_settings.ini`, the dashboard or the disc |
 | **X** only | the File Manager (spec 32) at once |
-| **B** | **safe boot:** every customization is skipped: no extensions, none of OXOS's ini files (`oxos_settings.ini`, `oxos_extensions.ini` and the extensions' own, `oxos_launch_redirect.ini`, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored. The standard splash and jingle show, with **`[ SAFE MODE ]`** in yellow at the top centre; the dashboards are tried in the built-in order (spec 19). Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
+| **B** | **safe boot:** every customization is skipped: no extensions, none of OXOS's ini files (`oxos_settings.ini`, `oxos_extensions.ini` and the extensions' own, `oxos_title_patches.ini`), and OXOS's EEPROM settings ignored. The standard splash shows, with **`[ SAFE MODE ]`** in yellow at the top centre; the dashboards are tried in the built-in order (spec 19). Safe boot lasts until the next cold boot (as safe mode does today, spec 34 §3.3) |
 | **B**, then **X** held during the safe boot's splash | safe boot, then the File Manager |
 | **B**, then **A** held during the safe boot's splash | safe boot, then OXOS Setup (`C:\OXOS\apps\oxos_settings.xbe`), to put a setting right |
 | **A** | OXOS Setup |
@@ -47,14 +47,15 @@ Safe boot is wider than today's safe mode, which skips only the extensions and k
 disk or the EEPROM is used, so a console always starts the way a fresh OXOS install does.
 
 **Skipping the splash:** one OXOS byte in the EEPROM, outside the sections the kernel uses (security up to 0x2F, factory 0x30–0x5F, user 0x60–0xBF; which
-byte of 0xC0–0xFF is free of other dashboards and BIOSes is to check): bit 0 no splash, bit 1 no jingle. The kernel reads the EEPROM before the splash
+byte of 0xC0–0xFF is free of other dashboards and BIOSes is to check): bit 0 no splash (bit 1 was to be "no jingle"; the jingle was removed 2026-11-17). The
+kernel reads the EEPROM before the splash
 (`hardware::chipset::InitEeprom` comes before `boot_splash::StartSplash` in `core/startup.cpp`), so a change applies at the next boot. OXOS Setup's Boot page
 sets it through one kernel call; apps do not write EEPROM bytes themselves. It stays with the console when the disk is changed, and other BIOSes ignore it.
 
 **Writing it safely.** An nxdk app runs in kernel mode and could write any EEPROM byte itself (`HalWriteSMBusValue` to the EEPROM at SMBus address 0xA8),
 but a wrong offset can damage the security section (0x00–0x2F, which holds the encrypted hard-disk key: lost, the console cannot unlock its own drive) or a
 section checksum (factory or user settings reset, wrong video standard or region). So:
-- **One kernel call writes only OXOS's byte**, at the offset the kernel knows: OXOS Setup asks for "skip the splash" or "no jingle", never for an offset. It is
+- **One kernel call writes only OXOS's byte**, at the offset the kernel knows: OXOS Setup asks for "skip the splash", never for an offset. It is
   either a new OXOS export or an OXOS-only setting number of `ExSaveNonVolatileSetting`, which another kernel refuses instead of writing anything.
 - **The EEPROM is backed up first:** the first time OXOS Setup runs, it saves all 256 bytes to `C:\OXOS\oxos_eeprom_backup.bin` (and keeps an existing one).
   That file is what saves a console whose EEPROM is ever damaged, by OXOS or anything else.
@@ -76,8 +77,8 @@ missing. The release zip would ship it in `OXOS\apps\`, next to the FTP server (
 
 ## 3. Kernel changes it needs
 - A at boot (`kernel/src/gamepad/gamepad.cpp`, as X and B).
-- `oxos_settings.ini`, the one file for the kernel's own options: the kernel reads the dashboard order (spec 19, spec 38 §1.1) and the other kernel options,
-  with today's behaviour as the default when the file or a key is missing.
+- `oxos_settings.ini`, the one file for the kernel's own options: the kernel reads the dashboards (spec 19) and the boot video (spec 38) from it today; the
+  other kernel options will join it, with today's behaviour as the default when the file or a key is missing.
 - EEPROM settings are written the way the Xbox dashboard writes them (`ExSaveNonVolatileSetting`, its checksums).
 
 ## 4. Open

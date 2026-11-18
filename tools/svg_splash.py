@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Converts an SVG into the vector boot splash's scene (spec/oxos_internal/00_boot_splash.md §1.1), which the kernel draws at boot
-(kernel/src/graphics/vector_renderer.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
+(shared/graphics/vector_renderer.cpp). tools/mkbios.py calls it for a --splash file ending in .svg.
 
     svg_splash.py IN.svg OUT.bin      write the scene (without the "XKSPLASH" header)
     svg_splash.py IN.svg OUT.h        the same as a C++ header, for an app that draws it with the vector renderer: constexpr unsigned char NAME_SCENE[]

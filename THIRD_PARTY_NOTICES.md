@@ -7,6 +7,7 @@ What each release file contains besides OXOS's own code (GPL-2.0, see `LICENSE`)
 |---|---|---|
 | `OXOS/bios/bios_*.bin` (in `oxos_vX.Y.Z.zip`) | Intel's CPU microcode; Cromwell's X-codes and EEPROM key states; hardware tables | [BIOS images](#bios-images) |
 | `OXOS/apps/oxos_ftp.xbe` (in `oxos_vX.Y.Z.zip`; `ftp.xbe` up to v0.4.9) | nxdk, lwIP, the Nuvoton USB host library, PDCLib, LLVM libc++, SDL 3 and nxdk-sdl3 | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
+| `OXOS/apps/oxos_boot_video.xbe` (in `oxos_vX.Y.Z.zip`, from the release after v0.4.12) | the same as the trainer menu, and libmpeg2 and minimp3 | [The boot video player](#the-boot-video-player-oxos_boot_videoxbe) |
 | `OXOS/extensions/oxos_trainers.xbe` (in `oxos_vX.Y.Z.zip`, from v0.4.10) | the same, without the network parts (nxdk's network driver, lwIP) | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
 | `OXOS/trainers/*.etm` (in `oxos_vX.Y.Z.zip`, from v0.4.10) | game trainers by members of the Xbox scene | [Game trainers](#game-trainers-oxostrainers) |
 | `OXOS/oxos_title_patches.ini`, `OXOS/oxos_extensions.ini`, `OXOS/extensions/oxos_trainers.xos` and `.ini` | none: OXOS's own | |
@@ -78,7 +79,7 @@ The video encoder and NV2A memory pad calibration tables are functional hardware
 `oxos_trainers.xbe` (Universal Trainers' menu, [`kernel/extensions/oxos_trainers/app`](kernel/extensions/oxos_trainers/app)) is built the same way and links
 the same parts as `oxos_ftp.xbe` below, except the network ones (nxdk's network driver and lwIP glue, lwIP): it reads the disk, draws and reads the controllers.
 
-`oxos_ftp.xbe` ([`tools/ftp_server`](tools/ftp_server); `ftp.xbe` up to v0.4.9) is built with [nxdk](https://github.com/XboxDev/nxdk) and
+`oxos_ftp.xbe` ([`apps/oxos_ftp`](apps/oxos_ftp); `ftp.xbe` up to v0.4.9) is built with [nxdk](https://github.com/XboxDev/nxdk) and
 [SDL 3](https://www.libsdl.org) through [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3), at the commits pinned in `kernel/Makefile` (forks
 `kooscode/nxdk` and `kooscode/nxdk-sdl3`). The parts below are the ones linked into it (checked with the linker's list of the library members it uses, nxdk
 d1e7004, nxdk-sdl3 62455b7, SDL 3.4.18, lwIP 2.2.1); nxdk's other libraries (zlib, libpng, libjpeg, SDL 2) are not in it.
@@ -340,6 +341,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ```
+
+## The boot video player (`oxos_boot_video.xbe`)
+
+`oxos_boot_video.xbe` ([`apps/oxos_boot_video`](apps/oxos_boot_video), with [`shared/video_player`](shared/video_player)) is built and linked like the
+trainer menu above (nxdk, PDCLib, LLVM libc++, SDL 3 and nxdk-sdl3 for the controllers, the Nuvoton USB host library), and with two decoders, fetched by
+`make -C kernel video_libraries` at the versions pinned in `kernel/Makefile`:
+
+| Part | What it does in `oxos_boot_video.xbe` | Licence | Copyright |
+|---|---|---|---|
+| [libmpeg2](https://libmpeg2.sourceforge.io) 0.5.1 (`mpeg2dec_0.5.1.orig.tar.gz` from Debian, SHA-256 `dee22e89...71d4`) | MPEG-1 and MPEG-2 video, and its conversion to RGB | GPL-2.0-or-later | Aaron Holtzman, Michel Lespinasse and the mpeg2dec contributors (its `AUTHORS`) |
+| [minimp3](https://github.com/lieff/minimp3) (commit `03b957e`) | MP2 and MP3 sound | CC0-1.0 (public domain) | none |
+
+libmpeg2 is under the GNU General Public License, version 2 or later, as OXOS is under version 2 (`LICENSE`, the same text): its source is the tarball named
+above, built unchanged with the configuration in `shared/video_player/libmpeg2_config/config.h`, and OXOS's own source is this repository. minimp3 is
+dedicated to the public domain (CC0 1.0).
 
 ## Game trainers (`OXOS/trainers/`)
 

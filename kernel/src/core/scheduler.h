@@ -9,6 +9,9 @@ namespace xk::core {
 
 void ClockInterrupt(KIRQL interruptedIrql);
 void CheckTimers();
+#if XK_DEBUG_SERIAL
+void DumpTimers(); // the hang dump (interrupts.cpp): the timer list and the expiry DPC
+#endif
 void DispatchInterrupt();
 void RetireDpcList();
 void DeliverSoftwareInterrupts();          // interrupts disabled on entry and exit

@@ -15,7 +15,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ✅ Every console revision, 1.0 to 1.6 | the Conexant, Focus and Xcalibur video encoders; a separate 1.6 image | [02](oxos_internal/02_display_modes.md), [28](oxos_internal/28_1_6_console.md), [stock 17–20](stock/17_av_display_mode.md) |
 | ✅ 128 MB consoles | the upper 64 MB for titles without the "limit to 64 MB" flag (homebrew, Chihiro titles), as the development-kit kernel; the retail kernel uses only 64 MB | [stock 09 §10](stock/09_memory_manager.md) |
 | ✅ Display modes | progressive, HD (720p/1080i) and VGA timings, widescreen | [02](oxos_internal/02_display_modes.md) |
-| ✅ Boot splash and jingle | OXOS's animated vector logo and its own music on a cold boot | [00](oxos_internal/00_boot_splash.md), [17](oxos_internal/17_boot_jingle.md) |
+| ✅ Boot splash | OXOS's vector logo on a cold boot: a quick fade-in, 4 s to hold X (File Manager) or B (safe mode); no sound (the jingle and the animation were removed 2026-11-17) | [00](oxos_internal/00_boot_splash.md), [17](oxos_internal/17_boot_jingle.md) |
 | ✅ Boot without a DVD drive | consoles with the drive removed or disconnected boot normally | [08](oxos_internal/08_no_dvd_drive.md) |
 | ✅ Reliable cold boots | DRAM refresh, GPU clock, memory-interface and X-code write checks; bus masters stopped at entry; graphics engine brought up | [10](oxos_internal/10_dma_quiesce.md), [20](oxos_internal/20_dram_refresh.md), [24](oxos_internal/24_graphics_engine_init.md), [26](oxos_internal/26_gpu_clock.md), [27](oxos_internal/27_xcode_write_checks.md) |
 | ✅ Error screens that explain themselves | what happened and what to try, instead of a bare number; a crash shows its code and parameters | [29](oxos_internal/29_error_screens.md) |
@@ -31,9 +31,9 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | Feature | What it does | Spec |
 |---|---|---|
 | ✅ Titles from disc images | titles run from disc images (XISO, full dumps, CCI) and folders on the hard disk | [16](oxos_internal/16_virtual_discs.md) |
-| ✅ Dashboard choice | starts EvoX, the Xbox dashboard or the XBL Dashboard, whichever is installed | [19](oxos_internal/19_dashboard_choice.md) |
+| ✅ Dashboard choice | starts the dashboards `C:\OXOS\oxos_settings.ini` lists, in order (EvoX, the XBL Dashboard, ... in the shipped file), else `C:\xboxdash.xbe` as stock (2026-11-17) | [19](oxos_internal/19_dashboard_choice.md) |
 | ✅ Title compatibility and title patches | answers games expect; per-title patches from `oxos_title_patches.ini` | [25](oxos_internal/25_title_compatibility.md) |
-| ✅ Launch redirects | `oxos_launch_redirect.ini` starts another XBE in place of one a title launches | [33](oxos_internal/33_launch_redirect.md) |
+| ✅ Launch redirects | `[launch_redirect]` in `oxos_settings.ini` starts another XBE in place of one a title launches | [33](oxos_internal/33_launch_redirect.md) |
 | ✅ Trainers from dashboards | the title-start call dashboards patch for trainers (XBMC4Gamers); the trainer pack | [23](oxos_internal/23_trainer_hook.md), [trainer pack](../third_party/xbox_trainers/README.md) |
 | ✅ Universal Trainers | a game's trainer and chosen cheats from any dashboard, disc image or disc; a trainer menu before the game (`oxos_trainers.xbe`) or `oxos_trainers.ini` (extension `oxos_trainers.xos`) | [37](oxos_internal/37_universal_trainers.md) |
 | ✅ In-game reset | LT + RT + BACK + BLACK reboots from any title | [22](oxos_internal/22_in_game_reset.md) |
@@ -42,6 +42,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | Feature | What it does | Spec |
 |---|---|---|
 | ✅ OXOS File Manager | hold X at boot: upload files and launch XBEs from a browser, also on a blank disk | [31](oxos_internal/31_upload_server.md), [32](oxos_internal/32_file_manager_button.md) |
+| ✅ Kernel modules | launch-time kernel code (the extension loader, the settings, launch redirects, the dashboard order, title patches) mapped from `C:\OXOS\cache\oxos_kernel.cache` only during a launch, not resident: about 4 KB more for titles | [43](oxos_internal/43_kernel_modules.md) |
 | ✅ Kernel extensions and their SDK | `.xos` files that hook kernel functions and title events, run while a title runs; safe mode (hold B) | [34](oxos_internal/34_kernel_extensions.md), [SDK](../sdk/README.md) |
 | ✅ Log files | `C:\OXOS\log\`, rotated at 10 MB, also for extensions | [35](oxos_internal/35_log_files.md) |
 
@@ -61,7 +62,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | Feature | What it will do | Status | Spec |
 |---|---|---|---|
 | ✅ Trainers found automatically | the menu adds new `.etm` files to `oxos_trainers.ini` at every start (or on its own from a dashboard); the player picks among a title's trainers, those for another build marked; a title update gets the menu, not the disc | built 2026-11-16; the extension choosing the fitting trainer by itself is a proposal | [37 §7](oxos_internal/37_universal_trainers.md) |
-| ⬜ Boot video | a video of the user's choice from `C:\OXOS\boot_videos\` before the dashboard or first title, on cold boots and/or quick reboots (extension `oxos_boot_video.xos`) | proposal (2026-11-15) | [38](oxos_internal/38_boot_video.md) |
+| ✅ Boot video | a video of the user's choice (`.mpg`, 16:9) from `C:\OXOS\boot_videos\` before the dashboard or first title, after cold boots or every reboot (`[boot_video]` in `oxos_settings.ini`; player app `oxos_boot_video.xbe`); any button skips it | implemented 2026-11-17, not yet released | [38](oxos_internal/38_boot_video.md) |
 | ⬜ OXOS Setup | hold A at boot: one menu for every OXOS setting (dashboard order, extensions, trainers, boot video, video settings, disk, system info) | proposal (2026-11-15) | [39](oxos_internal/39_oxos_setup.md) |
 | ⬜ Boot buttons and safe boot | X, B and A work with or without the splash; B is a safe boot (no extensions, no OXOS ini files or EEPROM settings, the standard splash with `[ SAFE MODE ]`, default dashboard; X or A during it for the File Manager or Setup); skip the splash with an EEPROM setting | proposal (2026-11-15) | [39 §1.1](oxos_internal/39_oxos_setup.md) |
 | ⬜ Screenshots | a button combination (or a command from a PC) saves the picture on screen in `C:\OXOS\screenshots\`, from any title (extension `oxos_screenshots.xos`) | proposal (2026-11-15) | [40](oxos_internal/40_screenshots.md) |

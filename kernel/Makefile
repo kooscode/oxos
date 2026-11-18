@@ -91,6 +91,8 @@ XK_VERSION_HEADER := $(BUILD)/generated/xk_version.h
 CXXFLAGS += -I$(BUILD)/generated
 # The kernel extensions' binary interface, shared with their SDK (spec/oxos_internal/34).
 CXXFLAGS += -I$(ROOT)/sdk/include -I$(ROOT)/sdk/src
+# The code shared with the apps, extensions and host tools (shared/README.md): built as the kernel's own, with its C library (OXOS_KERNEL).
+CXXFLAGS += -I$(ROOT)/shared -DOXOS_KERNEL
 # The boot self-tests' header, for the kernel's hooks that start them (SELFTEST=1 builds only).
 CXXFLAGS += $(if $(filter 0,$(SELFTEST)),,-I$(ROOT)/tests/kernel_self_tests)
 # The netboot address: the upload server's own when DHCP does not answer (network/ip.cpp).
@@ -102,24 +104,29 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and take memory titles count on (Halo 2 needs nearly
 # all of it). Every kernel header (each folder of src/ holds its own): a source file is rebuilt when one changes.
-KERNEL_HEADERS := $(wildcard src/*/*.h src/*/*/*.h)
-# The extension loader's files (src/extensions/extension_loader.cpp, extension_parser.cpp and src/ini_file/extensions_ini.cpp) are linked on their own, below,
-# not into the kernel. src/runtime/c_library_extensions.cpp is not in the kernel either: the SDK's library has it (tools/gen_oxos_sdk.py).
-EXTENSION_LOADER_SRCS := $(addprefix src/extensions/,extension_loader.cpp extension_parser.cpp) \
-                         src/ini_file/extensions_ini.cpp
-CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) $(EXTENSION_LOADER_SRCS) src/runtime/c_library_extensions.cpp, \
-                         $(wildcard src/*/*.cpp src/*/*/*.cpp))
+KERNEL_HEADERS := $(wildcard src/*/*.h src/*/*/*.h modules/*.h $(ROOT)/shared/*.h $(ROOT)/shared/*/*.h)
+# The folders of shared/ the resident kernel builds (shared/ini_file goes into the kernel modules, shared/video_player is for apps only).
+# src/runtime/c_library_extensions.cpp is not in the kernel: the SDK's library has it (tools/gen_oxos_sdk.py).
+KERNEL_SHARED_DIRS := graphics
+CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) src/runtime/c_library_extensions.cpp, \
+                         $(wildcard src/*/*.cpp src/*/*/*.cpp $(KERNEL_SHARED_DIRS:%=$(ROOT)/shared/%/*.cpp)))
+# The kernel modules (spec/oxos_internal/43): kernel/modules/ with the shared ini parsers, compiled as the kernel is but linked on their own (below), not into
+# the kernel.
+KERNEL_MODULES_SRCS := $(wildcard modules/*.cpp) $(wildcard $(ROOT)/shared/ini_file/*.cpp)
 ASM_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/arch/trace.S),$(wildcard src/*/*.S))
 # The boot self-tests: test code in tests/kernel_self_tests, compiled into SELFTEST=1 kernels only.
 SELF_TESTS_DIR := $(ROOT)/tests/kernel_self_tests
 SELFTEST_SRCS := $(if $(filter 0,$(SELFTEST)),,$(wildcard $(SELF_TESTS_DIR)/*.cpp))
-OBJS := $(CXX_SRCS:src/%.cpp=$(BUILD)/%.obj) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) \
+# Objects: $(BUILD)/<folder>/<file>.obj for src/, $(BUILD)/shared/<folder>/<file>.obj for shared/, $(BUILD)/modules/<file>.obj for modules/.
+KERNEL_OBJECT = $(patsubst modules/%.cpp,$(BUILD)/modules/%.obj,\
+                $(patsubst $(ROOT)/shared/%.cpp,$(BUILD)/shared/%.obj,$(patsubst src/%.cpp,$(BUILD)/%.obj,$(1))))
+OBJS := $(call KERNEL_OBJECT,$(CXX_SRCS)) $(ASM_SRCS:src/%.S=$(BUILD)/%.obj) \
         $(SELFTEST_SRCS:$(SELF_TESTS_DIR)/%.cpp=$(BUILD)/kernel_self_tests/%.obj)
 
 all: $(BUILD)/oxoskrnl.exe
 
 # Boot-only code (spec/oxos_internal/18_boot_memory.md): these files may call one another's boot-only functions.
-BOOT_OBJS := splash.obj,jingle.obj,bootsound.obj,nic.obj,ip.obj,tcp.obj,webserver.obj,webpage.obj
+BOOT_OBJS := splash.obj,nic.obj,ip.obj,tcp.obj,webserver.obj,webpage.obj
 BOOT_OBJS := $(BOOT_OBJS),host_controller.obj,devices.obj,gamepad.obj,file_manager_screen.obj,vector_renderer.obj,ac97.obj
 # ... and the boot-only functions kept code calls during a cold boot, before the pages are freed, or that a kept file defines for the boot-only code.
 BOOT_ENTRIES := boot_splash::StartSplash,boot_splash::WaitForSplash,webserver::Start,webserver::Stop
@@ -127,8 +134,8 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),user_interface::NoDashboardError
 BOOT_ENTRIES := $(BOOT_ENTRIES),gamepad::WaitForXButton
 # The disk checks of a cold boot (storage/disk_format.cpp), called by storage/disk_layout.cpp's boot-only code.
 BOOT_ENTRIES := $(BOOT_ENTRIES),storage::BlankDiskCountdown,storage::IsDiskBlank,storage::DescribeDisk
-# The kernel extension loader's cache, written at a cold boot from the boot-only copy (extensions/extension_runtime_loader.cpp).
-BOOT_ENTRIES := $(BOOT_ENTRIES),extensions::WriteLoaderCache
+# The kernel modules' cache, written at a cold boot from the boot-only copy (kernel_modules/kernel_module_loader.cpp).
+BOOT_ENTRIES := $(BOOT_ENTRIES),kernel_modules::WriteKernelModulesCache
 # The cache partitions' formats, read at a cold boot on an exFAT disk (filesystems/hddfs/volume_exfat.cpp); the self-tests call it too.
 BOOT_ENTRIES := $(BOOT_ENTRIES),filesystems::ReadCachePartitions
 # The netboot title's installation (titles/title_netboot.cpp): a package only ever comes with a cold boot.
@@ -139,16 +146,22 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchAtColdBoot,titles::ServeFileManage
 KI_DATA_COPY_SIZE := $(shell sed -n 's/^\#define KI_DATA_COPY_SIZE \(0x[0-9A-Fa-f]*\).*/\1/p' src/arch/entry.S)
 
 # Per-file optimization (not in DEBUG builds): -O2 for the hashes and ciphers (XBE sections, saves), memcpy and memset, the virtual-disc decompressor (it runs
-# for every sector a title reads from a CCI) and the boot-only code (the splash and the jingle have to keep up with the clock; their pages are freed before the
+# for every sector a title reads from a CCI) and the boot-only code (the splash's fade has to keep up with the clock; its pages are freed before the
 # title starts, so their size costs nothing then), with the vector renderer it draws with.
 FAST_SRCS  := src/crypto/crypto.cpp src/runtime/memory.cpp src/storage/virtual_disc.cpp \
-              $(wildcard src/boot_splash/*.cpp) src/graphics/vector_renderer.cpp src/hardware/audio/ac97.cpp
+              $(wildcard src/boot_splash/*.cpp) $(ROOT)/shared/graphics/vector_renderer.cpp
 ifneq ($(DEBUG),1)
-$(patsubst src/%.cpp,$(BUILD)/%.obj,$(FAST_SRCS)): FILE_OPT := -O2
+$(call KERNEL_OBJECT,$(FAST_SRCS)): FILE_OPT := -O2
 endif
 
 # Each object also depends on every header it includes (the compiler writes the list; -MP keeps a removed header from breaking the build).
 $(BUILD)/%.obj: src/%.cpp $(KERNEL_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+$(BUILD)/shared/%.obj: $(ROOT)/shared/%.cpp $(KERNEL_HEADERS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
+$(BUILD)/modules/%.obj: modules/%.cpp $(KERNEL_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
 
@@ -165,7 +178,7 @@ FORCE:
 $(BUILD)/kernel_self_tests/%.obj: $(SELF_TESTS_DIR)/%.cpp $(KERNEL_HEADERS) $(wildcard $(SELF_TESTS_DIR)/*.h)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(FILE_OPT) -MMD -MP -MF $(@:.obj=.d) -c $< -o $@
--include $(OBJS:.obj=.d) $(EXTENSION_LOADER_OBJS:.obj=.d)
+-include $(OBJS:.obj=.d) $(KERNEL_MODULES_OBJS:.obj=.d)
 
 $(BUILD)/%.obj: src/%.S
 	@mkdir -p $(dir $@)
@@ -277,14 +290,16 @@ release:
 	$(MAKE) BUILD=$(RELEASE16_BUILD) SELFTEST=0 MCPX16=1 $(RELEASE16_BUILD)/bios_256k.bin
 	$(if $(filter 1,$(SKIP_TESTS)),,$(MAKE) test_dash)
 	head -c 262144 $(RELEASE_BUILD)/bios.bin | cmp - $(RELEASE_BUILD)/bios_256k.bin
-	$(if $(VERSION),$(MAKE) ftp_server extensions)
+	$(if $(VERSION),$(MAKE) apps extensions)
 	$(if $(VERSION),$(MAKE) -C $(ROOT)/sdk VERSION=$(VERSION))
 	$(if $(VERSION),$(MAKE) release_zip VERSION=$(VERSION))
 
 # The release zip, oxos_vVERSION.zip (spec/oxos_disk_layout.md, "The release zip"): OXOS\ as it goes on the console's C:\ (C:\OXOS), with the three BIOS
-# images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server, oxos_ftp.xbe), the extensions OXOS ships (oxos_extensions.ini listing them, off), the
-# trainer pack in OXOS\trainers\ and the folders the kernel makes; the third-party notices beside it. The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and
-# their SHA-256 sums are in build/kernel/release/dist.
+# images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server oxos_ftp.xbe, the boot video player oxos_boot_video.xbe), the settings
+# (oxos_settings.ini with the boot video on, oxos_title_patches.ini), the OXOS boot video in OXOS\boot_videos\ (splash/oxos_boot_video.mpg), the extensions
+# OXOS ships (oxos_extensions.ini listing them, off), the trainer pack in OXOS\trainers\ and the folders the kernel makes; the third-party notices beside it.
+# The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and their SHA-256 sums are in
+# build/kernel/release/dist.
 RELEASE_DIST := $(RELEASE_BUILD)/dist
 RELEASE_OXOS := $(RELEASE_DIST)/zip/OXOS
 release_zip:
@@ -294,11 +309,14 @@ release_zip:
 	cp $(RELEASE_BUILD)/bios.bin $(RELEASE_OXOS)/bios/bios_v$(VERSION).bin
 	cp $(RELEASE_BUILD)/bios_256k.bin $(RELEASE_OXOS)/bios/bios_v$(VERSION)_256k.bin
 	cp $(RELEASE16_BUILD)/bios_256k.bin $(RELEASE_OXOS)/bios/bios_1.6_v$(VERSION)_256k.bin
-	cp extensions/oxos_extensions.ini title_patches/oxos_title_patches.ini $(RELEASE_OXOS)/
+	cp extensions/oxos_extensions.ini settings/oxos_title_patches.ini settings/oxos_settings.ini $(RELEASE_OXOS)/
+	mkdir -p $(RELEASE_OXOS)/boot_videos
+	cp splash/oxos_boot_video.mpg $(RELEASE_OXOS)/boot_videos/
 	set -e; for name in $(SHIPPED_EXTENSIONS); do cp $(SHIPPED_EXTENSIONS_DIR)/$$name/$$name.* \
 	    $(RELEASE_OXOS)/extensions/; done
 	cp $(ROOT)/third_party/xbox_trainers/trainers/*.etm $(RELEASE_OXOS)/trainers/
-	cp $(FTP_SERVER_XBE) $(RELEASE_OXOS)/apps/oxos_ftp.xbe
+	cp $(OXOS_FTP_XBE) $(RELEASE_OXOS)/apps/oxos_ftp.xbe
+	cp $(OXOS_BOOT_VIDEO_XBE) $(RELEASE_OXOS)/apps/oxos_boot_video.xbe
 	cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_DIST)/zip/
 	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip OXOS THIRD_PARTY_NOTICES.md
 	cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) $(RELEASE_DIST)/
@@ -315,30 +333,30 @@ MCPX_DUMP_BUILD := $(OUT)/mcpx_dump
 mcpx_dump:
 	$(MAKE) BUILD=$(MCPX_DUMP_BUILD) NETBOOT=1 MCPX_DUMP=1 SERIAL=1 SELFTEST=0 SPLASH= $(MCPX_DUMP_BUILD)/bios_256k.bin
 
-# The kernel extension loader (spec/oxos_internal/34 §8.1): EXTENSION_LOADER_SRCS, compiled as the kernel is (the rule above) but linked on its own at
-# 0xB0000000 (XK_EXTENSION_LOADER_BASE) against this kernel's addresses, then appended to the kernel image.
-EXTENSION_LOADER_OBJS := $(patsubst src/%.cpp,$(BUILD)/%.obj,$(EXTENSION_LOADER_SRCS))
-EXTENSION_LOADER := $(BUILD)/extension_loader.exe
-$(EXTENSION_LOADER): $(EXTENSION_LOADER_OBJS) $(BUILD)/oxoskrnl.exe $(ROOT)/tools/link_extension_loader.py
-	python3 -I $(ROOT)/tools/link_extension_loader.py --kernel $(BUILD)/oxoskrnl.exe --map $(BUILD)/oxoskrnl.map \
-	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(EXTENSION_LOADER_OBJS)
+# The kernel modules (spec/oxos_internal/43): KERNEL_MODULES_SRCS, compiled as the kernel is (the rules above) but linked into one image of their own at
+# 0xB0000000 (XK_KERNEL_MODULES_BASE) against this kernel's addresses, then appended to the kernel image.
+KERNEL_MODULES_OBJS := $(call KERNEL_OBJECT,$(KERNEL_MODULES_SRCS))
+KERNEL_MODULES := $(BUILD)/kernel_modules.exe
+$(KERNEL_MODULES): $(KERNEL_MODULES_OBJS) $(BUILD)/oxoskrnl.exe $(ROOT)/tools/link_kernel_modules.py
+	python3 -I $(ROOT)/tools/link_kernel_modules.py --kernel $(BUILD)/oxoskrnl.exe --map $(BUILD)/oxoskrnl.map \
+	    --base 0xB0000000 --linker $(LD) --cc $(CC) --out $@ $(KERNEL_MODULES_OBJS)
 
 SPLASH_ARGS = $(if $(wildcard $(SPLASH)),--splash $(SPLASH))
 ifeq ($(IMAGE),base)
-$(BUILD)/bios.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(EXTENSION_LOADER)
+$(BUILD)/bios.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) $(KERNEL_MODULES)
 	python3 -I $(ROOT)/tools/mkbios.py --base $(BIOS_BASE) --mcpx-rom $(MCPX_ROM) \
-	    --kernel $< --out $@ --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
+	    --kernel $< --out $@ --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --kernel-modules $(KERNEL_MODULES)
 else
 $(BUILD)/bios.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
+                   $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(KERNEL_MODULES)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ \
-	    --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --extension-loader $(EXTENSION_LOADER)
+	    --flat-kernel $(BUILD)/oxoskrnl.flat.exe $(SPLASH_ARGS) --kernel-modules $(KERNEL_MODULES)
 $(BUILD)/bios_256k.bin: $(BUILD)/oxoskrnl.exe $(ROOT)/tools/mkbios.py $(wildcard $(SPLASH)) \
-                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(EXTENSION_LOADER)
+                        $(BOOT)/xcodes.bin $(BOOT)/bl.bin $(BOOT)/reset.bin $(KERNEL_MODULES)
 	python3 -I $(ROOT)/tools/mkbios.py --open --xcodes $(BOOT)/xcodes.bin --loader $(BOOT)/bl.bin \
 	    --reset $(BOOT)/reset.bin --cromwell $(CROMWELL_DIR) --kernel $< --out $@ $(SPLASH_ARGS) --size 256K \
-	    --extension-loader $(EXTENSION_LOADER)
+	    --kernel-modules $(KERNEL_MODULES)
 endif
 
 $(XDASH_HDD):
@@ -399,17 +417,20 @@ test_dash: $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash
-	# ... and with EvoX installed (C:\evoxdash.xbe): it is the dashboard started (spec/oxos_internal/19).
+	# ... with EvoX installed (C:\evoxdash.xbe) but no [dashboard] in C:\OXOS\oxos_settings.ini: still the Xbox dashboard, as stock (spec/oxos_internal/19).
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
 	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --evox
-	# ... and with C:\xboxdash.xbe moved to C:\Dashboard\default.xbe: it is started from there (spec/oxos_internal/19).
+	# ... with EvoX installed and listed first: EvoX.
 	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --evox --dash-order 'C:\evoxdash.xbe,C:\Dashboard\default.xbe'
+	# ... with C:\xboxdash.xbe moved to C:\Dashboard\default.xbe and listed after a missing EvoX: started from there.
+	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --no-disc --dash --xbl --dash-order 'C:\evoxdash.xbe,C:\Dashboard\default.xbe'
 
 # Quick-reboot phase: the release build runs the kernel test title from a disc with relaunch.txt; it relaunches itself as media\second.xbe through a persisted
 # LaunchDataPage and HalReturnToFirmware(2). On a 64 MB and a 128 MB console: the kernel still manages all the RAM after the quick reboots (spec/stock/09 §10).
-# A third run puts C:\OXOS\oxos_launch_redirect.ini on the test disk: the relaunch must start the disc's redirected\second.xbe instead (spec/oxos_internal/33
-# §6).
+# A third run puts C:\OXOS\oxos_settings.ini [launch_redirect] on the test disk: the relaunch must start the disc's redirected\second.xbe instead
+# (spec/oxos_internal/33 §6).
 test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
 	for run in "--memory 64" "--memory 128" "--memory 64 --redirect"; do \
@@ -495,10 +516,10 @@ $(FATX16_HDD): $(XDASH_HDD)
 	rm -f $(FATX16_STATE)/grown.qcow2
 UPLOAD_FATX_TEST = python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin \
     $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) --map $(RELEASE_BUILD)/oxoskrnl.map --no-disc --boot-wait 2 \
-    --upload 18080 --upload-xbe $(FTP_SERVER_XBE)
-test_upload: ftp_server $(XDASH_HDD) $(FATX16_HDD)
+    --upload 18080 --upload-xbe $(OXOS_FTP_XBE)
+test_upload: $(OXOS_FTP_XBE) $(XDASH_HDD) $(FATX16_HDD)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
-	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(FTP_SERVER_XBE)
+	$(FORMAT_TEST) --blank-marker 0 --upload 18080 --upload-xbe $(OXOS_FTP_XBE)
 	$(UPLOAD_FATX_TEST) --hdd $(XDASH_HDD)
 	$(UPLOAD_FATX_TEST) --hdd $(FATX16_HDD)
 
@@ -685,13 +706,15 @@ $(TITLE_LAUNCHER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(TITLE_LAUNCHER_DIR)/title_l
 	$(NXDK_ENV) $(MAKE) -C $(TITLE_LAUNCHER_DIR) -j8
 title_launcher: $(TITLE_LAUNCHER_XBE)
 
-# FTP server (tools/ftp_server, nxdk): the console's disks over the network (copy, move, delete with any FTP client). make ftp_server builds
-# build/tools/ftp_server/bin/default.xbe and ftp_server.iso; netboot.py IMAGE --title build/tools/ftp_server/bin runs it.
-FTP_SERVER_DIR := $(ROOT)/tools/ftp_server
-FTP_SERVER_XBE := $(APPS_BUILD)/tools/ftp_server/bin/default.xbe
-$(FTP_SERVER_XBE): $(NXDK_READY) $(SDL_SCREEN) $(FTP_SERVER_DIR)/ftp_server.cpp $(FTP_SERVER_DIR)/Makefile
-	$(NXDK_ENV) $(MAKE) -C $(FTP_SERVER_DIR) -j8
-ftp_server: $(FTP_SERVER_XBE)
+# OXOS's apps (apps/, nxdk; C:\OXOS\apps\ on the console, OXOS\apps\ in the release zip). make apps builds them all.
+# The FTP server (apps/oxos_ftp): the console's disks over the network (copy, move, delete with any FTP client). make oxos_ftp builds
+# build/apps/oxos_ftp/bin/default.xbe and oxos_ftp.iso; netboot.py IMAGE --title build/apps/oxos_ftp/bin --title-name ftp runs it.
+OXOS_FTP_DIR := $(ROOT)/apps/oxos_ftp
+OXOS_FTP_XBE := $(APPS_BUILD)/apps/oxos_ftp/bin/default.xbe
+$(OXOS_FTP_XBE): $(NXDK_READY) $(SDL_SCREEN) $(OXOS_FTP_DIR)/oxos_ftp.cpp $(OXOS_FTP_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(OXOS_FTP_DIR) -j8
+oxos_ftp: $(OXOS_FTP_XBE)
+# The boot video player (apps/oxos_boot_video) is below, after the video decoders it needs.
 
 test_iso: $(ISO_LAUNCHER_XBE) $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
@@ -723,6 +746,77 @@ test_memory: $(MEMORY_XBE) $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/memory_test.py --bios $(or $(MEMORY_BIOS),$(RELEASE_BUILD)/bios.bin) --xbe $(MEMORY_XBE) \
 	    --both --memory $(or $(MEMORY),64) --hdd $(HDD_IMAGE) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
 
+# The boot video's decoders (spec/oxos_internal/38 §3.1), fetched into third_party/: libmpeg2 0.5.1 (MPEG-1 and MPEG-2 video, GPL v2 or later), its last
+# release, from Debian's copy and checked against Debian's SHA-256; minimp3 (MP2 and MP3 sound, CC0) at a pinned commit.
+LIBMPEG2_DIR    := $(ROOT)/third_party/libmpeg2
+LIBMPEG2_URL    := https://deb.debian.org/debian/pool/main/m/mpeg2dec/mpeg2dec_0.5.1.orig.tar.gz
+LIBMPEG2_SHA256 := dee22e893cb5fc2b2b6ebd60b88478ab8556cb3b93f9a0d7ce8f3b61851871d4
+MINIMP3_DIR     := $(ROOT)/third_party/minimp3
+MINIMP3_URL     := https://github.com/lieff/minimp3
+MINIMP3_COMMIT  := 03b957e66532db2370e7a5a6ee113063528b1286
+# Both at their pinned versions: the stamp's name holds them, so a new pin fetches again.
+VIDEO_LIBRARIES_READY := $(ROOT)/third_party/.video_libraries_$(LIBMPEG2_SHA256)_$(MINIMP3_COMMIT)
+
+$(VIDEO_LIBRARIES_READY):
+	set -e; rm -rf $(LIBMPEG2_DIR) $(LIBMPEG2_DIR).tar.gz; \
+	curl -sSLf -o $(LIBMPEG2_DIR).tar.gz $(LIBMPEG2_URL); \
+	echo "$(LIBMPEG2_SHA256)  $(LIBMPEG2_DIR).tar.gz" | sha256sum -c --quiet; \
+	mkdir $(LIBMPEG2_DIR); \
+	tar xzf $(LIBMPEG2_DIR).tar.gz -C $(LIBMPEG2_DIR) --strip-components=1; \
+	rm $(LIBMPEG2_DIR).tar.gz; \
+	[ -d $(MINIMP3_DIR)/.git ] || git clone -q $(MINIMP3_URL) $(MINIMP3_DIR); \
+	git -C $(MINIMP3_DIR) cat-file -e $(MINIMP3_COMMIT)^{commit} 2>/dev/null || git -C $(MINIMP3_DIR) fetch -q $(MINIMP3_URL); \
+	git -C $(MINIMP3_DIR) checkout -q $(MINIMP3_COMMIT)
+	rm -f $(ROOT)/third_party/.video_libraries_*
+	touch $@
+video_libraries: $(VIDEO_LIBRARIES_READY)
+
+# Video decode test (tests/video_decode_title, an nxdk title): how fast the console decodes, converts and shows every .mpg file next to it, and decodes its
+# sound; run on a console (results on the debug serial port and in video_decode_results.txt next to it), spec/oxos_internal/38 §5.
+VIDEO_DECODE_DIR := $(ROOT)/tests/video_decode_title
+VIDEO_DECODE_XBE := $(APPS_BUILD)/tests/video_decode_title/bin/default.xbe
+
+VIDEO_PLAYER_FILES := $(wildcard $(ROOT)/shared/video_player/*.cpp $(ROOT)/shared/video_player/*.h $(ROOT)/shared/video_player/*.mk) \
+                      $(ROOT)/shared/video_player/libmpeg2_config/config.h
+$(VIDEO_DECODE_XBE): $(NXDK_READY) $(VIDEO_LIBRARIES_READY) $(SDL_SCREEN) $(VIDEO_DECODE_DIR)/video_decode_title.cpp $(VIDEO_DECODE_DIR)/Makefile \
+                     $(VIDEO_PLAYER_FILES)
+	$(NXDK_ENV) $(MAKE) -C $(VIDEO_DECODE_DIR) -j8
+video_decode_title: $(VIDEO_DECODE_XBE)
+
+# The boot video player (apps/oxos_boot_video, spec/oxos_internal/38): the kernel starts it before the first title when C:\OXOS\oxos_settings.ini asks.
+OXOS_BOOT_VIDEO_DIR := $(ROOT)/apps/oxos_boot_video
+OXOS_BOOT_VIDEO_XBE := $(APPS_BUILD)/apps/oxos_boot_video/bin/default.xbe
+$(OXOS_BOOT_VIDEO_XBE): $(NXDK_READY) $(VIDEO_LIBRARIES_READY) $(SDL_SCREEN) $(OXOS_BOOT_VIDEO_DIR)/oxos_boot_video.cpp $(OXOS_BOOT_VIDEO_DIR)/Makefile \
+                        $(VIDEO_PLAYER_FILES) $(wildcard $(ROOT)/shared/ini_file/*) $(wildcard $(ROOT)/shared/graphics/*) splash/oxos_splash.svg
+	$(NXDK_ENV) $(MAKE) -C $(OXOS_BOOT_VIDEO_DIR) -j8
+oxos_boot_video: $(OXOS_BOOT_VIDEO_XBE)
+apps: oxos_ftp oxos_boot_video
+
+# The OXOS test video (spec/oxos_internal/38 §6), made from OXOS's own boot splash: its picture (splash/oxos_splash.svg, drawn by tools/vsplash) fading in and
+# out over 8 s with a 440 Hz tone, in the boot video format (16:9 at 848x480 with the 640x480 picture in its middle; MPEG-2 video, MP2 sound at 48 kHz). The
+# boot video test plays it. Made at build time with ffmpeg; no video is kept in the repository.
+OXOS_INTRO_DIR   := $(APPS_BUILD)/apps/oxos_boot_video/intro
+OXOS_INTRO_VIDEO := $(APPS_BUILD)/apps/oxos_boot_video/oxos_intro.mpg
+$(OXOS_INTRO_VIDEO): splash/oxos_splash.svg $(ROOT)/tools/svg_splash.py $(ROOT)/tools/vsplash/render.cpp $(ROOT)/shared/graphics/vector_renderer.cpp
+	$(MAKE) -C $(ROOT)/tools/vsplash
+	rm -rf $(OXOS_INTRO_DIR)
+	mkdir -p $(OXOS_INTRO_DIR)
+	python3 -I $(ROOT)/tools/svg_splash.py splash/oxos_splash.svg $(OXOS_INTRO_DIR)/scene.bin
+	$(ROOT)/build/tools/vsplash/vsplash $(OXOS_INTRO_DIR)/scene.bin $(OXOS_INTRO_DIR)/splash
+	ffmpeg -loglevel error -y -loop 1 -framerate 30 -t 8 -i $(OXOS_INTRO_DIR)/splash-end.ppm -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=8" \
+	    -filter_complex "[0:v]pad=848:480:104:0,fade=in:0:15,fade=out:st=7:d=1[v];\
+	                     [1:a]volume=-12dB,afade=in:d=0.5,afade=out:st=7:d=1,aformat=channel_layouts=stereo[a]" \
+	    -map "[v]" -map "[a]" -c:v mpeg2video -q:v 3 -c:a mp2 -ar 48000 -b:a 192k $@
+	rm -rf $(OXOS_INTRO_DIR)
+oxos_intro_video: $(OXOS_INTRO_VIDEO)
+
+# Boot video test (tests/boot_video_test.py): cold boots of a serial-log kernel with the player, oxos_settings.ini and the OXOS boot video on the disk: plays,
+# skipped with a button, missing file, switched off, no player.
+SERIAL_BUILD := $(ROOT)/build/kernel/serial
+test_boot_video: $(OXOS_BOOT_VIDEO_XBE) $(OXOS_INTRO_VIDEO) $(HDD_FETCH)
+	$(MAKE) BUILD=$(SERIAL_BUILD) SELFTEST=0 SERIAL=1 $(SERIAL_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/boot_video_test.py --bios $(SERIAL_BUILD)/bios.bin --player $(OXOS_BOOT_VIDEO_XBE) --video $(OXOS_INTRO_VIDEO)
+
 # The full regression run (tests/README.md, "Regression run"): the host unit tests and every xemu phase above, one after another, with one summary in
 # build/regression/. MCPX_ROM=... is used for test_mcpx only (skipped without it); ONLY=test_exfat,test_iso runs some phases.
 regression:
@@ -737,4 +831,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression extensions release_zip nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher ftp_server test_iso iso_disc run_iso
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression extensions release_zip nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher apps oxos_ftp oxos_boot_video oxos_intro_video test_boot_video test_iso iso_disc run_iso video_libraries video_decode_title

@@ -2,7 +2,7 @@
 
 Not part of the reference: the retail kernel shows its own boot animation from its INIT section (what it does with the animation's memory is in stock spec 17
 §6). OXOS shows its logo during cold boot instead, drawn from vector shapes and animated (since 2026-11-06; from 2026-10-15 a 640x480 PNG, removed 2026-11-06).
-Code: `kernel/src/boot_splash/splash.cpp`, `kernel/src/graphics/vector_renderer.cpp`; host side `tools/svg_splash.py`, `tools/mkbios.py`. The music that comes
+Code: `kernel/src/boot_splash/splash.cpp`, `shared/graphics/vector_renderer.cpp`; host side `tools/svg_splash.py`, `tools/mkbios.py`. The music that comes
 with it: spec/oxos_internal/17.
 
 ## 1. The image in flash
@@ -53,15 +53,15 @@ with it: spec/oxos_internal/17.
   bad header or an old version 1 PNG, 0x103 out of memory, 0x200 + the scene check that failed) record what happened.
 - It starts before the IDE set-up (since 2026-11-06; until then after it): a hard disk or DVD drive can take seconds to spin up after power-on, and the screen
   stayed dark meanwhile. The drives' ready waits run at the boot thread's IRQL (the reference raises to the IDE interrupt's first) and follow the clock, so the
-  splash and jingle threads run during them; the boot thread, which may not block, polls a lock the splash thread holds (SMBus, EEPROM) instead.
-- It fades in while boot continues, with the boot jingle (spec/oxos_internal/17_boot_jingle.md): the fade follows the clock from the jingle's start, a frame
-  about every 40 ms, and reaches full intensity as the jingle's build-up lands on its final chord (`jingle::ClimaxMs`, 2.6 s; `boot_splash::SplashFullMs`
-  records when it did). Since 2026-11-06 (user's timeline): a 0.5 s fade from black to the start picture (the metal logo), which stays until 1 s (the fade
-  included); then the jingle starts and the picture cross-fades (smoothstep) to the end picture (the green X and its glow), reaching it at the climax, 2.6 s
-  later (3.6 s); the end picture is held while the chord lingers, until the jingle has ended (`jingle::LengthMs`, 1.4 s after the climax: 5 s in all). The
-  emblem is one picture: it fades in and stays, with the same timing. The first title is loaded meanwhile but starts only after the hold (5 s after the picture
-  came on) and after the jingle has ended. HDMI adapters and capture cards take about 2 s to lock onto the boot display (measured on the 1.4 console), so an
-  HDMI screen may miss the logo and the start of the cross-fade. Quick reboots show no splash.
+  splash thread runs during them; the boot thread, which may not block, polls a lock the splash thread holds (SMBus, EEPROM) instead.
+- **Since 2026-11-17: one picture, no animation and no sound** (user: "remove the boot animation and jingle, just fast fade the splash, keep it there for a
+  while then move on"). The scene's end picture (the green X and its glow; the scene's start picture is not drawn) with the File Manager line fades in from
+  black in 0.3 s (a frame about every 40 ms, following the clock; `boot_splash::SplashFullMs` records when the full picture was drawn) and stays until 4 s
+  after the screen came on, while the controllers are read (X: the File Manager, spec 32; B: safe mode, spec 34 §3.3). The emblem fades in and stays the
+  same way. The first title is loaded meanwhile but starts only after the 4 s. HDMI adapters and capture cards take 1.5 to 2 s to lock onto the boot display,
+  so an HDMI screen shows the picture for about 2 s. Quick reboots show no splash. Until 2026-11-17 the splash was animated (a fade to the metal logo, a
+  cross-fade to the green X timed to the boot jingle, spec 17, 5 s in all); the code went with the jingle, which also freed 9.4 KB of boot-only code (the
+  256 KB image's free space 59.0 KB at 45f4dbf, 63.4 KB after).
 
 ## 3. Memory
 - The launcher waits for the fade, turns the screen off (`AvSendTVEncoderOption` option 9 with 1), then frees the two pictures and the screen buffer, so the

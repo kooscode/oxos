@@ -33,7 +33,7 @@ void CheckDramRefresh();
 // Before the memory manager unmaps page 2: the boot loader's records (refresh, GPU clock, X-code checks and snapshots, pad calibration); a quick reboot has
 // none.
 void TakeBootLoaderRecords(bool Quick);
-void ReportMachineChecksAtBoot();               // the CPU signature, microcode and machine-check banks
+void ReportMachineChecksAtBoot(bool Quick);     // the CPU signature, microcode and machine-check banks (cleared at a cold boot)
 void ReportMachineCheckBanks(const char *When); // the banks that hold an error
 void ReportNvPads(const char *When);            // the NV2A memory pad registers, and the 2BL's calibration once
 void ReportRefresh();                           // the DRAM refresh, GPU clock and X-code records

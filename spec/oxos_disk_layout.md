@@ -22,14 +22,14 @@ One page for every file and folder OXOS reads or writes, today and planned, each
 
 ```
 C:\OXOS\                                  ✅ made at every cold boot
-├── oxos_settings.ini                     ⬜ the kernel's options: [dashboard] order, toasts, in-game reset (38, 39)
+├── oxos_settings.ini                     ✅ the kernel's options: [dashboard] ✅ (19), [launch_redirect] ✅ (33), [boot_video] ✅ (38); toasts, in-game reset ⬜ (39); shipped
 ├── oxos_extensions.ini                   ✅ which extensions load, in which order, enabled (34)
-├── oxos_launch_redirect.ini              ✅ launch redirects (33)
 ├── oxos_title_patches.ini                ✅ per-title patches (25) / Will move to extensions (34 §10)
 ├── oxos_eeprom_backup.bin                ⬜ all 256 EEPROM bytes, saved by OXOS Setup before it changes one (39)
 │
 ├── apps\                                 ✅ OXOS's apps (from the release zip)
-│   ├── oxos_ftp.xbe                      ✅ the OXOS FTP server (tools/ftp_server)
+│   ├── oxos_ftp.xbe                      ✅ the OXOS FTP server (apps/oxos_ftp)
+│   ├── oxos_boot_video.xbe               ✅ the boot video player, started by the kernel (38)
 │   └── oxos_settings.xbe                 ⬜ OXOS Setup: hold A at boot (39)
 │
 ├── extensions\                           ✅ made at every cold boot; each extension with its own .ini of the same name
@@ -40,8 +40,6 @@ C:\OXOS\                                  ✅ made at every cold boot
 │   ├── oxos_trainers.xos                 ✅ Universal Trainers (37)
 │   ├── oxos_trainers.ini                 ✅ trainer and cheats per title ID
 │   ├── oxos_trainers.xbe                 ✅ the trainer menu, before a game that has a trainer
-│   ├── oxos_boot_video.xos               ⬜ boot video, run-once (38)
-│   ├── oxos_boot_video.ini               ⬜ cold_boot, quick_reboot, skippable
 │   ├── oxos_screenshots.xos              ⬜ screenshots (40)
 │   ├── oxos_screenshots.ini              ⬜ buttons, format
 │   ├── oxos_debugger.xos                 ⬜ homebrew debugging on a real console (41)
@@ -49,7 +47,7 @@ C:\OXOS\                                  ✅ made at every cold boot
 │   └── oxos_playtime.ini                 ⬜ save_every, skip
 │
 ├── trainers\                             ✅ .etm trainers for Universal Trainers (37)
-├── boot_videos\                          ⬜ boot videos, converted on a PC (38)
+├── boot_videos\                          ✅ boot videos (38): oxos_boot_video.mpg from the release zip, and the user's own, converted on a PC
 ├── screenshots\<titleID>\<datetime>.png  ⬜ (40)
 ├── playtime\                             ⬜ (42)
 │   ├── oxos_playtime.txt                 totals per title, never cleared (oxos_playtime.new while being replaced)
@@ -60,7 +58,7 @@ C:\OXOS\                                  ✅ made at every cold boot
 │   └── selftest.log                      ✅ self-test builds only
 │
 └── cache\                                ✅ made at every cold boot; the kernel's own, safe to delete
-    ├── oxos_extension_loader.cache       ✅ the extension loader, rewritten at every cold boot (34 §8.1)
+    ├── oxos_kernel.cache                 ✅ the kernel modules, rewritten at every cold boot (43)
     └── oxos_cache_partitions.cache       ✅ the X/Y/Z cache formats on exFAT (07)
 ```
 
@@ -77,18 +75,22 @@ C:\OXOS\                                  ✅ made at every cold boot
 | 40 | [Screenshots](oxos_internal/40_screenshots.md) |
 | 41 | [Homebrew debugging on a real console](oxos_internal/41_remote_debugging.md) |
 | 42 | [Play time](oxos_internal/42_play_time.md) |
+| 43 | [Kernel modules](oxos_internal/43_kernel_modules.md) |
 
 ## The release zip
 `oxos_vX.Y.Z.zip` (`make -C kernel release VERSION=X.Y.Z`, the `release_zip` target) holds `C:\OXOS` as it is installed: copy its `OXOS` folder to `C:\`
-(`/C/` on an exFAT disk). When updating, keep your own `.ini` files (`oxos_extensions.ini`, `extensions\oxos_trainers.ini`): the zip's are the defaults.
+(`/C/` on an exFAT disk). When updating, keep your own `.ini` files (`oxos_settings.ini`, `oxos_extensions.ini`, `extensions\oxos_trainers.ini`): the zip's
+are the defaults.
 
 ```
 oxos_vX.Y.Z.zip
 ├── OXOS\
 │   ├── bios\                             bios_vX.Y.Z.bin (1 MB), bios_vX.Y.Z_256k.bin, bios_1.6_vX.Y.Z_256k.bin: to flash, not used from the disk
-│   ├── apps\                             oxos_ftp.xbe, the OXOS FTP server
+│   ├── apps\                             oxos_ftp.xbe (the OXOS FTP server), oxos_boot_video.xbe (the boot video player)
+│   ├── oxos_settings.ini                 the dashboard order, launch redirects (none), the boot video on (kernel/settings/)
 │   ├── oxos_extensions.ini               the shipped extensions, listed, off (kernel/extensions/oxos_extensions.ini)
-│   ├── oxos_title_patches.ini
+│   ├── oxos_title_patches.ini            per-game fixes (kernel/settings/)
+│   ├── boot_videos\                      oxos_boot_video.mpg, the OXOS boot video (kernel/splash/)
 │   ├── extensions\                       oxos_trainers.xos, oxos_trainers.xbe, oxos_trainers.ini (every trainer off)
 │   ├── trainers\                         the trainer pack's 1,084 .etm files
 │   ├── log\                              empty, as the kernel makes it
@@ -113,6 +115,6 @@ memory units are unchanged.
 ## Not files
 | What | Where | |
 |---|---|---|
-| Skip the splash, no jingle | one OXOS byte in the EEPROM (0xC0–0xFF, which byte to check) | ⬜ spec 39 §1.1: read before the splash, set by OXOS Setup |
+| Skip the splash | one OXOS byte in the EEPROM (0xC0–0xFF, which byte to check) | ⬜ spec 39 §1.1: read before the splash, set by OXOS Setup |
 | Extension state pages | memory, 4 KB per extension, until the next cold boot | ✅ spec 34 §6 |
 | Start-up marks, last words | the CMOS RAM | ✅ `kernel/src/diagnostics/boot_marks.cpp`, `last_words.cpp` |

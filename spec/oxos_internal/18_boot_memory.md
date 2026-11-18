@@ -2,24 +2,25 @@
 
 OXOS addition, implemented 2026-10-27. Titles get the memory the kernel does not use, and the kernel image stays resident, so its size comes straight out of
 what a title has (spec/stock/09 §7). The stock 4627 kernel keeps 45 image pages once it has freed its INIT section. OXOS had grown to 69 (the encoder tables,
-exFAT, UDF, virtual discs, the splash's PNG decoder (now its vector renderer), the jingle), and Half-Life 2 started 25 pages behind the stock kernel.
+exFAT, UDF, virtual discs, the splash's PNG decoder (now its vector renderer), the jingle, removed 2026-11-17), and Half-Life 2 started 25 pages behind the
+stock kernel.
 Code: `kernel/Makefile`, `kernel/src/memory/init.cpp` (`memory::FreeBootPages`), `tools/check_kernel_layout.py`.
 
 ## 1. Built for size
 The kernel is compiled with `-Oz`. `-O2` stays where speed shows: the hashes and ciphers (`src/crypto/crypto.cpp`: XBE sections, saves), `memcpy`/`memset`
 (`src/runtime/memory.cpp`), the virtual-disc decompressor (`src/storage/virtual_disc.cpp`, every sector a title reads from a CCI) and the boot-only files of §2
-(the splash and the jingle keep up with the clock, and their pages are freed anyway). Debug builds (`DEBUG=1`) keep `-Og`.
+(the splash's fade keeps up with the clock, and its pages are freed anyway). Debug builds (`DEBUG=1`) keep `-Og`.
 
 ## 2. Boot-only sections
 Code and data used only during a cold boot go in two sections of their own, which the kernel frees before the first title starts:
 - `.xkb`, code: the splash (`src/boot_splash/splash.cpp`, except `boot_splash::EndSplash`, which every title start calls), its vector renderer
-  (`src/graphics/vector_renderer.cpp`), the jingle's synthesizer and player (`src/boot_splash/jingle.cpp`, `src/boot_splash/bootsound.cpp`), the network stack
+  (`shared/graphics/vector_renderer.cpp`), the network stack
   (`src/network/`) and the upload server (`src/webserver/`, spec/oxos_internal/31), and the disk checks of a cold boot (recognising a blank disk, naming what a
   foreign one holds: `src/storage/disk_format.cpp`, and the countdown and checks in `src/storage/disk_layout.cpp`, spec/oxos_internal/30 §4), the cold boot's
   launch choice (`titles::LaunchAtColdBoot` in `src/titles/title_loader.cpp`: the pre-launch checks, the SMC boot flags, X for the File Manager and B for safe
-  mode, 2026-11-13), the netboot title's installation (`src/titles/title_netboot.cpp`) and the kernel extension loader's cache file
-  (`extensions::WriteLoaderCache`, spec/oxos_internal/34 §8.1). The kernel extension loader itself is appended to the image after these sections, so its pages
-  are boot-only too. The files, or those parts of them, say `#pragma code_seg(".xkb")`.
+  mode, 2026-11-13), the netboot title's installation (`src/titles/title_netboot.cpp`) and the kernel modules' cache file
+  (`kernel_modules::WriteKernelModulesCache`, spec/oxos_internal/43). The kernel modules' image itself is appended to the image after these sections, so its
+  pages are boot-only too. The files, or those parts of them, say `#pragma code_seg(".xkb")`.
 - Code that can also run after the pages are freed asks `memory::BootPagesPresent()` before it calls boot-only code: the layout detection runs on every boot,
   and on a quick reboot it skips the disk checks (the cold boot already made the disk usable).
 - `.xka`, read-only data, in this order (COFF grouped sections, sorted by the name after `$`): `$c0`/`$c1` the Conexant's tables, `$f0`/`$f1` the Focus's,
@@ -41,13 +42,13 @@ below 0x8003A000 lost the page between the image and the Focus's tables, and XBM
 free list, as a freed contiguous page (`memory::FreeContiguousPage`), so the page database no longer maps it, and a bit in `memory::BootPagesFreed` (`.persist`)
 records it.
 
-Before that point the splash thread and the jingle thread have ended: `boot_splash::EndSplash` waits for both thread objects, and the self-tests that set
+Before that point the splash thread has ended: `boot_splash::EndSplash` waits for its thread object, and the self-tests that set
 display modes use only the kept tables.
 
 ## 4. Quick reboots
 A quick reboot re-enters the same image in memory (spec/stock/02 §1), so the freed pages hold whatever titles left there. `memory::InitMemoryManager` counts the
 pages `memory::BootPagesFreed` names as free memory, re-adopting a persisted allocation there as anywhere else. Nothing that runs on a quick reboot uses them:
-the splash and the jingle start only on a cold boot, and the microcode is loaded only on a cold boot (a quick reboot does not reset the processor, so the update
+the splash starts only on a cold boot, and the microcode is loaded only on a cold boot (a quick reboot does not reset the processor, so the update
 stays loaded). The kept encoder's tables are still in place: a console's encoder does not change.
 
 ## 5. The layout check

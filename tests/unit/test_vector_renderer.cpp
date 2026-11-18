@@ -1,4 +1,4 @@
-// The vector renderer the boot splash draws with (kernel/src/graphics/vector_renderer.cpp; scene format spec/oxos_internal/00_boot_splash.md §1.1):
+// The vector renderer the boot splash draws with (shared/graphics/vector_renderer.cpp; scene format spec/oxos_internal/00_boot_splash.md §1.1):
 // anti-aliased fills, fill rules, phases, gradients, the glow filter, and the checks that keep a bad scene from being drawn.
 #include "kernel_test.h"
 
@@ -7,7 +7,7 @@
 
 #include <graphics/vector_renderer.h>
 
-using namespace xk::graphics; // vector_renderer::, the kernel's vector renderer
+using namespace oxos::graphics; // vector_renderer::, the kernel's vector renderer (shared/graphics)
 
 namespace {
 

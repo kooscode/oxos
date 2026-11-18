@@ -478,17 +478,17 @@ REDIRECT = False  # set when the disk copy carries the launch redirect file (--r
 
 
 def write_launch_redirect(hdd_copy):
-    """C:\\OXOS\\oxos_launch_redirect.ini (spec/oxos_internal/33 §6), on a FATX test disk: the relaunch goes to the
+    """C:\\OXOS\\oxos_settings.ini's [launch_redirect] (spec/oxos_internal/33 §6), on a FATX test disk: the relaunch goes to the
     disc's redirected\\ folder; the third launch's missing image goes to a target that does not exist either, so the
     kernel falls back to the image the page names (§4)."""
     global REDIRECT
     q = Qcow2(hdd_copy)
     w = FATXWriter(q, "C")
-    text = ("; boot_test.py --redirect\r\n"
-            "[relaunch test]\r\nsource = D:\\media\\second.xbe\r\ntarget = D:\\redirected\\second.xbe\r\n"
-            "[missing target]\r\nsource = d:/media/missing.xbe\r\ntarget = D:\\nowhere\\missing.xbe\r\n")
+    text = ("; boot_test.py --redirect\r\n[dashboard]\r\ndashboard_1 = C:\\xboxdash.xbe\r\n[launch_redirect]\r\n"
+            "relaunch_test = D:\\media\\second.xbe >> D:\\redirected\\second.xbe\r\n"
+            "missing_target = d:/media/missing.xbe>>D:\\nowhere\\missing.xbe\r\n")
     w.makedirs("OXOS")
-    w.write_file("OXOS\\oxos_launch_redirect.ini", text.encode())
+    w.write_file("OXOS\\oxos_settings.ini", text.encode())
     q.save(hdd_copy + ".new")
     os.replace(hdd_copy + ".new", hdd_copy)
     REDIRECT = True
@@ -804,7 +804,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
                 mon.read("KiQuickRebootCount") == 2 + reboots + menu and
                 mon.read("memory::PersistedPages") >= 1,
             "LaunchDataPage launch of media;second.xbe"
-            + (", redirected to redirected\\second.xbe (oxos_launch_redirect.ini)" if REDIRECT else "")
+            + (", redirected to redirected\\second.xbe (oxos_settings.ini [launch_redirect])" if REDIRECT else "")
             + ", first run's results carried over": words[25] == 1 and
                 second == ("\\Device\\CdRom0\\redirected\\second.xbe" if REDIRECT else "\\Device\\CdRom0\\media\\second.xbe"),
             "persisted launch page contents (type, title id, flags, data)": words[27] == 1,
@@ -946,24 +946,12 @@ def misc_checks(mon):
     }
 
 
-def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
-    if jingle_pcm:  # once synthesis has finished (the jingle is still playing): the whole buffer
-        for _ in range(200):
-            if mon.read("boot_splash::BootSoundSynthMs"):
-                break
-            time.sleep(0.05)
-        buffer, size = mon.read("boot_splash::BootSoundBuffer"), mon.read("boot_splash::BootSoundBytes")
-        r = mon.hmp(f"pmemsave {buffer:#x} {size:#x} \"{jingle_pcm}\"")
-        print("  jingle samples saved:", jingle_pcm, r.strip() if isinstance(r, str) else r)
+def dash_checks(mon, evox=False, xbl=False, order=""):
     for _ in range(60):
         if mon.read("titles::TitleLaunched"):
             break
         time.sleep(0.25)
     time.sleep(4)
-    for _ in range(40):  # the jingle (and the splash) end a little after the dashboard has loaded
-        if mon.read("boot_splash::BootSoundStatus") >= 3:
-            break
-        time.sleep(0.25)
     exc = mon.read("core::LastExceptionVector")
     t0 = mon.read("KeTickCount")
     time.sleep(0.5)
@@ -985,30 +973,24 @@ def dash_checks(mon, jingle_pcm=None, evox=False, xbl=False):
     ptr = mon.read_offset("XeImageFileName", 4)  # ANSI_STRING: Length, MaximumLength, Buffer
     raw = b"".join(struct.pack("<I", int(w, 16)) for w in re.findall(r"0x([0-9a-f]{8})", mon.hmp(f"x/16wx {ptr:#x}").split(":", 1)[1]))
     dash = raw.split(b"\0")[0].decode("latin-1")
-    want = ("\\Device\\Harddisk0\\Partition2\\Dashboard\\default.xbe" if xbl else
-            "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if evox else "xboxdash.xbe"))
-    # The boot screen's diagnostics (kernel/src/boot_splash), read once: the splash and the jingle have ended.
-    bs = {name: mon.read(f"boot_splash::{name}") for name in ("SplashFullMs", "SplashFadeMs", "SplashFrames", "SplashSource", "SplashStatus", "BootSoundStatus",
-        "BootSoundPosition", "BootSoundLast", "BootSoundAhead", "BootSoundUnderruns", "BootSoundSynthMs")}
+    # Which dashboard should start (spec/oxos_internal/19): the first of --dash-order that is on the disk, else C:\xboxdash.xbe.
+    listed_evox = evox and "evoxdash" in order.lower()
+    listed_xbl = xbl and "dashboard\\default.xbe" in order.lower()
+    want = "\\Device\\Harddisk0\\Partition2\\" + ("evoxdash.xbe" if listed_evox else "Dashboard\\default.xbe" if listed_xbl else "xboxdash.xbe")
+    case = (f"[dashboard] {order}" if order else "no [dashboard]") + (", EvoX on the disk" if evox else "") + (", XBL loader on the disk" if xbl else "")
+    # The boot screen's diagnostics (kernel/src/boot_splash), read once: the splash has ended.
+    bs = {name: mon.read(f"boot_splash::{name}") for name in ("SplashFullMs", "SplashFrames", "SplashSource", "SplashStatus")}
     return {"M4b-2": {
         f"dashboard launched without a disc: {dash} "
-        f"({'EvoX first' if evox else 'only C:\\Dashboard' if xbl else 'no EvoX: the Xbox dashboard'})": mon.read("titles::TitleLaunched") == 2 and
+        f"({case})": mon.read("titles::TitleLaunched") == 2 and
             mon.read("titles::LastLoadStatus") == 0 and dash == want,
         "no exception, clock running": exc == 0xFFFFFFFF and ticking,
         "AvSetDisplayMode called, CRTC start set": mon.read("hardware::video::SetDisplayModeCalls") >= 1 and fb != 0,
         "framebuffer has drawn pixels": any(w != 0 for w in words),
-        f"boot splash faded in before the dashboard, full intensity {bs['SplashFullMs']} ms after the jingle's "
-        f"start, at its climax ({bs['SplashFadeMs']} ms)":
-            bs["SplashFrames"] >= 10 and bs["SplashFadeMs"] > 0
-            and 0 <= bs["SplashFullMs"] - bs["SplashFadeMs"] < 100,
+        f"boot splash faded in before the dashboard ({bs['SplashFrames']} frames, the full picture {bs['SplashFullMs']} ms after the screen came on)":
+            bs["SplashFrames"] >= 3 and 0 < bs["SplashFullMs"] < 1000,
         "splash scene (flash, copied to RAM by the 2BL) drawn": bs["SplashSource"] == 2
             and bs["SplashStatus"] == 0,
-        f"boot jingle played to its last buffer through the AC'97 controller (status {bs['BootSoundStatus']:#x}, "
-        f"buffer {bs['BootSoundPosition']} at the end, the jingle's last {bs['BootSoundLast']}, "
-        f"{bs['BootSoundAhead']} ms synthesized ahead, {bs['BootSoundUnderruns']} underruns, "
-        f"synthesis {bs['BootSoundSynthMs'] & 0x7FFFFFFF} ms)":
-            bs["BootSoundStatus"] == 3
-            and bs["BootSoundPosition"] >= bs["BootSoundLast"] > 0,
         f"boot-only pages freed before the dashboard ({boot_freed} pages; the splash code's page free, the encoder "
         f"tables' kept)": boot_freed >= 5 and not boot_code_present and tables_present,
     }, "M5e": launch_reason_checks(mon)}
@@ -1029,12 +1011,10 @@ def fatal_checks(mon):
         out = mon.hmp(f"xp/544wx {fb + (y * 640 + 48) * 4:#x}") if fb else ""
         text += len(re.findall(r"0x00ffffff", out))
     print(f"  (fatal error {code}, framebuffer {fb:#x}, {lit} lit digit samples, {text} title samples)")
-    sound_stopped = mon.read("user_interface::FatalSoundStopped")
     return {"M5f": {
         "no hard disk: disk fatal error (7/8/9)": code in (7, 8, 9),
         "error code drawn on screen": fb != 0 and lit > 20 and int(mon.hmp("xp/1wx 0xfd600800").split(":")[1].split()[0], 16) & 0x03FFFFFF == fb,
         "the error's title drawn under it": text > 20,
-        f"the boot sound stopped ({sound_stopped})": sound_stopped in (1, 2),
     }}, code
 
 
@@ -1432,7 +1412,7 @@ def main():
                     help="a second boot of test_exfat's kept disk: X:'s format from the first boot, as the title reads it after a cold boot")
     ap.add_argument("--extensions", metavar="DIR", help="with --relaunch: the test extensions built in DIR "
                     "(tests/extensions) and an oxos_extensions.ini on the test disk (spec/oxos_internal/34 §9.3)")
-    ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\oxos_launch_redirect.ini: "
+    ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\oxos_settings.ini [launch_redirect]: "
                     "the relaunch must start the disc's redirected\\second.xbe (spec/oxos_internal/33 §6)")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
     ap.add_argument("--keep-hdd", metavar="PATH", help="keep the disk copy after the run (as PATH), to inspect it")
@@ -1441,10 +1421,10 @@ def main():
     ap.add_argument("--iso-kind", choices=ISO_KINDS, default="plain", help="the image's form (--iso-launch)")
     ap.add_argument("--xbl", action="store_true",
                     help="--dash: move C:\\xboxdash.xbe to C:\\Dashboard\\default.xbe on " "the disk copy and check that the kernel starts it from there")
+    ap.add_argument("--dash-order", metavar="PATH,PATH",
+                    help="--dash: write C:\\OXOS\\oxos_settings.ini with these dashboards as [dashboard] dashboard_1, dashboard_2, ... on the disk copy")
     ap.add_argument("--evox", action="store_true",
                     help="--dash: put C:\\evoxdash.xbe on the disk copy and check that " "the kernel starts it instead of C:\\xboxdash.xbe")
-    ap.add_argument("--jingle-pcm", help="--dash: save the boot jingle's synthesized samples (guest memory) to this "
-                    "file while it plays, to compare with tools/jingle's render")
     ap.add_argument("--encoder", choices=sorted(ENCODERS),
                     help="present this video encoder (xemu -machine " "video-encoder=...) and check that the kernel finds and reports it")
     ap.add_argument("--memory", type=int, choices=(64, 128), default=64, help="the console's RAM in MB; --relaunch "
@@ -1500,6 +1480,14 @@ def main():
             FATXWriter(q, "C").write_file("evoxdash.xbe", FATX(q, "C").read_file("xboxdash.xbe"))
             q.save(hdd_copy + ".new")
             os.replace(hdd_copy + ".new", hdd_copy)
+        if a.dash_order:  # C:\OXOS\oxos_settings.ini's [dashboard]: dashboard_1, dashboard_2, ... (spec/oxos_internal/19)
+            q = Qcow2(hdd_copy)
+            w = FATXWriter(q, "C")
+            lines = "".join(f"dashboard_{i} = {p}\r\n" for i, p in enumerate(a.dash_order.split(","), 1))
+            w.makedirs("OXOS")
+            w.write_file("OXOS\\oxos_settings.ini", ("; boot_test.py --dash-order\r\n[dashboard]\r\n" + lines).encode())
+            q.save(hdd_copy + ".new")
+            os.replace(hdd_copy + ".new", hdd_copy)
     open(cfg, "w").write(
         f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '{a.memory}'\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
@@ -1542,7 +1530,7 @@ def main():
             results = blank_disk_fatal_checks(mon, 2 if a.foreign else 1, a.blank_marker if a.blank_marker is not None else a.countdown,
                                               pad if a.x_at_error else None)
         elif a.dash:
-            results = dash_checks(mon, a.jingle_pcm and os.path.abspath(a.jingle_pcm), a.evox, a.xbl)
+            results = dash_checks(mon, a.evox, a.xbl, a.dash_order or "")
         elif a.kept_cache_format:
             results = {"exFAT cache partitions": kept_cache_format_checks(mon, a.title_map)}
         elif a.relaunch:

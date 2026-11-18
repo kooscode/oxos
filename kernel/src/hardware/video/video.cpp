@@ -708,7 +708,12 @@ static void EncoderStart(ULONG Mode) {
 // --- OXOS's boot display (spec/stock/22 §7-8)
 // OXOS's own boot screens (splash, fatal error): the mode word the reference's boot animation would choose for this AV pack and video standard (spec/stock/22
 // §8.3; 4:3), so the encoder sends what the cable expects (component YPbPr on the HDTV pack, not composite). Standard: factory setting 0x103 bits 8-15 (1
-// NTSC-M, 2 NTSC-J, 3 PAL).
+// NTSC-M, 2 NTSC-J, 3 PAL). Deviation (spec/oxos_internal/02_display_modes.md §7): on the HDTV pack the reference starts in 480i; OXOS uses 480p when the
+// user's video flags allow it, the mode titles and dashboards then choose, so the next 640x480 mode set (the boot video player, spec/oxos_internal/38 §4)
+// keeps the signal (user, 2026-11-17).
+// The user's video flags (EEPROM setting 8): 480p allowed.
+constexpr ULONG VIDEO_FLAG_480P = 0x80000;
+
 ULONG BootModeWord() {
     ULONG type, length, region = 0x00400100;
     ExQueryNonVolatileSetting(0x103, &type, &region, sizeof(region), &length);
@@ -716,8 +721,14 @@ ULONG BootModeWord() {
     switch (HalBootSMCVideoMode & 7) {
     case 0: // SCART
         return pal ? 0x60030307 : japan ? 0x20010103 : 0x20010101;
-    case 1: // HDTV (component): the interlaced SD row
+    case 1: { // HDTV (component): 480p when the user's video flags allow it (setting 8, bit 19, as titles choose), else the interlaced SD row
+        ULONG flags = 0;
+        if (ExQueryNonVolatileSetting(8, &type, &flags, sizeof(flags), &length) || length != sizeof(flags))
+            flags = 0;
+        if (!pal && (flags & VIDEO_FLAG_480P))
+            return 0x88070701;
         return pal ? 0x48030314 : 0x0801010D;
+    }
     case 2: // VGA
         return pal ? 0 : 0x88070701;
     default: // composite, S-video, RF
@@ -785,6 +796,21 @@ void LoadBootGamma() {
 // --- Mode set (spec/stock/22 §2)
 
 volatile ULONG SetDisplayModeCalls; // diagnostics: AvSetDisplayMode calls (tests/boot_test.py)
+
+// The frame buffer KeepScreenUntilNextMode was given, until a mode set shows another one.
+static PVOID KeptScreen;
+
+void KeepScreenUntilNextMode(PVOID Screen) {
+    KeptScreen = Screen;
+}
+
+// After a mode set that scans out FrameBuffer (physical): the kept frame buffer is no longer on screen.
+static void FreeKeptScreen(ULONG FrameBuffer) {
+    if (KeptScreen && FrameBuffer != MmGetPhysicalAddress(KeptScreen)) {
+        MmFreeContiguousMemory(KeptScreen);
+        KeptScreen = nullptr;
+    }
+}
 
 // The NV2A side of a mode change exactly as spec/stock/22 §2 describes it, with the reference NV2A and CRTC rows of the console's encoder (spec 22 §3.4 / §4
 // Focus, §3.7 / §3.9 Conexant, §3.10 / §3.11 Xcalibur). Every encoder generates the pixel clock and follows the NV2A's syncs (spec 22 §5), so the NV2A raster
@@ -902,8 +928,10 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
         Mode = 0x0F010101;
     // Encoder modes other than the VGA class (the reference has no VGA rows; spec 22 §13): the reference mode change.
     if (EncoderAddress && EncoderMode(Mode) && (Mode >> 30) != 3 &&
-        ReferenceDisplayMode(regs, Mode, Format, Pitch, FrameBuffer))
+        ReferenceDisplayMode(regs, Mode, Format, Pitch, FrameBuffer)) {
+        FreeKeptScreen(FrameBuffer);
         return 0;
+    }
     // Pixel format: RAMDAC general control and the CRTC pixel-depth code.
     ULONG generalControl = 0x100030, depth = 0x3000000;
     if (Format == 0x10 || Format == 0x1C) {
@@ -965,6 +993,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
     WriteCrtc(regs, 0x25, (UCHAR)(Cr25 | ((pitch8 >> 6) & 0x20)));
     WriteCrtc(regs, 0x28, (UCHAR)((depth >> 24) | 0x80));
     *(volatile ULONG *)(regs + 0x600800) = FrameBuffer;
+    FreeKeptScreen(FrameBuffer);
     return 0;
 }
 

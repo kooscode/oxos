@@ -7,8 +7,8 @@ usage: check_kernel_layout.py --exe OXOSKRNL.exe --map OXOSKRNL.map --boot-objs 
 1. Boot-only memory (spec/oxos_internal/18_boot_memory.md): the boot-only sections (.xka data, .xkb code) are freed before the first title starts, so kept code
    must not use them. The linker keeps one copy of an inline function or a shared constant that several objects define, and that copy can be the one a boot-only
    file put in .xkb. So every global symbol the map places in a boot-only section must be absent from every other object, except the boot objects (--boot-objs:
-   the splash and the jingle, which call one another before the pages are freed) and the boot-only functions that kept code calls during a cold boot, before the
-   pages are freed (--boot-entries, function names).
+   the splash and the network code, which call one another before the pages are freed) and the boot-only functions that kept code calls during a cold boot,
+   before the pages are freed (--boot-entries, function names).
 2. The quick-reboot copy of .data (arch/entry.S, KI_DATA_COPY_SIZE = --data-copy): the initialised part of .data, as tools/mkbios.py stores it, must fit, or a
    quick reboot of a network-booted kernel would take another kernel's.
 3. The title-start call (spec/oxos_internal/23_trainer_hook.md): dashboards search 0x80010000-0x8003AF90 for the first `call [0x00010128]` (or `call

@@ -16,7 +16,8 @@ RtlLowerChar RtlCopyString RtlUpperString RtlCharToInteger RtlIntegerToChar RtlA
 
 def main():
     root = sys.argv[1]
-    files = [f for pattern in ("kernel/src/**/*.cpp", "kernel/src/**/*.h", "sdk/src/*.cpp", "sdk/examples/**/*.cpp", "tests/extensions/*.c*")
+    files = [f for pattern in ("kernel/src/**/*.cpp", "kernel/src/**/*.h", "kernel/modules/*.cpp", "kernel/modules/*.h", "shared/**/*.cpp", "shared/**/*.h", "sdk/src/*.cpp",
+                                          "sdk/examples/**/*.cpp", "tests/extensions/*.c*")
              for f in glob.glob(os.path.join(root, pattern), recursive=True)
              if not os.path.relpath(f, root).startswith(os.path.join("kernel", "src", "runtime"))]
     found = []

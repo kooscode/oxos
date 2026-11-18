@@ -96,3 +96,14 @@ reference would, and option 0x10 returns 0 / 1 / 2.
   pitch smaller than width × bytes per pixel, which xemu's downscale path rejects); at scale 1 it runs. The retail BIOS we have returns this title to the
   dashboard within 0.3 s in xemu, so there is no reference run to compare.
 - xemu's display code expects the 1080i pitch convention (it divides the surface pitch by the CRTC offset).
+
+## 7. The boot display's mode, and keeping the signal into the first title (2026-11-17)
+- **480p at boot on the HDTV pack:** the splash's mode word (`hardware::video::BootModeWord`) is `0x88070701` (640x480 progressive) when the AV pack is
+  HDTV, the region is not PAL and the user's video flags (EEPROM setting 8) allow 480p (bit 19, `0x80000`), as titles and dashboards then choose (nxdk's
+  `XVideoListModes` makes the same choice). Otherwise as the reference (spec/stock/22 §8.3): 480i (`0x0801010D`, PAL `0x48030314`) on the HDTV pack. User,
+  2026-11-17: "add 480p boot". 720p at boot is not done: the splash is drawn at 640x480, and the boot video is 480 lines (spec 38 §3).
+- **Why:** a mode set with the mode word already set only changes the frame buffer, pitch and format (spec/stock/22 §2.2); one with another word sets the
+  encoder up again, and an HDMI adapter or a TV loses the signal for one to two seconds. Booting in the mode the next title chooses avoids that.
+- **The splash kept for the boot video player:** when the player starts next, the kernel does not blank the screen or free the splash's frame buffer at the
+  splash's end (`boot_splash::EndSplash(true)`); `hardware::video::KeepScreenUntilNextMode` frees it at the next `AvSetDisplayMode` that scans out another
+  frame buffer. Every other title starts as before (the screen blanked, the splash's memory freed before it runs).

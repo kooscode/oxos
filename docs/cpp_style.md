@@ -61,9 +61,9 @@ state and each constant where the rules say it is, and trust every comment to de
 
 ### File and folder names
 
-- Plain English, lower case, words joined with underscores, never dashes: `core/`, `storage/disk_layout.cpp`, `spec/oxos_internal/17_boot_jingle.md`. Python
+- Plain English, lower case, words joined with underscores, never dashes: `core/`, `storage/disk_layout.cpp`, `spec/oxos_internal/00_boot_splash.md`. Python
   needs underscores for modules, so the whole repo uses them.
-- The same rule covers every name the repo defines: specs, docs, scripts, generated files and build folders (`build/trace_full`, `ftp_server.iso`), xemu state
+- The same rule covers every name the repo defines: specs, docs, scripts, generated files and build folders (`build/trace_full`, `oxos_ftp.iso`), xemu state
   folders and make targets (`make test_dash`).
 - A name says what the file holds, not where it came from: `dvd_drive.cpp`, not `cdrom.cpp`; `object_manager.cpp`, not `object.cpp`. No two- or three-letter
   abbreviations.
@@ -75,8 +75,8 @@ state and each constant where the rules say it is, and trust every comment to de
 - **Descriptive, never short or jargon:** a console user or an extension author must understand a name without reading the code. `oxos_extensions.ini`, not
   `oxos_ext.ini`; `oxos_title_patches.xos`, not `oxos_patches.xos` (which reads like kernel patches); `oxos_extension_context.h`, not `abi.h`. When a name could
   be read two ways, take the longer one that cannot.
-- **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console (`C:\OXOS\oxos_launch_redirect.ini`,
-  `oxos_extensions.ini`, `cache\oxos_extension_loader.cache`), OXOS's own extensions and their settings (`extensions\oxos_NAME.xos` with
+- **The `oxos_` prefix** marks everything OXOS provides that sits next to other people's things: files on the console (`C:\OXOS\oxos_settings.ini`,
+  `oxos_extensions.ini`, `cache\oxos_kernel.cache`), OXOS's own extensions and their settings (`extensions\oxos_NAME.xos` with
   `extensions\oxos_NAME.ini`), and the SDK's headers (`oxos_sdk.h`, `oxos_kernel.h`). Names without it belong to users and third-party extensions.
 - **OXOS is written `OXOS` or `oxos`, never `Oxos`**, in identifiers as in text: `OXOS_CONTEXT`, `OXOS_API_VERSION`, `oxos_log`, `oxos::NtCreateFile`.
 - **Everything the user writes or reads:** ini keys (`extension =`, `enabled =`, never `ext =`), folders (`C:\OXOS\extensions\`, not `ext\`), section names, log
@@ -91,7 +91,7 @@ The folders and what each holds are listed in the kernel README (`kernel/README.
 - A header sits in the folder of the code it declares (`kernel/src/storage/storage.h`), and is included with that folder (`#include <storage/storage.h>`;
   `kernel/src` is the include path). Each folder has one header with its name for what other folders use, and declares only what its own folder defines (exports
   included); what only some files share has a header named for it (`core/scheduler.h`, `extensions/extension_state.h`, `hardware/chipset/serial.h`,
-  `filesystems/hddfs/hddfs.h`, `boot_splash/jingle.h`). A header that seems to have no home goes in the folder whose code it supports (the ABI's types are
+  `filesystems/hddfs/hddfs.h`, `boot_splash/boot_splash.h`). A header that seems to have no home goes in the folder whose code it supports (the ABI's types are
   `runtime/types.h`), or in a new folder with a descriptive name; there is no `common/` or `misc/` folder. The 2BL's own headers are in `kernel/boot/`.
 - Test and debug code is kept out of the release kernel by the build, not by comments: the boot self-tests are in `tests/kernel_self_tests/` (compiled into the
   kernel only with `SELFTEST=1`), debug-only code under `#if XK_...`.

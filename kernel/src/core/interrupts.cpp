@@ -104,6 +104,7 @@ static void DumpThreads() {
     ULONG count = 0;
     for (PLIST_ENTRY e = head->Flink; e != head && count < 64; e = e->Flink, count++) {
         PKTHREAD t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
+        XK_SERIAL("hang: thread %p timeout timer %p inserted %u\n", t, &t->Timer, (unsigned)t->Timer.Header.Inserted);
         XK_SERIAL("hang: thread %p state %u reason %u priority %d wait status %08lx alertable %u\n", t, (unsigned)t->State, (unsigned)t->WaitReason,
                   (int)t->Priority, (ULONG)t->WaitStatus, (unsigned)t->Alertable);
         if (t->State == Waiting) {
@@ -156,6 +157,9 @@ static void DumpThreads() {
         }
         XK_SERIAL("\n");
     }
+    XK_SERIAL("hang: DPC list %s, software interrupts pending %#lx, IRQL %u\n", IsListEmpty(&KiPcr.PrcbData.DpcListHead) ? "empty" : "not empty",
+              (ULONG)PendingSoftwareInterrupts, (unsigned)KiPcr.Irql);
+    DumpTimers();
 }
 #endif
 

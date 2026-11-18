@@ -17,8 +17,6 @@ namespace xk::user_interface {
 
 volatile ULONG FatalErrorCode;        // the last reported code (read by the boot tests)
 volatile ULONG FatalErrorFrameBuffer; // the error screen's physical address (read by the boot tests)
-// How the error stopped the boot sound: 1 at once (the idle thread), 2 with the splash (read by the boot tests).
-volatile ULONG FatalSoundStopped;
 
 // --- The error history in the EEPROM
 
@@ -66,19 +64,29 @@ static ULONG FatalDetails(ULONG Code, char (*lines)[XK_FATAL_LINE + 1]) {
     return n;
 }
 
+// One line of a fatal error screen's text, at the left margin or centred.
+static void DrawHelpLine(ULONG *fb, ULONG y, const char *line, ULONG color, bool centred) {
+    if (centred)
+        graphics::DrawCentredText(fb, y, line, 2, color);
+    else
+        graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, line, 2, color);
+}
+
 static void DrawFatal(ULONG *fb, ULONG Code) {
     graphics::DrawLargeDigit(fb, 330, 72, Code % 10);
     graphics::DrawLargeDigit(fb, 250, 72, Code / 10 % 10);
     const XK_FATAL_HELP *help = FatalHelp(Code);
     graphics::DrawScreenTitle(fb, 204, help->Title);
+    // No Dashboard Found (13-20) has a few short sentences, centred under the title; the other screens' lists start at the left margin.
+    bool centred = Code >= 13 && Code <= 20;
     ULONG y = 244;
     for (const char *const *line = help->Lines; *line; line++, y += graphics::SCREEN_LINE)
-        graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, *line, 2, graphics::COLOR_TEXT);
+        DrawHelpLine(fb, y, *line, graphics::COLOR_TEXT, centred);
     char details[3][XK_FATAL_LINE + 1];
     ULONG count = FatalDetails(Code, details);
     y += 8;
     for (ULONG i = 0; i < count; i++, y += graphics::SCREEN_LINE)
-        graphics::DrawText(fb, graphics::SCREEN_WIDTH, graphics::SCREEN_LEFT, y, details[i], 2, graphics::COLOR_GREY);
+        DrawHelpLine(fb, y, details[i], graphics::COLOR_GREY, centred);
 }
 
 // The fatal error screen (only with an AV pack connected), in its own frame buffer.
@@ -104,9 +112,8 @@ void NoDashboardError(ULONG Code) {
     HalWriteSMBusValue(0x20, 0x08, FALSE, 0xE1); // LED sequence, then LED mode "custom", as ShowFatalError
     HalWriteSMBusValue(0x20, 0x07, FALSE, 1);
     RecordError(Code);
-    // The jingle has ended; the boot-only pages stay (the USB and the File Manager run from them).
+    // The splash has ended; the boot-only pages stay (the USB and the File Manager run from them).
     boot_splash::StopSplash();
-    FatalSoundStopped = 2;
     ULONG *fb = ShowCode(Code);
     gamepad::WaitForXButton();
     FatalErrorCode = 0;
@@ -184,15 +191,11 @@ void ShowBugCheck(ULONG Code, const ULONG_PTR *Parameters) {
     memset(core::CertKey, 0, sizeof(core::CertKey));
     memset(KiPersistedBootKeys + 16, 0, 16);
     RecordError(Code);
-    // The sound must stop: left running, the sound controller replays the jingle's last buffers in a loop. On the boot thread, which is the idle thread during
-    // start-up (the disk's errors, a title launch from it), nothing else runs once it halts and it must never wait: the controller is stopped at once. Any
-    // other thread lets the splash and the jingle finish, as before a title starts (boot_splash::EndSplash), and then blocks rather than spins.
+    // On the boot thread, which is the idle thread during start-up (the disk's errors, a title launch from it), nothing else runs once it halts and it must
+    // never wait. Any other thread lets the splash finish, as before a title starts (boot_splash::EndSplash), and then blocks rather than spins.
     bool idle = KeGetCurrentThread() == KiPcr.Prcb->IdleThread;
-    if (idle)
-        boot_splash::StopBootSound();
-    else
+    if (!idle)
         boot_splash::EndSplash();
-    FatalSoundStopped = idle ? 1 : 2;
     ShowCode(Code);
     for (;;) {
         if (idle) { // halt, but keep the clock and DPCs running

@@ -3,6 +3,7 @@
 #include <core/core.h>
 #include <core/scheduler.h>
 #include <arch/arch.h>
+#include <diagnostics/diagnostics.h>
 
 namespace xk::core {
 
@@ -154,6 +155,26 @@ void CheckTimers() {
     if (CONTAINING_RECORD(TimerListHead.Flink, KTIMER, TimerListEntry)->DueTime <= ReadKernelTime(KeInterruptTime))
         KeInsertQueueDpc(&TimerExpireDpc, nullptr, nullptr);
 }
+
+#if XK_DEBUG_SERIAL
+// The hang dump: whether the expiry DPC is queued, and the inserted timers in due order with the time left (negative: overdue), so a hang where timeouts stop
+// firing shows whether the list, the DPC or the clock is stuck. A link that does not point back ends the walk.
+void DumpTimers() {
+    ULONGLONG now = ReadKernelTime(KeInterruptTime);
+    XK_SERIAL("hang: timers: expiry DPC queued %u, interrupt time %lu ms\n", (unsigned)TimerExpireDpc.Inserted, (ULONG)(now / 10000));
+    ULONG count = 0;
+    for (PLIST_ENTRY e = TimerListHead.Flink; e != &TimerListHead && count < 24; e = e->Flink, count++) {
+        if (e->Flink->Blink != e) {
+            XK_SERIAL("hang:   timer list broken after %p\n", e);
+            break;
+        }
+        PKTIMER t = CONTAINING_RECORD(e, KTIMER, TimerListEntry);
+        LONGLONG ms = ((LONGLONG)t->DueTime - (LONGLONG)now) / 10000;
+        XK_SERIAL("hang:   timer %p due in %ld ms, inserted %u, period %ld, dpc %p\n", t, (long)ms, (unsigned)t->Header.Inserted, (long)t->Period, t->Dpc);
+    }
+    XK_SERIAL("hang: timers: %lu listed\n", count);
+}
+#endif
 
 void InitializeTimers() {
     InitializeListHead(&TimerListHead);
