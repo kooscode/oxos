@@ -1,7 +1,7 @@
 # OXOS demo [ Click the play button ]
 
-https://github.com/user-attachments/assets/0d9c2398-bac9-4bf0-87d3-0522cee564b5
+https://github.com/user-attachments/assets/68870746-89fd-4250-8ef8-c952cf4039b2
 
-*From Blank Disk to XB Live Dashboard in seconds!!*
+*Everything Open Source from the first CPU Reset vector's JMP to when Halo2 starts !!*
 
 [Back to the README](../README.md)
