@@ -97,12 +97,13 @@ An nxdk + SDL3 app (`kernel/extensions/oxos_trainers/app/`), started by `oxos_tr
 
 | Step | Where | What |
 |---|---|---|
-| 1. Which game | the title-loading event, of a launch through the launch data page or of the disc | read the XBE's title ID from its file (the image header and certificate, about 0.2 KB) before it is loaded; nothing more for an nxdk program (`CXBE`: the ISO launcher, homebrew), a title without a section or trainer file, or with XBMC4Gamers' hook installed |
+| 1. Which game | the title-loading event, of a launch through the launch data page or of the disc | read the XBE's title ID and build (its timestamp) from its file (the image header and certificate, about 0.2 KB) before it is loaded; nothing more for an nxdk program (`CXBE`: the ISO launcher, homebrew), a title without a section or trainer file, or with XBMC4Gamers' hook installed |
 | 2. Redirect | `oxos_title_redirect` (spec 34 §7.2) | `C:\OXOS\extensions\oxos_trainers.xbe` in the game's place, when it exists; the state page remembers the game and this launch. Also for the disc the console starts by itself, with no launch data page (power-on, xemu's "Load Disc"; 2026-11-15, v0.4.10b): the menu then takes the game to be `\Device\CdRom0\default.xbe`, and starts it with a page of type 0xFFFFFFFF, which the kernel frees as it starts the disc, so the game gets no launch data, as before |
 | 3a. New trainers | the app, first | the scan (§7.3): trainer files not yet in the ini are added to it, before anything else is read |
 | 3. The menu | the app | reads the game's path from the launch data page (unchanged by the redirect), the game's XBE for its name and title image (`$$XTIMAGE`, else `E:\UDATA\<title ID>\TitleImage.xbx`; XPR0, DXT1/3/5 or 32-bit), its section and trainer |
 | 4. Start Game | the app | writes the section's changed values (only the values; a missing line is added at the section's end; for another of the title's trainers: `trainer =`, `trainer_enabled` and the cheat and keys lines replaced by that trainer's, the `trainer N` lines kept), puts back the launch data page as it was given (the kernel's "tried" flag cleared) and quick-reboots, as a dashboard starts a title |
 | 5. Through | the title-loading event | the launch right after the menu's, of the game it was started for, is not redirected; the title-loaded event runs the trainer as the section now says |
+| 6. The same build again | the title-loading event | the launch right after that title's, of the same title ID and build, gets no second menu; another build gets the menu (§7.5b) |
 
 Measured on the console (2026-11-15, serial log): the decision in step 1 takes about 50 ms for a game with a section, in a 200 KB ini.
 
@@ -135,6 +136,8 @@ list then shows six cheats at a time instead of seven.
   holds a third (0xC0DE0003) the ini does not know: at the cold boot's menu the scan adds it as `trainer 3`; at the relaunch's the pad presses RIGHT (the
   second trainer), switches it and its cheat 1 on and starts; the section then reads exactly as expected (`trainer = xktest_two.etm`, its cheat lines, the
   keys line gone, the three trainer lines), and the game gets mark 0xC0DE0002.
+- xemu (`make test_extensions`, 2026-11-18): the relaunch test boots twice, its relaunch as the same build (no second menu; the trainer is chosen at the
+  cold boot's menu and runs at both runs) and as another build (`--other-build`: the menu again, where it is chosen), §7.5b.
 - Console (2026-11-16, Modxo console, all 1,084 trainers in `C:\OXOS\trainers\`): Halo 2 from `F:\Games` brings up the menu with `< 1 OF 8 >`.
 - xemu screenshots (2026-11-16, `tools/xemu_screenshot.py`, Halo 2's ISO as the disc): trainer 2 (the v1.1 +13) `< 2 OF 8 >` amber with the band; Cloaked shows
   "IN GAME [BACK]", Jump 2x as high "[RIGHT STICK] + [D-PAD DOWN]", Suicide "[RIGHT STICK] + [D-PAD UP]"; the KEY tags on the three.
@@ -149,8 +152,9 @@ list then shows six cheats at a time instead of seven.
 
 ## 7. Trainers found and chosen automatically (proposal, 2026-11-15; partly built 2026-11-16)
 Status: **built 2026-11-16:** the title's trainers in its section (`trainer N` lines, §2, in place of §7.2's index), the menu's scan for new trainers (§7.3, as
-built), the player's choice between a title's trainers (§7.4a, as built), title updates (§7.5). **Still a proposal:** the extension choosing the trainer that
-fits the build (§7.4), games with no trainer for their build (§7.5a). (User, 2026-11-15: "spec it - dont build it yet.. i want as easy as possible way to auto
+built), the player's choice between a title's trainers (§7.4a, as built), title updates (§7.5); **built 2026-11-18:** no second menu when a title
+starts the same build again (§7.5b). **Still a proposal:** the extension choosing the trainer that fits the build (§7.4), games with no trainer for their
+build (§7.5a). (User, 2026-11-15: "spec it - dont build it yet.. i want as easy as possible way to auto
 detect - when our trainer xbe runs, it should scan all the trainers and update the ini file for any new ones, that we we are guarenteed its always up to date").
 
 Today a trainer is found through the ini alone: the game's title ID names a section, the section's `trainer =` names one file. A new `.etm` in
@@ -289,11 +293,38 @@ With §7.4 a title that has trainers, but none for the build on this console, st
   per title (its name from the ini section, the build), the latest first, each title once. A title that has since got a fitting trainer (a new `.etm`) is
   left out.
 
+### 7.5b A title that starts the same build again: no second menu (built 2026-11-18)
+A title may start a new launch of itself straight after it starts: it restarts itself once at start-up (after preparing its cache drive, for example), or
+goes on to another XBE of its own. Each launch went through the title-loading event as a new one, so the player got the menu a second time, for the same
+title, right after pressing Start Game. But a launch of the same title ID is not always the same trainer's: a title update, or an XBE of the title built
+apart, is another build, and a trainer is made for one build (§7.1). The menu tells builds apart (its green and amber trainers, §4a); the title-loaded event
+only checks the title ID (§3 step 5). So the rule follows the build:
+
+| The launch | What the extension does |
+|---|---|
+| The title the menu started (§4a step 5) | remembers its launch number; the title ID and build were remembered with the menu's launch (step 2) |
+| The very next launch: the same title ID and the same build (XBE timestamp, read as in step 1) | no menu; logged: `<title ID>: the title launches the same build again (<build>): no menu (<path>).`; the title-loaded event runs the trainer the section names, as at the launch before; its launch number becomes the one remembered, so a title that restarts itself again goes through too |
+| The very next launch: another build, or another title ID | the usual decision (§4a step 1): the menu, which shows the trainers made for that build |
+| Any later launch (another title came between) | the usual decision |
+
+Title updates (§7.5) are not affected: the disc's XBE that only starts its update gets no menu and is not remembered, so the update's launch gets the menu
+as before. When OXOS does not see the update coming (§7.5's check finds no update XBE of the disc XBE's name), the menu comes for the disc's build and again
+for the update's, which is another build.
+
+The state page holds the title's path, title ID, build and launch numbers (`MENU_STATE` in `oxos_trainers.cpp`).
+
+Checked in xemu (`make test_extensions`, 2026-11-18), two boots of the relaunch test (§5):
+- The test title relaunching itself as `media\second.xbe`, the same XBE: the menu at the cold boot only, where the pad chooses the second trainer and
+  switches it and its cheat 1 on; the log line above for the relaunch; the trainer applied at both runs, mark 0xC0DE0002 at the last exit.
+- `media\second.xbe` with its timestamp changed (`boot_test.py --other-build`): the menu at the cold boot (START) and again at the relaunch, where the pad
+  chooses; no "same build" line; the trainer applied once.
+
 ### 7.6 Tests
 - Host: the index line of every pack trainer (title IDs, build timestamp or `any`, plain and XOR-encoded checks) against `third_party/xbox_trainers/index.csv`;
   the choice of §7.4 for a title with several builds.
 - xemu (`make test_extensions`): a second test trainer for another build of the test title is ignored, the one for its build is used; a new `.etm` copied to
-  the disk gets its index line and section on the menu's next run; the test title restarting itself shows no second menu; two trainers for the test title's
-  build show the selector, RIGHT then Start Game runs the second one and the ini names it; with only trainers for another build, no menu and the log line.
+  the disk gets its index line and section on the menu's next run; the test title restarting itself shows no second menu (built, §7.5b); two trainers
+  for the test title's build show the selector, RIGHT then Start Game runs the second one and the ini names it; with only trainers for another build, no
+  menu and the log line.
 - Console: Halo 2 (the +13 and its variants for other builds), a game with a title update.
 

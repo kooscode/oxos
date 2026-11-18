@@ -457,7 +457,9 @@ extensions: $(NXDK_READY)
 # Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions), the SDK's examples and the shipped extensions, built with the SDK as
 # it ships (build/sdk/oxos_sdk/), and an oxos_extensions.ini on the test disk; the relaunch's three launches must keep their state pages, run their hooks,
 # events, RunLoops and Unloads (and log a slow RunLoop in C:\OXOS\log\extensions.log), and leave out the ones that fail, are refused or are not listed. The
-# SDK's import definitions are brought up to date with exports.tsv first (sdk/src/oxoskrnl.def, committed with it when they change).
+# SDK's import definitions are brought up to date with exports.tsv first (sdk/src/oxoskrnl.def, committed with it when they change). It boots twice: the
+# relaunch (media\second.xbe) as the same build of the test title, which gets no second trainer menu, then as another build (--other-build), which gets one
+# (spec/oxos_internal/37 §7.5b).
 TEST_EXTENSIONS_DIR := $(abspath $(ROOT)/build/tests/extensions)
 test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
@@ -469,9 +471,11 @@ test_extensions: $(TEST_TITLE).xbe $(HDD_FETCH)
 	cp $(ROOT)/build/sdk/examples/*/*.xos $(TEST_EXTENSIONS_DIR)/
 	$(MAKE) extensions
 	cp $(SHIPPED_EXTENSIONS_DIR)/*/*.xos $(SHIPPED_EXTENSIONS_DIR)/*/*.xbe $(TEST_EXTENSIONS_DIR)/
-	python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
-	    --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
-	    --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR)
+	for build in "" --other-build; do \
+	    python3 -I $(ROOT)/tests/boot_test.py --bios $(RELEASE_BUILD)/bios.bin $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) \
+	        --map $(RELEASE_BUILD)/oxoskrnl.map --hdd $(HDD_IMAGE) --title $(TEST_TITLE).xbe \
+	        --title-map $(TEST_TITLE).map --relaunch --boot-wait 1 --memory 64 --extensions $(TEST_EXTENSIONS_DIR) $$build || exit 1; \
+	done
 
 # Video encoder phase: the encoder tables must be what tools/gen_av_tables.py makes from the specs (spec/stock/18-20); then the release build on each encoder
 # xemu can present (Conexant, Focus, Xcalibur): the bus probe finds it, XboxHardwareInfo reports it, and the dashboard's mode set programs it (Conexant and

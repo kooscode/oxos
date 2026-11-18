@@ -530,7 +530,7 @@ TRAINERS_INI_AFTER = ("; boot_test.py --extensions\r\n[584B0001]\r\ntitle = OXOS
                       "\r\n; its chosen trainer deleted\r\n[584B00FE]\r\ntitle = Chosen again\r\ntrainer = xktest_two.etm\r\ntrainer_enabled = no\r\n"
                       "1. Write the mark = no\r\n2. Unused = no\r\ntrainer 2 = xktest_two.etm | build any\r\n")
 TRAINER_MENU_PATH = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_trainers.xbe"
-# At the relaunch's menu: right to the second trainer, down to the trainer's switch and on, down to cheat 1 and on, start the game.
+# At the menu where the trainer is chosen: right to the second trainer, down to the trainer's switch and on, down to cheat 1 and on, start the title.
 TRAINER_MENU_KEYS = (("HATX", 1), ("HATY", 1), ("A", 1), ("HATY", 1), ("A", 1), ("START", 1))
 
 
@@ -589,8 +589,9 @@ def write_extensions(hdd_copy, folder, title_map=None):
     w.makedirs("OXOS\\extensions")
     w.write_file("OXOS\\oxos_extensions.ini", EXTENSIONS_INI.encode())
     # Universal Trainers for the test title (0x584B0001): its section has the first trainer set, off, and its cheat 1 on (off in the trainer file). The
-    # trainer menu (oxos_trainers.xbe) comes up at the cold boot (its scan adds xktest_new.etm) and at the relaunch, where boot_test picks the second trainer
-    # and switches it and its cheat 1 on (TRAINER_MENU_KEYS); extension_test.xos reads the mark the trainer writes (its settings trainer_mark, trainer_title).
+    # trainer menu (oxos_trainers.xbe) comes up at the cold boot (its scan adds xktest_new.etm), and again at the relaunch when media\second.xbe is another
+    # build (--other-build); at the last menu boot_test picks the second trainer and switches it and its cheat 1 on (TRAINER_MENU_KEYS). extension_test.xos
+    # reads the mark the trainer writes (its settings trainer_mark, trainer_title).
     mark = map_symbols(title_map)["_XkTitleTrainerMark"] if title_map else 0
     w.makedirs("OXOS\\trainers")
     w.write_file("OXOS\\trainers\\xktest.etm", make_test_trainer(0x584B0001, mark))
@@ -633,11 +634,12 @@ def extension_loaded_titles(mon):
     return min(word(pages[0] + 4 * 8), word(pages[2] + 4 * 2))
 
 
-def extension_checks(mon, launches, hdd):
+def extension_checks(mon, launches, hdd, other_build=False):
     """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
     plain_c.c, the SDK's examples example_run_loop, example_kernel_hook and example_title_event, slow_loop.cpp) after `launches` launches: the cold boot's
     title and each quick reboot's
-    (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks)."""
+    (spec/oxos_internal/34 §9.3). The emulator is paused at the last launch (title_checks). other_build: the relaunch (media\\second.xbe) is another build
+    of the test title, so the trainer menu comes again for it (spec/oxos_internal/37 §7.5b)."""
     def words(address, n):
         out = mon.hmp(f"x/{n}wx {address:#x}")
         return [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:n]
@@ -657,6 +659,11 @@ def extension_checks(mon, launches, hdd):
     hook_start = "[example_kernel_hook] Starting extension example_kernel_hook version 1.0.0."
     hook_end = "[example_kernel_hook] Terminating extension example_kernel_hook version 1.0.0."
     hook_counts = [bool(re.fullmatch(r"\[example_kernel_hook\] NtOpenFile called [1-9]\d* times\.", line)) for line in hook_lines[1::3]]
+    # Universal Trainers at the relaunch: the same build gets no second menu (the chosen trainer runs again), another build its own menu (spec 37 §7.5b).
+    same_build = [line for line in lines if re.fullmatch(r"\[oxos_trainers\] 584B0001: the title launches the same build again \([0-9A-F]{8}\): no menu "
+                                                         r"\(\\Device\\CdRom0\\media\\second\.xbe\)\.", line)]
+    menus = (" and again at the relaunch, another build of the title, which chose the second trainer and switched it on in oxos_trainers.ini" if other_build
+             else ", which chose the second trainer and switched it on in oxos_trainers.ini; no menu at the relaunch, the same build, where it ran again")
     if not count:
         return {"extensions loaded (extensions::LoadedExtensions)": False}
     print(f"  (slow_loop: {s[1]} Loads, {s[2]} slow calls of {s[3]}; extensions.log: {len(lines) - 1} lines, {[l for l in lines if l.startswith('extension ')]})")
@@ -692,11 +699,12 @@ def extension_checks(mon, launches, hdd):
         "settings from the extension's own extension_test.ini, which win over its oxos_extensions.ini section": x[15] == 1,
         f"data: oxos_ini_section reads one section of a 28 KB extension_test.ini, keys with spaces; a missing section (step {x[16]}; 1 = all)": x[16] == 1,
         f"Universal Trainers (oxos_trainers.xos): the trainer menu first at the cold boot's disc (its scan adding the trainer new on the disk and removing "
-        f"the deleted one's lines) and at the relaunch, which chose the second trainer and switched it on in oxos_trainers.ini; that trainer then ran "
-        f"with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})": x[17] == 0xC0DE0002 and
+        f"the deleted one's lines){menus}; that trainer then ran with its cheat 1 on (mark {x[17]:#x} at the test title's last exit, of {x[18]})":
+            x[17] == 0xC0DE0002 and
             x[18] == 2 and "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\default.xbe)." in lines and
-            "[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\media\\second.xbe)." in lines and
-            lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest_two.etm applied, 1 of 2 cheats on.") == 1 and
+            ("[oxos_trainers] 584B0001: the trainer menu first (\\Device\\CdRom0\\media\\second.xbe)." in lines) == other_build and
+            len(same_build) == (0 if other_build else 1) and
+            lines.count("[oxos_trainers] OXOS kernel test title: trainer xktest_two.etm applied, 1 of 2 cheats on.") == (1 if other_build else 2) and
             ini == TRAINERS_INI_AFTER.encode(),
         "example_title_event: its title's greeting from the data section of its own ini":
             '[example_title_event] "OXOS kernel test title": Hello from the data section.' in lines,
@@ -726,7 +734,7 @@ def kept_cache_format_checks(mon, title_map):
             serial == 0x12345678 and spc == 128}
 
 
-def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pad=None):
+def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pad=None, other_build=False):
     # reboots: quick reboots before the title's first run (the ISO launcher's launch). With relaunch the console does not stop at the third launch: the
     # dashboard starts the test disc again, and the cycle repeats. So the checks pause the emulator for each reading: once the title's results are complete, and
     # at the third launch's dashboard, where it stays paused for the checks after this one (RAM, extensions).
@@ -738,10 +746,16 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
         if mon.read("titles::TitleLaunched"):
             break
         time.sleep(0.25)
-    # With the extensions, the trainer menu comes up in place of the disc at the cold boot (START: the title as it is set) and of the relaunch (the trainer
-    # switched on): two more quick reboots, both before the second run. pad drives it.
-    menu = 2 if pad else 0
-    menu_shown = pad and use_trainer_menu(mon, pad, 0, (("START", 1),)) and use_trainer_menu(mon, pad, 2, TRAINER_MENU_KEYS)
+    # With the extensions, the trainer menu comes up in place of the disc at the cold boot. The relaunch (media\second.xbe) gets a menu of its own only when
+    # it is another build of the title (other_build); the same build gets none. Each menu is one more quick reboot before the second run. pad drives them:
+    # the trainer chosen and switched on at the last menu (TRAINER_MENU_KEYS), START (the title as it is set) at the cold boot's when another follows.
+    menu = (2 if other_build else 1) if pad else 0
+    if not pad:
+        menu_shown = False
+    elif other_build:
+        menu_shown = use_trainer_menu(mon, pad, 0, (("START", 1),)) and use_trainer_menu(mon, pad, 2, TRAINER_MENU_KEYS)
+    else:
+        menu_shown = use_trainer_menu(mon, pad, 0, TRAINER_MENU_KEYS)
     for i in range(160):  # includes the quick reboot into media\second.xbe
         v = mon.hmp(f"x/1wx {base:#x}")
         if os.environ.get("XK_DEBUG"):
@@ -800,8 +814,9 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
             "\\??\\D: -> launch directory": words[26] == 1,
         }
         if pad:
-            checks["the trainer menu (oxos_trainers.xbe) in place of the disc at the cold boot and of the relaunch; the second run got the launch page as the "
-                   "first run wrote it"] = bool(menu_shown)
+            menus = "at the cold boot and of the relaunch (another build)" if other_build else "at the cold boot"
+            checks[f"the trainer menu (oxos_trainers.xbe) in place of the disc {menus}; the second run got the launch page as the first run wrote it"] = \
+                bool(menu_shown)
     else:
         checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
     if TITLE_PATCHES and not relaunch:  # after a relaunch the dashboard runs: the title's memory is gone
@@ -1401,6 +1416,8 @@ def main():
                     help="a second boot of test_exfat's kept disk: X:'s format from the first boot, as the title reads it after a cold boot")
     ap.add_argument("--extensions", metavar="DIR", help="with --relaunch: the test extensions built in DIR "
                     "(tests/extensions) and an oxos_extensions.ini on the test disk (spec/oxos_internal/34 §9.3)")
+    ap.add_argument("--other-build", action="store_true", help="with --relaunch: the disc's media\\second.xbe is another build of the test title (its "
+                    "XBE timestamp changed); with --extensions the trainer menu comes again at the relaunch")
     ap.add_argument("--redirect", action="store_true", help="--relaunch through C:\\OXOS\\oxos_settings.ini [launch_redirect]: "
                     "the relaunch must start the disc's redirected\\second.xbe (spec/oxos_internal/33 §6)")
     ap.add_argument("--hdd", help="qcow2 HDD image; a temporary copy is attached (the original is never written)")
@@ -1431,7 +1448,7 @@ def main():
         if a.udf:
             mkudf.build(dvd)
         else:
-            mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch, a.redirect)
+            mkxiso.build(dvd, open(a.title, "rb").read() if a.title else None, a.relaunch, a.redirect, a.other_build)
     if a.blank_hdd:
         subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", hdd_copy, f"{a.blank_hdd}G"], check=True)
         if a.blank_marker is not None or a.foreign:
@@ -1523,10 +1540,12 @@ def main():
         elif a.kept_cache_format:
             results = {"exFAT cache partitions": kept_cache_format_checks(mon, a.title_map)}
         elif a.relaunch:
-            results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions), pad=pad if a.extensions else None),
+            results = {"M5d-2": title_checks(mon, a.title_map, True, extensions=bool(a.extensions), pad=pad if a.extensions else None,
+                                             other_build=a.other_build),
                        "RAM": ram_checks(mon, a.memory)}
             if a.extensions:
-                results["extensions"] = extension_checks(mon, 5, hdd_copy)  # with the trainer menu's two launches
+                # with the trainer menu's launches: at the cold boot, and at the relaunch when it is another build
+                results["extensions"] = extension_checks(mon, 5 if a.other_build else 4, hdd_copy, a.other_build)
         elif a.iso_launch:
             results = {f"disc image ({a.iso_kind})": iso_checks(mon, a)}
         else:

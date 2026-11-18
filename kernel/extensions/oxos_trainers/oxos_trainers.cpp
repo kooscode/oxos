@@ -223,17 +223,23 @@ static void TitleLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
 constexpr char MENU_PATH[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\extensions\\oxos_trainers.xbe";
 
 constexpr ULONG XBE_BASE_ADDRESS = 0x104; // the image header: where the XBE is loaded
+constexpr ULONG XBE_TIMESTAMP = 0x114;    // the image header's build timestamp: which build of the title this is (a trainer is made for one)
 constexpr ULONG XBE_CERTIFICATE = 0x118;  // the certificate's address; the title ID is at +8 in it
 constexpr ULONG XBE_HEADER_BYTES = 0x170; // the header up to the library versions' address
 
-// The state page (oxos_state): the launch that started the menu in place of a game, and that game. The menu starts it at the next launch, which goes through.
+// The state page (oxos_state): the launch that started the menu in place of a title, and that title. The menu starts it at the next launch, which goes
+// through; the launches of the same build straight after it get no second menu.
 struct MENU_STATE {
-    ULONG MenuLaunch; // oxos_launch_number() of the menu's launch; 0 = none
-    char Game[360];   // the game's path, as the title-loading event had it
+    ULONG MenuLaunch;    // oxos_launch_number() of the menu's launch; 0 = none
+    char TitlePath[360]; // the title's path, as the title-loading event had it
+    ULONG TitleId;       // the title's ID
+    ULONG TitleBuild;    // the title's build (its XBE timestamp)
+    ULONG TitleLaunch;   // the launch of the title the menu started, or of its latest launch of the same build straight after; 0 = none
 };
 
-// The title ID of the XBE at Path, read from the file before it is loaded: TRUE. FALSE when it cannot be read, or for an nxdk program (TitleBuiltWithNXDK).
-static BOOLEAN ReadTitleId(const char *Path, ULONG &TitleId) {
+// The title ID and build (XBE timestamp) of the XBE at Path, read from the file before it is loaded: TRUE. FALSE when it cannot be read, or for an nxdk
+// program (TitleBuiltWithNXDK).
+static BOOLEAN ReadTitleIdAndBuild(const char *Path, ULONG &TitleId, ULONG &Build) {
     HANDLE file;
     if (!NT_SUCCESS(oxos_file_open(Path, GENERIC_READ, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE, &file)))
         return FALSE;
@@ -256,6 +262,7 @@ static BOOLEAN ReadTitleId(const char *Path, ULONG &TitleId) {
     }
     NtClose(file);
     TitleId = certificate[2];
+    Build = *(const ULONG *)(header + XBE_TIMESTAMP);
     return read && !nxdk;
 }
 
@@ -264,20 +271,33 @@ static void TitleLoading(const OXOS_TITLE_LOADING *Title, void *UserData) {
     auto state = (MENU_STATE *)oxos_state();
     ULONG launch = oxos_launch_number();
     if (state->MenuLaunch && launch != state->MenuLaunch) {
-        BOOLEAN fromMenu = launch == state->MenuLaunch + 1 && strcasecmp(Title->Path, state->Game) == 0;
+        BOOLEAN fromMenu = launch == state->MenuLaunch + 1 && strcasecmp(Title->Path, state->TitlePath) == 0;
         state->MenuLaunch = 0;
-        if (fromMenu)
+        if (fromMenu) {
+            state->TitleLaunch = launch;
             return;
+        }
     }
-    if (Title->Size < sizeof(OXOS_TITLE_LOADING) || !Title->Target || strlen(Title->Path) >= sizeof(state->Game) || !oxos_file_exists(MENU_PATH))
+    // Only the very next launch can be the title launching itself again.
+    BOOLEAN afterTitle = state->TitleLaunch && launch == state->TitleLaunch + 1;
+    state->TitleLaunch = 0;
+    if (Title->Size < sizeof(OXOS_TITLE_LOADING) || !Title->Target || strlen(Title->Path) >= sizeof(state->TitlePath) || !oxos_file_exists(MENU_PATH))
         return;
-    ULONG titleId;
+    ULONG titleId, build;
     OXOS_INI_KEY *keys;
     uint32_t count;
     const char *file;
-    if (!ReadTitleId(Title->Path, titleId) || !ReadSection(titleId, keys, count, file))
+    if (!ReadTitleIdAndBuild(Title->Path, titleId, build) || !ReadSection(titleId, keys, count, file))
         return;
     oxos_ini_free(keys);
+    // The title the menu started, launching the same build again straight away (it restarts itself at start-up, or goes on to another XBE of that build):
+    // no second menu; the title-loaded event applies the chosen trainer again. Another build (a title update, another XBE built apart) gets the menu, which
+    // shows the trainers made for that build (spec/oxos_internal/37 §7.5b).
+    if (afterTitle && titleId == state->TitleId && build == state->TitleBuild) {
+        state->TitleLaunch = launch;
+        oxos_log("%08lX: the title launches the same build again (%08lX): no menu (%s).", titleId, build, Title->Path);
+        return;
+    }
     if (StartsItsUpdate(Title->Path, titleId)) {
         oxos_log("%08lX: the title update in E:\\TDATA\\%08lx\\$u starts next: the trainer menu comes with it (%s).", titleId, titleId, Title->Path);
         return;
@@ -285,7 +305,9 @@ static void TitleLoading(const OXOS_TITLE_LOADING *Title, void *UserData) {
     if (XBMCHookInstalled() || !oxos_title_redirect(Title, MENU_PATH))
         return;
     state->MenuLaunch = launch;
-    strlcpy(state->Game, Title->Path, sizeof(state->Game));
+    state->TitleId = titleId;
+    state->TitleBuild = build;
+    strlcpy(state->TitlePath, Title->Path, sizeof(state->TitlePath));
     oxos_log("%08lX: the trainer menu first (%s).", titleId, Title->Path);
 }
 

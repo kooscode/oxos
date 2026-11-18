@@ -18,11 +18,20 @@ TREE = {
 }
 
 
-def build(path, default_xbe=None, relaunch=False, redirect=False):
+# The XBE image header's build timestamp (the trainer menu and Universal Trainers tell builds of a title apart by it).
+XBE_TIMESTAMP = 0x114
+
+
+def build(path, default_xbe=None, relaunch=False, redirect=False, other_build=False):
     tree = dict(TREE)
     if default_xbe is not None:
         tree["default.xbe"] = default_xbe
-        tree["media"] = dict(tree["media"], **{"second.xbe": default_xbe})
+        second = default_xbe
+        if other_build:  # media\\second.xbe as another build of the title: the same XBE with another timestamp
+            second = bytearray(default_xbe)
+            struct.pack_into("<I", second, XBE_TIMESTAMP, struct.unpack_from("<I", second, XBE_TIMESTAMP)[0] + 1)
+            second = bytes(second)
+        tree["media"] = dict(tree["media"], **{"second.xbe": second})
     if relaunch:  # the kernel test title relaunches itself as media\\second.xbe
         tree["relaunch.txt"] = b"quick reboot"
     if redirect:  # boot_test.py --redirect sends that relaunch here (spec/oxos_internal/33 §6)
