@@ -1,6 +1,6 @@
-// The hard disk's layout (spec/evox/03, spec/cerbios/03, spec/oxos_internal/05_exfat_storage_spec.md): retail FATX partitions (the fixed table, the automatic
-// F:/G: of a larger disk or a PARTINFO table, both from Paul Bartholomew's (oz_paulb) LBA48 patch, 2003, GPL), or an exFAT volume (GPT, MBR or the whole disk).
-// Read once, at the first open of a partition or the power-cycle count.
+// The hard disk's layout (spec/evox/03, spec/oxos_internal/05_exfat_storage_spec.md, spec/oxos_internal/45): retail FATX partitions (the fixed table, the
+// automatic F:/G: of a larger disk or a PARTINFO table, both from Paul Bartholomew's (oz_paulb) LBA48 patch, 2003, GPL), or an exFAT volume (GPT, MBR or the
+// whole disk). Read once, at the first open of a partition or the power-cycle count.
 #include <storage/storage.h>
 #include <user_interface/user_interface.h>
 #include <diagnostics/diagnostics.h>
@@ -92,9 +92,9 @@ static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLON
     return found;
 }
 
-// FATX partitions without a table (oz_paulb's F:/G: split, spec/evox/03 §2, with Cerbios's cap and minimum, spec/cerbios/03 §3): the retail five; on a disk
-// larger than the retail 8 GB one, F: from E:'s end up to sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end, each capped at 0x74000000
-// sectors and used only when larger than 0x200000 sectors (1 GiB).
+// FATX partitions without a table (oz_paulb's F:/G: split, spec/evox/03 §2; the cap and minimum as observed, spec/oxos_internal/45 §5): the retail five; on a
+// disk larger than the retail 8 GB one, F: from E:'s end up to sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end, each capped at
+// 0x74000000 sectors and used only when larger than 0x200000 sectors (1 GiB).
 static void DiskDefaultPartitions() {
     constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF, CAP = 0x74000000, MIN = 0x200000;
     DiskPartitions[1] = {0x55F400, 0x9896B0}; // E:
@@ -116,8 +116,8 @@ static void DiskDefaultPartitions() {
     place(7, fEnd, n);
 }
 
-// A PARTINFO table (oz_paulb's format, spec/evox/03 §3) at sector 0 (oz_paulb's place), 8 sectors before the end or the last sector (Cerbios's places,
-// spec/cerbios/03 §2) replaces the whole table.
+// A PARTINFO table (oz_paulb's format, spec/evox/03 §3) at sector 0 (oz_paulb's place), 8 sectors before the end or the last sector (the places
+// observed, spec/oxos_internal/45 §5) replaces the whole table.
 static bool DiskReadPartitionTable(PUCHAR Sector) {
     ULONGLONG n = hardware::ide::DiskLengthInSectors;
     const ULONGLONG places[] = {0, n - 8, n - 1};

@@ -32,7 +32,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
   starting sector added to each request; the kernel already carries 64-bit offsets (NtReadFile/NtWriteFile byte offsets, file sizes) and sector sizes are powers
   of two, so there are shifts, not divisions. Disks above 128 GiB need 48-bit LBA commands (spec 04), whatever the layout.
 - **Recognition:** at boot the IDE driver reads sector 0. Order:
-  1. a retail or PARTINFO FATX disk (stock spec 04 table, or oz_paulb's `****PARTINFO****` in sector 0 / near the end, EvoX spec 03 §3, Cerbios spec 03 §2) →
+  1. a retail or PARTINFO FATX disk (stock spec 04 table, or oz_paulb's `****PARTINFO****` in sector 0 / near the end, EvoX spec 03 §3) →
      today's FATX path, unchanged;
   2. GPT (protective MBR) or MBR with an exFAT OXOS volume → the exFAT layout below;
   2a. no partition table, exFAT on the whole disk (sector 0 says `EXFAT   `, as a PC formats a bare disk) → the

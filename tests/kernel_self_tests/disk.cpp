@@ -125,7 +125,7 @@ static void NTAPI IdexControllerThread(PVOID) {
                 KiTestIdexPartitionSig[i][w] = ((PULONG)buf)[w];
         }
     }
-    // The first partition number the disk's layout does not have (6 on the retail 8 GB disk; a larger one also has F: and G:, spec/cerbios/03 §3), and a
+    // The first partition number the disk's layout does not have (6 on the retail 8 GB disk; a larger one also has F: and G:, spec/oxos_internal/45 §5), and a
     // path under it.
     ULONG absent = 6;
     while (absent < 15 && storage::DiskPartitions[absent].Length)

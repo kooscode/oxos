@@ -71,8 +71,8 @@ class FATX:
         return None if e is None else self.read_chain(e[2], e[3])
 
 
-# F: on a disk without a partition table (kernel/src/storage/disk_layout.cpp, spec/cerbios/03 §3): from the retail partitions' end up to sector 0x0FFFFFFF (or
-# the disk's end), at most 0x74000000 sectors.
+# F: on a disk without a partition table (kernel/src/storage/disk_layout.cpp, spec/oxos_internal/45 §5): from the retail partitions' end up to sector 0x0FFFFFFF
+# (or the disk's end), at most 0x74000000 sectors.
 def f_partition(disk_bytes):
     start, end = 0xEE8AB0, min(disk_bytes // 512, 0x0FFFFFFF)
     return start, min(end - start, 0x74000000)

@@ -38,7 +38,7 @@ a blank disk and makes the folders at boot (spec 30).
    preparing a disk on a PC, and an xemu disk image ready to use.
 
 ## Order with other work
-After large-disk support (Cerbios spec 03) or instead of most of it: an exFAT disk needs 48-bit LBA for disks over 128 GiB, but no extended partition tables.
+After large-disk support or instead of most of it: an exFAT disk needs 48-bit LBA for disks over 128 GiB, but no extended partition tables.
 128 MB RAM is independent and can come first (done 2026-11-10, stock spec 09 §10).
 
 ## Risks

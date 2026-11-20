@@ -1,4 +1,4 @@
-// Storage: what sits on the IDE drives (hardware/ide/): the hard disk's layout and partitions (disk_layout.cpp, spec/evox/03, spec/cerbios/03,
+// Storage: what sits on the IDE drives (hardware/ide/): the hard disk's layout and partitions (disk_layout.cpp, spec/evox/03, spec/oxos_internal/45,
 // spec/oxos_internal/05), formatting it (disk_format.cpp) and virtual discs (virtual_disc.cpp, spec/oxos_internal/16).
 #pragma once
 #include <io/io.h>
@@ -10,14 +10,14 @@ XBAPI NTSTATUS NTAPI OXOSFormatDisk(PCSZ KeepPath);
 XBAPI NTSTATUS NTAPI OXOSDeleteAllPartitions(ULONG CountdownSeconds);
 
 // FATX disk partitions 1-14 (sectors): the retail five, the automatic F: and G: of a larger disk, or the disk's own PARTINFO table (oz_paulb's, spec/evox/03;
-// spec/cerbios/03 §2-§3). Index = partition number.
+// spec/oxos_internal/45 §5). Index = partition number.
 struct IDE_PARTITION {
     ULONGLONG Start, Length;
 };
 
 namespace xk::storage {
 
-// The layout (disk_layout.cpp): the partitions the disk devices are created over (spec/cerbios/03 §2-§3).
+// The layout (disk_layout.cpp): the partitions the disk devices are created over (spec/oxos_internal/45 §5).
 extern IDE_PARTITION DiskPartitions[15];
 extern BOOLEAN DiskReformatted; // formatted or partitions deleted since boot: only the whole-disk device writes
 void InitDiskLayout(); // disk start-up: the whole-disk device the layout is read through
