@@ -6,14 +6,13 @@ OXOS addition, implemented 2026-11-03.
   before the title starts).
 - **Tests:** boot self-tests `KiTestDvdSortKeyOk` (tests/kernel_self_tests/dvd_drive.cpp) and `KiTestFATXTitleFolderOk` (tests/kernel_self_tests/fatx.cpp), on
   FATX and on exFAT.
-- **Background:** spec/cerbios/13 §7, where Cerbios patches these games' code. Here the kernel gives the answers instead, so the games need no patch.
 
 Games link their system library into their own executable, and some of its routines depend on details of the stock kernel's file systems. Where a game's
 behaviour depends on what a kernel call returns, OXOS returns what the game expects.
 
 ## 1. The physical sort key
-Games call the library routine XGetFilePhysicalSortKey(handle) to learn where a file lies on its disk, for example to order reads. A game in Cerbios's patch
-list (spec/cerbios/13 §7.9) uses it to find its archive on the disc. The routine:
+Games call the library routine XGetFilePhysicalSortKey(handle) to learn where a file lies on its disk, for example to order reads. A title (434D0050) uses it to
+find its archive on the disc. The routine:
 1. asks the file's volume for FileFsAttributeInformation (IoQueryVolumeInformation);
 2. if the name is **"FATX"** (name length 4), returns the dword at **FsContext + 0x1C**, the file's first cluster. It returns 0 if bit 0 of the first byte at
    FsContext is set;
@@ -43,21 +42,25 @@ Some games ask the sector size of `D:\` and expect a DVD's 2048 bytes:
 - **Why it is safe:** a title that aligns unbuffered reads to the reported size aligns them to 2048, which is also a multiple of 512.
 
 ## 3. Title patches from a file
-Some problems are in a game's own code, and no kernel answer can fix them (spec/cerbios/13 §7: a race in an intro, a CPUID wrapper, a display mode). For those
-the kernel writes patches into the loaded game, taken from a file, so any title can be fixed without a new kernel.
-- **Code:** the title patcher, a kernel module (`kernel/modules/title_patcher.cpp`, spec/oxos_internal/43, since 2026-11-17): it reads the file at each
-  title load and builds the title's records with the parser (`shared/ini_file/title_patcher_ini.cpp`, `shared/ini_file/title_patcher_ini.h`) on the ini line
-  reader it shares with the launch redirects (`shared/ini_file/ini_file.cpp`, spec/oxos_internal/33); the resident kernel keeps the records and writes them
-  into each section as it is read (`kernel/src/titles/title_loader.cpp`: `titles::LoadPatches` calls the module, `titles::ApplyPatches`).
+Patching a game's code in memory is decades old: on PCs it goes back to DOS, where memory-resident (TSR) patchers and trainers changed games while they ran, and
+on the Xbox, region and video-mode fixes and the "HDD fixes" that let a disc game run from a hard disk have done it. Most problems OXOS meets are better fixed
+in the kernel, by giving the game the answer it expects (§1, §2). Some are in the game's own code, and no kernel answer can fix them. For those the kernel has a
+universal title patcher: as a title's sections are loaded, it writes byte patches into them, taken from a text file. Any title can be fixed without a new
+kernel, and a patch is written only into the exact code it was made for (§3.1).
+
+The patcher knows nothing about particular titles. Which titles need patches, and what the patches are, is worked out separately, title by title; the
+results are written into the file, and the patcher applies them.
+
+- **Code:** the title patcher (`kernel/modules/title_patcher.cpp`): it reads the file at each title load and builds the title's records with the parser
+  (`shared/ini_file/title_patcher_ini.cpp`, `shared/ini_file/title_patcher_ini.h`) on the shared ini line reader (`shared/ini_file/ini_file.cpp`); the
+  resident kernel keeps the records and writes them into each section as it is read (`kernel/src/titles/title_loader.cpp`: `titles::LoadPatches` builds
+  them, `titles::ApplyPatches` writes them).
 - **Tests:** host unit tests `tests/unit/test_title_patcher_ini.cpp` (the format, and the shipped file parses without an error); boot self-test "title patches"
   (boot_test.py puts a patch file for the test title on the test disk: a matching section changes a variable, a section for another certificate version leaves
   another one alone, a patch whose current bytes are not there leaves a third one alone, and a patch below the image is skipped).
-- **Shipped file:** `kernel/settings/oxos_title_patches.ini`, with the Cerbios fixes (spec/cerbios/13 §7), including the two sector-size fixes (which the
-  kernel also covers, §2) and the archive-position fix of spec/cerbios/13 §7.9 (§1). Its current bytes: at 0x1C930D `8B F0 56 E8 00 F0 03 00` (mov esi, eax;
-  push esi; call the sort-key routine at 0x208315, from the code around it); at 0x20831B the library routine's `56 8D 45 08 50 FF 35 30 C7 34 00 83 CE FF` (the
-  same routine of another title of that library version, with this game's import slot for IoFileObjectType, 0x34C730). The other three are not known and are
-  blind patches under a `match =` line.
-- **OXOS fixes in the shipped file** (marked in it as not from Cerbios): the same title's Xbox Live sign-in picks a security gateway at random from the list the
+- **Shipped file:** `kernel/settings/oxos_title_patches.ini`, which the release copies to `C:\OXOS\`: each entry in the section of the certificate version
+  it was made for, with the retail bytes before it.
+- **OXOS fixes in the shipped file** (marked "OXOS fix" in it): title 434D0050's Xbox Live sign-in picks a security gateway at random from the list the
   service returns, `random % count`, with no check for an empty list (0x213B46, `div ecx`): with no gateways returned it stops with a divide error (bug check
   0x1E, 0xC0000094). The patch at 0x213AD6 retargets the `jbe` that is taken only for a count of 0 (`76 4B` > `76 94`) to the routine's own failure path (state
   3, as when the lookup fails), so sign-in fails and the title carries on. Checked on the Modxo console: the crash reproduced with the trace kernel, and with
@@ -69,16 +72,16 @@ the kernel writes patches into the loaded game, taken from a file, so any title 
 
 ```ini
 ; a comment (also after a section header or a patch)
-[4D4A000C]            ; every version of title 4D4A000C
+[56550013]            ; every version of title 56550013
 name = what it fixes  ; shown in the serial log
-patch = 506D7: E8 D4 64 00 > EB 08 64 00
+patch = 1FC80: 55 8B EC 83 > C3 8B EC 83
 
 [56550039/3]          ; only the release whose certificate version is 3 (decimal, or 0x hex)
-patch = 209A8E: 558BEC83EC34EB43 > B8 00 08 00 00 C2 04 00
+patch = 209A8E: 558BEC83EC34FF75 > B8 00 08 00 00 C2 04 00
 
-[434D0050]
-match = 1C930D: 8B F0 56 E8     ; when these bytes are there, the blind patches below are written
-patch = ECD8B: > 90 90 90 90 90 90 90 90
+[12345678]            ; an example: when the match bytes are there, the blind patch below is written
+match = 1000: 55 8B EC 83
+patch = 1010: > 90 90
 ```
 
 - **Sections:** `[TITLEID]` is the certificate's title ID (header +0x118 → +8), in hex. `[TITLEID/VERSION]` also needs the certificate version (+0xAC). Every
@@ -91,11 +94,10 @@ patch = ECD8B: > 90 90 90 90 90 90 90 90
 - **Why the current bytes:** a title ID and a version do not identify the game's code. Launchers that start a game from a disc image carry the game's
   certificate (the OXOS ISO launcher does, so dashboards show the game), and any header field can be copied. The code itself cannot: a patch is written only
   into the code it was made for. Four bytes or more is the rule for the shipped file (a one-byte check matches by chance too often).
-- **Match lines (blind patches):** `match = ADDRESS: CURRENT_BYTES`, for a section where some patches cannot give their current bytes (spec/cerbios/13 §7.9:
-  Cerbios checks one place, then writes five; three of the current bytes are not known). When the match line's CURRENT_BYTES are at its address, each blind
-  patch below it in the section, `patch = ADDRESS: > NEW_BYTES`, is written. A blind patch without a `match =` line above it in its section is an error. The
-  match bytes must lie in the same image section as the patch, so both are in memory when it is applied; otherwise the patch is dropped and logged. Patches with
-  CURRENT_BYTES of their own are checked against those, never against the match line.
+- **Match lines (blind patches):** `match = ADDRESS: CURRENT_BYTES`, for a section where some patches cannot give their current bytes. When the match line's
+  CURRENT_BYTES are at its address, each blind patch below it in the section, `patch = ADDRESS: > NEW_BYTES`, is written. A blind patch without a `match =` line
+  above it in its section is an error. The match bytes must lie in the same image section as the patch, so both are in memory when it is applied; otherwise the
+  patch is dropped and logged. Patches with CURRENT_BYTES of their own are checked against those, never against the match line.
 - **No other conditions.** The section's title ID (and version, if given) and the current (or match) bytes decide.
 - **Errors:** a line that cannot be read is skipped and counted. Other keys are ignored, for later additions.
 
@@ -106,8 +108,8 @@ patch = ECD8B: > 90 90 90 90 90 90 90 90
    - No file, or no matching section, means no patches.
 2. **Each time a section is read from the image,** after its digest is computed, each patch that falls inside it is checked: if the NEW_BYTES are already there
    (a copy patched before), it is logged as already there; else if the CURRENT_BYTES (or the section's match bytes) are there, the NEW_BYTES are written;
-   otherwise it is logged and not written. The patches checked against match bytes go first, because another patch of the section may change those bytes (the
-   first patch of spec/cerbios/13 §7.9 is at its match address). This happens
+   otherwise it is logged and not written. The patches checked against match bytes go first, because another patch of the section may change those bytes (a
+   patch may be at its own match address). This happens
    - for the preloaded sections, during the load and before the code sections are made read-only;
    - for the others, when the title loads them (XeLoadSection), again on every reload.
 3. **The serial log** shows the counts (matching sections, patches, lines not understood), each section's `name`, and for every patch: written, already there,

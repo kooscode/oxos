@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <ini_file/title_patcher_ini.h>
@@ -195,10 +196,13 @@ TEST(Patches, ShippedFileParses) {
     EXPECT_EQ(c.Errors, 0u);
     EXPECT_EQ(c.Sections, 1u);
     EXPECT_EQ(c.Patches, 7u);
-    for (uint32_t title : {0x4D4A000Cu, 0x56550013u, 0x4541038Bu, 0x4D530031u, 0x56550041u, 0x48450001u, 0x53430007u,
-                        0x56550039u, 0x45410042u, 0x434D0050u}) {
+    // Each title with the certificate version its patches were observed in (spec/oxos_internal/44 §7).
+    const std::pair<uint32_t, uint32_t> observed[] = {{0x56550013u, 1}, {0x4541038Bu, 3}, {0x4D530031u, 5}, {0x56550041u, 2}, {0x48450001u, 2},
+                                                      {0x53430007u, 2}, {0x56550039u, 3}, {0x45410042u, 3},
+                                                      {0x434D0050u, 1}};
+    for (auto [title, version] : observed) {
         INI_PATCH_COUNTS t;
-        for (auto &p : Parse(text, title, 1, &t, 1 << 16)) {
+        for (auto &p : Parse(text, title, version, &t, 1 << 16)) {
             if (p.Kind == INI_PATCH_BYTES) {
                 EXPECT_GE(p.Original.size(), 4u) << std::hex << title << " " << p.Address << ": check 4 bytes or more";
                 if (!p.Check) { // a patch checked against its section's match line has no bytes of its own
