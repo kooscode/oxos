@@ -279,17 +279,16 @@ static void BlCheckXcodeValues(ULONG Record) {
 }
 
 // --- NV2A memory pad calibration (spec/stock/21 §3): the drive/slew/delay compensation of the memory pads, measured
-// and set before the kernel is decompressed. Two methods, chosen in BlMain as Cerbios chooses them:
-// - NV2A revisions below D3 (consoles 1.0-1.5), the table method (§3.7a), exactly as Cerbios does it: Cerbios's row-set selection, the reference 4627
-//   measurement and arithmetic (all 32-bit, including the clamp of 1/2^20 above the top breakpoint and the zero store described below).
-// - D3 and later (1.6), the EEPROM method (§3.7), exactly as the 5838 2BL does it: the five rows from the EEPROM, the 5838 measurement (two groups per reading,
-//   the steadier kept) and arithmetic (a signed division in the lowest segment, a weight clamped to 1.0 above the top breakpoint, all nine registers written).
-// The table, in Cerbios's layout, is the one the flash header's 0x7C points at (through the 16 MB flash window): breakpoints at bytes 2-11 (the 5838 method's
-// at 0x0E-0x17), row sets at +0x18, +0x77 and +0xD6 (boot/padcal_table.inc, placed by boot/xcodes.S). A table whose breakpoints do not increase (the reference
-// would divide by zero), or an EEPROM that does not answer, leaves the X-codes' values.
+// and set before the kernel is decompressed, as the last retail 2BLs do it: one method per image, as in the retail images.
+// - Consoles 1.0-1.5: the table method of the 5713 2BL (§3.3-3.6): the row set chosen by the board strap bits 18-19, the rows from the flash table.
+// - 1.6 (MCPXREVD5 images): the EEPROM method of the 5838 2BL (§3.7): the five rows from the EEPROM.
+// Both measure and compute alike: four groups of readings (A, B, A, B, the steadier of each pair kept), a signed division in the lowest segment, a weight
+// clamped to 1.0 above the top breakpoint, all nine registers written. The table is the one the flash header's 0x7C points at (through the 16 MB flash
+// window): the 5713 table (breakpoints, three row sets at +0x0C, +0x6B, +0xCA) or, on the 1.6, the 5838 breakpoints only (boot/padcal_table.inc, placed
+// by boot/xcodes.S). A table whose breakpoints do not increase (the reference would divide by zero), or an EEPROM that does not answer, leaves the X-codes'
+// values.
 
 constexpr UCHAR EEPROM_SLAVE = 0xA8;
-constexpr ULONG PAD_ROW = 0x13, PAD_ROWS = 5;
 
 // Four readings of 0x121C, selector First..First+3 in 0x1228, each after a 10 000-tick wait, into R.
 static void BlPadRead4(ULONG First, ULONG *R) {
@@ -300,15 +299,8 @@ static void BlPadRead4(ULONG First, ULONG *R) {
     }
 }
 
-// Four readings of 0x121C, selector First..First+3; their average (4627).
-static ULONG BlPadMeasure(ULONG First) {
-    ULONG r[4];
-    BlPadRead4(First, r);
-    return (r[0] + r[1] + r[2] + r[3]) >> 2;
-}
-
 // Of two groups of four readings, the steadier one's average: the first group when the sum of its absolute differences between neighbours is strictly smaller
-// (5838).
+// (5101-5838).
 static ULONG BlPadSteadier(const ULONG *G1, const ULONG *G2) {
     int d1 = 0, d2 = 0;
     for (int i = 0; i < 3; i++) {
@@ -325,17 +317,12 @@ static ULONG BlPadRound(ULONG x) {
 }
 
 // The row pair and weight for a measurement M against breakpoints B[0], B[2], B[4], B[6], B[8] (every other byte): Hi is weighted by F, Lo by 0x100000 - F.
-// Retail16: the 5838 arithmetic (a signed division in the lowest segment, a weight above 1.0 clamped to 1.0); otherwise the 4627 one (unsigned, such a weight
-// becomes 1/2^20).
-template <bool Retail16>
+// A signed division in the lowest segment, a weight above 1.0 clamped to 1.0 (5101-5838).
 static void BlPadSelect(ULONG M, const volatile UCHAR *B, const volatile UCHAR *Set, const volatile UCHAR **Hi, const volatile UCHAR **Lo, ULONG *F) {
     const volatile UCHAR *row[5] = {Set, Set + 0x13, Set + 0x26, Set + 0x39, Set + 0x4C};
     ULONG b0 = B[0], b1 = B[2], b2 = B[4], b3 = B[6], b4 = B[8], f;
     if (M <= b1) { // the lowest segment: a negative quotient (sign bit set) becomes 0
-        if constexpr (Retail16)
-            f = (ULONG)((int)((M - b0) << 20) / (int)(b1 - b0));
-        else
-            f = ((M - b0) << 20) / (b1 - b0);
+        f = (ULONG)((int)((M - b0) << 20) / (int)(b1 - b0));
         if (f & 0x80000000)
             f = 0;
         *Hi = row[3];
@@ -343,7 +330,7 @@ static void BlPadSelect(ULONG M, const volatile UCHAR *B, const volatile UCHAR *
     } else if (M >= b3) { // the highest segment: a weight above 1.0 is clamped
         f = ((M - b3) << 20) / (b4 - b3);
         if (f > 0x100000)
-            f = Retail16 ? 0x100000 : 1;
+            f = 0x100000;
         *Hi = row[0];
         *Lo = row[1];
     } else if (M < b2) {
@@ -401,19 +388,22 @@ struct BL_PAD_RESULT {
     ULONG Magic; // 'PADC' table method, 'PADE' EEPROM method, 'PADN' when it did not run (no table, no EEPROM)
     ULONG A, B, Strap, Values[9];
 };
-constexpr ULONG PAD_TABLE = 0x43444150, PAD_EEPROM = 0x45444150, PAD_NONE = 0x4E444150; // 'PADC' 'PADE' 'PADN'
+#ifndef MCPXREVD5
+constexpr ULONG PAD_DONE = 0x43444150; // 'PADC': calibrated by the table method
+#else
+constexpr ULONG PAD_DONE = 0x45444150; // 'PADE': calibrated by the EEPROM method
+#endif
+constexpr ULONG PAD_NONE = 0x4E444150; // 'PADN': not calibrated (no table, no EEPROM)
 
 // From the measurements A and B, the rows (Set, 19 bytes each) and the breakpoints (Breaks: A at bytes 0, 2, ..., 8, B at 1, 3, ..., 9): the nine values,
-// written in the write window, and the record. ZeroStore: a register whose value is 0 is not written, the 4627 reference storing that 0 at NV2A offset 0
-// instead (its read-only identification register); the 5838 one writes all nine.
-template <bool Retail16>
-static void BlPadApply(ULONG A, ULONG B, const volatile UCHAR *Breaks, const volatile UCHAR *Set, ULONG Magic, ULONG Strap) {
+// all written in the write window, and the record.
+static void BlPadApply(ULONG A, ULONG B, const volatile UCHAR *Breaks, const volatile UCHAR *Set, ULONG Strap) {
     const volatile UCHAR *hi, *lo;
     ULONG f, o[16];
-    BlPadSelect<Retail16>(A, Breaks, Set, &hi, &lo, &f);
+    BlPadSelect(A, Breaks, Set, &hi, &lo, &f);
     for (int k = 0; k < 16; k++)
         o[k] = BlPadRound(hi[k] * f + lo[k] * (0x100000 - f));
-    BlPadSelect<Retail16>(B, Breaks + 1, Set, &hi, &lo, &f);
+    BlPadSelect(B, Breaks + 1, Set, &hi, &lo, &f);
     ULONG c12 = BlPadRound(lo[0x12] * (0x100000 - f) + hi[0x12] * f);
     ULONG c10 = BlPadRound(hi[0x10] * f + lo[0x10] * (0x100000 - f));
     ULONG c11 = BlPadRound(lo[0x11] * (0x100000 - f) + hi[0x11] * f);
@@ -430,7 +420,7 @@ static void BlPadApply(ULONG A, ULONG B, const volatile UCHAR *Breaks, const vol
                     BlPadNibbles(o[12], o[13]), BlPadNibbles(o[14], o[15]), v1214};
     alignas(32) ULONG pairs[18];
     for (int i = 0; i < 9; i++) {
-        pairs[2 * i] = (Retail16 || val[i]) ? reg[i] : 0;
+        pairs[2 * i] = reg[i];
         pairs[2 * i + 1] = val[i];
     }
     BlWriteWindow(pairs, 9);
@@ -440,40 +430,56 @@ static void BlPadApply(ULONG A, ULONG B, const volatile UCHAR *Breaks, const vol
     result->Strap = Strap;
     for (int i = 0; i < 9; i++)
         result->Values[i] = val[i];
-    result->Magic = Magic;
+    result->Magic = PAD_DONE;
 }
 
-// The table that the flash header's 0x7C points at, or nullptr when its breakpoints from byte First on (five pairs) do not increase.
-static const volatile UCHAR *BlPadTable(ULONG First) {
+// The table that the flash header's 0x7C points at, or nullptr when its breakpoints (five pairs from byte 2) do not increase.
+static const volatile UCHAR *BlPadTable() {
     auto table = (const volatile UCHAR *)(*(volatile ULONG *)0xFF00007C - 0x1000000);
-    for (ULONG i = First + 2; i < First + 10; i++) {
+    for (ULONG i = 2; i < 10; i++) {
         if (table[i] >= table[i + 2])
             return nullptr;
     }
     return table;
 }
 
-// NV2A below D3: the table method.
-[[gnu::noinline]] static void BlPadCalibrate(bool Upgraded) {
+// The measurements A and B: four groups of four readings in the order A, B, A, B, the steadier group of each pair averaged.
+static void BlPadMeasure(ULONG &A, ULONG &B) {
+    ULONG g[4][4];
+    BlNv(0x1220) = 0x000F0F0F;
+    BlPadRead4(0x40004, g[0]);
+    BlPadRead4(0x40000, g[1]);
+    BlPadRead4(0x40004, g[2]);
+    BlPadRead4(0x40000, g[3]);
+    BlNv(0x1220) = 0;
+    A = BlPadSteadier(g[0], g[2]);
+    B = BlPadSteadier(g[1], g[3]);
+}
+
+#ifndef MCPXREVD5
+// Consoles 1.0-1.5: the table method (5713). The retail X-codes turn the board strap bits 19:18 into a field in bits 26:25 that the 2BL reads (spec/stock/21
+// §3.3): 00 gives set 2, both bits set 1, one of them set 3 (a copy of set 1 in every retail table). OXOS's X-codes do not write that field, so the set is
+// chosen from bits 19:18 directly, with the same outcome.
+[[gnu::noinline]] static void BlPadCalibrate() {
     ((volatile BL_PAD_RESULT *)0x2300)->Magic = PAD_NONE;
-    const volatile UCHAR *table = BlPadTable(0);
+    const volatile UCHAR *table = BlPadTable();
     if (!table) {
         BlPost(0x33);
         return;
     }
-    ULONG strap = BlNv(0x101000);
-    auto set = table + (Upgraded ? 0xD6 : (strap & 0xC0000) ? 0x18 : 0x77);
-    BlNv(0x1220) = 0x000F0F0F;
-    ULONG a = BlPadMeasure(0x40004), b = BlPadMeasure(0x40000);
-    BlNv(0x1220) = 0;
-    BlPadApply<false>(a, b, table + 2, set, PAD_TABLE, strap);
+    ULONG strap = BlNv(0x101000), boardStraps = strap >> 18 & 3;
+    auto set = table + (boardStraps == 3 ? 0x0C : boardStraps == 0 ? 0x6B : 0xCA);
+    ULONG a, b;
+    BlPadMeasure(a, b);
+    BlPadApply(a, b, table + 2, set, strap);
     BlPost(0x31);
 }
+#endif
 
 // One SMBus word read of the EEPROM (slave 0xA8), as the 5838 2BL does it: the status cleared by writing back what it reads, start (word data), then wait while
 // busy (bit 3); a collision (bit 1) starts again, an error (bit 5 or 2) fails, done (bit 4) gives the word. Bounded, unlike the reference: -1 when the EEPROM
-// does not answer.
-static int BlEepromReadWord(UCHAR Command) {
+// does not answer. Also used by the serial builds' snapshot.
+[[maybe_unused]] static int BlEepromReadWord(UCHAR Command) {
     for (int attempt = 0; attempt < 400; attempt++) {
         BlOut8(SMB + 4, EEPROM_SLAVE | 1);
         BlOut8(SMB + 8, Command);
@@ -491,11 +497,13 @@ static int BlEepromReadWord(UCHAR Command) {
     return -1;
 }
 
-// NV2A D3 and later (1.6): the EEPROM method. Row r is EEPROM bytes 0xC4 + 10r .. 0xCD + 10r: each of the first nine gives two row bytes (its high nibble
-// first), the tenth is row byte 0x12. Readings in the order A, B, A, B.
+#ifdef MCPXREVD5
+// 1.6: the EEPROM method (5838; spec/stock/21 §3.7). Row r is EEPROM bytes 0xC4 + 10r .. 0xCD + 10r: each of the first nine gives two row bytes (its high
+// nibble first), the tenth is row byte 0x12. The breakpoints come from the flash table.
 [[gnu::noinline]] static void BlPadCalibrateFromEeprom() {
+    constexpr ULONG PAD_ROW = 0x13, PAD_ROWS = 5; // a row's bytes, the rows
     ((volatile BL_PAD_RESULT *)0x2300)->Magic = PAD_NONE;
-    const volatile UCHAR *table = BlPadTable(0x0C);
+    const volatile UCHAR *table = BlPadTable();
     if (!table) {
         BlPost(0x33);
         return;
@@ -519,17 +527,12 @@ static int BlEepromReadWord(UCHAR Command) {
         }
         rows[PAD_ROW * r + 0x12] = e[9];
     }
-    ULONG g[4][4];
-    BlNv(0x1220) = 0x000F0F0F;
-    BlPadRead4(0x40004, g[0]);
-    BlPadRead4(0x40000, g[1]);
-    BlPadRead4(0x40004, g[2]);
-    BlPadRead4(0x40000, g[3]);
-    BlNv(0x1220) = 0;
-    ULONG a = BlPadSteadier(g[0], g[2]), b = BlPadSteadier(g[1], g[3]);
-    BlPadApply<true>(a, b, table + 0x0E, rows, PAD_EEPROM, BlNv(0x101000));
+    ULONG a, b;
+    BlPadMeasure(a, b);
+    BlPadApply(a, b, table + 2, rows, BlNv(0x101000));
     BlPost(0x32);
 }
+#endif
 
 // --- The boot splash's copy for the kernel
 
@@ -667,18 +670,12 @@ extern "C" [[noreturn]] void BlMain() {
     BlAnswerSmcChallenge();
     BlPciWrite(1, 0x8C, 0x40000000);
     BlSnapshotEeprom();
-    // Cerbios's choice of method (spec/stock/21 §3.7a): "upgraded" memory = top of memory (host 0x84) 256 MB, or 128 MB with PCI 0:2:0 and 0:3:0 register 0x3C
-    // low bytes 0x0F and 0xF0. NV2A D3 and later without that: the EEPROM method (1.6). Otherwise the table, with the third row set when upgraded.
-    {
-        ULONG top = BlPciRead(0, 0x84);
-        UCHAR irq2 = (UCHAR)BlPciRead(2, 0x3C), irq3 = (UCHAR)BlPciRead(3, 0x3C);
-        bool upgraded128 = irq2 == 0x0F && irq3 == 0xF0 && top == 0x07FFFFFF;
-        bool eepromMethod = *(volatile UCHAR *)0xFD000000 >= 0xD3 && !upgraded128; // a byte read, as there
-        if (eepromMethod)
-            BlPadCalibrateFromEeprom();
-        else
-            BlPadCalibrate(top == 0x0FFFFFFF || upgraded128);
-    }
+    // One method per image, as the retail images: the 1.6's 5838 2BL always uses the EEPROM rows, the 5713 2BL always the table (spec/stock/21 §3.3, §3.7).
+#ifdef MCPXREVD5
+    BlPadCalibrateFromEeprom();
+#else
+    BlPadCalibrate();
+#endif
     BlSetUpChipset();
     // Boot status on the front LED (spec/oxos_internal/03_debug_serial.md §6): slow green blink while the 2BL runs.
     BlSmcTransfer(false, 0x08, 0x03);

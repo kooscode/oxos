@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Check that OXOS's NV2A pad calibration (kernel/boot/bl.cpp BlPadCalibrate) makes exactly the NV2A writes of a reference routine (spec/stock/21 §3), by
-running both in the Unicorn CPU emulator (pip install unicorn) with the same fake measurements, straps and upgraded-memory flag.
+"""Check that OXOS's NV2A pad calibration (kernel/boot/bl.cpp) makes exactly the NV2A writes of a retail routine (spec/stock/21 §3), by running both in
+the Unicorn CPU emulator (pip install unicorn) with the same fake measurements and straps.
 
 usage: padcal_check.py REF REF_LOADER REF_BIOS OUR_BL_ELF OUR_IMAGE [CASES]
-  REF         cerbios: REF_LOADER = Cerbios's bootloader (runs at 0x90000; table routine 0x9103C(base, flag))
-              4627:    REF_LOADER = the decrypted Complex 4627 2BL (0x400000; routine 0x400980(base), flag 0 only)
-              5838:    REF_LOADER = the decrypted 5838 2BL (0x400000; the EEPROM method 0x400A5F(base), NV2A D3 and
-                       later): compared with BlPadCalibrateFromEeprom, both reading a random EEPROM over a model
-                       SMBus (word reads of slave 0xA8)
+  REF         5713: REF_LOADER = the decrypted 5713 2BL (0x400000; the table method 0x400A5F(base)), compared with
+                    BlPadCalibrate of a 1.0-1.5 build; the strap has the field in bits 26:25 that the retail X-codes
+                    make from bits 19:18
+              5838: REF_LOADER = the decrypted 5838 2BL (0x400000; the EEPROM method 0x400A5F(base)), compared with
+                    BlPadCalibrateFromEeprom of a 1.6 build (MCPX16=1), both reading a random EEPROM over a model SMBus
+                    (word reads of slave 0xA8)
   REF_BIOS    the reference BIOS image (its table)
   OUR_BL_ELF  build/X/boot/bl.elf;  OUR_IMAGE  the matching open image (bios_256k.bin; its table is built in)
 """
@@ -19,7 +20,7 @@ ref, refldr, refbios, elf, img = sys.argv[1:6]
 cases = int(sys.argv[6]) if len(sys.argv) > 6 else 2000
 RET = 0x7000
 sym = {l.split()[2]: int(l.split()[0], 16) for l in subprocess.run(["nm", elf], capture_output=True, text=True).stdout.splitlines() if len(l.split()) == 3}
-ourfn = sym["_ZL24BlPadCalibrateFromEepromv" if ref == "5838" else "_ZL14BlPadCalibrateb"]
+ourfn = sym["_ZL24BlPadCalibrateFromEepromv" if ref == "5838" else "_ZL14BlPadCalibratev"]
 ourtsc = next(v for k, v in sym.items() if "BlTscWait" in k)
 with tempfile.NamedTemporaryFile() as t:
     subprocess.run(["llvm-objcopy", "-O", "binary", "-j", ".ram", elf, t.name], check=True)
@@ -66,12 +67,8 @@ def nops(code, base, lo, hi):
     while 0 <= i < hi - base: out.append((base + i, b"\x90\x90")); i = code.find(b"\x0f\x09", i + 2)
     return out
 
-if ref == "cerbios":
-    rbase, rentry, rpatch = 0x90000, 0x9103C, [(0x909F1, b"\xc2\x04\x00")] + nops(refcode, 0x90000, 0x90B08, 0x91187)
-elif ref == "5838":
-    rbase, rentry, rpatch = 0x400000, 0x400A5F, [(0x40095F, b"\xc2\x04\x00")] + nops(refcode, 0x400000, 0x400A5F, 0x401100)
-else:
-    rbase, rentry, rpatch = 0x400000, 0x400980, [(0x400919, b"\xc2\x04\x00")] + nops(refcode, 0x400000, 0x400980, 0x400F14)
+# Both retail routines start at 0x400A5F, with the wait helper at 0x40095F (made to return at once); wbinvd becomes two nops.
+rbase, rentry, rpatch = 0x400000, 0x400A5F, [(0x40095F, b"\xc2\x04\x00")] + nops(refcode, 0x400000, 0x400A5F, 0x401100)
 opatch = [(ourtsc, b"\xc3")] + nops(ourram, 0x400000, ourfn, ourfn + 0x700)
 rng, bad = random.Random(1), 0
 def vec():
@@ -86,11 +83,12 @@ for n in range(cases):
             bad += 1
             if bad <= 3: print("MISMATCH", [hex(x) for x in rd], "\n ref", a, "\n ours", b)
         continue
-    rd, st = vec() + vec(), rng.choice([0, 0x40000, 0x80000, 0xC0000, 0x861D4401])
-    fl = rng.choice([0, 1]) if ref == "cerbios" else 0
-    a = run(refcode, rbase, rentry, rpatch, [0xFD000000, fl] if ref == "cerbios" else [0xFD000000], rd, st)
-    b = run(ourram, 0x400000, ourfn, opatch, [fl], rd, st, regs=fl)
-    if a != b or len(a) != 19:
+    # 16 readings (A, B, A, B); a strap as the retail X-codes leave it: bit 31, bits 19:18 from the board, bits 26:25 = 0 (00), 1 (one bit), 3 (both)
+    rd, board = vec() + vec() + vec() + vec(), rng.randrange(4)
+    st = rng.randrange(1 << 32) & 0x61F3FFFF | 0x80000000 | board << 18 | {0: 0, 1: 1, 2: 1, 3: 3}[board] << 25
+    a = run(refcode, rbase, rentry, rpatch, [0xFD000000], rd, st)
+    b = run(ourram, 0x400000, ourfn, opatch, [], rd, st)
+    if a != b or len(a) != 27:
         bad += 1
-        if bad <= 3: print("MISMATCH", [hex(x) for x in rd], hex(st), fl, "\n ref", a, "\n ours", b)
+        if bad <= 3: print("MISMATCH", [hex(x) for x in rd], hex(st), "\n ref", a, "\n ours", b)
 print(f"{ref}: {cases} cases, {bad} mismatches")

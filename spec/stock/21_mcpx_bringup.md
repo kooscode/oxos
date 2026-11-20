@@ -1,9 +1,9 @@
 # Spec 21 — MCPX chipset bring-up by the 2BL (before the kernel)
 
 Reference behaviour of the second-stage boot loader (2BL) between the end of the X-codes and the jump into the kernel, as found in the Complex 4627 image
-(consoles 1.0-1.5, MCPX 1.0 boot ROM) and the 5838 image (1.6, MCPX 1.1 boot ROM with a first-stage loader), with Cromwell for comparison; §3.7a describes the
-calibration sequence OXOS implements. Behaviour only; no code. PCI addresses are written bus:device:function, register offset; "dev1" is 0:1:0 (the MCPX LPC/ISA
-bridge), "host" is 0:0:0. **Status: reference only.**
+(consoles 1.0-1.5, MCPX 1.0 boot ROM) and the 5838 image (1.6, MCPX 1.1 boot ROM with a first-stage loader), with Cromwell for comparison; for the pad
+calibration (§3) also the retail 4817, 5101, 5530 and 5713 images (consoles 1.1-1.5, MCPX 1.1); §3.7a says what OXOS implements. Behaviour only; no code. PCI
+addresses are written bus:device:function, register offset; "dev1" is 0:1:0 (the MCPX LPC/ISA bridge), "host" is 0:0:0. **Status: reference only.**
 
 ## 1. Load address and execution environment
 - Complex 4627: the decrypted 2BL is executed at physical 0x00090000 (its first action copies 0x6000 bytes from 0x00090000 to 0x00400000) (Complex 4627 2BL).
@@ -72,39 +72,75 @@ Execution order. "Byte" = an 8-bit cycle at 0xCFC; every other PCI access is a 3
 
 ## 3. NV2A pad calibration (step 7)
 Re-derived instruction by instruction from the Complex 4627 2BL (routine at 0x400980, called from the main routine at 0x40064B with the NV2A base 0xFD000000)
-and the 5838 2BL (0x400A5F, called at 0x4006B7). EvoX M8's loader contains the 4627 routine byte for byte (0x560 bytes). NV2A offsets below are from 0xFD000000.
-All arithmetic is 32-bit unsigned unless stated. Verified: OXOS's implementation (kernel/boot/bl.cpp) makes the same NV2A writes in the same order as the 4627
-routine run in a CPU emulator, over 3000 random measurement and strap inputs.
+and the 5838 2BL (0x400A5F, called at 0x4006B7); the retail 4817, 5101, 5530 and 5713 2BLs were studied the same way (2026-11-20) and compared step by step.
+EvoX M8's loader contains the 4627 routine byte for byte (0x560 bytes). NV2A offsets below are from 0xFD000000. All arithmetic is 32-bit unsigned unless
+stated.
+
+| Image (sha256 of the BIOS image) | 2BL (decrypted, sha256) | Calibration routine; call site | Wait helper | Strap read | `wbinvd`; store loop | Table (header 0x7C) |
+|---|---|---|---|---|---|---|
+| Complex 4627 (34f1c8de…) | | 0x400980; 0x40064B | 0x400919 | | 0x400DE0; 0x400EEA-0x400F08 | 0xC30 |
+| 4817 (db0587bc…) | 873dd396… | 0x4009AD-0x400F3F; 0x40069E | 0x400946 | 0x4009BC | 0x400E0C; 0x400F16-0x400F34 | 0xC90 |
+| 5101 (f8b77144…) | f8f78088… | 0x400A46-0x400F17; 0x40069E | 0x400946 | 0x400A54 | 0x400DE1; 0x400EEB-0x400F0C | 0xD20 |
+| 5530 (d4873903…), 5713 (fcde15fd…) | 34395d66…, e31c19b7… | 0x400A5F-0x400F30; 0x4006B7 | 0x40095F | 0x400A6D | 0x400DFA; 0x400F04-0x400F25 | 0xD30 |
+| 5838 (148d279b…) | | 0x400A5F; 0x4006B7 | 0x40095F | | 0x400E57; 0x400F61-0x400F82 | 0xDC0 |
+
+- All of them run the 2BL at 0x400000 (entry 0x4001BC after the copy, the FBL's images loaded at 0x90000 first). The 5530 and 5713 2BL code is byte for byte
+  the same; 5101's calibration routine and helpers are 5713's shifted down by 0x19; 5530/5713's helpers (0x40095F-0x400A5E) are byte for byte 5838's.
+- In short: 4627 and 4817 share one algorithm (§3.4-3.6 as written for 4627); 5101, 5530, 5713 and 5838 share another (the "later" variant in §3.4-3.6). The
+  row source is the flash table in all but 5838 (EEPROM rows, §3.7). The row set is chosen differently by 4627, 4817 and 5101-5713 (§3.3).
 
 ### 3.1 Where it runs
 - Main routine order (both 2BLs): device 1 0x80 byte ← 2; SMC challenge (§2 steps 2-5, which ends with SMC 0x20, 0x21, **0x01 ← 0** and device 1 0x8C ←
   0x40000000); fill 0x80090000..+0x6000 with 0xCC; **this calibration**; steps 8-11 (device 1 0x54, host 0x64, 0x6C, 0x80); 5838 only: step 12 (revision ≥ 0xD1
   → 0xC8); then the kernel is decrypted and decompressed.
-- The 2BL runs from RAM at 0x400000 with caches on: MTRR default UC, range 0 RAM WB (4627 64 MB, 5838 128 MB), range 1 flash 0xFFF80000 512 KB WP; paging on
+- The 2BL runs from RAM at 0x400000 with caches on: MTRR default UC, range 0 RAM WB (4627, 4817, 5101 64 MB; 5530, 5713, 5838 128 MB; fixed, the 2BLs
+  do not detect memory size), range 1 flash 0xFFF80000 512 KB WP; paging on
   with NV2A mapped uncached (PDE 0xFB). The X-codes have already set the memory clock and written the placeholder pad values (Cromwell-equivalent: 0x1214
   0x48480848 or 0x09090909, 0x122C 0x88888888 or 0xAAAAAAAA, 0x1230 0xFFFFFFFF, 0x1234/0x1238 0xAAAAAAAA, 0x123C/0x1244/0x1248 0x8B8B8B8B, 0x1240 0xFFFFFFFF).
   5838 (1.6): 0x1214 and 0x122C from EEPROM bytes 0xC0 and 0xC1 (each byte repeated in all four bytes), the others as Cromwell (spec 24 §2.6, §3.3).
+  4817-5713: the X-codes choose 0x1214 / 0x122C from the strap field F of §3.3 (F = 0: 0x48480848 / 0x88888888, else 0x09090909 / 0xAAAAAAAA; 5713 X-codes
+  0x5AB-0x605), and also write 0x1220, 0x1228, 0x1264 ← 0, 0x1210 ← 0x10, 0x124C ← 0xAA8BAA8B, 0x1250 ← 0x0000AA8B, 0x1218 ← 0x00010000 (5713 0x587-0x6DD).
+  The calibration routine is the only 2BL code that touches the NV2A.
 
-### 3.2 Wait loop (4627 0x400919, 5838 0x40095F)
+### 3.2 Wait loop (addresses in the table above; the same in every version)
 `wait(n)`: rdtsc → (lo, hi); end_lo = lo + n, end_hi = hi + carry. Loop: rdtsc; stop if hi > end_hi; otherwise continue while lo < end_lo. Every wait below is n
 = 10 000 (0x2710) TSC ticks (about 14 µs at 733 MHz).
 
-### 3.3 Table and row-set selection (4627; Cerbios on NV2A < D3; inferred for the other 1.0-1.5 retail 2BLs, not examined)
+### 3.3 Table and row-set selection
 1. T = [0xFFC0007C] − 0x400000 (the flash header field 0x7C read through the 4 MB flash window; wraps to 0xFFC00000 + offset).
-2. If NV2A 0x101000 (strap) has bit 18 or 19 set: row set S = T + 0x0C, else S = T + 0x6B. The strap is read **before** any calibration register is written.
+2. The strap NV2A 0x101000 is read once, **before** any calibration register is written. The row set S:
+   - **4627:** bit 18 or 19 set → set 1 (T + 0x0C), else set 2 (T + 0x6B).
+   - **4817:** always set 1; the strap value read is discarded. Sets 2 and 3 of its table are never used.
+   - **5101, 5530, 5713:** the field F = bits 26:25 (bit 25 = F bit 0): F = 0 → set 2 (T + 0x6B); F = 1 → set 3 (T + 0xCA); F = 2 or 3 → set 1 (T + 0x0C).
+     Nothing else takes part: no PCI read, no MCPX or NV2A revision, no memory size, no EEPROM, no test of bits 18-19 in the 2BL.
+   - **5838:** no table rows (§3.7).
 3. Rows: row r (r = 0..4) is the 19 bytes at S + 0x13·r. Breakpoints: A uses T[2], T[4], T[6], T[8], T[10]; B uses T[3], T[5], T[7], T[9], T[11].
+4. Where F comes from (4817-5713): the X-codes read the board's strap bits 19:18 and write the strap register back, bits 18, 19 and 25-28 replaced and bit
+   31 set (mask 0xE1F3FFFF, then an OR value); the 2BL reads what they wrote (4817/5101 X-codes 0x122-0x1BB, 5530/5713 0x146-0x227):
 
-### 3.4 Measurement (4627)
+| Board strap bits 19:18 | OR value | F | 5101-5713 set | 4627 set (bits 18-19 directly) |
+|---|---|---|---|---|
+| 00 | 0x80000000 | 0 | set 2 | set 2 |
+| 01 or 10 | 0x820C0000 | 1 | set 3 (the same bytes as set 1) | set 1 |
+| 11 | 0x860C0000 (5530/5713: 0x86040000, bit 19 cleared, when I/O port 0x80D0 bit 5 reads 1 after 0x41 is written to it) | 3 | set 1 | set 1 |
+
+   Side writes in the same branches: NV2A 0x10B8 ← 0xEEEE0000 (00), 0xFFFF0000 (11); for 01/10 0xFFFF0000 (4817/5101) or 0x11110000 (5530/5713). The 4627
+   X-codes do not rewrite the strap register (they test bits 18-19 for their 0x1214 placeholder).
+- Net effect: on every console the 5101-5713 2BLs use the same rows as the 4627 rule (straps 00 → set 2, else set 1's bytes); only the bytes of set 2 differ
+  between 4627 and the later tables (§3.9). Set 3 is not for upgraded memory or a revision: it follows the straps alone.
+
+### 3.4 Measurement (4627, 4817)
 1. 0x1220 ← 0x000F0F0F.
 2. For sel = 0x40004, 0x40005, 0x40006, 0x40007: 0x1228 ← sel; wait(10 000); read 0x121C. A = (sum of the four) >> 2.
 3. For sel = 0x40000 .. 0x40003 the same; B = (sum) >> 2.
 4. 0x1220 ← 0 (immediately after the eighth read).
 
-5838 differs: four groups of four readings, in the order A-set, B-set, A-set, B-set (each reading: 0x1228 ← sel, wait(10 000), read 0x121C); 0x1220 ← 0 after
-the last. For each measurement it keeps the group whose Σ|r[i] − r[i+1]| (i = 0..2, absolute signed differences) is smaller: the first group if its sum is
-strictly smaller, else the second; then averages that group (sum >> 2).
+The later variant (5101, 5530, 5713, 5838): four groups of four readings, in the order A-set, B-set, A-set, B-set (each reading: 0x1228 ← sel, wait(10 000),
+read 0x121C); 0x1220 ← 0 after the last (5713: 0x1220 ← 0x000F0F0F at 0x400AA7, groups by the helper 0x4009C6, 0x1220 ← 0 at 0x400AE8). For each measurement
+it keeps the group whose Σ|r[i] − r[i+1]| (i = 0..2, absolute signed differences) is smaller: the first group if its sum is strictly smaller, else the second;
+then averages that group (sum >> 2) (5713 0x4009F4: A from groups 1 and 3, B from 2 and 4).
 
-### 3.5 Interpolation (4627; M = A with breakpoints b0..b4 = T[2,4,6,8,10], or M = B with T[3,5,7,9,11])
+### 3.5 Interpolation (4627 and 4817; M = A with breakpoints b0..b4 = T[2,4,6,8,10], or M = B with T[3,5,7,9,11])
 | Case (tested in this order) | Weight f (20-bit fixed point) | hi row (× f) | lo row (× (0x100000 − f)) |
 |---|---|---|---|
 | M ≤ b1 | ((M − b0) << 20) / (b1 − b0), unsigned; if bit 31 of the quotient is set, f = 0 | row 3 | row 4 |
@@ -113,7 +149,8 @@ strictly smaller, else the second; then averages that group (sum >> 2).
 | otherwise | ((M − b2) << 20) / (b3 − b2) | row 1 | row 2 |
 - Each output nibble: round(x) = ((x + 0x80000) >> 20) & 0xF with x = hi[k]·f + lo[k]·(0x100000 − f), 32-bit wrap.
 - A gives o0..o15 from row bytes k = 0x00..0x0F. B gives c10, c11, c12 from row bytes 0x10, 0x11, 0x12.
-- 5838 differs: in the first case the division is signed (idiv); in the second case f is clamped to 0x100000 (1.0).
+- The later variant (5101-5838) differs: in the first case the division is signed (a negative quotient → f = 0; 5713 A 0x400B2A, B 0x400D34); in the
+  second case f is clamped to 0x100000 (1.0; 5713 A 0x400B58, B 0x400D6B). The case order, breakpoints, rows, rounding and outputs are the same.
 - A table whose breakpoints are not increasing (e.g. all zero) divides by zero: the reference has no check.
 
 ### 3.6 Values and writes
@@ -123,8 +160,9 @@ strictly smaller, else the second; then averages that group (sum >> 2).
 - List, in order: 0x122C Pattern(o0, o1), 0x123C Pattern(o2, o3), 0x1230 Pattern(o4, o5), 0x1240 Pattern(o6, o7), 0x1234 Pattern(o8, o9), 0x1244 Pattern(o10,
   o11), 0x1238 Pattern(o12, o13), 0x1248 Pattern(o14, o15), 0x1214 v.
 - `wbinvd`, then the nine 32-bit stores in list order.
-- 4627: an entry whose value is 0 has its register replaced by 0, so that 0 is stored at NV2A offset 0 (PMC_BOOT_0, read-only) instead. 5838 has the same loop
-  but its test compares the register (never 0), so it writes all nine.
+- 4627 and 4817: an entry whose value is 0 has its register replaced by 0, so that 0 is stored at NV2A offset 0 (PMC_BOOT_0, read-only) instead. The later
+  variant (5101-5838) has the same loop but its test needs both the register and the value to be 0 (the register never is), so it writes all nine (5713
+  0x400EEC).
 
 ### 3.6a The write window: no memory traffic while the pads change (requirement)
 The nine stores change the drive, slew and delay of the NV2A's own DRAM interface. The reference arranges its code so that **from the first pad store to the
@@ -135,7 +173,7 @@ its 0x400000 run address; the decompiler hides the second point):
    Then **`wbinvd`** (0x400DE0): caches written back and emptied. Only after it are the nine 32-bit values built (the pattern of §3.6, a helper called eight
    times, then the 0x1214 value) and stored, each with its register offset, into a local array of nine {offset, value} pairs on the stack. Those stores
    (write-allocate on the P6) bring the array's lines into the cache. A second loop over the array then replaces the offset of every entry whose offset or value
-   is 0 by 0 (the "zero store" of §3.7a step 4), which reads and writes the same, now cached, lines.
+   is 0 by 0 (the "zero store" of §3.6), which reads and writes the same, now cached, lines.
 2. Store loop (0x400EEA-0x400F08): an outer counter 0..1 around an inner loop over the nine entries; the inner body loads value and offset and stores the value
    to NV2A base + offset **only when the outer counter is 1**. Pass 0 does no load and no store: it only executes the loop's instructions, bringing its two
    32-byte code lines into the instruction cache. Pass 1 then runs entirely from the caches: its code lines were fetched by pass 0, the array lines are cached
@@ -149,26 +187,25 @@ Requirements for OXOS (kernel/boot/bl.cpp BlPadCalibrate and any later re-calibr
 - Write the store loop so the compiler cannot move arithmetic, spills or other stack traffic into the window: an inline-assembly loop over the array (or with
   all nine values and offsets in registers), with **a dry pass first** that executes the same loop code without storing (warming its code lines), then the
   storing pass; no calls, no stack accesses and no other memory references between the first and the last store; interrupts off.
-- Keep the store order (§3.6: 0x122C, 0x123C, 0x1230, 0x1240, 0x1234, 0x1244, 0x1238, 0x1248, 0x1214) and the zero-store behaviour.
+- Keep the store order (§3.6: 0x122C, 0x123C, 0x1230, 0x1240, 0x1234, 0x1244, 0x1238, 0x1248, 0x1214).
+- The later 2BLs keep the same structure (5713: all nibbles before `wbinvd` at 0x400DFA, values built after it, the store loop with a dry pass). One
+  difference: each storing iteration re-reads the NV2A base from the stack frame (0x400F15); only its first read can reach memory, and that is before the
+  first pad store, so the invariant holds.
 - Nothing that writes memory may follow in the window, e.g. logging the result (OXOS's record at 0x2300) comes after the last store.
 - Status (2026-10-28): implemented in OXOS's 2BL (inline-assembly loop with a dry pass); it is kept as reference behaviour, but on the 1.4 console it did not
   change the rate of single-bit RAM changes (§3.8).
 
-### 3.7 5838 row source (NV2A ≥ D3; 1.6)
-- The 5838 2BL uses this source **unconditionally**: it has no table method and no revision test (5838 2BL 0x400A5F; spec 24 §5.2). "NV2A ≥ D3" is how Cerbios
-  chooses between its two methods.
+### 3.7 5838 row source (1.6)
+- The 5838 2BL uses this source **unconditionally**: it has no table method and no revision test (5838 2BL 0x400A5F; spec 24 §5.2). The 1.0-1.5 retail
+  images, for their part, have no EEPROM method: which source is used follows from the image, not from a test.
 - 25 SMBus word reads of the EEPROM (slave 0xA8), commands 0xC4, 0xC6, ..., 0xF4 (50 bytes, 0xC4-0xF5).
 - Row r (r = 0..4) from EEPROM bytes 0xC4 + 10r .. 0xCD + 10r: each of the first nine bytes gives two nibbles (high nibble first) for row bytes 0x00-0x11; the
   tenth byte is row byte 0x12. Only the breakpoints come from the flash table (5838: header 0x7C = 0xDC0). No strap test.
-- Cerbios takes this path when NV2A PMC 0 low byte ≥ 0xD3 (and a PCI condition holds), the table path otherwise.
 - The rest is the 5838 variant of §3.4-3.6: the measurement in four groups (A, B, A, B; the steadier group of each pair kept), the signed division in the lowest
-  segment, the weight clamped to 1.0 above the top breakpoint, all nine registers written (no zero store); breakpoints from the 5838 header (Cerbios's table
-  bytes 0x0C-0x17, the same bytes as 5838's own header at 0xDC0).
+  segment, the weight clamped to 1.0 above the top breakpoint, all nine registers written (no zero store); breakpoints from the 5838 table at 0xDC0 (§3.9).
 - SMBus word read (5838 0x400430): host address 0xA9, command, status cleared by writing back what it reads, control 0x0B (start, word); then wait while status
   bit 3 (busy) is set; bit 1 (collision) starts again, bit 5 or bit 2 fails, bit 4 gives the word at 0xC006. Waiting for a done bit instead of for busy to clear
   hangs on the 1.6 console.
-- Cerbios 3.1.0 (0x90F40) reads the EEPROM and measures the same way, but its arithmetic is not the 5838 one: in an emulator it matches neither the 5838 nor the
-  4627 arithmetic when a reading falls outside the breakpoints. OXOS follows the 5838 2BL, the retail loader of the 1.6 console.
 - OXOS (kernel/boot/bl.cpp BlPadCalibrateFromEeprom) makes the same NV2A writes as the 5838 routine 0x400A5F run in an emulator with a random EEPROM, over 2000
   cases (tools/padcal_check.py 5838). On the 1.6 console it reads all 25 words and calibrates (POST 0x32); the console's RAM is still not reliable, see
   spec/oxos_internal/28.
@@ -183,42 +220,19 @@ Requirements for OXOS (kernel/boot/bl.cpp BlPadCalibrate and any later re-calibr
 - The EEPROM bytes the 1.6 uses for memory: **0xC0-0xC3** (X-codes, byte reads: 0x1214, 0x122C, 0x10B8, strap bits 18/19; spec 24 §3) and **0xC4-0xF5** (2BL,
   word reads: the five rows).
 
-### 3.7a Cerbios 3.1.0 on NV2A < D3 (consoles 1.0-1.5): the complete sequence (what OXOS implements)
-From Cerbios's bootloader (plaintext at flash 0x3CDD8, loaded at 0x90000, entry 0x90208; main routine 0x90738). Addresses below are those load addresses. Every
-step was read from the code; values are exact.
-1. CPU set-up (0x90208): IDT/GDT loaded; CR0 |= CD|NW, `wbinvd`; MTRR default (0x2FF) ← 0; range 0 base 0 type 6 (WB), mask 0xF_F0000800 (**256 MB**); range 1
-   base 0xFFF80005 (WP), mask 512 KB; others cleared; default ← 0x800 (UC, enabled); caches on. The code is copied to and runs from RAM at 0x400000.
-2. Device 1 register 0x80: byte write 0x02 at 0xCFC (0x90738).
-3. SMC challenge (0x90646): byte reads of SMC 0x1C, 0x1D, 0x1E, 0x1F; all four 0 → halt path; else the answer bytes to SMC 0x20 and 0x21, then **SMC 0x01 ←
-   0x00**; then device 1 0x8C ← 0x40000000 (dword).
-4. Pre-check (0x911E4 = strstr): if the string "SHADOW" occurs in the 2BL parameter area at 0x80400004, steps 5-9 are skipped (a shadow restart). On a cold boot
-   it does not occur.
-5. Method selection (0x9076A-0x907E5), in this order: read host 0x84 (top of memory, dword) = top; read PCI 0:2:0 0x3C (dword, low byte b2) and 0:3:0 0x3C
-   (dword, low byte b3); read the NV2A byte at 0xFD000000 (revision). upgraded128 = (b2 = 0x0F and b3 = 0xF0 and top = 0x07FFFFFF).
-   - revision ≥ 0xD3 and not upgraded128 → the EEPROM-row method (0x90F40; §3.7, 1.6 consoles).
-   - otherwise → the table method (0x9103C) with flag = (top = 0x0FFFFFFF) or upgraded128.
-6. Table method (0x9103C, flag):
-   1. T = [0xFF00007C] − 0x1000000 (header field 0x7C, 0x1400 in Cerbios, through the 16 MB flash window).
-   2. strap = NV2A 0x101000 (read first). Row set S = T + 0xD6 if flag; else T + 0x18 if strap bit 18 or 19 is set; else T + 0x77. Row r = S + 0x13·r (r =
-      0..4).
-   3. Measurement exactly as §3.4 (4627): 0x1220 ← 0x000F0F0F; selectors 0x40004-0x40007, each 0x1228 ← sel, wait(10 000) (§3.2, same loop at 0x909F1), read
-      0x121C; A = sum >> 2; selectors 0x40000-0x40003 the same → B; 0x1220 ← 0.
-   4. Values and writes (shared routine 0x90B08): exactly §3.5 and §3.6 for the 4627 variant (unsigned divisions, the 1/2^20 weight above the top breakpoint,
-      breakpoints T[2,4,6,8,10] for A and T[3,5,7,9,11] for B, `wbinvd`, the nine stores in order, a zero value stored at NV2A offset 0 instead of its
-      register), with the write window of §3.6a: no memory access between the first and the last pad store.
-7. AGP/host (0x91187): device 1 0x54 |= 0x88000000; host 0x64 |= 0x88000000; host 0x6C: read v, write v & ~1, write v (the LDT reset); host 0x80 ← 0x00000100.
-8. Device 1 0x08 read as a byte; if ≥ 0xD1: device 1 0xC8 ← 0x00008F00 (0x90710).
-9. Then the kernel is decompressed (0x92D66) and entered.
-- Table layout (0x135 bytes, Cerbios's flash 0x1400-0x1534): bytes 0x00-0x0B the 4627 breakpoint header (byte for byte), 0x0C-0x17 the 5838 one (used by the
-  EEPROM method), row sets at +0x18 (strap bit), +0x77 (no strap bit), +0xD6 (upgraded memory). The +0x18 set equals the 4627 table's first set byte for byte;
-  the +0x77 set differs from 4627's second set only in the B bytes (0x10-0x12 of each row, which give 0x1214). So on a console whose strap selects the first set
-  (the no-DVD 1.4 console), Cerbios and 4627 write the same nine values.
-- The MCPX revision is not part of the selection; it only gates step 8.
-- Verified: OXOS's 2BL with this table (§3.9) makes the same NV2A writes as Cerbios's 0x9103C run in an emulator, both flag values, over 2000 random inputs
-  (tools/padcal_check.py).
+### 3.7a What OXOS implements (kernel/boot/bl.cpp)
+One method per image, as the retail images have it:
+- **1.0-1.5 images:** the 5713 2BL's table method (§3.3-3.6, the later variant): the retail 4817-5713 table (§3.9), the four-group measurement, the signed
+  division and the clamp, all nine registers written, the write window of §3.6a. The row set follows the board strap bits 19:18 as the retail X-codes map
+  them (§3.3 step 4: 00 → set 2, one bit → set 3, both → set 1), read directly: OXOS's X-codes (Cromwell's) do not write the field F.
+- **1.6 images (MCPXREVD5):** the 5838 2BL's EEPROM method (§3.7), with the 5838 breakpoints as the image's table.
+- Verified (2026-11-20): OXOS's 2BL makes the same NV2A writes as the 5713 routine 0x400A5F (random readings and straps with F as the X-codes leave it) and as
+  the 5838 routine 0x400A5F (random readings and EEPROM), each over 2000 cases, run in a CPU emulator (tools/padcal_check.py 5713 / 5838).
+- Not done: the 0xCC fill of 0x80090000 before the calibration.
 
-### 3.8 Measured on the no-DVD 1.4 console (NV2A 0x02A000A3, MCPX 1.1), OXOS 2BL with the 4627 table
-A = 0x5E-0x63, B = 0x5D-0x61 over six boots, strap 0x861D4401 (first row set); written: 0x122C 0x99999999, 0x123C 0x8E8E8E8E, 0x1230 0xFFFFFFFF, 0x1240
+### 3.8 Measured on the no-DVD 1.4 console (NV2A 0x02A000A3, MCPX 1.1), OXOS 2BL with the 4627 algorithm (2026-10)
+A = 0x5E-0x63, B = 0x5D-0x61 over six boots, strap 0x861D4401 (board bits 19:18 = 11, F = 3: set 1 under every rule of §3.3, the same bytes in every
+table); written: 0x122C 0x99999999, 0x123C 0x8E8E8E8E, 0x1230 0xFFFFFFFF, 0x1240
 0xFFFFFFFF, 0x1234 0x99999999, 0x1244 0x8E8E8E8E, 0x1238 0x99999999, 0x1248 0x8E8E8E8E, 0x1214 0x09090909. 0x1240 stays 0xFFFFFFFF with this table.
 
 **Drift with time powered (2026-10-28, ~430 cold boots, 8 s off between boots).** A and B are not constants of the console. After a long rest the first boot
@@ -227,14 +241,17 @@ follows ~1-2 below it. Over the whole day A ranged 0x5A-0x66 and B 0x5A-0x63. Th
 select row set 1).
 
 **What the retail arithmetic writes for each A** (the Complex 4627 2BL's routine at 0x400980 run in an emulator with the console's strap, readings A ×4 then B =
-A − 1 ×4; the same nine values from OXOS's implementation, which matches it write for write, §3.7a):
-| A | 0x122C, 0x1234, 0x1238 | 0x123C, 0x1244, 0x1248 | 0x1230, 0x1240 | 0x1214 |
-|---|---|---|---|---|
-| 0x56 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x01010101 |
-| 0x57 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
-| 0x58-0x59 | 0xAAAAAAAA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
-| 0x5A-0x5B | 0xA9A9A9A9 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
-| 0x5C-0x6A | 0x99999999 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 |
+A − 1 ×4; the same nine values from OXOS's implementation at the time), and what the later variant (the 5713 routine, the same inputs) writes:
+| A | 0x122C, 0x1234, 0x1238 | 0x123C, 0x1244, 0x1248 | 0x1230, 0x1240 | 0x1214 (4627) | 0x1214 (5101-5713) |
+|---|---|---|---|---|---|
+| 0x56 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x01010101 | 0x01010101 |
+| 0x57 | 0xBABABABA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 | 0x01010101 |
+| 0x58-0x59 | 0xAAAAAAAA | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 | 0x01010101 |
+| 0x5A-0x5B | 0xA9A9A9A9 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 | 0x01010101 |
+| 0x5C-0x6A | 0x99999999 | 0x8E8E8E8E | 0xFFFFFFFF | 0x09090909 | 0x01010101 |
+- The eight A registers are the same under both. 0x1214 differs: this console's B (0x56 and up) is above the top B breakpoint (T[11] = 0x55), where the
+  4627 weight becomes 1/2^20 (row 1's B bytes, 01 01 00) and the later one 1.0 (row 0's, 01 00 00). 0x01010101 is what the 5101-5713 retail BIOSes write on
+  this console.
 So for every A from 0x5C up the retail 2BL writes exactly what OXOS writes on this console; the step to a stronger setting is at A = 0x5B / 0x5C (the A
 breakpoint T[6] = 0x5D of the table, with rounding).
 
@@ -243,30 +260,41 @@ seconds of the kernel starting (about 1 boot in 5-7 in that band; none at A ≥ 
 and did not change the rate (4 of 30 boots, same cells). The cause was not the pads: in exactly those boots DRAM refresh (PFB 0x100210) was off after the
 X-codes (spec/oxos_internal/20). A, the console's warmth and the lost refresh go together; the pad values themselves are the reference ones.
 
-### 3.9 The calibration table (Cerbios layout, 0x135 bytes)
+### 3.9 The calibration tables
 Functional hardware constants (as the encoder tables of specs 18-20): the breakpoints the measurements A and B are compared with, and the pad values
-interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10, c11, c12 (B). Set 1 equals the 4627 table's first set; set 2 differs from
-4627's second set in bytes 0x10-0x12 only. OXOS builds it from kernel/boot/padcal_table.inc.
+interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10, c11, c12 (B).
+- **4817, 5101, 5530, 5713:** byte for byte the same table, 0x129 bytes (12-byte breakpoints + three sets of 0x5F), at 0xC90 / 0xD20 / 0xD30 / 0xD30.
+  OXOS builds it into its 1.0-1.5 images (kernel/boot/padcal_table.inc).
+- **Complex 4627** (also 3944, 4034): 0xCA bytes, the same breakpoints and set 1, and an older set 2 (below); no set 3.
+- **5838:** the 1.6 breakpoints only (12 bytes at 0xDC0); its rows come from the EEPROM (§3.7). OXOS builds them into its 1.6 images.
 
 | Offset | Content | Bytes |
 |---|---|---|
-| +0x00 | breakpoints | 20 4E 4E 3E 56 43 5D 4A 64 50 6A 55 |
-| +0x0C | 1.6 breakpoints (EEPROM method) | 20 4E 57 2C 5F 30 66 36 6B 3D 74 40 |
-| +0x18 | set 1 (strap bit 18/19), row 0 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 00 00 |
-| +0x2B | set 1 (strap bit 18/19), row 1 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 01 00 |
-| +0x3E | set 1 (strap bit 18/19), row 2 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 02 00 |
-| +0x51 | set 1 (strap bit 18/19), row 3 | 0A 0B 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 01 02 00 |
-| +0x64 | set 1 (strap bit 18/19), row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 01 03 00 |
-| +0x77 | set 2 (no strap bit), row 0 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
-| +0x8A | set 2 (no strap bit), row 1 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
-| +0x9D | set 2 (no strap bit), row 2 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
-| +0xB0 | set 2 (no strap bit), row 3 | 08 08 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 00 01 01 |
-| +0xC3 | set 2 (no strap bit), row 4 | 08 08 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 00 01 01 |
-| +0xD6 | set 3 (upgraded memory), row 0 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 0E 0E 0E 0E 01 00 00 |
-| +0xE9 | set 3 (upgraded memory), row 1 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 0E 0E 0E 0E 01 01 00 |
-| +0xFC | set 3 (upgraded memory), row 2 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 0E 0E 0E 0E 01 02 00 |
-| +0x10F | set 3 (upgraded memory), row 3 | 0A 0B 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0E 0E 0E 0E 01 02 00 |
-| +0x122 | set 3 (upgraded memory), row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0E 0E 0E 0E 01 03 00 |
+| +0x00 | breakpoints (4627-5713) | 20 4E 4E 3E 56 43 5D 4A 64 50 6A 55 |
+| +0x0C | set 1, row 0 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 00 00 |
+| +0x1F | set 1, row 1 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 01 00 |
+| +0x32 | set 1, row 2 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 02 00 |
+| +0x45 | set 1, row 3 | 0A 0B 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 01 02 00 |
+| +0x58 | set 1, row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 01 03 00 |
+| +0x6B | set 2, row 0 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
+| +0x7E | set 2, row 1 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
+| +0x91 | set 2, row 2 | 08 08 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 01 |
+| +0xA4 | set 2, row 3 | 08 08 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 00 01 01 |
+| +0xB7 | set 2, row 4 | 08 08 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 00 01 01 |
+| +0xCA | set 3 (= set 1), row 0 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 00 00 |
+| +0xDD | set 3 (= set 1), row 1 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 01 00 |
+| +0xF0 | set 3 (= set 1), row 2 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 01 02 00 |
+| +0x103 | set 3 (= set 1), row 3 | 0A 0B 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 01 02 00 |
+| +0x116 | set 3 (= set 1), row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 01 03 00 |
+| 4627 +0x6B | 4627 set 2, row 0 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 00 00 |
+| 4627 +0x7E | 4627 set 2, row 1 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 01 00 |
+| 4627 +0x91 | 4627 set 2, row 2 | 09 09 0E 08 0F 0F 0F 0F 09 09 0E 08 09 09 0E 08 00 02 00 |
+| 4627 +0xA4 | 4627 set 2, row 3 | 0A 0B 0E 08 0F 0F 0F 0F 0A 0B 0E 08 0A 0B 0E 08 00 02 00 |
+| 4627 +0xB7 | 4627 set 2, row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0B 0E 0E 08 00 03 00 |
+| 5838 +0x00 | 1.6 breakpoints | 20 4E 57 2C 5F 30 66 36 6B 3D 74 40 |
+
+- Set 2 of 4817-5713 against 4627: bytes 0-1 of every row are 08 08 (4627: 09 09, 09 09, 09 09, 0A 0B, 0B 0E) and bytes 0x11-0x12 are 01 01; bytes
+  2-0x10 are the same. EvoX M8+ carries the 4817-5713 sets.
 
 ## 4. Flash header 0x6C-0x7F
 | Offset | Complex 4627 | 5838 | Cromwell |
@@ -278,7 +306,7 @@ interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10,
 | 0x7C | 0x00000C30 | 0x00000DC0 | 0x00000C90 (pre-1.6) / 0x00000DC0 (1.6) |
 - Sources: (flash header) (Cromwell).
 - **0x7C**: read by the 2BL as the flash offset (from 0xFFC00000) of the NV2A calibration table (§3). In each retail image it points just past the X-code table;
-  the 4627 table is 0xCA bytes (12-byte header + two 0x5F-byte sets).
+  the 4627 table is 0xCA bytes (12-byte header + two 0x5F-byte sets); 4817 0xC90, 5101 0xD20, 5530 and 5713 0xD30, each 0x129 bytes (three sets) (§3.9).
 - 0x6C, 0x70, 0x74, 0x78 have no direct references in the 2BLs, the 5838 first-stage loader or the kernels; the CPU-side boot ROM starts interpreting at 0x80.
   **Inferred:** they are consumed by the MCPX hardware at reset.
 - Differences: 0x6C bit 2 (clear only in Complex 4627); 0x78 upper half (0 in Complex 4627, non-zero elsewhere) and lower half (0x60 / 0x70 / 0x90). What they

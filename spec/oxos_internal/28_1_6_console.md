@@ -7,7 +7,8 @@ one hybrid image for 1.0-1.6 is the plan after it, §4.5 step 6).
 ## 1. Status (2026-11-07)
 The 1.6 boots OXOS to the dashboard from OXOS's own code, 3 of 3 cold boots (POST 0x20 → 0x32 → 0x23 → 0x21 → 0x22, then the kernel to idle 0x30):
 - **X-codes:** `kernel/boot/xcodes_1_6.inc`, written from spec/stock/24 on the layout of Cromwell's table. The 1.0-1.5 images keep Cromwell's `Xcodes.h`
-  unchanged. The program, with its write checks, is 406 X-codes and ends at 0xEC6. The pad table moved to 0xECB-0xFFF (header 0x7C).
+  unchanged. The program, with its write checks, is 406 X-codes and ends at 0xEC6. The pad table (header 0x7C) is at 0xECB: since 2026-11-20 only the
+  5838 breakpoints, 0xECB-0xED6 (spec 15 §2).
 - **2BL:** the EEPROM pad calibration (spec/stock/21 §3.7); the X-code check list and the memory interface repair hold the 1.6 values (0x10D4 0x0F included,
   0x10B8 left alone).
 - **Checks:**
@@ -67,7 +68,7 @@ listed in G0.
 | B1 | 1.6 repair table (uncommitted) lacks 0x10D4 and 0x10B8 | If a repair stays: 0x10B0, 0x10CC, 0x10B8 (the value read at 2BL entry, or EEPROM 0xC2), 0x10D4 0x0F, 0x10B4, 0x10BC, 0x10C4, 0x10C8, 0x10D8, 0x10DC, 0x10E8 in that order (spec 24 §5.3). The retail 2BL repairs nothing: once G1 and the write checks hold, the 1.6 repair can go | XCHK at 0x2600 empty |
 | B2 | `BlXcodeValues` holds Cromwell's values | A 1.6 list (spec 24 §7, 5838 column; EEPROM-derived registers left out or compared with the logged EEPROM bytes) | XCHK record lists only real losses |
 | B3 | MTRR range 0 is 64 MB | 5838's 2BL makes it 128 MB (spec 24 §5.3); matters only on 128 MB consoles | Done in the kernel instead: widened at a cold boot when the RAM is 128 MB (spec/stock/09 §10) |
-| B4 | Pad method choice | Nothing to change: NV2A ≥ D3 and not "upgraded" → EEPROM method. With the retail decision "upgraded" cannot happen: host 0x84 is 128 MB only when the large mask is 0xFF, never with 0x0F/0xF0 | POST 0x32 |
+| B4 | Pad method choice | The 1.6 image always uses the EEPROM method, as the 5838 2BL does (since 2026-11-20 chosen by the image, spec 15 §1; before, by the NV2A revision, which also chose it on this console) | POST 0x32 |
 | B5 | SMC 0x13/0x12 | If the memory test stays in start.S: send the two masks to the SMC from the 2BL (retail sends them from the X-codes; Cromwell sends 0x0F/0xF0) | — (nothing reads them back; spec 24 §8) |
 
 ### 4.4 Kernel (`kernel/src/hardware/chipset/init.cpp`, `video.cpp`, `memory/init.cpp`)

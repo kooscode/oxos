@@ -97,8 +97,8 @@
 #else
 #include "xcodes_1_6.inc"
 #endif
-    // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.7a). On the 1.6 it follows a longer program
-    // (with its write checks), so it fills the end of the bank: 0xECB-0xFFF.
+    // The NV2A memory pad calibration table, where header 0x7C points (the 2BL reads it there, spec/stock/21 §3.3): 0xC90-0xDB8. On the 1.6 it follows a
+    // longer program (with its write checks): only the breakpoints, at 0xECB-0xED6.
 #ifndef MCPXREVD5
     .org 0xc90
 #else

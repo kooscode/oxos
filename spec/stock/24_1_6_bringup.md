@@ -248,7 +248,7 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 - NV2A at 0xFD000000; the AGP window as #90; NV2A command 7.
 - The memory configuration of §4.3 in 0x100200 / 0x100204 and PCI 0:0:0 0x84.
 - **PCI 0:2:0 0x3C = the "large" mask, PCI 0:3:0 0x3C = the "faulty" mask** (low byte; §4). These are the USB controllers' interrupt-line registers used as
-  scratch. Neither the FBL nor the 5838 2BL reads them; the kernel overwrites them (spec 23 §3.1 rows 7-8). Cerbios's loader reads them (spec 21 §3.7a step 5).
+  scratch. Neither the FBL nor the 5838 2BL reads them; the kernel overwrites them (spec 23 §3.1 rows 7-8).
 - SMBus 0xC006 holds the last data byte (the faulty mask); the SMC has registers 0x13 and 0x12 set (§4.4).
 - Test patterns in RAM at the §4.1 addresses. Nothing at physical 0: the retail program does not use the overflow trick.
 - From the exit: MTRRs all off except the default type 0x806 (all memory write-back), caches on.
@@ -365,8 +365,8 @@ Lane n (bit n of the masks) uses address A = 0x00555548, 0x00555558, 0x00555568,
 |---|---|---|
 | MCPX revision: PCI 0:1:0 0x08 read as a byte, ≥ 0xD1 | 5838 2BL 0x400661-0x400687 | PCI 0:1:0 0xC8 ← 0x00008F00 (spec 21 §2 step 12) |
 - That is the only one. The 5838 2BL does **not** read the NV2A revision, the strap, the top of memory, PCI IDs or the memory-test masks. Its pad calibration
-  (0x400A5F) **always** uses the EEPROM rows (0xC4-0xF5) and the 5838 breakpoints: it has no table method. The NV2A ≥ D3 test of spec 21 §3.7 is Cerbios's
-  choice between two methods, not a retail test.
+  (0x400A5F) **always** uses the EEPROM rows (0xC4-0xF5) and the 5838 breakpoints: it has no table method. No retail 2BL chooses between the
+  two methods by a test: each image has one (spec 21 §3.7).
 - Spec 21 §2 (chipset sequence) is confirmed for the 1.6 path without change. Spec 21 §3.7 is confirmed; additions are made there (the write window, the
   X-codes' EEPROM bytes).
 
