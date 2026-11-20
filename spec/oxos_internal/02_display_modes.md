@@ -81,7 +81,7 @@ The option behaviour of stock spec 17 §5a and the encoder specs, except Macrovi
 
 ## 4. Encoder detection
 The reference decides from its own BIOS image (stock spec 17 §1). OXOS probes the bus instead, as Cromwell does (`DetectVideoEncoder` in
-`drivers/video/BootVgaInitialization.c`, GPL-2.0: register 0 at 0x8A, then 0xD4, else it assumes an Xcalibur; Cerbios 3.1.0 also probes 0xE0, 0x80036FCB): an
+`drivers/video/BootVgaInitialization.c`, GPL-2.0: register 0 at 0x8A, then 0xD4, else it assumes an Xcalibur): an
 SMBus byte read (protocol 0x0A, command 0) at 0x8A, then 0xD4, then 0xE0; the first that completes (host status 0x10) is the encoder. Reason: OXOS's open BIOS
 has 0x70 at flash offset 0x78, and one image should serve every revision. Flags 0x20 (Focus) / 0x400 (Xcalibur) are reported exactly as the reference would, and
 option 0x10 returns 0 / 1 / 2.

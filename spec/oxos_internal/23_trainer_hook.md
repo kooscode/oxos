@@ -50,11 +50,7 @@ later title until XBMC runs again. A cold boot always starts clean.
 - It never matches OXOS. Its reads stay below 0x8003B000, so they are harmless. OXOS already starts titles of any region (spec/stock/05 §4 step 10).
 
 ## 4. Other BIOSes
-- EvoX M8 and Cerbios 3.1.0 keep the stock call: EvoX at 0x80015A6A, Cerbios at 0x8001653F.
-- Neither installs a trainer hook in its kernel image.
-- Cerbios's extension only prepares each launch (its title patches among them, spec/cerbios/06) and is freed before the title starts; the kernel's own title
-  thread then starts the title through the stock call (spec/cerbios/00). So XBMC4Gamers' patch should take effect on Cerbios as on a stock BIOS (not tested
-  yet: the Halo 2 trainer from XBMC4Gamers on Cerbios would confirm it).
+- EvoX M8 keeps the stock call (at 0x80015A6A) and installs no trainer hook in its kernel image.
 
 ## 5. With Universal Trainers (spec 37)
 OXOS's Universal Trainers (spec 37, the extension `oxos_trainers.xos`) install a trainer in the title-loaded event (spec 34 §7.2), before the title's first instruction. They never

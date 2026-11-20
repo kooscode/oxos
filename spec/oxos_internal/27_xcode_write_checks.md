@@ -117,8 +117,7 @@ behave differently on the two paths.
 - Green debug kit (MCPX X2, Conexant, 128 MB), Modxo: every boot of the kit since 2026-11-07 (netboot, release and serial images, 1.0-1.5 X-codes).
 
 ## 6. Open
-- Whether other modchips or consoles show the same lost writes. Only the Modxo 1.4 console was measured. Cerbios was never seen to fail on this console, but it
-  was not measured the same way.
+- Whether other modchips or consoles show the same lost writes. Only the Modxo 1.4 console was measured.
 - The 1.6 console's program (boot/xcodes_1_6.inc, 2026-11-07) gets the retries and the wait, on its own 0x10B0 value 0x01000010; the end of the program comes
   from header 0x7C (0xECB on the 1.6). The 1.6's power-on value of 0x10B0 was not measured: if it already equals 0x01000010, the wait ends at once. The writes
   the 1.6 program makes from EEPROM bytes (strap, 0x10B8, 0x122C, 0x1214) are not checked.

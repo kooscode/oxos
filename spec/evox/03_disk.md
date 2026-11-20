@@ -26,12 +26,10 @@ before the install and uses the INIT copies 0x800B2770 / 0x800B2784 of entries 0
   - So mode 1 = F: is the whole rest of the disk; mode 3 = F: up to 0x0FFFFFFF and no G:; other non-zero values (2 in this build) = F: up to 0x0FFFFFFF and G:
     after it.
   - High 16 bits of start and count stay 0. A PARTINFO sector found on the disk (§3) replaces the whole table.
-  - Compared with Cerbios (spec/cerbios/03 §3): F: starts at the same sector (E:'s end = 0xEE8AB0); Cerbios caps each automatic partition at 0x74000000 sectors,
-    EvoX does not, so on disks above ~1.06 TB their G: sizes differ.
   The XBE loader area also holds partition 6 / "F:" sizing from 0xEE8AB0 sectors (spec 02 §3).
 
 ## 3. Partition table (PARTINFO)
-- **Format** (Paul Bartholomew's (oz_paulb) LBA48 patch, 2003, GPL; Cerbios uses the same magic and entry layout, spec/cerbios/03 §2): 16-byte magic
+- **Format** (Paul Bartholomew's (oz_paulb) LBA48 patch, 2003, GPL): 16-byte magic
   `****PARTINFO****`, then at +0x30 up to 14 entries of 0x20 bytes: name (16 bytes, e.g. `XBOX MUSIC`, `XBOX SYSTEM`, `XBOX GAME SWAP 1–3`), +0x10 flags (bit 31
   = in use), +0x14 first sector, +0x18 sector count, +0x1C reserved.
   **[C]**

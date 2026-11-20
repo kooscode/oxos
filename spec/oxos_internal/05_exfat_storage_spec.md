@@ -40,7 +40,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
      mkfs.exfat places it at 2048) and the volume fits the disk. Sectors 24 to FatOffset-1 are unused by exFAT
      (after the two 12-sector boot regions), so the reserved-area copy (§4, sectors 1024–2047) lives there. With
      an earlier FAT the disk is not used as an exFAT disk. Sector 3 of such a disk is in exFAT's main boot region
-     but is also where a kernel that takes the disk for a FATX disk (stock, Cerbios, an OXOS without rule 2a)
+     but is also where a kernel that takes the disk for a FATX disk (stock, or an OXOS without rule 2a)
      writes its refurbishment record (Partition0 offset 0x600), which breaks the main region's checksum. So the
      volume is mounted from the backup boot region (sectors 12–23) when the main one fails its checksum; the disk
      is then repaired by copying the backup's 12 sectors over the main region, as `fsck.exfat` does (the backup
@@ -67,7 +67,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
   `F:\Titles\Halo\default.xbe`.
 
 ### 2.1 F: is the only extra drive (decided)
-On FATX disks the extended partitions (F:, G:, and Cerbios's J:–N:) exist because each partition has a size limit. On one exFAT volume every folder shares the
+On FATX disks the extended partitions (F:, G:, ...) exist because each partition has a size limit. On one exFAT volume every folder shares the
 same free space, so a single F: already offers the whole disk:
 - **F:** (Partition6) is the `/F` folder and reports the volume's full free space (§6). It is a folder, not the volume root, so dashboards don't see the system
   folders (`/E`, `/C`, `/X`–`/Z`) as part of F:.

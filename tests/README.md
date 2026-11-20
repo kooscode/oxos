@@ -56,7 +56,7 @@ Run it on request, and after a large change: the file systems, memory, boot, the
 | `controller_test.py` | The `make test_controller` runner: boots the controller test title's disc, presses each input of a virtual gamepad and checks what the title received. |
 | `virtual_gamepad.py` | A virtual gamepad through Linux uinput, which xemu sees as an ordinary USB pad. Used by `controller_test.py`, and by `boot_test.py` to press X for the File Manager. |
 | `mkxiso.py` | Builds the Xbox (XDVDFS) test disc: test files plus the kernel test title as `default.xbe`. Can also pack any folder as a disc (used by `tools/debug_app.py`). |
-| `mkcci.py` | Writes a CCI image (compressed disc image, spec/cerbios/07 §4) from an ISO, for `make test_iso`. |
+| `mkcci.py` | Writes a CCI image (compressed disc image, Team Resurgent's libCCI `FORMAT.md`) from an ISO, for `make test_iso`. |
 | `mkudf.py` | Builds the UDF test disc for `make test_udf`, covering the different ways UDF stores files and names. |
 | `fatx.py` | A FATX reader for the Xbox hard-disk partitions, to check files the kernel wrote, and a small writer (`FATXWriter`: folders, files, copying a host folder) for preparing disks: `python3 tests/fatx.py SRC.qcow2 --add "E:\\Folder=host/folder" --out NEW.qcow2`. |
 | `exfat.py` | Builds GPT disks with an exFAT volume (`--from-fatx SRC DST` copies a FATX disk's C: and E:) and checks a volume completely: boot and entry-set checksums, name hashes, FAT chains, no cluster used twice, the allocation bitmap (`--check IMG`, `--ls IMG /path`); `--add /F/dir=HOST` also copies a host file or folder onto a new disk. |

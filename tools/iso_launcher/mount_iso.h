@@ -6,7 +6,7 @@
 //
 // MountISO takes a drive path (C E F G X Y Z) or a \Device\ path to an .iso (XISO or full dump) or .cci image. For a split image, pass the first part
 // (name.1.iso): name.2.iso is added. A mount replaces the one before it and stays through quick reboots until the console is switched off or UnmountISO is
-// called. The device interface is rmenhal's (NKPatcher) as extended by Cerbios, so this works on Cerbios too.
+// called. The device interface is rmenhal's (NKPatcher), with Team Resurgent's Hermes's request layout, so this works on any BIOS that offers it.
 #pragma once
 #include <xboxkrnl/xboxkrnl.h>
 
@@ -15,7 +15,7 @@
 
 namespace oxos_vdisc {
 
-struct MountRequest { // the device's request layout (spec/cerbios/07 §2.1: NKPatcher's, extended)
+struct MountRequest { // the device's request layout (Team Resurgent's Hermes, src/external.h: NKPatcher's, extended)
     UCHAR Parts, Type, Pad[2];
     ANSI_STRING Path[8];
     ANSI_STRING Link;

@@ -547,7 +547,7 @@ PLAY_HDD    ?= $(firstword $(wildcard $(ROOT)/xbox_files/hdd/msdash.qcow2) $(HDD
 # (xbox_files/hdd/msdash.qcow2), or INSTANCE=name for any other disk (default: its file name); stock_<INSTANCE> for make run_stock.
 INSTANCE    ?= $(if $(filter $(XDASH_HDD),$(abspath $(PLAY_HDD))),xemu,$(if $(findstring msdash,$(notdir $(PLAY_HDD))),msdash,$(subst -,_,$(basename $(notdir $(PLAY_HDD))))))
 STATE       ?= $(ROOT)/xemu_state/oxos_$(INSTANCE)
-# run_stock with another BIOS (BIOS_BASE=...): BIOS_NAME names its state, e.g. BIOS_NAME=cerbios -> cerbios_<INSTANCE>.
+# run_stock with another BIOS (BIOS_BASE=...): BIOS_NAME names its state, e.g. BIOS_NAME=evox -> evox_<INSTANCE>.
 BIOS_NAME   ?= stock
 STATE_STOCK ?= $(ROOT)/xemu_state/$(BIOS_NAME)_$(INSTANCE)
 PLAY_FETCH   = $(filter $(XDASH_HDD),$(PLAY_HDD))

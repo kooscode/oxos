@@ -3,8 +3,8 @@
 Status: **proposal**, not implemented (user, 2026-11-15: "a screenshot kernel extension"). Nothing here is decided until the user says so.
 
 While any title runs, a button combination (or a command from a PC, spec 41) saves the picture on screen as an image file on the hard disk, without the
-title's help and without changing it. Cerbios has screenshots too, by hooking each title's graphics library (spec/cerbios/13 §5); OXOS would read the frame
-the display is showing instead, which needs nothing from the title.
+title's help and without changing it. OXOS would read the frame the display is showing, which needs nothing from the title (no hook in its graphics
+library).
 
 ## 1. What the user sees
 - **Take one:** hold a combination on any controller (to choose; it must not clash with the in-game reset's LT + RT + BACK + BLACK, spec 22), for example

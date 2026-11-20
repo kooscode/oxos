@@ -90,9 +90,7 @@ byte** per register. The writer `write(register, index)` turns it into one or mo
 | 0x0E luma filter on/off | store the state (variant bit 0). If a mode is set and the state changed: re-run `write(register, index)` for per-mode columns **24–41** of the current (remapped) row |
 | WSS/CGMS write | register **7** ← ((word & 0xFFFFF) \| 0x01800000) << 1 |
 
-## 4a. Cerbios and Cromwell (cross-check)
-- **Cerbios:** the same steps, row maps, per-mode rows and NV2A rows as 5838; a 1 µs stall after step 0; the Xcalibur CRTC rows 7, 8, 0x0A and 0x0F with CR19 =
-  0 (spec 22 §3.11); its optional HD RGB setting is not applied to the Xcalibur (Cerbios).
+## 4a. Cromwell (cross-check)
 - **Cromwell** (shows a picture on 1.6): register 4 ← 0x0F and register 0 ← 0, then registers 0x00–0x8F written in order from fixed tables with 500 µs between
   writes; NV2A left in YCrCb (0x680630 = 2) with the reference rasters of NV rows 1 (NTSC, 780 × 525) and 3 (PAL, 800 × 520) and 780 × 525 for 480p, but
   32-pixel HSYNC and 3-line VSYNC (Cromwell).

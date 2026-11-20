@@ -63,8 +63,7 @@ Setup.
   - In the kernel the decoder would take most of the 60 KB still free in the 256 KB image, could stop a boot with any bug, and would need a flash to update.
   - An extension may not use the FPU, MMX or SSE (spec 34 §9.2: the kernel does not save those registers for extensions), which a video decoder needs, and
     the SDK has no screen or sound interface.
-  - An nxdk app has the C library, the FPU, MMX and SSE, costs titles no memory (the next launch frees it) and is updated by copying a file. Cerbios plays
-    its boot video from an app too (spec cerbios/09 §2.1).
+  - An nxdk app has the C library, the FPU, MMX and SSE, costs titles no memory (the next launch frees it) and is updated by copying a file.
 - **The player's code is shared** (`shared/video_player/`, user 2026-11-17): OXOS Setup will preview boot videos with it.
 - The disc started after the video: a game with a trainer still gets the trainer menu first (spec 37), as the launch goes through the extensions as usual.
 
@@ -100,7 +99,7 @@ Set aside:
 - **pl_mpeg** (MIT, one header): MPEG-1 only and no SIMD code; online converters often write MPEG-2 into a `.mpg`.
 - **FFmpeg built for nxdk** (MP4, MOV, AVI, WMV and games' XMV files directly): no nxdk build of it exists yet (kodi4xbox, on nxdk, lists video playback as
   missing), the port is large, and an everyday MP4 would still be too heavy to play smoothly.
-- **XMV, as Cerbios plays it:** Cerbios's player is linked with Microsoft's XDK XMV library (spec cerbios/09 §2.1), which OXOS cannot use.
+- **XMV:** playing it needs Microsoft's XDK XMV library, which OXOS cannot use.
 - **Converting in the browser:** a "Boot video" page in the File Manager (spec 31) that converts any video the browser plays and uploads it. Easiest for users;
   needs an encoder written in JavaScript on that page. A follow-up.
 

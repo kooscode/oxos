@@ -18,7 +18,7 @@ where it has one (used as labels only). **Status: reference only.**
 | Title | its own graphics library repeats the §7 device set-up and calls `AvSetDisplayMode` | — |
 
 - No stage writes the video PLL (VPLL, 0x680508) or the memory PLL (MPLL, 0x680504). The kernel only *reads* 0x680500, 0x680504 and 0x680508 (§7 step 4) (4627
-  kernel) (5838 kernel) (Cerbios). This holds for every encoder, for the HD and VGA-pack modes and with no encoder (§13).
+  kernel) (5838 kernel). This holds for every encoder, for the HD and VGA-pack modes and with no encoder (§13).
 - `AvSetDisplayMode` performs no PMC, PFB, PTIMER or instance-memory access, and never writes PCRTC 0x600804 (4627 kernel) (5838 kernel).
 
 ## 2. `AvSetDisplayMode`: the NV2A writes in order (4627 and 5838)
@@ -65,7 +65,7 @@ framebuffer; then the encoder options 0x0B (level 5) and 0x0E (off). CR25 is not
   writes SR01 ← 0x01 and port 0x80D3 ← 4; the graphics library does this after its first frame (§8) (4627 kernel) (5838 kernel).
 - The AR writes are not preceded by a read of 0x6013DA (the reference relies on the index/data flip-flop being in the index state).
 - 4627 stores the new mode word at #21; 5838 stores it at the start of the full change (before #0). Same result unless the call is re-entered (5838 kernel).
-- The order and values are identical in 4627, 5838 and Cerbios except where marked (Cerbios: §10).
+- The order and values are identical in 4627 and 5838 except where marked.
 
 ## 3. The NV2A row (mode bits 16–23)
 ### 3.1 Layout and selection
@@ -210,10 +210,10 @@ Other registers (0x680880 is written at step 19, from the separate table of §3.
   and 0x680680: the Conexant raster follows its own input timing (H_CLKI; e.g. row 1: 776 × 525, HSYNC 0x28D–0x2AD, VSYNC 0x1EA–0x1ED). The Conexant CRTC rows
   differ from the Focus ones in the SD CRTC rows (§4).
 
-### 3.7 Conexant NV2A rows, 5838 (AV blob; recommended set for 1.0–1.3, identical in Cerbios)
+### 3.7 Conexant NV2A rows, 5838 (AV blob; recommended set for 1.0–1.3)
 Register map; all values hexadecimal dwords, written to the register in the column heading. Conexant descriptor of the AV blob (spec 17 §1a.2), table 5; the
 4627 table differs only in 0x680680 / 0x680684 (§3.8). These rows are written on every console whose encoder is the Conexant (4627: `XboxHardwareInfo` flag 0x20
-clear; 5838: flags 0x20 and 0x400 clear) (4627 kernel) (5838 kernel) (Cerbios).
+clear; 5838: flags 0x20 and 0x400 clear) (4627 kernel) (5838 kernel).
 
 Vertical timing:
 
@@ -316,9 +316,9 @@ Other registers (0x680880 is written at step 19, from the separate table of §3.
 - The quotient 0x680680 / 0x680684 is the same in every SD row except row **0x10**: 4627 divides by 0x20D (525), giving 2100, 5838 by 0x271 (625), giving 1764 =
   the H_CLKO of encoder rows 0x13 / 0x18 (the 625-line rows that use NV row 0x10). The 4627 HD rows hold 2 × HT × VT over 1 (as the Focus rows, §3.5).
 
-### 3.9 Conexant CRTC rows (4627 = 5838 = Cerbios)
+### 3.9 Conexant CRTC rows (4627 = 5838)
 Same 34 indexes and merging as §4 (CR13, CR19, CR25 get the pitch bits). Rows 7–0x0C and 0x0F are the Focus rows of §4; rows 1–6, 0x0D, 0x0E, 0x10 are the
-Conexant's own (4627 kernel) (5838 kernel) (Cerbios).
+Conexant's own (4627 kernel) (5838 kernel).
 
 | row | values in register order |
 |---|---|
@@ -346,10 +346,10 @@ Conexant's own (4627 kernel) (5838 kernel) (Cerbios).
 - Fixed bytes as in §4 (CR1A 0x3A / 0x38, CR1B 0x05, CR20 0x80, CR33 0x11, CR41 0); CR10 (vertical retrace start) is not always equal to the NV2A VSYNC start
   (row 1: 0x1EB against 0x1EA; row 2: 0x1E8 against 0x1EA).
 
-### 3.10 Xcalibur NV2A rows, 5838 (AV blob; the only set for 1.6, identical in Cerbios)
+### 3.10 Xcalibur NV2A rows, 5838 (AV blob; the only set for 1.6)
 Register map; all values hexadecimal dwords, written to the register in the column heading. Xcalibur descriptor of the AV blob, table 5: the Xcalibur has its
 **own** NV2A rows, neither the Focus nor the Conexant ones (the table loader stores the Xcalibur descriptor's tables 5 and 6 for the mode change when flag 0x400
-is set) (5838 kernel). Cerbios carries the same values (Cerbios).
+is set) (5838 kernel).
 
 Vertical timing:
 
@@ -461,7 +461,6 @@ Same 34 indexes and merging as §4. Rows 9 and 0x0B are the Focus rows; all othe
   0x00, 0x40 (replaced by the pitch at #15); CR19 0x38, 0x37, 0x5C, 0x00, 0x38 (ORed with the pitch bits at #15, so the row's bits 0–4, nouveau: start address
   bits 16–20, survive); CR1B **0x85**; CR2D 0xE0, 0xE0, 0xC0, 0xA1, 0x00. Their effect on the scanout is not determined (Open); 1.6 consoles show 480p and 1080i
   with them (inferred from the retail kernel shipping them).
-- **Cerbios** uses the same Xcalibur CRTC rows except **CR19 = 0x00 in rows 7, 8, 0x0A and 0x0F** (Cerbios).
 
 ### 3.12 Rows each reference mode word selects, per encoder
 The same mode word selects the same row numbers on every encoder (§3.3); the encoder rows that carry the timing are:
@@ -586,7 +585,7 @@ The same mode word selects the same row numbers on every encoder (§3.3); the en
 
 ### 5.2 Clocking and sync with the Xcalibur (1.6)
 - **NV2A side:** identical to the other encoders: 0x68050C |= 0x10020000 (TV pixel clocks), no VPLL write, the flat-panel timing generator drives positive HSYNC
-  / VSYNC (FP_TG_CONTROL bits 4 / 8 in every row) (5838 kernel) (Cerbios). Inferred: the Xcalibur supplies the pixel clock, as the Conexant and the Focus do.
+  / VSYNC (FP_TG_CONTROL bits 4 / 8 in every row) (5838 kernel). Inferred: the Xcalibur supplies the pixel clock, as the Conexant and the Focus do.
 - **Register 0x54 = the NV2A raster:** bits 16–27 = HT, bits 0–11 = VT, bit 15 = interlaced input (set only in the 1080i row). In every Xcalibur row it equals
   the NV2A row's HT (0x680824 + 1) and VT (0x680804 + 1) (5838 kernel):
 
@@ -626,7 +625,7 @@ The same mode word selects the same row numbers on every encoder (§3.3); the en
   32-bit front buffer has pitch 2560 (CR13 0x40, CR19 bits 5–7 = 1, CR25 bit 5 = 0) (4627 kernel).
 
 ### 6.2 Start address (0x600800)
-- `AvSetDisplayMode` writes its framebuffer argument to 0x600800 unchanged: no translation, masking or alignment (4627 kernel) (5838 kernel) (Cerbios).
+- `AvSetDisplayMode` writes its framebuffer argument to 0x600800 unchanged: no translation, masking or alignment (4627 kernel) (5838 kernel).
 - Every caller passes a **physical address**: the graphics library stores a surface's GPU address as its CPU (virtual) address & 0x03FFFFFF, and contiguous
   memory is identity-offset (virtual 0x80000000 + physical, or 0xF0000000 + physical), so the low 26 bits are the physical address (4627 kernel).
 - Surfaces used for scanout are allocated with `MmAllocateContiguousMemoryEx` (lowest 0, highest 0x03FFB000 − 1, alignment 0x4000, write-combined read-write
@@ -638,24 +637,24 @@ The same mode word selects the same row numbers on every encoder (§3.3); the en
   START_ADDRESS_HSYNC). Nothing else in the reference writes it (§1). Its power-on value and whether the scanout then uses 0x600800 is not determined.
 
 ### 6.3 Memory interface before scanout
-Read from the X-code tables of xbox_files/bios (Complex_4627.bin: the last 256 KB bank; 5838.bin; cerbios-hybrid-3.1.0.bin; evox.m8plus.fc.137.nodvd.bin) and of
-OXOS's own image (XboxDev/cromwell's table, kernel/boot/xcodes.S). X-code entries are 9 bytes from bank offset 0x80: opcode, operand 1, operand 2; offsets below
-are bank offsets of the entry. Opcode 0x08 **jumps when the current result is not equal** to operand 1 (seen from the memory probe: a lane whose +32 MB
-read-back is not 0x5A5A5A5A goes to the "faulty" marking). The tables were replayed for a 1.4 console (NV2A PMC 0x000000 low byte 0xA3, strap 0x861D4401, SMBus
-devices SMC, Focus encoder and EEPROM present, nothing at the 1.6 encoder's address 0x70 or the Conexant's 0x45) to see which branch such a console takes.
+Read from the X-code tables of xbox_files/bios (Complex_4627.bin: the last 256 KB bank; 5838.bin; evox.m8plus.fc.137.nodvd.bin) and of OXOS's own image
+(XboxDev/cromwell's table, kernel/boot/xcodes.S). X-code entries are 9 bytes from bank offset 0x80: opcode, operand 1, operand 2; offsets below are bank offsets
+of the entry. Opcode 0x08 **jumps when the current result is not equal** to operand 1 (seen from the memory probe: a lane whose +32 MB read-back is not
+0x5A5A5A5A goes to the "faulty" marking). The tables were replayed for a 1.4 console (NV2A PMC 0x000000 low byte 0xA3, strap 0x861D4401, SMBus devices SMC,
+Focus encoder and EEPROM present, nothing at the 1.6 encoder's address 0x70 or the Conexant's 0x45) to see which branch such a console takes.
 
 **Branches by console.**
 - Complex 4627 (one table for 1.0-1.5): NV2A revision 0xA1 vs other. On a non-A1 NV2A: 0x0010B0 ← 0x07633461, 0x0010CC ← 0x66660000, 0x0010D4 ← 9 (entries
   0x0158-0x0173); on A1: 0x07633451, 0, 5 (0x012B-0x0146). Strap 0x101000 ← 0x803D4401 on A1 only (0x0203-0x020C). NVPLL 0x680500 ← 0x00011701 on A1, else
   0x00011C01 (0x0467-0x0482).
-- Cerbios 3.1.0 and EvoX M8+: first an SMBus read of slave 0x70 (address byte 0xE1; Cerbios entries 0x012B-0x0185): a device there (the 1.6 encoder) selects the
-  1.6 table (0x0010B0 ← 0x01000010, ...); no answer jumps to a 1.0-1.5 table (Cerbios from 0x0857, EvoX from 0x0ED8) that equals OXOS's/Cromwell's table below
-  for an A3 NV2A, including the strap rewrite (peek 0x101000, keep its other bits, set bit 31 and bits from the revision: 0x861D4401 here).
+- EvoX M8+: first an SMBus read of slave 0x70 (address byte 0xE1): a device there (the 1.6 encoder) selects the 1.6 table (0x0010B0 ← 0x01000010, ...); no
+  answer jumps to a 1.0-1.5 table (from 0x0ED8) that equals OXOS's/Cromwell's table below for an A3 NV2A, including the strap rewrite (peek 0x101000, keep its
+  other bits, set bit 31 and bits from the revision: 0x861D4401 here).
 - 5838: the 1.6 table only (0x0010B0 ← 0x01000010 at 0x0134, then a jump over the 1.0-1.5 values).
-- A 1.4 console therefore takes the 4627 non-A1 branch, Cerbios's/EvoX's 1.0-1.5 table, or (OXOS) Cromwell's table.
+- A 1.4 console therefore takes the 4627 non-A1 branch, EvoX's 1.0-1.5 table, or (OXOS) Cromwell's table.
 
 **Values on a 1.4 console (NV2A A3), final value of each register written by the X-codes:**
-| Register | Complex 4627 | Cerbios / EvoX (1.0-1.5 table) | OXOS (Cromwell) | 5838 (1.6 table) |
+| Register | Complex 4627 | EvoX (1.0-1.5 table) | OXOS (Cromwell) | 5838 (1.6 table) |
 |---|---|---|---|---|
 | 0x0010B0, 0x0010B8, 0x0010BC | 0x07633461, 0xFFFF0000, 0x5866 | same | same | 0x01000010, 0, 0x5860 |
 | 0x0010C4, 0x0010C8, 0x0010CC, 0x0010D4 | 0x0351C858, 0x30007D67, 0x66660000, 9 | same | same | 0xAAAA0000, 0x7D67, 0x66660000, 0xF |
@@ -663,7 +662,7 @@ devices SMC, Focus encoder and EEPROM present, nothing at the 1.6 encoder's addr
 | 0x001210, 0x001218 | 0x10, 0x00010000 | same | same | 0, 0 |
 | 0x001214 (before calibration) | 0x12121212 (strap bits 18/19 set; 0x10101010 if clear) | 0x09090909 | 0x09090909 | 0 |
 | 0x00122C, 0x001234, 0x001238 | 0xAAAAAAAA | same | same | 0, 0xAAAAAAAA, 0xAAAAAAAA |
-| 0x001230, 0x001240 | 0xAAAAAAAA, 0x8B8B8B8B | 0xFFFFFFFF, 0xFFFFFFFF | same as Cerbios | 0xFFFFFFFF |
+| 0x001230, 0x001240 | 0xAAAAAAAA, 0x8B8B8B8B | 0xFFFFFFFF, 0xFFFFFFFF | same as EvoX | 0xFFFFFFFF |
 | 0x00123C, 0x001244, 0x001248 | 0x8B8B8B8B | same | same | same |
 | 0x00124C, 0x001250 | 0xAA8BAA8B, 0x0000AA8B | same | same | 0xAA8BAA8B, 0x00005474 |
 | 0x1002C0/C8 sequence; 0x1002C4/CC | 0x11, 0x32, 0x132; 0x00100042 | same | same | same; 0x00100000 |
@@ -680,7 +679,7 @@ NVPLL and the memory PLL writes are identical in every image. The differences on
 rewritten by the 2BL calibration, spec 21 §3), the 4627 table not rewriting the strap on A3, and the early SMC-dependent host 0x6C write that Cromwell's table
 lacks (whether it happens on a given console depends on its SMC version byte; to be logged).
 
-**Memory-size probe** (Complex 4627 entries 0x0671-0x0B66; the same logic in Cerbios from 0x0DF7, EvoX from 0x14ED, 5838 from 0x07FD; OXOS does it in
+**Memory-size probe** (Complex 4627 entries 0x0671-0x0B66; the same logic in EvoX from 0x14ED, 5838 from 0x07FD; OXOS does it in
 boot/start.S because Cromwell's table has none): 0x100200 ← 0x03070103 and 0x100204 ← 0x11448000; PCI 0:2:0 and 0:3:0 register 0x3C cleared. For each of 8 lanes
 *n*, address *a* = 0x00555548 + 16*n* (*n* = 0-3, below 64 MB) or 0x04555548 + 16(*n* − 4) (*n* = 4-7, at 64 MB and up): write 0xAAAAAAAA at *a* and 0x5A5A5A5A
 at *a* + 32 MB; if *a* + 32 MB does not read back 0x5A5A5A5A the lane is marked faulty (bit *n* of 0:3:0 0x3C); else if *a* still reads 0xAAAAAAAA (no alias at
@@ -733,7 +732,7 @@ checked in the disassembly (hits that decode as data are not listed). Addresses 
 - Inferred: the scanout works from X-code state alone (Cromwell shows a picture without the §7 set-up), so §7 is not a prerequisite for scanout as such.
 
 ## 7. Device set-up by the kernel's graphics library (boot animation; titles repeat it)
-In order (4627 kernel) (5838 kernel) (Cerbios: same):
+In order (4627 kernel) (5838 kernel):
 1. PBUS 0x1804 (PCI command mirror) |= 4 (bus master); PCRTC 0x600140 ← 0 (vertical-blank interrupt off); PTIMER 0x9140 ← 0.
 2. Read the PCI device and revision mirrors 0x1800 / 0x1808 and the memory size PFB 0x10020C.
 3. PBUS 0x1830 ← 0; PBUS 0x180C ← 0xF800 (latency timer).
@@ -809,18 +808,6 @@ pitch (4627 kernel).
 - An HD row (480p 0x88070701 / 0x88080801, 720p 0x880B0A02, 1080i 0x880E0C03) is used only when a title (or the dashboard) asks for a progressive or HD mode and
   the EEPROM enables it.
 
-## 10. Cerbios (question 7)
-- Same `AvSetDisplayMode` write sequence and values; the NV rows are re-encoded (per-encoder rows of byte indexes into a shared dword pool) and decode to
-  exactly the 5838 rows and 0x680880 values for the Focus (Cerbios).
-- Focus-specific (not in 4627 or 5838): after the 1 µs stall, byte write Focus 0x0C ← 0x0C; at step 20, read Focus 0x0C and write it back with bit 7 (SYNC_MS)
-  set, then byte write Focus 0xBA ← (mode bits 24–27) | 0x20 (the Conexant DAC-enable value; on the Focus 0xBA is HACT_WD low). Purpose not determined
-  (Cerbios).
-- An optional setting for HDTV or VGA packs in HD modes: separate HD encoder rows and NV2A RGB output (0x680630, 0x6808C4, 0x68084C ← 0, also on the same-mode
-  path).
-- Optional mode-word remapping before the mode is applied; the same-mode path is skipped once (on the third call), and for 0x880E0C03 with a setting the pitch
-  writes are skipped.
-- Graphics library device set-up (§7) unchanged; the boot mode list has two extra entries (NTSC-J HDTV 640 × 480p with 10:11 pixels → 0x88110F01).
-
 ## 11. Cromwell (question 8, cross-check; it shows a correct picture on Focus consoles)
 - NV2A output **RGB** for Conexant and Focus (0x680630, 0x68084C, 0x6808C4 ← 0), YCrCb only for the Xcalibur; the Focus is programmed for RGB input (colour
   matrix on, VID_CNTL0 matrix bypass off) (Cromwell).
@@ -867,8 +854,8 @@ Registers the reference writes on every full mode change and xemu does not need 
 | 0x880B0A02 (720p) | 0x0B / 0x0A | 1650 × 750; 74.25 MHz | 1650 × 750; 74.25 MHz from the encoder PLL (PLL_INT 0x21) | 1650 × 750, row 0x23; 74.25 MHz |
 | 0x880E0C03 (1080i) | 0x0E / 0x0C | 2200 × 1125 frame; 74.25 MHz | the same | the same, row 0x24 |
 
-- **VPLL:** no stage writes 0x680508 for any mode or encoder: the only accesses in the 4627, 5838 and Cerbios kernels are the reads of §7 step 4 (4627 kernel)
-  (5838 kernel) (Cerbios). 0x68050C gets the same OR 0x10020000 in every mode (HD, VGA-pack and SD alike).
+- **VPLL:** no stage writes 0x680508 for any mode or encoder: the only accesses in the 4627 and 5838 kernels are the reads of §7 step 4 (4627 kernel)
+  (5838 kernel). 0x68050C gets the same OR 0x10020000 in every mode (HD, VGA-pack and SD alike).
 - **No encoder answering:** the table set still follows `XboxHardwareInfo` (Conexant set when flags 0x20 and 0x400 are clear), the encoder writes are issued
   without checking their result, and the NV2A rows are written as usual (4627 kernel) (5838 kernel). Inferred: the NV2A then has no pixel clock (0x68050C
   selects the encoder's), so no picture; whether the two waits of §2.3 (#1 on 0x6806A0, #18 on 0x6013DA, neither with a timeout) finish without a clock is not
@@ -886,12 +873,7 @@ Registers the reference writes on every full mode change and xemu does not need 
   the same pack → Conexant 0xBA ← 0x20 | (mode bits 24–27); Focus word 0xA0 ← 0x0200 | (0x0F if the bits are 0x0F, else 0); Xcalibur register 4 ← mode bits
   24–27; with no mode set yet the bits are taken as 0x0F (all DACs off) (5838 kernel). 4627: Conexant / Focus 0xBA writes only, as spec 12 §4 (4627 kernel).
 
-## 15. Cerbios and Cromwell with a Conexant or an Xcalibur (cross-check)
-- **Cerbios:** the Conexant and Xcalibur NV2A rows, the 0x680880 values and the Conexant CRTC rows are the 5838 ones (re-encoded as byte indexes into a shared
-  dword pool, decoded and compared); the Xcalibur CRTC rows differ only in CR19 (§3.11). The Conexant encoder tables (SD common, SD per-mode, HD) equal 4627's.
-  Differences in the sequence: a 1 µs stall after the Xcalibur outputs-off step 0; the optional HD RGB setting (§10) applies to the Conexant and the Focus only
-  (cleared for the Xcalibur), with its own Conexant HD rows (0x2E ← 0x00, 0x32 ← 0x48, 0x3C / 0x3E / 0x40 ← 0x80, 0xC6 ← 0x98 RGB input; the other registers as
-  the HD rows) (Cerbios).
+## 15. Cromwell with a Conexant or an Xcalibur (cross-check)
 - **Cromwell, Conexant** (shows a picture on 1.0–1.3): computes its own encoder timing from overscan ratios and sets the NV2A raster to its H_CLKI × V_LINESI
   (the same rule as the reference); NV2A output RGB and Conexant RGB input; in 480p the encoder PLL makes the clock (0xA0 = PLL_INT 12, EN_XCLK = 0; 858 × 525).
   It writes every register 0x2E–0xFE with 500 µs between writes, with TIMING_RST and EN_OUT held off, then a timing reset, EN_OUT on, the luma / chroma gains at
@@ -909,13 +891,12 @@ Registers the reference writes on every full mode change and xemu does not need 
 - Whether the NV2A ignores 0x600800 bits above the memory size (the reference never sets them).
 - Where the boot animation's widescreen flag comes from (no direct writer found; probably the EEPROM widescreen bit).
 - The meaning of FP_HCRTC (0x680828) values that are not width − 1, and the tolerance of the Focus to a raster that is off by a pixel in sync position.
-- Purpose of the Cerbios Focus 0x0C / 0xBA writes.
 - NV rows 9, 0x0A, 0x0C, 0x0D: which title mode words (if any) use them.
 - Conexant 480p (HD row 1, 0xA0 = 0x8C, EN_XCLK set): where the 27 MHz on CLKI comes from on a 1.0–1.3 board, given that no stage programs the VPLL and 0x68050C
   selects the encoder's clock.
 - Xcalibur: which registers set its clock (0x5A, 0x5B, 0x80 vary with the raster); the meaning of the 0x50–0x56 fields beyond the totals; why the 576-line,
   704-input and 1080i rows put the sync edges where §5.2 shows.
-- Xcalibur CRTC rows 7, 8, 0x0A, 0x0C, 0x0F: effect of CR0C, CR19 bits 0–4, CR1B bit 7 and CR2D bits 5–7, and why Cerbios clears CR19 in four of them.
+- Xcalibur CRTC rows 7, 8, 0x0A, 0x0C, 0x0F: effect of CR0C, CR19 bits 0–4, CR1B bit 7 and CR2D bits 5–7.
 - The Conexant's and the Xcalibur's tolerance to sync positions other than the reference rows' (§5.1, §5.2).
 - Xcalibur row 7: why the step-19 value 0x21101101 (scaling bit set) is kept for an unscaled 640-pixel row.
 - Without an encoder: whether the waits of §2.3 #1 and #18 complete.

@@ -76,6 +76,4 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ⬜ One image for every revision | a run-time 1.6 check, so 1.0–1.6 share one image | planned | [28 §4.5](oxos_internal/28_1_6_console.md) |
 | ⬜ USB sticks as memory units | a stick formatted exFAT, FAT32 or FAT16 on a PC is a memory unit, rooted at its `/OXOS` folder and described by `/OXOS/oxos_memory_unit.ini` on the stick; standard FATX units unchanged | planned | [06](oxos_internal/06_exfat_storage_plan.md) |
 
-**Ideas, not planned yet:** features studied in Cerbios that OXOS may add (a second hard disk, fan, LED, LCD and clock control, video options): see
-[`cerbios/00_overview.md`](cerbios/00_overview.md).
 

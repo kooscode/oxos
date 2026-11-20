@@ -22,9 +22,9 @@ The work was iterative: each feature (a kernel subsystem, a driver, a milestone 
 │                                                                │
 │  [THE WALL: INTEROPERABILITY SPECIFICATION]                    │
 │  Crosses: plain-text behavioural specs (spec/stock,            │
-│           spec/cerbios), and the video encoder register        │
-│           and NV2A calibration tables as flat data (§5), and   │
-│           the 16-byte certificate key (§6). Nothing else.      │
+│           spec/evox), the video encoder register and NV2A      │
+│           calibration tables as flat data (§5), and the        │
+│           16-byte certificate key (§6). Nothing else.          │
 │  *ZERO source, machine or disassembled code past this wall*    │
 │                                                                │
 │                               ▼                                │
@@ -47,9 +47,9 @@ The work was iterative: each feature (a kernel subsystem, a driver, a milestone 
 ```
 
 ### 1. Phase 1: Reverse Engineering & Specification Generation
-* **The Input:** The original, compiled Xbox kernels (`xboxkrnl.exe` 1.0.4627.1 and 1.0.5838.1, unpacked from retail BIOS images) analyzed with disassembly and decompilation tools (Ghidra, objdump). The Cerbios kernel was analyzed the same way for cross-checks and for features to add later. The retail kernel was also observed running in the xemu emulator, as a black box (§4). Public material was used alongside: chip datasheets (Conexant CX25870/871, Focus FS453/4), and open-source projects under their own licences (XboxDev/cromwell, nxdk, nouveau, xemu).
+* **The Input:** The original, compiled Xbox kernels (`xboxkrnl.exe` 1.0.4627.1 and 1.0.5838.1, unpacked from retail BIOS images) analyzed with disassembly and decompilation tools (Ghidra, objdump). The EvoX M8+ BIOS (its kernel, a patched retail 5838 kernel) was analyzed the same way for the features OXOS shares with it: 48-bit disk addressing, the extra partitions and the in-game reset. The retail kernel was also observed running in the xemu emulator, as a black box (§4). Public material was used alongside: chip datasheets (Conexant CX25870/871, Focus FS453/4), and open-source projects under their own licences (XboxDev/cromwell, nxdk, nouveau, xemu).
 * **The Action:** The AI agent acted as a reverse engineer to map out the system's mechanical behaviors: kernel exports and their observable behavior, data formats, hardware initialization routines and video encoder I2C registers. The BIOS images were unpacked (their boot loader decrypted) only to reach the kernel for analysis. The boot chain itself was not reimplemented from them: the OXOS BIOS boots with the open X-code sequence from XboxDev/cromwell and contains no Microsoft boot-ROM data. The only Microsoft key it carries is the certificate key of §6, passed to the kernel for save-game and System Link interoperability.
-* **The Constraint:** The agent was prohibited from retaining, reusing, or copy-pasting raw assembly language, decompiled C structures, internal variable names, or creative formatting from the original file. Its sole output was a functional specification documenting *what* the system does mechanically (`spec/stock/` and `spec/cerbios/` in this repository).
+* **The Constraint:** The agent was prohibited from retaining, reusing, or copy-pasting raw assembly language, decompiled C structures, internal variable names, or creative formatting from the original file. Its sole output was a functional specification documenting *what* the system does mechanically (`spec/stock/` and `spec/evox/` in this repository).
 
 ### 2. The Wall: How It Is Kept
 Both phases were carried out by one AI agent with explicit instructions abide keep by strict rules on seperation and what may cross it and on what each phase may work from and to never stray from these rules. Frequent validations of clean-room state and review by AI agent to ensure clean-room approach is maintained.
@@ -57,7 +57,7 @@ Both phases were carried out by one AI agent with explicit instructions abide ke
 2. **Specifications describe behaviour, not code.** They state inputs, outputs, side effects, data formats, the order of hardware accesses, and constants that the hardware or the ABI dictates. Addresses of the original's routines appear only as evidence pointers, so each statement can be checked. No code, decompiled structures or internal names are included.
 3. **Code is written from the committed specification.** When the implementation needs something the specification does not say, the work goes back to Phase 1 and the specification is extended first. Code is never written from the disassembly.
 4. **Verification is black-box (§4).** Its results are written into the specifications as behaviour, never as copied code or data.
-5. **Never in the repository:** Microsoft or Cerbios images, unpacked kernels, decompiler output, or the scratch scripts that read the images. Cerbios's per-game patch data is never copied: OXOS derives its own fixes by testing.
+5. **Never in the repository:** Microsoft or EvoX BIOS images, unpacked kernels, decompiler output, or the scratch scripts that read the images.
 
 ### 3. Phase 2: Independent Clean Re-Implementation
 * **The Boundary:** The agent treats the Phase 1 specifications as its *only* source of truth about the original kernel, alongside the public documentation and open-source references named above.

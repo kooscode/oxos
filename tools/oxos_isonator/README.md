@@ -11,10 +11,10 @@ Halo 2/
 
 The launcher is the OXOS [ISO launcher](../iso_launcher) with the game's identity copied in: title ID, title name, alternate title IDs, region, ratings, disc
 number, version, and the title image (`$$XTIMAGE`). Dashboards such as XBMC4Gamers, EvoX and the OXOS title launcher therefore show the game itself, with its
-name, artwork and save data. Starting it mounts the image in its folder as the console's disc through the virtual disc device that OXOS and Cerbios share
-(`\Device\CdRom1`, rmenhal's NKPatcher interface, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md),
-[`spec/cerbios/07_virtual_discs.md`](../../spec/cerbios/07_virtual_discs.md)). It then starts the game the way a disc in the drive starts. The same folder works
-on OXOS and on Cerbios.
+name, artwork and save data. Starting it mounts the image in its folder as the console's disc through OXOS's virtual disc device
+(`\Device\CdRom1`, rmenhal's NKPatcher interface, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md), with the request
+layout of Team Resurgent's [Hermes](https://github.com/Team-Resurgent/Hermes)). It then starts the game the way a disc in the drive starts. The same folder
+works on any BIOS that offers this device.
 
 ## Usage
 ```
@@ -34,7 +34,7 @@ tools/oxos_isonator/oxos_isonator.py --info xiso/                 # what each im
 | Option | What it does |
 |---|---|
 | `-o DIR` | where games built from folders go (default: the current folder) |
-| `--split` | cut an image over 4 GB into `NAME.1.iso` + `NAME.2.iso`, for FATX disks (Cerbios, stock partitions). Without it an image is one file: exFAT (OXOS) has no file size limit. An existing image is split in place: the tail is copied to part 2 and the file is shortened to part 1, so no second copy of the whole image is made. |
+| `--split` | cut an image over 4 GB into `NAME.1.iso` + `NAME.2.iso`, for FATX disks. Without it an image is one file: exFAT (OXOS) has no file size limit. An existing image is split in place: the tail is copied to part 2 and the file is shortened to part 1, so no second copy of the whole image is made. |
 | `--own-folder` | move each image (and its second part) into a folder named after it. The launcher starts the image in its own folder, so every game needs a folder of its own. |
 | `--name NAME` | the folder and image name for a game built from a folder (default: the source folder's name) |
 | `--title TEXT` | the title name dashboards show (default: the game's own) |
@@ -56,5 +56,5 @@ tools/oxos_isonator/oxos_isonator.py --info xiso/                 # what each im
   launcher (any build, so running the tool again updates the launchers), so a game's own `default.xbe` is never overwritten without `--force`.
 - **On start** the launcher mounts the image and starts the game without touching the screen. It shows text only when something is wrong (no image, a failed
   mount).
-- Repackinator (Team Resurgent) does the same job for Cerbios with its own launcher. This tool is a separate implementation (OXOS is GPL-2.0, Repackinator
+- Repackinator (Team Resurgent) does the same job with its own launcher. This tool is a separate implementation (OXOS is GPL-2.0, Repackinator
   GPL-3.0), and its launcher is the OXOS one.

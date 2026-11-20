@@ -59,7 +59,7 @@ section checksum (factory or user settings reset, wrong video standard or region
   either a new OXOS export or an OXOS-only setting number of `ExSaveNonVolatileSetting`, which another kernel refuses instead of writing anything.
 - **The EEPROM is backed up first:** the first time OXOS Setup runs, it saves all 256 bytes to `C:\OXOS\oxos_eeprom_backup.bin` (and keeps an existing one).
   That file is what saves a console whose EEPROM is ever damaged, by OXOS or anything else.
-- **The byte is checked to be free** before it is chosen: none of the stock dashboard, XBL Dashboard, EvoX, XBMC4Gamers, Cerbios or the common EEPROM tools may
+- **The byte is checked to be free** before it is chosen: none of the stock dashboard, XBL Dashboard, EvoX, XBMC4Gamers or the common EEPROM tools may
   write it.
 - A power cut during the write can only affect that byte (each takes a few milliseconds); the kernel treats a value it does not recognise as "everything on".
   Wear is no concern: EEPROMs are rated for about a million writes per byte.

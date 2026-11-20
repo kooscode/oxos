@@ -129,7 +129,7 @@ OXOS's own files are in `C:\OXOS\` (exFAT disk: `/C/OXOS/`), shipped from `kerne
   test_boot_video` plays it in xemu (plays, skipped, missing file, off, no player); `video_decode_title` measures decoding speed on a console.
 
 ## Reverse engineering: REA writes the spec, the main agent implements it
-Behaviour of the stock kernel, Cerbios or EvoX is studied with **REA**, the reverse-engineering MCP server (`mcp__rea__*` tools on Ghidra: `open_binary`,
+Behaviour of the stock kernel or EvoX is studied with **REA**, the reverse-engineering MCP server (`mcp__rea__*` tools on Ghidra: `open_binary`,
 `search_procedures`, `procedure_pseudo_code`, `xrefs`, `read_bytes`, ...; the `reverse-engineer-anything` skill explains them). The work is split in two, so no
 reference code ever reaches OXOS (clean room, [`spec/README.md`](spec/README.md), [`dmca_compliance.md`](dmca_compliance.md)):
 **If the `mcp__rea__*` tools are missing** (`claude mcp list` shows no `rea`, or it is not connected), ask the user before installing anything. REA is the
@@ -145,7 +145,7 @@ claude mcp add rea --scope user -e GHIDRA_INSTALL_DIR=/path/to/ghidra -e JAVA_HO
 Restart Claude Code afterwards; `claude mcp list` should show `rea: ... ✔ Connected`. Ghidra's first analysis of a binary takes minutes.
 
 1. **A subagent with REA writes a research spec** into `experimental/` (not `spec/`, and not listed in `spec/README.md`). Once the findings are clear and the
-   implementation built from them works, the spec is written into `spec/stock/`, `spec/cerbios/` or `spec/evox/` (next free number, listed in
+   implementation built from them works, the spec is written into `spec/stock/` or `spec/evox/` (next free number, listed in
    `spec/README.md`) and committed with the implementation.
 2. **The main agent implements from the spec only.** It does not open the reference binaries or read REA's output itself; a gap in the spec goes back to
    the subagent as a question, and the answer goes into the spec.
@@ -160,7 +160,7 @@ order with its value, what was checked and ruled out, the versions compared).
 **The hand-off prompt** (Agent tool), in short:
 ```text
 Using the REA MCP tools, study <behaviour> in <binary, version, sha256> (compare <other versions>). Write a clean-room behavioural spec to
-experimental/<stock|cerbios|evox>_NN_<name>.md in the style and detail of spec/stock/23_boot_hardware_setup.md: sources and hashes, what was searched, then the
+experimental/<stock|evox>_NN_<name>.md in the style and detail of spec/stock/23_boot_hardware_setup.md: sources and hashes, what was searched, then the
 behaviour as numbered steps and tables (conditions, constants, register values, data formats, error paths), citing the reference's addresses. Answer
 these questions: <list>. NO code of any kind: no disassembly, no decompiled or pseudocode, no instruction sequences, no code bytes; describe what it does,
 not how it is written. Report back: the spec's path, a summary of its findings, and what stays unknown.
@@ -220,7 +220,7 @@ Each tool's invocation and options are in its README (folders) or its docstring 
 | Run the host unit tests | `tools/unit_tests.sh` | GoogleTest, `tests/unit/` |
 | Build a console app | `tools/nxdk_app.mk` + `tools/sdl_screen/` | nxdk + SDL3; output in `build/<folder>` |
 | Start an XBE in xemu | `make -C kernel run_xbe XBE=...` (`tools/xbe_launcher/`), `run_iso` (`tools/iso_launcher/`) | |
-| Game folders from disc images | `tools/oxos_isonator/` | for OXOS and Cerbios |
+| Game folders from disc images | `tools/oxos_isonator/` | for OXOS and any BIOS with the NKPatcher virtual disc device |
 | Copy files to and from a console, start an XBE | `apps/oxos_ftp/` (the OXOS FTP server; `SITE LAUNCH /F/path`, `SITE REBOOT`) | Python's `ftplib` in one session is fastest for many files |
 | Boot a new kernel on a console, run an XBE straight away | `tools/netboot/` (`netboot.py IMAGE --title DIR --title-name NAME`) | flash the netboot image once |
 | Power a console on or off, read its COM1 and POST codes | `tools/modxo/` (`console.py on`, `off`, `cycle`, `state`, `log`) | the Modxo rig; keep `console.py log` running |

@@ -167,8 +167,8 @@ from which titles derive their save-signature and System Link keys: with it, sav
 ## How it was made
 - **The kernel** (`src/`): the reference kernel was studied with Ghidra to write behavioural specifications (`../spec/stock/`), and the kernel is written from
   those specs only. No Microsoft source code, machine code, disassembly, decompiled code or keys are included.
-- **Planned features** (`../spec/cerbios/`): the Cerbios BIOS's kernel and extension were studied the same way, and its features were written up as behavioural
-  specs for OXOS. Everything OXOS adds to a stock kernel, implemented and planned: `../spec/oxos_features.md`.
+- **Partitions** (`../spec/cerbios/03`): the Cerbios BIOS's partition layout was studied the same way.
+  Everything OXOS adds to a stock kernel, implemented and planned: `../spec/oxos_features.md`.
 - **The boot chain** (`boot/`, spec 01 §5): our own reset code and 2BL, with the hardware set-up table (X-codes) and EEPROM key handling of
   [XboxDev/cromwell](https://github.com/XboxDev/cromwell). On a console the MCPX boot ROM runs Cromwell's X-codes, whose "overflow trick" hands control to our
   2BL without any Microsoft key; without a boot ROM (debug kits with the MCPX X2, and xemu), our reset code runs the same X-codes. `tools/harden_xcodes.py` adds
@@ -262,7 +262,7 @@ console.
 | 19 | exFAT disks: Xbox drives as folders, read-write, cache formats | oxos/05, oxos/07 | ✅ xemu (`test_exfat`): Halo, Halo 2; console |
 | 20 | Video encoders: Conexant, Focus, Xcalibur from their register maps | 18–20, oxos/02 | ✅ xemu (`test_encoders`); console: Focus |
 | 21 | Real hardware: netboot, flash mapping, CPU set-up, microcode, pad calibration | oxos/09, oxos/13–15, 21 §3 | ✅ console: the dashboard boots |
-| 22 | Virtual discs: XISO, full dumps, CCI, split images (`src/storage/`, ISO launcher) | oxos/16, cerbios/07 | ✅ xemu (`test_iso`); console: Halo 2 |
+| 22 | Virtual discs: XISO, full dumps, CCI, split images (`src/storage/`, ISO launcher) | oxos/16 | ✅ xemu (`test_iso`); console: Halo 2 |
 | 23 | Boot jingle | oxos/17 | removed 2026-11-17 (with the splash's animation) |
 | 24 | Boot-only memory freed before the first title (`-Oz` build) | oxos/18 | ✅ xemu (`test_memory`); more free memory than stock when built (2026-10-27), 4–36 KB (under 0.06 %) less on games since (2026-11-15, oxos/18 §7) |
 | 25 | Dashboard choice: EvoX when installed, else the Xbox dashboard | oxos/19 | ✅ xemu (`test_dash`) |

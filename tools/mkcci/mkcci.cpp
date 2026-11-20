@@ -1,5 +1,5 @@
-// mkcci: convert an Xbox disc image (.iso, XISO or full dump) to CCI, the LZ4-compressed format OXOS and Cerbios mount (spec/cerbios/07 §4,
-// spec/oxos_internal/16_virtual_discs.md).
+// mkcci: convert an Xbox disc image (.iso, XISO or full dump) to CCI, the LZ4-compressed format OXOS mounts (Team Resurgent's libCCI FORMAT.md,
+// GPL-2.0; spec/oxos_internal/16_virtual_discs.md).
 //
 //   mkcci IN.iso OUT [--split] [--no-verify]
 //

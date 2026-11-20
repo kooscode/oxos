@@ -22,7 +22,7 @@ These scripts are the PC side.
   off).
 - **1.6 console:** it has no LPC header, so the LPC lines are wired to the board (a rebuilt header). LFRAME goes to the Pico's LFRAME pin (GPIO 5 on the
   RP2040-Tiny), not to ground. Use two ground wires and keep every wire short: with long wires the LPC cycles were corrupted and the console showed FRAG (red
-  and green), even with Cerbios.
+  and green).
 - The BIOS goes into Modxo's flash bank as its own .uf2: `flashbin_to_uf2.py` from Modxo's `tools/` (default base 0x10040000).
 - Python 3 with pyserial (`pip install pyserial`).
 

@@ -55,7 +55,7 @@ retail kernel's value is 3); it is not an ini key. It applies only for disks lar
 
 ## 4. Drive letters (extension)
 Partition numbers by letter: **C 2, E 1, F 6, G 7, X 3, Y 4, Z 5**; and per disk J–N = partitions 10–14 (strings `0J10\ 0K11\ 0L12\ 0M13\ 0N14\` for disk 0 and
-`1J10\ … 1N14\` for disk 1). Paths may use `HDD0-`/`HDD1-` prefixes (`HDD?-?:\`) and `DVD-ROM:\`; spec 05 (dual HDD) covers disk 1.
+`1J10\ … 1N14\` for disk 1). Paths may use `HDD0-`/`HDD1-` prefixes (`HDD?-?:\`) and `DVD-ROM:\`.
 
 ## 5. Partition-table query for applications (device control)
 A disk device accepts a Cerbios-specific control code **0xCAFEBABE**. With an output buffer of at least 0x1C bytes it returns: 0xCAFEBABE, 0xBABEFACE, version

@@ -6,8 +6,8 @@ equivalent.
 ## 1. The problem
 The NV2A's DRAM refresh is switched on by the X-codes: PFB 0x100210 ← 0x80000000, after the mode-register sequence and before the timing register and the
 memory-clock (host 0:0.3 register 0x6C) writes. Every X-code table examined does this with the same value, for every console revision (Complex 4627 and Cromwell
-for 1.0-1.5, 5838 for 1.6, Cerbios and EvoX for both; spec/stock/22 §6.3). Nothing later in a reference chain reads or writes the register again: neither retail
-2BL (4627, 5838), nor Cerbios's loader, nor the 4627 / 5838 kernels (spec/stock/22 §6.3a).
+for 1.0-1.5, 5838 for 1.6, EvoX for both; spec/stock/22 §6.3). Nothing later in a reference chain reads or writes the register again: neither retail
+2BL (4627, 5838), nor the 4627 / 5838 kernels (spec/stock/22 §6.3a).
 
 On the no-DVD 1.4 console (2026-10-28) the register read 0 (bit 31 clear, its low counter fields stopped) right after the X-codes in about one cold boot in five
 once the console had been powered for ~10 minutes (the 2BL's pad measurement A had drifted to 0x5C-0x5E, spec/stock/21 §3.8). It stayed 0 through the 2BL and

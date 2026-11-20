@@ -1,4 +1,4 @@
-"""Write a CCI image (the compressed disc image format of spec/cerbios/07 §4) from an ISO, for the virtual disc tests.
+"""Write a CCI image (the compressed disc image format of Team Resurgent's libCCI FORMAT.md, GPL-2.0) from an ISO, for the virtual disc tests.
 
 Each 2048-byte block is LZ4-compressed (a plain greedy compressor, block format) when that saves space, else kept as it is; the index after the blocks holds
 each block's offset / 4 (bit 31 set for a compressed block, as writers do) plus one entry for the end.

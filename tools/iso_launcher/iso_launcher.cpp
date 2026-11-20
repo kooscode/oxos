@@ -7,7 +7,7 @@
 //   - Without iso.txt: the image in the launcher's own folder, so a copy of the launcher next to an image starts it.
 // Images: XISO or a full disc dump (.iso), CCI (.cci), either one whole or split in two (name.1.iso + name.2.iso).
 //
-// The image is mounted through the virtual disc device (\Device\CdRom1, rmenhal's NKPatcher interface, which Cerbios uses too), then \Device\CdRom0\default.xbe
+// The image is mounted through the virtual disc device (\Device\CdRom1, rmenhal's NKPatcher interface), then \Device\CdRom0\default.xbe
 // is launched through the launch data page and a quick reboot; the mount stays for the title's own reboots until the console is switched off (or the disc tray
 // is opened). The launcher leaves the screen alone, so the title's video mode change is the only one; it starts SDL (tools/sdl_screen) and shows text only when
 // something is wrong.

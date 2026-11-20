@@ -47,11 +47,7 @@ file (or the section) copied.
 Until 2026-11-17 that list was fixed in the kernel (EvoX first; the XBL loader added 2026-11-08 as `E:\XBLDashboard\default.xbe`, moved to `C:\Dashboard` the
 same day, where the installer puts it).
 
-## 4. Other BIOSes (for comparison)
-- Cerbios: one path, `DASHPATH` (alias `DASHPATH1`) in `cerbios.ini`, default `C:\evoxdash.xbe`; then its recovery dashboard, then `C:\xboxdash.xbe` (spec
-  cerbios/09 §2).
-
-## 5. Tests
+## 4. Tests
 `make test_dash` boots the xemu dashboard disk four times:
 - as it is, no `oxos_settings.ini`: `XeImageFileName` is `C:\xboxdash.xbe`;
 - with a copy of its dashboard as `C:\evoxdash.xbe` but no `[dashboard]` (`boot_test.py --dash --evox`): still `C:\xboxdash.xbe`;

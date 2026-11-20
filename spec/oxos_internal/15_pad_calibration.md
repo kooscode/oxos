@@ -6,13 +6,13 @@ Implemented 2026-10-26. Behaviour: spec/stock/21 §3.7a (Cerbios's sequence for 
 `BlMain` (kernel/boot/bl.cpp) follows Cerbios's (and the retail 2BL's) order: device 1 0x80 byte ← 2, SMC challenge (with SMC 0x01 ← 0), device 1 0x8C ←
 0x40000000, method selection and `BlPadCalibrate`, `BlSetUpChipset` (device 1 0x54, host 0x64, the host 0x6C LDT toggle, host 0x80, then the revision ≥ D1
 write), front LED, network download (netboot builds), Inflate. Not done: the "SHADOW" pre-check (our 2BL runs only on a cold boot) and the retail 0xCC fill of
-0x80090000 (Cerbios does not do it either).
+0x80090000.
 
 ## 2. Table
 - Cerbios's layout (0x135 bytes), recorded in spec/stock/21 §3.9 and built into the X-code area at the flash offset in header 0x7C (0xC90; 0xDC0 in MCPXREVD5
   images) from kernel/boot/padcal_table.inc, read through the 16 MB flash window as Cerbios does. Like the video encoder tables, it is a functional hardware
   constant (dmca_compliance.md §5).
-- A table whose breakpoints do not increase makes the 2BL return before touching a register (Cerbios would divide by zero), so the X-codes' values stay.
+- A table whose breakpoints do not increase makes the 2BL return before touching a register, so the X-codes' values stay.
 - NV2A D3 and later (1.6) without upgraded memory: Cerbios's EEPROM method, not implemented; values stay.
 
 ## 3. Diagnostics

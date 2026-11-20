@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""oxos_isonator: Xbox disc images (XISO) and per-game launchers for OXOS and Cerbios.
+"""oxos_isonator: Xbox disc images (XISO) and per-game launchers for OXOS.
 
 For every game it makes a folder a dashboard (XBMC4Gamers, EvoX, the OXOS title launcher) lists as a game:
 
@@ -8,15 +8,15 @@ For every game it makes a folder a dashboard (XBMC4Gamers, EvoX, the OXOS title 
         default.xbe      the launcher: OXOS's ISO launcher, carrying the game's title ID, name, region, version and
                          title image, so the dashboard shows the game itself
 
-Starting default.xbe mounts the image in its folder as the console's disc and starts the game, through the virtual disc device that Cerbios and OXOS share
-(rmenhal's NKPatcher interface; spec/oxos_internal/16_virtual_discs.md, spec/cerbios/07).
+Starting default.xbe mounts the image in its folder as the console's disc and starts the game, through OXOS's virtual disc device
+(rmenhal's NKPatcher interface, Team Resurgent's Hermes request layout; spec/oxos_internal/16_virtual_discs.md).
 
 Sources:
   - an extracted game folder (default.xbe at its top): an XISO is built from it, in OUT/<name>/;
   - a disc image (.iso, XISO or full dump; a split one by its .1.iso part): only the launcher is made, next to it;
   - a folder of images, or of game folders: each one in turn.
 
-Images are one file by default: exFAT (OXOS) has no file size limit. --split cuts an image over 4 GB into two parts for a FATX disk (Cerbios, stock partitions),
+Images are one file by default: exFAT (OXOS) has no file size limit. --split cuts an image over 4 GB into two parts for a FATX disk,
 named NAME.1.iso and NAME.2.iso.
 
 Python 3.8+, standard library only. The launcher template is build/tools/iso_launcher/bin/default.xbe (make -C kernel iso_launcher), or --launcher.

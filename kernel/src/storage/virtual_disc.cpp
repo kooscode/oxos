@@ -1,6 +1,6 @@
 // Virtual disc images: an Xbox disc image (XISO, a full disc dump or CCI) on the hard disk stands in for the DVD drive
 // (spec/oxos_internal/16_virtual_discs.md). The device interface is rmenhal's virtual DVD drive from NKPatcher (cdromimagedrv.asm, 2004, GPL-2.0), with
-// Cerbios's request layout and slots (spec/cerbios/07): the control device
+// the extended mount request of Team Resurgent's Hermes (src/external.h, GPL-3.0): the control device
 // \Device\Virtual0\Image0 (links \Device\CdRom1, \??\CdRom1:), mount and unmount device controls, image slots 1 and 2 (\Device\Virtual0\Image1, Image2). OXOS
 // design:
 // - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (ServeVirtualDvd, called by the drive's read and device-control routines), so D: and
@@ -26,7 +26,7 @@ volatile NTSTATUS VirtualDiscLastMountStatus; // the last mount or unmount reque
 namespace {
 
 constexpr ULONG VD_SLOTS = 2;      // images 1 and 2 (0 is the control device)
-constexpr ULONG VD_NAME = 0x106;   // the longest path or link name kept (as Cerbios)
+constexpr ULONG VD_NAME = 0x106;   // the longest path or link name kept
 constexpr ULONG VD_SECTOR = 0x800;
 constexpr ULONGLONG VD_GAME_PARTITION = 0x18300000; // full disc dumps: where the game partition starts
 constexpr ULONG IOCTL_VD_PRESENT = 0x1EE7CD00, IOCTL_VD_MOUNT = 0x1EE7CD01, IOCTL_VD_UNMOUNT = 0x1EE7CD02, IOCTL_VD_PRESENT2 = 0x0CE52B00,
@@ -479,7 +479,7 @@ bool CopyName(const UCHAR *Field, CHAR *Out) {
     return true;
 }
 
-// The mount request (spec/cerbios/07 §2.1; NKPatcher's with its dword count split into count and type): {count, type, -, -, path[8] (counted strings at
+// The mount request (Hermes's, src/external.h: NKPatcher's with its dword count split into count and type): {count, type, -, -, path[8] (counted strings at
 // 4 + 8 i), link at 0x44}.
 NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
     if (!In || InLength < 0x4C || !In[0] || In[0] > 2)

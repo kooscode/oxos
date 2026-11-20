@@ -6,8 +6,7 @@ X-code interpreter, the 5838 X-code program, the EEPROM memory parameters, the m
 
 Evidence conventions:
 - "MCPX 1.1 ROM 0xFFFFxxxx": the 512-byte boot ROM (xbox_files/mcpx/mcpx_1.1.bin) at its run address 0xFFFFFE00. "MCPX 1.0 ROM": mcpx_1.0.bin, same addressing.
-- "5838 X-code 0x0412": flash offset of a 9-byte X-code in xbox_files/bios/5838.bin. Same for "4627 X-code" (Complex_4627-256k.bin) and "Cerbios X-code"
-  (cerbios-hybrid-3.1.0.bin).
+- "5838 X-code 0x0412": flash offset of a 9-byte X-code in xbox_files/bios/5838.bin. Same for "4627 X-code" (Complex_4627-256k.bin).
 - "5838 FBL 0xFFFFD5B1": the first-stage loader at its run address (flash 0x3D400 = 0xFFFFD400).
 - "5838 2BL 0x400A5F": the decrypted 2BL at 0x400000 + image offset (where it runs; spec 21 uses the same addresses).
 - "5838 kernel 0x80054921": xboxkrnl 1.0.5838.1 at base 0x80010000.
@@ -41,7 +40,7 @@ Evidence conventions:
 | 0x07 | use result | the low byte of operand 1 is taken as the op to run; that op gets operand 2 as its operand 1 and the **accumulator** as its operand 2. So "07, 03, A" writes the accumulator to memory A; "07, 04, A" writes it to PCI address A; "07, 11, P" writes its low byte to port P (0xFFFFFE17-0xFFFFFE21) |
 | 0x08 | jump if not equal | if accumulator ≠ operand 1: pointer += operand 2 (signed, relative to the **next** op) (0xFFFFFE77) |
 | 0x09 | jump | pointer += operand 2 (relative to the next op) (0xFFFFFE83) |
-| 0x10 | AND-OR, second register | second register ← (second register AND operand 1) OR operand 2; accumulator ← second register (0xFFFFFE8B). Not used by 4627, 5838, Cerbios or Cromwell. |
+| 0x10 | AND-OR, second register | second register ← (second register AND operand 1) OR operand 2; accumulator ← second register (0xFFFFFE8B). Not used by 4627, 5838 or Cromwell. |
 | 0x11 | I/O write | 8-bit write of the low byte of operand 2 to port operand 1 (0xFFFFFE97) |
 | 0x12 | I/O read | accumulator ← 8-bit read of port operand 1, zero-extended (0xFFFFFEA2) |
 | 0xEE | exit | §1.4 (0xFFFFFEAE) |
@@ -144,7 +143,7 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 | 18 | PCI 0:1:1 0x18 | 0x0000C201 | 0x0122 |
 | 19 | I/O 0xC200 (byte) | 0x70 | 0x012B |
 - The SMBus is enabled **before** any memory-interface write, because the EEPROM loop (§3) runs between the first two memory-interface writes and the rest.
-- 5838 writes the PM base only at 0:1:0 0x84. The 4627 program writes it only at 0:1:0 0x10 (4627 X-code 0x0092); Cerbios and Cromwell write both (§7).
+- 5838 writes the PM base only at 0:1:0 0x84. The 4627 program writes it only at 0:1:0 0x10 (4627 X-code 0x0092); Cromwell writes both (§7).
 
 ### 2.3 NV2A memory interface (0x10B0-0x10E8) and strap
 | # | Register | Value | Condition | Evidence |
@@ -181,8 +180,8 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 | 38 | SMBus byte write: 0xC004 ← 0x20, 0xC008 ← 0x01 (command), 0xC006 ← 0x00 (data), 0xC002 ← 0x0A (start, byte data); poll 0xC000 until it reads exactly 0x10; 0xC000 ← 0x10 (clear) | 0x01CD-0x0203 |
 | 39 | SMBus byte read: 0xC004 ← 0x21, 0xC008 ← 0x01, 0xC002 ← 0x0A; poll 0xC000 until 0x10; 0xC000 ← 0x10; read 0xC006 | 0x020C-0x0242 |
 | 40 | If the byte read is **not 0x50** ('P'): PCI 0:0:3 0x6C ← 0x01000000. Either way the program goes on. | 0x024B-0x025D |
-- Writing 0 to SMC register 1 restarts the SMC's version string, so the byte read is its first character. The same check is in 4627 (4627 X-codes 0x03BC-0x044C)
-  and Cerbios; Cromwell reads the byte and ignores it (boot_rom/Xcodes.h:199-200).
+- Writing 0 to SMC register 1 restarts the SMC's version string, so the byte read is its first character. The same check is in 4627 (4627 X-codes
+  0x03BC-0x044C); Cromwell reads the byte and ignores it (boot_rom/Xcodes.h:199-200).
 
 ### 2.6 GPU clock and PBUS defaults
 | # | Register | Value | Evidence |
@@ -202,7 +201,7 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 | 54 | 0x1240 | 0xFFFFFFFF | 0x06CB |
 | 55 | 0x1244 | 0x8B8B8B8B | 0x06D4 |
 | 56 | 0x1248 | 0x8B8B8B8B | 0x06DD |
-- The memory PLL (0x680504) is **not written** by 5838 (nor by 4627, Cerbios or Cromwell): the memory clock is the hardware's own.
+- The memory PLL (0x680504) is **not written** by 5838 (nor by 4627 or Cromwell): the memory clock is the hardware's own.
 - 0x122C, 0x1214 and 0x1230-0x1248 are the pad registers. These are the values in force while the DRAM is initialised and tested; the 2BL's calibration replaces
   nine of them (spec 21 §3.7). 0x124C and 0x1250 (#62-63) are not touched by the 2BL.
 
@@ -220,8 +219,6 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 | 65 | 0x100228 | 0x081205FF | 0x0764 |
 | 66 | 0x1218 | **0** | 0x076D |
 - No delay and no poll between any of these writes.
-- Cerbios's 1.6 path issues the 0x132 pair later, after #61-62 and after #67-73 (Cerbios X-codes 0x0DC1, 0x0DCA); the rest is the same. Both boot the 1.6
-  console.
 
 ### 2.8 Chipset (bridge and host function 3)
 | # | Register | Value | Evidence |
@@ -287,8 +284,8 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 | **0xC0** | 4th | NV2A **0x1214** | b × 0x01010101 | 0x055A-0x0563 |
 - **Byte repetition** is done with the ops available: for each bit k (0-7) of the byte (tested in the value read back from 0x1248), 0x1248 is ORed with
   0x01010100 << k (5838 X-codes 0x03FB-0x04CA tests, 0x057E-0x0695 ORs). The result is the byte in all four bytes of 0x1248.
-- The strap's bit 31 set makes the written value override the hardware straps (inferred from all four programs setting it whenever they rewrite the strap). Bits
-  25-28 always end at 0 on a 1.6; the kernel then sets XboxHardwareInfo flag 0x40 (bits 25-26 zero, spec 02 §5; §6.1).
+- The strap's bit 31 set makes the written value override the hardware straps (inferred from all three programs of §7 setting it whenever they rewrite the
+  strap). Bits 25-28 always end at 0 on a 1.6; the kernel then sets XboxHardwareInfo flag 0x40 (bits 25-26 zero, spec 02 §5; §6.1).
 - **0x10D4 and the rest of the memory interface (§2.3 #24-31) are written after 0xC3 and 0xC2 are applied; the DRAM controller (§2.4) after that; 0x122C and
   0x1214 (from 0xC1, 0xC0) after the GPU clock and before the DRAM initialisation.**
 
@@ -305,7 +302,7 @@ The program is not executed in file order. Order of execution (5838 X-codes):
 - What writes them at the factory, and their physical meaning (memory vendor or chip type for 0xC3, drive strengths for the others), is not in the code (§8).
 
 ## 4. Memory test and size decision (A4)
-Same logic as the 4627 program (4627 X-codes 0x0671-0x0BE4) and Cerbios; spec 22 §6.3 describes it for 1.0-1.5.
+Same logic as the 4627 program (4627 X-codes 0x0671-0x0BE4); spec 22 §6.3 describes it for 1.0-1.5.
 
 ### 4.1 Set-up (5838 X-codes 0x07FD-0x0818)
 | # | Register | Value |
@@ -447,51 +444,49 @@ Lane n (bit n of the masks) uses address A = 0x00555548, 0x00555558, 0x00555568,
   the vector-0x31 set-up (§6.1), neither specific to the 1.6.
 
 ## 7. Comparison of the X-code programs (A6)
-Final value of every register a program writes. 4627 = Complex 4627 for an NV2A that is not A1 (the A1 branch: spec 22 §6.3). Cerbios = its 1.6 path (taken when
-the SMBus read of address 0xE1 answers). Cromwell = boot_rom/Xcodes.h with MCPXREVD5. "EE" = from the EEPROM (§3.3). Values in hex. Registers equal in all four
-are listed at the end.
+Final value of every register a program writes. 4627 = Complex 4627 for an NV2A that is not A1 (the A1 branch: spec 22 §6.3). Cromwell = boot_rom/Xcodes.h
+with MCPXREVD5. "EE" = from the EEPROM (§3.3). Values in hex. Registers equal in all three are listed at the end.
 
-| Register | 4627 | 5838 (1.6) | Cerbios 1.6 path | Cromwell MCPXREVD5 | Cromwell source |
-|---|---|---|---|---|---|
-| ops 0xF5, 0x80 (no-ops) | yes | yes | no | no | — |
-| PCI 0:1:0 0x84 (PM base) | not written | 8001 | 8001 | 8001 | Xcodes.h:27 |
-| PCI 0:1:0 0x10 (PM base) | 8001 | not written | 8001 | 8001 | Xcodes.h:28 |
-| SMBus enable (0:1:1 0x04/0x14/0x18, I/O 0xC200) | after the memory interface | **before** the memory interface | before | after | Xcodes.h:96-99 |
-| Encoder SMBus traffic in the X-codes | Conexant writes | **none** | a read of 0xE1 (Xcalibur probe) | Conexant, Focus, Xcalibur writes | Xcodes.h:110-178 |
-| 0x10B0 | 07633461 | **01000010** | 01000010 | 01000010 | Xcodes.h:47 |
-| 0x101000 (strap) | not written (A1 only) | **from EE 0xC3**, mask E1F3FFFF | from EE 0xC3 | from the hardware strap bits 18/19: 00 → 80000000 set; 11 → 860C0000; mixed → 820C0000 (mask E1F3FFFF) | Xcodes.h:52-78 |
-| 0x10B8 | FFFF0000 | **from EE 0xC2** (b·0x01010000) | from EE 0xC2 | EEEE0000 / FFFF0000 / 11110000 by the same strap bits | Xcodes.h:64-79 |
-| 0x10D4 | 9 | **F** | F | 9 | Xcodes.h:80 |
-| 0x10BC | 5866 | **5860** | 5860 | 5866 | Xcodes.h:82 |
-| 0x10C4 | 0351C858 | **AAAA0000** | AAAA0000 | 0351C858 | Xcodes.h:83 |
-| 0x10C8 | 30007D67 | **00007D67** | 00007D67 | 30007D67 | Xcodes.h:84 |
-| 0x10DC | A0423635 | **0** | 0 | A0423635 | Xcodes.h:86 |
-| 0x10E8 | 0C6558C6 | **04000000** | 04000000 | 0C6558C6 | Xcodes.h:87 |
-| SMC version check (0:0:3 0x6C ← 01000000 unless 'P') | yes | yes | yes | no (byte read, ignored) | Xcodes.h:199-200 |
-| 0x1210 | 10 | **0** | 0 | 10 | Xcodes.h:207 |
-| 0x1214 (before calibration) | 10101010 or 12121212 (strap 18/19) | **from EE 0xC0** | from EE 0xC0 | 48480848 or 09090909 (strap 25/26) | Xcodes.h:208-220 |
-| 0x122C (before calibration) | AAAAAAAA | **from EE 0xC1** | from EE 0xC1 | 88888888 or AAAAAAAA | Xcodes.h:208-220 |
-| 0x1230 | AAAAAAAA | FFFFFFFF | FFFFFFFF | FFFFFFFF | Xcodes.h:221 |
-| 0x1240 | 8B8B8B8B | FFFFFFFF | FFFFFFFF | FFFFFFFF | Xcodes.h:225 |
-| 0x1002C4, 0x1002CC | 00100042 | **00100000** | 00100000 | 00100042 | Xcodes.h:229-230 |
-| order of the 0x132 mode-register pair | before 0x1002D0 | before 0x1002D0 | after 0x1002D0, 0x100210 and 0:0:3 0x340-0x35C | before 0x1002D0 | Xcodes.h:235-238 |
-| 0x1250 | AA8B | **5474** | 5474 | AA8B | Xcodes.h:241 |
-| 0x1218 | 00010000 | **0** | 0 | 00010000 | Xcodes.h:244 |
-| PCI 0:0:3 0x344 | 00C00000 | **0** | 0 | 00C00000 | Xcodes.h:257 |
-| PCI 0:0:3 0x35C | 04070000 | **0** | 0 | 04070000 | Xcodes.h:258 |
-| Memory test, size decision (§4) | yes | yes | yes | **no**: 0x100200 03070103, 0x100204 11448000, 0:0:0 0x84 07FFFFFF kept | Xcodes.h:263-265 |
-| PCI 0:2:0 / 0:3:0 0x3C after the X-codes | masks | masks (§2.11) | masks | 0:2:0 ← 0 only | Xcodes.h:265 |
-| SMC 0x13 / 0x12 | masks | masks | masks | fixed 0F / F0 | Xcodes.h:279-282 |
-| Overflow-trick jump | no | no | yes (own code) | yes | Xcodes.h:294-295 |
-| Exit operand | 806 | 806 | 806 | 806 | Xcodes.h:298 |
+| Register | 4627 | 5838 (1.6) | Cromwell MCPXREVD5 | Cromwell source |
+|---|---|---|---|---|
+| ops 0xF5, 0x80 (no-ops) | yes | yes | no | — |
+| PCI 0:1:0 0x84 (PM base) | not written | 8001 | 8001 | Xcodes.h:27 |
+| PCI 0:1:0 0x10 (PM base) | 8001 | not written | 8001 | Xcodes.h:28 |
+| SMBus enable (0:1:1 0x04/0x14/0x18, I/O 0xC200) | after the memory interface | **before** the memory interface | after | Xcodes.h:96-99 |
+| Encoder SMBus traffic in the X-codes | Conexant writes | **none** | Conexant, Focus, Xcalibur writes | Xcodes.h:110-178 |
+| 0x10B0 | 07633461 | **01000010** | 01000010 | Xcodes.h:47 |
+| 0x101000 (strap) | not written (A1 only) | **from EE 0xC3**, mask E1F3FFFF | from the hardware strap bits 18/19: 00 → 80000000 set; 11 → 860C0000; mixed → 820C0000 (mask E1F3FFFF) | Xcodes.h:52-78 |
+| 0x10B8 | FFFF0000 | **from EE 0xC2** (b·0x01010000) | EEEE0000 / FFFF0000 / 11110000 by the same strap bits | Xcodes.h:64-79 |
+| 0x10D4 | 9 | **F** | 9 | Xcodes.h:80 |
+| 0x10BC | 5866 | **5860** | 5866 | Xcodes.h:82 |
+| 0x10C4 | 0351C858 | **AAAA0000** | 0351C858 | Xcodes.h:83 |
+| 0x10C8 | 30007D67 | **00007D67** | 30007D67 | Xcodes.h:84 |
+| 0x10DC | A0423635 | **0** | A0423635 | Xcodes.h:86 |
+| 0x10E8 | 0C6558C6 | **04000000** | 0C6558C6 | Xcodes.h:87 |
+| SMC version check (0:0:3 0x6C ← 01000000 unless 'P') | yes | yes | no (byte read, ignored) | Xcodes.h:199-200 |
+| 0x1210 | 10 | **0** | 10 | Xcodes.h:207 |
+| 0x1214 (before calibration) | 10101010 or 12121212 (strap 18/19) | **from EE 0xC0** | 48480848 or 09090909 (strap 25/26) | Xcodes.h:208-220 |
+| 0x122C (before calibration) | AAAAAAAA | **from EE 0xC1** | 88888888 or AAAAAAAA | Xcodes.h:208-220 |
+| 0x1230 | AAAAAAAA | FFFFFFFF | FFFFFFFF | Xcodes.h:221 |
+| 0x1240 | 8B8B8B8B | FFFFFFFF | FFFFFFFF | Xcodes.h:225 |
+| 0x1002C4, 0x1002CC | 00100042 | **00100000** | 00100042 | Xcodes.h:229-230 |
+| 0x1250 | AA8B | **5474** | AA8B | Xcodes.h:241 |
+| 0x1218 | 00010000 | **0** | 00010000 | Xcodes.h:244 |
+| PCI 0:0:3 0x344 | 00C00000 | **0** | 00C00000 | Xcodes.h:257 |
+| PCI 0:0:3 0x35C | 04070000 | **0** | 04070000 | Xcodes.h:258 |
+| Memory test, size decision (§4) | yes | yes | **no**: 0x100200 03070103, 0x100204 11448000, 0:0:0 0x84 07FFFFFF kept | Xcodes.h:263-265 |
+| PCI 0:2:0 / 0:3:0 0x3C after the X-codes | masks | masks (§2.11) | 0:2:0 ← 0 only | Xcodes.h:265 |
+| SMC 0x13 / 0x12 | masks | masks | fixed 0F / F0 | Xcodes.h:279-282 |
+| Overflow-trick jump | no | no | yes | Xcodes.h:294-295 |
+| Exit operand | 806 | 806 | 806 | Xcodes.h:298 |
 - 4627 on an A1 NV2A also differs in 0x10B0 (07633451), 0x10CC (0), 0x10D4 (5), the strap (803D4401) and NVPLL (00011701) (spec 22 §6.3).
-- **Equal in all four:** PCI 0:1:0 0x04, I/O 0x8049/0x80D9/0x8026, 0:30:0 0x4C/0x18/0x20/0x24/0x04, 0:0:0 0x84 (provisional 07FFFFFF), 1:0:0 0x10/0x14/0x04,
+- **Equal in all three:** PCI 0:1:0 0x04, I/O 0x8049/0x80D9/0x8026, 0:30:0 0x4C/0x18/0x20/0x24/0x04, 0:0:0 0x84 (provisional 07FFFFFF), 1:0:0 0x10/0x14/0x04,
   0:1:1 0x04/0x14/0x18, I/O 0xC200, 0x10CC 66660000, 0x10B4 0, 0x10D8 0, PFB 0x100200 03070103 (before the test), 0x100410 11000016, 0x100330 84848888, 0x10032C
   FFFFCFFF, 0x100328 1, 0x100338 DF, NVPLL 00011C01, 0x68050C 000A0400, 0x1220 0, 0x1228 0, 0x1264 0, 0x1234/0x1238 AAAAAAAA, 0x123C/0x1244/0x1248 8B8B8B8B,
   0x1002D4 1, the 0x1002C0/0x1002C8 values 11, 32, 132, 0x1002D0 1 twice, 0x100210 80000000, 0x124C AA8BAA8B, 0x100228 081205FF, 0:1:0 0x60 \|= 400, 0x4C FDDE,
   0x9C 871CC707, 0xB4 bits 8-11, 0:0:3 0x340 F0F0C0C0, 0x36C 00230801 then 01230801, final 0:30:0 0x20 FDF0FD00 and 1:0:0 0x10 FD000000.
 - **Flash header 0x00-0x7F:** 5838 and Cromwell MCPXREVD5 are identical byte for byte (Cromwell boot_rom/2bBootStartup.S:63-105, 0x1C-0x2B = C8B4588A 00100000
-  00050AA7 F0000000, 0x78 = 0x16CE0090, 0x7C = 0xDC0). Cerbios uses the 1.0-1.5 values at 0x1C-0x2B on every console and 0x78 = 0x1F480060 (spec 21 §4).
+  00050AA7 F0000000, 0x78 = 0x16CE0090, 0x7C = 0xDC0).
 - **What Cromwell gets right for the 1.6:** the header, 0x10B0, everything in the "equal" list, the exit, the overflow trick. **What it lacks or has wrong:**
   the EEPROM parameters (strap, 0x10B8, 0x122C, 0x1214), 0x10D4, 0x10BC, 0x10C4, 0x10C8, 0x10DC, 0x10E8, 0x1210, 0x1218, 0x1250, 0x1002C4/0x1002CC, 0:0:3
   0x344/0x35C, the SMC version check, the memory test and size decision (its 2BL forces 128 MB again: boot_rom/2bBootStartBios.c:120-123), the real masks to the

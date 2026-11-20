@@ -1,9 +1,9 @@
 # Spec 21 — MCPX chipset bring-up by the 2BL (before the kernel)
 
 Reference behaviour of the second-stage boot loader (2BL) between the end of the X-codes and the jump into the kernel, as found in the Complex 4627 image
-(consoles 1.0-1.5, MCPX 1.0 boot ROM) and the 5838 image (1.6, MCPX 1.1 boot ROM with a first-stage loader), with Cerbios and Cromwell for comparison. Behaviour
-only; no code. PCI addresses are written bus:device:function, register offset; "dev1" is 0:1:0 (the MCPX LPC/ISA bridge), "host" is 0:0:0. **Status: reference
-only.**
+(consoles 1.0-1.5, MCPX 1.0 boot ROM) and the 5838 image (1.6, MCPX 1.1 boot ROM with a first-stage loader), with Cromwell for comparison; §3.7a describes the
+calibration sequence OXOS implements. Behaviour only; no code. PCI addresses are written bus:device:function, register offset; "dev1" is 0:1:0 (the MCPX LPC/ISA
+bridge), "host" is 0:0:0. **Status: reference only.**
 
 ## 1. Load address and execution environment
 - Complex 4627: the decrypted 2BL is executed at physical 0x00090000 (its first action copies 0x6000 bytes from 0x00090000 to 0x00400000) (Complex 4627 2BL).
@@ -19,29 +19,29 @@ only.**
 ## 2. Chipset sequence (answers questions 1, 2, 3 and 6)
 Execution order. "Byte" = an 8-bit cycle at 0xCFC; every other PCI access is a 32-bit cycle at 0xCF8/0xCFC.
 
-| # | Action | 4627 | 5838 | Cerbios | Cromwell |
-|---|---|---|---|---|---|
-| 1 | dev1 0x80: **byte** write 0x02 to byte 0 (bytes 1-3 untouched; not read first) | yes | yes | yes | dword write 2 (later, in its PCI set-up) |
-| 2 | SMC challenge (SMBus slave 0x20): read registers 0x1C, 0x1D, 0x1E, 0x1F (byte reads) | yes | yes | yes | (own code) |
-| 3 | If all four bytes are 0: halt path (§2.4) | yes | yes | yes | — |
-| 4 | SMC 0x20 ← response byte 1, SMC 0x21 ← response byte 2, SMC 0x01 ← 0x00 (byte writes) | yes | yes | yes | — (OXOS: yes, since 2026-10-26) |
-| 5 | **dev1 0x8C ← 0x40000000** (plain dword write, not read-modify-write; only bit 30 set) | yes | yes | yes | yes, same value, same point (before its PCI set-up) |
-| 6 | Fill 0x80090000..+0x6000 with 0xCC (erase the old copy of the 2BL) | yes | yes | no | — |
-| 7 | NV2A pad/drive calibration (§3) | yes | yes (other data source) | yes (two variants) | no |
-| 8 | dev1 0x54: read, OR 0x88000000, write | yes | yes | yes | yes |
-| 9 | host 0x64: read, OR 0x88000000, write | yes | yes | yes | yes |
-| 10 | host 0x6C: read v; write v & ~1; write v (two data writes, one address write) | yes | yes | yes | yes |
-| 11 | host 0x80 ← 0x00000100 | yes | yes | yes | yes |
-| 12 | Read dev1 0x08 as a **byte** (revision); if ≥ 0xD1: **dev1 0xC8 ← 0x00008F00** (dword) | **no** | yes | yes | yes (dword write, at the start of its PCI set-up) |
-| 13 | Decrypt/verify the kernel, locate its PE entry, call it with the key block | yes | yes | yes | — |
+| # | Action | 4627 | 5838 | Cromwell |
+|---|---|---|---|---|
+| 1 | dev1 0x80: **byte** write 0x02 to byte 0 (bytes 1-3 untouched; not read first) | yes | yes | dword write 2 (later, in its PCI set-up) |
+| 2 | SMC challenge (SMBus slave 0x20): read registers 0x1C, 0x1D, 0x1E, 0x1F (byte reads) | yes | yes | (own code) |
+| 3 | If all four bytes are 0: halt path (§2.4) | yes | yes | — |
+| 4 | SMC 0x20 ← response byte 1, SMC 0x21 ← response byte 2, SMC 0x01 ← 0x00 (byte writes) | yes | yes | — (OXOS: yes, since 2026-10-26) |
+| 5 | **dev1 0x8C ← 0x40000000** (plain dword write, not read-modify-write; only bit 30 set) | yes | yes | yes, same value, same point (before its PCI set-up) |
+| 6 | Fill 0x80090000..+0x6000 with 0xCC (erase the old copy of the 2BL) | yes | yes | — |
+| 7 | NV2A pad/drive calibration (§3) | yes | yes (other data source) | no |
+| 8 | dev1 0x54: read, OR 0x88000000, write | yes | yes | yes |
+| 9 | host 0x64: read, OR 0x88000000, write | yes | yes | yes |
+| 10 | host 0x6C: read v; write v & ~1; write v (two data writes, one address write) | yes | yes | yes |
+| 11 | host 0x80 ← 0x00000100 | yes | yes | yes |
+| 12 | Read dev1 0x08 as a **byte** (revision); if ≥ 0xD1: **dev1 0xC8 ← 0x00008F00** (dword) | **no** | yes | yes (dword write, at the start of its PCI set-up) |
+| 13 | Decrypt/verify the kernel, locate its PE entry, call it with the key block | yes | yes | — |
 
-- Sources: (Complex 4627 2BL) (5838 2BL) (Cerbios) (Cromwell).
-- Steps 8-11 and 12 are separate routines; in 5838 and Cerbios step 12 runs **after** steps 8-11.
+- Sources: (Complex 4627 2BL) (5838 2BL) (Cromwell).
+- Steps 8-11 and 12 are separate routines; in 5838 step 12 runs **after** steps 8-11.
 - The Complex 4627 2BL never reads the MCPX revision and never writes dev1 0xC8 on any console.
 - Step 5 runs **after** the SMC challenge is answered, and before any other chipset write except step 1.
 - In the image layout, the routine that ends with the 0x8C write sits before the main routine that starts with the 0x80 write; in execution order 0x80 (step 1)
   comes first.
-- No 2BL step reads or writes the configuration space of 0:4:0 (NIC) or 0:9:0 (IDE), or any ACPI/GPIO port (0x80xx) (Complex 4627 2BL) (5838 2BL) (Cerbios).
+- No 2BL step reads or writes the configuration space of 0:4:0 (NIC) or 0:9:0 (IDE), or any ACPI/GPIO port (0x80xx) (Complex 4627 2BL) (5838 2BL).
 - No 2BL step writes NV2A 0x100200 / 0x100204 or the CRTC start 0x600800; those are left as the X-codes set them (the X-codes write 0x100200 and 0x100204)
   (Complex 4627 2BL) (5838 2BL).
 - 1.6 (5838 2BL, re-checked 2026-11-07): the sequence above holds without change. Step 12 is the 5838 2BL's **only** hardware-revision test; it reads no NV2A
@@ -60,8 +60,8 @@ Execution order. "Byte" = an 8-bit cycle at 0xCFC; every other PCI access is a 3
 - The booted value 0x04001800 has byte 0 = 0x00 and bits 11, 12, 26 set; none of those bits are written by any 2BL (Complex 4627 2BL) (5838 2BL).
 
 ### 2.3 Device 1 registers 0xC8, 0x54, 0x08
-- 0x08: read once, as a byte, only by 5838/Cerbios, only for the threshold test (≥ 0xD1).
-- 0xC8: written 0x00008F00 (whole dword) only when revision ≥ 0xD1; never read (5838 2BL) (Cerbios).
+- 0x08: read once, as a byte, only by 5838, only for the threshold test (≥ 0xD1).
+- 0xC8: written 0x00008F00 (whole dword) only when revision ≥ 0xD1; never read (5838 2BL).
 - 0x54: OR 0x88000000 (bits 31 and 27) on all revisions (Complex 4627 2BL) (5838 2BL); host 0x64 gets the same OR.
 
 ### 2.4 Halt path
@@ -269,13 +269,13 @@ interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10,
 | +0x122 | set 3 (upgraded memory), row 4 | 0B 0E 0E 08 0F 0F 0F 0F 0B 0E 0E 08 0E 0E 0E 0E 01 03 00 |
 
 ## 4. Flash header 0x6C-0x7F
-| Offset | Complex 4627 | 5838 | Cerbios | Cromwell |
-|---|---|---|---|---|
-| 0x6C | 0x00000103 | 0x00000107 | 0x00000107 | 0x00000107 |
-| 0x70 | 0x0000000F | 0x0000000F | 0x0000000F | 0x0000000F |
-| 0x74 | 0x40004400 | 0x40004400 | 0x40004400 | 0x40004400 |
-| 0x78 | 0x00000060 | 0x16CE0090 | 0x1F480060 | 0x12D10070 (pre-1.6) / 0x16CE0090 (1.6) |
-| 0x7C | 0x00000C30 | 0x00000DC0 | 0x00001400 | 0x00000C90 (pre-1.6) / 0x00000DC0 (1.6) |
+| Offset | Complex 4627 | 5838 | Cromwell |
+|---|---|---|---|
+| 0x6C | 0x00000103 | 0x00000107 | 0x00000107 |
+| 0x70 | 0x0000000F | 0x0000000F | 0x0000000F |
+| 0x74 | 0x40004400 | 0x40004400 | 0x40004400 |
+| 0x78 | 0x00000060 | 0x16CE0090 | 0x12D10070 (pre-1.6) / 0x16CE0090 (1.6) |
+| 0x7C | 0x00000C30 | 0x00000DC0 | 0x00000C90 (pre-1.6) / 0x00000DC0 (1.6) |
 - Sources: (flash header) (Cromwell).
 - **0x7C**: read by the 2BL as the flash offset (from 0xFFC00000) of the NV2A calibration table (§3). In each retail image it points just past the X-code table;
   the 4627 table is 0xCA bytes (12-byte header + two 0x5F-byte sets).
@@ -283,17 +283,6 @@ interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10,
   **Inferred:** they are consumed by the MCPX hardware at reset.
 - Differences: 0x6C bit 2 (clear only in Complex 4627); 0x78 upper half (0 in Complex 4627, non-zero elsewhere) and lower half (0x60 / 0x70 / 0x90). What they
   control is not determined (§7).
-- Cerbios uses the 4627-era values at 0x00-0x2F and 0x70-0x74, 0x6C = 0x107, and a 0x7C table whose breakpoint bytes equal Complex 4627's (Cerbios).
-
-## 5. Cerbios versus the retail 2BLs (question 5)
-- Same device 1 / host sequence as 5838, including the revision ≥ 0xD1 write of dev1 0xC8 (§2, step 12) (Cerbios).
-- Same SMC challenge and the same dev1 0x8C ← 0x40000000 right after it (Cerbios).
-- Differences:
-  - no 0xCC erase;
-  - a pre-check, after step 5, that can skip steps 7-12 entirely (purpose not determined);
-  - two calibration variants (§3).
-- Nothing in the Cerbios 2BL touches 0:4:0 or 0:9:0 either. **Inferred:** what makes Cerbios (and a retail 2BL) bring up IDE and NIC on a 1.4 console is step 5
-  (plus step 12 on MCPX ≥ D1), not anything extra.
 
 ## 6. Configuration cycle width (question 7)
 - The 2BLs use dword cycles at 0xCFC everywhere except: the dev1 0x80 byte write (step 1) and the dev1 0x08 byte read (step 12), both at 0xCFC itself (register
@@ -309,7 +298,6 @@ interpolated between. Rows: bytes 0x00-0x0F give o0-o15 (A), 0x10-0x12 give c10,
 - Meaning of dev1 0xC8 = 0x8F00 on MCPX ≥ D1, and of 0x54 / host 0x64 bits 31 and 27 (AGP-related per Cromwell's routine name; inferred).
 - Meaning of header 0x6C, 0x70, 0x74, 0x78 fields and of their differences.
 - Meaning of PCI 0:0:3 0x6C bit 24 (halt path).
-- Purpose of the Cerbios pre-check that skips steps 7-12.
 - Whether the EEPROM bytes 0xC0-0xF5 used by 5838 exist on pre-1.6 consoles.
 - The 1.6 X-code program, its EEPROM parameters and memory test: spec 24.
 - Whether byte-wide cycles at 0xCFD-0xCFF behave on hardware; the retail kernel uses them, which suggests they do.

@@ -1,7 +1,7 @@
 # 28. The 1.6 console: bring-up status
 
 OXOS addition. Started 2026-11-07 on a 1.6 console (NV2A revision D3, MCPX D5, Xcalibur encoder) with an RP2040 Modxo on a rebuilt LPC header (LFRAME on the
-Pico's GPIO 5, two grounds, short wires: longer wires gave corrupted LPC cycles and FRAG even with Cerbios). Images: `make bios MCPX16=1` (separate 1.6 build;
+Pico's GPIO 5, two grounds, short wires: longer wires gave corrupted LPC cycles and FRAG). Images: `make bios MCPX16=1` (separate 1.6 build;
 one hybrid image for 1.0-1.6 is the plan after it, §4.5 step 6).
 
 ## 1. Status (2026-11-07)
@@ -47,7 +47,7 @@ listed in G0.
 | G3 | Interface and PBUS values differ | 0x10D4 0x0F, 0x10BC 0x5860, 0x10C4 0xAAAA0000, 0x10C8 0x7D67, 0x10DC 0, 0x10E8 0x04000000, 0x1210 0, 0x1218 0, 0x1250 0x5474, 0x1002C4/0x1002CC 0x00100000, host 0:0:3 0x344 0 and 0x35C 0 (spec 24 §7) | Snapshot / XCHK record (B2) |
 | G4 | SMBus enabled after the memory interface; encoder writes for Conexant, Focus and Xcalibur | Enable the SMBus (0:1:1 0x04/0x14/0x18, I/O 0xC200) before 0x10B0; no encoder traffic in the 1.6 program (spec 24 §2.2, §6.3) | Modxo LPC log: no SMBus 0x8A/0xD4/0xE0 cycles before the kernel |
 | G5 | No SMC version check | SMC 0x01 ← 0, read 0x01; not 'P' → 0:0:3 0x6C ← 0x01000000 (spec 24 §2.5) | Log the byte read (expected 'P') |
-| G6 | PM base | Write 0:1:0 0x84 ← 0x8001 (retail 1.6). The extra 0x10 write Cromwell and Cerbios make is harmless (Cerbios boots this console) | — |
+| G6 | PM base | Write 0:1:0 0x84 ← 0x8001 (retail 1.6). The extra 0x10 write Cromwell makes is harmless | — |
 | G7 | No memory test in the X-codes (start.S does it) | Either the retail test and decision in the X-codes (spec 24 §4) with the SMC report (0x13 large, 0x12 faulty), or keep start.S's (same rule, spec 22 §6.3) and send the report from the 2BL. The X-codes must then leave 0x100204 = 0x11448000 so start.S runs it | Serial `ram:` line: 0x100200, 0x100204, host 0x84; log both masks |
 | G8 | Overflow-trick jump | Keep the two writes (0 ← 0xFC1000B8, 4 ← 0x90E0FFFF) after the DRAM initialisation and after the last 0x100200/0x100204 write, i.e. after the size decision when the X-codes make it, then exit 0x806 (spec 24 §1.4, §2.11) | POST 0x20 (2BL reached) on every boot |
 | G9 | Layout | The program plus the pad table must fit below 0x1000: header 0x7C names the table (0xDC0 in 5838; the temporary image moved it to 0xE00). Byte 0x78 (0x16CE0090) stays: the retail kernel reads it (spec 24 §6.1) | mkbios.py / build check that the program ends below the table |

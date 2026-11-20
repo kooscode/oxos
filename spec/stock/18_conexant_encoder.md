@@ -77,10 +77,7 @@ CVBS to pin 24).
 | 0x0E luma filter | 0x96 ← (0x96 & 0x0F) \| (on ? 0x10 : 0) (YLPF) |
 | WSS/CGMS write | 0x60 ← (word & 0xF) \| 0xC0 (EWSSF1, EWSSF2), 0x62 ← word >> 4, 0x64 ← word >> 12 |
 
-## 3a. Cerbios and Cromwell (cross-check)
-- **Cerbios:** the same steps, values and tables as 5838 (SD common, SD per-mode and HD tables byte-identical to 4627; NV2A and CRTC rows as spec 22 §3.7–§3.9).
-  Its optional HD RGB setting for the HDTV / VGA packs uses its own HD rows: 0x2E ← 0x00, 0x32 ← 0x48, 0x3C / 0x3E / 0x40 ← 0x80, 0xC6 ← 0x98 (RGB input), the
-  other registers as §5.3, with the NV2A sending RGB (spec 22 §10) (Cerbios).
+## 3a. Cromwell (cross-check)
 - **Cromwell** (shows a picture on 1.0–1.3): NV2A output RGB with RGB input (0xC6 = 0x98); its own timing from overscan ratios, with the NV2A raster set to its
   H_CLKI × V_LINESI (the same rule as the reference); 480p with the encoder PLL (0xA0 = 12, EN_XCLK clear); all registers 0x2E–0xFE written with 500 µs between
   writes, 0x6C without TIMING_RST and 0xC4 without EN_OUT, then a timing reset (0x6C | 0x80) and EN_OUT on; luma / chroma gains 0xA8 / 0xAA / 0xAC held at 0
