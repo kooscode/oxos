@@ -5,6 +5,9 @@
 //     mov reg, [esp+0Ch]; <2 bytes> A3 00 00 00   (the device field at +0xA3)
 // When that is the caller, its return address is redirected to HalpIgrReturn, which sees the filled-in state once the function has returned: no title code is
 // patched.
+//
+// The technique (the caller test, the XInputGetState signature, the 12-byte stack move and the return redirect) is rmenhal's in-game reset in NKPatcher
+// (nkpatcher.asm, "In-Game Reset", Copyright 2004 rmenhal, GPL-2.0; see THIRD_PARTY_NOTICES.md).
     .text
     .globl _KeRaiseIrqlToDpcLevel@0
 _KeRaiseIrqlToDpcLevel@0:

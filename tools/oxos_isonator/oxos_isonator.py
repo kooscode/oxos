@@ -9,7 +9,7 @@ For every game it makes a folder a dashboard (XBMC4Gamers, EvoX, the OXOS title 
                          title image, so the dashboard shows the game itself
 
 Starting default.xbe mounts the image in its folder as the console's disc and starts the game, through the virtual disc device that Cerbios and OXOS share
-(spec/oxos_internal/16_virtual_discs.md, spec/cerbios/07).
+(rmenhal's NKPatcher interface; spec/oxos_internal/16_virtual_discs.md, spec/cerbios/07).
 
 Sources:
   - an extracted game folder (default.xbe at its top): an XISO is built from it, in OUT/<name>/;
@@ -33,7 +33,7 @@ SECTOR = 2048
 MAGIC = b"MICROSOFT*XBOX*MEDIA"
 VD_SECTOR = 32                    # the XDVDFS volume descriptor
 FULL_DUMP_OFFSET = 0x18300000     # the game partition of a full disc dump
-FULL_DUMP_MIN = 0x18310800        # a full dump's first part is larger than this (spec/cerbios/07 §2.1)
+FULL_DUMP_MIN = 0x18310800        # a full dump's first part is larger than this (spec/oxos_internal/16 §1)
 PART_MAX = 0xFFF00000             # one part of a split image: under FATX's 4 GB file limit, whole sectors
 ATTR_DIR, ATTR_FILE = 0x10, 0x80  # as on retail discs
 CHUNK = 8 << 20

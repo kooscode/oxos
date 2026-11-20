@@ -44,7 +44,8 @@ void InitVideo() {
     if (NT_SUCCESS(HalReadSMBusValue(0x20, 0x04, FALSE, &v)))
         HalBootSMCVideoMode = (UCHAR)v;
     // The retail kernels decide from a byte of their own BIOS image (spec/stock/02 §5, spec/stock/17 §1.2); OXOS's image does not carry it, so the encoder is
-    // probed (a byte read of register 0, as Cerbios does) and XboxHardwareInfo reports it the way the reference would: 0x20 Focus, 0x400 Xcalibur.
+    // probed (a byte read of register 0, as Cromwell's DetectVideoEncoder does) and XboxHardwareInfo reports it the way the reference would: 0x20 Focus, 0x400
+    // Xcalibur.
     static const UCHAR encoders[] = {AV_ENCODER_CONEXANT, AV_ENCODER_FOCUS, AV_ENCODER_XCALIBUR};
     EncoderAddress = 0;
     for (UCHAR a : encoders) {

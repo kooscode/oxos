@@ -31,8 +31,9 @@ before the install and uses the INIT copies 0x800B2770 / 0x800B2784 of entries 0
   The XBE loader area also holds partition 6 / "F:" sizing from 0xEE8AB0 sectors (spec 02 §3).
 
 ## 3. Partition table (PARTINFO)
-- **Format** (same magic and entry layout as Cerbios, spec/cerbios/03 §2): 16-byte magic `****PARTINFO****`, then at +0x30 up to 14 entries of 0x20 bytes: name
-  (16 bytes, e.g. `XBOX MUSIC`, `XBOX SYSTEM`, `XBOX GAME SWAP 1–3`), +0x10 flags (bit 31 = in use), +0x14 first sector, +0x18 sector count, +0x1C reserved.
+- **Format** (Paul Bartholomew's (oz_paulb) LBA48 patch, 2003, GPL; Cerbios uses the same magic and entry layout, spec/cerbios/03 §2): 16-byte magic
+  `****PARTINFO****`, then at +0x30 up to 14 entries of 0x20 bytes: name (16 bytes, e.g. `XBOX MUSIC`, `XBOX SYSTEM`, `XBOX GAME SWAP 1–3`), +0x10 flags (bit 31
+  = in use), +0x14 first sector, +0x18 sector count, +0x1C reserved.
   **[C]**
 - **Source**: the module's default table (0x8003C740), replaced at disk set-up (entry 4) by **sector 0 of `\Device\Harddisk0\partition0`** when that sector
   begins with the same 16-byte magic (0x1F0 bytes copied). **[C]** (The stock disk's sector 0 holds the "BRFR" refurb block, not a PARTINFO table, on retail

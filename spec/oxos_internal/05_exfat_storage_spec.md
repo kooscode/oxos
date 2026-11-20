@@ -30,10 +30,10 @@ Memory units come last (§9). Out of scope: changing what titles do.
   OXOS never rewrites the table; partitioning is done on a PC or by our host tool.
 - **Cost on the Xbox:** the table is read and checked once at boot (about 33 sectors and two CRC32 passes over 16 KB). After that a partition is only a 64-bit
   starting sector added to each request; the kernel already carries 64-bit offsets (NtReadFile/NtWriteFile byte offsets, file sizes) and sector sizes are powers
-  of two, so there are shifts, not divisions. Disks above 128 GiB need 48-bit LBA commands (Cerbios spec 03 §1), whatever the layout.
+  of two, so there are shifts, not divisions. Disks above 128 GiB need 48-bit LBA commands (spec 04), whatever the layout.
 - **Recognition:** at boot the IDE driver reads sector 0. Order:
-  1. a retail or Cerbios-style FATX disk (stock spec 04 table, or `****PARTINFO****` in sector 0 / near the end, Cerbios spec 03 §2) → today's FATX path,
-     unchanged;
+  1. a retail or PARTINFO FATX disk (stock spec 04 table, or oz_paulb's `****PARTINFO****` in sector 0 / near the end, EvoX spec 03 §3, Cerbios spec 03 §2) →
+     today's FATX path, unchanged;
   2. GPT (protective MBR) or MBR with an exFAT OXOS volume → the exFAT layout below;
   2a. no partition table, exFAT on the whole disk (sector 0 says `EXFAT   `, as a PC formats a bare disk) → the
      exFAT layout too, when the volume's FAT starts at sector 2048 or later (FatOffset, boot sector byte 80;
@@ -140,7 +140,7 @@ Every virtual partition shares the one exFAT volume, so each reports its own siz
 - Usage per folder is computed at mount (a directory walk) and kept up to date on writes.
 
 ## 7. What stays FATX
-- **FATX hard disks**: retail and Cerbios-style disks keep the current driver, so a disk can move between OXOS and other BIOSes.
+- **FATX hard disks**: retail and PARTINFO disks keep the current driver, so a disk can move between OXOS and other BIOSes.
 - **FATX memory units** keep working; exFAT ones are added in §9.
 
 ## 8. Trace evidence (Halo, OXOS trace build, fresh disk, 2026-10-18)

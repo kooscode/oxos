@@ -12,7 +12,7 @@ Halo 2/
 The launcher is the OXOS [ISO launcher](../iso_launcher) with the game's identity copied in: title ID, title name, alternate title IDs, region, ratings, disc
 number, version, and the title image (`$$XTIMAGE`). Dashboards such as XBMC4Gamers, EvoX and the OXOS title launcher therefore show the game itself, with its
 name, artwork and save data. Starting it mounts the image in its folder as the console's disc through the virtual disc device that OXOS and Cerbios share
-(`\Device\CdRom1`, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md),
+(`\Device\CdRom1`, rmenhal's NKPatcher interface, [`spec/oxos_internal/16_virtual_discs.md`](../../spec/oxos_internal/16_virtual_discs.md),
 [`spec/cerbios/07_virtual_discs.md`](../../spec/cerbios/07_virtual_discs.md)). It then starts the game the way a disc in the drive starts. The same folder works
 on OXOS and on Cerbios.
 
@@ -44,7 +44,7 @@ tools/oxos_isonator/oxos_isonator.py --info xiso/                 # what each im
 | `--info` | only print each image's kind, size, title and whether it has a title image |
 
 ## Details
-- **Images read:** XISO, and full disc dumps (the game partition at 0x18300000, recognised as Cerbios and OXOS do it), whole or split. CCI images are read by
+- **Images read:** XISO, and full disc dumps (the game partition at 0x18300000, Microsoft's disc layout), whole or split. CCI images are read by
   the consoles, not by this tool; `tools/mkcci` makes them.
 - **Images written:** XDVDFS with the volume descriptor at sector 32. Each directory is a balanced binary tree of entries in case-insensitive name order, with
   no entry crossing a sector and 0xFF as padding. Files are written after the directories, each starting on a sector. File attributes are as on retail discs

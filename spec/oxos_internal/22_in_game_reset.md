@@ -1,7 +1,8 @@
 # 22 — In-game reset (IGR)
 
 OXOS addition, implemented 2026-10-29. Code: `kernel/src/in_game_reset/`: `xinput_hook.S` (`KeRaiseIrqlToDpcLevel`, `HalpIgrReturn`), `in_game_reset.cpp`
-(`HalpIgrCheck`, `in_game_reset::Reboot`). Background: how Cerbios and EvoX do it (spec/cerbios/08, spec/evox/04 §2).
+(`HalpIgrCheck`, `in_game_reset::Reboot`). Background: rmenhal's in-game reset in NKPatcher (2004, GPL-2.0; §2), and how Cerbios and EvoX do it
+(spec/cerbios/08, spec/evox/04 §2).
 
 Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title, reboots the console. The reboot is a cold one, a power cycle through the SMC
 (§6), so:
@@ -28,7 +29,7 @@ It returns 0 (ERROR_SUCCESS) when the state was copied. `pState` is XINPUT_STATE
 RT).
 
 ## 2. The hook
-`KeRaiseIrqlToDpcLevel` (export 129) checks its return address, as Cerbios's does (spec/cerbios/08 §1):
+`KeRaiseIrqlToDpcLevel` (export 129) checks its return address, as rmenhal's NKPatcher does (credit below):
 - below 0x80000000 (title code);
 - the dword there, byte 1 masked, is `8B ?? 24 0C` (mov reg, [esp+0Ch]);
 - the dword at +6 is 0x000000A3.
@@ -38,12 +39,18 @@ On a match it moves the six stack dwords (its own return, saved esi, saved ebx, 
 arguments still above it. With status 0 it calls `HalpIgrCheck(pState)` and returns 0 to the title through `ret 8`. Every caller, matched or not, then gets the
 normal `KfRaiseIrql(DISPATCH_LEVEL)`. No title code is changed, so the hook holds for any title built with this XAPI code, whatever its load address.
 
-## 3. The combo
-`HalpIgrCheck` builds Cerbios's 16-bit mask (spec/cerbios/08 §2): bits 0–7 the low byte of the digital buttons, bit 8 + i analog button i when it reads 0xFF
-(fully down). The reboot fires when 0xD020 (LT 0x4000, RT 0x8000, BACK 0x20, BLACK 0x1000) is all set. That is Cerbios's IGRFULL default.
+**Credit:** this hook is rmenhal's in-game reset from NKPatcher (`nkpatcher.asm`, "In-Game Reset", Copyright 2004 rmenhal, GPL-2.0, the same licence as OXOS; a
+public copy is in [Rocky5/Xbox-Softmodding-Tool](https://github.com/Rocky5/Xbox-Softmodding-Tool), `App Sources/NKPatcher/Main NKP11/`). The caller test, the
+signature and its constants, the six dwords moved 12 bytes down and the return redirect are the same; the button check (§3) and the reboot (§6) differ.
 
-Unlike Cerbios's IGRFULL, nothing is written to the SMC scratch register first: Cerbios writes 0x0C, and scratch bit 0x08 makes the next cold boot start the
-dashboard (spec/stock/12, boot flag 0x80), not the netbooted title.
+## 3. The combo
+`HalpIgrCheck` builds a 16-bit mask (the encoding Cerbios's settings use, spec/cerbios/08 §2): bits 0–7 the low byte of the digital buttons, bit 8 + i analog
+button i when it reads 0xFF (fully down). The reboot fires when 0xD020 (LT 0x4000, RT 0x8000, BACK 0x20, BLACK 0x1000) is all set: both triggers + BACK + BLACK,
+one of rmenhal's NKPatcher combos (2004; also EvoX, spec/evox/04 §2, and Cerbios's IGRFULL default). NKPatcher counts BLACK as held when it is non-zero; OXOS
+wants 0xFF.
+
+Unlike the full reboot to the dashboard of rmenhal's NKPatcher (and Cerbios's IGRFULL), nothing is written to the SMC scratch register first: they write
+0x0C, and scratch bit 0x08 makes the next cold boot start the dashboard (spec/stock/12, boot flag 0x80), not the netbooted title.
 
 `HalpIgrCheck` runs at the caller's IRQL after XInputGetState has lowered it again (passive for game threads). The reboot (§6) uses the polled SMBus, which
 works at any IRQL.
@@ -60,8 +67,8 @@ works at any IRQL.
   back to what netboot serves.
 
 ## 6. The reboot: a power cycle (2026-11-04)
-`in_game_reset::Reboot` writes SMC register 0x02 ← 0x40 (power cycle, Cerbios's IGRCYCLE action, spec/cerbios/08), retrying the SMBus write up to five times; if
-the console is still running two seconds later, `HalReturnToFirmware(1)`.
+`in_game_reset::Reboot` writes SMC register 0x02 ← 0x40 (the SMC's power cycle, documented by Xbox-Linux on xboxdevwiki's "PIC" page), retrying the SMBus write
+up to five times; if the console is still running two seconds later, `HalReturnToFirmware(1)`.
 - **Why not `HalReturnToFirmware(1)`** (until 2026-11-03): that is the reference reset, SMC 0x02 ← 1 and then port 0xCF9 ← 0x0E. Pressed while a test title was
   running, the next boot found 29 of the X-codes' GPU and memory settings at their power-on values (the memory interface, the DRAM controller, pads, the GPU
   clock, DRAM refresh; spec 26 §5): the RAM was sized as 128 MB with the wrong layout and the kernel stopped after the memory manager (the front LED blinking
@@ -97,7 +104,8 @@ Status: design only. The power cycle of §6 stays until the tests of §8.6 pass.
   §4). HAL phase 0 then only reprograms the interrupt controller and stops the video overlay (spec 25 §4); the cold boot's bus-master stop (spec 10) does not
   run. Title selection then takes branch A of spec/stock/05 §2: an empty launch path starts the dashboard (spec 19), and type
   0xFFFFFFFF frees the page first (no launch data for the dashboard).
-- Cerbios's IGRDASH combo (LT RT START BACK) does the same: page cleared, first dword 0xFFFFFFFF, quick reboot, after suspending every other thread of the
+- rmenhal's NKPatcher in-game reset (to the dashboard, quick reboot) does the same: page allocated and persisted if missing, cleared, first dword
+  0xFFFFFFFF, `HalReturnToFirmware(2)`. Cerbios's IGRDASH combo (LT RT START BACK) does too, after suspending every other thread of the
   title's process at raised IRQL (spec/cerbios/08 §4). Its IGRGAME combo is a quick reboot that restarts the disc's title instead.
 
 ### 8.2 Why the in-game reset is a power cycle today
@@ -110,7 +118,7 @@ Status: design only. The power cycle of §6 stays until the tests of §8.6 pass.
   and the X-code checks (spec 27).
 
 ### 8.3 Proposed behaviour
-| Combo (Cerbios mask bits, §3) | Mask | Action |
+| Combo (mask bits, §3) | Mask | Action |
 |---|---|---|
 | LT + RT + BACK + BLACK | 0xD020 | quick reboot to the dashboard (§8.4) |
 | LT + RT + BACK + WHITE | 0xE020 | the power cycle of §6, for a title that leaves the hardware in a state a quick reboot cannot recover from |
@@ -131,7 +139,7 @@ Differences from today's reset, for the user:
 3. **Other threads.** As Cerbios does: suspend every other thread of the title's process, so none of them touches the hardware or the disk while the reboot
    runs. (Open: whether `KeSuspendThread` on each is enough, or the threads must be held at raised IRQL as Cerbios does.)
 4. **Launch data.** Make sure the launch data page exists (allocate and persist one page if not), clear it and set its type to 0xFFFFFFFF with an empty path, as
-   `XLaunchNewImage(NULL, NULL)` and Cerbios's IGRDASH do.
+   `XLaunchNewImage(NULL, NULL)` and rmenhal's NKPatcher in-game reset do.
 5. **Reboot.** `HalReturnToFirmware(2)`, which runs the title's shutdown notifications and `KiQuickReboot` (§8.1).
 6. **Serial log:** `igr: LT RT BACK BLACK: quick reboot to the dashboard` (and `igr: ... WHITE: power cycle`).
 
@@ -162,4 +170,4 @@ Differences from today's reset, for the user:
 - The exact launch data `XLaunchNewImage(NULL, NULL)` writes (type and flags): log it from the installer's "restart" item on the console (the serial log's
   `firmware: launch data type ...` line) and match it.
 - Titles that read their pads at DISPATCH_LEVEL: none seen; §8.4 step 1 falls back to the power cycle for them.
-- Whether to add Cerbios's IGRGAME (quick reboot back into the disc's title) as a third combo.
+- Whether to add a third combo that quick-reboots back into the disc's title (rmenhal's NKPatcher triggers + START + BLACK; Cerbios's IGRGAME).

@@ -16,7 +16,7 @@ animation leaves it.
   - Its state registers and its internal tables hold power-on junk, e.g. PGRAPH 0x40005C = 0x39FEFF79.
   - Switching the engine off and on (PMC 0x200 bit 12) changes none of it: 448 registers were checked on the 1.4 console.
 - **On a stock console** the boot animation's graphics device (spec/stock/22 §7) runs before any title. It loads a default context image, so titles always find
-  a valid engine. The Cerbios boot animation (an XDK title) does the same.
+  a valid engine. Any boot animation built with the XDK's Direct3D does the same (checked in Cerbios's, an XDK title).
 - **OXOS has no boot animation.** So the first title that creates its own graphics device meets the junk.
   - Direct3D titles cope: their first context switch only loads the image they filled.
   - nxdk's pbkit (up to 2026-11, `pb_load_gr_ctx`) saves the engine's live state over its freshly filled image on the first switch. With the junk, every Kelvin

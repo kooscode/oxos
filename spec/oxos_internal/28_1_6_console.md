@@ -88,8 +88,8 @@ listed in G0.
    test stays in start.S (B5).
 4. Kernel flag 0x10 on a 1.6 (K1).
 5. Optional: 128 MB MTRR (B3). Done in the kernel (spec/stock/09 §10).
-6. Future (decided 2026-11-07, after steps 1-4): one hybrid image for 1.0-1.6, the X-codes detecting a 1.6 at run time (as Cerbios does with an SMBus read of
-   0xE1, spec 24 §7) instead of the MCPX16 build switch.
+6. Future (decided 2026-11-07, after steps 1-4): one hybrid image for 1.0-1.6, the X-codes detecting a 1.6 at run time (as EvoX M8+ does with an SMBus read of
+   0xE1, spec 24 §7, stock spec 22 §6) instead of the MCPX16 build switch.
 
 G0 (reference snapshot, for step 1): extend the serial build's entry snapshot with 0x101000, 0x10B8, 0x10D4, 0x10C4, 0x10C8, 0x10DC, 0x1210, 0x1214, 0x1218,
 0x122C, 0x1250, 0x1002C4, 0x100204, host 0x84, 0:0:3 0x344/0x35C, PCI 0:2:0 and 0:3:0 0x3C (the masks); and log EEPROM 0xC0-0xC3 and PCI 0:1:0 0x08 from the

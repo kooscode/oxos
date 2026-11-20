@@ -18,8 +18,8 @@ The specs are organised by what EvoX changes, not by where its code lives:
 | [04](04_runtime.md) | while a title runs: fan and LED, in-game reset |
 
 ## 1. Flash image and loader (see the unpacked README for offsets)
-- Not a Microsoft chain: X-codes for MCPX 1.0 and 1.1, ending with a 32-byte stub at RAM 0 (the ROM-bypass trick Cerbios and OXOS also use); a plaintext loader
-  derived from the MS 2BL at flash 0x3C900, run at 0x90000. **[C]**
+- Not a Microsoft chain: X-codes for MCPX 1.0 and 1.1, ending with a 32-byte stub at RAM 0 (Cromwell's ROM-bypass "overflow trick", Xbox-Linux 2002, GPL-2.0,
+  `boot_rom/Xcodes.h`; OXOS uses it too); a plaintext loader derived from the MS 2BL at flash 0x3C900, run at 0x90000. **[C]**
 - The loader decompresses the kernel (LDI/LZX stream, no RC4, no digest), copies the kernel's `.data` initializer from flash (DOS header +0x30, +0x2C bytes) and
   zero-fills +0x28 more, then calls the entry point with **two zero arguments** (retail 2BLs pass the boot parameters and a key pointer). **[C]**
 - Flash 0x382A8–0x3C900 is the retail 5838 AV blob, unchanged; the kernel reads it from flash at (+0x30) + (+0x2C) (spec/stock/17 §1a.2). **[C]**

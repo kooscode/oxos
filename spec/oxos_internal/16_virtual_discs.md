@@ -1,26 +1,29 @@
 # 16. Virtual discs: titles from disc images on the hard disk
 
 Implemented 2026-10-27. An image of an Xbox disc (made from the user's own disc) on the hard disk stands in for the DVD drive, so a title starts and runs from
-it as from the disc. The device interface is the one Cerbios has (spec/cerbios/07), so tools written for Cerbios work here, and the OXOS ISO launcher works on
-Cerbios. Code: `kernel/src/storage/virtual_disc.cpp`, `tools/iso_launcher/`.
+it as from the disc. The device interface is rmenhal's virtual DVD drive from NKPatcher (`cdromimagedrv.asm`, 2004, GPL-2.0): the control codes
+0x1EE7CD00/01/02, `\Device\CdRom1`, split images and the drive replies of §3.1. Cerbios extended its mount request (spec/cerbios/07); OXOS takes that layout
+too, so tools written for either work here, and the OXOS ISO launcher works on Cerbios. Code: `kernel/src/storage/virtual_disc.cpp`, `tools/iso_launcher/`.
 
 ## 1. Images
-- **XISO** (the game partition only) and **full disc dumps**. A dump is recognised as Cerbios does it (spec/cerbios/07 §2.1): its first part is larger than
-  0x18310800 bytes and the 2048-byte sector at 0x18310000 starts and ends with `MICROSOFT*XBOX*MEDIA`. Every read is then offset by 0x18300000. OXOS also
-  reports the game partition's size, not the file's.
-- **CCI** (LZ4-compressed blocks, format in spec/cerbios/07 §4). A split CCI is two whole CCI files, each with its own header and index for its run of sectors;
+- **XISO** (the game partition only) and **full disc dumps**. The game partition starts at 0x18300000 in a dump (Microsoft's disc layout, spec/stock/04c;
+  extract-xiso reads it the same way). A dump is recognised when its first part is larger than 0x18310800 bytes and the 2048-byte sector at 0x18310000 starts
+  and ends with `MICROSOFT*XBOX*MEDIA`. Every read is then offset by 0x18300000. OXOS also reports the game partition's size, not the file's.
+- **CCI** (LZ4-compressed blocks; Cerbios's own format, made with Team Resurgent's Repackinator; public format description: Team Resurgent's libCCI
+  `FORMAT.md`, GPL-2.0; also spec/cerbios/07 §4). A split CCI is two whole CCI files, each with its own header and index for its run of sectors;
   part 0 holds the first ones. `tools/mkcci` converts an `.iso` into one or two parts and checks them against the input.
 - **One or two parts**, read as one image (part 0's sectors first). A FATX disk needs split images (files stop at 4 GB); on exFAT an image may be one file of
   any size (§4).
 
 ## 2. Devices and requests
-As in spec/cerbios/07 §1–2:
+rmenhal's NKPatcher interface, with Cerbios's slots and request layout (spec/cerbios/07 §1–2):
 - The control device is `\Device\Virtual0\Image0`, with the links `\Device\CdRom1` and `\??\CdRom1:`. It is created after the drive
   (`storage::InitVirtualDiscs`, from `storage::InitIdeChannel`). It is not a mountable device type, so an open reaches the driver directly.
 - Images go in slots 1 and 2, as `\Device\Virtual0\Image1` and `Image2` (CD-ROM devices, 2048-byte sectors).
-- The device controls are 0x1EE7CD00/01/02 (alias 0x0CE52B00/01/02): present, mount and unmount. A mount request has the Cerbios layout (0x4C bytes: part count,
-  type, eight counted-string paths, a link name). The strings are copied, bounded to 0x106 characters, after an address check.
-- A mount first unmounts its target: every slot through the control device, its own slot through an image device.
+- The device controls are 0x1EE7CD00/01/02 (NKPatcher's; Cerbios's aliases 0x0CE52B00/01/02): present, mount and unmount. A mount request has Cerbios's layout
+  (0x4C bytes: part count, type, eight counted-string paths, a link name), which extends NKPatcher's (a dword part count, then the eight paths at +4). The
+  strings are copied, bounded to 0x106 characters, after an address check.
+- A mount first unmounts its target (as NKPatcher's attach does): every slot through the control device, its own slot through an image device.
 - Types `D` (plain), `d` (CCI) and 0 (plain, "replace `\Device\CdRom0`") are accepted. Hard-disk and memory-unit images (`M`, others) fail with
   STATUS_INVALID_DEVICE_REQUEST; they are not implemented yet.
 - A link name other than the drive's (`\Device\CdRom0`, `\??\CdRom0:`) is created to point at the image's device.
@@ -39,11 +42,11 @@ Cerbios moves links: the drive's device has another name, and `\Device\CdRom0` i
 | Request | Reply |
 |---|---|
 | READ (whole sectors inside the image) | the image's bytes; anything else STATUS_INVALID_PARAMETER |
-| 0x24000 READ_TOC, 0x24038 GET_LAST_SESSION | Cerbios's 12 bytes: one data track (`00 12 01 01 00 14 01 00 00 00 02 00`) |
+| 0x24000 READ_TOC, 0x24038 GET_LAST_SESSION | NKPatcher's 12 bytes: one data track (`00 12 01 01 00 14 01 00 00 00 02 00`; GET_LAST_SESSION as Cerbios) |
 | 0x2404C GET_DRIVE_GEOMETRY | image sectors, RemovableMedia, 1, 1, 2048 |
 | 0x24800 CHECK_VERIFY, 0x24080 AUTHENTICATE_DISK | success |
 | 0x4D014 SCSI pass-through | the Xbox security commands (the drive emulation's own test, `storage::IsDvdSecurityCommand`: MODE SENSE / SELECT of page 0x3E, READ DVD STRUCTURE at 0xFF02FDFF layer 0xFE) get the drive emulation's replies (spec/stock/04 §3a): the authenticated mode page 0x3E, an accepted MODE SELECT, a security sector built for the running title and signed for the open key. TEST UNIT READY succeeds; other commands fail. Cerbios fails all pass-through on images; OXOS answers so that titles which check the disc themselves still start. |
-| others (e.g. 0x335140 DVD_READ_STRUCTURE) | STATUS_INVALID_DEVICE_REQUEST, as Cerbios |
+| others (e.g. 0x335140 DVD_READ_STRUCTURE) | STATUS_INVALID_DEVICE_REQUEST, as NKPatcher |
 
 An unmounted image device answers STATUS_NO_MEDIA_IN_DEVICE.
 
@@ -78,7 +81,8 @@ An nxdk title, built with `make -C kernel iso_launcher`.
    unmounts the image and starts the dashboard.
 2. **A folder.** The launcher takes the best image in it: `.iso` before `.cci`. Second parts (`.2.iso`) never count as images on their own.
 3. **Two parts.** For `name.1.iso` (or `.1.cci`), `name.2.iso` is added when it exists.
-4. **Mount.** Type 0 for plain images (on Cerbios too, that type replaces `\Device\CdRom0`). Type `d` with the link `\Device\CdRom0` for CCI.
+4. **Mount.** Type 0 for plain images (an NKPatcher-style request; on Cerbios too, that type replaces `\Device\CdRom0`). Type `d` with the link `\Device\CdRom0`
+   for CCI.
 5. **Launch.** The launcher leaves the screen alone (no video mode change of its own, so the title's is the only one; it sets a mode only to show an error). It
    launches `\Device\CdRom0\default.xbe` through the launch data page and a quick reboot. The page names the launcher as the caller with nxdk's default title ID
    0xFFFF0002 (launch data type 0, no data), not the certificate's: a launcher made by oxos_isonator carries the game's certificate, and a game that finds its

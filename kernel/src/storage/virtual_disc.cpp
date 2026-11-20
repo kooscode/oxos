@@ -1,5 +1,6 @@
 // Virtual disc images: an Xbox disc image (XISO, a full disc dump or CCI) on the hard disk stands in for the DVD drive
-// (spec/oxos_internal/16_virtual_discs.md). The device interface is the one Cerbios titles and tools use (spec/cerbios/07): the control device
+// (spec/oxos_internal/16_virtual_discs.md). The device interface is rmenhal's virtual DVD drive from NKPatcher (cdromimagedrv.asm, 2004, GPL-2.0), with
+// Cerbios's request layout and slots (spec/cerbios/07): the control device
 // \Device\Virtual0\Image0 (links \Device\CdRom1, \??\CdRom1:), mount and unmount device controls, image slots 1 and 2 (\Device\Virtual0\Image1, Image2). OXOS
 // design:
 // - A mounted DVD image is the console's disc: \Device\CdRom0 serves it (ServeVirtualDvd, called by the drive's read and device-control routines), so D: and
@@ -234,14 +235,10 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
     PIO_STACK_LOCATION st = IoGetCurrentIrpStackLocation(Irp);
     ULONG outLen = st->Parameters.DeviceIoControl.OutputBufferLength;
     auto out = (PUCHAR)Irp->UserBuffer;
-    if (st->Parameters.DeviceIoControl.IoControlCode != IOCTL_SCSI_PASS_THROUGH_DIRECT) { // logged with its command
-        XK_SERIAL("vd: device control %#lx (in %lu, out %lu)\n", st->Parameters.DeviceIoControl.IoControlCode, st->Parameters.DeviceIoControl.InputBufferLength,
-                  outLen);
-    }
     switch (st->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_CDROM_READ_TOC:
     case IOCTL_CDROM_GET_LAST_SESSION: {
-        // One data track (as Cerbios answers for images).
+        // One data track (NKPatcher's reply for images).
         static const UCHAR toc[12] = {0, 0x12, 1, 1, 0, 0x14, 1, 0, 0, 0, 2, 0};
         if (outLen < sizeof(toc))
             return Complete(Irp, STATUS_INVALID_DEVICE_REQUEST);
@@ -287,8 +284,6 @@ NTSTATUS ImageControl(VD_SLOT *s, PIRP Irp) {
             hardware::ide::EmulatedDvdSecurityReply(cdb, data, p->DataTransferLength, &status, &got);
         else if (cdb[0] != 0x00) // TEST UNIT READY
             status = STATUS_INVALID_DEVICE_REQUEST;
-        XK_SERIAL("vd: pass-through %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x (%lu bytes): %#lx, %lu back%s\n", cdb[0], cdb[1], cdb[2], cdb[3], cdb[4],
-                  cdb[5], cdb[6], cdb[7], cdb[8], cdb[9], p->DataTransferLength, status, got, security ? " (security, emulated)" : "");
         p->ScsiStatus = NT_SUCCESS(status) ? 0 : 2;
         p->DataTransferLength = got;
         return Complete(Irp, status, got);
@@ -484,7 +479,8 @@ bool CopyName(const UCHAR *Field, CHAR *Out) {
     return true;
 }
 
-// The mount request (spec/cerbios/07 §2.1): {count, type, -, -, path[8] (counted strings at 4 + 8 i), link at 0x44}.
+// The mount request (spec/cerbios/07 §2.1; NKPatcher's with its dword count split into count and type): {count, type, -, -, path[8] (counted strings at
+// 4 + 8 i), link at 0x44}.
 NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
     if (!In || InLength < 0x4C || !In[0] || In[0] > 2)
         return STATUS_INVALID_DEVICE_REQUEST;
@@ -541,7 +537,7 @@ NTSTATUS NTAPI VirtualDiscDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     if (code == IOCTL_VD_PRESENT || code == IOCTL_VD_PRESENT2)
         return Complete(Irp, STATUS_SUCCESS);
     if (code == IOCTL_VD_MOUNT || code == IOCTL_VD_MOUNT2 || code == IOCTL_VD_UNMOUNT || code == IOCTL_VD_UNMOUNT2) {
-        // As Cerbios: a mount first unmounts its target (the control device: every slot).
+        // As NKPatcher's attach: a mount first unmounts its target (the control device: every slot).
         KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
         if (n)
             Unmount(n);
