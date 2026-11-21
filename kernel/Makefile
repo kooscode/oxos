@@ -600,27 +600,30 @@ print_trace_dump:
 
 # nxdk and SDL3 for the console apps (tools/*, tests/*_title except the kernel test title), fetched into third_party/ (not committed) by `make nxdk` or the
 # first app build:
-#   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk 14d5ee9 with pbkit's graphics-context fix (pb_init on a cold boot; XboxDev/nxdk#801) and lwIP sockets for
-#     more than one network client (MEMP_NUM_NETCONN 32);
+#   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk 14d5ee9 with pbkit's graphics-context fix (pb_init on a cold boot; XboxDev/nxdk#801), lwIP sockets for
+#     more than one network client (MEMP_NUM_NETCONN 32), and pdclib from kooscode/nxdk-pdclib, branch oxos: setvbuf fixes, faster fread, fwrite and
+#     memcpy/memmove/memset (XboxDev/nxdk-pdclib#63-66); and -O2 by default (not with DEBUG=y), for the apps and nxdk's libraries;
 #   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
 # Every app draws and reads the controllers through SDL3 and the shared text screen in tools/sdl_screen.
 APPS_BUILD       := $(abspath $(ROOT)/build)
 NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_URL         := https://github.com/kooscode/nxdk
-NXDK_COMMIT      := d1e7004a236a7357b87e9d9ae7433b2ae6126fc0
+NXDK_COMMIT      := ce202a8a316ee025f573a7b1c92944bca87a6b52
 NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
 NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
 NXDK_SDL3_COMMIT := 62455b72ac80d318961c05c1230ffcb471e9f2d4
 NXDK_ENV         := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
 SDL_SCREEN       := $(addprefix $(ROOT)/tools/sdl_screen/,sdl_screen.cpp sdl_screen.h sdl_screen.mk)
-# Both checkouts at their pinned commits: the stamp's name holds the two commits, so a new pin checks out again.
-NXDK_READY := $(ROOT)/third_party/.nxdk_$(NXDK_COMMIT)_$(NXDK_SDL3_COMMIT)
+# Both checkouts at their pinned commits: the stamp's name holds the two commits and the optimisation level (nxdk's default, -O2), so a new pin
+# or level checks out again and rebuilds every library and app.
+NXDK_READY := $(ROOT)/third_party/.nxdk_$(NXDK_COMMIT)_$(NXDK_SDL3_COMMIT)_O2
 
 $(NXDK_READY):
 	set -e; checkout() { \
 	    [ -d $$1/.git ] || git clone -q $$2 $$1; \
-	    git -C $$1 cat-file -e $$3^{commit} 2>/dev/null || git -C $$1 fetch -q $$2; \
+	    git -C $$1 cat-file -e $$3^{commit} 2>/dev/null || git -C $$1 fetch -q $$2 $$3; \
 	    git -C $$1 checkout -q $$3; \
+	    git -C $$1 submodule sync -q --recursive; \
 	    git -C $$1 submodule update -q --init --recursive; \
 	}; \
 	checkout $(NXDK_DIR) $(NXDK_URL) $(NXDK_COMMIT); \
@@ -629,6 +632,8 @@ $(NXDK_READY):
 	# pinned sources.
 	find $(NXDK_DIR)/lib $(NXDK_SDL3_DIR) -name '*.obj' -delete
 	rm -f $(NXDK_DIR)/lib/*.lib
+	# The apps' own objects too (in build/<folder>, next to main.exe), so every app is built again with the new nxdk and flags.
+	find $(APPS_BUILD) -name main.exe -not -path '*/regression/*' | while read -r exe; do rm -f "$$(dirname "$$exe")"/*.obj "$$exe"; done
 	rm -f $(ROOT)/third_party/.nxdk_*
 	touch $@
 nxdk: $(NXDK_READY)
