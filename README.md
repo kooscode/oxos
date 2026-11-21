@@ -139,8 +139,10 @@ unattended on a [hardware-in-the-loop rig](docs/hwitl.md).
 What OXOS adds to a stock kernel, and what is planned next: [`spec/oxos_features.md`](spec/oxos_features.md).
 
 ## Credits and license
-OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0), rmenhal's in-game reset hook from
-NKPatcher (GPL-2.0), Intel's Pentium III microcode,
+OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0), rmenhal's in-game reset hook and
+virtual DVD drive from NKPatcher (GPL-2.0), Paul Bartholomew's (oz_paulb) LBA48 patch and partition table (GPL), Team Resurgent's
+[Hermes](https://github.com/Team-Resurgent/Hermes) mount request (GPL-3.0) and libCCI's CCI format (GPL-2.0), EvoX M8+ as the reference studied for
+large disks and the in-game reset, Intel's Pentium III microcode,
 [xemu-dashboard](https://github.com/xemu-project/xemu-dashboard) (MIT), and for its console apps [nxdk](https://github.com/XboxDev/nxdk) with
 [SDL3](https://www.libsdl.org) (zlib) through Ryzee119's [nxdk-sdl3](https://github.com/Ryzee119/nxdk-sdl3) (MIT). Full notices:
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

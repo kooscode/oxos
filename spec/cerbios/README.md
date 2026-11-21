@@ -34,7 +34,8 @@ original source or from the retail Microsoft kernels, and re-implemented from th
   (GPL-3.0) sends it; CCI from Team Resurgent's libCCI format description (GPL-2.0) ([`oxos_internal/16`](../oxos_internal/16_virtual_discs.md)).
 - **Video encoder detection:** Cromwell's `DetectVideoEncoder` (GPL-2.0).
 - **Booting an open BIOS image:** Cromwell's X-codes and their "overflow trick" (GPL-2.0).
-- **1.6 console detection:** EvoX M8+'s SMBus read at address 0x70.
+- **1.6 consoles:** today a separate BIOS image, built from the retail 5838 BIOS's behaviour; a single image for every console, which will detect a 1.6 at
+  boot with EvoX M8+'s SMBus read at address 0x70, is planned ([`oxos_internal/28`](../oxos_internal/28_1_6_console.md)).
 
 ---
 
