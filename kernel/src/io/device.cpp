@@ -84,8 +84,9 @@ XBAPI void NTAPI IoDeleteDevice(PDEVICE_OBJECT DeviceObject) {
         CompleteUnload(DeviceObject);
 }
 
+// A title's link: a target past a device into a path must be an existing folder (spec/stock/26 §3). OXOS's own links (CreateLink) are made without that open.
 XBAPI NTSTATUS NTAPI IoCreateSymbolicLink(POBJECT_STRING SymbolicLinkName, POBJECT_STRING DeviceName) {
-    return objects::CreateSymbolicLink(SymbolicLinkName, DeviceName);
+    return objects::CreateSymbolicLink(SymbolicLinkName, DeviceName, true);
 }
 
 XBAPI NTSTATUS NTAPI IoDeleteSymbolicLink(POBJECT_STRING SymbolicLinkName) {

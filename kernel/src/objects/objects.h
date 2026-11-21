@@ -107,7 +107,8 @@ XBAPI NTSTATUS NTAPI NtDuplicateObject(HANDLE SourceHandle, PHANDLE TargetHandle
 namespace xk::objects {
 
 void InitObjectManager();
-NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName);
+// OpenPathTarget: a target that goes past a device into a path must be an existing folder (IoCreateSymbolicLink, spec/stock/26 §3).
+NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName, bool OpenPathTarget = false);
 
 // Names as the object manager keeps them (a length and the text, no 0 needed), made from a C string; OXOS's own code passes C strings to the functions below.
 inline OBJECT_STRING ObjectName(const char *Text) {

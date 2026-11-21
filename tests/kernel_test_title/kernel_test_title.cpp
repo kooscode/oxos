@@ -54,13 +54,14 @@ enum : ULONG {
     I_KeTickCount, I_XeImageFileName, I_ExAllocatePoolWithTag, I_ExFreePool, I_NtOpenFile, I_NtReadFile, I_NtClose,
     I_PsCreateSystemThread, I_NtWaitForSingleObject, I_KeDelayExecutionThread, I_IoCreateSymbolicLink,
     I_XeLoadSection, I_XeUnloadSection, I_XcSHAInit, I_XcSHAUpdate, I_XcSHAFinal, I_MmAllocateContiguousMemory,
-    I_MmPersistContiguousMemory, I_MmFreeContiguousMemory, I_LaunchDataPage, I_HalReturnToFirmware, I_NtQueryVolumeInformationFile, I_COUNT
+    I_MmPersistContiguousMemory, I_MmFreeContiguousMemory, I_LaunchDataPage, I_HalReturnToFirmware, I_NtQueryVolumeInformationFile, I_IoDeleteSymbolicLink,
+    I_COUNT
 };
 extern "C" ULONG XkThunks[I_COUNT + 1] = {
     0x80000000 | 156, 0x80000000 | 326, 0x80000000 | 15,  0x80000000 | 17,  0x80000000 | 202, 0x80000000 | 219,
     0x80000000 | 187, 0x80000000 | 254, 0x80000000 | 233, 0x80000000 | 99,  0x80000000 | 67,  0x80000000 | 327,
     0x80000000 | 328, 0x80000000 | 335, 0x80000000 | 336, 0x80000000 | 337,
-    0x80000000 | 165, 0x80000000 | 178, 0x80000000 | 171, 0x80000000 | 164, 0x80000000 | 49,  0x80000000 | 218, 0};
+    0x80000000 | 165, 0x80000000 | 178, 0x80000000 | 171, 0x80000000 | 164, 0x80000000 | 49,  0x80000000 | 218, 0x80000000 | 69, 0};
 #define K(name, type) ((type)XkThunks[I_##name])
 
 // The results boot_test.py reads; each test sets its field to 1 when it passes.
@@ -81,6 +82,7 @@ struct RESULTS {
     ULONG DriveLinkOk;    // \??\D: -> \Device\CdRom0\media
     ULONG LaunchPageOk;   // LaunchDataPage persisted with type, title id, flags and data
     char SecondName[64];  // XeImageFileName of the second run
+    ULONG PathLinkTargetsOk; // links to a missing folder or a file fail as on the stock kernel and leave no link; a partition links (both runs)
 };
 extern "C" volatile RESULTS XkTitleResults = {};
 // Title patches (spec/oxos_internal/25 §3): boot_test.py puts C:\OXOS\oxos_title_patches.ini on the test disk with a patch for A (in a section for this title),
@@ -168,6 +170,53 @@ static void Copy(volatile void *to, const volatile void *from, ULONG n) {
 
 static void Relaunch(volatile RESULTS &r, const char *path);
 
+// Test 6b: a title's link targets checked as on the stock kernel (spec/stock/26 §4), each on its own drive letter: a path past a device that is not an
+// existing folder, an unknown partition and a malformed target fail with the stock status and leave no link; a partition and a partition's root folder
+// link. Only files every test disk has (C:\xboxdash.xbe), and no folder of the FATX self-test's (the relaunch runs without it). Run in both runs: the field
+// after SecondName is not carried over.
+static ULONG CheckPathLinkTargets() {
+    auto create = K(IoCreateSymbolicLink, NTSTATUS(NTAPI *)(STRING *, STRING *));
+    auto remove = K(IoDeleteSymbolicLink, NTSTATUS(NTAPI *)(STRING *));
+    struct CASE {
+        const char *Link, *Target;
+        NTSTATUS Status; // the stock kernel's; 0: the link is made (then deleted again)
+    };
+    static const CASE cases[] = {
+        {"\\??\\U:", "\\Device\\Harddisk0\\Partition1\\XkNoDir\\Sub", (NTSTATUS)0xC000003A},  // a parent folder missing
+        {"\\??\\V:", "\\Device\\Harddisk0\\Partition1\\XkTestMissing", (NTSTATUS)0xC0000034},  // the last folder missing
+        {"\\??\\W:", "\\Device\\Harddisk0\\Partition2\\xboxdash.xbe", (NTSTATUS)0xC0000103},   // a file, not a folder
+        {"\\??\\K:", "\\Device\\Harddisk0\\Partition9", (NTSTATUS)0xC0000034},                 // an unknown partition (the self-tests keep a Q:)
+        {"\\??\\S:", "\\Device\\Harddisk0\\Partition9\\x", (NTSTATUS)0xC000003A},              // a path on an unknown partition
+        {"\\??\\P:", "\\Device\\Harddisk0\\Partition2\\a*b", (NTSTATUS)0xC0000033},            // an invalid FATX name
+        {"\\??\\O:", "\\Device\\CdRom9", (NTSTATUS)0xC000000D},                                // a missing object
+        {"\\??\\N:", "Device\\CdRom0", (NTSTATUS)0xC000000D},                                  // not starting with '\'
+        {"\\??\\L:", "\\Device\\\\CdRom0", (NTSTATUS)0xC000000D},                              // a doubled separator before the device
+        {"\\??\\R:", "\\Device\\Harddisk0\\Partition1", 0},                                    // a partition
+        {"\\??\\M:", "\\Device\\Harddisk0\\Partition2\\", 0},                                  // a partition's root folder
+        {"\\XkNoDir\\J:", "\\Device\\Harddisk0\\Partition1", (NTSTATUS)0xC000003A},               // the link name's directory missing
+    };
+    // 1 when every case passes; else 0x80000000 | the first failing case's number (from 1) << 24 | 0x800000 if a link was left behind | the low 16 bits of
+    // the status it got, for boot_test.py's message.
+    for (ULONG i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        STRING link, target;
+        Init(&link, cases[i].Link);
+        Init(&target, cases[i].Target);
+        NTSTATUS status = create(&link, &target);
+        bool linked = remove(&link) == 0;
+        if (status != cases[i].Status || linked != (cases[i].Status == 0))
+            return 0x80000000 | (i + 1) << 24 | (linked && cases[i].Status ? 0x800000 : 0) | ((ULONG)status & 0xFFFF);
+    }
+    // A link name that already exists: 0xC0000035, and the first link stays (case number 0x7F).
+    STRING link, target;
+    Init(&link, "\\??\\H:");
+    Init(&target, "\\Device\\Harddisk0\\Partition1");
+    NTSTATUS first = create(&link, &target), second = create(&link, &target);
+    bool linked = remove(&link) == 0;
+    if (first != 0 || second != (NTSTATUS)0xC0000035 || !linked)
+        return 0x80000000 | 0x7Fu << 24 | (linked ? 0 : 0x800000) | ((ULONG)second & 0xFFFF);
+    return 1;
+}
+
 // Relaunch test, second run (media\second.xbe, started by Relaunch() below): restore the first run's results from the launch data, then check what the kernel
 // handed over.
 static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
@@ -187,6 +236,7 @@ static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
     // Done with the launch page, as a game would be.
     *(PVOID *)XkThunks[I_LaunchDataPage] = nullptr;
     K(MmFreeContiguousMemory, void(NTAPI *)(PVOID))(ldp);
+    r.PathLinkTargetsOk = CheckPathLinkTargets();
     r.Magic = 0x54544B58;
     // Third launch (milestone 5e): an image that does not exist. The kernel falls back to the dashboard with LaunchDataPage = {type 1, reason 1, code 1}; the
     // host has 8 s to collect the results above first.
@@ -286,6 +336,7 @@ extern "C" void __cdecl XkTitleEntry() {
     if (K(IoCreateSymbolicLink, NTSTATUS(NTAPI *)(STRING *, STRING *))(&link, &target) == 0) {
         r.PathLinkOk = ReadFile("\\??\\T:\\keep.bin", buf, sizeof(buf), &got) == 0 && got == 26 && Equal(buf, "open xbox kernel fatx test", 26);
     }
+    r.PathLinkTargetsOk = CheckPathLinkTargets();
 
     // Test 7: load a section on demand. The ".extra" section (XkExtraData) is marked not to be loaded at start, as games do with level data; XeLoadSection must
     // bring it in with the right contents, and XeUnloadSection release it. Section headers follow the XBE image header at 0x10000.

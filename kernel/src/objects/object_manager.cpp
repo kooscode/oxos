@@ -1,5 +1,6 @@
 // Object manager (spec/stock/10): headers, handle table, namespace, directories and symbolic links. The Ob "lock" is DISPATCH_LEVEL, as in the reference.
 #include <objects/objects.h>
+#include <io/io.h> // NtOpenFile: a title's path link opens its folder (spec/stock/26 §3)
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <runtime/runtime.h>
@@ -693,8 +694,32 @@ static void NTAPI DeleteSymbolicLink(PVOID Object) {
         ExFreePool(link->LinkTarget.Buffer);
 }
 
+// Whether a link target goes past a device into a path, from where the lookup stopped (spec/stock/26 §3, §3.1): after a device, anything left is a path;
+// after another object with a parse procedure (\Device\Harddisk0), its first element still names the device ("Partition1"), and only what follows it (a
+// trailing '\' included) is a path.
+static bool IsPathPastDevice(PVOID Stopped, const OBJECT_STRING &Remaining) {
+    if (!Remaining.Length)
+        return false;
+    if (OBJECT_TO_OBJECT_HEADER(Stopped)->Type == &IoDeviceObjectType)
+        return true;
+    ULONG i = Remaining.Buffer[0] == '\\' ? 1 : 0;
+    while (i < Remaining.Length && Remaining.Buffer[i] != '\\')
+        i++;
+    return i < Remaining.Length;
+}
+
+// Whether the part of a link target the object manager walked (everything before Remaining) has a doubled separator (spec/stock/26 §3 step 2.2).
+static bool HasDoubledSeparator(POBJECT_STRING Target, const OBJECT_STRING &Remaining) {
+    ULONG walked = Target->Length - Remaining.Length;
+    for (ULONG i = 1; i < walked; i++) {
+        if (Target->Buffer[i] == '\\' && Target->Buffer[i - 1] == '\\')
+            return true;
+    }
+    return false;
+}
+
 // Permanent link LinkName -> object named TargetName (which must already exist).
-NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) {
+NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName, bool OpenPathTarget) {
     bool trace = TraceSymbolicLink;
     // Resolve up to the first object with a parse procedure: a target like
     // "\Device\Harddisk0\Partition1\Games\X" makes a path link into that device.
@@ -703,8 +728,40 @@ NTSTATUS CreateSymbolicLink(POBJECT_STRING LinkName, POBJECT_STRING TargetName) 
     NTSTATUS status = LookupObjectNameEx(nullptr, TargetName, OBJ_CASE_INSENSITIVE, nullptr, nullptr, &target, 0, true, &remaining);
     if (trace)
         XK_SERIAL("ob: link target lookup %#lx -> %p\n", status, target);
+    // A title's link whose target is malformed or names nothing before a device or a parse procedure is an invalid parameter (spec/stock/26 §3 steps 1-3:
+    // not starting with '\', a doubled separator, a missing name, a path past an object without a parse procedure).
+    if (OpenPathTarget && NT_SUCCESS(status) && HasDoubledSeparator(TargetName, remaining)) {
+        ObfDereferenceObject(target);
+        status = STATUS_INVALID_PARAMETER;
+    }
     if (!NT_SUCCESS(status))
-        return status;
+        return OpenPathTarget ? STATUS_INVALID_PARAMETER : status;
+    // A partition named exactly (\Device\Harddisk0\PartitionN, no path after it) must exist: 0xC0000034 for an unknown one (spec/stock/26 §3.1, §4).
+    if (OpenPathTarget && remaining.Length != 0 && OBJECT_TO_OBJECT_HEADER(target)->Type != &IoDeviceObjectType && !IsPathPastDevice(target, remaining)) {
+        PVOID device;
+        status = ObReferenceObjectByName(TargetName, OBJ_CASE_INSENSITIVE, &IoDeviceObjectType, nullptr, &device);
+        if (!NT_SUCCESS(status)) {
+            ObfDereferenceObject(target);
+            return status;
+        }
+        ObfDereferenceObject(device);
+    }
+    // A path inside a device, for a title's link: open the whole target as a folder first, before the link exists (spec/stock/26 §3 step 5: no access,
+    // share read | write | delete, FILE_DIRECTORY_FILE). A missing folder fails the link with the open's status: 0xC000003A for a missing parent,
+    // 0xC0000034 for the last folder, 0xC0000103 for a file (spec/stock/26 §4).
+    if (OpenPathTarget && IsPathPastDevice(target, remaining)) {
+        OBJECT_ATTRIBUTES targetAttrs = {nullptr, TargetName, OBJ_CASE_INSENSITIVE};
+        IO_STATUS_BLOCK iosb;
+        HANDLE folder;
+        status = NtOpenFile(&folder, 0, &targetAttrs, &iosb, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_DIRECTORY_FILE);
+        if (trace)
+            XK_SERIAL("ob: link target folder open %#lx\n", status);
+        if (!NT_SUCCESS(status)) {
+            ObfDereferenceObject(target);
+            return status;
+        }
+        NtClose(folder);
+    }
     OBJECT_ATTRIBUTES attrs = {nullptr, LinkName, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     POBJECT_SYMBOLIC_LINK link;
     status = ObCreateObject(&ObSymbolicLinkObjectType, &attrs, sizeof(OBJECT_SYMBOLIC_LINK), (PVOID *)&link);

@@ -765,7 +765,7 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
             break
         time.sleep(0.25)
     mon.pause()
-    count = 9 + 16 + 3 + 16
+    count = 9 + 16 + 3 + 16 + 1
     out = mon.hmp(f"x/{count}wx {base:#x}")
     try:
         words = [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:count]
@@ -785,6 +785,8 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
         "kernel thunks resolved: KeTickCount (data) + sleep": words[2] == 1,
         "pool, disc file read, system thread from the title": words[3] == 1 and words[4] == 1 and words[5] == 1,
         "path symbolic link \\??\\T: -> Partition1\\XkTest": words[6] == 1,
+        "path links to a missing folder or a file fail as on the stock kernel (spec/stock/26)"
+            + ("" if words[44] == 1 else f" (result {words[44]:#x})"): words[44] == 1,
         "XeLoadSection / XeUnloadSection (digest-checked)": words[7] == 1,
         "XcSHA known answer": words[8] == 1,
         "title finished": words[0] == 0x54544B58,

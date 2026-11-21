@@ -11,6 +11,7 @@
 #include <runtime/runtime.h>
 #include <runtime/types.h>
 #include <boot_splash/boot_splash.h>
+#include <io/io.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
@@ -110,3 +111,11 @@ bool IsNetbootTitlePage(ULONG) {
     return false;
 }
 } // namespace xk::titles
+
+// io/device.cpp: no device objects in host tests; the type is only compared against (objects::CreateSymbolicLink).
+XBAPI OBJECT_TYPE IoDeviceObjectType = {};
+
+// io/file.cpp: no file systems in host tests, so nothing can be opened (objects::CreateSymbolicLink opens a title's path-link folder with it).
+XBAPI NTSTATUS NTAPI NtOpenFile(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PIO_STATUS_BLOCK, ULONG, ULONG) {
+    return STATUS_OBJECT_NAME_NOT_FOUND;
+}
