@@ -129,9 +129,10 @@ video: put it in `C:\OXOS\boot_videos\` and name it in `boot_video_file`.
   raster, so nothing tears. A late frame is shown at once and the next ones catch up. When the raster does not move (xemu), the wait is dropped after three
   frames without a new screen frame.
 - **Sound:** minimp3 decodes one MP2/MP3 frame at a time, converted to 48 kHz stereo (nearest sample), into a ring of 32 buffer descriptors that both outputs of
-  the AC'97 controller (PCM and S/PDIF) play (spec 17 §2's registers); the player keeps about 0.3 s queued and reads the controller's current descriptor to
-  know how far it has played. **No interrupt is connected:** nxdk's `XAudio` and `XVideoWaitForVBlank` connect interrupts they never disconnect, which would
-  point into freed memory after the player's quick reboot. The codec is cold-reset first and unmuted, as the kernel's boot jingle did (spec 17 §2).
+  the AC'97 controller (PCM and S/PDIF) play (spec 17 §2's registers); the player keeps about 0.3 s queued and reads the controller's current descriptor to know
+  how far it has played. **No interrupt is connected:** nxdk's `XAudio` and `XVideoWaitForVBlank` connect interrupts they never disconnect, which would point
+  into freed memory after the player's quick reboot. The codec's cold reset is released only while it is still held (a released codec that is not ready gets a
+  warm reset), and once it is ready its power and both volumes are written (codec 0x26 ← 0, 0x02 ← 0, 0x18 ← 0x0808), never read first.
 - **Skip:** a button press on any controller (SDL3's gamepad events; the player asks between frames and while it waits).
 - **The end:** after the last picture the sound plays out (at most 2 s); the outputs are reset, the screen is cleared.
 - **Log:** `video player: 848x480, 200 frames shown, 0 late, shown at the vertical blank, with sound` and the app's

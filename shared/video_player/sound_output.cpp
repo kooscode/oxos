@@ -27,11 +27,12 @@ constexpr uint16_t SR_HALTED = 1;
 constexpr uint32_t GLOB_CNT = 0x12C;
 constexpr uint32_t GLOB_STA = 0x130;
 constexpr uint32_t CAS = 0x134;
-constexpr uint32_t GLOB_CNT_COLD = 2;
+constexpr uint32_t GLOB_CNT_COLD = 2; // the cold reset released
+constexpr uint32_t GLOB_CNT_WARM = 4; // a warm reset (wakes a codec whose link is off)
 constexpr uint32_t GLOB_STA_CODEC_READY = 0x100;
+constexpr uint32_t CODEC_POWER = 0x26;
 constexpr uint32_t CODEC_MASTER = 0x02;
 constexpr uint32_t CODEC_PCM = 0x18;
-constexpr uint16_t VOLUME_MUTE = 0x8000;
 // Descriptors queued but not played that the ring may hold: the one playing must not be written over.
 constexpr uint32_t MAX_QUEUED = SOUND_DESCRIPTORS - 2;
 constexpr uint32_t BUFFER_BYTES = SOUND_MAX_FRAMES * 4;
@@ -83,22 +84,35 @@ void ResetChannel(SOUND_OUTPUT &Output, uint32_t Channel) {
     Write16(Output, Channel + SR, 0x1C); // clears the status bits
 }
 
-bool StartCodec(SOUND_OUTPUT &Output) {
-    Write32(Output, GLOB_CNT, Read32(Output, GLOB_CNT) & ~GLOB_CNT_COLD);
-    KeStallExecutionProcessor(10);
-    Write32(Output, GLOB_CNT, Read32(Output, GLOB_CNT) | GLOB_CNT_COLD);
-    for (int ms = 0; ms < 500 && !(Read32(Output, GLOB_STA) & GLOB_STA_CODEC_READY); ms++) {
+bool IsCodecReady(const SOUND_OUTPUT &Output) {
+    return Read32(Output, GLOB_STA) & GLOB_STA_CODEC_READY;
+}
+
+bool WaitForCodec(const SOUND_OUTPUT &Output) {
+    for (int ms = 0; ms < 500 && !IsCodecReady(Output); ms++) {
         WaitMs(1);
     }
-    if (!(Read32(Output, GLOB_STA) & GLOB_STA_CODEC_READY)) {
+    return IsCodecReady(Output);
+}
+
+// The codec as the stock sound library starts it (spec/oxos_internal/46 §3): the cold reset released only while it is still held (a pulse on a running codec
+// resets it some milliseconds later, while its ready bit still reads set, and the volumes written meanwhile are lost), a warm reset for a released codec that
+// is not ready, then its power and both volumes written, never read.
+bool StartCodec(SOUND_OUTPUT &Output) {
+    uint32_t control = Read32(Output, GLOB_CNT);
+    if (!(control & GLOB_CNT_COLD)) {
+        Write32(Output, GLOB_CNT, control | GLOB_CNT_COLD);
+    } else if (!IsCodecReady(Output)) {
+        Write32(Output, GLOB_CNT, control | GLOB_CNT_WARM);
+        KeStallExecutionProcessor(10);
+        Write32(Output, GLOB_CNT, control & ~GLOB_CNT_WARM);
+    }
+    if (!WaitForCodec(Output)) {
         return false;
     }
-    if (Read16(Output, CODEC_MASTER) & VOLUME_MUTE) {
-        WriteCodec(Output, CODEC_MASTER, 0x0000);
-    }
-    if (Read16(Output, CODEC_PCM) & VOLUME_MUTE) {
-        WriteCodec(Output, CODEC_PCM, 0x0808);
-    }
+    WriteCodec(Output, CODEC_POWER, 0x0000);  // every section powered
+    WriteCodec(Output, CODEC_MASTER, 0x0000); // 0 dB, not muted
+    WriteCodec(Output, CODEC_PCM, 0x0808);    // 0 dB, not muted
     return true;
 }
 
