@@ -600,7 +600,7 @@ print_trace_dump:
 
 # nxdk and SDL3 for the console apps (tools/*, tests/*_title except the kernel test title), fetched into third_party/ (not committed) by `make nxdk` or the
 # first app build:
-#   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk 14d5ee9 with pbkit's graphics-context fix (pb_init on a cold boot; XboxDev/nxdk#801), lwIP sockets for
+#   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk fafbe41 with pbkit's graphics-context fix (pb_init on a cold boot; XboxDev/nxdk#801), lwIP sockets for
 #     more than one network client (MEMP_NUM_NETCONN 32), and pdclib from kooscode/nxdk-pdclib, branch oxos: setvbuf fixes, faster fread, fwrite and
 #     memcpy/memmove/memset (XboxDev/nxdk-pdclib#63-66); and -O2 by default (not with DEBUG=y), for the apps and nxdk's libraries;
 #   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
@@ -608,7 +608,7 @@ print_trace_dump:
 APPS_BUILD       := $(abspath $(ROOT)/build)
 NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_URL         := https://github.com/kooscode/nxdk
-NXDK_COMMIT      := ce202a8a316ee025f573a7b1c92944bca87a6b52
+NXDK_COMMIT      := 796f441aaccf2e067945a80cee927061679549c1
 NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
 NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
 NXDK_SDL3_COMMIT := 62455b72ac80d318961c05c1230ffcb471e9f2d4
