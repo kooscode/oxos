@@ -68,6 +68,19 @@ void LogLine(const char *Format, ...) {
     va_end(args);
 }
 
+// The hang dump's capture (interrupts.cpp): not under test; nothing is captured, and printing goes to the harness's log.
+void StartLogCapture(char *, ULONG) {
+    // Not under test.
+}
+
+ULONG StopLogCapture() {
+    return 0;
+}
+
+void PrintLogText(const char *Text, ULONG Length) {
+    HostLogWrite(Text, Length);
+}
+
 volatile BOOLEAN BootMarksOn;
 
 void BootMark(const char *) {

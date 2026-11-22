@@ -11,6 +11,9 @@ void ClockInterrupt(KIRQL interruptedIrql);
 void CheckTimers();
 #if XK_DEBUG_SERIAL
 void DumpTimers(); // the hang dump (interrupts.cpp): the timer list and the expiry DPC
+#if XK_DEBUG_SERIAL
+void StartHangDumps(); // serial builds: starts the hang dump's thread (interrupts.cpp), before the first title
+#endif
 #endif
 void DispatchInterrupt();
 void RetireDpcList();

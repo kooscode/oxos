@@ -161,6 +161,36 @@ static void DumpThreads() {
               (ULONG)PendingSoftwareInterrupts, (unsigned)KiPcr.Irql);
     DumpTimers();
 }
+
+// The hang dump runs on its own thread at priority 1: printed from the clock interrupt, it held up every thread for as long as the serial port took (a
+// title that only looked idle lost its sound). The sampler queues HangDumpDpc, which wakes the thread; the thread takes the snapshot at DISPATCH_LEVEL into
+// HangDumpText, where nothing changes meanwhile, and prints it at PASSIVE_LEVEL, where every other thread comes first.
+static KDPC HangDumpDpc;         // queued by the sampler
+static KEVENT HangDumpEvent;     // set by HangDumpDpc, waited for by the thread
+static bool HangDumpThreadReady; // StartHangDumps has run (before it, the sampler dumps in place)
+static char HangDumpText[16384]; // the snapshot
+
+static void NTAPI WakeHangDumpThread(PKDPC, PVOID, PVOID, PVOID) {
+    KeSetEvent(&HangDumpEvent, 0, FALSE);
+}
+
+static void NTAPI RunHangDumps(PVOID) {
+    for (;;) {
+        KeWaitForSingleObject(&HangDumpEvent, Executive, KernelMode, FALSE, nullptr);
+        KIRQL old = KfRaiseIrql(DISPATCH_LEVEL);
+        diagnostics::StartLogCapture(HangDumpText, sizeof(HangDumpText));
+        DumpThreads();
+        ULONG length = diagnostics::StopLogCapture();
+        KfLowerIrql(old);
+        diagnostics::PrintLogText(HangDumpText, length);
+    }
+}
+
+void StartHangDumps() {
+    KeInitializeDpc(&HangDumpDpc, WakeHangDumpThread, nullptr);
+    KeInitializeEvent(&HangDumpEvent, SynchronizationEvent, FALSE);
+    HangDumpThreadReady = CreateSystemThread(RunHangDumps, nullptr, 0, 1) != nullptr;
+}
 #endif
 
 // Called from the IRQ entry stubs with interrupts disabled.
@@ -177,8 +207,12 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         XK_SERIAL("sample: eip %08lx irql %u thread %p\n", ((PULONG)__builtin_frame_address(0) + 3)[9], (unsigned)KiPcr.Irql, KiPcr.PrcbData.CurrentThread);
         static ULONG idleSamples;
         idleSamples = KiPcr.PrcbData.CurrentThread == &IdleThreadObject ? idleSamples + 1 : 0;
-        if (idleSamples == 3 || idleSamples == 12)
-            DumpThreads();
+        if (idleSamples == 3 || idleSamples == 12) {
+            if (HangDumpThreadReady)
+                KeInsertQueueDpc(&HangDumpDpc, nullptr, nullptr);
+            else
+                DumpThreads();
+        }
     }
 #endif
     KIRQL old = KiPcr.Irql;

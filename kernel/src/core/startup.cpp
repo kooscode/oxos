@@ -1,5 +1,6 @@
 // Kernel start-up after the 2BL hand-off (spec/stock/01_boot.md, spec/stock/02_executive_init.md).
 #include <core/core.h>
+#include <core/scheduler.h> // StartHangDumps (serial builds)
 #include <arch/arch.h>
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
@@ -175,6 +176,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
         };
         CreateSystemThread(R::Run, nullptr, 0, 8);
     }
+#endif
+#if XK_DEBUG_SERIAL
+    StartHangDumps(); // serial builds: the hang dump's own thread (interrupts.cpp)
 #endif
     KiBootStep("title launcher");
     titles::StartTitleLauncher();

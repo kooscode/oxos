@@ -48,6 +48,11 @@ void LogLineArgs(const char *Format, __builtin_va_list Args); // the same, for a
 #if XK_DEBUG_SERIAL
 extern char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256];           // the ring, readable from the emulator monitor
 extern volatile ULONG DebugLogPosition;                        // characters written so far; the next goes at this % sizeof(DebugLog)
+// A capture: while one is open, log lines go into Buffer (what does not fit is dropped) instead of the ring and the serial port, to be printed later at a
+// low priority with PrintLogText (the hang dump: a snapshot taken quickly, printed slowly).
+void StartLogCapture(char *Buffer, ULONG Size);
+ULONG StopLogCapture(); // the characters captured
+void PrintLogText(const char *Text, ULONG Length); // to the ring and the serial port, a line at a time with interrupts enabled in between
 #endif
 
 // --- Log files (file_log.cpp)

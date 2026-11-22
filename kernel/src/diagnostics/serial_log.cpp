@@ -14,18 +14,54 @@ namespace xk::diagnostics {
 char DebugLog[XK_BOOT_SELFTEST ? 8192 : 256];
 volatile ULONG DebugLogPosition;
 
+static char *CaptureBuffer;              // the open capture's buffer (StartLogCapture), nullptr when none is open
+static ULONG CaptureSize, CaptureLength; // its size and the characters in it
+
+void StartLogCapture(char *Buffer, ULONG Size) {
+    CaptureLength = 0;
+    CaptureSize = Size;
+    CaptureBuffer = Buffer;
+}
+
+ULONG StopLogCapture() {
+    CaptureBuffer = nullptr;
+    return CaptureLength;
+}
+
+// Writes Length characters to the ring and the serial port, as one piece.
+static void WriteLogText(const char *Text, ULONG Length) {
+    ULONG flags = save_flags_cli(); // whole lines: another processor or interrupt does not cut into one
+    for (ULONG i = 0; i < Length; i++)
+        DebugLog[(DebugLogPosition + i) % sizeof(DebugLog)] = Text[i];
+    DebugLogPosition = DebugLogPosition + Length;
+    hardware::chipset::WriteSerial(Text, Length);
+    restore_flags(flags);
+}
+
+void PrintLogText(const char *Text, ULONG Length) {
+    ULONG start = 0;
+    for (ULONG i = 0; i < Length; i++) {
+        if (Text[i] == '\n' || i + 1 == Length) {
+            WriteLogText(Text + start, i + 1 - start);
+            start = i + 1;
+        }
+    }
+}
+
 void LogLineArgs(const char *Format, __builtin_va_list Args) {
     BootMark(Format);
     char line[256];
     int length = vsnprintf(line, sizeof(line), Format, Args);
     if (length < 0 || length >= (int)sizeof(line))
         length = sizeof(line) - 1;
-    ULONG flags = save_flags_cli(); // whole lines: another processor or interrupt does not cut into one
-    for (int i = 0; i < length; i++)
-        DebugLog[(DebugLogPosition + i) % sizeof(DebugLog)] = line[i];
-    DebugLogPosition = DebugLogPosition + length;
-    hardware::chipset::WriteSerial(line, length);
-    restore_flags(flags);
+    if (CaptureBuffer) {
+        ULONG flags = save_flags_cli();
+        for (int i = 0; i < length && CaptureLength < CaptureSize; i++)
+            CaptureBuffer[CaptureLength++] = line[i];
+        restore_flags(flags);
+        return;
+    }
+    WriteLogText(line, length);
 }
 
 void LogLine(const char *Format, ...) {
