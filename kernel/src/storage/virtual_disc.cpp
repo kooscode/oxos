@@ -40,7 +40,8 @@ constexpr ULONG CCI_WINDOW = 1024;      // index entries cached per part
 
 // What a mount needs again after a quick reboot.
 struct VD_SAVED {
-    UCHAR InUse, Type, Parts, Pad;
+    UCHAR InUse, Type, Parts;
+    UCHAR MountedByLastTitle; // mounted by the title that ran last (an attach XBE): its quick reboot boots the image, not ends it
     CHAR Path[2][VD_NAME + 1];
     CHAR Link[VD_NAME + 1];
 };
@@ -481,9 +482,9 @@ bool CopyName(const UCHAR *Field, CHAR *Out) {
 }
 
 // The mount request (Hermes's, src/external.h: NKPatcher's with its dword count split into count and type): {count, type, -, -, path[8] (counted strings at
-// 4 + 8 i), link at 0x44}.
+// 4 + 8 i), link at 0x44}. NKPatcher's layout, as ISO launcher (attach) XBEs send it, ends after the paths (0x44 bytes): no link (spec/oxos_internal/16 §2).
 NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
-    if (!In || InLength < 0x4C || !In[0] || In[0] > 2)
+    if (!In || InLength < 0x44 || !In[0] || In[0] > 2)
         return STATUS_INVALID_DEVICE_REQUEST;
     UCHAR type = In[1];
     if (type == 0)
@@ -507,9 +508,10 @@ NTSTATUS MountRequest(ULONG Slot, const UCHAR *In, ULONG InLength) {
         if (!CopyName(In + 4 + 8 * i, saved->Path[i]) || !saved->Path[i][0])
             return STATUS_INVALID_DEVICE_REQUEST;
     }
-    if (!CopyName(In + 0x44, saved->Link))
+    if (InLength >= 0x4C && !CopyName(In + 0x44, saved->Link))
         return STATUS_INVALID_DEVICE_REQUEST;
     saved->InUse = 1;
+    saved->MountedByLastTitle = 1;
     NTSTATUS status = Attach(Slot);
     return NT_SUCCESS(status) ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_REQUEST;
 }
@@ -535,6 +537,14 @@ NTSTATUS NTAPI VirtualDiscDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
     ULONG n = *(PULONG)DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION st = IoGetCurrentIrpStackLocation(Irp);
     ULONG code = st->Parameters.DeviceIoControl.IoControlCode;
+#if XK_DEBUG_SERIAL
+    if (!n) {
+        auto in = (const ULONG *)st->Parameters.DeviceIoControl.InputBuffer;
+        ULONG inLength = st->Parameters.DeviceIoControl.InputBufferLength;
+        XK_SERIAL("vd: control request %#lx, in %lu bytes (%08lx %08lx %08lx %08lx), out %lu bytes\n", code, inLength, inLength > 3 ? in[0] : 0,
+                  inLength > 7 ? in[1] : 0, inLength > 11 ? in[2] : 0, inLength > 15 ? in[3] : 0, st->Parameters.DeviceIoControl.OutputBufferLength);
+    }
+#endif
     if (code == IOCTL_VD_PRESENT || code == IOCTL_VD_PRESENT2)
         return Complete(Irp, STATUS_SUCCESS);
     if (code == IOCTL_VD_MOUNT || code == IOCTL_VD_MOUNT2 || code == IOCTL_VD_UNMOUNT || code == IOCTL_VD_UNMOUNT2) {
@@ -607,6 +617,19 @@ void InitVirtualDiscs() {
     VirtualDiscControl->Flags &= ~DO_DEVICE_INITIALIZING;
     io::CreateLink("\\Device\\CdRom1", control);
     io::CreateLink("\\??\\CdRom1:", control);
+}
+
+bool HasVirtualDiscFromLastTitle() {
+    for (const auto &saved : SavedVirtualDiscs) {
+        if (saved.InUse && saved.MountedByLastTitle)
+            return true;
+    }
+    return false;
+}
+
+void ForgetVirtualDiscMounters() {
+    for (auto &saved : SavedVirtualDiscs)
+        saved.MountedByLastTitle = 0;
 }
 
 void UnmountVirtualDiscs() {

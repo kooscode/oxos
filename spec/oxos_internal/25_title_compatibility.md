@@ -86,6 +86,10 @@ patch = 1010: > 90 90
 
 - **Sections:** `[TITLEID]` is the certificate's title ID (header +0x118 → +8), in hex. `[TITLEID/VERSION]` also needs the certificate version (+0xAC). Every
   matching section applies, in file order.
+- **`[*]`** (2026-11-22) applies to every title, with no version. It is for launchers that carry the title ID and version of the game they start, such as ISO
+  launcher (attach) XBEs: no title ID names them, their code bytes do. Its patches are written, as in any section, only where their current (or match) bytes
+  are there, so in the shipped file each one checks 6 bytes or more. The shipped file's `[*]` section ("All Title Patcher", first in the file) holds the ISO
+  launcher fix (spec 16 §2).
 - **Patches:** `patch = ADDRESS: CURRENT_BYTES > NEW_BYTES`. The address is a virtual address of the loaded title, in hex (`0x` allowed). CURRENT_BYTES and
   NEW_BYTES are hex byte pairs, with or without spaces and tabs, 1 to 255 on each side: the kernel compares the CURRENT_BYTES at the address and writes the
   NEW_BYTES there. NEW_BYTES may be shorter than CURRENT_BYTES (the bytes after them are left alone), so such a line still works; the shipped file always gives

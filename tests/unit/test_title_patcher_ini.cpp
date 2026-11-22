@@ -87,6 +87,21 @@ TEST(Patches, VersionedSectionsOnlyMatchTheirVersion) {
     EXPECT_TRUE(Parse(File, 0x12345678, 3).empty());
 }
 
+TEST(Patches, AnyTitleSectionsMatchEveryTitleAndVersion) {
+    const std::string text = "[*]\nname = any title\npatch = 11F40: 66 81 79 04 48 1F > 66 81 79 04 00 00\n[12345678]\npatch = 1000: 55 8B EC 83 > C3\n";
+    INI_PATCH_COUNTS c;
+    auto any = Parse(text, 0x454C0001, 1, &c);
+    ASSERT_EQ(any.size(), 2u);
+    EXPECT_EQ(any[1].Address, 0x11F40u);
+    EXPECT_EQ(any[1].Original, B({0x66, 0x81, 0x79, 0x04, 0x48, 0x1F}));
+    EXPECT_EQ(c.Sections, 1u);
+    EXPECT_EQ(c.Errors, 0u);
+    EXPECT_EQ(Parse(text, 0x12345678, 7).size(), 3u) << "[*] and the title's own section";
+    INI_PATCH_COUNTS bad;
+    Parse("[*/3]\npatch = 1000: 55 > C3\n[**]\n", 1, 3, &bad);
+    EXPECT_EQ(bad.Errors, 2u) << "no version on [*], and nothing else is a wildcard";
+}
+
 TEST(Patches, BadLinesAreCountedAndSkipped) {
     INI_PATCH_COUNTS c;
     auto r = Parse("[ABC]\n"
@@ -192,10 +207,15 @@ TEST(Patches, ShippedFileParses) {
         text.append(buf, n);
     fclose(f);
     INI_PATCH_COUNTS c;
-    auto r = Parse(text, 0x41560010, 2, &c, 1 << 16); // Wolfenstein: seven one-byte patches
+    auto r = Parse(text, 0x41560010, 2, &c, 1 << 16); // Wolfenstein: seven one-byte patches, and the [*] section's two
     EXPECT_EQ(c.Errors, 0u);
-    EXPECT_EQ(c.Sections, 1u);
-    EXPECT_EQ(c.Patches, 7u);
+    EXPECT_EQ(c.Sections, 2u);
+    EXPECT_EQ(c.Patches, 9u);
+    // [*] applies to every title, so its patches check 6 bytes or more.
+    for (auto &p : Parse(text, 0x00000001, 1, nullptr, 1 << 16)) {
+        if (p.Kind == INI_PATCH_BYTES)
+            EXPECT_GE(p.Original.size(), 6u) << std::hex << p.Address << ": a [*] patch checks 6 bytes or more";
+    }
     // Each title with the certificate version its patches were observed in (spec/oxos_internal/44 §7).
     const std::pair<uint32_t, uint32_t> observed[] = {{0x56550013u, 1}, {0x4541038Bu, 3}, {0x4D530031u, 5}, {0x56550041u, 2}, {0x48450001u, 2},
                                                       {0x53430007u, 2}, {0x56550039u, 3}, {0x45410042u, 3},

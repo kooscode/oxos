@@ -41,6 +41,10 @@ void RestoreVirtualDiscMounts();
 // Unmounts every disc image (spec/oxos_internal/16 §5): the title launcher calls it at a launch away from the disc (titles::IsLaunchAwayFromDisc) and when a
 // title ends with a quick reboot that asks for nothing, so an image left mounted does not become the disc the next title falls back to.
 void UnmountVirtualDiscs();
+// Whether the title that ran last mounted an image (an attach XBE that then quick-reboots into it, spec/oxos_internal/16 §5), and the title launcher's
+// reset of that mark as it enters the next title.
+bool HasVirtualDiscFromLastTitle();
+void ForgetVirtualDiscMounters();
 void InitVirtualDiscs(); // start-up: the virtual disc control device (the IDE start-up calls it)
 
 } // namespace xk::storage

@@ -738,8 +738,9 @@ static void LaunchAfterQuickReboot() {
     auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
     bool titleAsked = ldp && ldp->LaunchPath[0] && !(ldp->Flags & 1);
     // A title that ends with a quick reboot asking for nothing (no launch data page, or the one it was started with: how nxdk titles exit) has ended: a disc
-    // image is unmounted, so the dashboard follows instead of the image's title again (spec/oxos_internal/16 §5). A return to the dashboard keeps it.
-    if (place == BOOT_VIDEO_NONE && (!ldp || (ldp->Flags & 1)))
+    // image is unmounted, so the dashboard follows instead of the image's title again (spec/oxos_internal/16 §5). A return to the dashboard keeps it, and so
+    // does an image that title mounted itself: an attach XBE mounts one and quick-reboots so that the disc, now the image, starts.
+    if (place == BOOT_VIDEO_NONE && (!ldp || (ldp->Flags & 1)) && !storage::HasVirtualDiscFromLastTitle())
         storage::UnmountVirtualDiscs();
     if (place == BOOT_VIDEO_NONE && (BootVideoSwitches & XK_BOOT_VIDEO_ALWAYS) && !titleAsked && LoadBootVideoPlayer(BOOT_VIDEO_QUICK_REBOOT))
         return;
@@ -750,6 +751,7 @@ static void LaunchAfterQuickReboot() {
 // §2), and the LaunchDataPage moves below the kernel, out of the title's way (spec/stock/05 §5).
 static void PrepareToEnterTitle() {
     boot_splash::EndSplash(BootVideoPlace != BOOT_VIDEO_NONE);
+    storage::ForgetVirtualDiscMounters(); // images mounted until now are not this title's
     if (!LaunchDataPage)
         return;
     ULONG kernelPhys = MmGetPhysicalAddress((PVOID)0x80010000);

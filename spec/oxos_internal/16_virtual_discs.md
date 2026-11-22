@@ -24,6 +24,13 @@ rmenhal's NKPatcher interface, with Hermes's request layout; the slots are OXOS'
 - The device controls are 0x1EE7CD00/01/02 (NKPatcher's; also 0x0CE52B01/02, as Hermes sends them, and 0x0CE52B00): present, mount and unmount. A mount request
   has Hermes's layout (0x4C bytes: part count, type, eight counted-string paths, a link name), which extends NKPatcher's (a dword part count, then the eight
   paths at +4). The strings are copied, bounded to 0x106 characters, after an address check.
+- A request of 0x44 to 0x4B bytes ends after the paths and has no link name (NKPatcher's layout). ISO launcher (attach) XBEs made by disc image tools send
+  one (0x1EE7CD01 to `\Device\CdRom1`, 0x44 bytes, part count 1 or 2, type 0 for an ISO). OXOS required 0x4C bytes until 2026-11-22 and refused it; the
+  launcher's quick reboot then started the dashboard instead of the image's title (issue #11).
+- Such a launcher takes this route, which cannot mount a CCI, when the kernel's build number (`XboxKrnlVersion`) is below 8008; with 8008 or more it opens
+  `\Device\Virtual0\Image0` and sends 0x0CE52B02, then 0x0CE52B01 with the 0x4C-byte layout (type `D`, or `d` for a CCI; link `\Device\CdRom0`). OXOS
+  keeps the stock build number, and a patch in the shipped title patch file's `[*]` section (spec 25 §3, "All Title Patcher") turns the launcher's two
+  build checks into "below 0", so it takes the second route, CCI images included.
 - A mount first unmounts its target (as NKPatcher's attach does): every slot through the control device, its own slot through an image device.
 - Types `D` (plain) and `d` (CCI), as Hermes sends them, and 0 (plain: NKPatcher's request, whose dword part count leaves the type byte 0) are accepted.
   Other types fail with STATUS_INVALID_DEVICE_REQUEST.
@@ -73,7 +80,10 @@ asking for a title falls back to the disc (stock spec 05 §2 B): the image's tit
   (`E:\TDATA\<title ID>\$u\`) still reads the title's data from the disc, so a launch into TDATA keeps the image. Decided by the path, not the title ID:
   homebrew titles and dashboards often share the nxdk's default title ID (FFFF0002);
 - **when a title ends with a quick reboot that asks for nothing:** no launch data page, or the page it was started with (already used, the loop guard of stock
-  spec 05 §2). This is how nxdk titles exit. The boot video (with `boot_video_always`) then plays, and the dashboard follows, since there is no disc.
+  spec 05 §2). This is how nxdk titles exit. The boot video (with `boot_video_always`) then plays, and the dashboard follows, since there is no disc. An image
+  that title mounted itself stays: an ISO launcher (attach) XBE mounts the image and quick-reboots the same way so that the disc, now the image,
+  starts. Each slot's record keeps a "mounted by the last title" mark, set by a mount request and cleared as the title launcher enters the next title
+  (`storage::HasVirtualDiscFromLastTitle`, `storage::ForgetVirtualDiscMounters`).
 
 Launches that keep the images: the disc title's own launches (`\Device\CdRom0;...`, a fresh page naming itself included), its title update, the trainer
 menu starting the title (a fresh page), a return to the dashboard (a page with no path, `XLaunchNewImage(NULL)`, as a disc left in the tray), and the boot

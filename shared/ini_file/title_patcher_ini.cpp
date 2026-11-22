@@ -3,6 +3,7 @@
 //   ; comment
 //   [4D4A000C]            every version of title 4D4A000C
 //   [56550039/3]          only certificate version 3 (decimal, or 0x hex)
+//   [*]                   every title: its patches are written only where their current (or match) bytes are there
 //   name = what it fixes
 //   patch = 506D7: E8 D4 64 00 > EB 08   CURRENT_BYTES > NEW_BYTES: when these bytes are at this address of the
 //                                        loaded title, write those
@@ -105,9 +106,14 @@ uint32_t ParseTitlePatches(const char *Text, uint32_t Length, uint32_t TitleId, 
             c.Errors++;
             continue;
         }
-        if (line.Kind != INI_LINE_KIND::KEY) { // [TITLEID] or [TITLEID/VERSION]
+        if (line.Kind != INI_LINE_KIND::KEY) { // [TITLEID], [TITLEID/VERSION] or [*]
             matchLength = 0;
             active = false;
+            if (line.Kind == INI_LINE_KIND::SECTION && line.TextLength == 1 && line.Text[0] == '*') {
+                active = true; // a launcher that carries the title ID of the game it starts: its code bytes identify it
+                c.Sections++;
+                continue;
+            }
             Cursor cur = {line.Text, line.Text + line.TextLength};
             uint32_t id, version = 0;
             bool ok = line.Kind == INI_LINE_KIND::SECTION && cur.Number(&id, true);
