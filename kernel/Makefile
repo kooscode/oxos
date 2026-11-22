@@ -603,16 +603,20 @@ print_trace_dump:
 #   - nxdk: kooscode/nxdk, branch oxos: XboxDev nxdk fafbe41 with pbkit's graphics-context fix (pb_init on a cold boot; XboxDev/nxdk#801), lwIP sockets for
 #     more than one network client (MEMP_NUM_NETCONN 32), and pdclib from kooscode/nxdk-pdclib, branch oxos: setvbuf fixes, faster fread, fwrite and
 #     memcpy/memmove/memset (XboxDev/nxdk-pdclib#63-66); -O2 by default (not with DEBUG=y), for the apps and nxdk's libraries; and hal/audio's fixes
-#     (XboxDev/nxdk#806): no cold reset of a running codec, and the descriptor lists kept within one page;
-#   - SDL3: kooscode/nxdk-sdl3, a fork of Ryzee119's nxdk-sdl3, which builds on that nxdk.
+#     (XboxDev/nxdk#806): no cold reset of a running codec, and the descriptor lists kept within one page; lwIP from kooscode/lwip (branch oxos), which
+#     follows lwip-tcpip/lwip master for its fixes; SDL2 from kooscode/nxdk-sdl (branch oxos); and what the XB Live dashboard added (sound shutdown and
+#     resync, network driver shutdown, pbkit additions; pdclib's malloc returning freed memory to the system, malloc_trim);
+#   - SDL3: kooscode/nxdk-sdl3, branch oxos: Ryzee119's nxdk-sdl3 master (it builds on that nxdk) with the XGU renderer's waits for a buffer flip in
+#     RenderPresent capped at 3 vertical blanks (under xemu a flip can stall for good; Ryzee119/nxdk-sdl3#7), the XGU renderer's vertex caches invalidated
+#     before every draw (a stale vertex drew wedges after render-to-texture), and the XB Live dashboard's audio, joystick and video additions.
 # Every app draws and reads the controllers through SDL3 and the shared text screen in tools/sdl_screen.
 APPS_BUILD       := $(abspath $(ROOT)/build)
 NXDK_DIR         := $(abspath $(ROOT)/third_party/nxdk)
 NXDK_URL         := https://github.com/kooscode/nxdk
-NXDK_COMMIT      := f145b4ed4032babe40b9867b880068cdcf220fe3
+NXDK_COMMIT      := 65c9816753b15036bfd08d4536cd86a9e8e5573d
 NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
 NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
-NXDK_SDL3_COMMIT := 62455b72ac80d318961c05c1230ffcb471e9f2d4
+NXDK_SDL3_COMMIT := 11aeba85bfc0e76873e64d99779f1939803ffd7c
 NXDK_ENV         := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
 SDL_SCREEN       := $(addprefix $(ROOT)/tools/sdl_screen/,sdl_screen.cpp sdl_screen.h sdl_screen.mk)
 # Both checkouts at their pinned commits: the stamp's name holds the two commits and the optimisation level (nxdk's default, -O2), so a new pin
