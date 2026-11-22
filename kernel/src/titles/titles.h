@@ -23,6 +23,14 @@ extern ULONG ConsoleGameRegion;      // the console's game region (from the EEPR
 extern ULONG DiscTitleId;            // the title pinned to the current game disc (0 = none)
 extern UCHAR TitleDiscAuthenticated; // the disc in the drive passed the DVD authentication
 
+// Whether a launch through the launch page leaves the disc, so that a mounted disc image is unmounted first (spec/oxos_internal/16 §5): the image asked for
+// (Path, the page's path) is neither on the disc (\Device\CdRom0) nor in E:\TDATA, where a disc title keeps its title update (TDATA\<title ID>\$u), which
+// still reads the title's data from the disc. Not by title ID: homebrew titles and dashboards often share the nxdk's default one.
+inline bool IsLaunchAwayFromDisc(const char *Path) {
+    bool onDisc = strncasecmp(Path, "\\Device\\CdRom0", 14) == 0 && (!Path[14] || Path[14] == '\\');
+    return !onDisc && strncasecmp(Path, "\\Device\\Harddisk0\\Partition1\\TDATA\\", 35) != 0;
+}
+
 void StartTitleLauncher(); // the end of start-up: load and enter the first title
 // Boot-only (titles/title_loader.cpp, spec/oxos_internal/18 §2): the cold boot's choice of what to launch, and the OXOS File Manager (spec/oxos_internal/31)
 // until a browser launches an XBE that loads (false: no network card).

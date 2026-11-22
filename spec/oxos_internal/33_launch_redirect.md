@@ -75,9 +75,9 @@ spec/stock/05 §2).
 - Host unit tests `tests/unit/test_launch_redirect_ini.cpp`: drive letters, device paths, `/`, case, comments, lines without `>>` or a path, blanks around
   `>>`, the first match deciding, the section among others, paths too long, CR LF; `tests/unit/test_ini_file.cpp`: the shared line reader.
 - `make test_relaunch` (boot_test.py `--redirect`): the test disk's `C:\OXOS\oxos_settings.ini` `[launch_redirect]` sends the kernel test title's relaunch
-  (`D:\media\second.xbe`) to `D:\redirected\second.xbe` on the same disc, and its third launch (`D:\media\missing.xbe`, which does not exist) to a target that
-  does not exist either. Checked: the kernel loaded the target (`XeImageFileName`), the first run's results arrived through the unchanged launch data, D: is
-  linked (the title reads `D:\a.txt`, which the target's folder holds too), and the missing launch still ends at the dashboard with reason 1 (§4: the target
+  (`D:\media\second.xbe`) to `D:\redirected\second.xbe` on the same disc, and its third launch (`E:\XkNoSuchDir\missing.xbe`, which does not exist) to a target
+  that does not exist either. Checked: the kernel loaded the target (`XeImageFileName`), the first run's results arrived through the unchanged launch data, D:
+  is linked (the title reads `D:\a.txt`, which the target's folder holds too), and the missing launch still ends at the dashboard with reason 1 (§4: the target
   failed, then the source). With a SERIAL=1 kernel the log shows both redirects and the fallback (§5).
 - Debug kit (2026-11-12, exFAT disk, the FTP server's SITE LAUNCH): a redirect from one XBE in an F: folder to another started the target, which read its
   picture from D: (its own folder); a section whose target does not exist started the source; the serial log showed both (§5). The memory test title had the

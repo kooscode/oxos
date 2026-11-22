@@ -22,6 +22,7 @@ namespace xk::storage {
 extern DRIVER_OBJECT VirtualDiscDriverObject;
 ULONG VirtualDiscReads, VirtualDiscErrors;    // diagnostics (tests/boot_test.py): image reads, failed ones
 volatile NTSTATUS VirtualDiscLastMountStatus; // the last mount or unmount request's result
+volatile ULONG VirtualDiscLaunchUnmounts;     // diagnostics (tests/boot_test.py): launches away from the disc that unmounted a mounted image
 
 namespace {
 
@@ -606,6 +607,14 @@ void InitVirtualDiscs() {
     VirtualDiscControl->Flags &= ~DO_DEVICE_INITIALIZING;
     io::CreateLink("\\Device\\CdRom1", control);
     io::CreateLink("\\??\\CdRom1:", control);
+}
+
+void UnmountVirtualDiscs() {
+    KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);
+    if (VirtualDiscSlots[0].Mounted || VirtualDiscSlots[1].Mounted)
+        VirtualDiscLaunchUnmounts = VirtualDiscLaunchUnmounts + 1;
+    UnmountAll();
+    KeSetEvent(&VirtualDiscMountLock, 0, FALSE);
 }
 
 // The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come back.

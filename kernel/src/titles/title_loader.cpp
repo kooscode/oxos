@@ -678,6 +678,10 @@ static void LaunchTitle(ULONG Reason) {
                 break;
             }
         }
+        // An image that is not on the disc (a dashboard starting a title from the hard disk): a disc image left mounted by an earlier launch is unmounted, so
+        // this title's own restart or exit falls back to the dashboard, not to that image's title (spec/oxos_internal/16 §5).
+        if (IsLaunchAwayFromDisc(path))
+            storage::UnmountVirtualDiscs();
         // The redirect file's target in its place (spec/oxos_internal/33), else the image the page names.
         if (RedirectLaunch(path)) {
             TitleLaunched = 3;
@@ -733,6 +737,10 @@ static void LaunchAfterQuickReboot() {
     }
     auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
     bool titleAsked = ldp && ldp->LaunchPath[0] && !(ldp->Flags & 1);
+    // A title that ends with a quick reboot asking for nothing (no launch data page, or the one it was started with: how nxdk titles exit) has ended: a disc
+    // image is unmounted, so the dashboard follows instead of the image's title again (spec/oxos_internal/16 §5). A return to the dashboard keeps it.
+    if (place == BOOT_VIDEO_NONE && (!ldp || (ldp->Flags & 1)))
+        storage::UnmountVirtualDiscs();
     if (place == BOOT_VIDEO_NONE && (BootVideoSwitches & XK_BOOT_VIDEO_ALWAYS) && !titleAsked && LoadBootVideoPlayer(BOOT_VIDEO_QUICK_REBOOT))
         return;
     LaunchTitle(0);

@@ -475,7 +475,7 @@ def write_launch_redirect(hdd_copy):
     w = FATXWriter(q, "C")
     text = ("; boot_test.py --redirect\r\n[dashboard]\r\ndashboard_1 = C:\\xboxdash.xbe\r\n[launch_redirect]\r\n"
             "relaunch_test = D:\\media\\second.xbe >> D:\\redirected\\second.xbe\r\n"
-            "missing_target = d:/media/missing.xbe>>D:\\nowhere\\missing.xbe\r\n")
+            "missing_target = e:/XkNoSuchDir/missing.xbe>>D:\\nowhere\\missing.xbe\r\n")
     w.makedirs("OXOS")
     w.write_file("OXOS\\oxos_settings.ini", text.encode())
     q.save(hdd_copy + ".new")
@@ -734,10 +734,11 @@ def kept_cache_format_checks(mon, title_map):
             serial == 0x12345678 and spc == 128}
 
 
-def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pad=None, other_build=False):
+def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pad=None, other_build=False, snapshot=None):
     # reboots: quick reboots before the title's first run (the ISO launcher's launch). With relaunch the console does not stop at the third launch: the
     # dashboard starts the test disc again, and the cycle repeats. So the checks pause the emulator for each reading: once the title's results are complete, and
-    # at the third launch's dashboard, where it stays paused for the checks after this one (RAM, extensions).
+    # at the third launch's dashboard, where it stays paused for the checks after this one (RAM, extensions). snapshot: kernel variables (names, a dict
+    # filled with their values) read at the first pause, while the title still runs (the kernel's globals start again at each quick reboot).
     if not title_map:
         return {"test title built": False}
     syms = map_symbols(title_map)
@@ -777,6 +778,8 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
         return b"".join(struct.pack("<I", w) for w in ws).split(b"\0")[0].decode("latin-1")
     name, second = text(words[9:25]), text(words[28:44])
     launched = mon.read("titles::TitleLaunched")
+    if snapshot is not None:
+        snapshot.update({n: mon.read(n) for n in list(snapshot)})
     mon.resume()
     checks = {
         "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
@@ -898,10 +901,15 @@ def iso_launch_setup(a, work, dvd, hdd_copy):
 
 
 def iso_checks(mon, a):
-    checks = title_checks(mon, a.title_map, relaunch=True, reboots=1)
-    checks["image mounted by the launcher (storage::VirtualDiscLastMountStatus 0), read without errors"] = (
-        mon.read("storage::VirtualDiscLastMountStatus") == 0 and mon.read("storage::VirtualDiscReads") > 0
-        and mon.read("storage::VirtualDiscErrors") == 0)
+    # The image's counters while the title runs from it: its last launch (an image on the hard disk) unmounts the image (spec/oxos_internal/16 §5).
+    names = ("storage::VirtualDiscLastMountStatus", "storage::VirtualDiscReads", "storage::VirtualDiscErrors")
+    seen = dict.fromkeys(names, 0)
+    checks = title_checks(mon, a.title_map, relaunch=True, reboots=1, snapshot=seen)
+    status, reads, errors = (seen[n] for n in names)
+    checks[f"image mounted by the launcher (storage::VirtualDiscLastMountStatus 0: {status:#x}), read without errors "
+           f"({reads} reads, {errors} errors)"] = status == 0 and reads > 0 and errors == 0
+    checks["the title's launch of an image on the hard disk (not in TDATA) unmounted the disc image (spec/oxos_internal/16 §5)"] = \
+        mon.read("storage::VirtualDiscLaunchUnmounts") == 1
     return checks
 
 

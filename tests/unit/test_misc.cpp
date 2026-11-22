@@ -1,6 +1,7 @@
 // The remaining entry points: Nt query calls, timer APCs, path links through a parse procedure, link deletion, and the rarer run-time helpers.
 #include "kernel_test.h"
 #include <hardware/chipset/chipset.h>
+#include <titles/titles.h>
 #include <core/core.h>
 #include <objects/objects.h>
 
@@ -223,4 +224,16 @@ TEST(Misc, ByKeyDeviceQueueRemovalAndClockInitialisation) {
     LARGE_INTEGER now;
     KeQuerySystemTime(&now);
     EXPECT_GT(now.QuadPart, 0);
+}
+
+// --- Launches away from the disc (spec/oxos_internal/16 §5): which launch paths unmount a disc image.
+TEST(Titles, OnlyALaunchOffTheDiscAndOutOfTDATALeavesTheDisc) {
+    EXPECT_TRUE(titles::IsLaunchAwayFromDisc("\\Device\\Harddisk0\\Partition6\\Games\\a\\default.xbe")) << "a dashboard starts another title";
+    EXPECT_TRUE(titles::IsLaunchAwayFromDisc("\\Device\\Harddisk0\\Partition1\\Apps\\default.xbe")) << "E:, not TDATA";
+    EXPECT_TRUE(titles::IsLaunchAwayFromDisc("\\Device\\CdRom01\\default.xbe")) << "not the disc's device";
+    EXPECT_TRUE(titles::IsLaunchAwayFromDisc("\\Device\\Harddisk0\\Partition6\\TDATA\\default.xbe")) << "TDATA on F:, not E:";
+    EXPECT_FALSE(titles::IsLaunchAwayFromDisc("\\Device\\Harddisk0\\Partition1\\TDATA\\55530041\\$u\\default.xbe")) << "a title update";
+    EXPECT_FALSE(titles::IsLaunchAwayFromDisc("\\device\\harddisk0\\partition1\\tdata\\ffff0002\\$u\\default.xbe")) << "any case";
+    EXPECT_FALSE(titles::IsLaunchAwayFromDisc("\\Device\\CdRom0\\sc3.xbe")) << "the disc title's other XBE";
+    EXPECT_FALSE(titles::IsLaunchAwayFromDisc("\\Device\\CdRom0")) << "the disc itself";
 }

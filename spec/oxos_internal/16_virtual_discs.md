@@ -65,6 +65,20 @@ console with a DVD drive an eject also ends it: opening the tray while a title r
 the title-launch thread re-attaches every saved slot before choosing a title (`storage::RestoreVirtualDiscMounts`). A slot whose files no longer open is
 dropped.
 
+**A title's end or a launch away from the disc ends it** (2026-11-22). A disc image is not a disc left in the tray: once its title has ended, the image is
+unmounted, so the dashboard follows instead of that title again. Before, an image left mounted stayed the disc, and a title that exits or restarts without
+asking for a title falls back to the disc (stock spec 05 §2 B): the image's title started again, over and over. The title launcher unmounts every image:
+- **at a launch away from the disc** (`titles::IsLaunchAwayFromDisc`): the launch data page asks for an image that is neither on the disc (its path does not
+  start with `\Device\CdRom0`) nor in `E:\TDATA\`, as when a dashboard starts a title from the hard disk. A disc title's update
+  (`E:\TDATA\<title ID>\$u\`) still reads the title's data from the disc, so a launch into TDATA keeps the image. Decided by the path, not the title ID:
+  homebrew titles and dashboards often share the nxdk's default title ID (FFFF0002);
+- **when a title ends with a quick reboot that asks for nothing:** no launch data page, or the page it was started with (already used, the loop guard of stock
+  spec 05 §2). This is how nxdk titles exit. The boot video (with `boot_video_always`) then plays, and the dashboard follows, since there is no disc.
+
+Launches that keep the images: the disc title's own launches (`\Device\CdRom0;...`, a fresh page naming itself included), its title update, the trainer
+menu starting the title (a fresh page), a return to the dashboard (a page with no path, `XLaunchNewImage(NULL)`, as a disc left in the tray), and the boot
+video player's return. The ISO launcher started from the hard disk by a dashboard unmounts the old image this way, then mounts its own.
+
 Unmounting stops new requests to the slot and waits for running ones to finish. It then closes the files, deletes the image's link and frees the slot. The image
 device stays (a later mount reuses it).
 

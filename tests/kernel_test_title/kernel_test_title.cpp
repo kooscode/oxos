@@ -238,10 +238,11 @@ static void SecondRun(volatile RESULTS &r, LAUNCH_DATA_PAGE *ldp) {
     K(MmFreeContiguousMemory, void(NTAPI *)(PVOID))(ldp);
     r.PathLinkTargetsOk = CheckPathLinkTargets();
     r.Magic = 0x54544B58;
-    // Third launch (milestone 5e): an image that does not exist. The kernel falls back to the dashboard with LaunchDataPage = {type 1, reason 1, code 1}; the
+    // Third launch (milestone 5e): an image that does not exist, on the hard disk. The kernel falls back to the dashboard with LaunchDataPage = {type 1,
+    // reason 1, code 1}; a launch away from the disc also unmounts a disc image (test_iso: the image this title runs from, spec/oxos_internal/16 §5). The
     // host has 8 s to collect the results above first.
     Sleep(8000);
-    Relaunch(r, "\\Device\\CdRom0\\media;missing.xbe");
+    Relaunch(r, "\\Device\\Harddisk0\\Partition1\\XkNoSuchDir;missing.xbe");
     for (;;)
         Sleep(1000);
 }
