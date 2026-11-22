@@ -11,8 +11,9 @@ PARTITIONS = {"E": (0x55F400, 0x1312D6000), "C": (0x465400, 0x1F400000), "X": (0
 
 
 class FATX:
-    def __init__(self, disk, letter):
-        lba, self.length = PARTITIONS[letter]
+    def __init__(self, disk, letter, place=None):
+        """The volume of a retail partition (letter), or of any partition at place = (first sector, length in bytes)."""
+        lba, self.length = place or PARTITIONS[letter]
         self.disk, self.base = disk, lba * 512
         sig, self.serial, spc, self.root = struct.unpack("<4sIII", disk.read(self.base, 16))
         assert sig == b"FATX"
@@ -78,16 +79,17 @@ def f_partition(disk_bytes):
     return start, min(end - start, 0x74000000)
 
 
-def format_partition(disk, lba, sectors, cluster=16384, serial=0x4F584F53):
+def format_partition(disk, lba, sectors, cluster=16384, serial=0x4F584F53, zero_fat=True):
     """An empty FATX volume of SECTORS sectors at LBA: the 4 KB header, the FAT (entries 0 and 1, the root, set) and
-    the root directory's one cluster, all entries never used (0xFF)."""
+    the root directory's one cluster, all entries never used (0xFF). zero_fat=False writes only the FAT's first 4 KB (for space that is already zero, such
+    as the unallocated part of a grown disk)."""
     base, length = lba * 512, sectors * 512
     disk.write(base, struct.pack("<4sIII", b"FATX", serial, cluster // 512, 1) + b"\xff" * (0x1000 - 16))
     entries = length // cluster + 1
     esize = 2 if entries < 0xFFF0 else 4
     fat_size = (entries * esize + 4095) & ~4095
     fat = (struct.pack("<HH", 0xFFF8, 0xFFFF) if esize == 2 else struct.pack("<II", 0xFFFFFFF8, 0xFFFFFFFF))
-    disk.write(base + 0x1000, fat + bytes(fat_size - len(fat)))
+    disk.write(base + 0x1000, fat + bytes((fat_size if zero_fat else 0x1000) - len(fat)))
     disk.write(base + 0x1000 + fat_size, b"\xff" * cluster)
 
 

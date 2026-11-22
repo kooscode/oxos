@@ -43,11 +43,11 @@ make -C kernel regression ONLY=test_extensions,test_memory                # some
 ```
 - **What runs:** the unit tests, then the xemu phases in order: `test` (the self-test kernel's boot, which also runs `test_dash`, `test_relaunch`,
   `test_fatal`, `test_udf`), `test_mcpx` (the real boot ROM; skipped without `MCPX_ROM`), `test_exfat` (about 8 minutes alone), `test_lba48`,
-  `test_extensions`, `test_format`, `test_upload`, `test_iso`, `test_encoders`, `test_controller`, `test_boot_video`, `test_memory`. About 15 minutes.
+  `test_fatx_layouts`, `test_extensions`, `test_format`, `test_upload`, `test_iso`, `test_encoders`, `test_controller`, `test_boot_video`, `test_memory`. About 20 minutes.
 - **Result:** one line per phase as it finishes (`test_iso: PASS (N checks, S s)`); `build/regression/summary.txt` and each phase's log
   (`build/regression/PHASE.log`). It goes on after a failure and fails if any phase fails or `test_memory` reports fewer than 15 960 free pages
   (`--pages`). Every phase must pass; put the result in the commit's "Checked" lines.
-- **Run it in the background** and wait for it to finish; it takes the PC's xemu for 15 minutes. It builds kernels from the working tree as it goes, so do
+- **Run it in the background** and wait for it to finish; it takes the PC's xemu for 20 minutes. It builds kernels from the working tree as it goes, so do
   not edit sources while it runs (a later phase would test a half-done change): stop it first (and `pkill -x xemu`), then start it again afterwards.
 - `make release` runs only the unit tests and `test_dash`.
 

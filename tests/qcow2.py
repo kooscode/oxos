@@ -58,6 +58,8 @@ class Qcow2:
         return data
 
     def _cluster(self, index):
+        if index // self.l2_entries >= len(self.l1):  # past the source's size (grow()): unallocated
+            return None
         l1 = self.l1[index // self.l2_entries] & 0x00FFFFFFFFFFFE00
         if not l1:
             return None

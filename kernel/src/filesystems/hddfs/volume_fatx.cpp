@@ -56,23 +56,27 @@ NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
         *(ULONG *)boot == FATX_SIGNATURE) {
         ULONG spc = *(ULONG *)(boot + 8), root = *(ULONG *)(boot + 0xC);
         v->SerialNumber = *(ULONG *)(boot + 4);
-        bool spcOk = spc && spc <= 128 && !(spc & (spc - 1));
+        // Any power of two up to 32 MB clusters, as the retail arithmetic allows: the retail kernel stops at 128 sectors (spec/stock/04 §6), disk formatters
+        // for disks over 2 TB write up to 2 MB (spec/oxos_internal/45 §8.5).
         ULONG sectorShift = 0;
         while ((1u << sectorShift) < v->SectorSize)
             sectorShift++;
+        bool spcOk = spc && !(spc & (spc - 1)) && spc <= (0x2000000u >> sectorShift);
         v->BytesPerCluster = spcOk ? spc << sectorShift : 0;
         while (spcOk && (1u << v->ClusterShift) < v->BytesPerCluster)
             v->ClusterShift++;
         if (spcOk && v->BytesPerCluster >= align) {
+            // The cluster count as 32 bits, as the reference takes it (spec/oxos_internal/45 §8.5); the FAT's size and the data in 64 bits.
             ULONG entries = (ULONG)(v->PartitionLength >> v->ClusterShift) + 1;
             v->FatEntryShift = entries < 0xFFF0 ? 1 : 2;
-            ULONG fatSize = ((entries << v->FatEntryShift) + align - 1) & ~(align - 1);
+            ULONGLONG fatSize = (((ULONGLONG)entries << v->FatEntryShift) + align - 1) & ~(ULONGLONG)(align - 1);
             if ((LONGLONG)fatSize < v->PartitionLength - reserved) {
+                ULONGLONG clusters = (ULONGLONG)(v->PartitionLength - reserved - (LONGLONG)fatSize) >> v->ClusterShift;
                 v->FatByteOffset = reserved;
-                v->DataByteOffset = reserved + fatSize;
-                v->NumberOfClusters = (ULONG)((v->PartitionLength - reserved - fatSize) >> v->ClusterShift);
+                v->DataByteOffset = reserved + (ULONG)fatSize;
+                v->NumberOfClusters = (ULONG)clusters;
                 v->RootFcb.FirstCluster = root;
-                if (HDDFSIsValidCluster(v, root))
+                if (clusters <= 0x0FFFFFFF && HDDFSIsValidCluster(v, root)) // at most 0x0FFFFFFF clusters (spec/oxos_internal/45 §8.5)
                     status = STATUS_SUCCESS;
             }
         }

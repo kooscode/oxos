@@ -757,6 +757,20 @@ test_memory: $(MEMORY_XBE) $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/memory_test.py --bios $(or $(MEMORY_BIOS),$(RELEASE_BUILD)/bios.bin) --xbe $(MEMORY_XBE) \
 	    --both --memory $(or $(MEMORY),64) --hdd $(HDD_IMAGE) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
 
+# FATX disk layouts (spec/oxos_internal/45 §8, §9): large disks laid out and formatted as disk formatters do (tables with 48-bit entries,
+# clusters up to 1 MB, F: or G: to the disk's end, a stale table at the end), each booted with the partition probe title (tests/partition_probe_title), which
+# reports every partition's place and reads and writes a file on F: and G:.
+PROBE_DIR := $(ROOT)/tests/partition_probe_title
+PROBE_XBE := $(APPS_BUILD)/tests/partition_probe_title/bin/default.xbe
+
+$(PROBE_XBE): $(NXDK_READY) $(PROBE_DIR)/partition_probe_title.cpp $(PROBE_DIR)/Makefile
+	$(NXDK_ENV) $(MAKE) -C $(PROBE_DIR) -j8
+
+test_fatx_layouts: $(PROBE_XBE) $(HDD_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/fatx_layout_test.py --bios $(RELEASE_BUILD)/bios.bin --xbe $(PROBE_XBE) --hdd $(HDD_IMAGE) \
+	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(ONLY_CASES),--only $(ONLY_CASES))
+
 # The boot video's decoders (spec/oxos_internal/38 §3.1), fetched into third_party/: libmpeg2 0.5.1 (MPEG-1 and MPEG-2 video, GPL v2 or later), its last
 # release, from Debian's copy and checked against Debian's SHA-256; minimp3 (MP2 and MP3 sound, CC0) at a pinned commit.
 LIBMPEG2_DIR    := $(ROOT)/third_party/libmpeg2

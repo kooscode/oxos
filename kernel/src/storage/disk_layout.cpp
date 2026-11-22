@@ -92,11 +92,21 @@ static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLON
     return found;
 }
 
+// What the volumes decided at the cold boot where the disk alone leaves its FATX layout open (spec/oxos_internal/45 §9; kept across quick reboots, which
+// read the layout again without the boot-only check).
+enum : ULONG {
+    DISK_F_SMALL = 1,     // F: from 24 sectors, not only above 0x200000
+    DISK_F_TO_END = 2,    // F: to the disk's end (at most 0x7FFFFFFF8 sectors from sector 0), no G:
+    DISK_G_TO_END = 4,    // G: to the disk's end (at most sector 0xFFFFFFFF) without the 0x74000000 cap, from 24 sectors
+    DISK_NO_END_TABLE = 8 // a table 8 sectors before the end or in the last sector is a stale copy: not used
+};
+XK_PERSIST ULONG DiskFATXLayoutChoice;
+
 // FATX partitions without a table (oz_paulb's F:/G: split, spec/evox/03 §2; the cap and minimum as observed, spec/oxos_internal/45 §5): the retail five; on a
 // disk larger than the retail 8 GB one, F: from E:'s end up to sector 0x0FFFFFFF (or the disk's end) and G: from there to the disk's end, each capped at
-// 0x74000000 sectors and used only when larger than 0x200000 sectors (1 GiB).
-static void DiskDefaultPartitions() {
-    constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF, CAP = 0x74000000, MIN = 0x200000;
+// 0x74000000 sectors and used only when larger than 0x200000 sectors (1 GiB). Choice (DISK_...) changes F: and G: as their volumes showed (spec 45 §9).
+static void DiskDefaultPartitions(ULONG Choice) {
+    constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF, CAP = 0x74000000, MIN = 0x200000, SMALL = 24;
     DiskPartitions[1] = {0x55F400, 0x9896B0}; // E:
     DiskPartitions[2] = {0x465400, 0xFA000};  // C:
     for (ULONG i = 0; i < 3; i++)             // X:, Y:, Z:
@@ -104,24 +114,29 @@ static void DiskDefaultPartitions() {
     ULONGLONG n = hardware::ide::DiskLengthInSectors;
     if (n <= RETAIL_END)
         return;
-    auto place = [&](ULONG number, ULONGLONG start, ULONGLONG end) {
+    if (Choice & DISK_F_TO_END) {
+        DiskPartitions[6] = {RETAIL_END, (n < 0x7FFFFFFF8 ? n : 0x7FFFFFFF8) - RETAIL_END};
+        return;
+    }
+    auto place = [&](ULONG number, ULONGLONG start, ULONGLONG end, bool full) {
         ULONGLONG length = end > start ? end - start : 0;
-        if (length > CAP)
+        if (length > CAP && !full)
             length = CAP;
-        if (length > MIN)
+        if (length > MIN || (full && length >= SMALL))
             DiskPartitions[number] = {start, length};
         return start + length;
     };
-    ULONGLONG fEnd = place(6, RETAIL_END, n < LBA28_END ? n : LBA28_END);
-    place(7, fEnd, n);
+    ULONGLONG fEnd = place(6, RETAIL_END, n < LBA28_END ? n : LBA28_END, Choice & DISK_F_SMALL);
+    place(7, fEnd, n < 0xFFFFFFFF || !(Choice & DISK_G_TO_END) ? n : 0xFFFFFFFF, Choice & DISK_G_TO_END);
 }
 
-// A PARTINFO table (oz_paulb's format, spec/evox/03 §3) at sector 0 (oz_paulb's place), 8 sectors before the end or the last sector (the places
-// observed, spec/oxos_internal/45 §5) replaces the whole table.
-static bool DiskReadPartitionTable(PUCHAR Sector) {
+// A PARTINFO table (oz_paulb's format, spec/evox/03 §3) at sector 0 (oz_paulb's place), or (AtEnd) 8 sectors before the end or in the last sector (the
+// places observed, spec/oxos_internal/45 §5), replaces the whole table.
+static bool DiskReadPartitionTable(PUCHAR Sector, bool AtEnd) {
     ULONGLONG n = hardware::ide::DiskLengthInSectors;
-    const ULONGLONG places[] = {0, n - 8, n - 1};
-    for (ULONGLONG lba : places) {
+    const ULONGLONG places[] = {AtEnd ? n - 8 : 0, n - 1};
+    for (ULONG i = 0; i < (AtEnd ? 2u : 1u); i++) {
+        ULONGLONG lba = places[i];
         if (!NT_SUCCESS(ReadDiskSectors(lba, Sector, 512)) ||
             memcmp(Sector, "****PARTINFO****", 16) != 0)
             continue;
@@ -211,6 +226,90 @@ static void DiskFormatIfBlank(PUCHAR Scratch) {
     DiskFormat(nullptr);
 }
 
+// Whether a FATX volume at Start of Length sectors checks out (spec/oxos_internal/45 §9): its superblock, then its root directory where the geometry of
+// that length puts it. The FAT's size, and so where the data starts, follows from the length (spec/stock/04 §6), so only the length the volume was formatted
+// for finds the root directory: entries with valid names (spec/stock/04b), deleted ones, or the 0xFF end marker (a 0x00 one only after an entry, as zeros
+// are what a FAT's unused tail holds).
+static bool DiskCheckFATXVolume(ULONGLONG Start, ULONGLONG Length, PUCHAR Sector) {
+    if (Length < 24 || !NT_SUCCESS(ReadDiskSectors(Start, Sector, 512)) || *(PULONG)Sector != 0x58544146) // "FATX"
+        return false;
+    ULONG spc = *(PULONG)(Sector + 8), root = *(PULONG)(Sector + 12), shift = 12;
+    if (spc < 8 || spc > 0x10000 || (spc & (spc - 1)) || !root)
+        return false;
+    while ((1u << shift) < (spc << 9))
+        shift++;
+    ULONGLONG bytes = Length << 9;
+    ULONG entries = (ULONG)(bytes >> shift) + 1;
+    ULONGLONG fat = (((ULONGLONG)entries << (entries < 0xFFF0 ? 1 : 2)) + 0xFFF) & ~0xFFFull;
+    if (fat >= bytes - 4096)
+        return false;
+    ULONGLONG clusters = (bytes - 4096 - fat) >> shift;
+    if (root - 1 >= clusters || clusters > 0x0FFFFFFF ||
+        !NT_SUCCESS(ReadDiskSectors(Start + ((4096 + fat + ((ULONGLONG)(root - 1) << shift)) >> 9), Sector, 512)))
+        return false;
+    for (ULONG i = 0; i < 512; i += 64) {
+        UCHAR length = Sector[i];
+        if (length == 0xFF || (length == 0 && i))
+            return true;
+        if (length == 0xE5)
+            continue;
+        if (!length || length > 42 || (Sector[i + 1] & ~0x37))
+            return false;
+        for (ULONG c = 0; c < length; c++) {
+            UCHAR ch = Sector[i + 2 + c];
+            if (ch < 0x20 || ch > 0x7E || ch == '"' || ch == '*' || ch == '/' || ch == ':' || ch == '<' || ch == '>' || ch == '?' || ch == '\\' ||
+                ch == '|')
+                return false;
+        }
+    }
+    return true;
+}
+
+// Partitions 6-14 of DiskPartitions whose volumes check out.
+static ULONG DiskCountFittingVolumes(PUCHAR Sector) {
+    ULONG count = 0;
+    for (ULONG i = 6; i < 15; i++) {
+        if (DiskPartitions[i].Length && DiskCheckFATXVolume(DiskPartitions[i].Start, DiskPartitions[i].Length, Sector))
+            count++;
+    }
+    return count;
+}
+
+// A disk without a table at sector 0: where the layouts disk formatters write differ from spec 45 §5's, the volumes decide (spec/oxos_internal/45 §9, from
+// spec 45 §8.2). Spec 45's layout stays wherever its own volume checks out or neither does.
+static ULONG DiskChooseFATXLayout(PUCHAR Sector) {
+    constexpr ULONGLONG RETAIL_END = 0xEE8AB0, LBA28_END = 0x0FFFFFFF;
+    ULONGLONG n = hardware::ide::DiskLengthInSectors;
+    ULONG choice = 0;
+    if (n > RETAIL_END) {
+        memset(DiskPartitions, 0, sizeof(DiskPartitions));
+        DiskDefaultPartitions(0);
+        IDE_PARTITION f = DiskPartitions[6], g = DiskPartitions[7];
+        bool fFits = f.Length && DiskCheckFATXVolume(f.Start, f.Length, Sector);
+        if (!fFits && n > 0xFFFFFFFF && DiskCheckFATXVolume(RETAIL_END, (n < 0x7FFFFFFF8 ? n : 0x7FFFFFFF8) - RETAIL_END, Sector)) {
+            choice = DISK_F_TO_END; // one F: over the whole disk (spec 45 §8.2)
+        } else {
+            ULONGLONG fSmall = (n < LBA28_END ? n : LBA28_END) - RETAIL_END, gFull = (n < 0xFFFFFFFF ? n : 0xFFFFFFFF) - LBA28_END;
+            if (!f.Length && DiskCheckFATXVolume(RETAIL_END, fSmall, Sector))
+                choice |= DISK_F_SMALL;
+            if (n > LBA28_END && gFull != g.Length && !(g.Length && DiskCheckFATXVolume(g.Start, g.Length, Sector)) &&
+                DiskCheckFATXVolume(LBA28_END, gFull, Sector))
+                choice |= DISK_G_TO_END; // G: to the disk's end (spec 45 §8.2)
+        }
+    }
+    // A table at the disk's end only: a copy a table format left there survives a later format without a table (spec 45 §8.4). It is not
+    // used when the layout without it has more volumes that check out.
+    memset(DiskPartitions, 0, sizeof(DiskPartitions));
+    DiskDefaultPartitions(choice);
+    ULONG withoutTable = DiskCountFittingVolumes(Sector);
+    memset(DiskPartitions, 0, sizeof(DiskPartitions));
+    if (DiskReadPartitionTable(Sector, true) && DiskCountFittingVolumes(Sector) < withoutTable)
+        choice |= DISK_NO_END_TABLE;
+    memset(DiskPartitions, 0, sizeof(DiskPartitions));
+    XK_SERIAL("disk: FATX layout without a table at sector 0: choice %#lx\\n", choice);
+    return choice;
+}
+
 // FATX headers at the retail C: or E: (a FATX disk, whatever else it holds: never formatted by itself).
 static bool DiskHasFatx(PUCHAR Scratch) {
     const ULONGLONG starts[] = {0x465400, 0x55F400};
@@ -277,9 +376,13 @@ static void DiskReadLayout() {
         if (!DiskHasEXFATLayout && pcTable) { // a PC disk without a usable exFAT volume: hands off
             DiskHasForeignLayout = TRUE;
             XK_SERIAL("disk: PC partition table without a usable exFAT volume: no partitions, writes refused\n");
-        } else if (!DiskHasEXFATLayout) { // FATX: the disk's table, else the default layout
-            if (!sector || !DiskReadPartitionTable(sector))
-                DiskDefaultPartitions();
+        } else if (!DiskHasEXFATLayout && (!sector || !DiskReadPartitionTable(sector, false))) {
+            // FATX without a table at sector 0: a table at the disk's end, else the layout without one, as the cold boot's check of the volumes chose
+            // (spec/oxos_internal/45 §9).
+            if (sector && memory::BootPagesPresent())
+                DiskFATXLayoutChoice = DiskChooseFATXLayout(sector);
+            if (!sector || (DiskFATXLayoutChoice & DISK_NO_END_TABLE) || !DiskReadPartitionTable(sector, true))
+                DiskDefaultPartitions(DiskFATXLayoutChoice);
         }
         if (sector)
             ExFreePool(sector);
