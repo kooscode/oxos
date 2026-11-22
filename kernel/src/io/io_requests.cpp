@@ -1,5 +1,6 @@
 // I/O manager: IRP allocation, dispatch, completion and request builders (spec/stock/11 §3).
 #include <io/io.h>
+#include <arch/arch.h>
 #include <core/core.h>
 #include <runtime/runtime.h>
 
@@ -58,7 +59,7 @@ XBAPI NTSTATUS FASTCALL IofCallDriver(PDEVICE_OBJECT DeviceObject, PIRP Irp) {
         KeBugCheckEx(0x35 /*NO_MORE_IRP_STACK_LOCATIONS*/, (ULONG_PTR)Irp, 0, 0, 0);
     PIO_STACK_LOCATION stack = --Irp->Tail.Overlay.CurrentStackLocation;
     stack->DeviceObject = DeviceObject;
-    return DeviceObject->DriverObject->MajorFunction[stack->MajorFunction](DeviceObject, Irp);
+    return CallTitleRoutine<NTSTATUS>((PVOID)DeviceObject->DriverObject->MajorFunction[stack->MajorFunction], DeviceObject, Irp);
 }
 
 // --- Completion
@@ -171,7 +172,7 @@ XBAPI void FASTCALL IofCompleteRequest(PIRP Irp, CCHAR PriorityBoost) {
             PIO_COMPLETION_ROUTINE routine = stack->CompletionRoutine;
             PVOID context = stack->Context;
             memset(stack, 0, sizeof(*stack));
-            if (routine(upper, Irp, context) == STATUS_MORE_PROCESSING_REQUIRED)
+            if (CallTitleRoutine<NTSTATUS>((PVOID)routine, upper, Irp, context) == STATUS_MORE_PROCESSING_REQUIRED)
                 return;
         } else {
             if (Irp->PendingReturned && Irp->CurrentLocation <= Irp->StackCount)

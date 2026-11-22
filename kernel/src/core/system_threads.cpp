@@ -1,5 +1,6 @@
 // Process structure: system threads as objects (spec/stock/07 "Thread creation", spec/stock/10 §5).
 #include <core/core.h>
+#include <arch/arch.h>
 #include <core/scheduler.h>
 #include <runtime/runtime.h>
 #include <diagnostics/diagnostics.h>
@@ -31,7 +32,7 @@ XBAPI NTSTATUS NTAPI PsSetCreateThreadNotifyRoutine(PCREATE_THREAD_NOTIFY_ROUTIN
 static void NotifyThreadCreation(ETHREAD *t, BOOLEAN create) {
     for (auto routine : CreateThreadNotifyRoutines) {
         if (routine)
-            routine(t, t->UniqueThread, create);
+            CallTitleRoutine((PVOID)routine, t, t->UniqueThread, create);
     }
 }
 

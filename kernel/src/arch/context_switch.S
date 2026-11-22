@@ -49,6 +49,27 @@ _KiThreadStartup:
 1:  hlt
     jmp 1b
 
+// ULONG KiCallTitleRoutine(PVOID Routine, ULONG Count, const ULONG *Arguments)  -- cdecl (arch.h CallTitleRoutine)
+// Calls a routine a title may have supplied with Count 32-bit arguments, pushed last to first, and returns its eax. esp is restored from ebp afterwards: a
+// routine built cdecl where the kernel expects stdcall returns without removing its arguments, and the caller's stack stays intact (spec/oxos_internal/47).
+    .globl _KiCallTitleRoutine
+_KiCallTitleRoutine:
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %esi
+    movl 12(%ebp), %ecx
+    movl 16(%ebp), %esi
+1:  testl %ecx, %ecx
+    jz 2f
+    pushl -4(%esi,%ecx,4)
+    decl %ecx
+    jmp 1b
+2:  call *8(%ebp)
+    leal -4(%ebp), %esp                          // whatever the routine left on the stack
+    popl %esi
+    popl %ebp
+    ret
+
 // void KiCallOnStack(void (*fn)(), PVOID stackTop)  -- used to run DPCs on the PRCB DPC stack.
     .globl _KiCallOnStack
 _KiCallOnStack:

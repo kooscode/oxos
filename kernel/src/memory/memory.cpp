@@ -42,16 +42,17 @@ XBAPI PVOID NTAPI MmAllocateContiguousMemory(ULONG NumberOfBytes) {
     return MmAllocateContiguousMemoryEx(NumberOfBytes, 0, 0xFFFFFFFF, 0, PAGE_READWRITE);
 }
 
+// The page is bits 12-27 of the address, as on the stock kernel (spec/stock/27 §3): the allocation's 0x80000000 address and its alias in the GPU's
+// write-combined window (0xF0000000 + physical, which some titles free through, spec/oxos_internal/47 §3) name the same page. Unlike the reference, a page
+// past the last physical page, or one that is not in use, ends the loop instead of faulting or freeing another allocation's pages.
 XBAPI void NTAPI MmFreeContiguousMemory(PVOID BaseAddress) {
-    ULONG pfn = ((ULONG)BaseAddress & 0x7FFFFFFF) >> PAGE_SHIFT;
-    for (;;) {
+    for (ULONG pfn = ((ULONG)BaseAddress >> PAGE_SHIFT) & 0xFFFF; pfn <= HighestPhysicalPage; pfn++) {
         ULONG pte = PteArray[pfn];
         if (!(pte & PTE_PRESENT))
             break;
         FreeContiguousPage(pfn);
         if (pte & PTE_END_OF_ALLOCATION)
             break;
-        pfn++;
     }
 }
 

@@ -3,6 +3,7 @@
 // Kernel APCs (ApcListHead[KernelMode]) are delivered by the APC_LEVEL software interrupt. "User" APCs (ApcListHead[UserMode]) only run when an alertable
 // user-mode wait returns STATUS_USER_APC: the Xbox has no user mode, so the wait routine itself runs them at PASSIVE_LEVEL before returning.
 #include <core/core.h>
+#include <arch/arch.h>
 #include <core/scheduler.h>
 #include <hardware/chipset/chipset.h>
 
@@ -91,17 +92,17 @@ void DeliverApc() {
         if (!normalRoutine) { // special APC: kernel routine only, at APC_LEVEL
             DequeueApc(head);
             KfLowerIrql(old);
-            kernelRoutine(apc, &normalRoutine, &ctx, &a1, &a2);
+            CallTitleRoutine((PVOID)kernelRoutine, apc, &normalRoutine, &ctx, &a1, &a2);
         } else {
             if (t->ApcState.KernelApcInProgress || t->KernelApcDisable)
                 break;
             DequeueApc(head);
             KfLowerIrql(old);
-            kernelRoutine(apc, &normalRoutine, &ctx, &a1, &a2);
+            CallTitleRoutine((PVOID)kernelRoutine, apc, &normalRoutine, &ctx, &a1, &a2);
             if (normalRoutine) {
                 t->ApcState.KernelApcInProgress = TRUE;
                 KfLowerIrql(PASSIVE_LEVEL);
-                normalRoutine(ctx, a1, a2);
+                CallTitleRoutine((PVOID)normalRoutine, ctx, a1, a2);
                 KfRaiseIrql(APC_LEVEL);
             }
         }
@@ -123,9 +124,9 @@ void ExecuteUserApcs() {
         auto normalRoutine = (PKNORMAL_ROUTINE)apc->NormalRoutine;
         PVOID ctx = apc->NormalContext, a1 = apc->SystemArgument1, a2 = apc->SystemArgument2;
         KfLowerIrql(old);
-        kernelRoutine(apc, &normalRoutine, &ctx, &a1, &a2);
+        CallTitleRoutine((PVOID)kernelRoutine, apc, &normalRoutine, &ctx, &a1, &a2);
         if (normalRoutine)
-            normalRoutine(ctx, a1, a2);
+            CallTitleRoutine((PVOID)normalRoutine, ctx, a1, a2);
         KeRaiseIrqlToSynchLevel();
     }
     KfLowerIrql(old);

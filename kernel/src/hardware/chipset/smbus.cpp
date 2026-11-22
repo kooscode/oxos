@@ -201,7 +201,7 @@ static void RunShutdownNotifications() {
         if (!e)
             break;
         auto r = CONTAINING_RECORD(e, HAL_SHUTDOWN_REGISTRATION, ListEntry);
-        r->NotificationRoutine(r);
+        CallTitleRoutine((PVOID)r->NotificationRoutine, r);
     }
 }
 

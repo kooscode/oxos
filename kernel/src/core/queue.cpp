@@ -165,7 +165,7 @@ XBAPI BOOLEAN NTAPI KeRemoveEntryDeviceQueue(PKDEVICE_QUEUE DeviceQueue, PKDEVIC
 
 XBAPI BOOLEAN NTAPI KeSynchronizeExecution(PKINTERRUPT Interrupt, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext) {
     KIRQL old = KfRaiseIrql((KIRQL)Interrupt->Irql);
-    BOOLEAN result = SynchronizeRoutine(SynchronizeContext);
+    auto result = CallTitleRoutine<BOOLEAN>((PVOID)SynchronizeRoutine, SynchronizeContext);
     KfLowerIrql(old);
     return result;
 }

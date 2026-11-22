@@ -620,6 +620,25 @@ extern "C" void HostBugCheck(unsigned long code, unsigned long p1, unsigned long
 }
 
 // --- arch.h helpers in host builds.
+// KiCallTitleRoutine (context_switch.S in the kernel): the host's routines are stdcall, so a plain call of the right shape.
+extern "C" unsigned long KiCallTitleRoutine(void *Routine, unsigned long Count, const unsigned long *A) {
+    using R = unsigned long;
+    switch (Count) {
+    case 0:
+        return ((R(__attribute__((stdcall)) *)())Routine)();
+    case 1:
+        return ((R(__attribute__((stdcall)) *)(R))Routine)(A[0]);
+    case 2:
+        return ((R(__attribute__((stdcall)) *)(R, R))Routine)(A[0], A[1]);
+    case 3:
+        return ((R(__attribute__((stdcall)) *)(R, R, R))Routine)(A[0], A[1], A[2]);
+    case 4:
+        return ((R(__attribute__((stdcall)) *)(R, R, R, R))Routine)(A[0], A[1], A[2], A[3]);
+    default:
+        return ((R(__attribute__((stdcall)) *)(R, R, R, R, R))Routine)(A[0], A[1], A[2], A[3], A[4]);
+    }
+}
+
 extern "C" unsigned long HostSaveFlagsCli() {
     uint32_t f = HostIf | 2;
     HostIf = 0;

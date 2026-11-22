@@ -63,7 +63,7 @@ void RetireDpcList() {
         PKDEFERRED_ROUTINE routine = dpc->DeferredRoutine;
         PVOID ctx = dpc->DeferredContext, a1 = dpc->SystemArgument1, a2 = dpc->SystemArgument2;
         sti();
-        routine(dpc, ctx, a1, a2);
+        CallTitleRoutine((PVOID)routine, dpc, ctx, a1, a2);
     }
 }
 

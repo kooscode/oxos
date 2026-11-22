@@ -112,6 +112,16 @@ enum : UCHAR {
 };
 }
 
+// Calls Routine, a routine a title may have supplied (a DPC, an interrupt service routine, an APC, a driver's dispatch or completion routine, a shutdown
+// notification), with Arguments (each 32 bits), and returns its eax as RESULT. The stack pointer is restored after the call, so a routine built cdecl where
+// the kernel expects stdcall (it returns without removing its arguments) leaves the caller's stack intact (spec/oxos_internal/47; context_switch.S).
+extern "C" ULONG KiCallTitleRoutine(PVOID Routine, ULONG Count, const ULONG *Arguments);
+template <typename RESULT = ULONG, typename... ARGUMENTS>
+inline RESULT CallTitleRoutine(PVOID Routine, ARGUMENTS... Arguments) {
+    const ULONG arguments[] = {(ULONG)(ULONG_PTR)Arguments..., 0}; // the 0 keeps the array non-empty
+    return (RESULT)KiCallTitleRoutine(Routine, sizeof...(ARGUMENTS), arguments);
+}
+
 // Defined in assembly: the boot thread's stack (entry.S: its size there must match) and the quick reboot's restart (quick_reboot.S, spec/stock/02 §1).
 extern "C" UCHAR KiBootStack[];
 constexpr ULONG KI_BOOT_STACK_SIZE = 0x3000;

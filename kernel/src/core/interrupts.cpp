@@ -247,7 +247,7 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         ClockInterrupt(old);
     } else if (PKINTERRUPT obj = InterruptObjects[irq]) {
         obj->ServiceCount++;
-        obj->ServiceRoutine(obj, obj->ServiceContext);
+        CallTitleRoutine((PVOID)obj->ServiceRoutine, obj, obj->ServiceContext);
     }
     cli();
 
