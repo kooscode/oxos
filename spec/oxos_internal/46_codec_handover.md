@@ -34,6 +34,13 @@ reaches the next title as it is.
   released at the cold boot also turned the nxdk dashboard's reset pulse into the failure of §1.
 - No codec register is written by the kernel.
 
+### 2.1 The ready bit after a held reset (2026-11-21)
+Once a program has run the codec, GLOB_STA bit 8 stays set while §2 holds the reset (§1), so the next title's poll after its release ends at once: the
+1.4 console (Wolfson WM9709 codec, vendor ID 0x574D4C09) showed "ready after 0 µs" on every boot through the boot video player, against 20 µs when nothing had
+run the codec before. It is harmless: the codec is ready about 20 µs after the release, before a title's sound gets going; six cold boots in a row of boot
+video → an nxdk dashboard all had sound. Releasing the codec at the switch instead, as the stock kernel leaves it, would remove the stale bit but bring back
+§1's failure for titles built with an older nxdk, so the reset stays held.
+
 ## 3. The boot video player's sound start
 `shared/video_player/sound_output.cpp` (spec 38) starts the codec as the XDK sound library does (spec/stock/25 §3), without a reset pulse:
 1. GLOB_CNT bit 1 clear → set it (release). Bit 1 set and bit 8 clear (released, not ready) → a warm reset: bit 2 set for 10 µs, bits 2 and 3 cleared.
@@ -42,8 +49,12 @@ reaches the next title as it is.
    a running codec the read gave the values of before the reset, the writes were skipped and the codec came up muted).
 
 ## 4. nxdk
-The fix of §1's `XAudioInit` (release only a held reset, a warm reset for a released codec that is not ready, bounded waits, the power and volume writes) is
-proposed upstream as XboxDev/nxdk#806. Titles built with an nxdk without it start correctly on OXOS because of §2.
+The fix of §1's `XAudioInit` (release only a held reset, a warm reset for a released codec that is not ready, bounded waits, the power and volume writes only
+once the codec is ready) is proposed upstream as XboxDev/nxdk#806, together with a second fix in the same file: the descriptor lists live in the global
+`ac97Device`, which could straddle a page boundary, and the bus-master engines read them by physical address, so past the boundary they read unrelated
+memory and ran past the last valid descriptor (no sound, or a looping buffer, on some boots only); `ac97Device` is now page-aligned. Titles built with an
+nxdk without the first fix start correctly on OXOS because of §2; the second is not something the kernel can make up for. OXOS's console apps build with
+kooscode/nxdk (branch oxos), which has both.
 
 ## 5. Checked
 - Debug kit (Conexant, MCPX X2), netboot: five runs of boot video → nxdk dashboard → ISO launcher → trainer menu → the title that crashed before: the title's
