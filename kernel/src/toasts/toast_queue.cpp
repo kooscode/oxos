@@ -5,6 +5,7 @@
 #include <arch/arch.h>
 #include <core/core.h>
 #include <extensions/extensions.h>
+#include <runtime/runtime.h>
 
 namespace xk::toasts {
 
@@ -21,6 +22,9 @@ struct TOAST_EVENT_ENTRY {
 };
 
 XK_PERSIST bool ToastsOff;                         // toasts.h
+XK_PERSIST bool VideoModeToastOff;                 // toasts.h
+static volatile ULONG TitleMode;                   // the mode word of the title's last mode set
+static ULONG NamedMode;                            // the title's mode word last named in a toast; 0 before its first
 static QUEUED_TOAST Queue[TOAST_QUEUE_LENGTH]; // the waiting toasts, oldest at QueueFirst
 static ULONG QueueFirst, QueueCount;
 static TOAST_EVENT_ENTRY Events[TOAST_EVENTS_MAX]; // the events waiting for the run loop, oldest at EventFirst
@@ -125,15 +129,61 @@ void OpenToasts() {
 // same tick then wraps to a huge "time since" (in-game shortcuts acted at once on a console, 2026-11-23).
 void NoteTitleStarted() {
     TitleStart = KeTickCount;
+    NamedMode = 0;
     ModeSet = false;
     TitleStarted = true;
 }
 
-void NoteDisplayModeSet() {
+void NoteDisplayModeSet(ULONG Mode) {
     if (!TitleStarted) // the kernel's own screens, and the title before it was loaded
         return;
+    TitleMode = Mode;
     ModeSetAt = KeTickCount;
     ModeSet = true;
+}
+
+// The mode word's picture as a user knows it (spec/stock/17 §2a): the class (bits 30-31: 0 SD 525 lines, 1 SD 625 lines, 2 HD, 3 VGA), the CRTC row
+// (bits 8-15: HD 0x0A 720p, 0x0C 1080i, 7 and 8 480p) and the widescreen bit (28, for SD and 480p; 720p and 1080i are always 16:9).
+static const char *NameVideoMode(ULONG Mode, bool &Widescreen) {
+    ULONG row = (Mode >> 8) & 0xFF;
+    Widescreen = (Mode >> 28) & 1;
+    switch (Mode >> 30) {
+    case 0:
+        return "480i";
+    case 1:
+        return "576i";
+    case 2:
+        if (row == 0x0A || row == 0x0C) {
+            Widescreen = false;
+            return row == 0x0A ? "720p" : "1080i";
+        }
+        return "480p";
+    default:
+        Widescreen = false;
+        return "VGA";
+    }
+}
+
+// "Video Mode: 720p": the name a user knows the mode word by.
+static void DescribeVideoMode(ULONG Mode, char (&Text)[TOAST_TEXT_MAX]) {
+    bool widescreen;
+    const char *name = NameVideoMode(Mode, widescreen);
+    snprintf(Text, sizeof(Text), "Video Mode: %s%s", name, widescreen ? " 16:9" : "");
+}
+
+// The title's first mode is always named (user, 2026-11-23: the mode a title runs in), a later one when its name differs: another size of the same mode
+// (640 or 720 pixels wide) is not named again.
+void QueueVideoModeToast() {
+    ULONG mode = TitleMode, before = NamedMode;
+    if (!ModeSet || mode == before || VideoModeToastOff || KeTickCount - ModeSetAt < VIDEO_MODE_TOAST_DELAY_MS)
+        return;
+    NamedMode = mode;
+    char text[TOAST_TEXT_MAX], beforeText[TOAST_TEXT_MAX];
+    DescribeVideoMode(mode, text);
+    DescribeVideoMode(before, beforeText);
+    if (before && !strcmp(text, beforeText))
+        return;
+    QueueKernelToast(text, VIDEO_MODE_TOAST_SECONDS);
 }
 
 // When the title's video is ready for the overlay (spec/oxos_internal/36 §3.4): every title sets its mode through AvSetDisplayMode (nxdk's XVideoSetMode

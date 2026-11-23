@@ -3,6 +3,7 @@
 #include "kernel_test.h"
 
 #include <string>
+#include <vector>
 
 #include <toasts/toast_layout.h>
 #include <toasts/toasts.h>
@@ -130,17 +131,17 @@ TEST(Toasts, AFailedExtensionsToastsLoseTheirOwner) {
 TEST(Toasts, AllowedOnceTheTitleHasSetItsVideoMode) {
     toasts::OpenToasts();
     KeTickCount = 10000;
-    toasts::NoteDisplayModeSet(); // the kernel's own screen, before the title: does not count
+    toasts::NoteDisplayModeSet(0x88070701); // the kernel's own screen, before the title: does not count
     EXPECT_FALSE(toasts::TitleSettled()) << "no title yet";
     toasts::NoteTitleStarted();
     KeTickCount = 10300;
-    toasts::NoteDisplayModeSet();
+    toasts::NoteDisplayModeSet(0x88070701);
     KeTickCount = 10799;
     EXPECT_FALSE(toasts::TitleSettled());
     KeTickCount = 10800;
     EXPECT_TRUE(toasts::TitleSettled()) << "half a second after the title's mode set";
     KeTickCount = 11000;
-    toasts::NoteDisplayModeSet(); // a second mode set: half a second again
+    toasts::NoteDisplayModeSet(0x88070701); // a second mode set: half a second again
     EXPECT_FALSE(toasts::TitleSettled());
     toasts::CloseToasts();
     toasts::OpenToasts();
@@ -151,6 +152,47 @@ TEST(Toasts, AllowedOnceTheTitleHasSetItsVideoMode) {
     KeTickCount = 22000;
     EXPECT_TRUE(toasts::TitleSettled()) << "no mode set: 2 seconds after the start";
     toasts::CloseToasts();
+}
+
+// The toasts a title's mode sets give: none until VIDEO_MODE_TOAST_DELAY_MS after a set, then at most one.
+static std::vector<std::string> ModeToasts(std::initializer_list<ULONG> Modes) {
+    toasts::OpenToasts();
+    toasts::NoteTitleStarted();
+    std::vector<std::string> texts;
+    toasts::QUEUED_TOAST taken;
+    for (ULONG mode : Modes) {
+        toasts::NoteDisplayModeSet(mode);
+        KeTickCount += toasts::VIDEO_MODE_TOAST_DELAY_MS - 1;
+        toasts::QueueVideoModeToast();
+        EXPECT_FALSE(toasts::TakeNextToast(taken)) << "too early";
+        KeTickCount += 1;
+        toasts::QueueVideoModeToast();
+        toasts::QueueVideoModeToast(); // once only
+        if (toasts::TakeNextToast(taken)) {
+            EXPECT_EQ(taken.Owner, toasts::TOAST_NO_OWNER);
+            texts.push_back(taken.Text);
+        }
+        EXPECT_FALSE(toasts::TakeNextToast(taken));
+    }
+    toasts::CloseToasts();
+    return texts;
+}
+
+TEST(Toasts, EachTitlesVideoModeNamed) {
+    using V = std::vector<std::string>;
+    toasts::NoteDisplayModeSet(0x880B0A02); // the kernel's own screen, before the title: not named
+    EXPECT_EQ(ModeToasts({0x880B0A02}), V{"Video Mode: 720p"}) << "a title's first mode, even the one on screen before";
+    EXPECT_EQ(ModeToasts({0x880B0A02}), V{"Video Mode: 720p"}) << "and the next title's";
+    EXPECT_EQ(ModeToasts({0x88070701, 0x880B0A02, 0x880E0C03}), (V{"Video Mode: 480p", "Video Mode: 720p", "Video Mode: 1080i"}));
+    EXPECT_EQ(ModeToasts({0x88070701, 0x88080801}), V{"Video Mode: 480p"}) << "480p at another width: not named again";
+    EXPECT_EQ(ModeToasts({0x98080801}), V{"Video Mode: 480p 16:9"});
+    EXPECT_EQ(ModeToasts({0x04010101}), V{"Video Mode: 480i"});
+    EXPECT_EQ(ModeToasts({0x54030301}), V{"Video Mode: 576i 16:9"});
+    EXPECT_EQ(ModeToasts({0xC0060601}), V{"Video Mode: VGA"});
+    EXPECT_EQ(ModeToasts({}), V{}) << "no mode set";
+    toasts::VideoModeToastOff = true;
+    EXPECT_EQ(ModeToasts({0x880B0A02}), V{}) << "show_video_mode = no";
+    toasts::VideoModeToastOff = false;
 }
 
 TEST(ToastLayout, TheBoxFitsItsTextInWholeOverlayRows) {

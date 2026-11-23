@@ -899,11 +899,13 @@ static void WaitForTray() {
 }
 
 // The switches of oxos_settings.ini read at the cold boot (the kernel settings module), for this cold boot and its quick reboots: the boot video's
-// ([boot_video], spec/oxos_internal/38 §1) and whether toasts are off ([toasts], spec/oxos_internal/36 §2). None in safe mode or without the kernel modules.
+// ([boot_video], spec/oxos_internal/38 §1) and whether toasts, and the video mode's, are off ([toasts], spec/oxos_internal/36 §2). None in safe mode or
+// without the kernel modules.
 static void ReadColdBootSwitches() {
     ULONG switches = !extensions::SafeMode && kernel_modules::Modules ? kernel_modules::Modules->ReadColdBootSwitches() : 0;
     BootVideoSwitches = switches & (XK_BOOT_VIDEO_ENABLED | XK_BOOT_VIDEO_ALWAYS);
     toasts::ToastsOff = (switches & XK_TOASTS_OFF) != 0;
+    toasts::VideoModeToastOff = (switches & XK_VIDEO_MODE_TOAST_OFF) != 0;
 }
 
 // LaunchTitle(Reason), after the boot video when [boot_video] turns it on (user, 2026-11-17: "if enabled, play the boot video always"): the player's

@@ -2,7 +2,8 @@
 """Screenshots of xemu running a BIOS: boots it with an optional disc, files of your own on the hard disk's C:, and a virtual controller that presses buttons
 between the screenshots. For checking screens (the dashboard, the trainer menu, error screens) without anyone at the PC.
 
-usage: xemu_screenshot.py BIOS OUT [--iso GAME.iso] [--hdd HDD.qcow2] [--eeprom FILE] [--put LOCAL=C:\\PATH ...] [--steps STEPS] [--save-hdd FILE]
+usage: xemu_screenshot.py BIOS OUT [--iso GAME.iso] [--hdd HDD.qcow2] [--eeprom FILE] [--avpack hdtv] [--put LOCAL=C:\\PATH ...] [--steps STEPS]
+       [--save-hdd FILE]
 
 OUT is the screenshots' name: OUT_1.png, OUT_2.png, ... (640x480). STEPS is a comma-separated list, run in order:
 - wait:SECONDS   wait (boot, a game starting, an animation);
@@ -107,6 +108,8 @@ def main():
     ap.add_argument("--put", action="append", default=[], metavar="LOCAL=C:\\PATH", help="a file to copy onto C:, E:, ... (repeatable)")
     ap.add_argument("--steps", default="wait:30,shot", help="wait:S, shot and button presses, comma-separated")
     ap.add_argument("--eeprom", help="EEPROM to start from (copied, never written)")
+    ap.add_argument("--avpack", choices=["composite", "svideo", "scart", "hdtv", "vga", "rfu", "none"],
+                    help="the AV cable xemu presents (default: xemu's own, composite); HD modes also need an EEPROM with them on (run.py --hd --state DIR)")
     ap.add_argument("--save-hdd", metavar="FILE", help="keep the disk as xemu left it")
     ap.add_argument("--serial", metavar="FILE", help="write the debug serial port to FILE (a SERIAL=1 kernel's log, titles' DbgPrint)")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
@@ -125,7 +128,8 @@ def main():
         shutil.copyfile(a.eeprom, os.path.join(work, "eeprom.bin"))
     cfg = os.path.join(work, "xemu.toml")
     open(cfg, "w").write(
-        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '64'\n\n[sys.files]\nbootrom_path = ''\n"
+        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '64'\n" + (f"avpack = '{a.avpack}'\n" if a.avpack else "")
+        + "\n[sys.files]\nbootrom_path = ''\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\neeprom_path = '{os.path.join(work, 'eeprom.bin')}'\nhdd_path = '{hdd}'\n"
         + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING
         + "\n[net]\nenable = true\nbackend = 'nat'\n")  # the network card on, as on a console (10.0.2.15 by DHCP)

@@ -102,8 +102,10 @@ void ReadBootVideoSettings(const char *Text, uint32_t Length, BOOT_VIDEO_SETTING
 
 constexpr char TOASTS_SECTION[] = "toasts";
 constexpr char KEY_TOASTS_ENABLED[] = "enabled";
+constexpr char KEY_SHOW_VIDEO_MODE[] = "show_video_mode";
 
-bool ReadToastsEnabled(const char *Text, uint32_t Length) {
+// A [toasts] switch that is on unless the file says "Key = no".
+static bool ReadToastsSwitch(const char *Text, uint32_t Length, const char *Key) {
     bool enabled = true, inSection = false;
     INI_READER reader = {Text, Text + Length};
     INI_LINE line;
@@ -112,10 +114,18 @@ bool ReadToastsEnabled(const char *Text, uint32_t Length) {
             inSection = line.Kind == INI_LINE_KIND::SECTION && IsSection(line, TOASTS_SECTION);
             continue;
         }
-        if (inSection && line.Kind == INI_LINE_KIND::KEY && IsKey(line, KEY_TOASTS_ENABLED))
+        if (inSection && line.Kind == INI_LINE_KIND::KEY && IsKey(line, Key))
             enabled = !(line.ValueLength == 2 && (line.Value[0] | 0x20) == 'n' && (line.Value[1] | 0x20) == 'o');
     }
     return enabled;
+}
+
+bool ReadToastsEnabled(const char *Text, uint32_t Length) {
+    return ReadToastsSwitch(Text, Length, KEY_TOASTS_ENABLED);
+}
+
+bool ReadShowVideoMode(const char *Text, uint32_t Length) {
+    return ReadToastsSwitch(Text, Length, KEY_SHOW_VIDEO_MODE);
 }
 
 } // namespace oxos::ini_file

@@ -22,7 +22,9 @@ More shortcuts (start any XBE, e.g. the FTP server on BLACK + WHITE):
 C:\OXOS\extensions\oxos_igs.ini. Without the extension (safe mode, B held at
 power on), hold LT + RT + BACK + BLACK for 3 seconds.
 
-SOUND
+TOASTS
+Each title's video mode shows for 2 seconds ("Video Mode: 720p"). Off:
+show_video_mode = no under [toasts] in C:\OXOS\oxos_settings.ini.
 If a title leaves the sound chip frozen, "Audio Codec Frozen - Restarting"
 shows and the console restarts into the same launch, with sound.
 

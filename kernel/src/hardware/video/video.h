@@ -23,6 +23,8 @@ void SmcSetOutputs(bool Enable);
 // scans out another one.
 void KeepScreenUntilNextMode(PVOID Screen);
 extern volatile UCHAR EncoderAddress;
+extern volatile ULONG ScreenWidth;       // the frame's width as the CRTC scans it out (CR01), from the last mode set; 0 before (video.cpp)
+extern volatile bool ScreenInterlaced;   // the CRTC scans out fields (CR39 not 0xFF: 1080i), from the last mode set (video.cpp)
 extern volatile ULONG EncoderProgrammed; // diagnostics: the last mode word whose encoder registers were written
 extern volatile ULONG EncoderMismatches; // diagnostics: registers that read back differently after that mode set
 extern volatile ULONG XcShadow[0x100];   // the Xcalibur's registers as last written

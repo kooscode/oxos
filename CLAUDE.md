@@ -180,7 +180,8 @@ clean the implementation up, cite the `spec/` spec in its comments (`spec/stock/
   Steps: `wait:SECONDS`, `shot`, and buttons (`A`, `B`, `X`, `Y`, `BLACK`, `WHITE`, `BACK`, `START`, `LS`, `RS`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `LT`, `RT`,
   with `:N` to repeat); buttons joined by `+` are held together (`BLACK+WHITE`, half a second; `LT+RT+BACK+BLACK@3.5` for 3.5 s).
   - **Output:** `OUT_1.png`, `OUT_2.png`, ... one per `shot`, 640x480. Paths on C: in `--put` use `\` (quote them); the folders are made.
-  - **Options:** `--iso` a disc; `--hdd` another disk image (copied, never written; default xemu's dashboard disk); `--eeprom` an EEPROM to start from;
+  - **Options:** `--iso` a disc; `--hdd` another disk image (copied, never written; default xemu's dashboard disk); `--eeprom` an EEPROM to start from
+    (`--avpack hdtv` and an EEPROM from `run.py --hd --state DIR` for HD modes);
     `--save-hdd FILE` keeps the disk as the console left it (read it with `tests/fatx.py`); `--serial FILE` keeps the debug serial port (with a `SERIAL=1`
     BIOS, `make -C kernel BUILD=../build/kernel/serial SELFTEST=0 SERIAL=1 ../build/kernel/serial/bios.bin`: the kernel's log and titles' `DbgPrint`).
   - **Timing:** a cold boot reaches the dashboard in about 30-40 s in xemu; wait before the first `shot`, and a second or two after each press.

@@ -28,13 +28,13 @@ ULONG ReadColdBootSwitches() {
     BOOT_VIDEO_SETTINGS settings;
     uint32_t errors;
     oxos::ini_file::ReadBootVideoSettings(text, got, &settings, &errors);
-    bool toasts = oxos::ini_file::ReadToastsEnabled(text, got);
+    bool toasts = oxos::ini_file::ReadToastsEnabled(text, got), videoMode = oxos::ini_file::ReadShowVideoMode(text, got);
     ExFreePool(text);
     if (errors)
         XK_SERIAL("settings: oxos_settings.ini: %u lines not understood\n", errors);
-    XK_SERIAL("settings: oxos_settings.ini (%lu bytes): boot video %s, always %s; toasts %s\n", got, settings.Enabled ? "on" : "off",
-              settings.Always ? "yes" : "no", toasts ? "on" : "off");
-    ULONG switches = toasts ? 0 : XK_TOASTS_OFF;
+    XK_SERIAL("settings: oxos_settings.ini (%lu bytes): boot video %s, always %s; toasts %s, video mode %s\n", got, settings.Enabled ? "on" : "off",
+              settings.Always ? "yes" : "no", toasts ? "on" : "off", videoMode ? "on" : "off");
+    ULONG switches = (toasts ? 0 : XK_TOASTS_OFF) | (videoMode ? 0 : XK_VIDEO_MODE_TOAST_OFF);
     if (settings.Enabled)
         switches |= XK_BOOT_VIDEO_ENABLED | (settings.Always ? XK_BOOT_VIDEO_ALWAYS : 0);
     return switches;

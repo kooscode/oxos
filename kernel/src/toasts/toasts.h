@@ -14,6 +14,9 @@ constexpr ULONG TOAST_SECONDS_DEFAULT = 5, TOAST_SECONDS_MAX = 30;
 constexpr ULONG TOAST_MODE_SETTLE_MS = 500;                      // after the title's mode set (AvSetDisplayMode), until toasts show: titles may set it twice
 constexpr ULONG TOAST_TITLE_SETTLE_MS = 2000;                    // a title that sets no mode: toasts show this long after it started
 constexpr ULONG TOAST_NO_OWNER = 0xFFFFFFFF;                     // a toast no extension queued
+constexpr ULONG VIDEO_MODE_TOAST_SECONDS = 2;                    // the video mode's toast
+constexpr ULONG VIDEO_MODE_TOAST_DELAY_MS = 2000;                // after the title's last mode set, until its mode is named: a title starting up after its
+                                                                 // mode set had not drawn yet, and xemu showed no overlay over it (2026-11-23)
 
 // A queued toast: the caller's, copied.
 struct QUEUED_TOAST {
@@ -26,7 +29,8 @@ struct QUEUED_TOAST {
 
 // --- The queue (toast_queue.cpp)
 
-extern XK_PERSIST bool ToastsOff; // [toasts] enabled = no in oxos_settings.ini, read at the cold boot (spec/oxos_internal/36 §2)
+extern XK_PERSIST bool ToastsOff;         // [toasts] enabled = no in oxos_settings.ini, read at the cold boot (spec/oxos_internal/36 §2)
+extern XK_PERSIST bool VideoModeToastOff; // [toasts] show_video_mode = no
 
 // Exported as oxos_toast_enqueue / oxos_toast_enqueue_wait (spec/oxos_internal/36 §5): the toast's owner is the extension the call comes from.
 NTSTATUS EnqueueToast(OXOS_TOAST &Toast);
@@ -36,7 +40,8 @@ NTSTATUS QueueKernelToast(const char *Text, ULONG Seconds);
 
 void OpenToasts();            // the extensions of a launch are loaded: an empty queue, open for their toasts
 void NoteTitleStarted();      // the title has been loaded
-void NoteDisplayModeSet();    // AvSetDisplayMode (hardware/video/video.cpp): the title has set its video mode
+void NoteDisplayModeSet(ULONG Mode); // AvSetDisplayMode (hardware/video/video.cpp): a mode set, the title's or the kernel's own screen's
+void QueueVideoModeToast();   // the run loop, once the title has settled: its first mode named in a toast, and each later one with another name
 bool TitleSettled();          // toasts may show: TOAST_MODE_SETTLE_MS after the title's mode set, or TOAST_TITLE_SETTLE_MS after its start without one
 void CloseToasts();           // the title ends: the overlay hidden, the queue emptied and closed, waits end with STATUS_CANCELLED
 bool TakeNextToast(QUEUED_TOAST &Toast); // the display takes the next toast; false when none waits

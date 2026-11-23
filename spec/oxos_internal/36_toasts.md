@@ -32,12 +32,25 @@ open". Extensions push toasts through a kernel export (§5); a toast can carry a
 ## 2. Who shows one
 - **The kernel**, for its own events, each a decision of its own when it is built: a frozen sound codec (spec 46 §3, 2026-11-23: "Audio Codec Frozen -
   Restarting" drawn at once before the power cycle, `toasts::ShowNotice`, and "Audio Codec Frozen" / "Power off and on to restore sound" queued when the
-  guard stops a second cycle, `toasts::QueueKernelToast`); proposed, not built: an extension unloaded or a slow run loop (spec 34 §4.3), a log file that
-  could not be written (spec 35).
+  guard stops a second cycle, `toasts::QueueKernelToast`); the video mode (§2.1); proposed, not built: an extension unloaded or a slow run loop (spec 34
+  §4.3), a log file that could not be written (spec 35).
 - **Extensions**, through the export (§5), from `ExtensionStart` (the toast waits until the title has set its video mode, §3.4), from `ExtensionRunLoop`,
   from a hook or a title event.
 - **The user switches them off** with one setting (`[toasts]` in `C:\OXOS\oxos_settings.ini`, `enabled = no`, read at the cold boot by the kernel
   settings module); the exports then return `STATUS_NOT_SUPPORTED` and nothing shows. Safe boot (B held) loads no extensions, so no toasts.
+
+### 2.1 The video mode (2026-11-23)
+User, 2026-11-23: a toast names the mode a title runs in ("Video Mode: 720p"), at the title's first mode set and whenever it changes the mode.
+- **Source:** the mode word of the title's `AvSetDisplayMode` calls (`hardware/video/video.cpp` hands it to `toasts::NoteDisplayModeSet`; mode sets of the
+  kernel's own screens are not counted). Named from its class (bits 30-31: 0 → `480i`, 1 → `576i`, 2 → HD by its CRTC row: 0x0A `720p`, 0x0C `1080i`,
+  others `480p`; 3 → `VGA`) and, for SD and 480p, the widescreen bit 28 (` 16:9`); the mode words: spec/stock/17 §2a.
+- **When:** on the extensions' run loop, 2 s after the title's last mode set (`VIDEO_MODE_TOAST_DELAY_MS`), for 2 s at the bottom centre. The first mode a
+  title sets is always named; a later one only when its name differs (a title moving from 640 to 720 pixels in 480p is not named again). A title that sets
+  no mode gets none.
+- **Why 2 s:** named 0.5 s after the mode set (the settle rule of §3.4) the toast was drawn while the dashboard was still starting, and xemu showed nothing; 2
+  s later it shows. xemu also shows no overlay over a frame the CPU drew (a test title filling its frame buffer): on the console the overlay is the
+  hardware's and shows over either.
+- **Off:** `[toasts] show_video_mode = no` (default yes; `enabled = no` turns it off with all toasts).
 
 ## 3. How the kernel shows one: the GPU's video overlay (PVIDEO)
 The NV2A has a video overlay: the CRTC blends a second picture, from its own buffer in memory, over the frame it scans out. The title's frames, its frame
@@ -45,7 +58,8 @@ buffers and its GPU commands are never touched; the toast costs no drawing per f
 5 seconds after the start, up for 10 seconds) showed a toast this way over a dashboard and over a game, in xemu and on the Conexant debug kit at 720p.
 
 ### 3.1 The overlay registers
-NV2A registers at 0xFD000000 + offset, as the open nouveau driver documents the NV10-class overlay and as the pilot used them (buffer 0 only):
+NV2A registers at 0xFD000000 + offset, as the open nouveau driver documents the NV10-class overlay and as the pilot used them (buffer 0). The service
+writes each buffer register for buffer 1 too (4 bytes on), because a title's GPU set-up resets both (§3.5); only buffer 0 is flipped in.
 | Offset | Register | The pilot's value |
 |---|---|---|
 | 0x8704 | STOP | 1 while it is set up, then 0; 1 again to stop |
@@ -70,9 +84,12 @@ NV2A registers at 0xFD000000 + offset, as the open nouveau driver documents the 
 - **The buffer** (384 x 44 x 2 = 33 KB in the pilot) is contiguous memory taken when the toast shows and freed after it, write-combined.
 
 ### 3.3 Place in every mode
-The kernel reads the mode in use from the NV2A's flat-panel timing, which every mode set writes: the vertical display end (0x680800) and the horizontal
-display end (0x680820), each the active size minus one. Not the horizontal CRTC size (0x680828): the encoders' 640-pixel modes hold 600 there, and a toast
-placed by it sat 20 pixels left of centre (xemu, 2026-11-23). Values outside 320-1920 x 240-1080 (no mode set yet) count as 640x480. The box is drawn once
+The overlay is placed in the frame's pixels, the frame as the CRTC scans it out; the flat panel then stretches that frame to the line the encoder takes,
+the overlay with it. So the width is the CRTC's horizontal display end (CR01, characters of 8 pixels, minus one), which `AvSetDisplayMode` records after
+every mode set (`hardware::video::ScreenWidth`); the height is the flat-panel timing's vertical display end (0x680800, the active height minus one). Not the
+flat panel's horizontal display end (0x680820): a 480p game's 640-pixel frame is shown on a 720-pixel line, and a toast placed by 720 came out right of
+centre, 1.125 times too far right (console, 2026-11-23); nor its horizontal CRTC size (0x680828), which held 600 in xemu's 640-pixel mode. A width outside
+320-1920 falls back to 0x680820, and values outside 320-1920 x 240-1080 (no mode set yet) count as 640x480. The box is drawn once
 at 480-line size and scaled by height / 480 on screen (DS_DX / DT_DY = box size << 20 / screen size), so the font is the same size on every screen and
 nothing is drawn twice; then it is placed:
 | Anchor | x | y |
@@ -80,8 +97,13 @@ nothing is drawn twice; then it is placed:
 | left / centre / right | 6% of the width / (width - box) / 2 / width - 6% - box | |
 | top / middle / bottom | | 10% of the height / (height - box) / 2 / height - 10% - box |
 
-In 640x480, a one-line toast of 26 characters is 352 x 44 at (144, 388) at the bottom centre. Interlaced modes (480i, 1080i: the timing holds one field,
-540 lines) need the field handling checked on hardware.
+In 640x480, a one-line toast of 26 characters is 352 x 44 at (144, 388) at the bottom centre.
+
+**1080i:** the overlay's lines are a field's, half the frame's. `AvSetDisplayMode` records whether the CRTC scans out fields (`ScreenInterlaced`: CR39,
+the interlace half-line position, is 0xFF in every progressive mode and set only in the 1080i row, spec/stock/22 §4), and the toast's y and height are
+then halved; its picture is scaled to the halved height. Placed by the frame's 1080 lines, a bottom toast at y 873 was below the field's 540 and never
+seen (1.6 console, 2026-11-24); halved, it shows at the bottom centre at its full size. SD modes (480i, 576i) are progressive at the NV2A (the encoder
+interlaces them) and are placed as they are.
 
 ### 3.4 When and where
 The extensions' run loop (spec 34 §4.3, every millisecond) drives the display: no thread of its own. Each round it shows the next toast once the title has
@@ -91,6 +113,16 @@ starts the half second again); a title that keeps the mode it was started in get
 seconds from the start: an in-game shortcut pressed 4.5 s into a game got no toast (user, 2026-11-23: "is the toast allowed purely a timeout or we know
 video is ready?"). The run loop runs
 whenever an extension is loaded, and only extensions queue toasts, so a toast always has it.
+
+### 3.5 A title's GPU set-up resets the overlay's scale (console, 2026-11-24)
+A title that sets up its GPU after its mode set writes the overlay's input registers: nxdk's `pb_init` sets SIZE_IN to "unknown" (reads back 0x07FF07FE),
+POINT_IN to 0 and DS_DX / DT_DY to 1:1, for both buffers, and leaves OFFSET, POINT_OUT, SIZE_OUT, FORMAT and BUFFER alone. A toast already up then keeps its
+place and size but is drawn 1:1 from its narrower picture: the first 720p toast (the video mode toast, 2 seconds after the dashboard's mode set, `pb_init`
+about 0.2 s later) came out repeated and garbled, later ones right (user, 2026-11-24). Seen in register dumps on the debug kit: every register right when
+the toast showed, SIZE_IN 0x07FF07FE and DS_DX 0x00100000 one second later. At 480 lines a toast is 1:1, so nothing showed. **What the service does:** each
+run-loop round while a toast is up, if OFFSET still holds the toast's picture and SIZE_IN, POINT_IN, DS_DX or DT_DY differ from what they read back when it
+was shown (the hardware drops the scale's low bits: 0xAAAAA reads 0xAAAA8 / 0xAAAA0), it writes them back for both buffers and sets BUFFER again. A title
+that has put its own picture on the overlay (another OFFSET) is left alone (§7). On the console the reset was put back within one round, too fast to see.
 
 ## 4. Actions: an extension acts while its toast is up
 The kernel's toast has no action of its own (user, 2026-11-23: "all the kernel does is queue up the toast and the extension can then get notified via
@@ -199,7 +231,8 @@ overlay never goes off. After a toast, the service puts back every register it c
 
 ## 9. Tests
 - **Host unit tests** (`tests/unit/test_toasts.cpp`): the queue (order, a full queue, copies, refused texts, closed and switched off, events to the owner, a
-  failed extension's toasts), the box and the anchors in 640x480, 720x480 and 1280x720, the YUY2 conversion; `[toasts] enabled` in `test_settings_ini.cpp`.
+  failed extension's toasts), the box and the anchors in 640x480, 720x480 and 1280x720, the YUY2 conversion; `[toasts] enabled` and `show_video_mode` in
+  `test_settings_ini.cpp`; the video mode's names and timing (`EachTitlesVideoModeNamed`).
 - **xemu** (`make test_extensions`): extension_test queues a one-second toast at every launch and has a three-line one refused; its own toast must be shown
   and hidden at least once over the launches, and no other toast's event may reach it. By hand (2026-11-23, `tools/xemu_screenshot.py`): a two-line toast
   at the bottom centre and a one-line one at the top right over the xemu dashboard, centred once the mode was read from the display-end registers (§3.3);

@@ -12,6 +12,7 @@
 //
 //   [toasts]
 //   enabled = no                      no: no toasts over titles (spec/oxos_internal/36); yes or missing: toasts on
+//   show_video_mode = no              no: no toast when a title changes the video mode; yes or missing: one (spec/oxos_internal/36 §2)
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -43,5 +44,8 @@ void ReadBootVideoSettings(const char *Text, uint32_t Length, BOOT_VIDEO_SETTING
 
 // [toasts]'s enabled (spec/oxos_internal/36 §2): true unless the file says "enabled = no" (any case; a key given twice, the last one counts).
 bool ReadToastsEnabled(const char *Text, uint32_t Length);
+
+// [toasts]'s show_video_mode (spec/oxos_internal/36 §2): true unless the file says "show_video_mode = no", as ReadToastsEnabled.
+bool ReadShowVideoMode(const char *Text, uint32_t Length);
 
 } // namespace oxos::ini_file

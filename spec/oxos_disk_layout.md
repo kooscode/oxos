@@ -25,7 +25,7 @@ C:\OXOS\                                  primary OXOS folder, it's auto created
 ├── oxos_settings.ini                 <--|✅ [dashboard] (19)
 │                                        |✅ [launch_redirect] (33)
 │                                        |✅ [boot_video] (38)
-│                                        |✅ [toasts] (36)
+│                                        |✅ [toasts] (36: enabled, show_video_mode)
 │                                        |⬜ in-game reset (39)
 ├── oxos_extensions.ini                   ✅ which extensions load, in which order, enabled (34)
 ├── oxos_title_patches.ini                ✅ per-title patches (25), applied by the kernel modules (43)

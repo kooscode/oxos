@@ -128,3 +128,14 @@ TEST(SettingsIni, ToastsAreOnUnlessTurnedOff) {
     EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled(other.data(), (uint32_t)other.size())) << "another section's enabled";
     EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled("", 0));
 }
+
+TEST(SettingsIni, VideoModeToastIsOnUnlessTurnedOff) {
+    const std::string off = "[toasts]\nenabled = yes\nshow_video_mode = NO\n";
+    EXPECT_FALSE(oxos::ini_file::ReadShowVideoMode(off.data(), (uint32_t)off.size()));
+    EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled(off.data(), (uint32_t)off.size())) << "only its own key";
+    const std::string on = "[toasts]\nshow_video_mode = yes\n";
+    EXPECT_TRUE(oxos::ini_file::ReadShowVideoMode(on.data(), (uint32_t)on.size()));
+    const std::string other = "[boot_video]\nshow_video_mode = no\n[toasts]\nenabled = no\n";
+    EXPECT_TRUE(oxos::ini_file::ReadShowVideoMode(other.data(), (uint32_t)other.size())) << "another section's key, or enabled";
+    EXPECT_TRUE(oxos::ini_file::ReadShowVideoMode("", 0));
+}

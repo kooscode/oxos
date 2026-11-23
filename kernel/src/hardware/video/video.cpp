@@ -798,6 +798,8 @@ void LoadBootGamma() {
 // --- Mode set (spec/stock/22 §2)
 
 volatile ULONG SetDisplayModeCalls; // diagnostics: AvSetDisplayMode calls (tests/boot_test.py)
+volatile ULONG ScreenWidth;         // the frame's width in pixels as the CRTC scans it out, from the last mode set; 0 before
+volatile bool ScreenInterlaced;     // the CRTC scans out fields, from the last mode set
 
 // The frame buffer KeepScreenUntilNextMode was given, until a mode set shows another one.
 static PVOID KeptScreen;
@@ -923,16 +925,28 @@ static bool ReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format,
     return true;
 }
 
+// After a mode set: the frame's width from the CRTC's horizontal display end (CR01: characters of 8 pixels, minus one). The flat-panel timing behind it may be
+// wider (a 640-pixel frame stretched to the 720 pixels of an SD line); the video overlay is placed in the frame's pixels (toasts/toast_overlay.cpp). And whether
+// the CRTC scans out fields: CR39 (the interlace half-line position) is 0xFF in every progressive mode and set only for 1080i (spec/stock/22 §4); SD modes
+// are progressive at the NV2A, the encoder interlaces them.
+static void NoteScreenWidth(volatile UCHAR *regs) {
+    regs[0x6013D4] = 0x01;
+    ScreenWidth = ((ULONG)regs[0x6013D5] + 1) * 8;
+    regs[0x6013D4] = 0x39;
+    ScreenInterlaced = regs[0x6013D5] != 0xFF;
+}
+
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
     SetDisplayModeCalls = SetDisplayModeCalls + 1;
-    toasts::NoteDisplayModeSet(); // the title's video is set up: toasts may show (spec/oxos_internal/36 §3.4)
     if (!Mode)
         Mode = 0x0F010101;
+    toasts::NoteDisplayModeSet(Mode); // the title's video is set up: toasts may show, and its mode is named (spec/oxos_internal/36 §3.4)
     // Encoder modes other than the VGA class (the reference has no VGA rows; spec 22 §13): the reference mode change.
     if (EncoderAddress && EncoderMode(Mode) && (Mode >> 30) != 3 &&
         ReferenceDisplayMode(regs, Mode, Format, Pitch, FrameBuffer)) {
         FreeKeptScreen(FrameBuffer);
+        NoteScreenWidth(regs);
         return 0;
     }
     // Pixel format: RAMDAC general control and the CRTC pixel-depth code.
@@ -997,6 +1011,7 @@ XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, U
     WriteCrtc(regs, 0x28, (UCHAR)((depth >> 24) | 0x80));
     *(volatile ULONG *)(regs + 0x600800) = FrameBuffer;
     FreeKeptScreen(FrameBuffer);
+    NoteScreenWidth(regs);
     return 0;
 }
 

@@ -38,7 +38,7 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ✅ Trainers from dashboards | the title-start call dashboards patch for trainers (XBMC4Gamers); the trainer pack | [23](oxos_internal/23_trainer_hook.md), [trainer pack](../third_party/xbox_trainers/README.md) |
 | ✅ Universal Trainers | a game's trainer and chosen cheats from any dashboard, disc image or disc; a trainer menu before the game (`oxos_trainers.xbe`) or `oxos_trainers.ini` (extension `oxos_trainers.xos`) | [37](oxos_internal/37_universal_trainers.md) |
 | ✅ In-game shortcuts | buttons held together in any title (XDK or nxdk) reset the console or start an XBE, after a toast; LT + RT + BACK + BLACK resets as the in-game reset did (`oxos_igs.xos`, `oxos_igs.ini`) | [48](oxos_internal/48_in_game_shortcuts.md), [22 §9](oxos_internal/22_in_game_reset.md) |
-| ✅ Toasts | short messages over a running title on the GPU's video overlay, queued by extensions (`oxos_toast_enqueue`) | [36](oxos_internal/36_toasts.md) |
+| ✅ Toasts | short messages over a running title on the GPU's video overlay, queued by extensions (`oxos_toast_enqueue`); the kernel names each title's video mode ("Video Mode: 720p", `[toasts] show_video_mode`) | [36](oxos_internal/36_toasts.md) |
 
 ### On the console
 | Feature | What it does | Spec |
