@@ -54,7 +54,8 @@ Unlike the full reboot to the dashboard of rmenhal's NKPatcher, nothing is writt
 works at any IRQL.
 
 ## 4. Limits
-- Only XDK titles: nxdk titles (the OXOS launchers, the FTP server) have their own USB code and are not covered.
+- Only XDK titles: nxdk titles (the OXOS launchers, the FTP server) have their own USB code and are not covered. §9 proposes reading the buttons from the
+  USB host controllers instead, which covers every title.
 - A title with a different XInputGetState prologue is not recognised (no such title seen so far). The serial log says `igr: the title reads its controllers
   (XInputGetState)` the first time the hook sees a title's controller read, so a title that never prints it is not covered.
 - With TRACE_IMPORTS builds (spec 01) the tracer's thunk is the caller, so the hook does not match.
@@ -127,6 +128,7 @@ Differences from today's reset, for the user:
 - A mounted disc image is unmounted (§8.4 step 2), as with the power cycle.
 
 ### 8.4 The quick in-game reset, step by step
+(With §9 the steps run on a kernel thread of OXOS's own instead of in the title's thread; step 3 is answered there.)
 `HalpIgrCheck` runs in the title's thread that called `XInputGetState`, at that caller's IRQL (§3):
 1. **IRQL.** Below DISPATCH_LEVEL (game threads read pads at passive level): go on. At DISPATCH_LEVEL or above (a title reading its pads from a DPC): use the
    power cycle instead, because the shutdown notifications and the unmount may wait.
@@ -168,3 +170,62 @@ Differences from today's reset, for the user:
   `firmware: launch data type ...` line) and match it.
 - Titles that read their pads at DISPATCH_LEVEL: none seen; §8.4 step 1 falls back to the power cycle for them.
 - Whether to add a third combo that quick-reboots back into the disc's title (rmenhal's NKPatcher triggers + START + BLACK).
+
+## 9. Proposal: buttons from the USB host controllers, for every title (2026-11-23; not implemented)
+Status: design, from a pilot on the Conexant debug kit (2026-11-23, a throwaway build, not committed). The user asked for every title to be covered, however
+it was built (XDK, nxdk or another toolkit). It replaces §1-2 (the `XInputGetState` hook) as where the buttons come from, and runs §8's quick reboot from a
+kernel thread.
+
+### 9.1 Why
+The hook of §2 finds `XInputGetState` in the XDK's input library, so titles built another way (nxdk dashboards and apps, homebrew; titles built against
+other libraries) are not covered (§4). Every title, however it is built, reads its pads the same way in the end: through the console's two OHCI USB host
+controllers, which put each finished transfer on a "done" list in memory and raise their interrupt. OXOS dispatches that interrupt before the title's own
+handler runs (`KiDispatchHardwareInterrupt` calls the title's interrupt routine). There the kernel can read the pads' reports
+without touching the title's code or the controller.
+
+### 9.2 Reading the reports
+At each interrupt of the first controller (IRQ 1, registers at 0xFED00000) and of the second (IRQ 9, 0xFED08000), before the title's interrupt routine:
+1. `HcInterruptStatus` (+0x0C) bit 1 (WritebackDoneHead) set: the controller has written a done list. Otherwise nothing to read.
+2. `HcHCCA` (+0x18) gives the physical address of the controller's communication area; its `DoneHead` (+0x84, low 4 bits are flags) is the physical address
+   of the last finished transfer descriptor.
+3. Follow the list (each general transfer descriptor: flags with the completion code in bits 28-31, the current buffer pointer, the next descriptor, the
+   buffer end), at most 32 entries. For a descriptor finished without error, read its data: a pad's input report is 20 bytes starting `00 14`; byte 2 holds
+   the digital buttons, bytes 4-11 the analog buttons A, B, X, Y, BLACK, WHITE, LT, RT (pressed past half: more than 0x80), as §3's mask.
+4. Only reads: nothing is written to the controller or to the list, so the title's own handler then finds everything as the controller left it.
+
+**Physical reads.** The descriptors and buffers are wherever the title's USB code put them, often in the title's own memory, which is not mapped at the
+kernel's 0x80000000 window (only the kernel's own allocations are). The kernel reads them through one reserved page (taken with `MmMapIoSpace` when the title
+starts): for each read, interrupts off, the page's PTE pointed at the wanted physical page, `invlpg`, the bytes copied, the PTE put back. In the pilot a first
+version read through 0x80000000 and stopped the kernel (bug check 0x1E in the interrupt dispatch) as soon as a game (its descriptors in its own memory) read a
+pad; the reserved page fixed it.
+
+**The report's start.** A finished descriptor's buffer pointer is cleared (or, after a short transfer, points just past the data); its buffer end stays. The
+pilot took the start as the end minus 19 (or the pointer minus 20) and checked the `00 14` header; for one game the computed address was wrong although the
+header and the buttons matched. The real version takes the start from the endpoint and buffer the title set up (the descriptor's place in the endpoint's
+list), or keeps the header check as the guard.
+
+### 9.3 The reset, on a kernel thread
+The interrupt only sets a flag (it runs at the controller's interrupt level). A kernel thread of OXOS's own, waiting at a high priority, does the rest:
+1. **Stop the title.** Suspend every thread of the title (`KeSuspendThread`): a title thread is one whose start address is in title code (below 0x80000000),
+   plus the title's main thread (started by the title launcher). Then wait 50 ms so each takes the suspend at its next safe point. In the pilot, a quick
+   reboot started from a kernel thread without this let a title's own code run on during the reboot and write to memory already released (bug check 0x1E in the
+   title, 10 ms into the reboot); with the threads suspended it never happened again (an nxdk dashboard with 10 threads, a game with 2).
+2. **Launch data** as §8.4 step 4 (or a launch page naming another XBE to start), then `HalReturnToFirmware(2)`. The title's shutdown
+   notifications run on this thread, with its threads suspended.
+3. **Disc images** as §8.4 step 2.
+
+### 9.4 Pilot results (Conexant debug kit, serial build, 2026-11-23)
+| Running | Button source | Combo seen | Result |
+|---|---|---|---|
+| an nxdk dashboard | done list | yes (3 s after its start, the first report) | 10 threads suspended, the next XBE loaded 0.47 s after the press |
+| an nxdk app (the trainer menu, the FTP server) | done list | yes | reports seen from their first frames |
+| a retail game (its USB buffers in its own memory) | done list, through the reserved page | yes | 2 threads suspended, the next XBE loaded 0.47 s after the press |
+| a retail game, `XInputGetState` hook (§2) instead | the hook | yes, but only once the game read its pads (after its intro) | the next XBE loaded 0.4 s after the press |
+
+### 9.5 What changes for the in-game reset
+- Every title is covered, however it was built; `xinput_hook.S` and the prologue match of §2 are no longer needed (they can stay as a fallback until §9 is
+  proven on all three consoles).
+- The combos of §3 and §8.3 are read from the reports the same way (the mask of §3 is built from the report's bytes).
+- The reset runs on the kernel thread (§9.3), at passive level, whatever IRQL the title reads its pads at: §8.4 step 1's DPC case disappears.
+- §8.6's tests apply, plus: nxdk titles (the FTP server, a dashboard), a title using both controllers (IRQ 1 and IRQ 9), and a title that reads its pads at a
+  high rate (the cost of the snoop per interrupt).
