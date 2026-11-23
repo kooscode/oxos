@@ -177,8 +177,8 @@ clean the implementation up, cite the `spec/` spec in its comments (`spec/stock/
   python3 -I tools/xemu_screenshot.py build/kernel/release/bios.bin /tmp/menu --iso GAME.iso \
       --put build/kernel/extensions/oxos_trainers/app/bin/default.xbe='C:\OXOS\extensions\oxos_trainers.xbe' --steps wait:30,shot,DOWN:3,wait:2,shot
   ```
-  Steps: `wait:SECONDS`, `shot`, and buttons (`A`, `B`, `X`, `Y`, `BLACK`, `WHITE`, `BACK`, `START`, `LS`, `RS`, `UP`, `DOWN`, `LEFT`, `RIGHT`, with `:N`
-  to repeat).
+  Steps: `wait:SECONDS`, `shot`, and buttons (`A`, `B`, `X`, `Y`, `BLACK`, `WHITE`, `BACK`, `START`, `LS`, `RS`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `LT`, `RT`,
+  with `:N` to repeat); buttons joined by `+` are held together (`BLACK+WHITE`, half a second; `LT+RT+BACK+BLACK@3.5` for 3.5 s).
   - **Output:** `OUT_1.png`, `OUT_2.png`, ... one per `shot`, 640x480. Paths on C: in `--put` use `\` (quote them); the folders are made.
   - **Options:** `--iso` a disc; `--hdd` another disk image (copied, never written; default xemu's dashboard disk); `--eeprom` an EEPROM to start from;
     `--save-hdd FILE` keeps the disk as the console left it (read it with `tests/fatx.py`); `--serial FILE` keeps the debug serial port (with a `SERIAL=1`

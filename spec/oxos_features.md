@@ -36,7 +36,8 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ✅ Launch redirects | `[launch_redirect]` in `oxos_settings.ini` starts another XBE in place of one a title launches | [33](oxos_internal/33_launch_redirect.md) |
 | ✅ Trainers from dashboards | the title-start call dashboards patch for trainers (XBMC4Gamers); the trainer pack | [23](oxos_internal/23_trainer_hook.md), [trainer pack](../third_party/xbox_trainers/README.md) |
 | ✅ Universal Trainers | a game's trainer and chosen cheats from any dashboard, disc image or disc; a trainer menu before the game (`oxos_trainers.xbe`) or `oxos_trainers.ini` (extension `oxos_trainers.xos`) | [37](oxos_internal/37_universal_trainers.md) |
-| ✅ In-game reset | LT + RT + BACK + BLACK reboots from any title | [22](oxos_internal/22_in_game_reset.md) |
+| ✅ In-game shortcuts | buttons held together in any title (XDK or nxdk) reset the console or start an XBE, after a toast; LT + RT + BACK + BLACK resets as the in-game reset did (`oxos_igs.xos`, `oxos_igs.ini`) | [48](oxos_internal/48_in_game_shortcuts.md), [22 §9](oxos_internal/22_in_game_reset.md) |
+| ✅ Toasts | short messages over a running title on the GPU's video overlay, queued by extensions (`oxos_toast_enqueue`) | [36](oxos_internal/36_toasts.md) |
 
 ### On the console
 | Feature | What it does | Spec |
@@ -68,8 +69,6 @@ When it ships, its row moves from "Planned" to "Implemented" and its ⬜ becomes
 | ⬜ Screenshots | a button combination (or a command from a PC) saves the picture on screen in `C:\OXOS\screenshots\`, from any title (extension `oxos_screenshots.xos`) | proposal (2026-11-15) | [40](oxos_internal/40_screenshots.md) |
 | ⬜ Homebrew development on a real console | build, deploy, run, log and debug nxdk apps on a real console from Linux, macOS or Windows: one `oxos` tool, gdb or lldb over the GDB remote protocol, VS Code | proposal (2026-11-15) | [41](oxos_internal/41_remote_debugging.md) |
 | ⬜ Play time | an extension keeps the time played per game in `C:\OXOS\playtime\`, readable by any dashboard; the XBL Dashboard also sends it to an online service at start | proposal (2026-11-15) | [42](oxos_internal/42_play_time.md) |
-| ⬜ In-game reset by quick reboot | the in-game reset returns to the dashboard by a quick reboot, as titles do, instead of a power cycle | proposal (2026-11-06) | [22 §8](oxos_internal/22_in_game_reset.md) |
-| ⬜ Toasts | short messages over a running title, from the kernel and from extensions | proposal (2026-11-14) | [36](oxos_internal/36_toasts.md) |
 | ⬜ OXOS features as extensions | Move `Title patches`, `Netboot` and `Kernel call tracer` features to Kernel Extensions so resident kernel gets smaller - winning back title memory, today the kernel has about 0.06 % less memory available than stock ([18 §7](oxos_internal/18_boot_memory.md)) | decided (2026-11-13), not built | [34 §10](oxos_internal/34_kernel_extensions.md) |
 | ⬜ Run-once extensions | an extension that only prepares a launch (a trainer, a boot video) is unloaded before the title starts, giving its memory back | proposal (2026-11-15) | [34 §4.3a](oxos_internal/34_kernel_extensions.md) |
 | ⬜ Extensions: the rest | `oxos_resolve_path`; the error screen names a crashed extension | open items | [34](oxos_internal/34_kernel_extensions.md) |

@@ -1,5 +1,6 @@
 // XBE loader and title launch (spec/stock/05 §2-4).
 #include <titles/titles.h>
+#include <toasts/toasts.h>
 #include <diagnostics/diagnostics.h>
 #include <user_interface/user_interface.h>
 #include <io/io.h>
@@ -622,7 +623,7 @@ static bool RedirectLaunch(PCSZ Path) {
 
 // --- The boot video (spec/oxos_internal/38 §2): its player, C:\OXOS\apps\oxos_boot_video.xbe, runs in place of the title; when it quick-reboots, the title
 // is chosen as it would have been without it. The player leaves the launch data page as it found it. oxos_settings.ini's [boot_video] is read at the cold
-// boot only, by the kernel settings module (ReadBootVideoSwitches); its two switches are kept for the quick reboots.
+// boot only, by the kernel settings module (ReadColdBootSwitches); its two switches are kept for the quick reboots.
 
 constexpr char BOOT_VIDEO_PLAYER[] = "\\Device\\Harddisk0\\Partition2\\OXOS\\apps\\oxos_boot_video.xbe";
 
@@ -765,6 +766,68 @@ static void PrepareToEnterTitle() {
     MmFreeContiguousMemory(old);
 }
 
+// --- Launches asked for by extensions (spec/oxos_internal/34 §7.3), for in-game shortcuts (spec/oxos_internal/48)
+
+static void NTAPI TitleThread(PVOID, PVOID);
+
+// Suspends every thread of the running title (spec/oxos_internal/22 §9.3): those started in title code (below 0x80000000), and the title's main thread (the
+// title launcher's thread, which entered the title). Then 50 ms, so each takes the suspend at its next safe point. Without it a title's own code ran on
+// during the quick reboot and wrote to memory already given back.
+static void SuspendTitleThreads() {
+    PKTHREAD self = KeGetCurrentThread(), threads[64];
+    ULONG count = 0;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
+    for (PLIST_ENTRY e = core::SystemProcess.ThreadListHead.Flink; e != &core::SystemProcess.ThreadListHead && count < 64; e = e->Flink) {
+        auto t = CONTAINING_RECORD(e, KTHREAD, ThreadListEntry);
+        auto start = ((PETHREAD)t)->StartAddress;
+        if (t != self && ((ULONG)start < 0x80000000 || start == (PVOID)TitleThread))
+            threads[count++] = t;
+    }
+    KfLowerIrql(old);
+    for (ULONG i = 0; i < count; i++)
+        KeSuspendThread(threads[i]);
+    LARGE_INTEGER wait;
+    wait.QuadPart = -50 * 10000;
+    KeDelayExecutionThread(KernelMode, FALSE, &wait);
+    XK_SERIAL("launch: %lu title threads suspended\n", count);
+}
+
+NTSTATUS SwitchTitle(const char *Path) {
+    ULONG length = Path ? strlen(Path) : 0;
+    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        return (NTSTATUS)0xC0000184; // STATUS_INVALID_DEVICE_STATE
+    if (length >= 360) // the title loader reads 360 characters of the launch path
+        return STATUS_INVALID_PARAMETER;
+    if (Path && !io::PathExists(Path))
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    if (InterlockedExchange(&hardware::chipset::ConsoleStopping, 1))
+        return (NTSTATUS)0x80000011; // STATUS_DEVICE_BUSY
+    auto page = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+    if (!page && (page = (LAUNCH_DATA_PAGE *)MmAllocateContiguousMemory(0x1000)) != nullptr)
+        MmPersistContiguousMemory(page, 0x1000, TRUE);
+    if (!page) {
+        hardware::chipset::ConsoleStopping = 0;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    SuspendTitleThreads();
+    memset(page, 0, 0x1000);
+    page->LaunchDataType = 0xFFFFFFFF; // the dashboard: no launch data (the page is freed, spec/stock/05 §2)
+    if (Path) { // "\Device\...\folder;name.xbe"
+        page->LaunchDataType = 0;
+        memcpy(page->LaunchPath, Path, length + 1);
+        for (ULONG i = length; i-- > 0;) {
+            if (page->LaunchPath[i] == '\\') {
+                page->LaunchPath[i] = ';';
+                break;
+            }
+        }
+    }
+    LaunchDataPage = page;
+    XK_SERIAL("launch: an extension starts %s\n", Path ? Path : "the dashboard");
+    HalReturnToFirmware(2);
+    return (NTSTATUS)0xC0000001; // STATUS_UNSUCCESSFUL: not reached
+}
+
 // --- The cold boot's choice (spec/stock/03 §4): the pre-launch checks, the SMC boot flags, X for the File Manager and
 // B for safe mode. Boot-only (spec/oxos_internal/18 §2): a quick reboot just launches.
 
@@ -835,10 +898,12 @@ static void WaitForTray() {
     }
 }
 
-// The boot video's switches from oxos_settings.ini's [boot_video] (spec/oxos_internal/38 §1, the kernel settings module), for this cold boot and its quick
-// reboots; none in safe mode or without the kernel modules.
-static void ReadBootVideoSwitches() {
-    BootVideoSwitches = !extensions::SafeMode && kernel_modules::Modules ? kernel_modules::Modules->ReadBootVideoSwitches() : 0;
+// The switches of oxos_settings.ini read at the cold boot (the kernel settings module), for this cold boot and its quick reboots: the boot video's
+// ([boot_video], spec/oxos_internal/38 §1) and whether toasts are off ([toasts], spec/oxos_internal/36 §2). None in safe mode or without the kernel modules.
+static void ReadColdBootSwitches() {
+    ULONG switches = !extensions::SafeMode && kernel_modules::Modules ? kernel_modules::Modules->ReadColdBootSwitches() : 0;
+    BootVideoSwitches = switches & (XK_BOOT_VIDEO_ENABLED | XK_BOOT_VIDEO_ALWAYS);
+    toasts::ToastsOff = (switches & XK_TOASTS_OFF) != 0;
 }
 
 // LaunchTitle(Reason), after the boot video when [boot_video] turns it on (user, 2026-11-17: "if enabled, play the boot video always"): the player's
@@ -867,7 +932,7 @@ void LaunchAtColdBoot() {
         return;
     // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).
     extensions::SafeMode = gamepad::BButtonPressed != 0;
-    ReadBootVideoSwitches();
+    ReadColdBootSwitches();
     extensions::LoadExtensions();
     ULONG reason = CheckFirstBoot();
     XK_SERIAL("launch: cold boot: boot flags %#lx, region %#lx, first-boot reason %#lx, boot video switches %#lx\n", hardware::chipset::BootFlags,

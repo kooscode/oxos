@@ -63,8 +63,8 @@ SERIAL ?= $(if $(filter 1,$(SELFTEST) $(TRACE_IMPORTS)),1,0)
 # STATEDUMP=1: print the machine-state probe (tools/statedump) on the debug serial port at the end of start-up, for comparing the set-up with a reference
 # kernel's. Turns SERIAL on.
 STATEDUMP ?= 0
-# REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel reboots the console the way the in-game reset does
-# (in_game_reset::Reboot), so resets can be tested in a loop without a controller.
+# REBOOT_TEST=N (debug): N seconds into every boot (cold, and the quick reboots that start titles) the kernel powers the console off and on
+# (hardware::chipset::PowerCycle, the in-game shortcuts' coldboot), so resets can be tested in a loop without a controller.
 REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
 SERIAL := 1
@@ -297,8 +297,8 @@ release:
 # The release zip, oxos_vVERSION.zip (spec/oxos_disk_layout.md, "The release zip"): OXOS\ as it goes on the console's C:\ (C:\OXOS), with the three BIOS
 # images in OXOS\bios\, OXOS's apps in OXOS\apps\ (the FTP server oxos_ftp.xbe, the boot video player oxos_boot_video.xbe), the settings
 # (oxos_settings.ini with the boot video on, oxos_title_patches.ini), the OXOS boot video in OXOS\boot_videos\ (splash/oxos_boot_video.mpg), the extensions
-# OXOS ships (oxos_extensions.ini listing them, off), the trainer pack in OXOS\trainers\ and the folders the kernel makes; beside it README.txt (how to
-# install: settings/release_readme.txt, the version filled in, Windows line ends) and the third-party notices.
+# OXOS ships (oxos_extensions.ini listing them: the in-game shortcuts on, the trainers off), the trainer pack in OXOS\trainers\ and the folders the kernel
+# makes; beside it README.txt (how to install: settings/release_readme.txt, the version filled in, Windows line ends) and the third-party notices.
 # The SDK is its own zip. make release VERSION=X.Y.Z builds everything first; then the zip, the SDK's zip and their SHA-256 sums are in
 # build/kernel/release/dist.
 RELEASE_DIST := $(RELEASE_BUILD)/dist
@@ -442,8 +442,8 @@ test_relaunch: $(TEST_TITLE).xbe $(HDD_FETCH)
 	done
 
 # The kernel extensions OXOS ships (kernel/extensions/NAME/, one folder each), built with the extension SDK as it ships, like anyone's extension, into
-# build/kernel/extensions/NAME/; an extension's app (NAME/app/, an nxdk app) is built too and copied there as NAME.xbe. oxos_trainers (Universal Trainers,
-# spec/oxos_internal/37) also gets its oxos_trainers.ini, generated from the trainer pack.
+# build/kernel/extensions/NAME/; an extension's app (NAME/app/, an nxdk app) is built too and copied there as NAME.xbe, and its settings (NAME/NAME.ini) as
+# NAME.ini. oxos_trainers (Universal Trainers, spec/oxos_internal/37) gets its oxos_trainers.ini generated from the trainer pack instead.
 SHIPPED_EXTENSIONS := $(notdir $(patsubst %/,%,$(wildcard extensions/*/)))
 SHIPPED_EXTENSIONS_DIR := $(abspath $(ROOT)/build/kernel/extensions)
 extensions: $(NXDK_READY)
@@ -451,7 +451,8 @@ extensions: $(NXDK_READY)
 	set -e; for name in $(SHIPPED_EXTENSIONS); do mkdir -p $(SHIPPED_EXTENSIONS_DIR)/$$name; \
 	    $(MAKE) -C extensions/$$name OXOS_OUT=$(SHIPPED_EXTENSIONS_DIR)/$$name; \
 	    if [ -d extensions/$$name/app ]; then $(NXDK_ENV) $(MAKE) -C extensions/$$name/app -j8; \
-	        cp $(SHIPPED_EXTENSIONS_DIR)/$$name/app/bin/default.xbe $(SHIPPED_EXTENSIONS_DIR)/$$name/$$name.xbe; fi; done
+	        cp $(SHIPPED_EXTENSIONS_DIR)/$$name/app/bin/default.xbe $(SHIPPED_EXTENSIONS_DIR)/$$name/$$name.xbe; fi; \
+	    if [ -f extensions/$$name/$$name.ini ]; then cp extensions/$$name/$$name.ini $(SHIPPED_EXTENSIONS_DIR)/$$name/; fi; done
 	python3 -I $(ROOT)/tools/gen_trainers_ini.py $(ROOT)/third_party/xbox_trainers $(SHIPPED_EXTENSIONS_DIR)/oxos_trainers/oxos_trainers.ini
 
 # Kernel extensions (spec/oxos_internal/34 §9.3): the test extensions (tests/extensions), the SDK's examples and the shipped extensions, built with the SDK as
@@ -666,9 +667,10 @@ run_image_test: $(IMAGE_TEST_ISO) $(PLAY_FETCH)
 
 test_controller: $(CONTROLLER_ISO) $(HDD_FETCH)
 	$(if $(filter stock,$(CONTROLLER_BIOS)),,$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin)
+	$(if $(filter stock,$(CONTROLLER_BIOS)),,$(MAKE) extensions)
 	python3 -I $(ROOT)/tests/controller_test.py --bios $(if $(filter stock,$(CONTROLLER_BIOS)),$(BIOS_BASE),$(RELEASE_BUILD)/bios.bin) \
 		$(if $(filter stock,$(CONTROLLER_BIOS)),--mcpx-rom $(STOCK_MCPX),$(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))) \
-		--hdd $(HDD_IMAGE) --iso $(CONTROLLER_ISO)
+		--hdd $(HDD_IMAGE) --iso $(CONTROLLER_ISO) $(if $(filter stock,$(CONTROLLER_BIOS)),,--igs $(SHIPPED_EXTENSIONS_DIR)/oxos_igs/oxos_igs.xos)
 
 # Run an XBE from the hard disk, e.g. a homebrew app copied to F: on an exFAT disk: a disc with the XBE launcher (tools/xbe_launcher, nxdk) and launch.txt = XBE
 # boots, and the launcher starts that XBE the way a dashboard does (the XBE then runs from the disk, with D: its folder). XBE='F:\apps\demo\default.xbe'

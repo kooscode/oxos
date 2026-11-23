@@ -5,7 +5,7 @@ What each release file contains besides OXOS's own code (GPL-2.0, see `LICENSE`)
 
 | Release file | Third-party material | Section |
 |---|---|---|
-| `OXOS/bios/bios_*.bin` (in `oxos_vX.Y.Z.zip`) | Intel's CPU microcode; Cromwell's X-codes and EEPROM key states; rmenhal's in-game reset hook; the interfaces and formats it follows (below); hardware tables | [BIOS images](#bios-images) |
+| `OXOS/bios/bios_*.bin` (in `oxos_vX.Y.Z.zip`) | Intel's CPU microcode; Cromwell's X-codes and EEPROM key states; rmenhal's in-game reset (its button combination, now the kernel's last resort); the interfaces and formats it follows (below); hardware tables | [BIOS images](#bios-images) |
 | `OXOS/apps/oxos_ftp.xbe` (in `oxos_vX.Y.Z.zip`; `ftp.xbe` up to v0.4.9) | nxdk, lwIP, the Nuvoton USB host library, PDCLib, LLVM libc++, SDL 3 and nxdk-sdl3 | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
 | `OXOS/apps/oxos_boot_video.xbe` (in `oxos_vX.Y.Z.zip`, from the release after v0.4.12) | the same as the trainer menu, and libmpeg2 and minimp3 | [The boot video player](#the-boot-video-player-oxos_boot_videoxbe) |
 | `OXOS/extensions/oxos_trainers.xbe` (in `oxos_vX.Y.Z.zip`, from v0.4.10) | the same, without the network parts (nxdk's network driver, lwIP) | [The FTP server and the trainer menu](#the-ftp-server-and-the-trainer-menu-oxos_ftpxbe-oxos_trainersxbe) |
@@ -71,7 +71,8 @@ pinned in `kernel/Makefile`.
 
 ### rmenhal's NKPatcher (in-game reset)
 
-The kernel's in-game reset hook (`kernel/src/in_game_reset/xinput_hook.S`, spec/oxos_internal/22 §2) follows rmenhal's in-game reset in NKPatcher
+The in-game reset (spec/oxos_internal/22, until 2026-11-23 a hook on `XInputGetState`; now in-game shortcuts, spec/oxos_internal/48, whose default
+shortcut and the kernel's last resort keep its LT + RT + BACK + BLACK) follows rmenhal's in-game reset in NKPatcher
 (`nkpatcher.asm`, Copyright 2004 rmenhal, GPL-2.0, the same licence as OXOS). A public copy of NKPatcher's source is in
 [Rocky5/Xbox-Softmodding-Tool](https://github.com/Rocky5/Xbox-Softmodding-Tool) (`App Sources/NKPatcher/Main NKP11/`).
 
@@ -87,7 +88,7 @@ work each feature builds on:
 | CCI disc images | Team Resurgent's libCCI (`FORMAT.md`) | GPL-2.0 | `kernel/src/storage/virtual_disc.cpp`, `tools/mkcci/`, spec/oxos_internal/16 |
 | LBA48, the automatic F:/G: partitions and the PARTINFO table | Paul Bartholomew's (oz_paulb) LBA48 patch (2003) | GPL | `kernel/src/storage/disk_layout.cpp`, spec/oxos_internal/04 and 45 |
 | Video encoder detection | Cromwell's `DetectVideoEncoder` (above) | GPL-2.0 | `kernel/src/hardware/video/video.cpp` |
-| The SMC power cycle of the in-game reset | xboxdevwiki's SMC ("PIC") page | documentation | `kernel/src/in_game_reset/in_game_reset.cpp` |
+| The SMC power cycle of the in-game reset | xboxdevwiki's SMC ("PIC") page | documentation | `kernel/src/hardware/chipset/smbus.cpp` (`PowerCycle`) |
 
 EvoX M8+ (the EvoX team) was studied as the reference for LBA48, the extra partitions and the in-game reset (spec/evox/); its behaviour is described there,
 and none of its code is in OXOS.

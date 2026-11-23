@@ -59,6 +59,11 @@ const char *oxos_kernel_version(void) {
     return oxos_context->KernelVersion;
 }
 
+const char *oxos_title_path(void) {
+    const OXOS_KERNEL_INFO *kernel = oxos_context->Kernel;
+    return kernel && kernel->Size >= sizeof(OXOS_KERNEL_INFO) ? kernel->TitlePath : nullptr;
+}
+
 void *oxos_state(void) {
     return oxos_context->State;
 }
@@ -248,8 +253,8 @@ void oxos_list_free(char **Names) {
         ExFreePool(Names);
 }
 
-// --- Data: one [section] of the extension's own NAME.ini (oxos_sdk.h §4a), read from the disk at each call, a piece at a time, so a large file never sits in
-// memory; two passes (count, then copy) give one block for oxos_ini_free
+// --- Data: one [section] of the extension's own NAME.ini, or the names of its sections (oxos_sdk.h §4a), read from the disk at each call, a piece at a time,
+// so a large file never sits in memory; two passes (count, then copy) give one block for oxos_ini_free or oxos_list_free
 
 namespace {
 
@@ -260,15 +265,16 @@ constexpr KIRQL PASSIVE = 0;
 constexpr NTSTATUS STATUS_END_OF_FILE_CODE = static_cast<NTSTATUS>(0xC0000011), STATUS_OBJECT_NAME_NOT_FOUND_CODE = static_cast<NTSTATUS>(0xC0000034),
                    STATUS_INVALID_DEVICE_STATE_CODE = static_cast<NTSTATUS>(0xC0000184), STATUS_NOT_SUPPORTED_CODE = static_cast<NTSTATUS>(0xC00000BB);
 
-// One pass over the file, looking for Section: the first pass counts its keys and their text, the second (Keys set) copies them.
+// One pass over the file, looking for Section (null: listing every section's name): the first pass counts its keys (or the names) and their text, the
+// second (Block set) copies them.
 struct SECTION_READER {
     const char *Section;
     ULONG SectionLength;
-    bool InSection;     // the lines being read are the section's
-    bool Found;         // its [header] was seen
-    uint32_t Count;     // its keys so far
-    ULONG TextBytes;    // their keys and values, each with its terminating 0
-    OXOS_INI_KEY *Keys; // second pass: where the keys go (at most Capacity), and their text after them, up to TextEnd
+    bool InSection;   // the lines being read are the section's
+    bool Found;       // its [header] was seen
+    uint32_t Count;   // its keys (or the names) so far
+    ULONG TextBytes;  // their keys and values (or the names), each with its terminating 0
+    void *Block;      // second pass: where the keys (OXOS_INI_KEY) or the names (char *) go, at most Capacity, and their text after them, up to TextEnd
     uint32_t Capacity;
     char *Text;
     char *TextEnd;
@@ -280,6 +286,20 @@ void TrimBlanks(const char *&Start, const char *&End) {
         Start++;
     while (End > Start && (End[-1] == ' ' || End[-1] == '\t' || End[-1] == '\r'))
         End--;
+}
+
+// A section's name, when Reader lists them: counted, and on the second pass copied.
+void ListINISection(SECTION_READER &Reader, const char *Name, ULONG Length) {
+    if (Reader.Block) {
+        if (Reader.Count == Reader.Capacity || Length + 1 > static_cast<ULONG>(Reader.TextEnd - Reader.Text)) // the file grew meanwhile
+            return;
+        memcpy(Reader.Text, Name, Length);
+        Reader.Text[Length] = 0;
+        static_cast<char **>(Reader.Block)[Reader.Count] = Reader.Text;
+        Reader.Text += Length + 1;
+    }
+    Reader.Count++;
+    Reader.TextBytes += Length + 1;
 }
 
 // One line of the file: a [section] header, a key = value line of the section looked for, or anything else (skipped).
@@ -294,6 +314,11 @@ void ReadINILine(SECTION_READER &Reader, const char *Line, ULONG Length) {
         const char *name = start + 1;
         const char *nameEnd = close ? close : name;
         TrimBlanks(name, nameEnd);
+        if (!Reader.Section) {
+            if (close && name < nameEnd)
+                ListINISection(Reader, name, nameEnd - name);
+            return;
+        }
         Reader.InSection = close && static_cast<ULONG>(nameEnd - name) == Reader.SectionLength &&
                            strncasecmp(name, Reader.Section, Reader.SectionLength) == 0;
         Reader.Found = Reader.Found || Reader.InSection;
@@ -312,14 +337,14 @@ void ReadINILine(SECTION_READER &Reader, const char *Line, ULONG Length) {
     ULONG valueLength = valueEnd - value;
     if (!keyLength)
         return;
-    if (Reader.Keys) {
+    if (Reader.Block) {
         if (Reader.Count == Reader.Capacity || keyLength + valueLength + 2 > static_cast<ULONG>(Reader.TextEnd - Reader.Text)) // the file grew meanwhile
             return;
         memcpy(Reader.Text, key, keyLength);
         Reader.Text[keyLength] = 0;
         memcpy(Reader.Text + keyLength + 1, value, valueLength);
         Reader.Text[keyLength + 1 + valueLength] = 0;
-        Reader.Keys[Reader.Count] = {Reader.Text, Reader.Text + keyLength + 1};
+        static_cast<OXOS_INI_KEY *>(Reader.Block)[Reader.Count] = {Reader.Text, Reader.Text + keyLength + 1};
         Reader.Text += keyLength + valueLength + 2;
     }
     Reader.Count++;
@@ -369,10 +394,10 @@ NTSTATUS ReadINIPass(const char *Path, SECTION_READER &Reader, char *Buffer) {
     return status;
 }
 
-} // namespace
-
-NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Count) {
-    Keys = nullptr;
+// Both passes over the extension's NAME.ini for Section (null: the section names), into one block from the pool: Count entries of EntryBytes each, then their
+// text. Block stays null when there is nothing to copy.
+NTSTATUS ReadINIBlock(const char *Section, ULONG EntryBytes, void *&Block, uint32_t &Count) {
+    Block = nullptr;
     Count = 0;
     if (oxos_context->Size < sizeof(OXOS_CONTEXT) || !oxos_context->INIPath) // a kernel from before NAME.ini
         return STATUS_NOT_SUPPORTED_CODE;
@@ -381,27 +406,44 @@ NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Co
     auto buffer = static_cast<char *>(ExAllocatePoolWithTag(INI_READ_BYTES + INI_LINE_MAX, INI_POOL_TAG));
     if (!buffer)
         return STATUS_INSUFFICIENT_RESOURCES_CODE;
-    SECTION_READER counting = {Section, static_cast<ULONG>(strlen(Section))};
+    ULONG sectionLength = Section ? static_cast<ULONG>(strlen(Section)) : 0;
+    SECTION_READER counting = {Section, sectionLength};
     NTSTATUS status = ReadINIPass(oxos_context->INIPath, counting, buffer);
-    if (NT_SUCCESS(status) && !counting.Found)
+    if (NT_SUCCESS(status) && Section && !counting.Found)
         status = STATUS_OBJECT_NAME_NOT_FOUND_CODE;
     if (NT_SUCCESS(status) && counting.Count) {
-        ULONG arrayBytes = counting.Count * sizeof(OXOS_INI_KEY);
-        auto block = static_cast<OXOS_INI_KEY *>(ExAllocatePoolWithTag(arrayBytes + counting.TextBytes, INI_POOL_TAG));
-        SECTION_READER copying = {Section, counting.SectionLength};
-        copying.Keys = block;
+        ULONG arrayBytes = counting.Count * EntryBytes;
+        auto block = static_cast<char *>(ExAllocatePoolWithTag(arrayBytes + counting.TextBytes, INI_POOL_TAG));
+        SECTION_READER copying = {Section, sectionLength};
+        copying.Block = block;
         copying.Capacity = counting.Count;
-        copying.Text = reinterpret_cast<char *>(block) + arrayBytes;
+        copying.Text = block + arrayBytes;
         copying.TextEnd = copying.Text + counting.TextBytes;
         status = block ? ReadINIPass(oxos_context->INIPath, copying, buffer) : STATUS_INSUFFICIENT_RESOURCES_CODE;
         if (NT_SUCCESS(status)) {
-            Keys = block;
+            Block = block;
             Count = copying.Count < counting.Count ? copying.Count : counting.Count;
         } else if (block) {
             ExFreePool(block);
         }
     }
     ExFreePool(buffer);
+    return status;
+}
+
+} // namespace
+
+NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Count) {
+    void *block;
+    NTSTATUS status = ReadINIBlock(Section, sizeof(OXOS_INI_KEY), block, Count);
+    Keys = static_cast<OXOS_INI_KEY *>(block);
+    return status;
+}
+
+NTSTATUS oxos_ini_sections(char **&Names, uint32_t &Count) {
+    void *block;
+    NTSTATUS status = ReadINIBlock(nullptr, sizeof(char *), block, Count);
+    Names = static_cast<char **>(block);
     return status;
 }
 
@@ -437,6 +479,45 @@ BOOLEAN oxos_title_redirect(const OXOS_TITLE_LOADING *Title, const char *Path) {
         return FALSE;
     memcpy(Title->Target, Path, length + 1);
     return TRUE;
+}
+
+BOOLEAN oxos_on_pad_changed(void (*Callback)(const OXOS_PAD_STATE &State, void *UserData), void *UserData) {
+    return RegisterEvent(OXOS_EVENT_PAD_CHANGED, reinterpret_cast<PVOID>(Callback), UserData); // a reference is passed as a pointer
+}
+
+// --- Toasts (oxos_sdk.h §8; the queue is the kernel's, exports 436-437)
+
+NTSTATUS oxos_toast(const char *Format, ...) {
+    char text[OXOS_TOAST_LINE_MAX + 1]; // a longer line is cut
+    va_list args;
+    va_start(args, Format);
+    vsnprintf(text, sizeof(text), Format, args);
+    va_end(args);
+    for (char *c = text; *c; c++) {
+        if (*c < 0x20 || *c > 0x7E)
+            *c = ' ';
+    }
+    OXOS_TOAST toast = {text, OXOS_TOAST_BOTTOM_CENTRE, 0, 0};
+    return oxos_toast_enqueue(toast);
+}
+
+namespace {
+
+// The extension's toast callback: the kernel's event carries an OXOS_TOAST_NOTICE, which ToastEvent unpacks for it.
+void (*ToastCallback)(ULONG ToastId, OXOS_TOAST_EVENT Event, void *UserData);
+
+void ToastEvent(const void *Data, void *UserData) {
+    auto notice = static_cast<const OXOS_TOAST_NOTICE *>(Data);
+    ToastCallback(notice->ToastId, notice->Event, UserData);
+}
+
+} // namespace
+
+BOOLEAN oxos_on_toast(void (*Callback)(ULONG ToastId, OXOS_TOAST_EVENT Event, void *UserData), void *UserData) {
+    if (!Callback || ToastCallback)
+        return FALSE;
+    ToastCallback = Callback;
+    return RegisterEvent(OXOS_EVENT_TOAST, reinterpret_cast<PVOID>(ToastEvent), UserData);
 }
 
 BOOLEAN oxos_on_title_loading(void (*Callback)(const OXOS_TITLE_LOADING *Title, void *UserData), void *UserData) {

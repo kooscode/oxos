@@ -25,7 +25,8 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Launch redirects:** `[launch_redirect]` in `C:\OXOS\oxos_settings.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live
   updater instead of the old one ([how to use it](docs/launch_redirect.md)).
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
-- **In-Game Reset (IGR):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK).
+- **In-Game Shortcuts (IGS):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK), plus your own button combinations to start any XBE,
+  in every title, with a toast on screen first (`C:\OXOS\extensions\oxos_igs.ini`).
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
 - **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.
@@ -139,7 +140,7 @@ unattended on a [hardware-in-the-loop rig](docs/hwitl.md).
 What OXOS adds to a stock kernel, and what is planned next: [`spec/oxos_features.md`](spec/oxos_features.md).
 
 ## Credits and license
-OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0), rmenhal's in-game reset hook and
+OXOS is GPL-2.0 ([`LICENSE`](LICENSE)). It uses [XboxDev/cromwell](https://github.com/XboxDev/cromwell) (GPL-2.0), rmenhal's in-game reset and
 virtual DVD drive from NKPatcher (GPL-2.0), Paul Bartholomew's (oz_paulb) LBA48 patch and partition table (GPL), Team Resurgent's
 [Hermes](https://github.com/Team-Resurgent/Hermes) mount request (GPL-3.0) and libCCI's CCI format (GPL-2.0), EvoX M8+ as the reference studied for
 large disks and the in-game reset, Intel's Pentium III microcode,

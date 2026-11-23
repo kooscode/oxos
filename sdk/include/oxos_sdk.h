@@ -67,6 +67,7 @@ ULONG oxos_setting_number(const char *Key, ULONG Default);
 
 ULONG oxos_launch_number(void);        // launches since the cold boot: 1 = the cold boot's title
 const char *oxos_kernel_version(void); // e.g. "0.4.7"
+const char *oxos_title_path(void);     // the running title's XBE (\Device\...), from the title-loaded event on; null before
 
 // The state page: 4 KB that keep their contents from one launch to the next, until the next cold boot. All zero at the first launch, and again when the
 // extension's Version changes (a new build may keep other data in it). Never null.
@@ -141,6 +142,9 @@ typedef struct OXOS_INI_KEY {
 
 #ifdef __cplusplus // C++: references (as oxos_file_list; C extensions do without)
 NTSTATUS oxos_ini_section(const char *Section, OXOS_INI_KEY *&Keys, uint32_t &Count);
+// The names of the file's sections, in its order, as oxos_file_list gives names (free them with oxos_list_free); none: Count 0. For an extension whose
+// sections are the user's to name (each a shortcut, say).
+NTSTATUS oxos_ini_sections(char **&Names, uint32_t &Count);
 #endif
 // The value of Key (any case) among the Count keys oxos_ini_section returned, or null.
 const char *oxos_ini_value(const OXOS_INI_KEY *Keys, uint32_t Count, const char *Key);
@@ -205,6 +209,103 @@ BOOLEAN oxos_on_title_exiting(void (*Callback)(const OXOS_TITLE_EXITING *Title, 
 // or a dashboard started Title->Path), or the disc the console starts without one (power-on; not the dashboard, a netbooted title, or a launch redirect's own
 // target). FALSE when this one cannot be, when an extension loaded earlier has already redirected it, or when Path is longer than 359 characters.
 BOOLEAN oxos_title_redirect(const OXOS_TITLE_LOADING *Title, const char *Path);
+
+// --- 7. Pads, title launches and resets (spec/oxos_internal/34 §7.3)
+//
+// The pads' state comes from the USB host controllers (spec/oxos_internal/22 §9), for every title however it was built. Buttons: the OXOS_PAD_* bits, the
+// analog buttons counting as held past half way.
+
+#define OXOS_PAD_DPAD_UP 0x0001
+#define OXOS_PAD_DPAD_DOWN 0x0002
+#define OXOS_PAD_DPAD_LEFT 0x0004
+#define OXOS_PAD_DPAD_RIGHT 0x0008
+#define OXOS_PAD_START 0x0010
+#define OXOS_PAD_BACK 0x0020
+#define OXOS_PAD_LEFT_THUMB 0x0040 // the left stick pressed
+#define OXOS_PAD_RIGHT_THUMB 0x0080
+#define OXOS_PAD_A 0x0100
+#define OXOS_PAD_B 0x0200
+#define OXOS_PAD_X 0x0400
+#define OXOS_PAD_Y 0x0800
+#define OXOS_PAD_BLACK 0x1000
+#define OXOS_PAD_WHITE 0x2000
+#define OXOS_PAD_LEFT_TRIGGER 0x4000
+#define OXOS_PAD_RIGHT_TRIGGER 0x8000
+
+typedef struct OXOS_PAD_STATE {
+    ULONG Port;      // the pad: 0-3, in the order the kernel first saw each pad's reports (not necessarily the port it is plugged into)
+    ULONG Buttons;   // OXOS_PAD_* bits
+    UCHAR Analog[8]; // the analog buttons A B X Y BLACK WHITE LT RT, 0-255
+    SHORT ThumbLX, ThumbLY, ThumbRX, ThumbRY;
+} OXOS_PAD_STATE;
+
+#ifdef __cplusplus // C++: references (as oxos_file_list; C extensions do without)
+// Callback runs on the run-loop thread, at passive level, once for each change of a pad's Buttons (not for every report). Register in ExtensionStart.
+BOOLEAN oxos_on_pad_changed(void (*Callback)(const OXOS_PAD_STATE &State, void *UserData), void *UserData);
+// The last report of pad Port; FALSE when no report of that pad has been seen.
+BOOLEAN oxos_pad_state(ULONG Port, OXOS_PAD_STATE &State);
+#endif
+
+#define OXOS_RESET_COLD 1 // power the console off and on (through the SMC): the BIOS, netboot and the disc start again
+#define OXOS_RESET_WARM 2 // the console's reset (through the SMC)
+
+// Stops the title (its threads suspended) and starts Path (a \Device\ path, as section 4's); null: the dashboard. At passive level only
+// (the run loop, an extension's own thread, a pad callback), never from a hook. Returns only on failure: STATUS_INVALID_DEVICE_STATE (not at passive
+// level), STATUS_DEVICE_BUSY (another launch or reset is already under way), STATUS_OBJECT_NAME_NOT_FOUND (no such XBE), STATUS_INVALID_PARAMETER.
+NTSTATUS oxos_title_launch(const char *Path);
+// Resets the console (OXOS_RESET_COLD or OXOS_RESET_WARM); returns only on failure (STATUS_INVALID_PARAMETER, STATUS_DEVICE_BUSY).
+NTSTATUS oxos_console_reset(ULONG Kind);
+
+// --- 8. Toasts: a short message over the running title (spec/oxos_internal/36)
+//
+// A box with one or two lines of text, on the GPU's video overlay: the title's own picture is never touched. The kernel queues the toasts of every extension
+// (8 at most) and shows them one after the other, each for its time, once the title has set its video mode. The user can switch toasts off ([toasts] in
+// C:\OXOS\oxos_settings.ini); every call then returns STATUS_NOT_SUPPORTED.
+//
+//   OXOS_TOAST toast = {"Saving: savegame.dat", OXOS_TOAST_TOP_RIGHT, 3};
+//   if (NT_SUCCESS(oxos_toast_enqueue(toast)))
+//       oxos_log("toast %lu queued", toast.ToastId);
+
+typedef enum OXOS_TOAST_PLACE {
+    OXOS_TOAST_TOP_LEFT,
+    OXOS_TOAST_TOP_CENTRE,
+    OXOS_TOAST_TOP_RIGHT,
+    OXOS_TOAST_MIDDLE_LEFT,
+    OXOS_TOAST_MIDDLE_CENTRE,
+    OXOS_TOAST_MIDDLE_RIGHT,
+    OXOS_TOAST_BOTTOM_LEFT,
+    OXOS_TOAST_BOTTOM_CENTRE, // the usual place
+    OXOS_TOAST_BOTTOM_RIGHT,
+} OXOS_TOAST_PLACE;
+
+#define OXOS_TOAST_LINE_MAX 42 // characters in one line of a toast: the box then fits between the side margins
+
+typedef struct OXOS_TOAST {
+    const char *Text;       // one or two lines ('\n' between them) of printable ASCII, OXOS_TOAST_LINE_MAX characters each; the kernel copies it
+    OXOS_TOAST_PLACE Place; // where it shows
+    ULONG Seconds;          // how long it stays up, 1 to 30 seconds; 0 means the default (5 seconds)
+    ULONG ToastId;          // written by the kernel when the toast is queued (0 when it was not); the id its events carry
+} OXOS_TOAST;
+
+typedef enum OXOS_TOAST_EVENT {
+    OXOS_TOAST_SHOWN,   // it came up
+    OXOS_TOAST_HIDDEN,  // its time is up
+    OXOS_TOAST_DROPPED, // it never showed: no memory for its picture, or the title had the overlay on for the toast's whole time
+} OXOS_TOAST_EVENT;
+
+#ifdef __cplusplus // C++: references (as oxos_file_list; C extensions do without)
+// Queues Toast; never waits: any IRQL up to DISPATCH_LEVEL, hooks included. STATUS_SUCCESS (ToastId set); STATUS_DEVICE_BUSY (the queue is full: try again
+// later, or with oxos_toast_enqueue_wait); STATUS_CANCELLED (the title is ending); STATUS_NOT_SUPPORTED (toasts are off); STATUS_INVALID_PARAMETER (the
+// text, place or time is wrong).
+NTSTATUS oxos_toast_enqueue(OXOS_TOAST &Toast);
+// The same, waiting up to TimeoutMs for room in the queue (STATUS_TIMEOUT when there was none). At passive level only (the run loop, an extension's own
+// thread, an event callback), never from a hook.
+NTSTATUS oxos_toast_enqueue_wait(OXOS_TOAST &Toast, ULONG TimeoutMs);
+#endif
+// One line, formatted as oxos_log formats it, at the bottom centre for 5 seconds; never waits.
+NTSTATUS oxos_toast(const char *Format, ...);
+// Callback gets the extension's own toasts' events, on the run-loop thread at passive level. Register in ExtensionStart, once (a second call returns FALSE).
+BOOLEAN oxos_on_toast(void (*Callback)(ULONG ToastId, OXOS_TOAST_EVENT Event, void *UserData), void *UserData);
 
 // --- How the macros above work: nothing here to use
 

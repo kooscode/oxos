@@ -398,3 +398,8 @@ EXPORTS
     oxos_file_create                             @430 NONAME
     oxos_file_delete                             @431 NONAME
     oxos_file_rename_handle                      @432 NONAME
+    oxos_pad_state                               @433 NONAME
+    oxos_title_launch                            @434 NONAME
+    oxos_console_reset                           @435 NONAME
+    oxos_toast_enqueue                           @436 NONAME
+    oxos_toast_enqueue_wait                      @437 NONAME

@@ -31,6 +31,9 @@ void InitRtcLate();
 void InitPit();
 void InitPci();
 void IdleVideoOverlay();   // the video overlay stopped (cold boot and quick reboot)
+void PowerCycle();         // the console powered off and on through the SMC (smbus.cpp); any IRQL; does not return
+NTSTATUS ResetConsole(ULONG Kind); // exported as oxos_console_reset (spec/oxos_internal/34 §7.3): 1 power cycle, 2 the SMC's reset
+extern volatile LONG ConsoleStopping; // an extension's launch or reset (oxos_title_launch, oxos_console_reset) is under way: the first one wins
 void InitAcpiPm();
 void Pulse();
 void DetectHardware();

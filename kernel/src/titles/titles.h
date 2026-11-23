@@ -42,6 +42,9 @@ bool ServeFileManager();
 void ReadNetbootTitle();
 bool LaunchNetbootTitle();                        // boot-only: call it only while memory::BootPagesPresent()
 NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target = nullptr); // load an XBE (titles/title_loader.cpp); the caller enters it
+// Exported as oxos_title_launch (spec/oxos_internal/34 §7.3): stops the running title (its threads suspended) and starts Path (a \Device\ path to an XBE),
+// or the dashboard when Path is null, through the launch data page and a quick reboot. Returns only on failure.
+NTSTATUS SwitchTitle(const char *Path);
 // A whole file of at most MaxSize bytes, in pool memory the caller frees, with its length in *Got. Null when it does not open (*Status says why:
 // STATUS_OBJECT_NAME_NOT_FOUND when it does not exist), is empty or larger, or cannot be read (titles/title_loader.cpp; the kernel's files in C:\OXOS).
 char *ReadOXOSFile(PCSZ Path, ULONG MaxSize, ULONG Tag, ULONG *Got, NTSTATUS *Status);

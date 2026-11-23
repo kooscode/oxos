@@ -15,6 +15,7 @@ constexpr UCHAR SMC_ADDRESS = 0x20, SMC_RESET = 0x02, SMC_TRAY_STATE = 0x03, SMC
 static volatile ULONG CurrentTrayState = 0xFFFFFFFF, TrayStateChanges; // updated by SMC events
 static volatile UCHAR ShutdownPending;                                 // a shutdown or reset is under way
 static ULONG SmcScratch;                                               // the scratch register as last written
+volatile LONG ConsoleStopping;                                         // an extension's launch or reset is under way: the first one wins
 // Boot flags (the reference's 0x8003B138, kept across quick reboots), derived from the SMC at cold boot (spec/stock/12 §4): 0x08 SMC "reset on eject" off (0x19
 // = 1), 0x10/0x20/0x80 from the scratch register, 0x40 tray ejected at boot.
 XK_PERSIST volatile ULONG BootFlags;
@@ -264,6 +265,32 @@ extern "C" void KiQuickRebootQuiesce() {
     for (int i = 0; i < 100000 && (*(volatile ULONG *)0xFEF00098 & 1); i++) {
         // Wait for a frame being received to finish (NvRxStatus busy; bounded).
     }
+}
+
+// A power cycle through the SMC (register 0x02 = 0x40, the SMC's power-cycle command, xboxdevwiki "PIC"), so the next boot is a cold one: the in-game
+// reset's reboot (spec/oxos_internal/22 §6), now the kernel's last resort and oxos_console_reset(OXOS_RESET_COLD). A reset (0x02 = 1, then port 0xCF9) while a
+// title is using the GPU left most of the X-codes' GPU and memory set-up undone at the next boot (spec/oxos_internal/22 §5). The SMBus is polled, so this works
+// at any IRQL. If the SMC does not cut the power within two seconds, the reference reset follows.
+void PowerCycle() {
+    for (int i = 0; i < 5 && !NT_SUCCESS(HalWriteSMBusValue(SMC_ADDRESS, 0x02, FALSE, 0x40)); i++) {
+        // Retry until the SMC accepts the power cycle (up to five tries).
+    }
+    for (ULONG ms = 0; ms < 2000; ms++)
+        KeStallExecutionProcessor(1000);
+    HalReturnToFirmware(1);
+}
+
+// oxos_console_reset (spec/oxos_internal/34 §7.3): 1 powers the console off and on (PowerCycle), 2 resets it through the SMC. Returns only on failure.
+NTSTATUS ResetConsole(ULONG Kind) {
+    if (Kind != 1 && Kind != 2)
+        return (NTSTATUS)0xC000000D; // STATUS_INVALID_PARAMETER
+    if (InterlockedExchange(&ConsoleStopping, 1))
+        return (NTSTATUS)0x80000011; // STATUS_DEVICE_BUSY
+    XK_SERIAL("reset: an extension asks for a %s\n", Kind == 1 ? "power cycle" : "reset");
+    if (Kind == 1)
+        PowerCycle();
+    HalReturnToFirmware(1);
+    return (NTSTATUS)0xC0000001; // STATUS_UNSUCCESSFUL: not reached
 }
 
 // Routine 2 (quick reboot) runs the shutdown notifications and re-enters the kernel; every other routine resets at once: 4 (fatal error) first leaves scratch 2

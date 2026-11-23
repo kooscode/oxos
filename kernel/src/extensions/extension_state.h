@@ -55,6 +55,7 @@ struct XK_EXTENSIONS_STATE {
     KEVENT LoopStop;
     volatile ULONG LoopExtension; // the index of the extension whose RunLoop is running, or XK_NO_EXTENSION
     volatile ULONG LoopCallStart; // KeTickCount when that RunLoop was called
+    PKTHREAD LoopThreadObject;    // the run loop's thread: a launch it asks for (a pad callback) must not wait for it to end
 };
 namespace xk::extensions {
 extern XK_EXTENSIONS_STATE *LoadedExtensions; // null when no extension is loaded

@@ -8,7 +8,7 @@ namespace {
 
 const XK_KERNEL_MODULES Table = {
     xk::extensions::LoadListedExtensions,
-    xk::modules::ReadBootVideoSwitches,
+    xk::modules::ReadColdBootSwitches,
     xk::modules::FindLaunchRedirect,
     xk::modules::LoadListedDashboard,
     xk::modules::BuildTitlePatches,

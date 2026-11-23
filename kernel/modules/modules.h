@@ -6,7 +6,7 @@
 namespace xk::modules {
 
 // kernel_settings.cpp
-ULONG ReadBootVideoSwitches();
+ULONG ReadColdBootSwitches();
 // launch_redirect.cpp
 bool FindLaunchRedirect(PCSZ Path, char *Target, ULONG TargetSize);
 // dashboard_resolver.cpp

@@ -5,7 +5,7 @@
 #include <hardware/chipset/chipset.h>
 #include <hardware/video/video.h>
 #include <diagnostics/diagnostics.h>
-#include <in_game_reset/in_game_reset.h>
+#include <hardware/usb/pad_reports.h>
 #include <memory/memory.h>
 #include <storage/storage.h>
 #include <runtime/runtime.h>
@@ -128,6 +128,7 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     objects::InitObjectManager();
     KiBootStep("I/O manager");
     io::InitIoSystem();
+    hardware::usb::StartPadReports(); // the pads' state while titles run (spec/oxos_internal/22 §9)
     filesystems::InitFileSystems();
     InitializeSystemTime();
     KiBootStep("EEPROM");
@@ -164,14 +165,14 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     }
 #endif
 #if XK_REBOOT_TEST
-    { // debug (make REBOOT_TEST=N): a reboot N seconds into every boot (also inside a title), through the in-game reset
+    { // debug (make REBOOT_TEST=N): a reboot N seconds into every boot (also inside a title), through the power cycle
         struct R {
             static void NTAPI Run(PVOID) {
                 LARGE_INTEGER t;
                 t.QuadPart = -10000000LL * XK_REBOOT_TEST;
                 KeDelayExecutionThread(KernelMode, FALSE, &t);
-                XK_SERIAL("reboot test: the in-game reset's reboot\n");
-                in_game_reset::Reboot();
+                XK_SERIAL("reboot test: the power cycle\n");
+                hardware::chipset::PowerCycle();
             }
         };
         CreateSystemThread(R::Run, nullptr, 0, 8);

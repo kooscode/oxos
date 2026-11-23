@@ -63,8 +63,9 @@ ap.add_argument("--net-udp", type=int, metavar="PORT",
                 help="network: xemu's udp backend, sending the console's Ethernet frames to 127.0.0.1:PORT "
                 "(tools/netboot/netboot.py --xemu PORT serves netboot from them)")
 ap.add_argument("--net-forward", action="append", default=[], metavar="HOST:GUEST",
-                help="network: xemu's nat backend (the console gets 10.0.2.15 by DHCP), with TCP port HOST on this "
-                "PC forwarded to the console's GUEST, repeatable (e.g. the FTP server: 2121:21 plus its data ports)")
+                help="network: xemu's nat backend (the default: the console gets 10.0.2.15 by DHCP, DNS through this PC), with TCP "
+                "port HOST on this PC forwarded to the console's GUEST, repeatable (e.g. the FTP server: 2121:21 plus its data ports)")
+ap.add_argument("--no-net", action="store_true", help="no network card (by default the console is on xemu's nat network)")
 a = ap.parse_args()
 
 work = tempfile.mkdtemp(prefix="xk-run-")
@@ -104,7 +105,7 @@ def config(path, extra=""):
         + ("\n[net]\nenable = true\nbackend = 'nat'\n[net.nat]\nforward_ports = ["
            + ", ".join(f"{{host = {h}, guest = {g}, protocol = 'tcp'}}"
                        for h, g in (f.split(":") for f in a.net_forward)) + "]\n"
-           if a.net_forward and not a.net_udp else ""))
+           if not a.net_udp and not a.no_net else ""))
 
 
 def follow(path, proc, on_line=None):

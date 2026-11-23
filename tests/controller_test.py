@@ -5,12 +5,19 @@ title receives for each.
 The title (tests/controller_test_title) is built with nxdk and keeps its state in a block with the signature "XKCTLTST"; this script finds it in a RAM dump (QMP
 pmemsave) and then reads it through its virtual address after each press.
 
-usage: controller_test.py --bios BIOS --iso controller_test_title.iso [--mcpx-rom MCPX] [--hdd HDD] [--xemu PATH]
+With --igs (oxos_igs.xos, a FATX --hdd), also the in-game shortcuts (spec/oxos_internal/48) on the same pad: the disk gets the extension with one shortcut,
+BLACK + WHITE -> coldboot at once (launch_delay = 0); pressing it must power the console off and on (the title starts again: its report count starts over)
+and log its line in C:\\OXOS\\log\\extensions.log. Then LT + RT + BACK + BLACK held 3.5 s, which no shortcut uses, must do the same through the kernel's last
+resort (spec/oxos_internal/48 §5).
+
+usage: controller_test.py --bios BIOS --iso controller_test_title.iso [--mcpx-rom MCPX] [--hdd HDD] [--igs oxos_igs.xos] [--xemu PATH]
 """
 import argparse, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from virtual_gamepad import VPAD_PRODUCT, VPAD_VENDOR, XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
+from qcow2 import Qcow2  # noqa: E402
+from fatx import FATX, FATXWriter  # noqa: E402
 
 ANALOG = ["A", "B", "X", "Y", "BLACK", "WHITE", "LT", "RT"]
 DIGITAL = ["UP", "DOWN", "LEFT", "RIGHT", "START", "BACK", "LS", "RS"]
@@ -110,6 +117,108 @@ class PadState:
         return out
 
 
+# The in-game shortcuts' test set-up (--igs): the extension, listed and logging, with one shortcut.
+IGS_EXTENSIONS_INI = "[oxos_igs]\r\nextension = oxos_igs.xos\r\nenabled = yes\r\nlogging_enabled = yes\r\n"
+IGS_INI = "[test]\r\nbuttons = black + white\r\naction = coldboot\r\nlaunch_delay = 0\r\n"
+IGS_LOG_LINE = "[oxos_igs] [test] black + white: coldboot"
+
+
+def install_igs(hdd, xos):
+    """oxos_igs.xos, its oxos_igs.ini and an oxos_extensions.ini listing it, on C: of the FATX disk hdd."""
+    q = Qcow2(hdd)
+    w = FATXWriter(q, "C")
+    w.makedirs("OXOS\\extensions")
+    w.write_file("OXOS\\oxos_extensions.ini", IGS_EXTENSIONS_INI.encode())
+    w.write_file("OXOS\\extensions\\oxos_igs.ini", IGS_INI.encode())
+    w.write_file("OXOS\\extensions\\oxos_igs.xos", open(xos, "rb").read())
+    q.save(hdd + ".new")
+    os.replace(hdd + ".new", hdd)
+
+
+def report_count(state, slot):
+    """The pad's report count in the title's state block, or None when the block cannot be read (its address not mapped) or the pad is gone."""
+    try:
+        s = state.slots()[slot]
+    except struct.error:  # memsave wrote nothing: the address is not mapped
+        return None
+    return s["reports"] if s["present"] else None
+
+
+def wait_for_restart(state, slot, seconds=90):
+    """True once the title runs again after a power cycle. First the reboot, within 20 s: the pad's report count stops (xemu keeps the RAM through a power
+    cycle, so the old block stays readable), falls, or cannot be read. Then a title's block whose count climbs again."""
+    deadline = time.time() + 20
+    last, still = report_count(state, slot), 0
+    while time.time() < deadline:
+        time.sleep(0.5)
+        count = report_count(state, slot)
+        still = still + 1 if count is not None and count == last else 0
+        if count is None or (last is not None and count < last) or still >= 6:
+            break
+        last = count
+    else:
+        print(f"    no reboot within 20 s: the report count went on ({last})")
+        return False
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        time.sleep(3)
+        try:
+            if not state.locate():
+                continue
+        except struct.error:
+            continue
+        before = [report_count(state, i) for i in range(SLOTS)]
+        time.sleep(1)
+        after = [report_count(state, i) for i in range(SLOTS)]
+        if any(b is not None and a is not None and a > b for b, a in zip(before, after)):
+            return True
+    print(f"    the title did not start again within {seconds} s")
+    return False
+
+
+def wait_for_pad(state, seconds=60):
+    """The slot of the first pad reporting (more than 50 reports), or None."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            for i, s in enumerate(state.slots()):
+                if s["present"] and s["reports"] > 50:
+                    return i
+        except struct.error:  # not mapped for a moment
+            pass
+        time.sleep(1)
+    return None
+
+
+def check_shortcuts(pad, state, slot):
+    """The in-game shortcut and the kernel's last resort (--igs); True when both power-cycled the console (the log line is checked once xemu has stopped,
+    check_shortcut_log)."""
+    ok = True
+    for name, controls, hold in (("in-game shortcut BLACK + WHITE -> coldboot", ("RB", "LB"), 0.5),
+                                 ("the kernel's last resort: LT + RT + BACK + BLACK held 3 s", ("LT", "RT", "BACK", "RB"), 3.5)):
+        for control in controls:
+            pad.set(control, 255 if control in ("LT", "RT") else 1)
+        time.sleep(hold)
+        for control in controls:
+            pad.set(control, 0)
+        restarted = wait_for_restart(state, slot)
+        slot = wait_for_pad(state) if restarted else slot
+        passed = restarted and slot is not None
+        ok &= passed
+        print(f"  [{'PASS' if passed else 'FAIL'}] {name}: the console powered off and on, the title started again")
+        if slot is None:
+            return False
+    return ok
+
+
+def check_shortcut_log(hdd):
+    """The shortcut's line in C:\\OXOS\\log\\extensions.log, read once xemu has written the disk and stopped."""
+    log = (FATX(Qcow2(hdd), "C").read_file("OXOS\\log\\extensions.log") or b"").decode("latin-1").split("\r\n")
+    logged = IGS_LOG_LINE in log
+    print(f"  [{'PASS' if logged else 'FAIL'}] C:\\OXOS\\log\\extensions.log: '{IGS_LOG_LINE}'")
+    return logged
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bios", required=True)
@@ -118,12 +227,15 @@ def main():
     ap.add_argument("--hdd")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     ap.add_argument("--hold", type=float, default=0.3, help="seconds each input is held")
+    ap.add_argument("--igs", metavar="XOS", help="oxos_igs.xos: also test the in-game shortcuts and the kernel's last resort (needs --hdd)")
     a = ap.parse_args()
 
     work = tempfile.mkdtemp(prefix="xk-pad-")
     sock, cfg, hdd = (os.path.join(work, n) for n in ("qmp.sock", "xemu.toml", "hdd.qcow2"))
     if a.hdd:
         shutil.copyfile(a.hdd, hdd)
+        if a.igs:
+            install_igs(hdd, a.igs)
     open(cfg, "w").write(
         "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
@@ -182,6 +294,8 @@ def main():
             print(f"  [{'PASS' if passed else 'FAIL'}] {control}={value} -> {expected}{note}")
         reports = state.slots()[slot]["reports"]
         print(f"  {reports} input reports received")
+        if a.igs and a.hdd:
+            ok &= check_shortcuts(pad, state, slot)
     finally:
         proc.terminate()
         try:
@@ -190,6 +304,8 @@ def main():
             proc.kill()
         log.close()
         pad.close()
+    if a.igs and a.hdd and ok:
+        ok &= check_shortcut_log(hdd)
     if os.path.exists(hdd):
         os.remove(hdd)
     print("RESULT:", "PASS" if ok else f"FAIL (logs in {work})")

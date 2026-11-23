@@ -7,6 +7,7 @@
 #include <arch/arch.h>
 #include <core/core.h>
 #include <titles/titles.h>
+#include <toasts/toasts.h>
 
 // Each encoder's tables have their own part of the boot-only data (spec/oxos_internal/18_boot_memory.md), first in it (right after the kept image, so the
 // Conexant's share its last page), each after a marker: the pages of the two encoders the console does not have are freed before the first title starts
@@ -925,6 +926,7 @@ static bool ReferenceDisplayMode(volatile UCHAR *regs, ULONG Mode, ULONG Format,
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer) {
     auto regs = (volatile UCHAR *)RegisterBase;
     SetDisplayModeCalls = SetDisplayModeCalls + 1;
+    toasts::NoteDisplayModeSet(); // the title's video is set up: toasts may show (spec/oxos_internal/36 §3.4)
     if (!Mode)
         Mode = 0x0F010101;
     // Encoder modes other than the VGA class (the reference has no VGA rows; spec 22 §13): the reference mode change.

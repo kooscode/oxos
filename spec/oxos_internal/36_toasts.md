@@ -1,8 +1,10 @@
-# 36. Toasts: short messages on screen while a title runs (proposal)
+# 36. Toasts: short messages on screen while a title runs
 
-Status: **proposal**, not implemented (user, 2026-11-14: "write it up as a proposal ... would be nice if extensions could also popup a toast"; reworked
-2026-11-23 after a pilot on the GPU's video overlay, user: "update the toast spec to use pvideo and the rest of implementation proposals"). Nothing here is
-decided until the user says so.
+Status: **implemented 2026-11-23** (user, 2026-11-14: "write it up as a proposal ... would be nice if extensions could also popup a toast"; reworked
+2026-11-23 after a pilot on the GPU's video overlay, user: "update the toast spec to use pvideo and the rest of implementation proposals"; built the same
+day for the in-game shortcuts, spec 48, user: "go ahead with the toast service - get it all working end to end"). Code: `kernel/src/toasts/` (the queue
+`toast_queue.cpp`, the display `toast_overlay.cpp`, the box's size, place and colours `toast_layout.h`), the SDK's section 8 (`sdk/include/oxos_sdk.h`),
+`sdk/examples/example_toast`. Tests: `tests/unit/test_toasts.cpp`. The kernel's own toasts (§2) are not built: each is a decision of its own.
 
 **Credit:** showing toasts on the NV2A's video overlay (PVIDEO) instead of drawing into the title's frames was suggested by
 [JayFoxRox](https://github.com/JayFoxRox) in [issue #7](https://github.com/kooscode/oxos/issues/7): the first version wrote into the game's memory, which
@@ -16,23 +18,24 @@ open". Extensions push toasts through a kernel export (§5); a toast can carry a
 ## 1. What a toast is
 | Field | Meaning |
 |---|---|
-| Text | one or two lines of printable ASCII (the kernel's font, `graphics::DrawText`), at most 48 characters a line; longer is cut |
+| Text | one or two lines of printable ASCII (the kernel's font, `graphics::DrawText`), at most 42 characters a line (`OXOS_TOAST_LINE_MAX`: the widest box then fits between the side margins in 640x480); anything else is refused (`STATUS_INVALID_PARAMETER`); `oxos_toast` cuts its one line to fit |
 | Place | one of nine anchors (top, middle or bottom; left, centre or right), in fractions of the screen, so it lands in the same place in every mode (§3.3) |
 | Time | how long it stays up, 1 to 30 seconds (default 5) |
-| Action (optional) | a button combination and an XBE path: pressing the combination while the toast is up starts that XBE (§4) |
 
-- **One toast at a time.** Others wait in a queue (8 entries) and follow in order; when the queue is full the push fails (§5), the queue is never reordered.
-- **Look:** OXOS's colours from the boot splash: black box, a border in OXOS green `#8BE31F`, "OXOS" or the extension's short name in green, the text in
-  `#F4FFE6`.
-- **The title keeps running and keeps its controllers.** A toast with an action only watches for its combination (§4); every button still reaches the title.
+- **One toast at a time.** Others wait in a queue (8 entries) and follow in order; when the queue is full, `oxos_toast_enqueue` fails and the caller may try
+  again, or `oxos_toast_enqueue_wait` waits for room (§5); the queue is never reordered.
+- **Look:** OXOS's colours from the boot splash: black box, a 3-pixel border in OXOS green `#8BE31F`, the text in `#F4FFE6` (font scale 2: 12 pixels a
+  character, lines 20 pixels apart). The box is as wide as its longest line plus 16 pixels each side, rounded up to 32 pixels (§3.2's pitch), and
+  44 pixels high for one line, 64 for two.
+- **The title keeps running and keeps its controllers.** A toast is never interactive itself; an extension can act on buttons while its toast is up (§4).
 
 ## 2. Who shows one
 - **The kernel**, for its own events, each a decision of its own when it is built: the in-game reset's combination seen (spec 22), an extension unloaded or a
   slow run loop (spec 34 §4.3), a log file that could not be written (spec 35).
-- **Extensions**, through the export (§5), from `ExtensionStart` (the toast waits until the title has run 5 seconds), from `ExtensionRunLoop`, from a hook or a
-  title event.
-- **The user switches them off** with one setting (`[toasts]` in `C:\OXOS\oxos_settings.ini`, `enabled = no`); the export then returns FALSE and nothing
-  shows. Safe boot (B held) shows no toasts.
+- **Extensions**, through the export (§5), from `ExtensionStart` (the toast waits until the title has set its video mode, §3.4), from `ExtensionRunLoop`,
+  from a hook or a title event.
+- **The user switches them off** with one setting (`[toasts]` in `C:\OXOS\oxos_settings.ini`, `enabled = no`, read at the cold boot by the kernel
+  settings module); the exports then return `STATUS_NOT_SUPPORTED` and nothing shows. Safe boot (B held) loads no extensions, so no toasts.
 
 ## 3. How the kernel shows one: the GPU's video overlay (PVIDEO)
 The NV2A has a video overlay: the CRTC blends a second picture, from its own buffer in memory, over the frame it scans out. The title's frames, its frame
@@ -65,32 +68,43 @@ NV2A registers at 0xFD000000 + offset, as the open nouveau driver documents the 
 - **The buffer** (384 x 44 x 2 = 33 KB in the pilot) is contiguous memory taken when the toast shows and freed after it, write-combined.
 
 ### 3.3 Place in every mode
-The kernel reads the mode in use (width, height, interlaced; from the CRTC's timing registers, or from the mode the title set through `AvSetDisplayMode`) and
-places the anchor in fractions of it: bottom centre is (width / 2 - box / 2, height × 0.85). The box is drawn once at 480-line size; in 720p and 1080i the
-overlay scales it up itself (DS_DX / DT_DY below 1 << 20), so the font is the same size on every screen and nothing is drawn twice. Interlaced modes (480i,
-1080i) need the field handling checked on hardware.
+The kernel reads the mode in use from the NV2A's flat-panel timing, which every mode set writes: the vertical display end (0x680800) and the horizontal
+display end (0x680820), each the active size minus one. Not the horizontal CRTC size (0x680828): the encoders' 640-pixel modes hold 600 there, and a toast
+placed by it sat 20 pixels left of centre (xemu, 2026-11-23). Values outside 320-1920 x 240-1080 (no mode set yet) count as 640x480. The box is drawn once
+at 480-line size and scaled by height / 480 on screen (DS_DX / DT_DY = box size << 20 / screen size), so the font is the same size on every screen and
+nothing is drawn twice; then it is placed:
+| Anchor | x | y |
+|---|---|---|
+| left / centre / right | 6% of the width / (width - box) / 2 / width - 6% - box | |
+| top / middle / bottom | | 10% of the height / (height - box) / 2 / height - 10% - box |
+
+In 640x480, a one-line toast of 26 characters is 352 x 44 at (144, 388) at the bottom centre. Interlaced modes (480i, 1080i: the timing holds one field,
+540 lines) need the field handling checked on hardware.
 
 ### 3.4 When and where
-A kernel thread of the toast service (§6) waits on the queue, at a low priority, from the title's start: it shows a toast only once the title has run 5
-seconds (titles set their video mode early), keeps it up for its time, hides it, and takes the next.
+The extensions' run loop (spec 34 §4.3, every millisecond) drives the display: no thread of its own. Each round it shows the next toast once the title has
+set its video mode, keeps it up for its time, hides it, and takes the next. **When toasts may show:** every title sets its mode through `AvSetDisplayMode`
+(nxdk's `XVideoSetMode` too), so a toast waits for the title's first mode set after the title-loaded event, and half a second more (a second mode set
+starts the half second again); a title that keeps the mode it was started in gets toasts 2 seconds after its start. The first version waited a fixed 5
+seconds from the start: an in-game shortcut pressed 4.5 s into a game got no toast (user, 2026-11-23: "is the toast allowed purely a timeout or we know
+video is ready?"). The run loop runs
+whenever an extension is loaded, and only extensions queue toasts, so a toast always has it.
 
-## 4. Actions: a button combination while the toast is up
-A toast may carry an action: a combination of buttons (the digital buttons and the analog buttons as pressed, e.g. BLACK + WHITE) and an XBE path. While the
-toast is up, and for one second after, the kernel compares the pads' state against the combination; when all of its buttons are held, it starts the XBE as a
-title launch does (a launch data page with that path, then a quick reboot, as `XLaunchNewImage`; spec/stock/05 §2), and the title ends.
-- **How the kernel sees the buttons: the USB host controllers' done lists** (spec 22 §9.2). At each USB interrupt, before the title's own handler, the kernel
-  reads the pads' 20-byte input reports the controller has just finished, through a reserved page (the title's USB buffers are often in its own memory). No
-  hook in the title: it works the same for every title, whether built with the XDK, nxdk or anything else, and the in-game reset uses the same reports.
-- **An action toast waits for the first pad report.** Games often sit in intro movies without reading a pad, and a combination cannot be seen before the title
-  reads its pads. The service holds an action toast until the first report of the title (up to 60 seconds), then shows it one second later and watches for the
-  combination while it is up. A toast without an action keeps the fixed delay (§3.4).
-- **The launch stops the title first** (spec 22 §9.3): the interrupt only sets a flag; the service's thread suspends every thread of the title, waits 50 ms,
-  writes the launch data page and quick-reboots. Without the suspend a title's code ran on during the reboot and stopped the kernel (§4.1).
-- **Rules:** a combination needs at least two buttons; it may not be the in-game reset's (LT + RT + BACK + BLACK) or a subset of it; an action toast says its
-  combination in its text. With toasts off (§2) no action can fire. An action toast whose XBE is the one already running (the same path as
-  `XeImageFileName`) is not shown: "BLACK + WHITE: FTP" never appears over the FTP server.
-- **Example:** an Xbox Live service extension pushes "Friend request: Name. BLACK + WHITE to open" with the action BLACK + WHITE →
-  `E:\Apps\Dashboard\default.xbe`.
+## 4. Actions: an extension acts while its toast is up
+The kernel's toast has no action of its own (user, 2026-11-23: "all the kernel does is queue up the toast and the extension can then get notified via
+callback when the toast on and when the toast is off, so it can monitor button combos and launch a title while toast is on screen"). An extension that wants
+one builds it from three kernel interfaces:
+1. **The toast's events** (§5): it queues its toast and keeps the `ToastId`; between that toast's "shown" and "hidden" events it watches for its combination.
+2. **The pads' changes** (spec 34 §7.3, `oxos_on_pad_changed`): the pads' state comes from the USB host controllers' done lists (spec 22 §9.2), for every
+   title however it was built.
+3. **A title launch or a reset** (spec 34 §7.3, `oxos_title_launch`, `oxos_console_reset`): the kernel stops the title's threads first (spec 22 §9.3).
+
+Rules for extensions that do this (the SDK documents them):
+- A combination needs at least two buttons, and the toast says it in its text ("Friend request: Name. BLACK + WHITE to open").
+- An extension does not offer to start the XBE that is already running (`XeImageFileName`): "BLACK + WHITE: FTP" never appears over the FTP server.
+- A title's controllers stay its own: every button still reaches the title; the extension only reads.
+- Games often sit in an intro without reading a pad: an action toast is best queued after the title's first pad report (the first `oxos_on_pad_changed`
+  call, or `oxos_pad_state` returning TRUE), so it is not over before its combination can be seen (§4.1).
 
 ### 4.1 Pilot (2026-11-23, the Conexant debug kit, a throwaway build)
 The toast "OXOS BLACK + WHITE: FTP" with the action BLACK + WHITE → `C:\OXOS\apps\oxos_ftp.xbe`:
@@ -103,44 +117,70 @@ The toast "OXOS BLACK + WHITE: FTP" with the action BLACK + WHITE → `C:\OXOS\a
 | A retail game (its USB buffers in its own memory), reading through 0x80000000 | bug check 0x1E in the interrupt dispatch: the buffer was not mapped there |
 | The same, reading through a reserved page | works: 2 threads suspended, 0.47 s from the press to the FTP server |
 
-## 5. The export and the SDK
-A kernel export of OXOS's own (after 432, spec 34 §9.1) takes a toast, copies it and queues it:
+## 5. The exports and the SDK
+Kernel exports of OXOS's own, cdecl, each the kernel's own function (spec 34 §9.1, as `oxos_file_create`): 436 `oxos_toast_enqueue` and 437
+`oxos_toast_enqueue_wait` are `toasts::EnqueueToast` and `toasts::EnqueueToastWait`. The SDK's library adds `oxos_toast` (formats one line, cut to 42
+characters, and queues it) and `oxos_on_toast` (registers event 5, `OXOS_EVENT_TOAST`, whose data is `{ToastId, Event}`, and unpacks it for the callback):
 ```cpp
-// oxos_sdk.h: toasts over the running title (spec/oxos_internal/36).
-typedef enum _OXOS_TOAST_PLACE {
+// oxos_sdk.h §8: toasts over the running title (spec/oxos_internal/36).
+typedef enum OXOS_TOAST_PLACE {
     OXOS_TOAST_TOP_LEFT, OXOS_TOAST_TOP_CENTRE, OXOS_TOAST_TOP_RIGHT,
     OXOS_TOAST_MIDDLE_LEFT, OXOS_TOAST_MIDDLE_CENTRE, OXOS_TOAST_MIDDLE_RIGHT,
     OXOS_TOAST_BOTTOM_LEFT, OXOS_TOAST_BOTTOM_CENTRE, OXOS_TOAST_BOTTOM_RIGHT,
 } OXOS_TOAST_PLACE;
 
-typedef struct _OXOS_TOAST {
-    const char *Text;          // one or two lines ('\n' between them), printable ASCII
-    OXOS_TOAST_PLACE Place;    // default OXOS_TOAST_BOTTOM_CENTRE
-    ULONG Seconds;             // how long it stays up, 1 to 30 seconds; 0 means the default (5 seconds)
-    ULONG ActionButtons;       // 0 = no action; else XINPUT_GAMEPAD_* digital bits | OXOS_TOAST_BUTTON_* analog buttons, held together
-    const char *ActionPath;    // the XBE the action starts, a drive path ("E:\\Apps\\Dashboard\\default.xbe")
+#define OXOS_TOAST_LINE_MAX 42
+
+typedef struct OXOS_TOAST {
+    const char *Text;       // one or two lines ('\n' between them) of printable ASCII, OXOS_TOAST_LINE_MAX characters each
+    OXOS_TOAST_PLACE Place; // where it shows
+    ULONG Seconds;          // how long it stays up, 1 to 30 seconds; 0 means the default (5 seconds)
+    ULONG ToastId;          // written by the kernel when the toast is queued (0 when it was not); the id its events carry
 } OXOS_TOAST;
 
-BOOLEAN oxos_toast_show(const OXOS_TOAST *Toast); // queued; FALSE when toasts are off, the queue is full or the toast is not valid (§4 rules)
-BOOLEAN oxos_toast(const char *Format, ...);      // one line, bottom centre, 5 seconds, no action: formatted like oxos_log
+NTSTATUS oxos_toast_enqueue(OXOS_TOAST &Toast);                        // queue it; never waits
+NTSTATUS oxos_toast_enqueue_wait(OXOS_TOAST &Toast, ULONG TimeoutMs);  // queue it, waiting up to TimeoutMs for room in the queue
+NTSTATUS oxos_toast(const char *Format, ...);                          // one line, bottom centre, 5 seconds: formatted like oxos_log, never waits
+
+typedef enum OXOS_TOAST_EVENT { OXOS_TOAST_SHOWN, OXOS_TOAST_HIDDEN, OXOS_TOAST_DROPPED } OXOS_TOAST_EVENT;
+BOOLEAN oxos_on_toast(void (*Callback)(ULONG ToastId, OXOS_TOAST_EVENT Event, void *UserData), void *UserData); // the extension's own toasts' events
 ```
-- The kernel copies the text and the path, so the caller's buffers may go away at once. It may be called at any IRQL up to DISPATCH_LEVEL; the drawing
-  happens on the service's thread.
+| Status | When | Retry? |
+|---|---|---|
+| `STATUS_SUCCESS` | queued; `ToastId` is set | no |
+| `STATUS_DEVICE_BUSY` | the queue is full (`oxos_toast_enqueue`) | yes, later, or with `oxos_toast_enqueue_wait` |
+| `STATUS_TIMEOUT` | no room within `TimeoutMs` (`oxos_toast_enqueue_wait`) | yes |
+| `STATUS_CANCELLED` | the title is ending: nothing is queued, and waits end | no |
+| `STATUS_NOT_SUPPORTED` | toasts are switched off (§2) | no |
+| `STATUS_INVALID_PARAMETER` | bad text, place or time; or `oxos_toast_enqueue_wait` above passive level | no: the call is wrong |
+
+- **Copies:** the kernel copies the text, so the caller's buffer may go away at once.
+- **`oxos_toast_enqueue`** may be called at any IRQL up to DISPATCH_LEVEL, from a hook too (the queue changes with interrupts off);
+  **`oxos_toast_enqueue_wait`** only at passive level, from the extension's run loop or its own threads, never from a hook (a hook runs in the title's thread, and waiting there stops the
+  game). It always has a timeout: it waits on an event the display sets each time it takes a toast from the queue, and tries again; when the title ends,
+  the event is set and every wait returns `STATUS_CANCELLED`.
+- **The owner:** each toast belongs to the extension whose code called the export (the return address, inside its image: `extensions::FindExtensionAt`),
+  so the exports need no context argument; its events go to that extension only. A toast queued by an extension whose `ExtensionStart` then fails keeps no
+  owner (its index goes to the next extension).
+- **Events** (`oxos_on_toast`): shown when it appears, hidden when its time is up, dropped when it never showed (the title ended first, or the title held the
+  overlay for the toast's whole time, §7). Called on the run-loop thread, at passive level, only for the extension's own toasts.
 - The kernel's own toasts use the same queue.
 
 **An SDK example, `sdk/examples/example_toast`:** it hooks `NtOpenFile` and `NtCreateFile` (`oxos_hook`) and pushes a toast when the title opens a file
 whose name is in its ini (`extensions\example_toast.ini`, `[files]`, e.g. `save = savegame.dat`): "Saving: savegame.dat", top right, 3 seconds. It shows a hook,
-the ini helpers and the toast export together, and does the toast from the hook (no work of its own in the title's thread beyond the name compare).
+the ini helpers and `oxos_toast_enqueue` together, and queues the toast from the hook (no work of its own in the title's thread beyond the name compare;
+`STATUS_DEVICE_BUSY` is simply skipped).
 
 ## 6. Memory
 Titles get what the kernel leaves free (spec 18 §7). The service has three parts:
 | Part | Where | Cost |
 |---|---|---|
-| The export and the queue (8 toasts, their text) | resident | under 1 KB |
-| The thread, the drawing, the YUY2 conversion, the overlay registers, the actions | a kernel module would be unloaded before the title runs; so either resident (estimated 2-3 KB: check against the page budget), or a kernel extension shipped with OXOS (`oxos_toasts.xos`, loaded only when toasts are on) that registers itself with the export | resident: maybe a page; extension: its pages only when on |
-| The picture | contiguous memory taken while a toast shows | 33 KB for 384 x 44, freed after |
+| The exports and the queue (8 toasts, their text), 16 events | resident | under 1 KB of data |
+| The drawing, the YUY2 conversion, the overlay registers | resident (a kernel module would be unloaded before the title runs); driven by the extensions' run loop, no thread of its own | a few hundred bytes of code; the kernel's font and `DrawText` were resident already (the error screens) |
+| The picture | contiguous memory taken while a toast shows: the box in X8R8G8B8, turned into YUY2 in place | up to 147 KB (576 x 64 x 4) for the widest two-line toast, 62 KB for a one-line one of 26 characters; freed when it hides |
 
-Which of the two is decided when it is built, by the page count (test_memory, 15 960 pages).
+Decided when built (2026-11-23): resident. test_memory with the service and the in-game shortcuts' pad reading, without the in-game reset's hook: 15 974
+free pages (the limit is 15 960).
 
 ## 7. Titles that use the overlay themselves
 A few titles play video through PVIDEO. A toast would replace their video for its time, and their next overlay write would take the overlay back. Before
@@ -156,14 +196,16 @@ overlay never goes off. After a toast, the service puts back every register it c
   0x2000000 before); not pursued.
 
 ## 9. Tests
-- **Host unit tests:** the queue (order, full queue, copies), the anchors in 480p, 720p and 1080i, the action rules (§4), the YUY2 conversion.
-- **xemu:** extension_test pushes a toast; boot_test.py reads the PVIDEO registers over QMP (shown, place, size, pitch a multiple of 64) and that they are
-  back after the toast's time.
+- **Host unit tests** (`tests/unit/test_toasts.cpp`): the queue (order, a full queue, copies, refused texts, closed and switched off, events to the owner, a
+  failed extension's toasts), the box and the anchors in 640x480, 720x480 and 1280x720, the YUY2 conversion; `[toasts] enabled` in `test_settings_ini.cpp`.
+- **xemu** (`make test_extensions`): extension_test queues a one-second toast at every launch and has a three-line one refused; its own toast must be shown
+  and hidden at least once over the launches, and no other toast's event may reach it. By hand (2026-11-23, `tools/xemu_screenshot.py`): a two-line toast
+  at the bottom centre and a one-line one at the top right over the xemu dashboard, centred once the mode was read from the display-end registers (§3.3);
+  the in-game shortcuts' toast before their action (spec 48).
 - **Hardware:** the capture card on each encoder (Conexant, Focus, Xcalibur) in 480i, 480p, 720p and 1080i: the toast's place and text, no flicker, the game's
   frame rate unchanged; an action toast's combination starting its XBE; a title that plays video through the overlay (§7).
 
 ## 10. Open
-- Resident service or shipped extension (§6).
 - Which kernel events show a toast (§2): each its own decision.
 - A second size, or an icon in the box (drawn in the rectangle, §3.2).
 - Whether an action may start any XBE or only ones listed in a settings file.

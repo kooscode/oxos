@@ -1,6 +1,8 @@
 // Kernel extensions while a title runs (spec/oxos_internal/34 §4.3, §7): the title's imports of hooked kernel functions, the launch events, and the end of the
 // extensions at the title's quick reboot. Resident: it runs while the title does, unlike the loader (a kernel module, kernel/modules/extension_loader.cpp),
 // which only runs before.
+#include <hardware/usb/pad_reports.h>
+#include <toasts/toasts.h>
 #include <extensions/extensions.h>
 #include <extensions/extension_state.h>
 #include <core/core.h>
@@ -66,11 +68,35 @@ namespace xk::extensions {
 
 // --- The run loop (§4.3): one thread, every extension's RunLoop in oxos_extensions.ini order, 1 ms between the rounds
 
+static void FireEvent(ULONG Event, PVOID Data, ULONG Extension = XK_NO_EXTENSION);
+
+// The pads whose buttons changed since the last round (hardware/usb/pad_reports.cpp), to the extensions registered for them (§7.3).
+static void DeliverPadChanges() {
+    ULONG changed = hardware::usb::TakePadChanges();
+    for (ULONG port = 0; changed; port++, changed >>= 1) {
+        OXOS_PAD_STATE pad;
+        if ((changed & 1) && hardware::usb::GetPadState(port, pad))
+            FireEvent(OXOS_EVENT_PAD_CHANGED, &pad);
+    }
+}
+
+// The toasts shown, hidden or dropped since the last round (toasts/toast_queue.cpp), each to the extension that queued it (spec/oxos_internal/36 §5).
+static void DeliverToastEvents() {
+    ULONG owner;
+    OXOS_TOAST_NOTICE notice;
+    while (toasts::TakeToastEvent(owner, notice))
+        FireEvent(OXOS_EVENT_TOAST, &notice, owner);
+}
+
 void NTAPI RunLoopThread(PVOID StartRoutine, PVOID StartContext) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
+    state->LoopThreadObject = KeGetCurrentThread();
     LARGE_INTEGER pause;
     pause.QuadPart = -10000; // 1 ms
     while (KeWaitForSingleObject(&state->LoopStop, Executive, KernelMode, FALSE, &pause) == STATUS_TIMEOUT) {
+        DeliverPadChanges();
+        toasts::RunToasts();
+        DeliverToastEvents();
         for (ULONG i = 0; i < state->Count && !state->LoopStop.Header.SignalState; i++) {
             XK_EXTENSION &extension = state->Extensions[i];
             if (!extension.Descriptor->RunLoop)
@@ -103,16 +129,27 @@ ULONG ResolveTitleImport(ULONG Ordinal, ULONG Target) {
 
 // --- Events (§7.2)
 
-// Calls every callback registered for Event, in load order.
-static void FireEvent(ULONG Event, PVOID Data) {
+// Calls every callback registered for Event, in load order; only Extension's when it is not XK_NO_EXTENSION.
+static void FireEvent(ULONG Event, PVOID Data, ULONG Extension) {
     XK_EXTENSIONS_STATE *state = LoadedExtensions;
     if (!state)
         return;
     for (ULONG i = 0; i < state->EventCount; i++) {
         const XK_EXTENSION_EVENT &e = state->Events[i];
-        if (e.Event == Event)
+        if (e.Event == Event && (Extension == XK_NO_EXTENSION || e.Extension == Extension))
             e.Callback(Data, e.UserData);
     }
+}
+
+ULONG FindExtensionAt(PVOID Address) {
+    XK_EXTENSIONS_STATE *state = LoadedExtensions;
+    // Count itself too: the extension whose Start is running (the loader counts it once Start returns TRUE).
+    for (ULONG i = 0; state && i <= state->Count && i < XK_EXTENSIONS_MAX; i++) {
+        const OXOS_CONTEXT &context = state->Extensions[i].Context;
+        if ((ULONG)Address - (ULONG)context.ImageBase < context.ImageSize)
+            return i;
+    }
+    return XK_NO_EXTENSION;
 }
 
 void TitleLoading(PCSZ Path, BOOLEAN Dashboard, char *Target, ULONG TargetSize) {
@@ -141,6 +178,7 @@ void TitleLoaded() {
         name[length] = wide[length] >= 0x20 && wide[length] < 0x7F ? (char)wide[length] : '?';
     OXOS_TITLE_LOADED data = {sizeof(data), XeImageFileName.Buffer, state->Kernel.TitleId, *(ULONG *)(cert + 0xAC), name, (PVOID)XBE_BASE, cert};
     FireEvent(OXOS_EVENT_TITLE_LOADED, &data);
+    toasts::NoteTitleStarted();
 }
 
 // --- The end of a title (§4.3)
@@ -156,12 +194,14 @@ void TitleExiting() {
         KeSetEvent(&state->LoopStop, 0, FALSE);
         LARGE_INTEGER timeout;
         timeout.QuadPart = -(LONGLONG)LOOP_DELAY_WARNING_MS * 10000;
-        if (KeGetCurrentIrql() == 0 && NtWaitForSingleObjectEx(state->LoopThread, KernelMode, FALSE, &timeout) != STATUS_SUCCESS) {
+        if (KeGetCurrentIrql() == 0 && KeGetCurrentThread() != state->LoopThreadObject &&
+            NtWaitForSingleObjectEx(state->LoopThread, KernelMode, FALSE, &timeout) != STATUS_SUCCESS) {
             ULONG stuck = state->LoopExtension;
             if (stuck != XK_NO_EXTENSION)
                 LogLoopDelay(state->Extensions[stuck], KeTickCount - state->LoopCallStart);
         }
     }
+    toasts::CloseToasts();
     for (ULONG i = 0; i < state->Count; i++) {
         XK_EXTENSION &extension = state->Extensions[i];
         if (extension.Descriptor->Terminate)

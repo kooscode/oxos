@@ -9,6 +9,7 @@
 #include <hardware/chipset/chipset.h>
 #include <io/io.h>
 #include <memory/memory.h>
+#include <hardware/usb/pad_reports.h>
 
 namespace xk::core {
 
@@ -76,7 +77,9 @@ XBAPI void FASTCALL KfLowerIrql(KIRQL NewIrql) {
     restore_flags(flags);
 }
 
-// KeRaiseIrqlToDpcLevel is in src/in_game_reset/xinput_hook.S: KfRaiseIrql(DISPATCH_LEVEL), plus the in-game reset hook.
+XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
+    return KfRaiseIrql(DISPATCH_LEVEL);
+}
 
 XBAPI KIRQL NTAPI KeRaiseIrqlToSynchLevel() {
     return KfRaiseIrql(SYNCH_LEVEL);
@@ -245,8 +248,12 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
     sti();
     if (irq == 0) {
         ClockInterrupt(old);
+        if (KeTickCount % 100 == 0)
+            hardware::usb::CheckPadLastResort(); // spec/oxos_internal/48 §5
     } else if (PKINTERRUPT obj = InterruptObjects[irq]) {
         obj->ServiceCount++;
+        if (irq == 1 || irq == 9) // the USB host controllers: the pads' reports, before the title's routine takes the done list
+            hardware::usb::ReadPadReports(irq);
         CallTitleRoutine((PVOID)obj->ServiceRoutine, obj, obj->ServiceContext);
     }
     cli();

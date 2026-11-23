@@ -398,3 +398,8 @@ ordinal	name	convention	arg_bytes	kind	kernel_symbol
 430	oxos_file_create	cdecl		func	?CreateFile@io@xk@@YAJPBDKKKKPAPAX_K@Z
 431	oxos_file_delete	cdecl		func	?DeleteFile@io@xk@@YAJPBD@Z
 432	oxos_file_rename_handle	cdecl		func	?RenameFile@io@xk@@YAJPAXPBD_N@Z
+433	oxos_pad_state	cdecl		func	?GetPadState@usb@hardware@xk@@YAEKAAUOXOS_PAD_STATE@@@Z
+434	oxos_title_launch	cdecl		func	?SwitchTitle@titles@xk@@YAJPBD@Z
+435	oxos_console_reset	cdecl		func	?ResetConsole@chipset@hardware@xk@@YAJK@Z
+436	oxos_toast_enqueue	cdecl		func	?EnqueueToast@toasts@xk@@YAJAAUOXOS_TOAST@@@Z
+437	oxos_toast_enqueue_wait	cdecl		func	?EnqueueToastWait@toasts@xk@@YAJAAUOXOS_TOAST@@K@Z

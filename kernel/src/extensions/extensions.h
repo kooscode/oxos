@@ -18,6 +18,8 @@ ULONG ResolveTitleImport(ULONG Ordinal, ULONG Target);
 void TitleLoading(PCSZ Path, BOOLEAN Dashboard, char *Target, ULONG TargetSize);
 // OXOS_EVENT_TITLE_LOADED for the XBE now at 0x00010000, before its entry point runs.
 void TitleLoaded();
+// The extension whose image holds Address (its index in LoadedExtensions), or 0xFFFFFFFF: whose call it is (a toast's owner, spec/oxos_internal/36 §5).
+ULONG FindExtensionAt(PVOID Address);
 // The title quick-reboots (HalReturnToFirmware(2)): OXOS_EVENT_TITLE_EXITING, then the run loop's end (up to 500 ms for the RunLoop call in progress) and each extension's Unload (§4.3).
 void TitleExiting();
 

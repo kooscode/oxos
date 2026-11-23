@@ -37,19 +37,20 @@ KERNEL_SOURCES := \
     src/runtime/status.cpp src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
     src/hardware/chipset/interrupts_timers.cpp src/hardware/chipset/port_io.cpp src/user_interface/error_screen_text.cpp \
     src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
-    modules/extension_parser.cpp
+    src/toasts/toast_queue.cpp modules/extension_parser.cpp
 # The code shared with the apps and tools (shared/README.md), built as the kernel builds it (OXOS_KERNEL: the kernel's C library).
 SHARED         := ../../shared
+SDK_INCLUDES   := -I../../sdk/include -I../../sdk/src # oxos_sdk.h: the types the kernel shares with extensions (as the kernel's build)
 SHARED_SOURCES := graphics/vector_renderer.cpp ini_file/ini_file.cpp ini_file/title_patcher_ini.cpp ini_file/extensions_ini.cpp \
                   ini_file/launch_redirect_ini.cpp ini_file/settings_ini.cpp
 KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/src $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
-                -Wall -Wextra -Wno-unused-parameter $(COVFLAGS) -I$(SHARED) -DOXOS_KERNEL
+                -Wall -Wextra -Wno-unused-parameter $(COVFLAGS) -I$(SHARED) $(SDK_INCLUDES) -DOXOS_KERNEL
 
 # The harness and the tests (host C++: exceptions, RTTI, the C++ library).
 TEST_SOURCES := host/hostcpu.cpp host/boot.cpp host/stubs.cpp host/checks.cpp $(sort $(wildcard test_*.cpp))
 TEST_FLAGS   := -std=gnu++20 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ../../kernel)\" -DGTEST_HAS_PTHREAD=1 -Ihost -I$(KERNEL)/src \
-                -I$(SHARED) -DOXOS_KERNEL -isystem $(GTEST_SRC)/include -isystem $(GTEST_SRC)
+                -I$(SHARED) $(SDK_INCLUDES) -DOXOS_KERNEL -isystem $(GTEST_SRC)/include -isystem $(GTEST_SRC)
 
 # GoogleTest itself, from its sources (one translation unit), 32-bit with everything else.
 GTEST_FLAGS  := -std=c++20 $(COMMON) -DGTEST_HAS_PTHREAD=1 -fexceptions -I$(GTEST_SRC)/include -I$(GTEST_SRC)

@@ -31,6 +31,7 @@ make LLVM=C:/LLVM/bin                  # Windows, when clang is not on the PATH
 | [`example_run_loop`](examples/example_run_loop) | `ExtensionRunLoop`: work while a title runs, timed with the kernel's millisecond count; a number setting from its own `.ini` |
 | [`example_kernel_hook`](examples/example_kernel_hook) | a hook on a kernel function (`NtOpenFile`) that uses a setting from its own `.ini` at every call; log lines in `ExtensionStart` and `ExtensionTerminate` |
 | [`example_title_event`](examples/example_title_event) | a title event, the state page that keeps data from one launch to the next, a setting and a data section from its own `.ini`, kernel functions called by name: a greeting per title, and the LED turns orange for one title |
+| [`example_toast`](examples/example_toast) | a toast over the running title (`oxos_toast_enqueue`) from a hook on `NtOpenFile` and `NtCreateFile`, for the files its own `.ini`'s data section lists: "Saving: savegame.dat" |
 
 ## 4. Write your own
 Copy the example closest to what you want into a folder of your own, rename it, and set its `Makefile`:
@@ -112,12 +113,14 @@ apply it, so the extension needs no code for it; the SDK's `oxos_extensions.ini`
 |---|---|
 | Its functions | `ExtensionStart` (before each title: read settings, hook, register for events; TRUE to stay), `ExtensionRunLoop` (again and again while the title runs), `ExtensionTerminate` (the title starts another) |
 | Logging | `oxos_log(Format, ...)`, `oxos_set_log_target` |
-| Settings (in memory) and launches | `oxos_setting("key")`, `oxos_setting_number("key", Default)`, `oxos_launch_number()`, `oxos_kernel_version()` |
-| Data (from the disk, one section at a time) | `oxos_ini_section("section", keys, count)`, `oxos_ini_value(keys, count, "key")`, `oxos_ini_free(keys)` (C++) |
+| Settings (in memory) and launches | `oxos_setting("key")`, `oxos_setting_number("key", Default)`, `oxos_launch_number()`, `oxos_kernel_version()`, `oxos_title_path()` |
+| Data (from the disk, one section at a time) | `oxos_ini_section("section", keys, count)`, `oxos_ini_value(keys, count, "key")`, `oxos_ini_free(keys)`; `oxos_ini_sections(names, count)` (C++) |
 | State page | `oxos_state()`: 4 KB that keep their contents from one launch to the next, until the next cold boot (all zero at first, and for a new `Version`) |
 | Files and folders | `oxos_file_read`, `oxos_file_write` (a whole file), `oxos_file_open`, `oxos_file_create`, `oxos_file_delete`, `oxos_file_rename`, `oxos_file_exists`, `oxos_file_list`; `oxos_directory_create`, `oxos_directory_delete`, `oxos_directory_rename`, `oxos_directory_exists`, `oxos_directory_list`; `oxos_list_free` |
 | Hooks | `oxos_hook(NtOpenFile, My_NtOpenFile)` and `oxos_next(NtOpenFile)(...)` (in `ExtensionStart`) |
 | Title events | `oxos_on_title_loading`, `oxos_on_title_loaded`, `oxos_on_title_exiting` (in `ExtensionStart`); `oxos_title_redirect` starts another XBE in place of a title being loaded |
+| Toasts | `oxos_toast_enqueue` (any IRQL, hooks too; never waits), `oxos_toast_enqueue_wait`, `oxos_toast("...")`, `oxos_on_toast` (its toasts shown, hidden or dropped): a short message over the title on the GPU's video overlay (C++; `examples/example_toast`) |
+| Pads, launches and resets | `oxos_on_pad_changed` (each change of a pad's buttons, in any title), `oxos_pad_state`; `oxos_title_launch` (stop the title, start an XBE or the dashboard), `oxos_console_reset` (C++; `kernel/extensions/oxos_igs/` uses them) |
 | The C library | `strlen`, `strcmp`, `strcasecmp`, `strchr`, `strstr`, `strlcpy`, `snprintf`, `strtoul`, `memcpy`, `memset`, `toupper`, `isdigit`, ... under their usual names |
 | The kernel | every function of the Xbox kernel, by name, as `include/oxos_kernel.h` declares it (`NtReadFile`, `KeTickCount`, `HalWriteSMBusValue`, ...) |
 
@@ -139,7 +142,7 @@ apply it, so the extension needs no code for it; the SDK's `oxos_extensions.ini`
 | `lib/oxos_sdk.lib` | the one library: the SDK's functions, the C functions the kernel does not have itself, and the kernel's import library |
 | `oxos_extension.mk` | the build rules (or use your own: the flags are in it) |
 | `oxos_extensions.ini` | which extensions OXOS loads, in which order: a sample listing the examples, for `C:\OXOS\` |
-| `examples/` | example_run_loop, example_kernel_hook, example_title_event, each with its own settings file (`NAME.ini`) |
+| `examples/` | example_run_loop, example_kernel_hook, example_title_event, example_toast, each with its own settings file (`NAME.ini`) |
 
 **The SDK's source** (`sdk/` in the OXOS repository) holds the two headers, the SDK's functions (`src/oxos_sdk.cpp`, with `src/oxos_extension_context.h`, the
 context the kernel fills, shared with the kernel and not shipped), and what `tools/gen_oxos_sdk.py` generates from the kernel: `include/oxos_kernel.h`, the

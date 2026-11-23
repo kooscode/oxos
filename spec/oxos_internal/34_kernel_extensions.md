@@ -180,12 +180,13 @@ refuses a descriptor whose `Context` does not point inside the extension's own i
    Here the extension hooks kernel functions (§7.1), registers for events (§7.2) and reads its state page (§6) and settings. It returns `TRUE`, or `FALSE` to be
    unloaded (§3.4). It must return promptly: the title waits for it.
 3. After every `Start`, the loader links the chains (§7.1) and is freed (§8.1).
-4. **The run loop** starts, when an extension has a `RunLoop`: **one** kernel thread for all extensions, which waits 1 ms, calls the `RunLoop()` of each
+4. **The run loop** starts, whenever an extension is loaded (since 2026-11-23: it also delivers the pads' changes, §7.3, and shows the toasts any extension
+   may queue, spec/oxos_internal/36): **one** kernel thread for all extensions, which waits 1 ms, delivers those, calls the `RunLoop()` of each
    extension that has one in `oxos_extensions.ini` order, and starts again. An extension does not choose when it is called and never waits for the kernel: the
    kernel owns the timing and the stop. `RunLoop` is the place for work that would hold up the title in `Start` (a server, a timer, file I/O), a little at a
    time; it keeps its own time with `KeTickCount`. It must return quickly, since every other `RunLoop` waits for it: a call that takes over **500 ms** is logged
    as `extension NAME delayed extension loop by N ms` in `C:\OXOS\log\extensions.log` (the kernel's log files, spec/oxos_internal/35) and on the debug serial
-   port. An extension with only hooks and events has no `RunLoop`; with none at all, no loop thread is started.
+   port. An extension with only hooks and events has no `RunLoop`; the loop thread runs for the pads and toasts all the same.
 5. The title runs. Hooks and events are called as the title calls the kernel and as launches happen.
 6. **`Terminate()`**, if set, when the title quick-reboots to start another one (`HalReturnToFirmware(2)`), before the kernel's shutdown notifications, on the
    thread that asked for the reboot. The run loop is stopped first: no `RunLoop` is called after the one in progress, which gets up to 500 ms to return when the
@@ -282,7 +283,8 @@ struct OXOS_CONTEXT {
 | `oxos_setting(Key)` | the value of the setting `Key` (any case), or null: the top of the extension's own `NAME.ini`, then its section in `oxos_extensions.ini` (§3.1). In memory: any time, hooks included. The kernel owns the text, valid until the title ends |
 | `oxos_setting_number(Key, Default)` | the value of `Key` as a whole decimal number, or `Default` when it is missing or does not start with a digit (user, 2026-11-14: extensions should not each parse digits) |
 | `oxos_ini_section(Section, Keys, Count)`, `oxos_ini_value(Keys, Count, Key)`, `oxos_ini_free(Keys)` | data (§3.1): one `[Section]` of the extension's own `NAME.ini` (any case), read from the disk at this call, 4 KB at a time, so the file never sits in memory: an array of its keys and values (keys may have spaces) in one block `oxos_ini_free` frees; `STATUS_OBJECT_NAME_NOT_FOUND` without the file or the section; `STATUS_INVALID_DEVICE_STATE` above `PASSIVE_LEVEL` (never from a hook). C++ only, as `oxos_file_list` |
-| `oxos_launch_number()`, `oxos_kernel_version()` | launches since the cold boot (1 = the cold boot's title); the kernel's version |
+| `oxos_ini_sections(Names, Count)` | the names of the `NAME.ini`'s sections, in the file's order, read the same way, as `oxos_file_list` gives names (`oxos_list_free`): for an extension whose sections the user names (spec/oxos_internal/48's shortcuts). C++ only |
+| `oxos_launch_number()`, `oxos_kernel_version()`, `oxos_title_path()` | launches since the cold boot (1 = the cold boot's title); the kernel's version; the running title's XBE as a `\Device\` path (`Kernel->TitlePath`, §5.2), null before the title-loaded event |
 | `oxos_state()` | the state page (§6): never null, all zero at the first launch and when the extension's `Version` changes |
 | `oxos_file_read(Path, Buffer, BufferSize, &Size)`, `oxos_file_write(Path, Data, Size)` | a whole file into the extension's buffer (too small: `STATUS_BUFFER_TOO_SMALL`, `Size` says how large it is), or written (created or replaced) |
 | `oxos_file_open`, `oxos_file_create`, `oxos_file_delete` | the kernel's own `io::OpenFile`, `io::CreateFile`, `io::DeleteFile`, exported as they are at 429-431 (`kernel/exports.tsv`'s `kernel_symbol` column names them; 432 is `io::RenameFile`, for the SDK's renames). A handle is read and written with `NtReadFile`/`NtWriteFile` and closed with `NtClose` |
@@ -392,6 +394,8 @@ event's data, typed, and the `UserData` it was registered with. Called in `oxos_
 | title loading (`OXOS_TITLE_LOADING`) | before the XBE is loaded: after the launch redirects (spec/oxos_internal/33) | the XBE's path, the launch data page (type, title ID of the launching title, its data), the launch kind (cold boot, launch data page, dashboard return) | read them; for a launch through the launch data page, start another XBE in its place (`oxos_title_redirect`, below) |
 | title loaded (`OXOS_TITLE_LOADED`) | the XBE is loaded and its thunks resolved, before its entry point | the title ID, name (plain text: the kernel turns the certificate's UTF-16 into 41 bytes of ASCII, others as `?`; user, 2026-11-14), certificate, XBE header, base | read or patch the title's image (as `oxos_title_patches.xos` does, §10) |
 | title exiting (`OXOS_TITLE_EXITING`) | the title calls `HalReturnToFirmware(2)` to start another XBE or the dashboard; the title is still in memory | the launch data page the title wrote | read it, or change the next launch |
+| pad changed (event 4, `oxos_on_pad_changed`) | a pad's buttons changed (§7.3), on the run loop | the pad's state | act on a combination (spec/oxos_internal/48) |
+| toast (event 5, `oxos_on_toast`) | one of the extension's own toasts showed, hid or was dropped (spec/oxos_internal/36 §5), on the run loop | the toast's id and what happened | act while its toast is up (spec/oxos_internal/36 §4) |
 
 **Redirecting a launch (`oxos_title_redirect`, kernel 0.4.10):** in the title-loading event of a launch through the launch data page (a title or a dashboard
 started the XBE), an extension may name another XBE to start in its place. The kernel does not load the asked-for XBE, and loads the target as a launch
@@ -402,7 +406,36 @@ load order) that redirects wins. The disc the console starts without a launch da
 `OXOS_TITLE_LOADING` carries `Target` and `TargetSize` for it (kernels before 0.4.10 leave them out: `Size` is smaller, and `oxos_title_redirect` returns
 FALSE). First user: Universal Trainers (spec/oxos_internal/37), which starts its menu in place of a game that has a trainer.
 
-*Open:* events for the disk (mounted, formatted), the network (link up), and the controllers.
+*Open:* events for the disk (mounted, formatted) and the network (link up). The controllers: §7.3.
+
+### 7.3 Pads, title launches and resets (2026-11-23)
+For in-game shortcuts and toast actions (user, 2026-11-23: extensions "listen and respond to usb events ... and launch titles if they want"). Built
+2026-11-23 for spec/oxos_internal/48: exports 433-435, `oxos_pad_state`, `oxos_title_launch` and `oxos_console_reset`, are the kernel's own
+`hardware::usb::GetPadState`, `titles::SwitchTitle` and `hardware::chipset::ResetConsole` (cdecl, as 429-432; `kernel/exports.tsv`'s `kernel_symbol`);
+`oxos_on_pad_changed` is event 4 (`OXOS_EVENT_PAD_CHANGED`, §7.2).
+
+**The pads' state** comes from the USB host controllers' done lists (spec 22 §9.2), for every title however it was built:
+```cpp
+typedef struct _OXOS_PAD_STATE {
+    ULONG Port;       // 0-3: the pad, in the order the kernel first saw each pad's reports (the done lists do not say which port it is in)
+    ULONG Buttons;    // OXOS_PAD_* bits: the digital buttons (as XInput's wButtons) and the analog buttons held past half way (A B X Y BLACK WHITE LT RT)
+    UCHAR Analog[8];  // the analog buttons A B X Y BLACK WHITE LT RT, 0-255
+    SHORT ThumbLX, ThumbLY, ThumbRX, ThumbRY;
+} OXOS_PAD_STATE;
+
+BOOLEAN oxos_on_pad_changed(void (*Callback)(const OXOS_PAD_STATE &State, void *UserData), void *UserData); // each change of a pad's Buttons
+BOOLEAN oxos_pad_state(ULONG Port, OXOS_PAD_STATE &State);                                                   // the last report of that pad
+NTSTATUS oxos_title_launch(const char *Path);  // stop the title and start Path (a \Device\ path, as the SDK's file functions); null: the dashboard
+NTSTATUS oxos_console_reset(ULONG Kind);       // OXOS_RESET_COLD: power off and on through the SMC; OXOS_RESET_WARM: the console's reset
+```
+- **Where the callback runs:** the reports arrive at the controllers' interrupt level; the kernel only records the new state there and calls the extensions'
+  callbacks on the run-loop thread (§4.3), at passive level, in `oxos_extensions.ini` order, once per change of `Buttons` (not per report). A pad's first
+  report counts as a change. The run loop starts when an extension registers for the pads, even without an `ExtensionRunLoop`.
+- **`oxos_title_launch`** does spec 22 §9.3's steps: suspends every thread of the title, writes the launch data page with `Path` (empty for the dashboard),
+  and quick-reboots; the extensions' title-exiting event (§7.2) runs first. At passive level only (the run loop, an extension's thread); from a hook it
+  returns `STATUS_INVALID_DEVICE_STATE`. The first launch or reset asked for wins; later ones return `STATUS_DEVICE_BUSY`. A path that does not exist:
+  `STATUS_OBJECT_NAME_NOT_FOUND`; one of 360 characters or more (what the title loader reads of the launch path): `STATUS_INVALID_PARAMETER`.
+- **`oxos_console_reset`**: the in-game reset's power cycle (spec 22 §6) or the SMC's reset (spec 22 §7); they do not return.
 
 ## 8. The `.xos` file and the loader
 - **PE32, i386, a DLL** (`IMAGE_FILE_DLL`), with a base relocation table: the kernel places the image where it finds memory and applies the relocations.
@@ -586,6 +619,8 @@ the kernel.
 since 2026-11-17 (spec/oxos_internal/43), with the ini reader; the trainer hook instruction (spec/oxos_internal/23: dashboards search the kernel
 image for it); the in-game reset; the title compatibility answers (spec/oxos_internal/25 §1-2: games need them to run at all); virtual discs; the error screens;
 the File Manager (the way out of a broken extension).
+**Changed 2026-11-23 (user):** the in-game reset leaves the kernel. Its shortcuts become an extension, in-game shortcuts (`oxos_igs.xos`, its own spec), on
+§7.3's pads; the kernel keeps the pads' state and one last-resort combination of its own, so a broken extension list still has a way out.
 
 **Names (decided 2026-11-13; the ini's place 2026-11-15):** every extension OXOS provides is `C:\OXOS\extensions\oxos_NAME.xos`, its section in
 `oxos_extensions.ini` is `[oxos_NAME]`, and its settings and data file is `C:\OXOS\extensions\oxos_NAME.ini`, next to it (§3.1). Extensions from others use any
@@ -615,8 +650,7 @@ other name; the `oxos_` prefix is OXOS's. Kernel features keep their files (`oxo
     share it.
   - Symbols: the title built with DWARF (`lld-link /DEBUG:DWARF`); its addresses are the XBE's, so `gdb` loads the `.exe` as it is.
 - **Screenshots (`screenshot.xos`)**: a controller combination saves the screen the console shows as a file on the disk.
-  - Needs a new event: **`OXOS_EVENT_CONTROLLER`**, every controller state a title reads, from the hook the in-game reset already has on `XInputGetState`
-    (spec/oxos_internal/22 §2).
+  - Needs: the pads' changes (§7.3, `oxos_on_pad_changed`), for every title.
   - The event only sets a flag; the next `RunLoop` reads the front buffer (its address, pitch and format from the GPU's display registers) and writes a BMP or
     PNG to `E:\Screenshots\` a part per call, so the loop is never held up, while the title goes on.
 - Others: a network log of a title's file and network calls, cheats (memory search and writes, on top of the trainers), save-game redirection or backup, a

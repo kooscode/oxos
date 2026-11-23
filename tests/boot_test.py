@@ -645,7 +645,7 @@ def extension_checks(mon, launches, hdd, other_build=False):
         return [int(w, 16) for line in out.splitlines() for w in line.split(":")[1].split()][:n]
     pages = extension_state_pages(mon)
     count = len(pages)
-    x = words(pages[0], 19) if count >= 1 else [0] * 19
+    x = words(pages[0], 23) if count >= 1 else [0] * 23
     c = words(pages[1], 3) if count >= 2 else [0] * 3
     p = words(pages[2], 6) if count >= 3 else [0] * 6
     t = words(pages[5], 1) if count >= 6 else [0]  # example_title_event: its launches
@@ -692,6 +692,8 @@ def extension_checks(mon, launches, hdd, other_build=False):
         "example_title_event: the LED orange from its RunLoop, for the title led_title names (any case)":
             '[example_title_event] "OXOS kernel test title": the LED is orange.' in lines,
         "Terminate at each quick reboot": x[4] == launches - 1,
+        f"toasts (spec/oxos_internal/36): queued with an id and a wrong one refused at every launch; its own toast shown {x[20]} and hidden {x[21]} times "
+        "(once a title has set its video mode), no event for another toast": x[19] == 1 and x[20] >= 1 and x[21] >= 1 and x[22] == 0,
         "events: a load and a loaded title per launch, an exit per quick reboot":
             x[7] >= launches and x[8] == launches and x[9] == launches - 1,
         "hook on NtOpenFile: the title's calls pass extension_test's hook, then chain's; its own (RunLoop) only chain's": x[10] > 0 and c[2] == x[10] + launches,

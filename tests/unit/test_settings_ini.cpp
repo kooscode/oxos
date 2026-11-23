@@ -118,3 +118,13 @@ TEST(SettingsIni, DashboardPathsOnUnknownDrivesAreNone) {
     EXPECT_EQ(Dashboard(text, 2), "(none)");
     EXPECT_EQ(Dashboard(text, 3), "\\Device\\Harddisk0\\Partition2\\last.xbe");
 }
+
+TEST(SettingsIni, ToastsAreOnUnlessTurnedOff) {
+    const std::string off = "[boot_video]\nenabled = no\n[toasts]\nenabled = No\n";
+    EXPECT_FALSE(oxos::ini_file::ReadToastsEnabled(off.data(), (uint32_t)off.size()));
+    const std::string on = "[toasts]\nenabled = yes\n";
+    EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled(on.data(), (uint32_t)on.size()));
+    const std::string other = "[boot_video]\nenabled = no\n";
+    EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled(other.data(), (uint32_t)other.size())) << "another section's enabled";
+    EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled("", 0));
+}

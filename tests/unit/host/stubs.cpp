@@ -11,6 +11,9 @@
 #include <runtime/runtime.h>
 #include <runtime/types.h>
 #include <boot_splash/boot_splash.h>
+#include <hardware/usb/pad_reports.h>
+#include <toasts/toasts.h>
+#include <extensions/extensions.h>
 #include <io/io.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
@@ -107,10 +110,20 @@ ULONG *CachePte(ULONG) {
 }
 } // namespace xk::filesystems
 
-// in_game_reset/xinput_hook.S: KeRaiseIrqlToDpcLevel is assembly there (it also watches for the in-game reset combination); here it is what it does for kernel
-// callers.
-XBAPI KIRQL NTAPI KeRaiseIrqlToDpcLevel() {
-    return KfRaiseIrql(DISPATCH_LEVEL);
+// hardware/usb/pad_reports.cpp: no USB host controllers on the host.
+void xk::hardware::usb::ReadPadReports(ULONG) {
+}
+
+void xk::hardware::usb::CheckPadLastResort() {
+}
+
+// toasts/toast_overlay.cpp: no GPU on the host (the queue, toast_queue.cpp, is tested).
+void xk::toasts::HideToast() {
+}
+
+// extensions/extension_runtime.cpp: every call is extension 0's (tests/unit/test_toasts.cpp reads the toasts' owner).
+ULONG xk::extensions::FindExtensionAt(PVOID) {
+    return 0;
 }
 
 // boot_splash/splash.cpp: no splash copy in host tests (no page holds one).

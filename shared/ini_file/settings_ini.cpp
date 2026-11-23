@@ -100,4 +100,22 @@ void ReadBootVideoSettings(const char *Text, uint32_t Length, BOOT_VIDEO_SETTING
     }
 }
 
+constexpr char TOASTS_SECTION[] = "toasts";
+constexpr char KEY_TOASTS_ENABLED[] = "enabled";
+
+bool ReadToastsEnabled(const char *Text, uint32_t Length) {
+    bool enabled = true, inSection = false;
+    INI_READER reader = {Text, Text + Length};
+    INI_LINE line;
+    while (NextLine(&reader, &line)) {
+        if (line.Kind == INI_LINE_KIND::SECTION || line.Kind == INI_LINE_KIND::BAD_SECTION) {
+            inSection = line.Kind == INI_LINE_KIND::SECTION && IsSection(line, TOASTS_SECTION);
+            continue;
+        }
+        if (inSection && line.Kind == INI_LINE_KIND::KEY && IsKey(line, KEY_TOASTS_ENABLED))
+            enabled = !(line.ValueLength == 2 && (line.Value[0] | 0x20) == 'n' && (line.Value[1] | 0x20) == 'o');
+    }
+    return enabled;
+}
+
 } // namespace oxos::ini_file

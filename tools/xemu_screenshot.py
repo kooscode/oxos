@@ -8,7 +8,8 @@ OUT is the screenshots' name: OUT_1.png, OUT_2.png, ... (640x480). STEPS is a co
 - wait:SECONDS   wait (boot, a game starting, an animation);
 - shot           save the next screenshot;
 - BUTTON[:N]     press a controller button N times (default 1): A, B, X, Y, BLACK (RB), WHITE (LB), BACK, START, LS, RS (stick clicks),
-                 UP, DOWN, LEFT, RIGHT (D-pad).
+                 UP, DOWN, LEFT, RIGHT (D-pad), LT, RT (the triggers, pulled all the way);
+- B1+B2+...[:N][@S]  press buttons together, held half a second, or S seconds (a combination: BLACK+WHITE, LT+RT+BACK+BLACK@3.5).
 Default: "wait:30,shot". --put copies a file onto C: (or E:, F:, ...) of a copy of the hard disk (FATX), creating folders and replacing a file
 that is there; repeat it for more files.
 The --hdd image itself is never written (default: the xemu-dashboard disk, `make -C kernel hdd_image`). --save-hdd keeps the disk as xemu left it, to
@@ -41,22 +42,25 @@ from virtual_gamepad import XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 # Button names in STEPS: (the virtual pad's control, the value that presses it).
 BUTTONS = {"A": ("A", 1), "B": ("B", 1), "X": ("X", 1), "Y": ("Y", 1), "BLACK": ("RB", 1), "WHITE": ("LB", 1), "BACK": ("BACK", 1), "START": ("START", 1),
-           "LS": ("LS", 1), "RS": ("RS", 1), "UP": ("HATY", -1), "DOWN": ("HATY", 1), "LEFT": ("HATX", -1), "RIGHT": ("HATX", 1)}
+           "LS": ("LS", 1), "RS": ("RS", 1), "UP": ("HATY", -1), "DOWN": ("HATY", 1), "LEFT": ("HATX", -1), "RIGHT": ("HATX", 1), "LT": ("LT", 255),
+           "RT": ("RT", 255)}
 
 
 def read_steps(text):
-    """[(kind, value)] from STEPS: ("wait", seconds), ("shot", None), ("press", (button, times)); exits with a message on a bad step."""
+    """[(kind, value)] from STEPS: ("wait", seconds), ("shot", None), ("press", ([buttons], times, seconds held or None)); exits with a message on a bad
+    step."""
     steps = []
     for item in filter(None, (part.strip() for part in text.split(","))):
+        item, _, hold = item.partition("@")
         name, _, count = item.partition(":")
         if name == "wait":
             steps.append(("wait", float(count)))
         elif name == "shot":
             steps.append(("shot", None))
-        elif name.upper() in BUTTONS:
-            steps.append(("press", (name.upper(), int(count or 1))))
+        elif all(button in BUTTONS for button in name.upper().split("+")):
+            steps.append(("press", (name.upper().split("+"), int(count or 1), float(hold) if hold else None)))
         else:
-            sys.exit(f"unknown step {item!r} (wait:S, shot, or a button: {', '.join(BUTTONS)})")
+            sys.exit(f"unknown step {item!r} (wait:S, shot, or buttons joined by +: {', '.join(BUTTONS)})")
     return steps
 
 
@@ -123,7 +127,8 @@ def main():
     open(cfg, "w").write(
         f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '64'\n\n[sys.files]\nbootrom_path = ''\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\neeprom_path = '{os.path.join(work, 'eeprom.bin')}'\nhdd_path = '{hdd}'\n"
-        + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING)
+        + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING
+        + "\n[net]\nenable = true\nbackend = 'nat'\n")  # the network card on, as on a console (10.0.2.15 by DHCP)
     pad = VirtualPad()  # before xemu starts, so xemu binds it to controller port 1
     serial = ["-device", "lpc47m157", "-serial", f"file:{os.path.abspath(a.serial)}"] if a.serial else []
     xemu = subprocess.Popen([a.xemu, "-config_path", cfg, "-qmp", f"unix:{sock},server,nowait"] + serial, stdout=open(os.path.join(work, "xemu.log"), "w"),
@@ -134,11 +139,13 @@ def main():
             if kind == "wait":
                 time.sleep(value)
             elif kind == "press":
-                control, pressed = BUTTONS[value[0]]
-                for _ in range(value[1]):
-                    pad.set(control, pressed)
-                    time.sleep(0.12)
-                    pad.set(control, 0)
+                buttons, times, hold = value
+                for _ in range(times):
+                    for button in buttons:
+                        pad.set(*BUTTONS[button])
+                    time.sleep(hold or (0.12 if len(buttons) == 1 else 0.5))
+                    for button in buttons:
+                        pad.set(BUTTONS[button][0], 0)
                     time.sleep(0.25)
             else:
                 window = find_xemu_window()

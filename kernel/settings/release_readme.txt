@@ -13,6 +13,13 @@ INSTALL
 UPDATING
 Copy the OXOS folder again, but keep your own .ini files if you changed them
 (C:\OXOS\oxos_settings.ini, C:\OXOS\oxos_extensions.ini,
-C:\OXOS\extensions\oxos_trainers.ini).
+C:\OXOS\extensions\oxos_trainers.ini, C:\OXOS\extensions\oxos_igs.ini),
+and add the sections that are new in this release's copies to yours.
+
+IN-GAME SHORTCUTS
+LT + RT + BACK + BLACK in any title shows "IN GAME RESET" and resets the console.
+More shortcuts (start any XBE, e.g. the FTP server on BLACK + WHITE):
+C:\OXOS\extensions\oxos_igs.ini. Without the extension (safe mode, B held at
+power on), hold LT + RT + BACK + BLACK for 3 seconds.
 
 More: https://github.com/kooscode/oxos

@@ -12,6 +12,7 @@
 #include <runtime/runtime.h>
 #include <diagnostics/diagnostics.h>
 #include <titles/titles.h>
+#include <toasts/toasts.h>
 
 namespace xk::extensions {
 
@@ -442,6 +443,7 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
     if (!descriptor->Start()) {
         XK_SERIAL("extensions: [%s] Start returned FALSE: unloaded\n", name);
         DropRegistrations(state->Count);
+        toasts::ForgetToastOwner(state->Count); // the next extension takes this index
         ReleaseStatePage(context.State);
         Slots->Count = firstSlot;
         MmFreeContiguousMemory(image);
@@ -508,6 +510,7 @@ void LoadListedExtensions() {
         LoadedExtensions->LoopExtension = XK_NO_EXTENSION;
         LoadedExtensions->Kernel.Size = sizeof(OXOS_KERNEL_INFO);
         LoadedExtensions->Kernel.MemoryPages = memory::HighestPhysicalPage + 1;
+        toasts::OpenToasts(); // ExtensionStart may queue a toast already (spec/oxos_internal/36 §2)
         slots->Count = 0;
         uint32_t errors;
         uint32_t count = oxos::ini_file::ParseExtensions(text, got, entries, XK_EXTENSIONS_MAX, &errors);
@@ -535,13 +538,11 @@ void LoadListedExtensions() {
     }
     if (!state)
         return;
-    // The loader's functions end with it; then the run loop starts, when an extension has a RunLoop: one thread for all of them (§4.3).
-    bool loop = false;
-    for (ULONG i = 0; i < state->Count; i++) {
+    // The loader's functions end with it; then the run loop starts: one thread for all of them (§4.3), which also delivers the pads' changes (§7.3) and shows
+    // the toasts any extension may queue (spec/oxos_internal/36).
+    for (ULONG i = 0; i < state->Count; i++)
         state->Extensions[i].Context.Api = nullptr;
-        loop |= state->Extensions[i].Descriptor->RunLoop != nullptr;
-    }
-    if (loop && !NT_SUCCESS(PsCreateSystemThreadEx(&state->LoopThread, 0, LOOP_STACK_BYTES, 0, nullptr, nullptr, nullptr, FALSE, FALSE, RunLoopThread))) {
+    if (!NT_SUCCESS(PsCreateSystemThreadEx(&state->LoopThread, 0, LOOP_STACK_BYTES, 0, nullptr, nullptr, nullptr, FALSE, FALSE, RunLoopThread))) {
         state->LoopThread = nullptr;
         XK_SERIAL("extensions: the run loop did not start\n");
     }

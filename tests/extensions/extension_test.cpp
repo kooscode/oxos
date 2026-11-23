@@ -32,9 +32,14 @@ struct SAVED {
     ULONG DataOk;             // oxos_ini_section at the first launch: 1 passed, else the first step that failed (2, 3, ...)
     ULONG TrainerMark;        // the test title's XkTitleTrainerMark, read when it exits (the setting trainer_mark gives its address)
     ULONG TrainerLaunches;    // exits of the test title (the setting trainer_title) at which it was read
+    ULONG ToastQueueOk;       // at every Start: a toast queued with an id, a three-line one refused (spec/oxos_internal/36 §5)
+    ULONG ToastsShown;        // its toasts' shown events, all launches
+    ULONG ToastsHidden;       // their hidden events
+    ULONG ToastOthers;        // events with an id that is not this launch's toast (must stay 0: only the extension's own toasts)
 };
 
 static SAVED *Saved;
+static ULONG ToastId;         // this launch's toast
 static BOOLEAN OwnFileOpened; // this launch's RunLoop opened the extension's own file
 static BOOLEAN Terminated;    // this launch's Terminate has run
 
@@ -139,12 +144,32 @@ static ULONG DataRoundTrip(void) {
     return 1;
 }
 
+// Its own toast's events (oxos_on_toast): counted, and any other id counted apart.
+static void CountToast(ULONG Id, OXOS_TOAST_EVENT Event, void *UserData) {
+    if (Id != ToastId)
+        Saved->ToastOthers++;
+    else if (Event == OXOS_TOAST_SHOWN)
+        Saved->ToastsShown++;
+    else if (Event == OXOS_TOAST_HIDDEN)
+        Saved->ToastsHidden++;
+}
+
+// A one-second toast for this launch, and one the kernel must refuse; TRUE when both went as they should.
+static BOOLEAN QueueToasts() {
+    OXOS_TOAST toast = {"extension_test", OXOS_TOAST_TOP_LEFT, 1, 0};
+    OXOS_TOAST wrong = {"one\ntwo\nthree", OXOS_TOAST_TOP_LEFT, 1, 0};
+    BOOLEAN queued = oxos_toast_enqueue(toast) == STATUS_SUCCESS && toast.ToastId != 0;
+    ToastId = toast.ToastId;
+    return queued && oxos_toast_enqueue(wrong) == (NTSTATUS)0xC000000D && wrong.ToastId == 0 && oxos_on_toast(CountToast, nullptr);
+}
+
 static BOOLEAN ExtensionStart(void) {
     Saved = (SAVED *)oxos_state();
     if (!Saved->Launches) { // the first launch: the page is all zero
         Saved->Magic = SAVED_MAGIC;
         Saved->SettingOk = 1;
         Saved->OwnSettingsOk = 1;
+        Saved->ToastQueueOk = 1;
     }
     Saved->Launches++;
     Saved->Generation = oxos_launch_number();
@@ -165,6 +190,8 @@ static BOOLEAN ExtensionStart(void) {
     oxos_on_title_loading(CountLoading, &Saved->Loading);
     oxos_on_title_loaded(CountLoaded, &Saved->Loaded);
     oxos_on_title_exiting(CountExiting, &Saved->Exiting);
+    if (!QueueToasts())
+        Saved->ToastQueueOk = 0;
     oxos_set_log_target(OXOS_LOG_SERIAL | OXOS_LOG_FILE); // asks for both: its section's logging_enabled = no must still keep every line out
     oxos_log("launch %lu, generation %lu", Saved->Launches, oxos_launch_number());
     return oxos_hook(NtOpenFile, CountNtOpenFile);

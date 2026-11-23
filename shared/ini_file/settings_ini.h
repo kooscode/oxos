@@ -9,6 +9,9 @@
 //   boot_video_enabled = yes          yes: a boot video plays; no or missing: none
 //   boot_video_file = intro.mpg       a file in C:\OXOS\boot_videos\, or a full path; quotes around it are allowed
 //   boot_video_always = no            yes: after every reboot that starts the dashboard or the disc; no or missing: after a cold boot only
+//
+//   [toasts]
+//   enabled = no                      no: no toasts over titles (spec/oxos_internal/36); yes or missing: toasts on
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -37,5 +40,8 @@ bool FindDashboard(const char *Text, uint32_t Length, uint32_t Number, char (&Pa
 // Reads [boot_video] from the file's text into *Settings: off and empty unless the file says otherwise ("yes" in any case turns a switch on; a key given twice,
 // the last one counts). Errors counts the lines that could not be read, in the whole file.
 void ReadBootVideoSettings(const char *Text, uint32_t Length, BOOT_VIDEO_SETTINGS *Settings, uint32_t *Errors);
+
+// [toasts]'s enabled (spec/oxos_internal/36 §2): true unless the file says "enabled = no" (any case; a key given twice, the last one counts).
+bool ReadToastsEnabled(const char *Text, uint32_t Length);
 
 } // namespace oxos::ini_file

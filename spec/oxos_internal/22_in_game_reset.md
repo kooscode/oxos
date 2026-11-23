@@ -1,6 +1,10 @@
-# 22 — In-game reset (IGR)
+# 22 — In-game reset (IGR), replaced by in-game shortcuts (IGS)
 
-OXOS addition, implemented 2026-10-29. Code: `kernel/src/in_game_reset/`: `xinput_hook.S` (`KeRaiseIrqlToDpcLevel`, `HalpIgrReturn`), `in_game_reset.cpp`
+**2026-11-23 (user): the in-game reset becomes in-game shortcuts (IGS):** an extension, `oxos_igs.xos`, with its shortcuts in
+`C:\OXOS\extensions\oxos_igs.ini`, on the pads' state of §9; its own spec (a later one) links back here. §1-8 describe the in-game reset as it was built
+(2026-10-29 to 2026-11-06) and stay as its record; §9 is the pads' state both use.
+
+OXOS addition, implemented 2026-10-29, removed 2026-11-23. Code (until then): `kernel/src/in_game_reset/`: `xinput_hook.S` (`KeRaiseIrqlToDpcLevel`, `HalpIgrReturn`), `in_game_reset.cpp`
 (`HalpIgrCheck`, `in_game_reset::Reboot`). Background: rmenhal's in-game reset in NKPatcher (2004, GPL-2.0; §2), and how EvoX M8 does it (spec/evox/04 §2).
 
 Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title, reboots the console. The reboot is a cold one, a power cycle through the SMC
@@ -171,10 +175,11 @@ Differences from today's reset, for the user:
 - Titles that read their pads at DISPATCH_LEVEL: none seen; §8.4 step 1 falls back to the power cycle for them.
 - Whether to add a third combo that quick-reboots back into the disc's title (rmenhal's NKPatcher triggers + START + BLACK).
 
-## 9. Proposal: buttons from the USB host controllers, for every title (2026-11-23; not implemented)
-Status: design, from a pilot on the Conexant debug kit (2026-11-23, a throwaway build, not committed). The user asked for every title to be covered, however
-it was built (XDK, nxdk or another toolkit). It replaces §1-2 (the `XInputGetState` hook) as where the buttons come from, and runs §8's quick reboot from a
-kernel thread.
+## 9. Buttons from the USB host controllers, for every title (2026-11-23, implemented)
+Status: implemented 2026-11-23 (`kernel/src/hardware/usb/pad_reports.cpp`; the launch, `titles::SwitchTitle` in `kernel/src/titles/title_loader.cpp`),
+designed from a pilot on the Conexant debug kit (2026-11-23, a throwaway build, not committed). The user asked for every title to be covered, however it was
+built (XDK, nxdk or another toolkit). It replaced §1-2 (the `XInputGetState` hook, removed) as where the buttons come from, and runs §8's quick reboot from
+a kernel thread.
 
 ### 9.1 Why
 The hook of §2 finds `XInputGetState` in the XDK's input library, so titles built another way (nxdk dashboards and apps, homebrew; titles built against
@@ -202,7 +207,18 @@ pad; the reserved page fixed it.
 **The report's start.** A finished descriptor's buffer pointer is cleared (or, after a short transfer, points just past the data); its buffer end stays. The
 pilot took the start as the end minus 19 (or the pointer minus 20) and checked the `00 14` header; for one game the computed address was wrong although the
 header and the buttons matched. The real version takes the start from the endpoint and buffer the title set up (the descriptor's place in the endpoint's
-list), or keeps the header check as the guard.
+list), or keeps the header check as the guard. Built (2026-11-23): the start as the pilot's, the `00 14` header as the guard.
+
+**Telling pads apart.** A finished descriptor names no device or endpoint, so the kernel knows a pad by the physical address of its report buffer (4 slots,
+the oldest reused). XDK titles keep one buffer per pad. nxdk titles fill a new buffer for every report (xemu, 2026-11-23: one pad cycled through more than
+16 buffers, 0x3F64000-0x3FDC000), so their one pad moves from slot to slot. Hence:
+| Rule | Why |
+|---|---|
+| A slot's first report counts as a change only when its buttons differ from the last report's (any slot), and those last buttons are kept across quick reboots (`XK_PERSIST`) | a pad that only moved to a new buffer makes no change event, and buttons still held when the next title starts are no change (an in-game shortcut held into the title it started does not fire again) |
+| The last resort (spec 48 §5): exactly LT + RT + BACK + BLACK, held on one slot for 3 s, or over every report for 3 s | the per-slot timer started over at every new buffer, and LT + RT + BACK + BLACK never fired over an nxdk title; over every report it works with one pad (a second pad's reports without the combination start it over) |
+| `OXOS_PAD_STATE::Port` is the slot | the same pad in XDK titles; in nxdk titles it changes from report to report |
+| Reports with d-pad up and down, or left and right, at once are dropped | a title asking for the pad's capabilities (`XInputGetCapabilities`) gets an answer in the report's own layout and header, every supported button's bits set (`00 14 FF 00 FF ...`), on the same done list; read as buttons it held every one, and the in-game shortcuts reset a game while the user pressed A (console, 2026-11-23). Shortcuts and the last resort also match exactly their buttons, no others |
+| The in-game shortcuts keep one state over all pads (spec 48 §3) | per port, a press arriving on a port that had not been seen counted as that port's first state and fired nothing (xemu, the controller test title) |
 
 ### 9.3 The reset, on a kernel thread
 The interrupt only sets a flag (it runs at the controller's interrupt level). A kernel thread of OXOS's own, waiting at a high priority, does the rest:

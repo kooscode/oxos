@@ -10,7 +10,15 @@ extern "C" {
 #define OXOS_EVENT_TITLE_LOADING 1 // events (§7.2): their data is oxos_sdk.h's OXOS_TITLE_LOADING ...
 #define OXOS_EVENT_TITLE_LOADED 2
 #define OXOS_EVENT_TITLE_EXITING 3
-#define OXOS_EVENT_COUNT 4 // one more than the highest event
+#define OXOS_EVENT_PAD_CHANGED 4 // its data is oxos_sdk.h's OXOS_PAD_STATE (spec/oxos_internal/34 §7.3)
+#define OXOS_EVENT_TOAST 5 // its data is an OXOS_TOAST_NOTICE, for the extension that queued the toast only (spec/oxos_internal/36 §5)
+#define OXOS_EVENT_COUNT 6 // one more than the highest event
+
+// The data of OXOS_EVENT_TOAST: one of the extension's toasts shown, hidden or dropped.
+typedef struct OXOS_TOAST_NOTICE {
+    ULONG ToastId;
+    OXOS_TOAST_EVENT Event;
+} OXOS_TOAST_NOTICE;
 
 // An event's callback, as the kernel calls it: the event's data and what the extension passed when it registered.
 typedef void (*OXOS_EVENT_CALLBACK)(const void *Data, void *UserData);

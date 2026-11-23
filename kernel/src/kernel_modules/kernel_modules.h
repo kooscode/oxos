@@ -22,16 +22,18 @@ struct XK_KERNEL_MODULES_HEADER {
 };
 XK_SIZE(XK_KERNEL_MODULES_HEADER, 20);
 
-// The boot video's switches (oxos_settings.ini's [boot_video], spec/oxos_internal/38 §2), as the kernel settings module returns them.
+// The switches of oxos_settings.ini the kernel reads at a cold boot, as the kernel settings module returns them: the boot video's ([boot_video],
+// spec/oxos_internal/38 §2) and the toasts' ([toasts], spec/oxos_internal/36 §2).
 constexpr ULONG XK_BOOT_VIDEO_ENABLED = 1; // boot_video_enabled = yes
 constexpr ULONG XK_BOOT_VIDEO_ALWAYS = 2;  // boot_video_always = yes (only with boot_video_enabled = yes)
+constexpr ULONG XK_TOASTS_OFF = 4;         // [toasts] enabled = no
 
 // The modules' functions: the table the image's entry point returns.
 struct XK_KERNEL_MODULES {
     // extension_loader.cpp: loads the extensions oxos_extensions.ini lists for this launch (spec/oxos_internal/34 §8).
     void (*LoadExtensions)();
-    // kernel_settings.cpp: oxos_settings.ini's [boot_video] switches, XK_BOOT_VIDEO_*; 0 without the file.
-    ULONG (*ReadBootVideoSwitches)();
+    // kernel_settings.cpp: oxos_settings.ini's cold-boot switches, XK_BOOT_VIDEO_* and XK_TOASTS_OFF; 0 without the file.
+    ULONG (*ReadColdBootSwitches)();
     // launch_redirect.cpp: the target oxos_launch_redirect.ini gives Path (a device path), as a device path in Target (TargetSize bytes); false: none
     // (spec/oxos_internal/33).
     bool (*FindLaunchRedirect)(PCSZ Path, char *Target, ULONG TargetSize);
