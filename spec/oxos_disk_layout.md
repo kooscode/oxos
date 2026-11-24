@@ -18,19 +18,23 @@ One page for every file and folder OXOS reads or writes, today and planned, each
   [33 §1](oxos_internal/33_launch_redirect.md)).
 - **Safe boot** (B held at a cold boot) reads none of OXOS's ini files and no OXOS EEPROM setting (spec [39 §1.1](oxos_internal/39_oxos_setup.md)).
 
-## `C:\OXOS` on the hard disk
+## `C:\OXOS` on the hard disk [ ✅ = Implemented / ⬜ = Not Implemented ]
 
 ```
-C:\OXOS\                                  ✅ made at every cold boot
-├── oxos_settings.ini                     ✅ the kernel's options: [dashboard] ✅ (19), [launch_redirect] ✅ (33), [boot_video] ✅ (38), [toasts] ✅ (36); in-game reset ⬜ (39); shipped
+C:\OXOS\                                  primary OXOS folder, it's auto created at cold boot
+├── oxos_settings.ini                 <--|✅ [dashboard] (19)
+│                                        |✅ [launch_redirect] (33)
+│                                        |✅ [boot_video] (38)
+│                                        |✅ [toasts] (36)
+│                                        |⬜ in-game reset (39)
 ├── oxos_extensions.ini                   ✅ which extensions load, in which order, enabled (34)
-├── oxos_title_patches.ini                ✅ per-title patches (25) / Will move to extensions (34 §10)
+├── oxos_title_patches.ini                ✅ per-title patches (25), applied by the kernel modules (43)
 ├── oxos_eeprom_backup.bin                ⬜ all 256 EEPROM bytes, saved by OXOS Setup before it changes one (39)
 │
 ├── apps\                                 ✅ OXOS's apps (from the release zip)
 │   ├── oxos_ftp.xbe                      ✅ the OXOS FTP server (apps/oxos_ftp)
 │   ├── oxos_boot_video.xbe               ✅ the boot video player, started by the kernel (38)
-│   └── oxos_settings.xbe                 ⬜ OXOS Setup: hold A at boot (39)
+│   └── oxos_settings.xbe                 ⬜ OXOS Setup App: hold A at boot (39)
 │
 ├── extensions\                           ✅ made at every cold boot; each extension with its own .ini of the same name
 │   ├── <anyone's>.xos + <same>.ini       ✅ the extension and its own settings (top) and data ([sections]) (34 §3.1)
