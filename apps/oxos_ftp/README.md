@@ -22,7 +22,12 @@ debug serial port. Log in with any user name and password.
 
 ## What it does
 - **Commands:** USER PASS SYST FEAT OPTS PWD CWD CDUP TYPE MODE STRU PASV EPSV PORT LIST NLST MLSD MLST RETR STOR APPE REST SIZE MDTM DELE MKD RMD RNFR RNTO
-  NOOP ABOR QUIT, SITE (below). Transfers are always binary. Up to 8 clients at once.
+  NOOP ABOR QUIT, ALLO, SITE (below). Transfers are always binary. Up to 8 clients at once.
+- **Speed on screen:** while files move, the top right shows `UL: 11.8 MB/s / ETA: 00:00:38` and `DL: 10.7 MB/s / ETA: 00:00:45` (once a
+  second), filled from the left as the files progress. The progress and the time left need the file's size: a download's is known; an upload's when the
+  client sends it first with `ALLO <bytes>` (FileZilla, lftp, Python's `ftplib`: `ftp.sendcmd(f"ALLO {size}")`); without it only the speed shows.
+- **Speed:** the disk reads and writes run in threads of their own, overlapped with the network, so transfers run near the network's speed: on a
+  console's 100 Mbit port, uploads 11.8 MB/s and downloads 10.7 MB/s (2026-11-24, an 800 MB disc image).
 - **Moving:** RNTO to a path in another folder moves the file or folder there (same drive only; the kernel opens the target folder as the reference kernel
   does). Moving between drives is refused; copy and delete instead.
 - **Big images:** on exFAT, files of 4 GB or more upload in one piece ([`spec/oxos_internal/07_exfat_driver.md`](../../spec/oxos_internal/07_exfat_driver.md)).

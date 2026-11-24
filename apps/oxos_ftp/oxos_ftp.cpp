@@ -11,7 +11,9 @@
 // drive. Passive data ports are lwIP's 49152-65535. The address (DHCP, else 192.168.1.222 after 30 s) is on the screen and, with a SERIAL=1 kernel, on the
 // debug serial port. The screen (and the debug serial port) shows every command as it arrives and what it did. BACK on any controller reboots the console (as
 // SITE REBOOT). The main thread owns the screen and the controllers (SDL3, tools/sdl_screen) and starts titles; the network runs in a thread of its own, and
-// each client in another. The C++ headers first: lwIP's socket macros (bind, connect, ...) would break them.
+// each client in another; an upload's disk writes in one more. While files move, the top right of the screen shows the speeds (UL / DL, MB/s), filled as the
+// files progress (a download's size is known; an upload's when the client sent ALLO with it). The C++ headers first: lwIP's socket macros (bind, connect,
+// ...) would break them.
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -34,12 +36,38 @@ extern "C" struct netif *g_pnetif; // nxdk's network interface (lib/nxdk/net.c)
 
 namespace {
 
-// The server's name, version and build time, in the 220 greeting and on the screen. The build time changes with every build, so a client can tell which build
-// answers. The version is MAJOR.MINOR.PATCH: raise it when the server's behaviour changes.
-constexpr char ServerName[] = "OXOS FTP server 0.1.2 (built " __DATE__ " " __TIME__ ")";
+// The server's name, version and build time, in the 220 greeting and on the screen: "OXOS FTP server 0.2.0 (2026-11-24 02:13:27)". The build time changes
+// with every build, so a client can tell which build answers. The version is MAJOR.MINOR.PATCH: raise it when the server's behaviour changes.
+constexpr char ServerVersion[] = "OXOS FTP server 0.2.0";
+
+struct SERVER_NAME {
+    char Text[48];
+};
+
+// ServerVersion and the compiler's build time (__DATE__ "Nov 24 2026", __TIME__ "02:13:27") as "... (2026-11-24 02:13:27)", at compile time.
+constexpr SERVER_NAME MakeServerName() {
+    constexpr char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    const char *date = __DATE__, *time = __TIME__;
+    int month = 1;
+    for (int i = 0; i < 12; i++) {
+        if (date[0] == months[3 * i] && date[1] == months[3 * i + 1] && date[2] == months[3 * i + 2])
+            month = i + 1;
+    }
+    SERVER_NAME name{};
+    int at = 0;
+    for (const char *c = ServerVersion; *c; c++)
+        name.Text[at++] = *c;
+    const char stamp[] = {' ', '(', date[7], date[8], date[9], date[10], '-', (char)('0' + month / 10), (char)('0' + month % 10), '-',
+                          date[4] == ' ' ? '0' : date[4], date[5], ' ', time[0], time[1], time[2], time[3], time[4], time[5], time[6], time[7], ')'};
+    for (char c : stamp)
+        name.Text[at++] = c;
+    return name;
+}
+
+constexpr SERVER_NAME ServerNameText = MakeServerName();
+constexpr const char *ServerName = ServerNameText.Text;
 
 constexpr unsigned short ControlPort = 21;
-constexpr unsigned BufferSize = 64 * 1024;
 constexpr int MaxSessions = 8;
 constexpr SIZE_T SessionStack = 64 * 1024; // each client's thread, and the network's
 constexpr NTSTATUS STATUS_NOT_SAME_DEVICE = (NTSTATUS)0xC00000D4;
@@ -94,6 +122,302 @@ void Log(const char *format, ...) {
     DbgPrint("ftp: %s\n", line);
     LeaveCriticalSection(&PrintLock);
 }
+
+// --- Transfer speeds and progress on the screen: the sessions count the bytes of the files they send and receive, the main thread shows them at the top
+// right once a second while transfers run
+
+volatile LONG UploadedBytes, DownloadedBytes;   // running totals, modulo 2^32: only a second's difference is used
+volatile LONG Uploads, Downloads;               // transfers in progress
+volatile LONG UploadKiBDone, UploadKiBTotal;    // of the uploads whose size is known: KiB done and in all (progress)
+volatile LONG DownloadKiBDone, DownloadKiBTotal; // the same for the downloads
+constexpr DWORD SpeedIntervalMs = 1000;         // how often the speeds are measured and shown
+
+// One transfer, counted in Uploads or Downloads while it lives; Count adds the file bytes it has moved. Size 0: not known (no progress shown for it).
+class TransferInProgress {
+public:
+    TransferInProgress(bool upload, LONGLONG start, LONGLONG size) : upload(upload), done(start), size(size) {
+        InterlockedIncrement(upload ? &Uploads : &Downloads);
+        if (size > 0) {
+            InterlockedExchangeAdd(upload ? &UploadKiBTotal : &DownloadKiBTotal, (LONG)(size >> 10));
+            InterlockedExchangeAdd(upload ? &UploadKiBDone : &DownloadKiBDone, (LONG)(done >> 10));
+        }
+    }
+
+    ~TransferInProgress() {
+        if (size > 0) {
+            InterlockedExchangeAdd(upload ? &UploadKiBTotal : &DownloadKiBTotal, -(LONG)(size >> 10));
+            InterlockedExchangeAdd(upload ? &UploadKiBDone : &DownloadKiBDone, -(LONG)(done >> 10));
+        }
+        InterlockedDecrement(upload ? &Uploads : &Downloads);
+    }
+
+    void Count(unsigned bytes) {
+        InterlockedExchangeAdd(upload ? &UploadedBytes : &DownloadedBytes, (LONG)bytes);
+        LONGLONG before = done;
+        done += bytes;
+        if (size > 0)
+            InterlockedExchangeAdd(upload ? &UploadKiBDone : &DownloadKiBDone, (LONG)((done >> 10) - (before >> 10)));
+    }
+
+private:
+    bool upload;   // a STOR or APPE, else a RETR
+    LONGLONG done; // the file's bytes so far, from the REST or APPE offset on
+    LONGLONG size; // the file's size, 0 when not known
+};
+
+// One line of the box: "UL: 11.8 MB/s / ETA: 00:01:12" from the bytes of one interval (tenths in integers: nxdk's printf has no floating point), and its
+// progress; the time left only when the size is known, from Smoothed (bytes a second, averaged over the last seconds so it does not jump each second).
+int DescribeTransfers(char *out, int room, const char *name, ULONG bytes, DWORD ms, LONG kibDone, LONG kibTotal, int line, ULONG &smoothed) {
+    ULONG perSecond = (ULONG)((ULONGLONG)bytes * 1000 / ms), tenths = perSecond / 100000;
+    smoothed = smoothed ? (ULONG)(((ULONGLONG)smoothed * 3 + perSecond) / 4) : perSecond;
+    sdl_screen::SetCornerFill(line, kibTotal > 0 ? (int)((LONGLONG)kibDone * 1000 / kibTotal) : -1);
+    int n = std::snprintf(out, room, "%s: %lu.%lu MB/s", name, tenths / 10, tenths % 10);
+    if (kibTotal > 0 && smoothed) {
+        ULONG left = (ULONG)((ULONGLONG)(kibTotal > kibDone ? kibTotal - kibDone : 0) * 1024 / smoothed);
+        n += std::snprintf(out + n, room - n, " / ETA: %02lu:%02lu:%02lu", left / 3600, left / 60 % 60, left % 60);
+    }
+    return n + std::snprintf(out + n, room - n, "\n");
+}
+
+// The main thread, every frame: once a second the speeds of the last second at the top right, filled by progress; nothing while no transfer runs.
+void ShowTransferSpeeds() {
+    static DWORD lastTime;
+    static ULONG lastUploaded, lastDownloaded;
+    static ULONG uploadSmoothed, downloadSmoothed; // bytes a second, for the time left; 0 again once no transfer runs
+    DWORD now = GetTickCount();
+    if (now - lastTime < SpeedIntervalMs)
+        return;
+    if (Uploads <= 0)
+        uploadSmoothed = 0;
+    if (Downloads <= 0)
+        downloadSmoothed = 0;
+    ULONG uploaded = (ULONG)UploadedBytes, downloaded = (ULONG)DownloadedBytes;
+    char text[128] = "";
+    int n = 0, line = 0;
+    if (Uploads > 0)
+        n += DescribeTransfers(text + n, sizeof(text) - n, "UL", uploaded - lastUploaded, now - lastTime, UploadKiBDone, UploadKiBTotal, line++,
+                               uploadSmoothed);
+    if (Downloads > 0)
+        n += DescribeTransfers(text + n, sizeof(text) - n, "DL", downloaded - lastDownloaded, now - lastTime, DownloadKiBDone, DownloadKiBTotal, line++,
+                               downloadSmoothed);
+    sdl_screen::SetCornerText(text);
+    lastTime = now;
+    lastUploaded = uploaded;
+    lastDownloaded = downloaded;
+}
+
+// --- An upload's disk writes, on a thread of their own
+
+// The blocks of an upload on their way to the disk: the session thread receives into a free block and queues it, the writer thread writes the queued blocks
+// in order and frees them. The disk writes one block by DMA while the session receives the next, so an upload runs at the network's speed, not the network's
+// and the disk's one after the other (console, 2026-11-23: 800 MB took 70 s to receive and 29 s to write).
+class DiskWriter {
+public:
+    static constexpr unsigned BlockSize = 256 * 1024; // the most a disk write takes
+    static constexpr int Blocks = 6;                  // 1.5 MB per upload
+
+    // Allocates the blocks and starts the writer thread for File from Offset on; false when there is no memory for them.
+    bool Start(HANDLE file, LONGLONG offset) {
+        this->file = file;
+        position.QuadPart = offset;
+        for (char *&block : blocks) {
+            block = static_cast<char *>(std::malloc(BlockSize));
+            if (!block)
+                return false;
+        }
+        freeBlocks = CreateSemaphore(nullptr, Blocks, Blocks, nullptr);
+        queuedBlocks = CreateSemaphore(nullptr, 0, Blocks, nullptr);
+        if (!freeBlocks || !queuedBlocks)
+            return false;
+        thread = CreateThread(nullptr, WriterStack, Run, this, CREATE_SUSPENDED, nullptr);
+        if (!thread)
+            return false;
+        // Above the session: the writer needs little CPU, but as soon as a write ends, so the disk does not wait for the session's time slice (console,
+        // 2026-11-23: at the same priority a busy session doubled the time spent writing).
+        SetThreadPriority(thread, THREAD_PRIORITY_HIGHEST);
+        ResumeThread(thread);
+        return true;
+    }
+
+    ~DiskWriter() {
+        for (char *block : blocks)
+            std::free(block);
+        for (HANDLE handle : {freeBlocks, queuedBlocks, thread}) {
+            if (handle)
+                CloseHandle(handle);
+        }
+    }
+
+    // The next free block, after waiting for one; nullptr once a write has failed.
+    char *TakeBlock() {
+        WaitForSingleObject(freeBlocks, INFINITE);
+        if (!NT_SUCCESS(status)) {
+            ReleaseSemaphore(freeBlocks, 1, nullptr);
+            return nullptr;
+        }
+        return blocks[next];
+    }
+
+    // The block TakeBlock gave, filled with Length bytes (more than 0), queued for the disk.
+    void QueueBlock(unsigned length) {
+        lengths[next] = length;
+        next = (next + 1) % Blocks;
+        ReleaseSemaphore(queuedBlocks, 1, nullptr);
+    }
+
+    // The block TakeBlock gave, back unused.
+    void ReturnBlock() {
+        ReleaseSemaphore(freeBlocks, 1, nullptr);
+    }
+
+    // Waits until every queued block is written and the writer thread has ended: the first failed write's status, else STATUS_SUCCESS.
+    NTSTATUS Finish() {
+        WaitForSingleObject(freeBlocks, INFINITE);
+        lengths[next] = 0; // the end
+        ReleaseSemaphore(queuedBlocks, 1, nullptr);
+        WaitForSingleObject(thread, INFINITE);
+        return status;
+    }
+
+private:
+    static constexpr SIZE_T WriterStack = 16 * 1024;
+
+    static DWORD WINAPI Run(LPVOID self) {
+        static_cast<DiskWriter *>(self)->WriteQueuedBlocks();
+        return 0;
+    }
+
+    // The writer thread: the queued blocks in order until the end; after a failed write the rest are only freed.
+    void WriteQueuedBlocks() {
+        for (int at = 0;; at = (at + 1) % Blocks) {
+            WaitForSingleObject(queuedBlocks, INFINITE);
+            if (!lengths[at])
+                return;
+            if (NT_SUCCESS(status)) {
+                IO_STATUS_BLOCK iosb;
+                NTSTATUS written = NtWriteFile(file, nullptr, nullptr, nullptr, &iosb, blocks[at], lengths[at], &position);
+                if (NT_SUCCESS(written))
+                    position.QuadPart += lengths[at];
+                else
+                    status = written;
+            }
+            ReleaseSemaphore(freeBlocks, 1, nullptr);
+        }
+    }
+
+    HANDLE file = nullptr;          // the upload's file
+    LARGE_INTEGER position = {};    // where the next block goes (the writer thread's)
+    char *blocks[Blocks] = {};      // the blocks, used in turn
+    unsigned lengths[Blocks] = {};  // each queued block's bytes; 0 ends the upload
+    int next = 0;                   // the block TakeBlock gives next (the session thread's)
+    HANDLE freeBlocks = nullptr;    // counts the free blocks
+    HANDLE queuedBlocks = nullptr;  // counts the queued blocks
+    HANDLE thread = nullptr;        // the writer thread
+    volatile NTSTATUS status = STATUS_SUCCESS; // the first failed write's
+};
+
+// --- A download's disk reads, on a thread of their own
+
+// The blocks of a download on their way to the network: the reader thread reads the file ahead into free blocks and queues them, the session thread sends
+// the queued blocks in order and frees them. The disk reads the next block by DMA while the session sends one, as DiskWriter does for uploads (console,
+// 2026-11-24: reading and sending one after the other, 800 MB went down at 8.9 MB/s against 11.8 up).
+class DiskReader {
+public:
+    static constexpr unsigned BlockSize = 256 * 1024; // the most a disk read takes
+    static constexpr int Blocks = 6;                  // 1.5 MB per download
+
+    // Allocates the blocks and starts the reader thread for File from Offset on; false when there is no memory for them.
+    bool Start(HANDLE file, LONGLONG offset) {
+        this->file = file;
+        position.QuadPart = offset;
+        for (char *&block : blocks) {
+            block = static_cast<char *>(std::malloc(BlockSize));
+            if (!block)
+                return false;
+        }
+        freeBlocks = CreateSemaphore(nullptr, Blocks, Blocks, nullptr);
+        filledBlocks = CreateSemaphore(nullptr, 0, Blocks, nullptr);
+        if (!freeBlocks || !filledBlocks)
+            return false;
+        thread = CreateThread(nullptr, ReaderStack, Run, this, CREATE_SUSPENDED, nullptr);
+        if (!thread)
+            return false;
+        SetThreadPriority(thread, THREAD_PRIORITY_HIGHEST); // as DiskWriter's: the disk does not wait for the session's time slice
+        ResumeThread(thread);
+        return true;
+    }
+
+    // Stops the reader thread if it still runs (a download that ended early), then frees the blocks.
+    ~DiskReader() {
+        if (thread) {
+            stopping = true;
+            ReleaseSemaphore(freeBlocks, 1, nullptr); // wakes the thread if it waits for a free block
+            WaitForSingleObject(thread, INFINITE);
+        }
+        for (char *block : blocks)
+            std::free(block);
+        for (HANDLE handle : {freeBlocks, filledBlocks, thread}) {
+            if (handle)
+                CloseHandle(handle);
+        }
+    }
+
+    // The next block read, after waiting for it, in Block: its bytes, 0 at the end of the file, -1 when a read failed (Status says how). A block with
+    // bytes goes back with ReturnBlock once sent.
+    int TakeBlock(char *&block) {
+        WaitForSingleObject(filledBlocks, INFINITE);
+        block = blocks[next];
+        if (!lengths[next])
+            return NT_SUCCESS(status) ? 0 : -1;
+        return (int)lengths[next];
+    }
+
+    void ReturnBlock() {
+        next = (next + 1) % Blocks;
+        ReleaseSemaphore(freeBlocks, 1, nullptr);
+    }
+
+    NTSTATUS Status() const {
+        return status;
+    }
+
+private:
+    static constexpr SIZE_T ReaderStack = 16 * 1024;
+
+    static DWORD WINAPI Run(LPVOID self) {
+        static_cast<DiskReader *>(self)->ReadBlocks();
+        return 0;
+    }
+
+    // The reader thread: blocks in order until the end of the file or a failed read, which queues an empty block; stops early when told to.
+    void ReadBlocks() {
+        for (int at = 0;; at = (at + 1) % Blocks) {
+            WaitForSingleObject(freeBlocks, INFINITE);
+            if (stopping)
+                return;
+            IO_STATUS_BLOCK iosb;
+            NTSTATUS read = NtReadFile(file, nullptr, nullptr, nullptr, &iosb, blocks[at], BlockSize, &position);
+            lengths[at] = NT_SUCCESS(read) ? (unsigned)iosb.Information : 0;
+            if (!NT_SUCCESS(read) && read != STATUS_END_OF_FILE)
+                status = read;
+            position.QuadPart += lengths[at];
+            ReleaseSemaphore(filledBlocks, 1, nullptr);
+            if (!lengths[at])
+                return;
+        }
+    }
+
+    HANDLE file = nullptr;          // the download's file
+    LARGE_INTEGER position = {};    // where the next block is read from (the reader thread's)
+    char *blocks[Blocks] = {};      // the blocks, used in turn
+    unsigned lengths[Blocks] = {};  // each filled block's bytes; 0 ends the download
+    int next = 0;                   // the block TakeBlock gives next (the session thread's)
+    HANDLE freeBlocks = nullptr;    // counts the free blocks
+    HANDLE filledBlocks = nullptr;  // counts the filled blocks
+    HANDLE thread = nullptr;        // the reader thread
+    volatile bool stopping = false; // the download ended early: the reader thread stops
+    volatile NTSTATUS status = STATUS_SUCCESS; // a failed read's
+};
 
 // --- Starting a title: the main thread does it, after SDL and the USB host have stopped (sdl_screen::Close) --------
 
@@ -361,9 +685,9 @@ struct Session {
     sockaddr_in active = {};   // PORT address
     bool haveActive = false;
     LONGLONG restart = 0;      // REST
+    LONGLONG announced = 0;    // ALLO: the next upload's size, for its progress on the screen; 0 when not sent
     bool haveFrom = false;     // RNFR
     Parts renameFrom;
-    char *buffer;
     std::string pending;       // received control bytes not yet a line
     char peer[20];
     std::string lastCommand;   // the command being answered (for the screen log of failures)
@@ -548,23 +872,39 @@ struct Session {
             NtClose(h);
             return;
         }
-        Reply(150, "Sending %s", p.back().c_str());
         LARGE_INTEGER offset;
         offset.QuadPart = restart;
         restart = 0;
+        FILE_STANDARD_INFORMATION standard;
+        IO_STATUS_BLOCK info;
+        LONGLONG size = NT_SUCCESS(NtQueryInformationFile(h, &info, &standard, sizeof(standard), FileStandardInformation)) ? standard.EndOfFile.QuadPart : 0;
         bool ok = true;
-        for (;;) {
-            IO_STATUS_BLOCK iosb;
-            status = NtReadFile(h, nullptr, nullptr, nullptr, &iosb, buffer, BufferSize, &offset);
-            if (!NT_SUCCESS(status) || !iosb.Information) {
-                ok = status == STATUS_END_OF_FILE || NT_SUCCESS(status);
-                break;
+        { // the reader stops and frees its blocks before the file closes
+            DiskReader reader;
+            if (!reader.Start(h, offset.QuadPart)) {
+                NtClose(h);
+                lwip_close(data);
+                Reply(451, "Out of memory");
+                return;
             }
-            if (!SendAll(data, buffer, (int)iosb.Information)) {
-                ok = false;
-                break;
+            Reply(150, "Sending %s", p.back().c_str());
+            TransferInProgress transfer(false, offset.QuadPart, size);
+            for (;;) {
+                char *block;
+                int length = reader.TakeBlock(block);
+                if (length <= 0) {
+                    ok = length == 0;
+                    break;
+                }
+                bool sent = SendAll(data, block, length);
+                reader.ReturnBlock();
+                if (!sent) {
+                    ok = false;
+                    break;
+                }
+                offset.QuadPart += length;
+                transfer.Count((unsigned)length);
             }
-            offset.QuadPart += iosb.Information;
         }
         NtClose(h);
         lwip_close(data);
@@ -605,13 +945,26 @@ struct Session {
             NtClose(h);
             return;
         }
+        LONGLONG size = announced;
+        announced = 0;
+        DiskWriter writer;
+        if (!writer.Start(h, offset.QuadPart)) {
+            NtClose(h);
+            lwip_close(data);
+            Reply(451, "Out of memory");
+            return;
+        }
         Reply(150, "Receiving %s", p.back().c_str());
         LONGLONG total = 0;
         bool ok = true, more = true;
+        TransferInProgress transfer(true, offset.QuadPart, size);
         while (more) {
+            char *block = writer.TakeBlock();
+            if (!block)
+                break;
             unsigned filled = 0;
-            while (filled < BufferSize) { // whole buffers: large, aligned disk writes
-                int n = lwip_recv(data, buffer + filled, BufferSize - filled, 0);
+            while (filled < DiskWriter::BlockSize) { // whole blocks: large, aligned disk writes
+                int n = lwip_recv(data, block + filled, DiskWriter::BlockSize - filled, 0);
                 if (n <= 0) {
                     more = false;
                     ok = n == 0;
@@ -619,17 +972,17 @@ struct Session {
                 }
                 filled += n;
             }
-            if (filled) {
-                IO_STATUS_BLOCK iosb;
-                status = NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, buffer, filled, &offset);
-                if (!NT_SUCCESS(status)) {
-                    ok = false;
-                    break;
-                }
-                offset.QuadPart += filled;
-                total += filled;
+            if (!filled) {
+                writer.ReturnBlock();
+                continue;
             }
+            writer.QueueBlock(filled);
+            total += filled;
+            transfer.Count(filled);
         }
+        status = writer.Finish();
+        if (!NT_SUCCESS(status))
+            ok = false;
         IO_STATUS_BLOCK iosb;
         NtFlushBuffersFile(h, &iosb);
         NtClose(h);
@@ -756,7 +1109,10 @@ struct Session {
             static const char features[] = "211-Features:\r\n SIZE\r\n MDTM\r\n REST STREAM\r\n PASV\r\n EPSV\r\n"
                                            " MLST type*;size*;modify*;\r\n211 End\r\n";
             SendAll(control, features, sizeof(features) - 1);
-        } else if (verb == "OPTS" || verb == "MODE" || verb == "STRU" || verb == "ALLO") {
+        } else if (verb == "ALLO") {
+            announced = std::strtoll(arg.c_str(), nullptr, 10);
+            Reply(200, "OK");
+        } else if (verb == "OPTS" || verb == "MODE" || verb == "STRU") {
             Reply(200, "OK");
         } else if (verb == "TYPE") {
             Reply(200, "Type set (always binary)");
@@ -925,7 +1281,6 @@ DWORD WINAPI SessionThread(LPVOID parameter) {
     session->Run();
     Log("%s disconnected", session->peer);
     lwip_close(session->control);
-    delete[] session->buffer;
     delete session;
     InterlockedDecrement(&SessionCount);
     return 0;
@@ -985,7 +1340,6 @@ DWORD WINAPI ServerThread(LPVOID) {
         lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
         auto session = new Session;
         session->control = s;
-        session->buffer = new char[BufferSize];
         std::snprintf(session->peer, sizeof(session->peer), "%s", inet_ntoa(from.sin_addr));
         Log("%s connected", session->peer);
         InterlockedIncrement(&SessionCount);
@@ -1016,6 +1370,7 @@ int main() {
             HalReturnToFirmware(HalRebootRoutine);
         }
         LaunchIfRequested();
+        ShowTransferSpeeds();
         sdl_screen::Present();
         if (!sdl_screen::IsOpen())
             Sleep(10);

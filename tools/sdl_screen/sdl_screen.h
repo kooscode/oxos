@@ -42,6 +42,13 @@ void SetCursor(int row, int column = 0);
 
 // Draws a bar behind one row (a selection); -1 for none.
 void SetHighlight(int row);
+// A box at the top right over the text, which the scrolling text does not move (a status such as transfer speeds): up to CORNER_LINES lines of up to
+// CORNER_COLUMNS characters, separated by '\n'; an empty text hides it.
+constexpr int CORNER_LINES = 4;
+constexpr int CORNER_COLUMNS = 32;
+void SetCornerText(const char *text);
+// A brighter bar behind one line of the corner box, filling it from the left: progress, in thousandths (0-1000); -1 for none. Any thread.
+void SetCornerFill(int line, int thousandths);
 
 // --- Drawing (the thread that called Open)
 

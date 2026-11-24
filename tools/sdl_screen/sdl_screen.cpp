@@ -23,6 +23,8 @@ char ScreenText[ROWS][COLUMNS];
 int ScreenRow;
 int ScreenColumn;
 int ScreenHighlight = -1;
+char CornerText[CORNER_LINES][CORNER_COLUMNS + 1]; // SetCornerText's lines; none when the first is empty
+int CornerFill[CORNER_LINES] = {-1, -1, -1, -1};    // SetCornerFill's progress per line, in thousandths; -1 none
 
 SDL_Texture *ScreenPicture;
 SDL_FRect ScreenPictureWhere;
@@ -96,6 +98,42 @@ void DrawText() {
         std::memcpy(row, ScreenText[r], length);
         row[length] = 0;
         SDL_RenderDebugText(ScreenRenderer, MARGIN, (MARGIN + r * CHAR_HEIGHT) / TEXT_SCALE_Y, row);
+    }
+    SDL_SetRenderScale(ScreenRenderer, 1.0f, 1.0f);
+}
+
+// The corner box (SetCornerText): its lines right-aligned at the text's top right, on a dark green box with a border.
+void DrawCorner() {
+    constexpr float TEXT_SCALE_Y = static_cast<float>(CHAR_HEIGHT) / SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE;
+    constexpr float PADDING = 6.0f;
+    TextLock lock;
+    int lines = 0, widest = 0;
+    while (lines < CORNER_LINES && CornerText[lines][0]) {
+        widest = SDL_max(widest, static_cast<int>(std::strlen(CornerText[lines])));
+        lines++;
+    }
+    if (!lines)
+        return;
+    const float right = static_cast<float>(WIDTH - MARGIN);
+    const SDL_FRect box{right - widest * CHAR_WIDTH - 2 * PADDING, MARGIN - PADDING, widest * CHAR_WIDTH + 2 * PADDING,
+                        static_cast<float>(lines * CHAR_HEIGHT) + 2 * PADDING};
+    SDL_SetRenderDrawColor(ScreenRenderer, 0x10, 0x30, 0x10, 0xFF);
+    SDL_RenderFillRect(ScreenRenderer, &box);
+    SDL_SetRenderDrawColor(ScreenRenderer, 0x20, 0x68, 0x20, 0xFF);
+    for (int i = 0; i < lines; i++) {
+        if (CornerFill[i] < 0)
+            continue;
+        const float top = i ? MARGIN + i * CHAR_HEIGHT : box.y, bottom = i == lines - 1 ? box.y + box.h : MARGIN + (i + 1) * CHAR_HEIGHT;
+        const SDL_FRect bar{box.x, top, box.w * SDL_min(CornerFill[i], 1000) / 1000.0f, bottom - top};
+        SDL_RenderFillRect(ScreenRenderer, &bar);
+    }
+    SDL_SetRenderDrawColor(ScreenRenderer, 0x40, 0xC0, 0x40, 0xFF);
+    SDL_RenderRect(ScreenRenderer, &box);
+    SDL_SetRenderScale(ScreenRenderer, 1.0f, TEXT_SCALE_Y);
+    SDL_SetRenderDrawColor(ScreenRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+    for (int i = 0; i < lines; i++) {
+        float x = right - PADDING - static_cast<float>(std::strlen(CornerText[i]) * CHAR_WIDTH);
+        SDL_RenderDebugText(ScreenRenderer, x, (MARGIN + i * CHAR_HEIGHT) / TEXT_SCALE_Y, CornerText[i]);
     }
     SDL_SetRenderScale(ScreenRenderer, 1.0f, 1.0f);
 }
@@ -195,6 +233,24 @@ void SetHighlight(int row) {
     ScreenHighlight = row;
 }
 
+void SetCornerFill(int line, int thousandths) {
+    TextLock lock;
+    if (line >= 0 && line < CORNER_LINES)
+        CornerFill[line] = thousandths;
+}
+
+void SetCornerText(const char *text) {
+    TextLock lock;
+    std::memset(CornerText, 0, sizeof(CornerText));
+    for (int line = 0; line < CORNER_LINES && *text; line++) {
+        int length = 0;
+        while (text[length] && text[length] != '\n')
+            length++;
+        std::memcpy(CornerText[line], text, SDL_min(length, CORNER_COLUMNS));
+        text += length + (text[length] == '\n');
+    }
+}
+
 // --- Drawing
 
 SDL_Renderer *Renderer() {
@@ -220,6 +276,7 @@ void Present() {
         SDL_RenderFillRect(ScreenRenderer, &bar);
     }
     DrawText();
+    DrawCorner();
     SDL_RenderPresent(ScreenRenderer);
 }
 
