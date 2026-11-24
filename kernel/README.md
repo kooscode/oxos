@@ -106,8 +106,8 @@ Saves and settings survive between runs (`FRESH=1` starts over from the image, w
 It starts with the EEPROM's widescreen flag set, in a 1920x1080 window at twice the render resolution; titles that support widescreen show 16:9 and the others
 4:3. Change that with `WIDE=0`, `ASPECT=16x9` (auto, native, 4x3, 16x9), `SIZE=1280x960`, `SCALE=3` or `FULL=1` (full screen). With HD modes enabled in the
 dashboard, titles run in 480p, 720p or 1080i (spec 17): 720p and 1080i always show at 16:9, while 480p follows the title's own widescreen signal as on the
-original kernel, so a widescreen title that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`. Enter the Matrix in 720p
-or 1080i crashes xemu at render scale 2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
+original kernel, so a widescreen title that leaves it off in 480p (such as Halo 2) shows 4:3 under `auto`; run it with `ASPECT=16x9`. A title in 720p
+or 1080i can crash xemu at render scale 2 or more (an xemu limitation); use `SCALE=1` or turn those modes off in the dashboard.
 
 ## Disks and disc images
 **An exFAT disk** (format it on a PC; the Xbox drives are folders `/C`, `/E`, `/F`, `/X`, `/Y`, `/Z` at its root, created when first used; names are not

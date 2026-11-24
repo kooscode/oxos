@@ -15,7 +15,7 @@ Holding **LT + RT + BACK + BLACK** together on any controller, in any XDK title,
 
 ## 1. Where the buttons come from
 Titles read their controllers with XAPI's `XInputGetState(hDevice, pState)`, which is linked into each title, so the kernel never sees the USB traffic. In the 7
-titles checked (Halo, Halo 2, Brute Force, Demo Disc, Enter the Matrix, Half-Life 2, Prince of Persia) the function starts the same way, with exactly one match
+titles checked (among them Halo 2 and Brute Force) the function starts the same way, with exactly one match
 per XBE:
 
 ```

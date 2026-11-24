@@ -93,7 +93,7 @@ option 0x10 returns 0 / 1 / 2.
   values with its variant condition), and the row maps as the reference.
 
 ## 6. xemu notes
-- Enter the Matrix in 720p or 1080i aborts xemu at render scale 2 or more (assertion in `surface_download_to_buffer`: one of the title's render surfaces has a
+- A title in 720p or 1080i aborts xemu at render scale 2 or more (assertion in `surface_download_to_buffer`: one of the title's render surfaces has a
   pitch smaller than width × bytes per pixel, which xemu's downscale path rejects); at scale 1 it runs. The retail BIOS we have returns this title to the
   dashboard within 0.3 s in xemu, so there is no reference run to compare.
 - xemu's display code expects the 1080i pitch convention (it divides the surface pitch by the CRTC offset).

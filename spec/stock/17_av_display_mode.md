@@ -104,7 +104,7 @@ AvSetDisplayMode calls: the class (bits 30–31) and the CRTC row (bits 8–15) 
   pack gets the HD words, spec 22 §13); a class-11 word takes the SD encoder path of §5 step 4 with the NV2A / CRTC rows its bytes name (4627 kernel) (5838
   kernel).
 - SD: 1/3 = 640×480 (NTSC/PAL), 2/4 = 720×480.
-- Enter the Matrix with 1080i allowed asks for 0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with pitch 0x1400 (logged with a gdb breakpoint
+- A title with 1080i allowed asks for 0x880E0C03 with pitch 0x1000, with only 720p allowed 0x880B0A02 with pitch 0x1400 (logged with a gdb breakpoint
   on AvSetDisplayMode).
 - **1080i scanout:** the title renders each field as 1920×540 with 8192-byte lines and passes half of that (0x1000) as the pitch: in interlaced mode the CRTC
   offset is stepped twice per field line.

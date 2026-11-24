@@ -26,7 +26,6 @@ C:\OXOS\                                  primary OXOS folder, it's auto created
 │                                        |✅ [launch_redirect] (33)
 │                                        |✅ [boot_video] (38)
 │                                        |✅ [toasts] (36: enabled, show_video_mode)
-│                                        |⬜ in-game reset (39)
 ├── oxos_extensions.ini                   ✅ which extensions load, in which order, enabled (34)
 ├── oxos_title_patches.ini                ✅ per-title patches (25), applied by the kernel modules (43)
 ├── oxos_eeprom_backup.bin                ⬜ all 256 EEPROM bytes, saved by OXOS Setup before it changes one (39)
@@ -41,7 +40,7 @@ C:\OXOS\                                  primary OXOS folder, it's auto created
 │   ├── oxos_title_patches.xos            ⬜ title patches (34 §10)
 │   ├── oxos_nettitle.xos                 ⬜ netboot titles (34 §10)
 │   ├── oxos_tracer.xos                   ⬜ kernel call tracer (34 §10)
-│   ├── oxos_igs.xos                      ✅ in-game shortcuts (48)
+│   ├── oxos_igs.xos                      ✅ in-game shortcuts and in-game reset (48)
 │   ├── oxos_igs.ini                      ✅ the shortcuts: buttons, action, target, toast
 │   ├── oxos_trainers.xos                 ✅ Universal Trainers (37)
 │   ├── oxos_trainers.ini                 ✅ trainer and cheats per title ID

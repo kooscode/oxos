@@ -29,7 +29,7 @@ a blank disk and makes the folders at boot (spec 30).
 4. **Cache-format emulation** (spec §5). Test: Halo and Halo 2 on a fresh exFAT disk: the trace shows the same sequence, the format empties `/Z` (or `/X`,
    `/Y`), the cache files appear there, a second boot reuses them.
 5. **Disk recognition and coexistence.** FATX disks unchanged; exFAT disks detected; memory units still FATX. Test: boot tests on both disk kinds.
-6. **Compatibility pass.** The titles we test (Halo, Halo 2, Half-Life 2, Enter the Matrix, Prince of Persia, Brute Force, demo disc) plus the stock dashboard,
+6. **Compatibility pass.** The titles we test (among them Halo 2 and Brute Force) plus the stock dashboard,
    each run once on exFAT with the tracer; any new raw access goes into the spec.
 7. **Memory units (last).** Trace an xemu memory-unit image (a title saving, the dashboard's memory-unit screen) to confirm spec §9, then USB sticks
    formatted exFAT, FAT32 or FAT16 as units rooted at their `/OXOS` folder, described by `/OXOS/oxos_memory_unit.ini` on the stick (a FAT16/32 driver is

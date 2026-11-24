@@ -46,7 +46,7 @@ make -C kernel regression ONLY=test_extensions,test_memory                # some
   `test_fatx_layouts`, `test_extensions`, `test_format`, `test_upload`, `test_iso`, `test_encoders`, `test_controller`, `test_boot_video`, `test_memory`. About 20 minutes.
 - **Result:** one line per phase as it finishes (`test_iso: PASS (N checks, S s)`); `build/regression/summary.txt` and each phase's log
   (`build/regression/PHASE.log`). It goes on after a failure and fails if any phase fails or `test_memory` reports fewer than 15 960 free pages
-  (`--pages`). Every phase must pass; put the result in the commit's "Checked" lines.
+  (`--pages`). Every phase must pass before the commit.
 - **Run it in the background** and wait for it to finish; it takes the PC's xemu for 20 minutes. It builds kernels from the working tree as it goes, so do
   not edit sources while it runs (a later phase would test a half-done change): stop it first (and `pkill -x xemu`), then start it again afterwards.
 - `make release` runs only the unit tests and `test_dash`.
@@ -234,7 +234,8 @@ Each tool's invocation and options are in its README (folders) or its docstring 
 | Generated sources | `tools/gen_def.py` (exports), `tools/gen_oxos_sdk.py` (SDK), `tools/gen_av_tables.py` (video encoders), `tools/mkucode.py` | regenerate, never edit by hand |
 
 ## Commits
-- One commit per finished feature, with a message that says what changed, why, and how it was checked (the tests that ran).
+- One commit per finished feature, with a message of one short sentence: what changed and why. No body, no lists, no test results; the changed files
+  hold the details.
 - Generated files are regenerated, not edited (their first line names the tool).
 
 ## Pitfalls
