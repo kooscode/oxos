@@ -12,6 +12,7 @@
 #include <runtime/runtime.h>
 #include <titles/title_start_call.h>
 #include <hardware/chipset/chipset.h>
+#include <hardware/video/video.h>
 #include <storage/storage.h>
 #include <memory/memory.h>
 #include <crypto/crypto.h>
@@ -749,10 +750,11 @@ static void LaunchAfterQuickReboot() {
 }
 
 // Just before the title runs: the splash ends (for the boot video player its picture stays on screen until the player's mode set, spec/oxos_internal/38
-// §2), and the LaunchDataPage moves below the kernel, out of the title's way (spec/stock/05 §5).
+// §2), and the LaunchDataPage moves below the kernel and the saved display below 16 MB, out of the title's way (spec/stock/28).
 static void PrepareToEnterTitle() {
     boot_splash::EndSplash(BootVideoPlace != BOOT_VIDEO_NONE);
     storage::ForgetVirtualDiscMounters(); // images mounted until now are not this title's
+    hardware::video::MoveSavedDisplay();
     if (!LaunchDataPage)
         return;
     ULONG kernelPhys = MmGetPhysicalAddress((PVOID)0x80010000);

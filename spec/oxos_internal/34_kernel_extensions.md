@@ -458,7 +458,8 @@ reports each extension's image size after its start; *open:* its pool, threads a
 ### 8.2 Where their memory lies: below 16 MB (2026-11-24)
 Contiguous memory that the kernel or an extension keeps while a title runs is taken below 16 MB (`OXOS_KEPT_MEMORY_HIGHEST`, 0x00FFFFFF, `oxos_sdk.h`): the
 extensions' images (§8), their state pages and the index page (§6), the toasts' pictures (spec/oxos_internal/36 §6), and what an extension allocates for the
-title (the trainers' block, spec/oxos_internal/37). `MmAllocateContiguousMemory` takes the highest free pages; on a stock kernel nothing is there when a title
+title (the trainers' block, spec/oxos_internal/37); and a dashboard's saved display, moved there before each title (spec/stock/28 §9: left in place, it put
+the same 32 MB block below it). `MmAllocateContiguousMemory` takes the highest free pages; on a stock kernel nothing is there when a title
 starts, and titles allocate from the top as if it were theirs.
 
 **Why (debug kit, 2026-11-24):** a retail title (XDK Direct3D) takes one 32 MB write-combined block (`MmAllocateContiguousMemoryEx(0x2000000, 0, 0x7FFFFFF,

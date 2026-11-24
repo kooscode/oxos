@@ -22,6 +22,8 @@ void SmcSetOutputs(bool Enable);
 // A frame buffer on screen that its owner has handed over (the boot splash's, kept for the boot video player): freed by the next AvSetDisplayMode that
 // scans out another one.
 void KeepScreenUntilNextMode(PVOID Screen);
+// Before each title: moves the saved display (a dashboard's persisted last picture) below 16 MB, out of the way of the title's allocations.
+void MoveSavedDisplay();
 extern volatile UCHAR EncoderAddress;
 extern volatile ULONG ScreenWidth;       // the frame's width as the CRTC scans it out (CR01), from the last mode set; 0 before (video.cpp)
 extern volatile bool ScreenInterlaced;   // the CRTC scans out fields (CR39 not 0xFF: 1080i), from the last mode set (video.cpp)

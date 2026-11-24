@@ -81,8 +81,8 @@ On error: release the image memory and free `XeImageFileName`.
 
 ## 5. Just before entering the title (0x8001e9f5)
 - If an LDP exists: move it to a new persisted 4 KB contiguous page **below the kernel's physical address**, and free the old one.
-- If the AV saved-data (persisted framebuffer, `AvGetSavedDataAddress`) isn't at the expected physical address (0x8003B2D0) → re-allocate it there and move it
-  (0x8002fd1b). This keeps the splash image on screen across launches.
+- If the AV saved-data (persisted framebuffer, `AvGetSavedDataAddress`) isn't at the target physical address (held in 0x8003B2D0: the start of the freed
+  INIT section, 0x3D000) → re-allocate it there and move it (0x8002fd1b), keeping it on screen. Spec 28 has the details.
 Then phase-1 calls the entry point at 0x10128 (spec 03).
 
 ## 6. Fatal errors

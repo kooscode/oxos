@@ -95,6 +95,33 @@ XBAPI void NTAPI AvSetSavedDataAddress(PVOID Address) {
     SavedDataAddress = Address;
 }
 
+// Before each title: the saved display (a dashboard's last picture, persisted for the next title) moves below 16 MB, as the stock kernel moves it low (to its
+// freed INIT pages, spec/stock/28 §4). Left where the dashboard put it, it split the top of memory, and a title's 32 MB Direct3D block, taken from the top,
+// lost its 64 KB alignment and the GPU hung (spec/oxos_internal/34 §8.2). The block starts with a 0x40-byte header whose second dword is the pixels'
+// physical address; the picture stays on screen: the CRTC scans out the copy from the next vertical blank, and the old block is freed after it.
+void MoveSavedDisplay() {
+    auto old = (PULONG)SavedDataAddress;
+    if (!old)
+        return;
+    ULONG size = MmQueryAllocationSize(old), oldPhys = MmGetPhysicalAddress(old);
+    if (oldPhys + size - 1 <= OXOS_KEPT_MEMORY_HIGHEST)
+        return;
+    auto block = (PULONG)MmAllocateContiguousMemoryEx(size, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (!block)
+        return;
+    memcpy(block, old, size);
+    block[1] += MmGetPhysicalAddress(block) - oldPhys;
+    auto crtc = (volatile ULONG *)0xFD600000;
+    crtc[0x800 / 4] = block[1]; // PCRTC_START
+    crtc[0x100 / 4] = 1;        // PCRTC_INTR_0: the vertical blank's bit cleared
+    MmPersistContiguousMemory(block, size, TRUE);
+    SavedDataAddress = block;
+    for (ULONG waited = 0; !(crtc[0x100 / 4] & 1) && waited < 100; waited++) // the next vertical blank, at most 100 ms
+        KeStallExecutionProcessor(1000);
+    MmFreeContiguousMemory(old);
+    XK_SERIAL("video: saved display moved from %#lx to %#lx (%#lx bytes)\n", oldPhys, MmGetPhysicalAddress(block), size);
+}
+
 static ULONG PackFromSmc(UCHAR smc) {
     switch (smc) {
     case 0: return 3; // SCART
