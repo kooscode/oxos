@@ -205,7 +205,7 @@ the kernel frees it before the title's first instruction.
   it, right after the title-loaded event and before the title starts. Its image, context and any pool it did not hand on are freed: the title gets that memory.
 - **What it cannot have:** a `RunLoop`, a `Terminate`, the title-exiting event, or hooks (§7.1): each would call into freed code. The loader refuses such a
   descriptor, and `oxos_hook` fails for it (logged in `extensions.log`).
-- **What it leaves behind:** memory it allocated for the title with `MmAllocateContiguousMemory` (a trainer's block, for instance) stays for the whole title,
+- **What it leaves behind:** memory it allocated for the title below 16 MB (§8.2; a trainer's block, for instance) stays for the whole title,
   as XBMC4Gamers' trainer block does; the next launch's memory start-up reclaims it, like everything that is not persisted. Its state page (§6) stays, as for
   every extension.
 - **Every launch:** it is loaded again before the next title, like every extension; one that should act only once per cold boot keeps that in its state page
@@ -309,9 +309,9 @@ prototype the kernel declares (§9.2). The memory functions and the compiler's h
 ## 6. The state page
 One page, 4096 bytes, per extension, that keeps its contents from one launch to the next until the next cold boot.
 
-- **What survives:** the page is allocated as contiguous memory and persisted (`MmPersistContiguousMemory`, PTE bit 10), so a quick reboot takes it back at the
-  same physical address (spec/stock/09; `kernel/src/memory/init.cpp`, the re-adoption loop). The kernel finds the pages again through an index page, also
-  persisted, whose address is in the persisted section (`XK_PERSIST`), as `LaunchDataPage` is kept (`kernel/src/titles/title_loader.cpp`).
+- **What survives:** the page is allocated as contiguous memory below 16 MB (§8.2) and persisted (`MmPersistContiguousMemory`, PTE bit 10), so a quick reboot
+  takes it back at the same physical address (spec/stock/09; `kernel/src/memory/init.cpp`, the re-adoption loop). The kernel finds the pages again through an
+  index page, also persisted, whose address is in the persisted section (`XK_PERSIST`), as `LaunchDataPage` is kept (`kernel/src/titles/title_loader.cpp`).
 - **Index page:** a magic number, a checksum over the index, and one entry per extension: its descriptor `Name` and `Version` and its state page's address.
   At a launch the kernel checks the magic and the checksum; if either is wrong (a cold boot, or memory written over), it starts a new, empty index.
 - **Which page an extension gets:** the one under its descriptor `Name`. A new name gets a new zeroed page; a page written by another `Version` of the
@@ -446,13 +446,32 @@ NTSTATUS oxos_console_reset(ULONG Kind);       // OXOS_RESET_COLD: power off and
 - **No entry point is called:** the kernel uses the descriptor, not `DllMain` (built with `/NOENTRY`).
 - **No CRT, no TLS, no C++ exceptions or RTTI, no static constructors** in the first version. The SDK builds with these off (§9); the loader refuses an image
   with a TLS directory.
-- **Memory:** the image is loaded into contiguous memory, not persisted (a quick reboot frees it). Its globals start from the file's values at each launch.
+- **Memory:** the image is loaded into contiguous memory below 16 MB (§8.2), not persisted (a quick reboot frees it). Its globals start from the file's
+  values at each launch.
 
 ### 8.1 What extensions cost titles
 Every loaded image, pool block, thread stack and state page is memory a title does not get. Without `oxos_extensions.ini`, or with no enabled section, titles
 keep exactly the memory they had (the parity rule, spec/oxos_internal/18): the loader runs, finds nothing to load, and allocates nothing (the index page is only
 created for the first extension). With extensions, titles lose their size, and a title that needs nearly all of its 64 MB can fail to start. The serial log
 reports each extension's image size after its start; *open:* its pool, threads and state page too, and showing it in the File Manager.
+
+### 8.2 Where their memory lies: below 16 MB (2026-11-24)
+Contiguous memory that the kernel or an extension keeps while a title runs is taken below 16 MB (`OXOS_KEPT_MEMORY_HIGHEST`, 0x00FFFFFF, `oxos_sdk.h`): the
+extensions' images (§8), their state pages and the index page (§6), the toasts' pictures (spec/oxos_internal/36 §6), and what an extension allocates for the
+title (the trainers' block, spec/oxos_internal/37). `MmAllocateContiguousMemory` takes the highest free pages; on a stock kernel nothing is there when a title
+starts, and titles allocate from the top as if it were theirs.
+
+**Why (debug kit, 2026-11-24):** a retail title (XDK Direct3D) takes one 32 MB write-combined block (`MmAllocateContiguousMemoryEx(0x2000000, 0, 0x7FFFFFF,
+0x1000, 0x404)`) for its push buffer and resources. On a stock kernel it ends at the top of contiguous memory (page 0x3FDF), so it starts on a 64 KB boundary
+(0x01FE0000). Its push buffer's wrap-around jump goes to the block's start rounded down to 64 KB: with the extensions' images at the top (0x3FD3-0x3FDB) the
+block started at 0x01FD2000, the jump went to 0x01FD0000, 8 KB below it, and the GPU fetched garbage (PFIFO DMA pusher errors: invalid method, invalid
+command, a jump out of the buffer); the title stopped at its own breakpoint 10 seconds in. Found by a bisect: the title ran until the kernel modules (spec 43,
+v0.4.13) changed the order of the pages taken before the title, which had kept the block 64 KB-aligned by chance. Without extensions, or with their images
+below 16 MB, it runs. Ruled out on the way: the toasts, the video mode, 128 MB, the sound codec, the run loop, the hooks, the state pages' persistence.
+
+**The rule:** nothing the kernel keeps during a title may sit at the top of the contiguous memory (pages up to 0x3FDF), so a title's contiguous blocks land
+where they would on a stock kernel. Memory freed before the title starts (the kernel modules, spec 43 §3) does not matter. The launch data page keeps its own
+placement (`kernel/src/titles/title_loader.cpp`). Below 16 MB the kept pages only move the title's ordinary pages, which have no alignment.
 
 **The loader is not resident: it is a kernel module** (decided 2026-11-13 as a loader of its own; one of the kernel modules since 2026-11-17,
 spec/oxos_internal/43):

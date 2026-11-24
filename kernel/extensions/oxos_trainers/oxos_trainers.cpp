@@ -158,7 +158,7 @@ static UCHAR *LoadTrainer(const char *Title, const char *File, ULONG *Size) {
         oxos_log("%s: trainer %s not loaded (%#lx, %lu bytes).", Title, path, status, *Size);
         return nullptr;
     }
-    auto trainer = (UCHAR *)MmAllocateContiguousMemory(*Size);
+    auto trainer = (UCHAR *)MmAllocateContiguousMemoryEx(*Size, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE); // out of the title's way (spec 34 §8.2)
     if (!trainer || !NT_SUCCESS(oxos_file_read(path, trainer, *Size, Size))) {
         oxos_log("%s: trainer %s not loaded (no memory, or not read).", Title, path);
         if (trainer)

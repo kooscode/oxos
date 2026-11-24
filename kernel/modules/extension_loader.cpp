@@ -110,7 +110,7 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
         }
     }
     if (!index) {
-        index = (STATE_INDEX *)MmAllocateContiguousMemory(PAGE_SIZE);
+        index = (STATE_INDEX *)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE);
         if (!index)
             return nullptr;
         memset(index, 0, PAGE_SIZE);
@@ -120,7 +120,7 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
     }
     if (index->Count == STATE_INDEX_ENTRIES)
         return nullptr;
-    PVOID page = MmAllocateContiguousMemory(PAGE_SIZE);
+    PVOID page = MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE);
     if (!page)
         return nullptr;
     memset(page, 0, PAGE_SIZE);
@@ -388,7 +388,8 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
         ExFreePool(file);
         return false;
     }
-    auto image = error == XK_PE_ERROR::NONE ? (PUCHAR)MmAllocateContiguousMemory(imageSize) : nullptr;
+    // Below 16 MB, as everything kept while the title runs (§8.2): the top of memory is the title's.
+    auto image = error == XK_PE_ERROR::NONE ? (PUCHAR)MmAllocateContiguousMemoryEx(imageSize, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE) : nullptr;
     if (image)
         error = MapImage(file, size, image, imageSize, (ULONG)image);
     ExFreePool(file);

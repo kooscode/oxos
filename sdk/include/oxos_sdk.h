@@ -43,6 +43,15 @@ void oxos_log(const char *Format, ...);
 #define OXOS_LOG_FILE 2
 void oxos_set_log_target(ULONG Target); // OXOS_LOG_FILE, OXOS_LOG_SERIAL, or both (the default); at any time
 
+// Memory kept while a title runs (spec/oxos_internal/34 §8.2): contiguous memory an extension keeps during the title (a trainer, a buffer) is taken below
+// this address, MmAllocateContiguousMemoryEx(Bytes, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE), never with MmAllocateContiguousMemory: that takes the top
+// of memory, where the title's own contiguous blocks would lie on a stock kernel, and moves them (a title whose Direct3D expects its 32 MB block to end at the
+// top drew garbage and stopped). The kernel keeps the extensions' images, state pages and the toasts' pictures there too.
+#define OXOS_KEPT_MEMORY_HIGHEST 0x00FFFFFF
+#if !defined(PAGE_READWRITE) && !defined(OXOS_SDK_IN_KERNEL)
+#define PAGE_READWRITE 0x04 // MmAllocateContiguousMemoryEx's Protect: read and write, cached (the kernel has its own)
+#endif
+
 // --- 3. Settings, the launch, the state page
 //
 // An extension's own file is C:\OXOS\extensions\NAME.ini, next to NAME.xos (the same name). It holds two kinds of things:

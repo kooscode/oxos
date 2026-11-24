@@ -64,7 +64,8 @@ static ULONG HeldSizeIn, HeldScaleX, HeldScaleY;    // the same as the registers
 // Draws Toast into a new picture: the box at 480-line size in X8R8G8B8, turned into YUY2 in place (the first half of the buffer). Null without memory.
 static PVOID DrawToast(const QUEUED_TOAST &Toast, TOAST_BOX Box) {
     ULONG pixels = Box.Width * Box.Height;
-    auto image = (ULONG *)MmAllocateContiguousMemoryEx(pixels * 4, 0, PVIDEO_LIMIT_ALL, PAGE_SIZE, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    // Below 16 MB, out of the title's way (spec/oxos_internal/34 §8.2): a toast shown while the title allocates must not move its blocks.
+    auto image = (ULONG *)MmAllocateContiguousMemoryEx(pixels * 4, 0, OXOS_KEPT_MEMORY_HIGHEST, PAGE_SIZE, PAGE_READWRITE | PAGE_WRITECOMBINE);
     if (!image)
         return nullptr;
     for (ULONG i = 0; i < pixels; i++) {
