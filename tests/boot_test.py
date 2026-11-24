@@ -17,7 +17,7 @@ from fatx import FATX, FATXWriter  # noqa: E402
 import mkxiso  # noqa: E402
 import mkudf  # noqa: E402
 import mkcci  # noqa: E402
-from controller_test import qmp, xemu_env  # noqa: E402
+from controller_test import XEMU_UNATTENDED_DISPLAY, qmp, xemu_env  # noqa: E402
 from virtual_gamepad import XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 
@@ -1507,7 +1507,7 @@ def main():
             q.save(hdd_copy + ".new")
             os.replace(hdd_copy + ".new", hdd_copy)
     open(cfg, "w").write(
-        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '{a.memory}'\n\n[sys.files]\n"
+        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n{XEMU_UNATTENDED_DISPLAY}[sys]\nmem_limit = '{a.memory}'\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\n"

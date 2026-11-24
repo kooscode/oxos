@@ -38,7 +38,7 @@ root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, os.path.join(root, "tests"))
 from qcow2 import Qcow2  # noqa: E402
 from fatx import FATXWriter  # noqa: E402
-from controller_test import xemu_env  # noqa: E402
+from controller_test import XEMU_UNATTENDED_DISPLAY, xemu_env  # noqa: E402
 from virtual_gamepad import XEMU_PORT1_BINDING, VirtualPad  # noqa: E402
 
 # Button names in STEPS: (the virtual pad's control, the value that presses it).
@@ -128,7 +128,7 @@ def main():
         shutil.copyfile(a.eeprom, os.path.join(work, "eeprom.bin"))
     cfg = os.path.join(work, "xemu.toml")
     open(cfg, "w").write(
-        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n[sys]\nmem_limit = '64'\n" + (f"avpack = '{a.avpack}'\n" if a.avpack else "")
+        f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n{XEMU_UNATTENDED_DISPLAY}[sys]\nmem_limit = '64'\n" + (f"avpack = '{a.avpack}'\n" if a.avpack else "")
         + "\n[sys.files]\nbootrom_path = ''\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\neeprom_path = '{os.path.join(work, 'eeprom.bin')}'\nhdd_path = '{hdd}'\n"
         + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING

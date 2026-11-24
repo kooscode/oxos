@@ -12,7 +12,7 @@ import argparse, os, shutil, struct, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkxiso  # noqa: E402
-from controller_test import qmp  # noqa: E402  (fails the test when xemu does not answer: it froze)
+from controller_test import XEMU_UNATTENDED_DISPLAY, qmp  # noqa: E402  (fails the test when xemu does not answer: it froze)
 
 MAGIC = b"XKMEMTST\x01\x00\x00\x00"
 FIELDS = ("Done InitFlags TotalPages AvailablePages HighContiguous Blocks Bytes PagesAbove64MB HighestPhysical "
@@ -50,7 +50,7 @@ def run(a, xbe, label):
     if a.hdd:
         shutil.copyfile(a.hdd, hdd)
     open(cfg, "w").write(
-        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n"
+        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n" + XEMU_UNATTENDED_DISPLAY +
         f"[sys]\nmem_limit = '{a.memory}'\n\n[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\ndvd_path = '{iso}'\n"

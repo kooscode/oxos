@@ -45,6 +45,12 @@ def decode(report):
     return active
 
 
+# xemu.toml lines for an unattended xemu: no vsync. With vsync on, xemu's frames wait for the screen's refresh, which a locked screen does not give, and the
+# guest then ran so slowly that a 0.3 s press reached it only at the next one (test_controller, test_extensions and test_boot_video failed while the PC's screen
+# was locked, 2026-11-24).
+XEMU_UNATTENDED_DISPLAY = "[display.window]\nvsync = false\n\n"
+
+
 def xemu_env():
     """Environment for an xemu that sees only the virtual pad, also while its window is not focused."""
     return dict(os.environ,
@@ -237,7 +243,7 @@ def main():
         if a.igs:
             install_igs(hdd, a.igs)
     open(cfg, "w").write(
-        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n[sys.files]\n"
+        "[general]\nshow_welcome = false\nskip_boot_anim = true\n\n" + XEMU_UNATTENDED_DISPLAY + "[sys.files]\n"
         f"bootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\nflashrom_path = '{os.path.abspath(a.bios)}'\n"
         f"eeprom_path = '{os.path.join(work, 'eeprom.bin')}'\ndvd_path = '{os.path.abspath(a.iso)}'\n"
         + (f"hdd_path = '{hdd}'\n" if a.hdd else "") + XEMU_PORT1_BINDING)
