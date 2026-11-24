@@ -288,8 +288,16 @@ NTSTATUS HDDFSFileChain(HDDFS_VOLUME *v, HDDFS_FCB *f, ULONG *Count, ULONG *Last
         *Count = *Last = 0;
         return STATUS_SUCCESS;
     }
-    if (!HDDFSChainIsBounded(v, f))
-        return HDDFSChainLength(v, f->FirstCluster, Count, Last);
+    if (!HDDFSChainIsBounded(v, f)) {
+        // FATX: from the last position looked up, which a growing file's writes keep near its end. From the first cluster, each write that grows a file
+        // walked its whole chain, and a 4 GB upload slowed to 3 MB/s by 1 GB (console, 2026-11-24).
+        if (!f->HintCluster)
+            return HDDFSChainLength(v, f->FirstCluster, Count, Last);
+        NTSTATUS status = HDDFSChainLength(v, f->HintCluster, Count, Last);
+        if (NT_SUCCESS(status))
+            *Count += f->HintClusterIndex;
+        return status;
+    }
     *Count = f->EXFATAllocClusters;
     if (!*Count) { // a first cluster without a length: owns nothing
         *Last = 0;
