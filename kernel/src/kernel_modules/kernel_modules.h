@@ -42,6 +42,12 @@ struct XK_KERNEL_MODULES {
     // title_patcher.cpp: this title's patch records from oxos_title_patches.ini, in pool memory the caller frees (*Records, *Size bytes); none: *Records
     // null (spec/oxos_internal/25 §3).
     void (*BuildTitlePatches)(ULONG TitleId, ULONG Version, const xk::titles::XBE_SECTION_HEADER *Sections, ULONG Count, PUCHAR *Records, ULONG *Size);
+    // sound_recovery.cpp (spec/oxos_internal/46 §3), at a quick reboot before the next title is chosen: a frozen codec saves the launch and powers the
+    // console off and on (does not return); true when it is frozen again right after such a recovery (no second cycle: the caller shows a toast).
+    bool (*CheckSoundAtQuickReboot)();
+    // sound_recovery.cpp, at a cold boot: true when it follows a recovery's power cycle, with the saved launch data page and disc images put back: the
+    // caller then launches as a quick reboot would have.
+    bool (*RestoreSoundRecoveryLaunch)();
 };
 
 // The image's entry point (kernel/modules/kernel_modules.cpp): the table.

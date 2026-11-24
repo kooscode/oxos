@@ -640,6 +640,20 @@ void UnmountVirtualDiscs() {
     KeSetEvent(&VirtualDiscMountLock, 0, FALSE);
 }
 
+ULONG CopyVirtualDiscMounts(void *Out, ULONG Size) {
+    if (Size < sizeof(SavedVirtualDiscs))
+        return 0;
+    memcpy(Out, SavedVirtualDiscs, sizeof(SavedVirtualDiscs));
+    return sizeof(SavedVirtualDiscs);
+}
+
+void RestoreVirtualDiscMountsFrom(const void *In, ULONG Size) {
+    if (Size != sizeof(SavedVirtualDiscs))
+        return;
+    memcpy(SavedVirtualDiscs, In, sizeof(SavedVirtualDiscs));
+    RestoreVirtualDiscMounts();
+}
+
 // The title-launch thread, before the first title (titles/title_loader.cpp): mounts from before a quick reboot come back.
 void RestoreVirtualDiscMounts() {
     KeWaitForSingleObject(&VirtualDiscMountLock, Executive, KernelMode, FALSE, nullptr);

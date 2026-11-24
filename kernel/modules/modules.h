@@ -11,6 +11,9 @@ ULONG ReadColdBootSwitches();
 bool FindLaunchRedirect(PCSZ Path, char *Target, ULONG TargetSize);
 // dashboard_resolver.cpp
 bool LoadListedDashboard();
+// sound_recovery.cpp
+bool CheckSoundAtQuickReboot();
+bool RestoreSoundRecoveryLaunch();
 // title_patcher.cpp
 void BuildTitlePatches(ULONG TitleId, ULONG Version, const titles::XBE_SECTION_HEADER *Sections, ULONG Count, PUCHAR *Records, ULONG *Size);
 

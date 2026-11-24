@@ -921,6 +921,15 @@ static bool RunFileManager() {
     return gamepad::XButtonPressed && ServeFileManager();
 }
 
+// The launch a sound recovery's power cycle interrupted (spec/oxos_internal/46 §3), as LaunchAfterQuickReboot would have made it, without the boot video:
+// the launch data page and the disc images are back (the sound recovery module).
+static void LaunchAfterSoundRecovery() {
+    auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
+    if ((!ldp || (ldp->Flags & 1)) && !storage::HasVirtualDiscFromLastTitle())
+        storage::UnmountVirtualDiscs();
+    LaunchTitle(0);
+}
+
 void LaunchAtColdBoot() {
     if (hardware::chipset::BootFlags & 0x20) // the previous boot ended in a fatal error (scratch 2)
         user_interface::ShowFatalError(21);
@@ -934,6 +943,8 @@ void LaunchAtColdBoot() {
     extensions::SafeMode = gamepad::BButtonPressed != 0;
     ReadColdBootSwitches();
     extensions::LoadExtensions();
+    if (kernel_modules::Modules && kernel_modules::Modules->RestoreSoundRecoveryLaunch())
+        return LaunchAfterSoundRecovery();
     ULONG reason = CheckFirstBoot();
     XK_SERIAL("launch: cold boot: boot flags %#lx, region %#lx, first-boot reason %#lx, boot video switches %#lx\n", hardware::chipset::BootFlags,
               ConsoleGameRegion, reason, BootVideoSwitches);
@@ -976,7 +987,12 @@ static void NTAPI TitleThread(PVOID, PVOID) {
     // The kernel modules for this launch (spec/oxos_internal/43): the extension loader, the settings, launch redirects, the dashboards and title patches.
     kernel_modules::LoadKernelModules();
     if (KiQuickRebootFlag) {
+        // A codec the last title left frozen: the console is powered off and on and this launch made again after it (spec/oxos_internal/46 §3), unless that
+        // happened just before (then a toast says why there is no sound).
+        bool soundFrozen = kernel_modules::Modules && kernel_modules::Modules->CheckSoundAtQuickReboot();
         extensions::LoadExtensions();
+        if (soundFrozen)
+            toasts::QueueKernelToast("Audio Codec Frozen\nPower off and on to restore sound", 10);
         LaunchAfterQuickReboot();
     } else {
         LaunchAtColdBoot();

@@ -27,6 +27,8 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
 - **In-Game Shortcuts (IGS):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK), plus your own button combinations to start any XBE,
   in every title, with a toast on screen first (`C:\OXOS\extensions\oxos_igs.ini`).
+- **Sound that stays on:** A title that leaves the sound chip frozen no longer leaves you silent: OXOS notices at the next title switch, shows "Audio Codec
+  Frozen - Restarting" and restarts into the same launch.
 - **Saves / System Link / XBOX Live:** OXOS is fully compatible with stock consoles and XB Live / Insignia.
 - **Error screens that explain themselves:** What happened and what to try, instead of a bare number; a kernel crash shows its code and parameters for a bug
   report.

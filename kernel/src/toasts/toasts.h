@@ -31,6 +31,8 @@ extern XK_PERSIST bool ToastsOff; // [toasts] enabled = no in oxos_settings.ini,
 // Exported as oxos_toast_enqueue / oxos_toast_enqueue_wait (spec/oxos_internal/36 §5): the toast's owner is the extension the call comes from.
 NTSTATUS EnqueueToast(OXOS_TOAST &Toast);
 NTSTATUS EnqueueToastWait(OXOS_TOAST &Toast, ULONG TimeoutMs);
+// The kernel's own toast (spec/oxos_internal/36 §2), at the bottom centre: queued like an extension's, with no owner to tell.
+NTSTATUS QueueKernelToast(const char *Text, ULONG Seconds);
 
 void OpenToasts();            // the extensions of a launch are loaded: an empty queue, open for their toasts
 void NoteTitleStarted();      // the title has been loaded
@@ -46,5 +48,8 @@ bool TakeToastEvent(ULONG &Owner, OXOS_TOAST_NOTICE &Notice);          // the ne
 
 void RunToasts();  // each run-loop round: shows the next toast once the title has settled, hides it when its time is up
 void HideToast();  // at once (the title ends); the picture is freed at passive level only
+// Text on the overlay at once, between titles, bypassing the queue and the title's 5 seconds: the kernel's notice before it powers the console off and on
+// (the sound recovery, spec/oxos_internal/46 §3). It stays until the power goes. False when it could not be drawn.
+bool ShowNotice(const char *Text);
 
 } // namespace xk::toasts

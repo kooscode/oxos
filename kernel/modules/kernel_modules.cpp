@@ -12,6 +12,8 @@ const XK_KERNEL_MODULES Table = {
     xk::modules::FindLaunchRedirect,
     xk::modules::LoadListedDashboard,
     xk::modules::BuildTitlePatches,
+    xk::modules::CheckSoundAtQuickReboot,
+    xk::modules::RestoreSoundRecoveryLaunch,
 };
 
 } // namespace

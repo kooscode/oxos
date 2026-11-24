@@ -46,5 +46,9 @@ void UnmountVirtualDiscs();
 bool HasVirtualDiscFromLastTitle();
 void ForgetVirtualDiscMounters();
 void InitVirtualDiscs(); // start-up: the virtual disc control device (the IDE start-up calls it)
+// The mounts a quick reboot keeps, copied out (into Out, Size bytes; the bytes copied, 0 when they do not fit) and back after a power cycle (then mounted
+// again): the sound recovery's saved launch (kernel/modules/sound_recovery.cpp, spec/oxos_internal/46 §3).
+ULONG CopyVirtualDiscMounts(void *Out, ULONG Size);
+void RestoreVirtualDiscMountsFrom(const void *In, ULONG Size);
 
 } // namespace xk::storage

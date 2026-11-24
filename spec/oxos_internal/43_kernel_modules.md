@@ -13,6 +13,7 @@ for it. The kernel extension loader (spec 34 §8.1) was the first such code (202
 |---|---|---|
 | `extension_loader.cpp`, `extension_parser.cpp` | loads the extensions `oxos_extensions.ini` lists (`extensions::LoadListedExtensions`) | 34 §8 |
 | `kernel_settings.cpp` | reads OXOS's own options from `oxos_settings.ini` at the cold boot: the boot video's switches and whether toasts are off (`ReadColdBootSwitches`) | 38 §2, 36 §2 |
+| `sound_recovery.cpp` | at every quick reboot, a frozen sound codec found by a silent DMA test: the launch saved, the console powered off and on, the launch made again at the cold boot (`CheckSoundAtQuickReboot`, `RestoreSoundRecoveryLaunch`) | 46 §3 |
 | `launch_redirect.cpp` | the target `oxos_launch_redirect.ini` gives a launched XBE (`FindLaunchRedirect`) | 33 |
 | `dashboard_resolver.cpp` | loads the first dashboard `oxos_settings.ini`'s `[dashboard]` lists that loads (`LoadListedDashboard`) | 19 |
 | `title_patcher.cpp` | builds a title's patch records from `oxos_title_patches.ini` (`BuildTitlePatches`) | 25 §3 |

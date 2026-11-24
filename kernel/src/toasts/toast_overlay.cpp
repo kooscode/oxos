@@ -108,6 +108,15 @@ static bool ShowToast() {
     return true;
 }
 
+bool ShowNotice(const char *Text) {
+    HideToast();
+    Current = {};
+    Current.Owner = TOAST_NO_OWNER;
+    Current.Place = OXOS_TOAST_BOTTOM_CENTRE;
+    strlcpy(Current.Text, Text, sizeof(Current.Text));
+    return ShowToast();
+}
+
 void HideToast() {
     if (Showing) {
         Register(PVIDEO_STOP) = 1;

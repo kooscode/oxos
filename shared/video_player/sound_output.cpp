@@ -95,7 +95,7 @@ bool WaitForCodec(const SOUND_OUTPUT &Output) {
     return IsCodecReady(Output);
 }
 
-// The codec as the stock sound library starts it (spec/oxos_internal/46 §3): the cold reset released only while it is still held (a pulse on a running codec
+// The codec as the stock sound library starts it (spec/oxos_internal/46 §4): the cold reset released only while it is still held (a pulse on a running codec
 // resets it some milliseconds later, while its ready bit still reads set, and the volumes written meanwhile are lost), a warm reset for a released codec that
 // is not ready, then its power and both volumes written, never read.
 bool StartCodec(SOUND_OUTPUT &Output) {

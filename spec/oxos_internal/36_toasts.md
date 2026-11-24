@@ -30,8 +30,10 @@ open". Extensions push toasts through a kernel export (§5); a toast can carry a
 - **The title keeps running and keeps its controllers.** A toast is never interactive itself; an extension can act on buttons while its toast is up (§4).
 
 ## 2. Who shows one
-- **The kernel**, for its own events, each a decision of its own when it is built: the in-game reset's combination seen (spec 22), an extension unloaded or a
-  slow run loop (spec 34 §4.3), a log file that could not be written (spec 35).
+- **The kernel**, for its own events, each a decision of its own when it is built: a frozen sound codec (spec 46 §3, 2026-11-23: "Audio Codec Frozen -
+  Restarting" drawn at once before the power cycle, `toasts::ShowNotice`, and "Audio Codec Frozen" / "Power off and on to restore sound" queued when the
+  guard stops a second cycle, `toasts::QueueKernelToast`); proposed, not built: an extension unloaded or a slow run loop (spec 34 §4.3), a log file that
+  could not be written (spec 35).
 - **Extensions**, through the export (§5), from `ExtensionStart` (the toast waits until the title has set its video mode, §3.4), from `ExtensionRunLoop`,
   from a hook or a title event.
 - **The user switches them off** with one setting (`[toasts]` in `C:\OXOS\oxos_settings.ini`, `enabled = no`, read at the cold boot by the kernel

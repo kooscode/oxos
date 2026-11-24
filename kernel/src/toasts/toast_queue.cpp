@@ -80,6 +80,11 @@ NTSTATUS EnqueueToast(OXOS_TOAST &Toast) {
     return QueueToast(Toast, extensions::FindExtensionAt(__builtin_return_address(0)));
 }
 
+NTSTATUS QueueKernelToast(const char *Text, ULONG Seconds) {
+    OXOS_TOAST toast = {Text, OXOS_TOAST_BOTTOM_CENTRE, Seconds, 0};
+    return QueueToast(toast, TOAST_NO_OWNER);
+}
+
 NTSTATUS EnqueueToastWait(OXOS_TOAST &Toast, ULONG TimeoutMs) {
     ULONG owner = extensions::FindExtensionAt(__builtin_return_address(0));
     if (KeGetCurrentIrql() != PASSIVE_LEVEL) {

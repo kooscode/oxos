@@ -65,6 +65,7 @@ C:\OXOS\                                  primary OXOS folder, it's auto created
 │
 └── cache\                                ✅ made at every cold boot; the kernel's own, safe to delete
     ├── oxos_kernel.cache                 ✅ the kernel modules, rewritten at every cold boot (43)
+    ├── oxos_sound_recovery.bin           ✅ the launch a frozen sound codec's power cycle interrupted, made again at the cold boot after it (46 §3)
     └── oxos_cache_partitions.cache       ✅ the X/Y/Z cache formats on exFAT (07)
 ```
 

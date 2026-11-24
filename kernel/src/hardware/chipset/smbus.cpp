@@ -249,13 +249,10 @@ extern "C" void KiQuickRebootQuiesce() {
         }
         hc[1] = 0; // HcControl: USBRESET, every list off
     }
-    // AC'97: both output channels stopped, then the codec held in cold reset (GLOB_CNT 0), its state after power-on. The next title releases it: a title's
-    // sound library releases a held reset and waits up to 20 ms for the codec (ready 20 us after the release on the debug kit), and an nxdk title's cold-reset
-    // pulse becomes a plain release. A codec left running instead was reset again by an nxdk title, whose wait then saw the ready bit of before the reset; the
-    // codec dropped out moments later, muted or not ready, and the next title's sound library failed (spec/oxos_internal/46 §2).
+    // AC'97: both output channels stopped. The codec's cold reset is left alone, as the stock kernel leaves it: asserting it on a codec that had been running
+    // froze the codec until the power was removed, about one quick reboot in 13 (spec/oxos_internal/46 §2).
     *(volatile UCHAR *)0xFEC0011B = 0;  // PCM out: stopped
     *(volatile UCHAR *)0xFEC0017B = 0;  // S/PDIF out: stopped
-    *(volatile ULONG *)0xFEC0012C = 0;  // GLOB_CNT: cold reset held, interrupts off
     *(volatile ULONG *)0xFD000140 = 0; // NV2A interrupts off
     // NIC: transmitter and receiver off (spec/oxos_internal/25 §7). A receiver left on writes every frame the network sends into the receive buffers of the
     // title that just ended, memory the next title is given. Resetting the whole NIC here (TxRxControl, rings: tried 2026-10-29) left it in a state the next
