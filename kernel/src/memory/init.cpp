@@ -248,8 +248,8 @@ static ULONG *FindOwnerPte(ULONG pfn, ULONG e) {
                 return pte;
         }
         return nullptr;
-    default:
-        for (ULONG i = MM_SYSTEM_PTE_BASE >> 22; i < MM_SYSTEM_PTE_END >> 22; i++) {
+    default: // system memory: the system PTE window, or the code window
+        for (ULONG i = MM_CODE_WINDOW_PDE; i < MM_SYSTEM_PTE_END >> 22; i = i == MM_CODE_WINDOW_PDE ? MM_SYSTEM_PTE_BASE >> 22 : i + 1) {
             ULONG *pte = (ULONG *)(0xC0000000 + (i << PAGE_SHIFT)) + index;
             if ((pd[i] & PTE_PRESENT) && (*pte & PTE_PRESENT) && frame(*pte))
                 return pte;
@@ -302,7 +302,7 @@ static inline bool CanTake(ULONG e) {
     return !(e & PTE_PRESENT) && (!(e & MM_PFN_BUSY) || !(USHORT)e);
 }
 
-bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits, ULONG *firstPfn) {
+bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits, ULONG *firstPfn, bool moveBusy) {
     if (!count || highPfn < lowPfn || count > highPfn - lowPfn + 1)
         return false;
     KIRQL old = KeRaiseIrqlToDpcLevel();
@@ -311,7 +311,7 @@ bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG ali
     if (count <= AvailablePages) {
         while (start >= (LONG)lowPfn) {
             ULONG i = count;
-            while (i && CanTake(PteArray[start + i - 1]))
+            while (i && CanTake(PteArray[start + i - 1]) && (moveBusy || !(PteArray[start + i - 1] & MM_PFN_BUSY)))
                 i--;
             if (!i) {
                 found = true;
@@ -697,6 +697,7 @@ void InitMemoryManager(bool QuickReboot) {
         pd[i] = 0;
     for (ULONG i = 0x340; i < 0x3C0; i++) // system PTE window 0xD0000000-0xEFFFFFFF starts empty
         pd[i] = 0;
+    pd[MM_CODE_WINDOW_PDE] = 0; // and so does the code window: its page table, as everything not persisted, is free again
     for (ULONG i = 0x3C0; i < 0x3E0; i++) // 0xF0000000-0xF7FFFFFF: write-through large pages
         pd[i] = (i << 22) | rw | PTE_PWT | PTE_LARGE;
     for (ULONG i = 0x3E0; i < 0x3FE; i++) // 0xF8000000-0xFF7FFFFF: uncached large pages

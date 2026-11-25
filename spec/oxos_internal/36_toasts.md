@@ -211,7 +211,7 @@ Titles get what the kernel leaves free (spec 18 §7). The service has three part
 |---|---|---|
 | The exports and the queue (8 toasts, their text), 16 events | resident | under 1 KB of data |
 | The drawing, the YUY2 conversion, the overlay registers | resident (a kernel module would be unloaded before the title runs); driven by the extensions' run loop, no thread of its own | a few hundred bytes of code; the kernel's font and `DrawText` were resident already (the error screens) |
-| The picture | contiguous memory below 16 MB (spec/oxos_internal/34 §8.2: a toast shown while the title allocates must not move its blocks) taken while a toast shows: the box in X8R8G8B8, turned into YUY2 in place | up to 147 KB (576 x 64 x 4) for the widest two-line toast, 62 KB for a one-line one of 26 characters; freed when it hides |
+| The picture | drawn in X8R8G8B8 in system memory, then turned into YUY2 in contiguous memory below 0x61000 (`OXOS_KEPT_MEMORY_HIGHEST`, spec/oxos_internal/34 §8.2: where no title claims memory): the 8 pages reserved at each launch before the title loads (`toasts::ReserveToastPicture`; a one-line toast of up to 28 characters fits), a larger picture from free pages there taken while it shows (never moving a title's pages); none: the toast is dropped ("toasts: 1 dropped: no memory for its picture") | up to 74 KB (576 x 64 x 2) for the widest two-line toast, 31 KB for a one-line one of 26 characters (drawing it takes twice that in system memory for a moment); freed when it hides |
 
 Decided when built (2026-11-23): resident. test_memory with the service and the in-game shortcuts' pad reading, without the in-game reset's hook: 15 974
 free pages (the limit is 15 960).

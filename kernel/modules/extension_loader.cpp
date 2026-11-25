@@ -94,6 +94,19 @@ static void CheckStateIndex() {
         index->Entries[i].Used = FALSE;
 }
 
+// A page persisted across quick reboots (the state index or a state page): below 64 KB, under the kernel, as the stock kernel puts the launch data page, else
+// below the stock kernel's image end; no title claims either (spec/oxos_internal/34 §8.2).
+static PVOID AllocateKeptPage() {
+    PVOID page = memory::AllocateKeptMemory(PAGE_SIZE, 0, 0xFFFF, PAGE_READWRITE, true); // the extensions load before the title
+    if (!page)
+        page = memory::AllocateKeptMemory(PAGE_SIZE, 0, OXOS_KEPT_MEMORY_HIGHEST, PAGE_READWRITE, true);
+    if (page) {
+        memset(page, 0, PAGE_SIZE);
+        MmPersistContiguousMemory(page, PAGE_SIZE, TRUE);
+    }
+    return page;
+}
+
 // The state page of Name, taken for this launch: its page from the last launch, zeroed again when Version is not the one that wrote it (a new build may lay
 // it out differently), or a new zeroed one; null when memory is short.
 static PVOID StatePageFor(const char *Name, const char *Version) {
@@ -110,21 +123,17 @@ static PVOID StatePageFor(const char *Name, const char *Version) {
         }
     }
     if (!index) {
-        index = (STATE_INDEX *)MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE);
+        index = (STATE_INDEX *)AllocateKeptPage();
         if (!index)
             return nullptr;
-        memset(index, 0, PAGE_SIZE);
         index->Magic = STATE_INDEX_MAGIC;
-        MmPersistContiguousMemory(index, PAGE_SIZE, TRUE);
         StateIndex() = index;
     }
     if (index->Count == STATE_INDEX_ENTRIES)
         return nullptr;
-    PVOID page = MmAllocateContiguousMemoryEx(PAGE_SIZE, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE);
+    PVOID page = AllocateKeptPage();
     if (!page)
         return nullptr;
-    memset(page, 0, PAGE_SIZE);
-    MmPersistContiguousMemory(page, PAGE_SIZE, TRUE);
     STATE_INDEX_ENTRY &e = index->Entries[index->Count++];
     strlcpy(e.Name, Name, sizeof(e.Name));
     strlcpy(e.Version, Version, sizeof(e.Version));
@@ -388,8 +397,8 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
         ExFreePool(file);
         return false;
     }
-    // Below 16 MB, as everything kept while the title runs (§8.2): the top of memory is the title's.
-    auto image = error == XK_PE_ERROR::NONE ? (PUCHAR)MmAllocateContiguousMemoryEx(imageSize, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE) : nullptr;
+    // The code window (§8.2): pages a title's contiguous request moves away, as the stock kernel's pool pages, never in its way; a quick reboot frees them.
+    auto image = error == XK_PE_ERROR::NONE ? (PUCHAR)memory::AllocateCodePages(imageSize) : nullptr;
     if (image)
         error = MapImage(file, size, image, imageSize, (ULONG)image);
     ExFreePool(file);
@@ -411,7 +420,7 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
         XK_SERIAL("extensions: [%s] %s refused: %s (%lu)\n", name, path, refused, (ULONG)error);
         Slots->Count = firstSlot;
         if (image)
-            MmFreeContiguousMemory(image);
+            memory::FreeCodePages(image, imageSize);
         return false;
     }
     // Every extension has its state page, so oxos_state never returns null.
@@ -419,7 +428,7 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
     if (!statePage) {
         XK_SERIAL("extensions: [%s] skipped: no memory for its state page\n", name);
         Slots->Count = firstSlot;
-        MmFreeContiguousMemory(image);
+        memory::FreeCodePages(image, imageSize);
         return false;
     }
 
@@ -447,7 +456,7 @@ static bool LoadExtension(const INI_EXTENSION_ENTRY &Entry, IMPORT_SLOTS *Slots,
         toasts::ForgetToastOwner(state->Count); // the next extension takes this index
         ReleaseStatePage(context.State);
         Slots->Count = firstSlot;
-        MmFreeContiguousMemory(image);
+        memory::FreeCodePages(image, imageSize);
         return false;
     }
     *ImagesBytes += imageSize;

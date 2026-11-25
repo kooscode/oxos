@@ -634,6 +634,16 @@ def extension_loaded_titles(mon):
     return min(word(pages[0] + 4 * 8), word(pages[2] + 4 * 2))
 
 
+def persisted_pages_for_titles(mon):
+    """The persisted pages (present, bit 10: kept across quick reboots, never moved) from 0x61 to 0x3FDF, read from the page database (the PTEs of
+    0x80000000-0x83FFFFFF at physical 0x3FF0000, spec/stock/09 §8): titles claim that memory, so the kernel keeps nothing there
+    (spec/oxos_internal/34 §8.2)."""
+    first, last = 0x61, 0x3FDF
+    out = mon.hmp(f"xp/{last - first + 1}wx {0x3FF0000 + 4 * first:#x}")
+    entries = [int(w, 16) for line in out.splitlines() if ":" in line for w in line.split(":")[1].split()]
+    return [first + i for i, e in enumerate(entries) if e & 0x401 == 0x401]
+
+
 def extension_checks(mon, launches, hdd, other_build=False):
     """What the test extensions recorded in their state pages (tests/extensions/extension_test.cpp, chain.cpp,
     plain_c.c, the SDK's examples example_run_loop, example_kernel_hook and example_title_event, slow_loop.cpp) after `launches` launches: the cold boot's
@@ -692,6 +702,9 @@ def extension_checks(mon, launches, hdd, other_build=False):
         "example_title_event: the LED orange from its RunLoop, for the title led_title names (any case)":
             '[example_title_event] "OXOS kernel test title": the LED is orange.' in lines,
         "Terminate at each quick reboot": x[4] == launches - 1,
+        "memory kept across the title (spec/oxos_internal/34 §8.2): the state pages and their index below 0x61000, where no title claims memory, and no "
+        "persisted page from there to the top of the contiguous memory (0x3FDF), as on the stock kernel": persisted_pages_for_titles(mon) == [] and
+            all(0x80000000 <= page < 0x80061000 for page in pages),
         f"toasts (spec/oxos_internal/36): queued with an id and a wrong one refused at every launch; its own toast shown {x[20]} and hidden {x[21]} times "
         "(once a title has set its video mode), no event for another toast": x[19] == 1 and x[20] >= 1 and x[21] >= 1 and x[22] == 0,
         "events: a load and a loaded title per launch, an exit per quick reboot":

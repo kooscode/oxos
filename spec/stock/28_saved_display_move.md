@@ -151,8 +151,9 @@ their first presented frame (same three calls as the boot animation).
 
 ## 9. Ours
 OXOS moves the LaunchDataPage as §3 (`PrepareToEnterTitle`, `kernel/src/titles/title_loader.cpp`), and the saved display block before it
-(`hardware::video::MoveSavedDisplay`): not to 0x3D000, which in OXOS holds the title's own image by then (spec 09 §8), but below 16 MB
-(`OXOS_KEPT_MEMORY_HIGHEST`, spec/oxos_internal/34 §8.2), top-down, when any page of it lies above. The move is §4.4's: copy, rebase header dword 1, PCRTC_START,
+(`hardware::video::MoveSavedDisplay`): not to 0x3D000, which in OXOS holds the title's own image by then (spec 09 §8), but just after the stock kernel's
+image end, 0x61000, as §4.3's exact-range allocation does at T, else at the lowest place above it in 64 KB steps (spec/oxos_internal/34 §8.2, 2026-11-25;
+below 16 MB, top-down, before: in the middle of a fixed range a title claims). The move is §4.4's: copy, rebase header dword 1, PCRTC_START,
 PCRTC_INTR_0 cleared, persisted, the saved-data address set, the next vertical blank (at most 100 ms: every wait has a limit), the old block freed.
 
 Why: a dashboard's persisted 0x12C040-byte frame buffer at 0x376F000 (64 MB console) stayed where it was across the quick reboots; the title's 32 MB

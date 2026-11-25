@@ -147,8 +147,11 @@ static ULONG CheatNumber(const char *Key) {
     return *end == '.' ? number : 0;
 }
 
-// Loads the trainer File from C:\OXOS\trainers\ into memory that stays for the title (the title's memory: the next launch frees it); its size in *Size. Null,
-// with the reason logged, when it cannot.
+// The loaded trainer: its code runs, so it lives in this extension's image, which the kernel keeps in pages a title's contiguous requests may move and code
+// may run from (spec/oxos_internal/34 §8.2). One trainer per title; a new title's load replaces it.
+static UCHAR TrainerSpace[ETM_MAX_BYTES];
+
+// Loads the trainer File from C:\OXOS\trainers\ into TrainerSpace; its size in *Size. Null, with the reason logged, when it cannot.
 static UCHAR *LoadTrainer(const char *Title, const char *File, ULONG *Size) {
     char path[160];
     snprintf(path, sizeof(path), "%s%s", TRAINERS_FOLDER, File);
@@ -158,14 +161,11 @@ static UCHAR *LoadTrainer(const char *Title, const char *File, ULONG *Size) {
         oxos_log("%s: trainer %s not loaded (%#lx, %lu bytes).", Title, path, status, *Size);
         return nullptr;
     }
-    auto trainer = (UCHAR *)MmAllocateContiguousMemoryEx(*Size, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE); // out of the title's way (spec 34 §8.2)
-    if (!trainer || !NT_SUCCESS(oxos_file_read(path, trainer, *Size, Size))) {
-        oxos_log("%s: trainer %s not loaded (no memory, or not read).", Title, path);
-        if (trainer)
-            MmFreeContiguousMemory(trainer);
+    if (!NT_SUCCESS(oxos_file_read(path, TrainerSpace, *Size, Size))) {
+        oxos_log("%s: trainer %s not loaded (not read).", Title, path);
         return nullptr;
     }
-    return trainer;
+    return TrainerSpace;
 }
 
 // The title-loaded event: its trainer, when its section says so.
@@ -194,7 +194,6 @@ static void TitleLoaded(const OXOS_TITLE_LOADED *Title, void *UserData) {
     const char *refused = trainer ? CheckTrainer(trainer, size, Title->TitleId, cheats) : nullptr;
     if (refused) {
         oxos_log("%s: trainer %s not run: %s.", Title->TitleName, file, refused);
-        MmFreeContiguousMemory(trainer);
         trainer = nullptr;
     }
     if (!trainer) {

@@ -73,7 +73,7 @@ In the title-loaded event, before the game's first instruction:
 | 1. The section | the title ID's section; nothing more unless `trainer_enabled = yes` and `trainer =` names a file |
 | 2. Not for nxdk programs | an XBE whose one library entry is `CXBE` (nxdk's cxbe) is homebrew or OXOS's ISO launcher, which carries the game's title ID (spec 16) but is not the game: no trainer. The trainer runs in the game the launcher starts |
 | 3. XBMC4Gamers | its hook installed in the kernel (spec 23 §5): its stub runs its own trainer, so OXOS logs that and does nothing |
-| 4. Load | `C:\OXOS\trainers\FILE` (at most 64 KB) into contiguous memory below 16 MB (spec/oxos_internal/34 §8.2) taken in the title's launch, kept for the whole game (a trainer's hooks jump into its code), freed by the next launch |
+| 4. Load | `C:\OXOS\trainers\FILE` (at most 64 KB) into a 64 KB buffer in the extension's own image, in the kernel's code window (spec/oxos_internal/34 §8.2: movable pages code can run from), kept for the whole game (a trainer's hooks jump into its code); the next launch loads the image anew |
 | 5. Check | format 1, every header offset inside the file, the title ID among the trainer's three, no dashboard helper routines needed (offset 0x1A is 0 in every pack trainer); otherwise logged and not run |
 | 6. Switches | one byte per cheat at the trainer's switch table: 1 for `yes`, 0 for `no` |
 | 7. Run | as XBMC4Gamers' stub does (§4): `edx` and `ebp` at the trainer, CR0.WP cleared, `call` its entry, CR0 and every register restored |

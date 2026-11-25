@@ -8,6 +8,7 @@
 // The AV exports (video.cpp) and the SMC's AV pack code read at boot (7 = none).
 XBAPI ULONG NTAPI AvSetDisplayMode(PVOID RegisterBase, ULONG Step, ULONG Mode, ULONG Format, ULONG Pitch, ULONG FrameBuffer);
 XBAPI void NTAPI AvSendTVEncoderOption(PVOID RegisterBase, ULONG Option, ULONG Param, PULONG Result);
+XBAPI PVOID NTAPI AvGetSavedDataAddress();
 XBAPI UCHAR HalBootSMCVideoMode;
 
 namespace xk::hardware::video {

@@ -38,6 +38,19 @@ XBAPI PVOID NTAPI MmAllocateContiguousMemoryEx(ULONG NumberOfBytes, ULONG Lowest
     return (PVOID)(MM_SYSTEM_PHYSICAL_MAP | (first << PAGE_SHIFT));
 }
 
+PVOID AllocateKeptMemory(ULONG Bytes, ULONG Lowest, ULONG Highest, ULONG Protect, bool BeforeTitle) {
+    ULONG pteBits, first, highPfn = Highest >> PAGE_SHIFT;
+    if (!Bytes || !ProtectToPte(Protect, &pteBits))
+        return nullptr;
+    if (highPfn > MM_HIGHEST_CONTIGUOUS_PFN)
+        highPfn = MM_HIGHEST_CONTIGUOUS_PFN;
+    if (!AllocateContiguousPages(BytesToPages(Bytes), Lowest >> PAGE_SHIFT, highPfn, 1, pteBits, &first, BeforeTitle))
+        return nullptr;
+    if (Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE))
+        FlushCaches();
+    return (PVOID)(MM_SYSTEM_PHYSICAL_MAP | (first << PAGE_SHIFT));
+}
+
 XBAPI PVOID NTAPI MmAllocateContiguousMemory(ULONG NumberOfBytes) {
     return MmAllocateContiguousMemoryEx(NumberOfBytes, 0, 0xFFFFFFFF, 0, PAGE_READWRITE);
 }
@@ -55,6 +68,25 @@ XBAPI void NTAPI MmFreeContiguousMemory(PVOID BaseAddress) {
             break;
     }
 }
+
+#if XK_DEBUG_SERIAL
+volatile ULONG UnmovablePagesForTitle;
+
+void CountUnmovablePagesForTitle(PVOID Allowed) {
+    constexpr ULONG FIRST = 0x61; // the stock kernel's image end: titles claim fixed ranges from 0x61000
+    ULONG allowedFirst = Allowed ? (MmGetPhysicalAddress(Allowed) >> PAGE_SHIFT) : 0;
+    ULONG allowedEnd = Allowed ? allowedFirst + (MmQueryAllocationSize(Allowed) >> PAGE_SHIFT) : 0;
+    ULONG count = 0;
+    for (ULONG pfn = FIRST; pfn <= MM_HIGHEST_CONTIGUOUS_PFN; pfn++) {
+        if ((PteArray[pfn] & PTE_PRESENT) && (pfn < allowedFirst || pfn >= allowedEnd)) {
+            if (count < 16)
+                XK_SERIAL("mm: unmovable page %#lx (%#lx) in the memory titles claim\n", pfn, PteArray[pfn] & 0xFFF);
+            count++;
+        }
+    }
+    UnmovablePagesForTitle = count;
+}
+#endif
 
 XBAPI void NTAPI MmPersistContiguousMemory(PVOID BaseAddress, ULONG NumberOfBytes, BOOLEAN Persist) {
     KIRQL old = KeRaiseIrqlToDpcLevel();
@@ -143,6 +175,41 @@ ULONG FreeMappedPages(ULONG va, ULONG pages) {
         }
     }
     return pages;
+}
+
+PVOID AllocateCodePages(ULONG Bytes) {
+    constexpr ULONG RW = PTE_PRESENT | PTE_WRITE | PTE_ACCESSED | PTE_DIRTY;
+    ULONG *pde = PdeAddress(MM_CODE_WINDOW), *table = PteAddress(MM_CODE_WINDOW), pages = BytesToPages(Bytes);
+    if (!pages || pages > AvailablePages)
+        return nullptr;
+    if (!(*pde & PTE_PRESENT)) { // the window's page table, recorded as a system page table at its PDE (movable too)
+        ULONG pfn = AllocatePage(MmSystemPageTableUsage, pde);
+        if (!pfn)
+            return nullptr;
+        *pde = (pfn << PAGE_SHIFT) | RW;
+        InvalidatePage((ULONG)table);
+    }
+    ULONG first = 0, run = 0;
+    for (ULONG i = 0; i < 1024 && run < pages; i++) { // the first run of free slots
+        run = table[i] ? 0 : run + 1;
+        if (run == 1)
+            first = i;
+    }
+    if (run < pages)
+        return nullptr;
+    for (ULONG i = 0; i < pages; i++) {
+        ULONG pfn = AllocatePage(MmSystemMemoryUsage, &table[first + i], false);
+        if (!pfn) {
+            FreeMappedPages(MM_CODE_WINDOW + (first << PAGE_SHIFT), i);
+            return nullptr;
+        }
+        table[first + i] = (pfn << PAGE_SHIFT) | RW;
+    }
+    return (PVOID)(MM_CODE_WINDOW + (first << PAGE_SHIFT));
+}
+
+void FreeCodePages(PVOID Base, ULONG Bytes) {
+    FreeMappedPages((ULONG)Base, BytesToPages(Bytes));
 }
 
 XBAPI PVOID NTAPI MmAllocateSystemMemory(ULONG NumberOfBytes, ULONG Protect) {

@@ -1005,6 +1005,7 @@ static void NTAPI TitleThread(PVOID, PVOID) {
     storage::RestoreVirtualDiscMounts();
     // The kernel modules for this launch (spec/oxos_internal/43): the extension loader, the settings, launch redirects, the dashboards and title patches.
     kernel_modules::LoadKernelModules();
+    toasts::ReserveToastPicture(); // while the low pages are free: the title's own pages fill them next
     if (KiQuickRebootFlag) {
         // A codec the last title left frozen: the console is powered off and on and this launch made again after it (spec/oxos_internal/46 §3), unless that
         // happened just before (then a toast says why there is no sound).
@@ -1027,6 +1028,9 @@ static void NTAPI TitleThread(PVOID, PVOID) {
     PrepareToEnterTitle();
     hardware::chipset::SetBootLed(0x0F); // solid green: the title (dashboard or game) is starting
     diagnostics::BootMarksDone();
+#if XK_DEBUG_SERIAL
+    memory::CountUnmovablePagesForTitle(AvGetSavedDataAddress());
+#endif
     CallTitleEntry(); // exactly `call [0x00010128]`, which trainer loaders hook (spec/oxos_internal/23)
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

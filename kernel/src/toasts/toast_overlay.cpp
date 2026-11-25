@@ -56,37 +56,48 @@ static bool Taken;                     // Current holds a toast
 static bool Showing;                   // Current is on screen
 static ULONG TakenAt, ShownAt;         // KeTickCount when it was taken and shown
 static PVOID Picture;                  // its picture (contiguous memory), null when none
+// Pages for the picture, taken at each launch before the title loads, while the memory below the stock kernel's image end is still free: room for a one-line
+// toast of up to 28 characters (372 x 44 at 2 bytes a pixel; "Video Mode: 480p 16:9" is 288 wide). A larger picture takes free pages there when it shows, or
+// the toast is not shown.
+constexpr ULONG TOAST_RESERVE_BYTES = 8 * PAGE_SIZE;
+static PVOID Reserve;                  // the launch's reserved pages, null when none (toasts off, or no free run)
 static ULONG Saved[SAVED_COUNT];       // the overlay's registers before it showed
 static ULONG ShownOffset;              // the picture's physical address, as written to PVIDEO_OFFSET
 static ULONG ShownSizeIn, ShownScaleX, ShownScaleY; // the toast's PVIDEO_SIZE_IN, DS_DX and DT_DY, put back by KeepToastScale
 static ULONG HeldSizeIn, HeldScaleX, HeldScaleY;    // the same as the registers read them back (the scale's low bits are dropped): what KeepToastScale checks
 
-// Draws Toast into a new picture: the box at 480-line size in X8R8G8B8, turned into YUY2 in place (the first half of the buffer). Null without memory.
+// Draws Toast into a new picture: the box at 480-line size in X8R8G8B8, in movable system memory, then turned into YUY2 in the picture. Null without memory.
 static PVOID DrawToast(const QUEUED_TOAST &Toast, TOAST_BOX Box) {
     ULONG pixels = Box.Width * Box.Height;
-    // Below 16 MB, out of the title's way (spec/oxos_internal/34 §8.2): a toast shown while the title allocates must not move its blocks.
-    auto image = (ULONG *)MmAllocateContiguousMemoryEx(pixels * 4, 0, OXOS_KEPT_MEMORY_HIGHEST, PAGE_SIZE, PAGE_READWRITE | PAGE_WRITECOMBINE);
-    if (!image)
+    auto canvas = (ULONG *)MmAllocateSystemMemory(pixels * 4, PAGE_READWRITE);
+    if (!canvas)
         return nullptr;
-    for (ULONG i = 0; i < pixels; i++) {
-        ULONG x = i % Box.Width, y = i / Box.Width;
-        bool frame = x < TOAST_FRAME || x >= Box.Width - TOAST_FRAME || y < TOAST_FRAME || y >= Box.Height - TOAST_FRAME;
-        image[i] = frame ? TOAST_COLOR_FRAME : TOAST_COLOR_BACKGROUND;
+    // The picture: contiguous (the overlay reads it by its physical address), below the stock kernel's image end where no title claims memory, and from free
+    // pages only, so a running title's pages are never moved (spec/oxos_internal/34 §8.2): the reserve, else free pages there, else no toast.
+    auto image = Reserve && pixels * 2 <= TOAST_RESERVE_BYTES
+                     ? (ULONG *)Reserve
+                     : (ULONG *)memory::AllocateKeptMemory(pixels * 2, 0, OXOS_KEPT_MEMORY_HIGHEST, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    if (image) {
+        for (ULONG i = 0; i < pixels; i++) {
+            ULONG x = i % Box.Width, y = i / Box.Width;
+            bool frame = x < TOAST_FRAME || x >= Box.Width - TOAST_FRAME || y < TOAST_FRAME || y >= Box.Height - TOAST_FRAME;
+            canvas[i] = frame ? TOAST_COLOR_FRAME : TOAST_COLOR_BACKGROUND;
+        }
+        char line[OXOS_TOAST_LINE_MAX + 1];
+        ULONG y = TOAST_PADDING_TOP;
+        for (const char *p = Toast.Text; *p; y += TOAST_LINE_HEIGHT) {
+            ULONG length = 0;
+            while (p[length] && p[length] != '\n')
+                length++;
+            memcpy(line, p, length);
+            line[length] = 0;
+            graphics::DrawText(canvas, Box.Width, TOAST_PADDING_X, y, line, TOAST_SCALE, TOAST_COLOR_TEXT);
+            p += length + (p[length] == '\n');
+        }
+        for (ULONG i = 0; i < pixels; i += 2)
+            image[i / 2] = ConvertToYUY2(canvas[i], canvas[i + 1]);
     }
-    char line[OXOS_TOAST_LINE_MAX + 1];
-    ULONG y = TOAST_PADDING_TOP;
-    for (const char *p = Toast.Text; *p; y += TOAST_LINE_HEIGHT) {
-        ULONG length = 0;
-        while (p[length] && p[length] != '\n')
-            length++;
-        memcpy(line, p, length);
-        line[length] = 0;
-        graphics::DrawText(image, Box.Width, TOAST_PADDING_X, y, line, TOAST_SCALE, TOAST_COLOR_TEXT);
-        p += length + (p[length] == '\n');
-    }
-    // In place: the dword for pixels i and i + 1 goes at byte 2 * i, never after the pixels still to read.
-    for (ULONG i = 0; i < pixels; i += 2)
-        ((ULONG *)image)[i / 2] = ConvertToYUY2(image[i], image[i + 1]);
+    MmFreeSystemMemory(canvas, pixels * 4);
     return image;
 }
 
@@ -173,10 +184,17 @@ void HideToast() {
         Showing = false;
     }
     Taken = false;
-    if (Picture && KeGetCurrentIrql() == PASSIVE_LEVEL) { // at a raised IRQL (a title rebooting) the reboot takes it back
+    if (Picture == Reserve) { // kept for the launch's next toast
+        Picture = nullptr;
+    } else if (Picture && KeGetCurrentIrql() == PASSIVE_LEVEL) { // at a raised IRQL (a title rebooting) the reboot takes it back
         MmFreeContiguousMemory(Picture);
         Picture = nullptr;
     }
+}
+
+void ReserveToastPicture() {
+    Reserve = ToastsOff ? nullptr
+                        : memory::AllocateKeptMemory(TOAST_RESERVE_BYTES, 0, OXOS_KEPT_MEMORY_HIGHEST, PAGE_READWRITE | PAGE_WRITECOMBINE, true);
 }
 
 void RunToasts() {

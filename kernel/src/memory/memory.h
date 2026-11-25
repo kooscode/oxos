@@ -15,6 +15,9 @@ constexpr ULONG MM_GPU_INSTANCE_FIRST_PFN = 0x3FE0, MM_PAGE_TABLES_FIRST_PFN = 0
 constexpr ULONG MM_HIGHEST_CONTIGUOUS_PFN = 0x3FDF;
 constexpr ULONG MM_SYSTEM_PHYSICAL_MAP = 0x80000000;
 constexpr ULONG MM_SYSTEM_PTE_BASE = 0xD0000000, MM_SYSTEM_PTE_END = 0xF0000000;
+// Kept code (extension images, trainers): 4 MB just below the code segment's limit (0xBFFFFFFF, spec/stock/23 §6.4: system memory at 0xD0000000 cannot run),
+// one page table, emptied at every boot; its pages are movable, as system memory (spec/oxos_internal/34 §8.2).
+constexpr ULONG MM_CODE_WINDOW = 0xBFC00000, MM_CODE_WINDOW_PDE = MM_CODE_WINDOW >> 22;
 
 // Win32 protection flags accepted by the Mm APIs (others fail, as in the reference).
 constexpr ULONG PAGE_READONLY = 0x02, PAGE_READWRITE = 0x04, PAGE_NOCACHE = 0x200, PAGE_WRITECOMBINE = 0x400;
@@ -63,13 +66,28 @@ extern ULONG HighestPhysicalPage; // MM_LOW_PAGES - 1, or MM_MAX_PAGES - 1 with 
 // Lets the running title's allocations use the upper 64 MB: its free pages count as available from now until the next quick reboot (the XBE loader calls it for
 // an XBE without the 64 MB limit flag). Nothing to do with 64 MB.
 void AllowUpperMemory();
+// Pages for code kept while a title runs, in MM_CODE_WINDOW: movable (a title's contiguous request moves them away, as the stock kernel's pool pages), never
+// in its way. Null when the window or the memory is full. FreeCodePages gives them back.
+PVOID AllocateCodePages(ULONG Bytes);
+void FreeCodePages(PVOID Base, ULONG Bytes);
+#if XK_DEBUG_SERIAL
+// The pages the kernel keeps that no request can move (present: contiguous or persisted) from the stock kernel's image end (0x61000) to the top of the
+// contiguous memory, Allowed's block left out (the saved display, which titles free): counted and logged just before a title is entered. It must be 0
+// (spec/oxos_internal/34 §8.2; test_extensions checks it).
+extern volatile ULONG UnmovablePagesForTitle;
+void CountUnmovablePagesForTitle(PVOID Allowed);
+#endif
 // A page for `usage`, mapped by *ownerPte (or, for a user page table, by a user PDE): zeroed unless asked not to. The caller writes the mapping. Returns the
 // PFN, or 0 when no page is free.
 ULONG AllocatePage(ULONG usage, ULONG *ownerPte, bool zero = true);
 void FreePage(ULONG pfn);
 // Contiguous run inside [lowPfn, highPfn]: the highest one that is free or can be freed by moving pages that are in use but not locked. The pages are mapped at
 // 0x80000000|PA with pteBits, the last one marked; returns the first PFN.
-bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits, ULONG *firstPfn);
+bool AllocateContiguousPages(ULONG count, ULONG lowPfn, ULONG highPfn, ULONG alignPages, ULONG pteBits, ULONG *firstPfn, bool moveBusy = true);
+// Contiguous memory for the kernel's own use while titles run, at 0x80000000|PA. Lowest..Highest as MmAllocateContiguousMemoryEx's; freed with
+// MmFreeContiguousMemory; null when no run fits. BeforeTitle: the launch's title is not loaded yet, so the pages in use there are the kernel's own, which may
+// be moved; otherwise free pages only: a title's pages are never moved under it (the stock kernel moves none; spec/oxos_internal/34 §8.2).
+PVOID AllocateKeptMemory(ULONG Bytes, ULONG Lowest, ULONG Highest, ULONG Protect, bool BeforeTitle = false);
 void FreeContiguousPage(ULONG pfn);
 // Frees the boot-only pages (the image's discardable sections) except those overlapping [KeepStart, KeepEnd), once; quick reboots keep them free. Returns the
 // number of pages freed.

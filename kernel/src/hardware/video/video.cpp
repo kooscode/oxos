@@ -95,18 +95,23 @@ XBAPI void NTAPI AvSetSavedDataAddress(PVOID Address) {
     SavedDataAddress = Address;
 }
 
-// Before each title: the saved display (a dashboard's last picture, persisted for the next title) moves below 16 MB, as the stock kernel moves it low (to its
-// freed INIT pages, spec/stock/28 §4). Left where the dashboard put it, it split the top of memory, and a title's 32 MB Direct3D block, taken from the top,
-// lost its 64 KB alignment and the GPU hung (spec/oxos_internal/34 §8.2). The block starts with a 0x40-byte header whose second dword is the pixels'
-// physical address; the picture stays on screen: the CRTC scans out the copy from the next vertical blank, and the old block is freed after it.
+// Before each title: the saved display (a dashboard's last picture, persisted for the next title) moves low, as the stock kernel moves it to the start of its
+// freed INIT pages, just after its image (spec/stock/28 §4): here to the stock kernel's image end, 0x61000, else the lowest place above it. Left where the
+// dashboard put it, it split the top of memory, and a title's 32 MB Direct3D block, taken from the top, lost its 64 KB alignment and the GPU hung
+// (spec/oxos_internal/34 §8.2). Titles that claim a fixed range from 0x61000 free it first, as on the stock kernel. The block starts with a 0x40-byte header
+// whose second dword is the pixels' physical address; the picture stays on screen: the CRTC scans out the copy from the next vertical blank, and the old block
+// is freed after it.
 void MoveSavedDisplay() {
+    constexpr ULONG TARGET = OXOS_KEPT_MEMORY_HIGHEST + 1, LIMIT = 0x01000000;
     auto old = (PULONG)SavedDataAddress;
     if (!old)
         return;
     ULONG size = MmQueryAllocationSize(old), oldPhys = MmGetPhysicalAddress(old);
-    if (oldPhys + size - 1 <= OXOS_KEPT_MEMORY_HIGHEST)
+    if (oldPhys == TARGET)
         return;
-    auto block = (PULONG)MmAllocateContiguousMemoryEx(size, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE | PAGE_WRITECOMBINE);
+    PULONG block = nullptr;
+    for (ULONG at = TARGET; !block && at + size <= LIMIT && at + size <= oldPhys; at += 0x10000) // the lowest run, in 64 KB steps
+        block = (PULONG)memory::AllocateKeptMemory(size, at, at + size - 1, PAGE_READWRITE | PAGE_WRITECOMBINE); // free pages only: the title's stay put
     if (!block)
         return;
     memcpy(block, old, size);

@@ -43,11 +43,14 @@ void oxos_log(const char *Format, ...);
 #define OXOS_LOG_FILE 2
 void oxos_set_log_target(ULONG Target); // OXOS_LOG_FILE, OXOS_LOG_SERIAL, or both (the default); at any time
 
-// Memory kept while a title runs (spec/oxos_internal/34 §8.2): contiguous memory an extension keeps during the title (a trainer, a buffer) is taken below
-// this address, MmAllocateContiguousMemoryEx(Bytes, 0, OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE), never with MmAllocateContiguousMemory: that takes the top
-// of memory, where the title's own contiguous blocks would lie on a stock kernel, and moves them (a title whose Direct3D expects its 32 MB block to end at the
-// top drew garbage and stopped). The kernel keeps the extensions' images, state pages and the toasts' pictures there too.
-#define OXOS_KEPT_MEMORY_HIGHEST 0x00FFFFFF
+// Memory kept while a title runs (spec/oxos_internal/34 §8.2): take it with MmAllocateSystemMemory(Bytes, PAGE_READWRITE) (MmFreeSystemMemory frees it):
+// its pages are ones a title's contiguous request may move away, as the stock kernel's own pool pages, so they are never in a title's way. The kernel keeps
+// the extensions' images in such pages too. Contiguous memory stays where a title would claim it: at the top of memory, a title's Direct3D block moved off
+// its 64 KB boundary drew garbage and stopped; in the middle, a title that claims a fixed range (from 0x61000) found it taken and crashed. Only memory the
+// hardware reads by its physical address needs contiguous pages: take them below this address, MmAllocateContiguousMemoryEx(Bytes, 0,
+// OXOS_KEPT_MEMORY_HIGHEST, 0, PAGE_READWRITE), where the stock kernel's own image lies (no title claims it); there are only a few dozen pages, shared with
+// the kernel's.
+#define OXOS_KEPT_MEMORY_HIGHEST 0x00060FFF
 #if !defined(PAGE_READWRITE) && !defined(OXOS_SDK_IN_KERNEL)
 #define PAGE_READWRITE 0x04 // MmAllocateContiguousMemoryEx's Protect: read and write, cached (the kernel has its own)
 #endif

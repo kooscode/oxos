@@ -53,6 +53,8 @@ bool TakeToastEvent(ULONG &Owner, OXOS_TOAST_NOTICE &Notice);          // the ne
 
 void RunToasts();  // each run-loop round: shows the next toast once the title has settled, hides it when its time is up
 void HideToast();  // at once (the title ends); the picture is freed at passive level only
+void ReserveToastPicture(); // each launch, before the title loads: the pages a one-line toast's picture takes (spec/oxos_internal/36 §6); a quick reboot
+                            // frees them
 // Text on the overlay at once, between titles, bypassing the queue and the title's 5 seconds: the kernel's notice before it powers the console off and on
 // (the sound recovery, spec/oxos_internal/46 §3). It stays until the power goes. False when it could not be drawn.
 bool ShowNotice(const char *Text);
