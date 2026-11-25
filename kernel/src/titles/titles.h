@@ -41,6 +41,7 @@ bool ServeFileManager();
 // kept from the memory manager until then.
 void ReadNetbootTitle();
 bool LaunchNetbootTitle();                        // boot-only: call it only while memory::BootPagesPresent()
+bool HasNetbootTitle();                           // boot-only: netboot delivered a title for this cold boot
 NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target = nullptr); // load an XBE (titles/title_loader.cpp); the caller enters it
 // Exported as oxos_title_launch (spec/oxos_internal/34 §7.3): stops the running title (its threads suspended) and starts Path (a \Device\ path to an XBE),
 // or the dashboard when Path is null, through the launch data page and a quick reboot. Returns only on failure.

@@ -1,7 +1,8 @@
 // The dashboard resolver module (spec/oxos_internal/19, 43): the dashboards C:\OXOS\oxos_settings.ini's [dashboard] lists (dashboard_1 to dashboard_8),
-// tried in order with the kernel's XBE loader. The kernel falls back to C:\xboxdash.xbe (titles/title_loader.cpp, LaunchDashboard).
+// tried in order with the kernel's XBE loader, or only looked for. The kernel falls back to C:\xboxdash.xbe (titles/title_loader.cpp, LaunchDashboard).
 #include "modules.h"
 #include <extensions/extensions.h>
+#include <io/io.h>
 #include <ini_file/settings_ini.h>
 #include <memory/memory.h>
 #include <titles/titles.h>
@@ -16,7 +17,7 @@ constexpr ULONG POOL_TAG = 'dSeX';
 
 } // namespace
 
-bool LoadListedDashboard() {
+bool LoadListedDashboard(bool OnlyCheck) {
     if (extensions::SafeMode)
         return false;
     ULONG got;
@@ -27,7 +28,7 @@ bool LoadListedDashboard() {
     bool loaded = false;
     for (ULONG n = 1; n <= INI_MAX_DASHBOARDS && !loaded; n++) {
         char path[INI_REDIRECT_MAX_PATH + 1];
-        loaded = oxos::ini_file::FindDashboard(text, got, n, path) && NT_SUCCESS(titles::LoadImage(path, TRUE));
+        loaded = oxos::ini_file::FindDashboard(text, got, n, path) && (OnlyCheck ? io::PathExists(path) : NT_SUCCESS(titles::LoadImage(path, TRUE)));
     }
     ExFreePool(text);
     return loaded;

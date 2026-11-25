@@ -82,6 +82,10 @@ static void PackageTitleName(char *out, const char *in, ULONG max) { // a NUL-pa
 
 // The title-launch thread, cold boot: install the package's files and launch its XBE. FALSE when there is no package or the launch failed (the usual disc /
 // dashboard selection follows).
+bool HasNetbootTitle() {
+    return NetbootPackageSize != 0;
+}
+
 bool LaunchNetbootTitle() {
     if (!NetbootPackageSize) {
         if (NetbootMarkerSeen[1] == MARKER_MAGIC) { // a title was sent but not taken: say why

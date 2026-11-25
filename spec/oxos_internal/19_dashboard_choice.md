@@ -26,7 +26,8 @@ starts the first that loads:
 
 A missing file fails at its open, before anything is loaded, so the next is tried. When none loads, the kernel behaves as before: on a cold boot the "No
 Dashboard Found" screen (spec 32 §1; under its title `No dashboard could be loaded.` / `Check C:\OXOS\oxos_settings.ini` / `or add the default
-C:\xboxdash.xbe.`, and X for the File Manager), a return to the firmware otherwise. The dashboard gets the same launch data page (reason and code) whichever it
+C:\xboxdash.xbe.`, and X for the File Manager), a return to the firmware otherwise. Since 2026-11-25 every launch first checks that one is on the disk (§5),
+so this is left for a dashboard that is there but does not load. The dashboard gets the same launch data page (reason and code) whichever it
 is.
 
 ## 2. Reading the file
@@ -46,6 +47,18 @@ file (or the section) copied.
 
 Until 2026-11-17 that list was fixed in the kernel (EvoX first; the XBL loader added 2026-11-08 as `E:\XBLDashboard\default.xbe`, moved to `C:\Dashboard` the
 same day, where the installer puts it).
+
+## 5. A dashboard at every launch
+Added 2026-11-25 (user: "EVERY boot must check dashboard as per ini file or default ms xbox dash, if not, throw error"). Before, a disk with the boot video on
+and no dashboard (the `C:\OXOS` folder copied, no dashboard yet) played the video, found no dashboard at its quick reboot, returned to the firmware as a fatal
+error, and the next cold boot showed "Previous Boot Failed" (error 21) and played the video again, round and round.
+- **The check:** a dashboard is on the disk when one `[dashboard]` lists exists (not in safe boot, nor without the kernel modules: the dashboard resolver
+  module's `LoadListedDashboard(true)` opens each path and loads nothing), or `C:\xboxdash.xbe` does (`titles::IsDashboardOnDisk`).
+- **Cold boot:** checked once the splash's X (File Manager) and B (safe boot) are read, before the boot video, a disc title or the dashboard: none is the "No
+  Dashboard Found" screen (error 13), X for the File Manager, as in §1. A title delivered by netboot (spec 09 §7) runs all the same: it may be what puts a
+  dashboard on the disk.
+- **Quick reboot:** checked before the next title is chosen. The screen is boot-only code (freed before the first title), so none is a plain restart
+  (`HalReturnToFirmware(1)`, not the fatal-error return), and its cold boot shows the screen.
 
 ## 4. Tests
 `make test_dash` boots the xemu dashboard disk four times:

@@ -523,7 +523,7 @@ struct LAUNCH_DATA_PAGE {
 static_assert(sizeof(LAUNCH_DATA_PAGE) == 0x1000);
 
 static void LaunchDashboard() {
-    if ((kernel_modules::Modules && kernel_modules::Modules->LoadListedDashboard()) || NT_SUCCESS(LoadImage(STOCK_DASHBOARD, TRUE)))
+    if ((kernel_modules::Modules && kernel_modules::Modules->LoadListedDashboard(false)) || NT_SUCCESS(LoadImage(STOCK_DASHBOARD, TRUE)))
         return;
     if (!KiQuickRebootFlag) {
         auto ldp = (LAUNCH_DATA_PAGE *)LaunchDataPage;
@@ -539,6 +539,12 @@ static void LaunchDashboard() {
         user_interface::ShowFatalError(code);
     }
     HalReturnToFirmware(4);
+}
+
+// Whether a dashboard is on the disk: one oxos_settings.ini lists (not in safe mode, nor without the kernel modules), or C:\xboxdash.xbe. Every launch
+// checks it first, so a title never starts on a console it could not return from (spec/oxos_internal/19 §5).
+static bool IsDashboardOnDisk() {
+    return (kernel_modules::Modules && kernel_modules::Modules->LoadListedDashboard(true)) || io::PathExists(STOCK_DASHBOARD);
 }
 
 static void LaunchDashboardWithReason(ULONG Reason, ULONG Code) {
@@ -945,6 +951,15 @@ void LaunchAtColdBoot() {
         return;
     // B held during the splash: no extensions until the next cold boot (spec/oxos_internal/34 §3.3).
     extensions::SafeMode = gamepad::BButtonPressed != 0;
+    // No dashboard on the disk: the No Dashboard Found screen before anything starts, boot video and disc included, with X for the File Manager. A title
+    // delivered by netboot still runs: it may be what puts a dashboard on the disk (spec/oxos_internal/19 §5).
+    if (!HasNetbootTitle() && !IsDashboardOnDisk()) {
+        XK_SERIAL("launch: no dashboard on the disk\n");
+        user_interface::NoDashboardError(13);
+        if (ServeFileManager())
+            return;
+        user_interface::ShowFatalError(13);
+    }
     ReadColdBootSwitches();
     extensions::LoadExtensions();
     if (kernel_modules::Modules && kernel_modules::Modules->RestoreSoundRecoveryLaunch())
@@ -997,6 +1012,11 @@ static void NTAPI TitleThread(PVOID, PVOID) {
         extensions::LoadExtensions();
         if (soundFrozen)
             toasts::QueueKernelToast("Audio Codec Frozen\nPower off and on to restore sound", 10);
+        // The dashboard gone since the cold boot: a plain restart, whose cold boot shows No Dashboard Found (that screen is boot-only code; spec 19 §5).
+        if (!IsDashboardOnDisk()) {
+            XK_SERIAL("launch: no dashboard on the disk: restarting\n");
+            HalReturnToFirmware(1);
+        }
         LaunchAfterQuickReboot();
     } else {
         LaunchAtColdBoot();

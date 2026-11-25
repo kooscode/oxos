@@ -138,8 +138,8 @@ BOOT_ENTRIES := $(BOOT_ENTRIES),storage::BlankDiskCountdown,storage::IsDiskBlank
 BOOT_ENTRIES := $(BOOT_ENTRIES),kernel_modules::WriteKernelModulesCache
 # The cache partitions' formats, read at a cold boot on an exFAT disk (filesystems/hddfs/volume_exfat.cpp); the self-tests call it too.
 BOOT_ENTRIES := $(BOOT_ENTRIES),filesystems::ReadCachePartitions
-# The netboot title's installation (titles/title_netboot.cpp): a package only ever comes with a cold boot.
-BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchNetbootTitle
+# The netboot title's installation and whether there is one (titles/title_netboot.cpp): a package only ever comes with a cold boot.
+BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchNetbootTitle,titles::HasNetbootTitle
 # The cold boot's launch choice and the File Manager (titles/title_loader.cpp).
 BOOT_ENTRIES := $(BOOT_ENTRIES),titles::LaunchAtColdBoot,titles::ServeFileManager
 # The quick-reboot copy of the initialised .data (src/arch/entry.S).

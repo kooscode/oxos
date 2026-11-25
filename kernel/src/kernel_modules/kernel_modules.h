@@ -39,7 +39,8 @@ struct XK_KERNEL_MODULES {
     // (spec/oxos_internal/33).
     bool (*FindLaunchRedirect)(PCSZ Path, char *Target, ULONG TargetSize);
     // dashboard_resolver.cpp: loads the first of the dashboards oxos_settings.ini's [dashboard] lists that loads; false: none did (spec/oxos_internal/19).
-    bool (*LoadListedDashboard)();
+    // OnlyCheck: loads nothing, true when one of them is on the disk (§5).
+    bool (*LoadListedDashboard)(bool OnlyCheck);
     // title_patcher.cpp: this title's patch records from oxos_title_patches.ini, in pool memory the caller frees (*Records, *Size bytes); none: *Records
     // null (spec/oxos_internal/25 §3).
     void (*BuildTitlePatches)(ULONG TitleId, ULONG Version, const xk::titles::XBE_SECTION_HEADER *Sections, ULONG Count, PUCHAR *Records, ULONG *Size);

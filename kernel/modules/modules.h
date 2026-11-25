@@ -10,7 +10,7 @@ ULONG ReadColdBootSwitches();
 // launch_redirect.cpp
 bool FindLaunchRedirect(PCSZ Path, char *Target, ULONG TargetSize);
 // dashboard_resolver.cpp
-bool LoadListedDashboard();
+bool LoadListedDashboard(bool OnlyCheck);
 // sound_recovery.cpp
 bool CheckSoundAtQuickReboot();
 bool RestoreSoundRecoveryLaunch();
