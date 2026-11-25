@@ -8,7 +8,8 @@ A byte flag (`0x8003A87C`, inferred name `KiQuickReboot`) separates them.
 - **Cold boot**: entry from the 2BL (spec 01). Flag = 0.
 - **Quick reboot**: `HalReturnToFirmware` with the quick-reboot routine jumps to 0x8001af9c, which:
   1. disables interrupts and resets the stack to the boot stack
-  2. calls a pre-reset hook (0x8001eabc; purpose not yet established)
+  2. calls a pre-reset hook (0x8001eabc): it restores the page directory (the 2BL's mappings and the flash PDE, CR3 reloaded) and touches no device
+     (spec 29 §1)
   3. **re-copies initialized `.data` from flash**, zeroes the rest of `.data`/BSS (sizes below)
   4. sets flag = 1, then repeats the processor bring-up from spec 01 §2.4 onward (IDT, PCR, Kd, kernel init) and goes idle. Cold-only hardware and memory init
      is skipped.
@@ -120,6 +121,6 @@ Titles read `XboxHardwareInfo`, so these bits must match on each console revisio
 - Tested by `make test_relaunch` (spec 05 §9).
 
 ## Open questions
-- The pre-reset hook 0x8001eabc; the 0x80CF pulse; the 0x8003B138 skip-pulse bit (spec 03 §boot flags).
+- The 0x80CF pulse; the 0x8003B138 skip-pulse bit (spec 03 §boot flags).
 - Meaning of XboxHardwareInfo flags 0x10/0x20/0x40/0x80/0x01 (check against several console revisions).
 - Phase-1 system thread 0x8001576F → spec 03.

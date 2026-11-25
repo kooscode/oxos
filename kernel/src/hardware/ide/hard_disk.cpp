@@ -11,17 +11,18 @@
 #include <hardware/ide/ide.h>
 #include <storage/storage.h>
 
-// The disk's exported variables (spec/stock/04 §4): outside the namespace, with the names titles import.
-static char DiskModel[40], DiskSerial[20]; // the IDENTIFY strings HalDiskModelNumber and HalDiskSerialNumber name
-ULONG HalDiskCachePartitionCount = 3;      // X, Y, Z
+// The disk's exported variables (spec/stock/04 §4): outside the namespace, with the names titles import. What the cold boot's IDENTIFY found is kept across
+// quick reboots, which send the disk no command (spec/stock/29 §3).
+XK_PERSIST static char DiskModel[40], DiskSerial[20]; // the IDENTIFY strings HalDiskModelNumber and HalDiskSerialNumber name
+ULONG HalDiskCachePartitionCount = 3;                 // X, Y, Z
 STRING HalDiskModelNumber = {0, sizeof(DiskModel), DiskModel};
 STRING HalDiskSerialNumber = {0, sizeof(DiskSerial), DiskSerial};
 
 namespace xk::hardware::ide {
 
-ULONGLONG DiskLengthInSectors;
-BOOLEAN DiskSupportsLba48, DiskSecurityUnlocked;
-volatile USHORT DiskSecurityWord; // IDENTIFY word 128, for diagnostics
+XK_PERSIST ULONGLONG DiskLengthInSectors;
+XK_PERSIST BOOLEAN DiskSupportsLba48, DiskSecurityUnlocked;
+XK_PERSIST volatile USHORT DiskSecurityWord; // IDENTIFY word 128, for diagnostics
 
 void DiskModelLine(char *Line, ULONG Size) {
     ULONG n = HalDiskModelNumber.Length;
@@ -128,7 +129,19 @@ static void DiskStartTransfer(PIRP Irp) {
     bool ext = DiskSupportsLba48 && lba + count > 0x0FFFFFFF;
     PIDE_CHANNEL_OBJECT ch = &IdexChannelObject;
     KIRQL old = KfRaiseIrql(ch->InterruptIrql);
-    if (!WaitForIdeStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 1000000) || !ProgramIdeDma(s->Parameters.Read.CacheBuffer, chunk)) {
+    // A disk not ready within 100 ms has timed out, as in the reference (spec/stock/29 §2, §4): the channel is reset and the chunk tried again, up to the
+    // retry limit.
+    if (!WaitForIdeStatus(IDE_STATUS_BSY | IDE_STATUS_DRDY, IDE_STATUS_DRDY, 100000)) {
+        KfLowerIrql(old);
+        if (ch->IoRetries++ < ch->MaximumIoRetries) {
+            ResetIdeChannel();
+            DiskStartTransfer(Irp);
+        } else {
+            DiskCompleteIrp(Irp, STATUS_IO_DEVICE_ERROR);
+        }
+        return;
+    }
+    if (!ProgramIdeDma(s->Parameters.Read.CacheBuffer, chunk)) {
         KfLowerIrql(old);
         DiskCompleteIrp(Irp, STATUS_IO_DEVICE_ERROR);
         return;
@@ -186,7 +199,10 @@ static void NTAPI DiskFinishIo() {
     DiskCompleteIrp(irp, STATUS_SUCCESS);
 }
 
+// A chunk that did not interrupt within its time (spec/stock/29 §4): the channel is reset, then the chunk is finished as failed, which tries it again up to
+// the retry limit.
 static void NTAPI DiskTimeout() {
+    ResetIdeChannel();
     DiskFinishIo();
 }
 
@@ -452,15 +468,20 @@ static bool DiskCommand(UCHAR command, UCHAR features, UCHAR count) {
     return WaitForIdeStatus(IDE_STATUS_BSY, 0, 5000000) && !(inb(IDE_ALT_STATUS) & IDE_STATUS_ERR);
 }
 
+// The string's length: its buffer without the trailing spaces IDENTIFY pads it with.
+static void SetIdentifyStringLength(STRING *s) {
+    ULONG n = s->MaximumLength;
+    while (n && s->Buffer[n - 1] == ' ')
+        n--;
+    s->Length = (USHORT)n;
+}
+
 static void CopyIdentifyString(const USHORT *words, ULONG count, char *out, STRING *s) {
     for (ULONG i = 0; i < count; i++) {
         out[2 * i] = (char)(words[i] >> 8);
         out[2 * i + 1] = (char)words[i];
     }
-    ULONG n = count * 2;
-    while (n && out[n - 1] == ' ')
-        n--;
-    s->Length = (USHORT)n;
+    SetIdentifyStringLength(s);
 }
 
 // The drive password: HMAC-SHA1(XboxHDKey, model, serial) over the trimmed IDENTIFY strings, zero-padded to 32.
@@ -538,7 +559,8 @@ void CountDiskPowerCycle() {
     }
 }
 
-void InitDisk() {
+// The cold boot's disk start-up (spec/stock/04 §2): wait for the disk, set its transfer modes, IDENTIFY it and keep what it reports.
+static void IdentifyDisk() {
     outb(IDE_DRIVE, 0xA0);
     // Wait for the disk: not busy and ready, as the reference does, for up to 30 s. OXOS deviations:
     // - a disk that is no longer busy but has not set DRDY after 1 s is used anyway (IDENTIFY below decides), as XboxDev/cromwell does; some drives and SATA
@@ -592,7 +614,19 @@ void InitDisk() {
     DiskSecurityWord = id[128];
     XK_SERIAL("disk: %.40s, %lu sectors%s, security %#x, status %#x\n", DiskModel, (ULONG)DiskLengthInSectors, DiskSupportsLba48 ? " (LBA48)" : "",
               DiskSecurityWord, DiskLastStatus);
+}
 
+// The disk at every boot. A quick reboot sends it no command, as the reference (spec/stock/29 §3): the drive may still be finishing the last title's
+// transfer, which the quick reboot lets complete, and it stays set up and unlocked; the cold boot's IDENTIFY results are kept, and only the devices are made
+// again.
+void InitDisk() {
+    if (KiQuickRebootFlag) {
+        SetIdentifyStringLength(&HalDiskModelNumber);
+        SetIdentifyStringLength(&HalDiskSerialNumber);
+        XK_SERIAL("disk: %.40s, %lu sectors (kept from the cold boot)\n", DiskModel, (ULONG)DiskLengthInSectors);
+    } else {
+        IdentifyDisk();
+    }
     OBJECT_STRING name = objects::ObjectName("\\Device\\Harddisk0");
     OBJECT_ATTRIBUTES attrs = {nullptr, &name, OBJ_PERMANENT | OBJ_CASE_INSENSITIVE};
     PVOID dir;
@@ -602,8 +636,8 @@ void InitDisk() {
     CreateDiskDevice(0, 0, (LONGLONG)DiskLengthInSectors << 9, &DiskPartitionTable[0]);
     storage::InitDiskLayout();
 
-    // ATA security (IDENTIFY word 128: bit 1 enabled, bit 2 locked).
-    if (DiskSecurityWord & 2) {
+    // ATA security (IDENTIFY word 128: bit 1 enabled, bit 2 locked), at a cold boot: the disk stays unlocked until it loses power.
+    if (!KiQuickRebootFlag && (DiskSecurityWord & 2)) {
         if (!(DiskSecurityWord & 4)) {
             DiskSecurityUnlocked = TRUE;
         } else {

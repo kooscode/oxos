@@ -11,7 +11,8 @@ exactly** (LBA28, fixed partition table) so stock drives and stock-formatted dis
 - Interrupt: **IRQ 14**, using `HalGetInterruptVector(14)`, latched mode; connect the ISR. On failure the kernel halts.
 - The **PRD (DMA descriptor) table** lives in the dedicated **`IDEXPRDT` section** (VA 0x8003CA00, 0x108 bytes). Its physical address is taken once with
   `MmGetPhysicalAddress`.
-- Cold boot → disk init (§2), then DVD init (§3). Quick reboot → only recreate the device objects (§2.4 and §3.4).
+- Cold boot → disk init (§2), then DVD init (§3). Quick reboot → only recreate the device objects (§2.4 and §3.4): no disk command, no reset, and the
+  transfer the last title left in flight is neither waited for nor stopped (spec 29 §2, §3).
 - The channel object is exported as `IdexChannelObject` (ord 357, 0x8003AD20). Its fields include the StartIo/timeout handler pointers, current IRP, IRQL, the
   PRD physical address, and the timeout counter (default 10). These layouts are ABI if any title touches them. Unverified, so low priority.
 
@@ -127,12 +128,12 @@ at 0x80012348, and the READ/WRITE and DEVICE_CONTROL dispatch.
     STATUS_INVALID_DEVICE_REQUEST
 - **IDE pass-through** (StartIo 0x80024c9d, ISR 0x80024c06): buffer `ATA_PASS_THROUGH` {IDEREGS (Features, Count, Number, CylLow, CylHigh, DriveHead, Command,
   HostSendsData), DataBufferSize, DataBuffer} = 16 bytes; the IRP's UserBuffer must *be* the input buffer and both lengths ≥ 16, else STATUS_INVALID_PARAMETER.
-  Information = output length. Select drive 0xA0 (DriveHead from the caller is not used), wait not-busy (else reset the channel: SRST pulse on 0x3F6, then poll;
-  STATUS_REQUEST_ABORTED), write 0x1F1–0x1F5 and the command, then PIO data out if HostSendsData (wait for DRQ). On the interrupt: the error, count, LBA bytes
+  Information = output length. Select drive 0xA0 (DriveHead from the caller is not used), wait not-busy (else reset the channel: SRST pulse on 0x3F6, then poll,
+  then retry up to 4 times; 0xC000016B when the reset fails, spec 29 §4; STATUS_REQUEST_ABORTED only when a reset or shutdown is pending), write 0x1F1–0x1F5 and the command, then PIO data out if HostSendsData (wait for DRQ). On the interrupt: the error, count, LBA bytes
   and **status** (in the Command byte) are copied back; PIO data in when !HostSendsData. Timeout 10 s. The IRP status is success even if the command failed.
   - everything else → IoInvalidDeviceRequest
 - **Transfer completion:**
-  - error → retry (≤ 4) or fail
+  - timeout (no interrupt within 10 s, or the drive not ready within 100 ms) → channel reset, then retry (≤ 4); any other error → fail at once (spec 29 §4)
   - more than 128 KB left → advance (length −= 128 KB, buffer += 128 KB, LBA += 0x100) and restart
   - otherwise success, IofCompleteRequest(boost 1), start the next channel packet
 - Our implementation polls IDENTIFY/SET FEATURES at init; the whole-disk Partition0 is flagged RAW_MOUNT_ONLY.
@@ -159,5 +160,5 @@ The FATX directory entry format, allocation, the FS cache (`Fsc*`), and the rest
 
 ## Open questions
 - 0x80055ac6 (end of disk init), 0x800559f8 (unlock command details), 0x80023f86 (ready test).
-- ISR / DPC completion / timeout handling, PIO paths, error retry policy.
+- PIO paths.
 - FATX directory entries, FAT chain and allocation, Fsc cache semantics (spec 04b).

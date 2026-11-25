@@ -24,12 +24,15 @@ bool WaitForIdeStatus(UCHAR mask, UCHAR value, ULONG timeoutUs) {
 // --- Bus-master DMA
 
 // Physical region descriptor table: 33 entries cover 128 KB starting at any page offset. The bus master wants it in one 64 KB region: the link checks that
-// (tools/check_kernel_layout.py), so it needs no 512-byte alignment, whose padding in the resident data moved with every change before it.
+// (tools/check_kernel_layout.py), so it needs no 512-byte alignment, whose padding in the resident data moved with every change before it. It is kept across
+// quick reboots, as the reference keeps its table in a section of its own (spec/stock/29 §2): the bus master finishes a transfer that is in flight, reading
+// its next entries from here meanwhile; zeroed with the rest of the BSS, the table sent the rest of a read to physical address 0, over the page directory
+// (2026-11-25).
 struct IDE_PRD {
     ULONG Physical;
     ULONG Count; // bytes in bits 0-15 (0 = 64 KB), bit 31 = end of table
 };
-alignas(8) static IDE_PRD PrdTable[33];
+alignas(8) XK_PERSIST static IDE_PRD PrdTable[33];
 
 volatile ULONG BadDmaPages; // diagnostics: transfers refused because a page was not valid RAM
 

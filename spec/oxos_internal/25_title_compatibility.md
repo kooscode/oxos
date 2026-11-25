@@ -169,7 +169,7 @@ Before the quick reboot that starts the next title, the kernel turns the NIC's r
 cold boot's bus-master stop (spec 10): HAL phase 0 only reprograms the interrupt controller and stops the video overlay (§4), so this step is the only one
 between two titles. A receiver left on keeps taking every frame the network sends (broadcasts, ARP, the end of an FTP session) and writes it, with its
 descriptor, into the receive ring of the title that just ended. That memory is free for the next title, and the writes go on until the next title starts
-the network itself, if it ever does.
+the network itself, if it ever does. The stock kernel does not do this: it never touches the NIC after the cold boot's PCI set-up (spec/stock/29 §5).
 - **Seen with:** a title started by the OXOS FTP server (`SITE LAUNCH`). About 3 s in, its background copy of the disc's compressed archives to its cache
   drive stops with a zlib error ("incorrect data check" or "invalid block type") in the first archive it unpacks. Every disc read had delivered the image's
   bytes (a sum per read, compared with the image on the PC); the bytes changed afterwards, in the unpacker's memory. The title records the failure and, at the

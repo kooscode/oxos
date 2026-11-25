@@ -236,7 +236,9 @@ void SetBootLed(UCHAR Pattern) {
 extern "C" void KiQuickRebootQuiesce() {
     outb(0x21, 0xFF); // mask both PICs
     outb(0xA1, 0xFF);
-    outb(0xFF60, 0);  // IDE bus master off
+    // The IDE bus master is left running, as the reference leaves it (spec/stock/29 §2): the drive finishes the command in flight (at most 128 KB, a few ms)
+    // and the restarted kernel sends the disk nothing. Stopping it here cut a transfer short and left the drive holding the rest of a read, which the next
+    // boot's IDENTIFY then read as the drive's identity (a launch during a download, 2026-11-25).
     // OHCI host controller resets (USB 0 and 1). A controller leaves its reset in USBSUSPEND, so put it back in USBRESET (HcControl 0), the state a title finds
     // after a cold boot: a title's USB library that finds the controller suspended resumes it with a 20 ms sleep inside XInitDevices, and a title whose other
     // thread asks for its input devices meanwhile initializes them twice (spec/oxos_internal/25 §5).
