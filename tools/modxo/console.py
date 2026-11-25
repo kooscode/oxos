@@ -8,24 +8,47 @@ The rig is an RP2040 Modxo modchip running the oxos_debug firmware module. Its U
 0xFE and 0xFC are reserved, so binary COM1 output (a kernel debugger's packets) can be misread; use --raw for it. The Pico answers the console's Super I/O probe
 only while this port is open with DTR set, so the logger keeps it open.
 
-  console.py log [--out FILE] [--raw FILE] [--no-dtr]   run the logger (one per Pico; it owns the serial port)
-  console.py state                                      print the power state (on / off / unknown / no pico)
-  console.py on | off                                   switch the console on / off (no press if it already is)
-  console.py power                                      press the power button once (a toggle)
-  console.py cycle [--off S]                            off, wait S seconds (default 8), on
+  console.py                                            list the connected Modxos: serial number, port, logger and power state
+  console.py log [SERIAL] [--out FILE] [--raw FILE] [--no-dtr]   run the logger (one per Pico; it owns the serial port)
+  console.py state SERIAL                               print the power state (on / off / unknown / no pico)
+  console.py on | off SERIAL                            switch the console on / off (no press if it already is)
+  console.py power SERIAL                               press the power button once (a toggle)
+  console.py cycle SERIAL [--off S]                     off, wait S seconds (default 8), on
 
-The other commands talk to a running logger over UDP on 127.0.0.1 (--port, default 47800). The press lasts 2 s (the firmware holds the pin). The power state
-comes from the status lines' 3v3 level (LPC power).
+SERIAL is the Pico's USB serial number (the list shows them; /dev/serial/by-id/usb-Raspberry_Pi_Pico_SERIAL-if00). A command without SERIAL lists the
+Modxos instead. The commands talk to that Pico's logger over UDP on 127.0.0.1: each logger takes the first free port from 47800 and answers with its serial
+number; when the Pico has no logger, one is started in the background (its log in /data/sources/tmp/console_SERIAL.txt). --port talks to the logger on that
+port instead, whatever its Pico. The press lasts 2 s (the firmware holds the pin). The power state comes from the status lines' 3v3 level (LPC power).
 
 Log lines: "HH:MM:SS.mmm post XX" per POST code, "... uart <text>" per COM1 line (a line without its newline is printed after 0.5 s without COM1 bytes, marked
 "[partial line]"), "... pico <status>" per status line. Needs pyserial.
 """
 import argparse
+import glob
+import os
 import socket
+import subprocess
 import sys
 import time
 
-PORT = 47800
+PORT = 47800        # the first logger's UDP port; later loggers take the next free ones
+PORTS = 20          # ports searched for loggers
+BY_ID = "/dev/serial/by-id/usb-Raspberry_Pi_Pico_*-if00"
+LOG_DIR = "/data/sources/tmp"  # where a logger started for a command writes its log
+
+
+def picos():
+    """The connected Picos: {serial number: device (/dev/ttyACMn)}."""
+    found = {}
+    for link in sorted(glob.glob(BY_ID)):
+        found[os.path.basename(link)[len("usb-Raspberry_Pi_Pico_"):-len("-if00")]] = os.path.realpath(link)
+    return found
+
+
+def serial_of(dev):
+    """The serial number of the Pico at dev, or "" when it is not one."""
+    real = os.path.realpath(dev)
+    return next((sn for sn, d in picos().items() if d == real), "")
 
 
 def stamp():
@@ -44,8 +67,25 @@ def log(args):
         if out:
             out.write(line + "\n")
 
+    if args.serial:
+        dev = picos().get(args.serial)
+        if not dev:
+            sys.exit("no Pico with serial number %s is connected" % args.serial)
+        args.dev = "/dev/serial/by-id/usb-Raspberry_Pi_Pico_%s-if00" % args.serial  # stays right when the ttyACM numbers change
+    ident = (args.serial or serial_of(args.dev)).encode()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("127.0.0.1", args.port))
+    if args.port is not None:
+        sock.bind(("127.0.0.1", args.port))
+    else:  # the first free port from PORT
+        for port in range(PORT, PORT + PORTS):
+            try:
+                sock.bind(("127.0.0.1", port))
+                break
+            except OSError:
+                continue
+        else:
+            sys.exit("no free UDP port in %d-%d" % (PORT, PORT + PORTS - 1))
+    emit("commands on 127.0.0.1:%d, Pico %s" % (sock.getsockname()[1], ident.decode() or "unknown"))
     sock.setblocking(False)
     power = None  # the last 3v3 level reported by the Pico: True, False or None (not seen yet)
     while True:
@@ -61,6 +101,8 @@ def log(args):
                     cmd, peer = sock.recvfrom(16)
                     if cmd == b"S":
                         sock.sendto(b"no pico", peer)
+                    elif cmd == b"I":
+                        sock.sendto(ident, peer)
                     elif cmd == b"P":
                         emit("power button pulse not sent: no Pico")
                 except BlockingIOError:
@@ -86,6 +128,8 @@ def log(args):
                             ser.dtr = False
                     elif cmd == b"S":
                         sock.sendto({True: b"on", False: b"off", None: b"unknown"}[power], peer)
+                    elif cmd == b"I":
+                        sock.sendto(ident, peer)
                 except BlockingIOError:
                     pass
                 data = ser.read(4096)
@@ -143,6 +187,74 @@ def state(port, timeout=2.0):
         return None
 
 
+def loggers(timeout=0.5):
+    """The running loggers: {serial number: UDP port}. A logger that does not know its Pico answers with an empty serial number."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    for port in range(PORT, PORT + PORTS):
+        s.sendto(b"I", ("127.0.0.1", port))
+    found = {}
+    end = time.time() + timeout
+    while True:
+        s.settimeout(max(0.01, end - time.time()))
+        try:
+            data, peer = s.recvfrom(64)
+        except (socket.timeout, ConnectionRefusedError):
+            if time.time() >= end:
+                return found
+            continue
+        found.setdefault(data.decode(), peer[1])
+
+
+def holders(dev):
+    """The PIDs of the processes that have dev open (a logger this script cannot reach must not get a second one beside it)."""
+    real, pids = os.path.realpath(dev), []
+    for fd_dir in glob.glob("/proc/[0-9]*/fd"):
+        try:
+            if any(os.path.realpath(os.path.join(fd_dir, fd)) == real for fd in os.listdir(fd_dir)):
+                pids.append(int(fd_dir.split("/")[2]))
+        except OSError:
+            continue
+    return pids
+
+
+def logger_port(serial):
+    """The UDP port of serial's logger, started in the background when there is none."""
+    port = loggers().get(serial)
+    if port:
+        return port
+    if serial not in picos():
+        sys.exit("no Pico with serial number %s is connected (console.py lists them)" % serial)
+    busy = holders(picos()[serial])
+    if busy:
+        sys.exit("%s is open in process %s, which does not answer as its logger (an older console.py?): stop it, or use --port" %
+                 (picos()[serial], ", ".join(map(str, busy))))
+    out = os.path.join(LOG_DIR, "console_%s.txt" % serial)
+    subprocess.Popen([sys.executable, "-I", os.path.abspath(__file__), "log", serial, "--out", out], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=open(os.path.join(LOG_DIR, "console_%s.err" % serial), "a"), start_new_session=True)  # errors only
+    print("started a logger for %s (log: %s)" % (serial, out))
+    end = time.time() + 10
+    while time.time() < end:
+        port = loggers().get(serial)
+        if port and state(port) not in (None, "unknown"):  # its first status line: the power state is known
+            return port
+        time.sleep(0.5)
+    if port:
+        return port
+    sys.exit("the logger for %s did not start (see %s)" % (serial, out.replace(".txt", ".err")))
+
+
+def list_picos():
+    """Print the connected Modxos with their loggers and power states."""
+    found, running = picos(), loggers()
+    if not found:
+        print("no Modxo (Raspberry Pi Pico) connected")
+    for sn, dev in found.items():
+        port = running.get(sn)
+        print("%-18s %-14s %s" % (sn, dev, "logger on %d, %s" % (port, state(port)) if port else "no logger"))
+    if "" in running:
+        print("a logger on port %d does not know its Pico's serial number (started with --dev, or an older console.py)" % running[""])
+
+
 def wait_state(port, want, timeout):
     end = time.time() + timeout
     while time.time() < end:
@@ -171,17 +283,25 @@ def switch(port, want):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("what", choices=["log", "state", "on", "off", "power", "cycle"])
-    p.add_argument("--dev", default="/dev/ttyACM0", help="log: the Pico's serial port (default %(default)s)")
-    p.add_argument("--port", type=int, default=PORT, help="UDP command port on 127.0.0.1 (default %(default)s)")
+    p.add_argument("what", nargs="?", choices=["list", "log", "state", "on", "off", "power", "cycle"])
+    p.add_argument("serial", nargs="?", help="the Pico's USB serial number (console.py lists them)")
+    p.add_argument("--dev", default="/dev/ttyACM0", help="log without SERIAL: the Pico's serial port (default %(default)s)")
+    p.add_argument("--port", type=int, help="the logger's UDP command port on 127.0.0.1 (default: log takes the first free one from %d, the other "
+                   "commands find SERIAL's logger)" % PORT)
     p.add_argument("--out", help="log: also append the log lines to this file")
     p.add_argument("--raw", help="log: also append the raw COM1 bytes to this file")
     p.add_argument("--no-dtr", action="store_true", help="log: keep DTR low, so the console finds no COM1")
     p.add_argument("--off", type=float, default=8.0, help="cycle: seconds off (default %(default)s)")
     args = p.parse_args()
+    if args.what in (None, "list") or (args.what != "log" and not args.serial and args.port is None):
+        list_picos()
+        return 0 if args.what in (None, "list") else 2
     if args.what == "log":
         log(args)
-    elif args.what == "state":
+        return 0
+    if args.port is None:
+        args.port = logger_port(args.serial)
+    if args.what == "state":
         print(state(args.port) or "no logger")
     elif args.what in ("on", "off"):
         return 0 if switch(args.port, args.what) else 1

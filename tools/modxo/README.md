@@ -27,19 +27,24 @@ These scripts are the PC side.
 - Python 3 with pyserial (`pip install pyserial`).
 
 ## Commands
-Start the logger once. It owns the Pico's serial port, and the other commands talk to it:
+Each Modxo is named by its Pico's USB serial number; `console.py` with no arguments lists the connected ones. One logger runs per Pico: it owns the Pico's
+serial port, and the other commands talk to it (each logger takes the first free UDP port from 47800). A command for a Pico without a logger starts one in
+the background (log in `/data/sources/tmp/console_SERIAL.txt`), or start it yourself:
 
 ```sh
-python3 tools/modxo/console.py log --out console.txt
+python3 tools/modxo/console.py                                   # 5303284748C4721C   /dev/ttyACM0   logger on 47800, off
+python3 tools/modxo/console.py log 5303284748C4721C --out console.txt
+python3 tools/modxo/console.py on 5303284748C4721C
 ```
 
 | Command | Does |
 |---|---|
-| `console.py log [--out FILE] [--raw FILE] [--no-dtr] [--dev PORT]` | log everything; `--raw` also keeps COM1's bytes unmodified (binary protocols); `--no-dtr` hides COM1 from the console (it raises DTR only for a power press) |
-| `console.py state` | `on`, `off`, `unknown` (no status line yet) or `no pico` (from the status lines' 3v3 level) |
-| `console.py on` / `off` | switch the console on / off; no press if it already is; a missed press is retried |
-| `console.py power` | press the power button once (a toggle) |
-| `console.py cycle [--off S]` | off, wait S seconds (default 8), on |
+| `console.py` (or `list`) | the connected Modxos: serial number, port, logger and power state; any command below without SERIAL lists them too |
+| `console.py log SERIAL [--out FILE] [--raw FILE] [--no-dtr]` | log everything; `--raw` also keeps COM1's bytes unmodified (binary protocols); `--no-dtr` hides COM1 from the console (it raises DTR only for a power press); `--dev PORT` instead of SERIAL |
+| `console.py state SERIAL` | `on`, `off`, `unknown` (no status line yet) or `no pico` (from the status lines' 3v3 level) |
+| `console.py on` / `off SERIAL` | switch the console on / off; no press if it already is; a missed press is retried |
+| `console.py power SERIAL` | press the power button once (a toggle) |
+| `console.py cycle SERIAL [--off S]` | off, wait S seconds (default 8), on |
 | `bootrun.py --log FILE [--runs N] ...` | boot N times and classify each boot: PASS / FREEZE / NOBOOT (see `--help`) |
 | `flash_uf2.sh FILE.uf2 [PORT]` | flash a firmware or BIOS .uf2 over USB |
 

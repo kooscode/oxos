@@ -224,7 +224,7 @@ Each tool's invocation and options are in its README (folders) or its docstring 
 | Game folders from disc images | `tools/oxos_isonator/` | for OXOS and any BIOS with the NKPatcher virtual disc device |
 | Copy files to and from a console, start an XBE | `apps/oxos_ftp/` (the OXOS FTP server; `SITE LAUNCH /F/path`, `SITE REBOOT`) | Python's `ftplib` in one session is fastest for many files |
 | Boot a new kernel on a console, run an XBE straight away | `tools/netboot/` (`netboot.py IMAGE --title DIR --title-name NAME`) | flash the netboot image once |
-| Power a console on or off, read its COM1 and POST codes | `tools/modxo/` (`console.py on`, `off`, `cycle`, `state`, `log`) | the Modxo rig; keep `console.py log` running |
+| Power a console on or off, read its COM1 and POST codes | `tools/modxo/` (`console.py` lists the Modxos; `on`, `off`, `cycle`, `state`, `log` + the Pico's serial number) | the Modxo rig; one logger per Pico |
 | See a console's screen | an HDMI capture card with ffmpeg (`-f v4l2 ... -ss 3`) | skip the first 3 s: the card shows colour bars first |
 | Kernel extensions | `sdk/` (its README), `kernel/extensions/` (the ones OXOS ships) | spec 34 |
 | Trainer pack, trainer ini | `third_party/xbox_trainers/` (its README, `index.csv`), `tools/gen_trainers_ini.py` | spec 37 |

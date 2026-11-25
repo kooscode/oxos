@@ -15,7 +15,7 @@ The Pico runs Modxo with an OXOS debug module ([`tools/modxo`](../tools/modxo/RE
 - holds the BIOS image, reflashed over USB;
 - emulates the console's SuperIO serial port, so the kernel's boot log and crash reports reach the PC (COM1);
 - streams every POST code (port 0x80 writes) and the LPC power and reset state;
-- presses the power button: `console.py on`, `off`, `cycle`.
+- presses the power button: `console.py on SERIAL`, `off`, `cycle` (SERIAL: the Pico's USB serial number; `console.py` lists them).
 
 ## Network boot
 The BIOS flashed on the Modxo can be a netboot image. Its 2BL asks the PC for a kernel at every power-on, so a new build needs no flashing.
