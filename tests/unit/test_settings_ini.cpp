@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include <string>
+#include <sys/mman.h>
 
 #include <ini_file/settings_ini.h>
 
@@ -66,6 +67,23 @@ TEST(SettingsIni, TheFileLosesItsQuotes) {
     std::string longest(BOOT_VIDEO_MAX_FILE, 'a');
     EXPECT_STREQ(Read("[boot_video]\nboot_video_file = " + longest + "\n").Settings.File, longest.c_str());
     EXPECT_STREQ(Read("[boot_video]\nboot_video_file = " + longest + "a\n").Settings.File, "");
+}
+
+// The kernel reads the file into a buffer of its exact size, with no 0 after it: the file name is copied without reading past the buffer's end (the text is
+// put right before a page that cannot be read; a v0.5.8 console stopped there).
+TEST(SettingsIni, TheFileIsCopiedWithoutReadingPastTheText) {
+    const std::string text = "[boot_video]\nboot_video_file = intro.mpg\nboot_video_enabled = yes";
+    auto pages = static_cast<char *>(mmap(nullptr, 8192, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    ASSERT_NE(pages, MAP_FAILED);
+    ASSERT_EQ(mprotect(pages + 4096, 4096, PROT_NONE), 0);
+    char *at = pages + 4096 - text.size();
+    memcpy(at, text.data(), text.size());
+    BOOT_VIDEO_SETTINGS settings;
+    uint32_t errors;
+    oxos::ini_file::ReadBootVideoSettings(at, (uint32_t)text.size(), &settings, &errors);
+    EXPECT_STREQ(settings.File, "intro.mpg");
+    EXPECT_TRUE(settings.Enabled);
+    munmap(pages, 8192);
 }
 
 TEST(SettingsIni, TheLastOfTwoKeysCounts) {

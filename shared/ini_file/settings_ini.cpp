@@ -66,8 +66,12 @@ void CopyFileName(const INI_LINE &Line, char (&File)[BOOT_VIDEO_MAX_FILE + 1]) {
     uint32_t length = Line.ValueLength;
     Unquote(from, length);
     File[0] = 0;
-    if (length <= BOOT_VIDEO_MAX_FILE)
-        strlcpy(File, from, length + 1);
+    // The value lies inside the file's text, which has no terminating 0: strlcpy would measure the source on past the value, to the buffer's end and beyond
+    // (a bug check when the buffer ended just before an unmapped page).
+    if (length <= BOOT_VIDEO_MAX_FILE) {
+        memcpy(File, from, length);
+        File[length] = 0;
+    }
 }
 
 } // namespace
