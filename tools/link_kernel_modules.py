@@ -90,7 +90,7 @@ def main():
         source, symbols = os.path.join(work, "kernel_symbols.S"), os.path.join(work, "kernel_symbols.obj")
         open(source, "w").write("// The kernel's addresses for the kernel modules (tools/link_kernel_modules.py).\n" + "".join(lines))
         subprocess.run([a.cc, "--target=i386-pc-win32", "-c", source, "-o", symbols], check=True)
-        subprocess.run([a.linker, "/NODEFAULTLIB", "/ENTRY:XkKernelModulesEntry", "/SUBSYSTEM:NATIVE", f"/BASE:{a.base:#x}", "/FIXED", "/ALIGN:0x20",
+        subprocess.run([a.linker, "/DRIVER", "/NODEFAULTLIB", "/ENTRY:XkKernelModulesEntry", "/SUBSYSTEM:NATIVE", f"/BASE:{a.base:#x}", "/FIXED", "/ALIGN:0x20",
                         "/FILEALIGN:0x20", "/MERGE:.rdata=.text", "/MERGE:.bss=.data", "/SAFESEH:NO", "/Brepro", "/DEBUG:NONE",
                         f"/MAP:{os.path.splitext(a.out)[0]}.map", f"/OUT:{a.out}"] + a.objects + [symbols], check=True)
     print(f"{a.out}: kernel modules at {a.base:#x}, {len(lines)} kernel symbols")
