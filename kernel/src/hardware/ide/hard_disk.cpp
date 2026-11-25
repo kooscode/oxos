@@ -41,7 +41,8 @@ struct IDE_DISK_DEVICE {
 };
 
 // On an exFAT disk (disk_layout.cpp), Partition1-6 are folders of the exFAT volume (the file system mounts them through FolderOfPartition), and Partition0's
-// retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at sectors 1024-2047, before the volume.
+// retail reserved area (bytes 0-0x7FFFF: refurb record, cache database) lives at disk sectors 1024-2047, before the volume or in its
+// unused space before its FAT.
 constexpr LONGLONG IDE_RESERVED_LENGTH = 0x80000, IDE_RESERVED_AT = 1024 * 512;
 static const char *const DiskFolders[] = {nullptr, "E", "C", "X", "Y", "Z", "F"}; // folder of Partition1-6
 

@@ -14,6 +14,7 @@ Shell:
   exfat.py --from-fatx SRC.qcow2 OUT.qcow2 [--size 2T] [--cluster 128K]   copy a FATX disk's C: and E: into /C and /E;
        [--add /F/dir=HOST ...]                                              also copy a host file or folder in
        [--whole-disk]                                                       exFAT on the whole disk, no partition table
+       [--part-start 34]                                                    the partition from sector 34, its FAT at disk sector 2048
        (OUT.raw: a sparse raw disk, the added files streamed: for disc images larger than memory)
   exfat.py --check IMG.qcow2                                                check a volume, list problems
   exfat.py --has IMG.qcow2 'F:\\dir\\x.xbe'                                    is that file there (exit 0)
@@ -177,13 +178,14 @@ class Builder:
                 self.add(f"{base}/{f}", HostFile(os.path.join(dirpath, f)) if lazy else
                          open(os.path.join(dirpath, f), "rb").read())
 
-    def _geometry(self, sectors, fat_off=128):
+    def _geometry(self, sectors, fat_off=128, part_start=0):
+        """The heap is aligned to a cluster on the disk (part_start + heap), as mkfs.exfat aligns it."""
         csec = self.cluster // SECTOR
         spc_shift = csec.bit_length() - 1
         count = (sectors - fat_off) // csec
         while True:
             fat_len = ((count + 2) * 4 + SECTOR - 1) // SECTOR
-            heap = (fat_off + fat_len + csec - 1) // csec * csec
+            heap = (part_start + fat_off + fat_len + csec - 1) // csec * csec - part_start
             new = (sectors - heap) // csec
             if new == count:
                 return spc_shift, fat_off, fat_len, heap, count
@@ -211,14 +213,15 @@ class Builder:
         struct.pack_into("<H", out, 2, sum16(out, (2, 3)))
         return bytes(out)
 
-    def write(self, path, reserved=None, raw=False, whole_disk=False):
+    def write(self, path, reserved=None, raw=False, whole_disk=False, part_start=PART_START):
         """whole_disk: exFAT on the whole disk with no partition table (as a PC formats a bare disk), its FAT at
-        sector 2048 as mkfs.exfat places it, so the reserved area (1024-2047) is in the unused space before it."""
+        sector 2048 as mkfs.exfat places it, so the reserved area (1024-2047) is in the unused space before it.
+        part_start: the partition's first sector; below 2048 (Ubuntu's Disks app: 34) the FAT goes to disk sector 2048, as mkfs.exfat aligns it."""
         sectors = self.size // SECTOR
-        part_start = 0 if whole_disk else PART_START
+        part_start = 0 if whole_disk else part_start
         last_usable = sectors - 1 if whole_disk else sectors - 34
         part_sectors = last_usable - part_start + 1
-        spc_shift, fat_off, fat_len, heap, count = self._geometry(part_sectors, 2048 if whole_disk else 128)
+        spc_shift, fat_off, fat_len, heap, count = self._geometry(part_sectors, 2048 - part_start if part_start < 2048 else 128, part_start)
         cs = self.cluster
         up_raw = upcase_table()
         up = expand_upcase(up_raw)
@@ -358,7 +361,7 @@ class Builder:
         entry = bytearray(128)
         entry[0:16] = BASIC_DATA
         entry[16:32] = bytes(range(16, 32))
-        struct.pack_into("<QQQ", entry, 32, PART_START, last_usable, 0)
+        struct.pack_into("<QQQ", entry, 32, part_start, last_usable, 0)
         entry[56:56 + 8] = "OXOS".encode("utf-16-le")
         entries = bytes(entry) + bytes(127 * 128)
         ecrc = crc32(entries)
@@ -456,16 +459,14 @@ class EXFAT:
                     if crc32(entries) != ecrc and not lenient:
                         self.problems.append(f"GPT entries at {elba}: CRC")
                         continue
-                    for i in range(n):
-                        e = entries[i * esize:(i + 1) * esize]
-                        if e[:16] == BASIC_DATA:
-                            first = struct.unpack_from("<Q", e, 32)[0]
-                            if not lenient or self.disk.read(first * SECTOR + 3, 8) == b"EXFAT   ":
-                                return first
-            raise ValueError("no usable GPT basic-data partition")
+                    for i in range(n):  # as the kernel: the first partition holding exFAT, whatever its type
+                        first = struct.unpack_from("<Q", entries, i * esize + 32)[0]
+                        if first and self.disk.read(first * SECTOR + 3, 8) == b"EXFAT   ":
+                            return first
+            raise ValueError("no usable GPT exFAT partition")
         for i in range(4):
             t, first = s0[446 + 16 * i + 4], struct.unpack_from("<I", s0, 446 + 16 * i + 8)[0]
-            if t == 0x07:
+            if t and first and self.disk.read(first * SECTOR + 3, 8) == b"EXFAT   ":
                 return first
         raise ValueError("no exFAT MBR partition")
 
@@ -596,7 +597,7 @@ class EXFAT:
         return self.problems, files, self.count - len(marked)
 
 
-def from_fatx(src, out, size, cluster, extra=(), whole_disk=False):
+def from_fatx(src, out, size, cluster, extra=(), whole_disk=False, part_start=PART_START):
     """OUT ending in .raw: a sparse raw disk, with the --add files read while it is written (no size limit from
     memory; qemu-img convert -O qcow2 makes a qcow2 of it)."""
     import fatx
@@ -620,7 +621,7 @@ def from_fatx(src, out, size, cluster, extra=(), whole_disk=False):
             b.add_tree(dest, host, lazy=raw)
         else:
             b.add(dest, HostFile(host) if raw else open(host, "rb").read())
-    b.write(out, disk.read(0, 0x400 * SECTOR), raw=raw, whole_disk=whole_disk)
+    b.write(out, disk.read(0, 0x400 * SECTOR), raw=raw, whole_disk=whole_disk, part_start=part_start)
 
 
 if __name__ == "__main__":
@@ -631,7 +632,8 @@ if __name__ == "__main__":
         pairs = list(zip(a[3::2], a[4::2]))
         opts = dict(pairs)
         extra = [tuple(v.split("=", 1)) for k, v in pairs if k == "--add"]
-        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")), extra, whole_disk=whole)
+        from_fatx(a[1], a[2], parse_size(opts.get("--size", "2T")), parse_size(opts.get("--cluster", "128K")), extra, whole_disk=whole,
+                  part_start=int(opts.get("--part-start", PART_START)))
         print(f"{a[2]}: written")
     elif a[:1] == ["--check"]:
         v = EXFAT(Qcow2(a[1]))

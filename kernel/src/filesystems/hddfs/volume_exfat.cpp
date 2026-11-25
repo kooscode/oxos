@@ -299,26 +299,29 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
     // (spec/oxos_internal/05 §2).
     UCHAR b[512];
     NTSTATUS status;
-    if (!EXFATReadBootRegion(v, 0, b, &status)) {
+    // The volume's offsets on the device: it may start a few sectors into it (storage::EXFATVolumeBias).
+    ULONG bias = storage::EXFATVolumeBias;
+    if (!EXFATReadBootRegion(v, bias, b, &status)) {
         if (!NT_SUCCESS(status))
             return status;
         XK_SERIAL("exfat: the main boot region is damaged; using the backup\n");
-        if (!EXFATReadBootRegion(v, 12 * 512, b, &status))
+        if (!EXFATReadBootRegion(v, bias + 12 * 512, b, &status))
             return NT_SUCCESS(status) ? STATUS_UNRECOGNIZED_VOLUME : status;
         // Repair the main region from the backup, as fsck.exfat does, so a PC mounts the disk again. The backup is never written: an interrupted repair leaves
         // a main region that fails its checksum and is repaired again.
         for (ULONG sector = 0; sector < 12 && NT_SUCCESS(status); sector++) {
             UCHAR copy[512];
             PUCHAR data;
-            status = HDDFSMapBlock(v, (12 + sector) * 512, &data);
+            ULONG at = bias + sector * 512;
+            status = HDDFSMapBlock(v, at + 12 * 512, &data);
             if (!NT_SUCCESS(status))
                 break;
             memcpy(copy, data, 512);
-            status = HDDFSMapBlock(v, sector * 512, &data);
+            status = HDDFSMapBlock(v, at, &data);
             if (!NT_SUCCESS(status))
                 break;
             memcpy(data, copy, 512);
-            status = HDDFSWriteBlockRange(v, sector * 512 & ~(HDDFS_BLOCK_SIZE - 1), sector * 512 & (HDDFS_BLOCK_SIZE - 1), 512);
+            status = HDDFSWriteBlockRange(v, at & ~(HDDFS_BLOCK_SIZE - 1), at & (HDDFS_BLOCK_SIZE - 1), 512);
         }
         XK_SERIAL("exfat: main boot region restored from the backup: %#lx\n", status);
         status = STATUS_SUCCESS; // a failed repair still mounts from the backup
@@ -330,13 +333,18 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
     ULONG count = *(ULONG *)(b + 92), root = *(ULONG *)(b + 96), serial = *(ULONG *)(b + 100);
     USHORT flags = *(USHORT *)(b + 106);
     UCHAR fats = b[110];
-    if (!count || (fats != 1 && fats != 2) || ((ULONGLONG)heap << 9) + ((ULONGLONG)count << clusterShift) > (ULONGLONG)v->PartitionLength)
+    if (!count || (fats != 1 && fats != 2) || bias + ((ULONGLONG)heap << 9) + ((ULONGLONG)count << clusterShift) > (ULONGLONG)v->PartitionLength)
         return STATUS_UNRECOGNIZED_VOLUME;
+    // Clusters are read and written in the cache's 4 KB blocks: the heap must start on one.
+    if ((bias + (heap << 9)) & (HDDFS_BLOCK_SIZE - 1)) {
+        XK_SERIAL("exfat: cluster heap at %#lx bytes into the device is not on a 4 KB boundary: not mounted\n", bias + (heap << 9));
+        return STATUS_UNRECOGNIZED_VOLUME;
+    }
     x->ClusterShift = clusterShift;
     x->BytesPerCluster = 1u << clusterShift;
     x->ClusterCount = count;
-    x->FatByteOffset = (fatOffset + (fats == 2 && (flags & 1) ? fatLength : 0)) << 9;
-    x->HeapByteOffset = (LONGLONG)heap << 9;
+    x->FatByteOffset = bias + ((fatOffset + (fats == 2 && (flags & 1) ? fatLength : 0)) << 9);
+    x->HeapByteOffset = bias + ((LONGLONG)heap << 9);
     x->Serial = serial;
     v->ClusterShift = clusterShift;
     v->BytesPerCluster = x->BytesPerCluster;
@@ -437,6 +445,7 @@ static NTSTATUS EXFATMountDisk(HDDFS_VOLUME *v) {
         }
     }
     x->Mounted = TRUE;
+    XK_SERIAL("exfat: mount %#llx bytes, cluster %#lx, %#lx clusters, %#lx free\n", v->PartitionLength, x->BytesPerCluster, count, x->Alloc.FreeClusters);
     return STATUS_SUCCESS;
 }
 

@@ -29,7 +29,8 @@ NTSTATUS ReadDiskSectors(ULONGLONG Lba, PVOID Buffer, ULONG Length);
 
 // exFAT layout (spec/oxos_internal/05_exfat_storage_spec.md): set before the first partition lookup.
 extern BOOLEAN DiskHasEXFATLayout;
-extern PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition
+extern PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition, from the 4 KB disk boundary at or before its start
+extern ULONG EXFATVolumeBias;             // bytes from EXFATVolumeDevice's start to the exFAT volume's (0 when the partition starts on a 4 KB boundary)
 extern BOOLEAN DiskHasForeignLayout; // a PC partition table without a usable exFAT volume: no partitions, no writes
 
 

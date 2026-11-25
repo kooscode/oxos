@@ -25,9 +25,10 @@ static volatile LONG DiskLayoutKnown;
 
 IDE_PARTITION DiskPartitions[15];
 
-// exFAT layout: a GPT or MBR disk whose first data partition holds exFAT, or exFAT on the whole disk with its FAT at sector 2048 or later.
+// exFAT layout: a GPT or MBR disk whose first data partition holds exFAT, or exFAT on the whole disk, either leaving disk sectors 1024-2047 unused.
 BOOLEAN DiskHasEXFATLayout;
-PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition (not named)
+PDEVICE_OBJECT EXFATVolumeDevice; // the exFAT partition (not named), from the 4 KB disk boundary at or before its start
+ULONG EXFATVolumeBias;            // bytes from the device's start to the volume's: the file system's 4 KB blocks then fall on the disk's
 
 // A disk with a PC partition table (GPT or an MBR with an exFAT/NTFS entry) on which no exFAT volume was found: it gets no partitions and refuses writes,
 // rather than being taken for a FATX disk whose fixed layout would write into it (the refurb record in sector 3 lands in the GPT's entry array).
@@ -55,11 +56,9 @@ NTSTATUS ReadDiskSectors(ULONGLONG Lba, PVOID Buffer, ULONG Length) {
     return status;
 }
 
-// The first basic-data partition of a GPT whose header (at Lba) and entry array check out. With Lenient, an entry array that fails its CRC is used too (the
-// caller then insists on an exFAT boot sector at the partition's start).
+// The first partition holding exFAT (any type GUID: Linux tools may leave theirs) of a GPT whose header (at Lba) and entry array check out. With Lenient, an
+// entry array that fails its CRC is used too. Sector holds the partition's boot sector afterwards.
 static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLONG *Last, bool Lenient = false) {
-    static const UCHAR basicData[16] = {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
-                                        0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
     if (!NT_SUCCESS(ReadDiskSectors(Lba, Sector, 512)) || memcmp(Sector, "EFI PART", 8) != 0)
         return false;
     ULONG size = *(PULONG)(Sector + 12), crc = *(PULONG)(Sector + 16);
@@ -81,11 +80,10 @@ static bool DiskReadGpt(ULONGLONG Lba, PUCHAR Sector, ULONGLONG *Start, ULONGLON
         (Lenient || Crc32(entries, count * entrySize) == entriesCrc)) {
         for (ULONG i = 0; i < count && !found; i++) {
             PUCHAR e = entries + i * entrySize;
-            if (memcmp(e, basicData, 16) == 0) {
-                *Start = *(ULONGLONG *)(e + 32);
-                *Last = *(ULONGLONG *)(e + 40);
-                found = *Last >= *Start;
-            }
+            *Start = *(ULONGLONG *)(e + 32);
+            *Last = *(ULONGLONG *)(e + 40);
+            found = *Start && *Last >= *Start && *Last < hardware::ide::DiskLengthInSectors && NT_SUCCESS(ReadDiskSectors(*Start, Sector, 512)) &&
+                    memcmp(Sector + 3, "EXFAT   ", 8) == 0;
         }
     }
     ExFreePool(entries);
@@ -343,35 +341,43 @@ static void DiskReadLayout() {
                         }
                     }
                 }
-            } else {
+            } else { // MBR: the first entry holding exFAT, of any type (Windows marks it 0x07, Linux tools may leave 0x83)
+                UCHAR table[64];
+                memcpy(table, sector + 446, sizeof(table));
                 for (ULONG i = 0; i < 4 && !found; i++) {
-                    PUCHAR e = sector + 446 + 16 * i;
-                    if (e[4] == 0x07 && *(PULONG)(e + 12)) {
+                    PUCHAR e = table + 16 * i;
+                    if (e[4] && *(PULONG)(e + 12)) {
+                        pcTable = pcTable || e[4] == 0x07; // only an NTFS/exFAT entry marks a foreign disk, as before
                         start = *(PULONG)(e + 8);
                         last = start + *(PULONG)(e + 12) - 1;
-                        found = pcTable = true;
+                        found = NT_SUCCESS(ReadDiskSectors(start, sector, 512)) && memcmp(sector + 3, "EXFAT   ", 8) == 0;
                     }
                 }
             }
         }
-        // The partition must start after the reserved-area copy, end inside the disk and hold exFAT.
-        found = found && start >= 2048 && last < hardware::ide::DiskLengthInSectors &&
-                NT_SUCCESS(ReadDiskSectors(start, sector, 512)) &&
-                memcmp(sector + 3, "EXFAT   ", 8) == 0;
-        // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk): used when its FAT starts at sector 2048 or later, so the
-        // reserved-area copy (1024-2047) sits in the unused space after the two 12-sector boot regions. Boot sector: VolumeLength (sectors) at 72, FatOffset
-        // (sectors) at 80.
-        if (!found && sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) &&
-            memcmp(sector + 3, "EXFAT   ", 8) == 0) {
-            ULONGLONG length = *(ULONGLONG *)(sector + 72);
+        // The reserved-area copy (disk sectors 1024-2047) must not overlap the volume's data: the volume starts at 2048 or later, or the copy sits in the
+        // unused space between its two 12-sector boot regions and its FAT, as when a PC tool starts the partition at sector 34 and aligns the FAT to 1 MiB
+        // on the disk, or formats the bare disk (spec/oxos_internal/05 §4). Boot sector: VolumeLength (sectors) at 72, FatOffset (sectors) at 80.
+        auto leavesReservedArea = [&](ULONGLONG at) {
             ULONG fatOffset = *(PULONG)(sector + 80);
-            XK_SERIAL("disk: exFAT on the whole disk: %#llx sectors, FAT at sector %#lx\n", length, fatOffset);
+            XK_SERIAL("disk: exFAT at sector %#llx, FAT at %#lx sectors into it\n", at, fatOffset);
+            return at >= 2048 || (at + 24 <= 1024 && at + fatOffset >= 2048);
+        };
+        // The partition must end inside the disk, hold exFAT and leave the reserved-area copy alone.
+        found = found && last < hardware::ide::DiskLengthInSectors && NT_SUCCESS(ReadDiskSectors(start, sector, 512)) &&
+                memcmp(sector + 3, "EXFAT   ", 8) == 0 && leavesReservedArea(start);
+        // Else exFAT on the whole disk, no partition table (as a PC formats a bare disk).
+        if (!found && sector && NT_SUCCESS(ReadDiskSectors(0, sector, 512)) && memcmp(sector + 3, "EXFAT   ", 8) == 0) {
+            ULONGLONG length = *(ULONGLONG *)(sector + 72);
             start = 0;
             last = length - 1;
-            found = fatOffset >= 2048 && length > fatOffset && length <= hardware::ide::DiskLengthInSectors;
+            found = leavesReservedArea(0) && length > *(PULONG)(sector + 80) && length <= hardware::ide::DiskLengthInSectors;
         }
-        if (found && NT_SUCCESS(hardware::ide::CreateDiskDevice(0x80, (LONGLONG)(start << 9), (LONGLONG)((last - start + 1) << 9), &EXFATVolumeDevice,
-                                                                IDE_KIND_VOLUME)))
+        // The device starts on the 4 KB disk boundary at or before the partition (sector 32 for one at 34), so a volume whose FAT and cluster heap PC tools
+        // aligned on the disk has them on the file system cache's 4 KB blocks (spec/oxos_internal/05 §4).
+        EXFATVolumeBias = (ULONG)(start & 7) << 9;
+        if (found && NT_SUCCESS(hardware::ide::CreateDiskDevice(0x80, (LONGLONG)((start & ~7ull) << 9), (LONGLONG)((last - start + 1) << 9) + EXFATVolumeBias,
+                                                                &EXFATVolumeDevice, IDE_KIND_VOLUME)))
             DiskHasEXFATLayout = TRUE;
         if (!DiskHasEXFATLayout && pcTable) { // a PC disk without a usable exFAT volume: hands off
             DiskHasForeignLayout = TRUE;
@@ -417,6 +423,7 @@ void DetectDiskLayout() {
         }
         if (scratch)
             MmFreeSystemMemory(scratch, DISK_FORMAT_SCRATCH);
+        XK_SERIAL("disk: format %s\n", DiskHasEXFATLayout ? "exFAT" : DiskHasForeignLayout ? "foreign (no partitions)" : "FATX");
         DiskLayoutKnown = 1;
     }
     KeSetEvent(&DiskLayoutLock, 0, FALSE);

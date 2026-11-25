@@ -14,8 +14,10 @@ Memory units come last (§9). Out of scope: changing what titles do.
 - **Partition table: GPT and MBR** (decided). GPT is the layout OXOS documents and its tools create: 64-bit sector numbers, so no partition-table size limit,
   and a backup table at the end of the disk. MBR is read as well, so a disk or USB stick formatted with a PC's default settings works without repartitioning
   (MBR is limited to 2 TiB with 512-byte sectors). Reading MBR adds one sector check and four 16-byte entries.
-- **The OXOS volume:** the first GPT entry with the "basic data" type GUID (EBD0A0A2-B9E5-4433-87C0-68B6B72699C7)
-  whose boot sector says exFAT (`EXFAT   ` at byte 3). With MBR: the first entry of type 0x07 holding exFAT.
+- **The OXOS volume:** the first GPT entry whose boot sector says exFAT (`EXFAT   ` at byte 3), whatever its type GUID (PC tools write "basic data",
+  EBD0A0A2-B9E5-4433-87C0-68B6B72699C7; Linux tools may leave "Linux filesystem"; 2026-11-24, before which only basic data was read). With MBR: the first entry
+  of any type holding exFAT (0x07 from Windows, 0x83 from Linux tools); only a 0x07 entry marks a disk without an exFAT volume as a PC disk (recognition rule 3
+  below).
 - **Reading GPT** (once, at boot):
   1. sector 0 must hold a protective MBR (an entry of type 0xEE) and the 0x55AA signature;
   2. sector 1 holds the header: signature `EFI PART`, revision, header size, header CRC32, its own sector number, the backup header's sector number, first and
@@ -23,7 +25,7 @@ Memory units come last (§9). Out of scope: changing what titles do.
   3. check the header CRC32 (computed with its CRC field zeroed) and the entry-array CRC32 (usually 128 entries of 128 bytes = 32 sectors); entries hold the
      type GUID, a unique GUID, the first and last sector (64-bit), attributes and a UTF-16 name;
   4. if the primary header or its array fails a check, use the backup header (normally the last sector of the disk) and its array;
-  5. if both arrays fail their CRC (2026-11-02), use a header that checks out with its array unchecked, provided the basic-data partition it names starts with
+  5. if both arrays fail their CRC (2026-11-02), use a header that checks out with its array unchecked, provided a partition it names starts with
      an exFAT boot sector (whose own checksum the mount checks). The case seen: a kernel that took the disk for FATX wrote its refurbishment record into sector
      3, inside the primary array, and the tool that partitioned the disk had placed the backup array one sector after where its header says. The serial log then
      says "GPT entry array at header N fails its CRC; using it". Otherwise the disk is not used as an OXOS disk (rule 3 below).
@@ -89,8 +91,13 @@ same free space, so a single F: already offers the whole disk:
 Titles open `\Device\Harddisk0\partition0` raw to keep the cache database (traced: one 512-byte read and one write at byte offset 0x800, sector 4, §8). On an
 exFAT disk the real sector 4 belongs to the partition table, so:
 - byte offsets **0 to 0x7FFFF** (the retail reserved area before X: at sector 0x400) are kept in **disk sectors 1024–2047**, between the partition table and the
-  exFAT partition, which must therefore start at sector 2048 or later (the usual 1 MiB alignment); a disk whose partition starts earlier is not used as an exFAT
-  disk;
+  exFAT partition, which must therefore start at sector 2048 or later (the usual 1 MiB alignment), or leave those sectors unused: a partition that starts
+  earlier is used when its two 12-sector boot regions end by sector 1024 and its FAT starts at disk sector 2048 or later (partition start + FatOffset, boot
+  sector byte 80). Sectors 24 to FatOffset-1 of an exFAT volume are unused, so the copy lives there. Seen 2026-11-24: Ubuntu's Disks app put the partition at
+  sector 34 and mkfs.exfat its FAT at 2014 sectors into it (disk sector 2048), its cluster heap on a 4 KB disk boundary too. The file system reads and writes
+  clusters in 4 KB blocks of the volume device, so that device starts on the 4 KB disk boundary at or before the partition (sector 32 for one at 34) and the
+  volume's offsets are taken from there (`storage::EXFATVolumeBias`); a volume whose cluster heap is still not on a 4 KB boundary is not mounted. Any other disk
+  whose partition starts earlier is not used as an exFAT disk;
 - other raw reads and writes of Partition0 fail with STATUS_INVALID_PARAMETER;
 - geometry and partition-info queries describe a disk of the real size.
 The kernel's own uses of the reserved area (for example the refurb record in sector 3) go through Partition0 by name and see the same sectors. tests/exfat.py

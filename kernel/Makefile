@@ -388,14 +388,15 @@ test_lba48: $(BUILD)/bios.bin $(TEST_TITLE).xbe $(LBA48_HDD)
 	    --hdd $(LBA48_HDD) --title $(TEST_TITLE).xbe --title-map $(TEST_TITLE).map
 
 # exFAT disks (spec/oxos_internal/07_exfat_driver.md): the self-tests on a GPT disk with one exFAT volume (256 GB, 16 KB clusters, sparse), the test disk's C:
-# and E: copied into /C and /E by tests/exfat.py; kept in xemu_state/oxos_xemu_exfat/. The FATX suite then runs on E: as a folder of the volume, and
-# tests/exfat.py checks the whole volume afterwards (checksums, chains, bitmap).
+# and E: copied into /C and /E by tests/exfat.py; kept in xemu_state/oxos_xemu_exfat/. The partition starts at sector 34 with its FAT at disk sector 2048, as
+# Ubuntu's Disks app lays it out (spec/oxos_internal/05 §4); OXOS's own format (partition at 2048) is booted by test_format and test_upload. The FATX suite then
+# runs on E: as a folder of the volume, and tests/exfat.py checks the whole volume afterwards (checksums, chains, bitmap).
 EXFAT_STATE := $(ROOT)/xemu_state/oxos_xemu_exfat
 EXFAT_HDD   := $(EXFAT_STATE)/hdd.qcow2
 $(EXFAT_HDD): $(HDD_FETCH)
 	mkdir -p $(EXFAT_STATE)
 	printf 'stale FAT tail test' > $(EXFAT_STATE)/stale.bin
-	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K \
+	python3 -I $(ROOT)/tests/exfat.py --from-fatx $(HDD_IMAGE) $@ --size 256G --cluster 16K --part-start 34 \
 	    --add /E/XkStale.stale=$(EXFAT_STATE)/stale.bin
 # Then a cold boot of the disk the first run left, with the release kernel (no self-tests to format X: again): the title finds X:'s format from the first
 # boot, kept in C:\OXOS\cache\oxos_cache_partitions.cache (spec/oxos_internal/05 §5).

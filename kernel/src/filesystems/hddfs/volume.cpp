@@ -140,10 +140,11 @@ LONGLONG HDDFSClusterOffset(HDDFS_VOLUME *v, ULONG Cluster) {
     return v->DataByteOffset + ((LONGLONG)(Cluster - v->FirstClusterNumber) << v->ClusterShift);
 }
 
+// The block holding Cluster's FAT entry, and the entry's place in it (the FAT may start at any sector).
 static void HDDFSFatLocation(HDDFS_VOLUME *v, ULONG Cluster, LONGLONG *Block, ULONG *Within) {
-    ULONG byte = Cluster << v->FatEntryShift;
-    *Block = v->FatByteOffset + (byte & ~(HDDFS_BLOCK_SIZE - 1));
-    *Within = byte & (HDDFS_BLOCK_SIZE - 1);
+    LONGLONG byte = (LONGLONG)v->FatByteOffset + ((LONGLONG)Cluster << v->FatEntryShift);
+    *Block = byte & ~(LONGLONG)(HDDFS_BLOCK_SIZE - 1);
+    *Within = (ULONG)(byte - *Block);
 }
 
 NTSTATUS HDDFSGetFatEntry(HDDFS_VOLUME *v, ULONG Cluster, ULONG *Value) {
