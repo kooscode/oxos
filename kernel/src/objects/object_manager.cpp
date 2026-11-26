@@ -647,13 +647,19 @@ XBAPI NTSTATUS NTAPI NtOpenDirectoryObject(PHANDLE DirectoryHandle, POBJECT_ATTR
     return ObOpenObjectByName(ObjectAttributes, &ObDirectoryObjectType, nullptr, DirectoryHandle);
 }
 
-// One entry per call; *Context is the running index.
+// One entry per call, numbered over the hash buckets in order; *Context is the index of the next one (spec/stock/30 §2-§5). A name that does not fit is
+// cut to the buffer and still moves *Context on, with STATUS_BUFFER_TOO_SMALL and the length it needs; the name gets no terminating zero.
 XBAPI NTSTATUS NTAPI NtQueryDirectoryObject(HANDLE DirectoryHandle, PVOID Buffer, ULONG Length, BOOLEAN RestartScan, PULONG Context, PULONG ReturnLength) {
+    if (Length < sizeof(OBJECT_DIRECTORY_INFORMATION))
+        return STATUS_INVALID_PARAMETER;
     POBJECT_DIRECTORY dir;
     NTSTATUS status = ObReferenceObjectByHandle(DirectoryHandle, &ObDirectoryObjectType, (PVOID *)&dir);
     if (!NT_SUCCESS(status))
         return status;
-    ULONG wanted = RestartScan ? 0 : *Context, index = 0;
+    ULONG wanted = RestartScan ? 0 : *Context;  // the index of the entry to return
+    ULONG index = 0;                            // the index of the entry the walk is at
+    ULONG reported = 0;                         // what goes into *ReturnLength: the length the entry needs, 0 when there is none
+    status = STATUS_NO_MORE_ENTRIES;
     POBJECT_HEADER_NAME_INFO found = nullptr;
     KIRQL old = KeRaiseIrqlToDpcLevel();
     for (ULONG b = 0; b < OB_NUMBER_HASH_BUCKETS && !found; b++) {
@@ -662,27 +668,26 @@ XBAPI NTSTATUS NTAPI NtQueryDirectoryObject(HANDLE DirectoryHandle, PVOID Buffer
                 found = n;
         }
     }
-    status = STATUS_NO_MORE_ENTRIES;
     if (found) {
-        ULONG need = sizeof(OBJECT_DIRECTORY_INFORMATION) + found->Name.Length + 1;
-        if (ReturnLength)
-            *ReturnLength = need;
-        if (Length < need) {
+        reported = sizeof(OBJECT_DIRECTORY_INFORMATION) + found->Name.Length;
+        ULONG copied = found->Name.Length;
+        status = STATUS_SUCCESS;
+        if (Length < reported) {
+            copied = Length - sizeof(OBJECT_DIRECTORY_INFORMATION);
             status = STATUS_BUFFER_TOO_SMALL;
-        } else {
-            auto info = (POBJECT_DIRECTORY_INFORMATION)Buffer;
-            info->Name.Buffer = (PCHAR)(info + 1);
-            info->Name.Length = found->Name.Length;
-            info->Name.MaximumLength = (USHORT)(found->Name.Length + 1);
-            memcpy(info->Name.Buffer, found->Name.Buffer, found->Name.Length);
-            info->Name.Buffer[found->Name.Length] = 0;
-            info->Type = ((POBJECT_HEADER)(found + 1))->Type->PoolTag;
-            *Context = wanted + 1;
-            status = STATUS_SUCCESS;
         }
+        auto info = (POBJECT_DIRECTORY_INFORMATION)Buffer;
+        info->Name.Length = found->Name.Length;
+        info->Name.MaximumLength = found->Name.Length;
+        info->Name.Buffer = (PCHAR)(info + 1);
+        info->Type = ((POBJECT_HEADER)(found + 1))->Type->PoolTag;
+        memcpy(info->Name.Buffer, found->Name.Buffer, copied);
+        *Context = wanted + 1;
     }
     KfLowerIrql(old);
     ObfDereferenceObject(dir);
+    if (ReturnLength)
+        *ReturnLength = reported;
     return status;
 }
 

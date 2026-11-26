@@ -49,7 +49,7 @@ OBJECT_TYPE / OBJECT_ATTRIBUTES layouts follow nxdk. **Status: implemented (mile
 - Symbolic links: {LinkTargetObject (referenced at creation), LinkTarget string}. `NtQuerySymbolicLinkObject` returns the string (STATUS_BUFFER_TOO_SMALL if it
   doesn't fit).
 - `NtQueryDirectoryObject` returns OBJECT_DIRECTORY_INFORMATION {Name, Type}, one entry per call; the context is a running index; STATUS_NO_MORE_ENTRIES at the
-  end.
+  end. The entry order, short buffers, the end of the directory and removals in detail: [spec 30](30_query_directory_object.md).
 
 ## 4. Executive objects (Nt*)
 - Event: type must be Notification or Synchronization (else STATUS_INVALID_PARAMETER). Create = ObCreateObject(16) + KeInitializeEvent + ObInsertObject.

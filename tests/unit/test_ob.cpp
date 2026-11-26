@@ -104,10 +104,112 @@ TEST(Ob, DirectoriesListTheirEntries) {
     EXPECT_EQ(st, (NTSTATUS)0x8000001A) << "STATUS_NO_MORE_ENTRIES";
     std::sort(names.begin(), names.end());
     EXPECT_EQ(names, (std::vector<std::string>{"one", "three", "two"}));
-    EXPECT_EQ(NtQueryDirectoryObject(opened, buffer, 10, TRUE, &context, &needed), (NTSTATUS)0xC0000023) << "buffer too small";
+    EXPECT_EQ(NtQueryDirectoryObject(opened, buffer, 13, TRUE, &context, &needed), (NTSTATUS)0xC0000023) << "buffer too small";
     for (HANDLE h : evs)
         NtClose(h);
     NtClose(opened);
+    NtClose(dir);
+}
+
+// The stock kernel's answers (spec/stock/30): the bucket order with the newest entry of a bucket first, the name without a terminating zero, a cut name
+// that still moves the index on, and nothing written past the end or for a buffer smaller than the structure.
+TEST(Ob, DirectoryQueriesAnswerAsTheStockKernel) {
+    constexpr NTSTATUS INVALID_PARAMETER = (NTSTATUS)0xC000000D, BUFFER_TOO_SMALL = (NTSTATUS)0xC0000023, NO_MORE_ENTRIES = (NTSTATUS)0x8000001A;
+    constexpr ULONG HEADER = sizeof(OBJECT_DIRECTORY_INFORMATION);
+    constexpr UCHAR UNTOUCHED = 0xAA;
+    auto bucketOf = [](const std::string &name) {
+        ULONG h = 0;
+        for (unsigned char c : name) {
+            if (c < 0x80)
+                h = h * 3 + (h >> 1) + (c | 0x20);
+        }
+        return h % 11;
+    };
+    const std::vector<std::string> created = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"};
+    HANDLE dir = MakeDirectory("\\ObTest9");
+    std::vector<HANDLE> events;
+    for (const std::string &name : created) {
+        events.push_back(MakeEvent(("\\ObTest9\\" + name).c_str()));
+    }
+    // Expected order: bucket 0 to 10, and within a bucket the last created first.
+    std::vector<std::string> expected;
+    for (ULONG bucket = 0; bucket < 11; bucket++) {
+        for (auto it = created.rbegin(); it != created.rend(); ++it) {
+            if (bucketOf(*it) == bucket)
+                expected.push_back(*it);
+        }
+    }
+
+    alignas(4) UCHAR buffer[64];
+    auto info = (POBJECT_DIRECTORY_INFORMATION)buffer;
+    ULONG context = 0;
+    ULONG returned = 0;
+    std::vector<std::string> listed;
+    for (;;) {
+        memset(buffer, UNTOUCHED, sizeof(buffer));
+        ULONG before = context;
+        NTSTATUS status = NtQueryDirectoryObject(dir, buffer, sizeof(buffer), listed.empty(), &context, &returned);
+        if (status == NO_MORE_ENTRIES) {
+            EXPECT_EQ(context, before) << "the index stays at the end";
+            EXPECT_EQ(returned, 0u);
+            EXPECT_EQ(buffer[0], UNTOUCHED) << "nothing written past the end";
+            break;
+        }
+        ASSERT_EQ(status, STATUS_SUCCESS);
+        listed.emplace_back(info->Name.Buffer, info->Name.Length);
+        EXPECT_EQ(context, listed.size());
+        EXPECT_EQ(returned, HEADER + info->Name.Length);
+        EXPECT_EQ(info->Name.MaximumLength, info->Name.Length);
+        EXPECT_EQ((PUCHAR)info->Name.Buffer, buffer + HEADER);
+        EXPECT_EQ(info->Type, (ULONG)'vevE');
+        EXPECT_EQ(buffer[HEADER + info->Name.Length], UNTOUCHED) << "no terminating zero";
+    }
+    EXPECT_EQ(listed, expected);
+
+    // A buffer too small for the name: the structure and the start of the name, the length it needs, and the index moved on.
+    memset(buffer, UNTOUCHED, sizeof(buffer));
+    EXPECT_EQ(NtQueryDirectoryObject(dir, buffer, HEADER + 2, TRUE, &context, &returned), BUFFER_TOO_SMALL);
+    EXPECT_EQ(context, 1u);
+    EXPECT_EQ(returned, HEADER + expected[0].size());
+    EXPECT_EQ(info->Name.Length, expected[0].size());
+    EXPECT_EQ(std::string((PCHAR)buffer + HEADER, 2), expected[0].substr(0, 2));
+    EXPECT_EQ(buffer[HEADER + 2], UNTOUCHED);
+    // Calling again with the same small buffer walks on to the end.
+    ULONG calls = 1;
+    while (NtQueryDirectoryObject(dir, buffer, HEADER, FALSE, &context, &returned) == BUFFER_TOO_SMALL) {
+        calls++;
+    }
+    EXPECT_EQ(calls, created.size());
+    EXPECT_EQ(context, created.size());
+
+    // Smaller than the structure: refused before the handle is looked at, nothing written.
+    context = 77;
+    returned = 77;
+    EXPECT_EQ(NtQueryDirectoryObject(dir, buffer, HEADER - 1, TRUE, &context, &returned), INVALID_PARAMETER);
+    EXPECT_EQ(NtQueryDirectoryObject((HANDLE)0x7FFC, buffer, HEADER - 1, TRUE, &context, &returned), INVALID_PARAMETER);
+    EXPECT_EQ(context, 77u);
+    EXPECT_EQ(returned, 77u);
+    EXPECT_EQ(NtQueryDirectoryObject(dir, buffer, sizeof(buffer), TRUE, &context, nullptr), STATUS_SUCCESS) << "ReturnLength may be NULL";
+
+    // Closing an entry's last handle takes it out and leaves the others in their order.
+    const std::string removed = expected[expected.size() / 2];
+    for (size_t i = 0; i < created.size(); i++) {
+        if (created[i] == removed) {
+            NtClose(events[i]);
+            events.erase(events.begin() + i);
+            break;
+        }
+    }
+    std::erase(expected, removed);
+    listed.clear();
+    while (NtQueryDirectoryObject(dir, buffer, sizeof(buffer), listed.empty(), &context, &returned) == STATUS_SUCCESS) {
+        listed.emplace_back(info->Name.Buffer, info->Name.Length);
+    }
+    EXPECT_EQ(listed, expected);
+
+    for (HANDLE h : events) {
+        NtClose(h);
+    }
     NtClose(dir);
 }
 
