@@ -43,17 +43,17 @@ SHARED         := ../../shared
 SDK_INCLUDES   := -I../../sdk/include -I../../sdk/src # oxos_sdk.h: the types the kernel shares with extensions (as the kernel's build)
 SHARED_SOURCES := graphics/vector_renderer.cpp ini_file/ini_file.cpp ini_file/title_patcher_ini.cpp ini_file/extensions_ini.cpp \
                   ini_file/launch_redirect_ini.cpp ini_file/settings_ini.cpp
-KERNEL_FLAGS := -std=gnu++20 $(COMMON) $(DEFINES) -I$(KERNEL)/src $(KERNEL_OPT) -mno-sse -mno-mmx \
+KERNEL_FLAGS := -std=gnu++23 $(COMMON) $(DEFINES) -I$(KERNEL)/src $(KERNEL_OPT) -mno-sse -mno-mmx \
                 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin -fno-stack-protector -fno-threadsafe-statics \
                 -Wall -Wextra -Wno-unused-parameter $(COVFLAGS) -I$(SHARED) $(SDK_INCLUDES) -DOXOS_KERNEL
 
 # The harness and the tests (host C++: exceptions, RTTI, the C++ library).
 TEST_SOURCES := host/hostcpu.cpp host/boot.cpp host/stubs.cpp host/checks.cpp $(sort $(wildcard test_*.cpp))
-TEST_FLAGS   := -std=gnu++20 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ../../kernel)\" -DGTEST_HAS_PTHREAD=1 -Ihost -I$(KERNEL)/src \
+TEST_FLAGS   := -std=gnu++23 $(COMMON) $(DEFINES) -DXK_KERNEL_DIR=\"$(abspath ../../kernel)\" -DGTEST_HAS_PTHREAD=1 -Ihost -I$(KERNEL)/src \
                 -I$(SHARED) $(SDK_INCLUDES) -DOXOS_KERNEL -isystem $(GTEST_SRC)/include -isystem $(GTEST_SRC)
 
 # GoogleTest itself, from its sources (one translation unit), 32-bit with everything else.
-GTEST_FLAGS  := -std=c++20 $(COMMON) -DGTEST_HAS_PTHREAD=1 -fexceptions -I$(GTEST_SRC)/include -I$(GTEST_SRC)
+GTEST_FLAGS  := -std=c++23 $(COMMON) -DGTEST_HAS_PTHREAD=1 -fexceptions -I$(GTEST_SRC)/include -I$(GTEST_SRC)
 
 KERNEL_OBJS := $(patsubst %.cpp,$(BUILD)/kernel/%.o,$(KERNEL_SOURCES)) $(patsubst %.cpp,$(BUILD)/shared/%.o,$(SHARED_SOURCES))
 TEST_OBJS   := $(patsubst %.cpp,$(BUILD)/%.o,$(TEST_SOURCES)) $(BUILD)/host/host_asm.o

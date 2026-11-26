@@ -7,7 +7,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))../../../../tools/nxdk_app.mk
 
 ifeq ($(abspath $(CURDIR)),$(NXDK_APP_BUILD))
 vpath %.cpp $(OXOS_ROOT)/shared/graphics
-CXXFLAGS += -std=c++20 -I$(CURDIR) -I$(OXOS_ROOT)/shared
+CXXFLAGS += -std=c++23 -I$(CURDIR) -I$(OXOS_ROOT)/shared
 oxos_trainers_app.obj: oxos_trainers_logo.h
 oxos_trainers_logo.h: $(NXDK_APP_DIR)/oxos_trainers_logo.svg $(OXOS_ROOT)/tools/svg_splash.py
 	python3 -I $(OXOS_ROOT)/tools/svg_splash.py $< $@

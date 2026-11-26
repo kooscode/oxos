@@ -22,7 +22,7 @@ OXOS_TARGET_FLAGS := --target=i386-pc-win32 -march=pentium -mno-sse -mno-mmx -mn
                      -fno-stack-protector -mno-incremental-linker-compatible -nostdinc -nostdlib -O2 -Wall -Wextra \
                      -Werror -Wno-unused-parameter -Wno-missing-field-initializers -I$(OXOS_SDK)/include
 OXOS_CFLAGS := $(OXOS_TARGET_FLAGS) -std=c17 $(EXTRA_OXOS_CFLAGS)
-OXOS_CXXFLAGS := $(OXOS_TARGET_FLAGS) -std=c++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics \
+OXOS_CXXFLAGS := $(OXOS_TARGET_FLAGS) -std=c++23 -fno-exceptions -fno-rtti -fno-threadsafe-statics \
                  $(EXTRA_OXOS_CXXFLAGS)
 # A kernel-mode image (/DRIVER), its sections packed at 32 bytes, as the kernel links itself: a loaded image takes the pages its bytes need, not one per
 # section.

@@ -79,7 +79,7 @@ TARGET  := --target=i386-pc-win32
 # start-up freeze: that one depends on the exact binary layout with either setting (2026-10-23).
 ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
-CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
+CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++23 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
             -Wall -Wextra -Werror -Wno-unused-parameter -Isrc -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
 ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Isrc $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
@@ -207,7 +207,7 @@ endif
 # Kernel test title (tests/kernel_test_title): a minimal freestanding "game" the boot tests run from a disc to check the title loader and the kernel functions
 # titles rely on. PE at 0x10000 -> XBE.
 TEST_TITLE := $(BUILD)/kernel_test_title
-TEST_TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++20 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
+TEST_TITLE_CXXFLAGS := $(TARGET) $(ARCH) -std=c++23 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
                        -fno-stack-protector -nostdlib -O2 -Wall -Werror
 $(TEST_TITLE).obj: $(ROOT)/tests/kernel_test_title/kernel_test_title.cpp
 	@mkdir -p $(dir $@)
@@ -268,8 +268,8 @@ BL_NETBOOT := $(if $(filter 1,$(NETBOOT)),$(BOOT)/netboot.o)
 $(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.h boot/netboot.cpp boot/bl.ld boot/inflate.h src/hardware/ethernet/nic.h
 	@mkdir -p $(dir $@)
 	$(CC) $(BOOT_FLAGS) -c boot/start.S -o $(BOOT)/start.o
-	$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/bl.cpp -o $(BOOT)/bl.o
-	$(if $(BL_NETBOOT),$(CXX) $(BOOT_FLAGS) -std=c++20 -c boot/netboot.cpp -o $(BL_NETBOOT))
+	$(CXX) $(BOOT_FLAGS) -std=c++23 -c boot/bl.cpp -o $(BOOT)/bl.o
+	$(if $(BL_NETBOOT),$(CXX) $(BOOT_FLAGS) -std=c++23 -c boot/netboot.cpp -o $(BL_NETBOOT))
 	ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o $(BL_NETBOOT) -o $(BOOT)/bl.elf
 	$(OBJCOPY) -O binary $(BOOT)/bl.elf $@
 

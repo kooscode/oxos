@@ -14,5 +14,5 @@ vpath %.cpp $(VIDEO_PLAYER_DIR)
 # libmpeg2's own configuration (its config.h) for the console: x86 with MMX, the CPU's abilities read at start-up. -iquote puts it before nxdk's USB
 # library's config.h, which is on the -I path first. Everything at -O2: nxdk compiles without optimisation, and the decoders must keep up with the video.
 CFLAGS += -O2 -iquote $(VIDEO_PLAYER_DIR)/libmpeg2_config -I$(LIBMPEG2_DIR)/include -I$(LIBMPEG2_DIR)/libmpeg2 -Wno-everything
-CXXFLAGS += -O2 -std=c++20 -I$(OXOS_ROOT)/shared -I$(LIBMPEG2_DIR)/include -I$(MINIMP3_DIR)
+CXXFLAGS += -O2 -std=c++23 -I$(OXOS_ROOT)/shared -I$(LIBMPEG2_DIR)/include -I$(MINIMP3_DIR)
 endif

@@ -5,7 +5,7 @@ machine, the source layout and the details of each target are in [`kernel/README
 tools in [`tools/README.md`](tools/README.md); the specifications in [`spec/`](spec/README.md).
 
 ## Rules of the repo
-- **C++20, written as [`docs/cpp_style.md`](docs/cpp_style.md) says.** Read it before writing code and check your diff against it: verb-first names, a comment
+- **C++23, written as [`docs/cpp_style.md`](docs/cpp_style.md) says.** Read it before writing code and check your diff against it: verb-first names, a comment
   on every piece of state, lines within 160 characters, format names in capitals (`FATXLookup`), `OXOS` or `oxos`, never `Oxos`. The only `.c` file is
   `tests/extensions/plain_c.c`.
 - **Plain GNU make**, no CMake. All build output goes under `build/`.

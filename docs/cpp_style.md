@@ -10,8 +10,8 @@ state and each constant where the rules say it is, and trust every comment to de
 
 ## 1. Language
 
-- C++20 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`sdk/`) supports extensions in plain C (spec/oxos_internal/34
-  §9), so its public headers are valid C17 as well as C++20 (their constants are `#define`s, their structures `typedef struct`), and
+- C++23 for all native code; there are no `.c` files. One exception: the kernel extension SDK (`sdk/`) supports extensions in plain C (spec/oxos_internal/34
+  §9), so its public headers are valid C17 as well as C++20 and later (their constants are `#define`s, their structures `typedef struct`), and
   `tests/extensions/plain_c.c` checks that a C extension builds and runs: it is the repository's only `.c` file. The SDK's own code and its example
   (`sdk/examples/example_*/`) are C++.
 - The kernel and the 2BL are freestanding: no exceptions, no RTTI, no standard library, no static constructors. The kernel is built `-Oz` on purpose (free
