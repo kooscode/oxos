@@ -795,6 +795,12 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
     launched = mon.read("titles::TitleLaunched")
     if snapshot is not None:
         snapshot.update({n: mon.read(n) for n in list(snapshot)})
+    # The title patch words, read while paused too: once resumed, the title can end and its memory with it ("Cannot access memory").
+    patch_words = {}
+    if TITLE_PATCHES and not relaunch:  # after a relaunch the dashboard runs: the title's memory is gone
+        for sym in ("_XkTitlePatchA", "_XkTitlePatchB", "_XkTitlePatchC"):
+            reply = mon.hmp(f"x/1wx {syms[sym]:#x}")
+            patch_words[sym] = None if "Cannot" in reply else int(reply.split(":")[1].split()[0], 16)  # None: no title mapped there
     mon.resume()
     checks = {
         "title launched from \\Device\\CdRom0\\default.xbe": words[1] == 1
@@ -839,11 +845,9 @@ def title_checks(mon, title_map, relaunch=False, reboots=0, extensions=False, pa
                 bool(menu_shown)
     else:
         checks["no relaunch without the flag file"] = words[25] == 0 and mon.read("KiQuickRebootCount") == 0
-    if TITLE_PATCHES and not relaunch:  # after a relaunch the dashboard runs: the title's memory is gone
-        def word(sym):
-            return int(mon.hmp(f"x/1wx {syms[sym]:#x}").split(":")[1].split()[0], 16)
-        checks["title patches: written where the original bytes are, not for another version or other bytes"] = (word("_XkTitlePatchA") == 0xA0A0A0A0 and
-            word("_XkTitlePatchB") == 0x22222222 and word("_XkTitlePatchC") == 0x33333333)
+    if patch_words:
+        checks["title patches: written where the original bytes are, not for another version or other bytes"] = (
+            patch_words["_XkTitlePatchA"] == 0xA0A0A0A0 and patch_words["_XkTitlePatchB"] == 0x22222222 and patch_words["_XkTitlePatchC"] == 0x33333333)
     return checks
 
 

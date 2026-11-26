@@ -16,7 +16,9 @@ AXES = {"LX": (0x00, -32768, 32767), "LY": (0x01, -32768, 32767), "LT": (0x02, 0
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT = 0x40045564, 0x40045565, 0x40045567
 UI_DEV_CREATE, UI_DEV_DESTROY = 0x5501, 0x5502
 VPAD_VENDOR, VPAD_PRODUCT = 0x045E, 0x028E  # an Xbox 360 pad: SDL maps it without a mapping string
-VPAD_VERSION, VPAD_NAME, BUS_USB = 0x0110, "Open Xbox Kernel test pad", 3
+# The name carries the process id: SDL's GUID holds a CRC of the name, so each test's pad has its own GUID, and its xemu binds only that pad, not the pad of
+# a test running at the same time (another session's xemu took this one's presses, 2026-11-26).
+VPAD_VERSION, VPAD_NAME, BUS_USB = 0x0110, f"Open Xbox Kernel test pad {os.getpid()}", 3
 
 
 def sdl_guid(bus, vendor, product, version, name):
@@ -30,9 +32,11 @@ def sdl_guid(bus, vendor, product, version, name):
     return struct.pack("<8H", bus, crc, vendor, 0, product, 0, version, 0).hex()
 
 
-# The xemu.toml table that puts the virtual pad on controller port 1. Without it xemu gives port 1 to the first pad it finds, which may be a real controller
-# plugged into the PC: the virtual pad's presses then reach no port (2026-11-15).
-XEMU_PORT1_BINDING = f"\n[input.bindings]\nport1_driver = 'usb-xbox-gamepad'\nport1 = '{sdl_guid(BUS_USB, VPAD_VENDOR, VPAD_PRODUCT, VPAD_VERSION, VPAD_NAME)}'\n"
+# The xemu.toml tables that put this process's virtual pad on controller port 1 and nothing on ports 2-4, with xemu's binding of newly found pads off.
+# Without them xemu gives port 1 to the first pad it finds, which may be a real controller plugged into the PC (the virtual pad's presses then reach no
+# port, 2026-11-15), and gives the free ports to any other pad, such as another test's virtual pad.
+XEMU_PORT1_BINDING = ("\n[input]\nauto_bind = false\n\n[input.bindings]\nport1_driver = 'usb-xbox-gamepad'\n"
+                      f"port1 = '{sdl_guid(BUS_USB, VPAD_VENDOR, VPAD_PRODUCT, VPAD_VERSION, VPAD_NAME)}'\nport2 = ''\nport3 = ''\nport4 = ''\n")
 
 
 class VirtualPad:
