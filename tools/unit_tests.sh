@@ -6,10 +6,14 @@
 #   tools/unit_tests.sh -- ARGS         pass ARGS to the test binary (e.g. --gtest_filter='Pool.*')
 #   OXOS_KERNEL_OPT=-O2 tools/unit_tests.sh   the kernel sources at the console build's optimisation (own build dir)
 #   OXOS_STRESS_SECONDS=N               length of each Stress.* test (default 5)
+#   LLVM=DIR tools/unit_tests.sh       clang from DIR (default /opt/llvm-20.1.8/bin when it is there, as for the kernel build); LLVM= for the PATH's
 #
 # The tests are a 32-bit (i386) build with plain make (tests/unit/Makefile). Without a local multilib toolchain (g++-multilib, googletest sources in
 # /usr/src/googletest) the script builds and runs them in a Docker image (tests/unit/Dockerfile).
 set -eu
+# LLVM=DIR takes clang and the coverage tools from DIR, else from the PATH.
+if [ -z "${LLVM+set}" ] && [ -d /opt/llvm-20.1.8/bin ]; then LLVM=/opt/llvm-20.1.8/bin; fi
+LLVM_DIR=${LLVM:+${LLVM%/}/}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COVERAGE=OFF
 if [ "${1:-}" = "--coverage" ]; then COVERAGE=ON; shift; fi
@@ -17,15 +21,15 @@ if [ "${1:-}" = "--" ]; then shift; fi
 
 inner() {
     BUILD=$ROOT/build/tests/unit$( [ "$COVERAGE" = ON ] && echo _cov || true )$( [ -n "${OXOS_KERNEL_OPT:-}" ] && echo "_opt$(echo "$OXOS_KERNEL_OPT" | tr -dc 'A-Za-z0-9')" || true )
-    make -s -C "$ROOT/tests/unit" -j"$(nproc)" CC=clang CXX=clang++ BUILD="$BUILD" \
+    make -s -C "$ROOT/tests/unit" -j"$(nproc)" CC="${LLVM_DIR}clang" CXX="${LLVM_DIR}clang++" BUILD="$BUILD" \
         COVERAGE=$( [ "$COVERAGE" = ON ] && echo 1 || echo 0 ) KERNEL_OPT="${OXOS_KERNEL_OPT:-}"
     if [ "$COVERAGE" = ON ]; then
         rm -f "$BUILD"/*.profraw
         LLVM_PROFILE_FILE="$BUILD/run.profraw" "$BUILD/oxos_unit_tests" "$@" || status=$?
-        llvm-profdata merge -o "$BUILD/run.profdata" "$BUILD/run.profraw"
-        llvm-cov report "$BUILD/oxos_unit_tests" -instr-profile="$BUILD/run.profdata" \
+        "${LLVM_DIR}llvm-profdata" merge -o "$BUILD/run.profdata" "$BUILD/run.profraw"
+        "${LLVM_DIR}llvm-cov" report "$BUILD/oxos_unit_tests" -instr-profile="$BUILD/run.profdata" \
             -ignore-filename-regex='googletest|tests/unit' | tee "$BUILD/coverage.txt"
-        llvm-cov show "$BUILD/oxos_unit_tests" -instr-profile="$BUILD/run.profdata" -format=html \
+        "${LLVM_DIR}llvm-cov" show "$BUILD/oxos_unit_tests" -instr-profile="$BUILD/run.profdata" -format=html \
             -ignore-filename-regex='googletest|tests/unit' -output-dir="$BUILD/coverage_html" >/dev/null
         echo "coverage: $BUILD/coverage.txt, $BUILD/coverage_html/index.html"
         exit ${status:-0}

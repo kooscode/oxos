@@ -70,9 +70,20 @@ ifeq ($(STATEDUMP),1)
 SERIAL := 1
 endif
 
-CXX := clang++
-CC  := clang
-LD  := lld-link
+# The LLVM tools: from the folder LLVM names (a make option or an environment variable, the same option as the SDK's oxos_extension.mk), by default LLVM
+# 20.1.8's release unpacked in /opt/llvm-20.1.8 when it is there, else (or with LLVM=) from the PATH. LLVM 20.1.0-20.1.2, Ubuntu's clang-20 among them, emit
+# SSE2 instructions for -march=pentium3, which the nxdk apps use (llvm issue 134607). The folder also goes first on the recipes' PATH, so what they call by
+# name (ld.lld, llvm-nm, nxdk's compiler wrappers) is the same LLVM.
+LLVM     ?= $(wildcard /opt/llvm-20.1.8/bin)
+LLVM_DIR := $(if $(LLVM),$(abspath $(LLVM))/)
+ifneq ($(LLVM),)
+export PATH := $(abspath $(LLVM)):$(PATH)
+endif
+CXX := $(LLVM_DIR)clang++
+CC  := $(LLVM_DIR)clang
+LD  := $(LLVM_DIR)lld-link
+# The compiler's version (20.1.8), in the nxdk stamp's name: another compiler rebuilds nxdk's libraries and the apps.
+CLANG_VERSION := $(shell $(CC) --version 2>/dev/null | sed -n '1s/.*clang version \([0-9][0-9.]*\).*/\1/p')
 
 TARGET  := --target=i386-pc-win32
 # Plain Pentium code (no cmov, no multi-byte NOPs), as the reference kernels (their compiler emits only 386-class instructions). Not a fix for the 1.4 console's
@@ -226,7 +237,7 @@ $(TEST_TITLE).xbe: $(TEST_TITLE).exe $(ROOT)/tools/mkxbe.py
 CROMWELL_DIR    := $(abspath $(ROOT)/third_party/cromwell)
 CROMWELL_COMMIT := 86f547387184d1001d377cce97d3756c8acf91cc
 MCPX16          ?= 0
-OBJCOPY         := $(firstword $(shell command -v llvm-objcopy) $(lastword $(sort $(wildcard /usr/lib/llvm-*/bin/llvm-objcopy))))  # any LLVM version
+OBJCOPY         := $(if $(LLVM),$(LLVM_DIR)llvm-objcopy,$(firstword $(shell command -v llvm-objcopy) $(lastword $(sort $(wildcard /usr/lib/llvm-*/bin/llvm-objcopy)))))  # any LLVM version
 GNU_OBJCOPY     := objcopy
 BOOT_FLAGS := --target=i386-unknown-none-elf -march=pentium -mno-sse -mno-mmx -ffreestanding -fno-exceptions \
               -fno-rtti -fno-builtin -fno-pic -fno-stack-protector -nostdlib -O2 -Wall -Wextra -Werror -Isrc \
@@ -270,7 +281,7 @@ $(BOOT)/bl.bin: boot/start.S boot/bl.cpp boot/bl.h boot/netboot.cpp boot/bl.ld b
 	$(CC) $(BOOT_FLAGS) -c boot/start.S -o $(BOOT)/start.o
 	$(CXX) $(BOOT_FLAGS) -std=c++23 -c boot/bl.cpp -o $(BOOT)/bl.o
 	$(if $(BL_NETBOOT),$(CXX) $(BOOT_FLAGS) -std=c++23 -c boot/netboot.cpp -o $(BL_NETBOOT))
-	ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o $(BL_NETBOOT) -o $(BOOT)/bl.elf
+	$(LLVM_DIR)ld.lld -m elf_i386 -T boot/bl.ld -nostdlib $(BOOT)/start.o $(BOOT)/bl.o $(BL_NETBOOT) -o $(BOOT)/bl.elf
 	$(OBJCOPY) -O binary $(BOOT)/bl.elf $@
 
 bios: $(BUILD)/bios.bin
@@ -619,11 +630,14 @@ NXDK_COMMIT      := 65c9816753b15036bfd08d4536cd86a9e8e5573d
 NXDK_SDL3_DIR    := $(abspath $(ROOT)/third_party/nxdk-sdl3)
 NXDK_SDL3_URL    := https://github.com/kooscode/nxdk-sdl3
 NXDK_SDL3_COMMIT := 11aeba85bfc0e76873e64d99779f1939803ffd7c
-NXDK_ENV         := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:/usr/lib/llvm-18/bin:$$PATH
+# nxdk's wrappers call clang, lld-link and llvm-lib by name: LLVM's folder, else the folder of the system's clang (Ubuntu's /usr/lib/llvm-NN/bin, which
+# also has the plain llvm-lib).
+NXDK_LLVM        := $(if $(LLVM),$(abspath $(LLVM)),$(patsubst %/,%,$(dir $(realpath $(shell command -v clang)))))
+NXDK_ENV         := NXDK_DIR=$(NXDK_DIR) PATH=$(NXDK_DIR)/bin:$(NXDK_LLVM):$$PATH
 SDL_SCREEN       := $(addprefix $(ROOT)/tools/sdl_screen/,sdl_screen.cpp sdl_screen.h sdl_screen.mk)
-# Both checkouts at their pinned commits: the stamp's name holds the two commits and the optimisation level (nxdk's default, -O2), so a new pin
-# or level checks out again and rebuilds every library and app.
-NXDK_READY := $(ROOT)/third_party/.nxdk_$(NXDK_COMMIT)_$(NXDK_SDL3_COMMIT)_O2
+# Both checkouts at their pinned commits: the stamp's name holds the two commits, the optimisation level (nxdk's default, -O2) and the compiler's
+# version, so a new pin, level or compiler checks out again and rebuilds every library and app.
+NXDK_READY := $(ROOT)/third_party/.nxdk_$(NXDK_COMMIT)_$(NXDK_SDL3_COMMIT)_O2_clang$(CLANG_VERSION)
 
 $(NXDK_READY):
 	set -e; checkout() { \
