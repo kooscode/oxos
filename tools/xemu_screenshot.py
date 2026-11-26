@@ -85,12 +85,27 @@ def write_files(hdd, files):
     os.replace(hdd + ".new", hdd)
 
 
-def find_xemu_window():
-    """The X11 id of xemu's main window, or None while it has none."""
-    tree = subprocess.run(["xwininfo", "-root", "-tree"], capture_output=True, text=True).stdout
+def is_started_by(pid, ancestor):
+    """Whether process pid is ancestor or one of its children (an AppImage's xemu runs under its AppRun)."""
+    while pid > 1:
+        if pid == ancestor:
+            return True
+        try:
+            pid = int(open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return False
+    return False
+
+
+def find_xemu_window(xemu_pid):
+    """The X11 id of the main window of the xemu started as xemu_pid (not another xemu's, e.g. a test's), or None while it has none."""
+    tree = subprocess.run(["xwininfo", "-root", "-tree"], capture_output=True, text=True, timeout=30).stdout
     for line in tree.splitlines():
         if '"xemu |' in line and '("xemu"' in line:
-            return line.split()[0]
+            window = line.split()[0]
+            owner = subprocess.run(["xprop", "-id", window, "_NET_WM_PID"], capture_output=True, text=True, timeout=30).stdout
+            if "=" in owner and is_started_by(int(owner.split("=")[1]), xemu_pid):
+                return window
     return None
 
 
@@ -112,6 +127,7 @@ def main():
                     help="the AV cable xemu presents (default: xemu's own, composite); HD modes also need an EEPROM with them on (run.py --hd --state DIR)")
     ap.add_argument("--save-hdd", metavar="FILE", help="keep the disk as xemu left it")
     ap.add_argument("--serial", metavar="FILE", help="write the debug serial port to FILE (a SERIAL=1 kernel's log, titles' DbgPrint)")
+    ap.add_argument("--mcpx-rom", help="MCPX boot ROM dump (needed only for a Microsoft BIOS)")
     ap.add_argument("--xemu", default=shutil.which("xemu") or os.path.expanduser("~/.local/bin/xemu"))
     a = ap.parse_args()
     if not os.environ.get("DISPLAY"):
@@ -129,7 +145,7 @@ def main():
     cfg = os.path.join(work, "xemu.toml")
     open(cfg, "w").write(
         f"[general]\nshow_welcome = false\nskip_boot_anim = false\n\n{XEMU_UNATTENDED_DISPLAY}[sys]\nmem_limit = '64'\n" + (f"avpack = '{a.avpack}'\n" if a.avpack else "")
-        + "\n[sys.files]\nbootrom_path = ''\n"
+        + f"\n[sys.files]\nbootrom_path = '{os.path.abspath(a.mcpx_rom) if a.mcpx_rom else ''}'\n"
         f"flashrom_path = '{os.path.abspath(a.bios)}'\neeprom_path = '{os.path.join(work, 'eeprom.bin')}'\nhdd_path = '{hdd}'\n"
         + (f"dvd_path = '{os.path.abspath(a.iso)}'\n" if a.iso else "") + XEMU_PORT1_BINDING
         + "\n[net]\nenable = true\nbackend = 'nat'\n")  # the network card on, as on a console (10.0.2.15 by DHCP)
@@ -152,7 +168,7 @@ def main():
                         pad.set(BUTTONS[button][0], 0)
                     time.sleep(0.25)
             else:
-                window = find_xemu_window()
+                window = find_xemu_window(xemu.pid)
                 if not window:
                     sys.exit(f"xemu has no window (its log: {os.path.join(work, 'xemu.log')})")
                 shots += 1

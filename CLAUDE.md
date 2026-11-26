@@ -185,7 +185,8 @@ clean the implementation up, cite the `spec/` spec in its comments (`spec/stock/
     `--save-hdd FILE` keeps the disk as the console left it (read it with `tests/fatx.py`); `--serial FILE` keeps the debug serial port (with a `SERIAL=1`
     BIOS, `make -C kernel BUILD=../build/kernel/serial SELFTEST=0 SERIAL=1 ../build/kernel/serial/bios.bin`: the kernel's log and titles' `DbgPrint`).
   - **Timing:** a cold boot reaches the dashboard in about 30-40 s in xemu; wait before the first `shot`, and a second or two after each press.
-  - **Not during a regression:** the tool grabs any xemu window by its title, so it can catch a test's xemu; take screenshots before or after.
+  - **Alongside other xemus** (a regression, another session's tests): fine, the tool grabs only the window of the xemu it started (its `_NET_WM_PID`).
+  - **A Microsoft BIOS:** `--mcpx-rom` with the boot ROM (below); `C:\xboxdash.xbe` on the disk is what it starts.
   What works and what does not:
   - It grabs xemu's own window (`"xemu | v..."`) by its X11 window id (ffmpeg `x11grab -window_id`): this works while other windows or the lock screen cover it,
     but needs the PC's GPU-backed X display (`$DISPLAY`).
