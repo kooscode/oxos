@@ -287,12 +287,21 @@ static ULONG PteToProtect(ULONG pte) {
     return protect;
 }
 
+// 0 for an address with nothing mapped: no page table, an empty PTE, or above 0x7FFF0000 when not present; PAGE_NOACCESS only for a page committed
+// with it (spec/stock/27 §4).
 XBAPI ULONG NTAPI MmQueryAddressProtect(PVOID VirtualAddress) {
+    constexpr ULONG LOWEST_SYSTEM_ADDRESS = 0x7FFF0000;  // from here up, a page that is not present answers 0 whatever its PTE holds
     ULONG va = (ULONG)VirtualAddress;
+    ULONG protect = 0;
+    KIRQL old = KeRaiseIrqlToDpcLevel();
     ULONG pde = *PdeAddress(va);
-    if (!(pde & PTE_PRESENT))
-        return 0x01;
-    return PteToProtect((pde & PTE_LARGE) ? pde : *PteAddress(va));
+    if (pde & PTE_PRESENT) {
+        ULONG pte = (pde & PTE_LARGE) ? pde : *PteAddress(va);
+        if ((pte & PTE_PRESENT) || (pte && va < LOWEST_SYSTEM_ADDRESS))
+            protect = PteToProtect(pte);
+    }
+    KfLowerIrql(old);
+    return protect;
 }
 
 XBAPI void NTAPI MmSetAddressProtect(PVOID BaseAddress, ULONG NumberOfBytes, ULONG NewProtect) {

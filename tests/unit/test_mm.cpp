@@ -302,7 +302,8 @@ TEST_F(Mm, SetAddressProtectChangesEveryPage) {
     p[4096] = 9; // writable again (the old read-only translation was invalidated)
     MmSetAddressProtect(p, 4096, 0x12345); // invalid: ignored
     EXPECT_EQ(MmQueryAddressProtect(p), PAGE_READWRITE | PAGE_NOCACHE);
-    EXPECT_EQ(MmQueryAddressProtect((PVOID)0xD7FFF000), PAGE_NOACCESS);
+    EXPECT_EQ(MmQueryAddressProtect((PVOID)0xD7FFF000), 0u) << "nothing mapped";
+    EXPECT_EQ(MmQueryAddressProtect(nullptr), 0u) << "page 0 is never mapped";
     MmFreeSystemMemory(p, 2 * 4096);
 }
 
@@ -424,6 +425,13 @@ TEST_F(Vm, ProtectAndPartialRelease) {
     EXPECT_EQ(mbi.State, MEM_COMMIT);
     EXPECT_EQ(mbi.AllocationBase, (PVOID)0x00620000) << "the split-off tail is a reservation of its own";
     EXPECT_EQ(Free(0x00600000, 0x10000, MEM_RELEASE), STATUS_SUCCESS);
+    // A page committed with PAGE_NOACCESS answers PAGE_NOACCESS; a reserved page that is not committed answers 0 (spec/stock/27 §4).
+    b = (PVOID)0x00620000;
+    s = 0x1000;
+    ASSERT_EQ(NtProtectVirtualMemory(&b, &s, PAGE_NOACCESS, &old), STATUS_SUCCESS);
+    EXPECT_EQ(MmQueryAddressProtect((PVOID)0x00620000), PAGE_NOACCESS);
+    ASSERT_EQ(Free(0x00621000, 0x1000, MEM_DECOMMIT), STATUS_SUCCESS);
+    EXPECT_EQ(MmQueryAddressProtect((PVOID)0x00621000), 0u);
     EXPECT_EQ(Free(0x00620000, 0x10000, MEM_RELEASE), STATUS_SUCCESS);
     EXPECT_EQ(memory::AvailablePages, available0);
 }

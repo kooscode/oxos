@@ -150,8 +150,10 @@ STATUS_NO_MORE_ENTRIES; it never sees the same entry twice. A caller that wants 
 `*Context` set back to the old index (or `ReturnLength` bytes).
 
 ## 9. Unknown
-- Whether page 0 (and the rest of 0x00000000..0x0000FFFF) is present in the page tables while a title runs. No path that maps it was found (§11.4), but
-  the boot page tables were not followed; to be observed (e.g. a read of address 0 from a test title under the stock kernel).
+- (Answered by observation, 2026-11-26: a test title under the stock 4627 BIOS in xemu, MCPX 1.0 boot ROM.) **Page 0 is not present while a title runs**:
+  MmIsAddressValid gives FALSE and MmQueryAddressProtect 0 for 0x0, 0x1000 and 0xF000 (and for 0x7FFE0000); 0x10000 (the XBE header) gives TRUE and
+  PAGE_READWRITE 4. A plain read of address 0 at PASSIVE_LEVEL stopped the title (the screen never changed again), as §11.5 predicts. The 5713 BIOS did not
+  boot in xemu, so 5838-era kernels were not observed.
 - What the flag at 0x8003BB20 (4627: 0x8003AB20) stands for. It decides whether a page fault taken with interrupts disabled is handled normally or ends
   in bug check 0x0A with IRQL 0xFF (§11.2 step 2); not needed for export 208, whose faults happen with interrupts enabled.
 - What the counter at 0x8003B8A0 (4627: 0x8003A8A0), incremented just before the 0x0A bug check, is used for.
