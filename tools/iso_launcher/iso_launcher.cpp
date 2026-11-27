@@ -185,32 +185,6 @@ void Heading() {
     sdl_screen::Print("OXOS ISO launcher\n\n");
 }
 
-// The title name from the image's default.xbe certificate (UTF-16, 40 characters), as ASCII.
-void TitleName(char *out, std::size_t size) {
-    out[0] = 0;
-    HANDLE h;
-    if (!NT_SUCCESS(Open(&h, "\\Device\\CdRom0\\default.xbe", FILE_NON_DIRECTORY_FILE)))
-        return;
-    alignas(4) static unsigned char head[0x1000];
-    IO_STATUS_BLOCK iosb;
-    LARGE_INTEGER at{};
-    NTSTATUS status = NtReadFile(h, nullptr, nullptr, nullptr, &iosb, head, sizeof(head), &at);
-    NtClose(h);
-    if (!NT_SUCCESS(status) || std::memcmp(head, "XBEH", 4))
-        return;
-    ULONG base = *reinterpret_cast<ULONG *>(head + 0x104), cert = *reinterpret_cast<ULONG *>(head + 0x118) - base;
-    if (cert + 0x0C + 80 > sizeof(head))
-        return;
-    std::size_t n = 0;
-    for (std::size_t i = 0; i < 40 && n + 1 < size; i++) {
-        unsigned c = head[cert + 0x0C + 2 * i] | head[cert + 0x0C + 2 * i + 1] << 8;
-        if (!c)
-            break;
-        out[n++] = c < 0x80 ? char(c) : '?';
-    }
-    out[n] = 0;
-}
-
 // Start the mounted disc's title through the launch data page and a quick reboot, as XLaunchXBE does, but with this launcher's own title ID (nxdk's default) in
 // the page. oxos_isonator copies the game's certificate into the launcher, so XLaunchXBE would name the game itself as the launcher: a game then sees a launch
 // "from itself" with no data and may take it as a return from its own relaunch (Prince of Persia goes to the dashboard).
@@ -298,13 +272,7 @@ int main() {
         sdl_screen::ShowForever();
     }
 
-    if (IsFile("\\Device\\CdRom0\\default.xbe"))
-        StartDisc();
-    char title[48];
-    TitleName(title, sizeof(title));
-    Heading();
-    sdl_screen::Clear();
-    sdl_screen::Print("OXOS ISO launcher\n\n");
-    sdl_screen::Print("Image: %s\nTitle: %s\n\nThe launch failed.\n", path, title[0] ? title : "(no default.xbe?)");
-    sdl_screen::ShowForever();
+    // Started whether or not \Device\CdRom0\default.xbe can be opened yet: some BIOSes with this device put the image in the drive's place only at the
+    // reboot. An image without one ends in the kernel's own error (the dashboard).
+    StartDisc();
 }
