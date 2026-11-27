@@ -46,6 +46,8 @@ NTSTATUS XdvdfsMountVolume(PDEVICE_OBJECT TargetDevice);
 // The title's D: folder on the hard disk (filesystems/hddfs/dispatch.cpp, spec/oxos_internal/25 §2): remembered before the title starts, so that D: reports a
 // DVD's 2048-byte sectors.
 void HDDFSRememberTitleFolder();
+// [storage] show_exfat_as_fatx = yes (read at a cold boot): an exFAT volume names its file system "FATX", not "exFAT" (spec/oxos_internal/05 §3.1).
+extern XK_PERSIST bool ExfatShownAsFatx;
 
 } // namespace xk::filesystems
 

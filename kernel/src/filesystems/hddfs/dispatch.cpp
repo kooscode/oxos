@@ -4,6 +4,8 @@
 
 namespace xk::filesystems {
 
+XK_PERSIST bool ExfatShownAsFatx; // filesystems.h
+
 static NTSTATUS HDDFSComplete(PIRP Irp, NTSTATUS Status, ULONG_PTR Information = 0) {
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = Information;
@@ -995,13 +997,17 @@ static NTSTATUS NTAPI HDDFSFsdQueryVolumeInformation(PDEVICE_OBJECT DeviceObject
         }
         ((PULONG)out)[0] = 2; // FILE_CASE_PRESERVED_NAMES
         ((PULONG)out)[1] = v->IsEXFAT ? HDDFS_MAX_NAME : FATX_MAX_NAME;
-        ((PULONG)out)[2] = 4;
-        info = 12;
-        if (len >= 16) {
-            memcpy(out + 12, "FATX", 4);
-            info = 16;
-        } else {
-            status = (NTSTATUS)0x80000005;
+        { // the name: "FATX", or "exFAT" on an exFAT volume unless [storage] show_exfat_as_fatx = yes (spec/oxos_internal/05 §3.1)
+            const char *name = v->IsEXFAT && !ExfatShownAsFatx ? "exFAT" : "FATX";
+            ULONG nameLength = strlen(name);
+            ((PULONG)out)[2] = nameLength;
+            info = 12;
+            if (len < 12 + nameLength) {
+                status = (NTSTATUS)0x80000005; // STATUS_BUFFER_OVERFLOW: the fixed part only
+                break;
+            }
+            memcpy(out + 12, name, nameLength);
+            info = 12 + nameLength;
         }
         break;
     default:

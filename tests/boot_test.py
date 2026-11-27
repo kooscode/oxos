@@ -386,6 +386,7 @@ def fatx_checks(mon, hdd):
         "D: as a hard-disk folder reports 2048-byte sectors, the volume its own": mon.read("KiTestFATXTitleFolderOk") == 1,
         "volume information (size, serial, FATX)": mon.read("KiTestFATXVolumeOk") == 1 and mon.read("KiTestFATXTotalClusters") == clusters and
             mon.read("KiTestFATXSerial") == serial,
+        "the file system's name (FATX, or exFAT on an exFAT disk)": mon.read("KiTestFATXNameLength") == (5 if is_exfat_disk(q) else 4),
         "free clusters balanced": mon.read("KiTestFATXFreeBalanced") == 1,
         "FATX suite finished": mon.read("KiTestFATXDone") == 1,
         **exfat_format_checks(mon, q)}

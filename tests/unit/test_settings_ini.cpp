@@ -147,6 +147,18 @@ TEST(SettingsIni, ToastsAreOnUnlessTurnedOff) {
     EXPECT_TRUE(oxos::ini_file::ReadToastsEnabled("", 0));
 }
 
+TEST(SettingsIni, ExfatIsShownAsItselfUnlessTurnedOn) {
+    EXPECT_FALSE(oxos::ini_file::ReadShowExfatAsFatx("", 0));
+    const std::string on = "[toasts]\nenabled = no\n[storage]\nshow_exfat_as_fatx = Yes\n";
+    EXPECT_TRUE(oxos::ini_file::ReadShowExfatAsFatx(on.data(), (uint32_t)on.size()));
+    const std::string off = "[storage]\nshow_exfat_as_fatx = no\n";
+    EXPECT_FALSE(oxos::ini_file::ReadShowExfatAsFatx(off.data(), (uint32_t)off.size()));
+    const std::string other = "[toasts]\nshow_exfat_as_fatx = yes\n";
+    EXPECT_FALSE(oxos::ini_file::ReadShowExfatAsFatx(other.data(), (uint32_t)other.size())) << "another section's key";
+    const std::string last = "[storage]\nshow_exfat_as_fatx = yes\nshow_exfat_as_fatx = no\n";
+    EXPECT_FALSE(oxos::ini_file::ReadShowExfatAsFatx(last.data(), (uint32_t)last.size())) << "the last one counts";
+}
+
 TEST(SettingsIni, VideoModeToastIsOnUnlessTurnedOff) {
     const std::string off = "[toasts]\nenabled = yes\nshow_video_mode = NO\n";
     EXPECT_FALSE(oxos::ini_file::ReadShowVideoMode(off.data(), (uint32_t)off.size()));

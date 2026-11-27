@@ -14,6 +14,7 @@ using namespace xk; // the kernel's subsystems as storage::, memory::, ...
 
 volatile ULONG KiTestFATXReadOk, KiTestFATXReadSum, KiTestFATXReadLength, KiTestFATXInfoOk, KiTestFATXDirOk, KiTestFATXWriteOk, KiTestFATXRenameDeleteOk,
     KiTestFATXErrorsOk, KiTestFATXVolumeOk, KiTestFATXFreeBalanced, KiTestFATXTotalClusters, KiTestFATXSerial, KiTestFATXDone;
+volatile ULONG KiTestFATXNameLength; // the file system name's length: 4 ("FATX") or 5 ("exFAT"); boot_test.py checks it against the disk
 volatile char KiTestFATXDirNames[64];
 // exFAT disk: a title-style format of X: (Partition3) through its volume handle empties the folder (spec/oxos_internal/05_exfat_storage_spec.md §5); E: refuses
 // it.
@@ -214,12 +215,15 @@ static void NTAPI FATXControllerThread(PVOID) {
 
     // Volume information; every cluster used above came back except keep.bin's one.
     ULONG size[6] = {}, vol[8] = {};
-    UCHAR attr[16] = {};
+    UCHAR attr[20] = {};
     ok = NtQueryVolumeInformationFile(hv, &iosb, size, 24, FileFsSizeInformation) == 0 && size[4] == 32 && size[5] == 512;
     ok &= NtQueryVolumeInformationFile(hv, &iosb, vol, 18, FileFsVolumeInformation) == 0;
-    ok &= NtQueryVolumeInformationFile(hv, &iosb, attr, 16, FileFsAttributeInformation) == 0 && attr[12] == 'F' && attr[15] == 'X';
+    // The file system's name: "FATX", or "exFAT" on an exFAT disk (spec/oxos_internal/05 §3.1; the self tests run on both).
+    ok &= NtQueryVolumeInformationFile(hv, &iosb, attr, sizeof(attr), FileFsAttributeInformation) == 0 &&
+          ((((PULONG)attr)[2] == 4 && !memcmp(attr + 12, "FATX", 4)) || (((PULONG)attr)[2] == 5 && !memcmp(attr + 12, "exFAT", 5)));
     KiTestFATXTotalClusters = size[0];
     KiTestFATXSerial = vol[2];
+    KiTestFATXNameLength = ((PULONG)attr)[2];
     KiTestFATXVolumeOk = ok;
     // XkTest may have existed from a previous run on the same image: it and keep.bin hold 2 clusters.
     KiTestFATXFreeBalanced = FreeClusters(hv) + 2 == freeBefore || FreeClusters(hv) == freeBefore;

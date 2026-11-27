@@ -87,6 +87,14 @@ same free space, so a single F: already offers the whole disk:
 - **Timestamps:** exFAT keeps 10 ms resolution and a UTC offset; the driver converts to and from the FATX/NT times the kernel APIs return.
 - **File sizes:** up to the exFAT limit; the APIs already carry 64-bit sizes and offsets.
 
+### 3.1 The file system's name (2026-11-27)
+`NtQueryVolumeInformationFile(FileFsAttributeInformation)` on a hard-disk volume answers {attributes 2 (case-preserved names), the longest name (42 on
+FATX, 255 on exFAT), the name's length, the name}. The name is `FATX` on a FATX disk and `exFAT` (5 characters) on an exFAT disk, so titles and SDKs see
+the real file system (user, 2026-11-27). A buffer too small for the name gets the 12-byte fixed part and STATUS_BUFFER_OVERFLOW (0x80000005).
+- **Override:** `[storage] show_exfat_as_fatx = yes` in `C:\OXOS\oxos_settings.ini` makes an exFAT disk answer `FATX`, as a retail disk does, for a title
+  that refuses anything else. Default `no`. Read at a cold boot by the kernel settings module (spec 43) with the other cold-boot switches; not in safe mode,
+  where the default holds.
+
 ## 4. The whole-disk device (Partition0)
 Titles open `\Device\Harddisk0\partition0` raw to keep the cache database (traced: one 512-byte read and one write at byte offset 0x800, sector 4, §8). On an
 exFAT disk the real sector 4 belongs to the partition table, so:

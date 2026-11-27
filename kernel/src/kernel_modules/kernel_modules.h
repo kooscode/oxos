@@ -28,12 +28,14 @@ constexpr ULONG XK_BOOT_VIDEO_ENABLED = 1; // boot_video_enabled = yes
 constexpr ULONG XK_BOOT_VIDEO_ALWAYS = 2;  // boot_video_always = yes (only with boot_video_enabled = yes)
 constexpr ULONG XK_TOASTS_OFF = 4;         // [toasts] enabled = no
 constexpr ULONG XK_VIDEO_MODE_TOAST_OFF = 8; // [toasts] show_video_mode = no
+constexpr ULONG XK_EXFAT_AS_FATX = 16;       // [storage] show_exfat_as_fatx = yes (spec/oxos_internal/05 §3.1)
 
 // The modules' functions: the table the image's entry point returns.
 struct XK_KERNEL_MODULES {
     // extension_loader.cpp: loads the extensions oxos_extensions.ini lists for this launch (spec/oxos_internal/34 §8).
     void (*LoadExtensions)();
-    // kernel_settings.cpp: oxos_settings.ini's cold-boot switches, XK_BOOT_VIDEO_*, XK_TOASTS_OFF and XK_VIDEO_MODE_TOAST_OFF; 0 without the file.
+    // kernel_settings.cpp: oxos_settings.ini's cold-boot switches, XK_BOOT_VIDEO_*, XK_TOASTS_OFF, XK_VIDEO_MODE_TOAST_OFF and XK_EXFAT_AS_FATX; 0 without
+    // the file.
     ULONG (*ReadColdBootSwitches)();
     // launch_redirect.cpp: the target oxos_launch_redirect.ini gives Path (a device path), as a device path in Target (TargetSize bytes); false: none
     // (spec/oxos_internal/33).

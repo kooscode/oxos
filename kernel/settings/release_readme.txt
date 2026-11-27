@@ -28,4 +28,8 @@ show_video_mode = no under [toasts] in C:\OXOS\oxos_settings.ini.
 If a title leaves the sound chip frozen, "Audio Codec Frozen - Restarting"
 shows and the console restarts into the same launch, with sound.
 
+EXFAT DISKS
+Titles see an exFAT disk as exFAT. For a title that only accepts FATX:
+show_exfat_as_fatx = yes under [storage] in C:\OXOS\oxos_settings.ini.
+
 More: https://github.com/kooscode/oxos

@@ -107,7 +107,8 @@ a page fails the regression. Where a piece of kernel code goes decides what it c
 ## Settings files on the console
 OXOS's own files are in `C:\OXOS\` (exFAT disk: `/C/OXOS/`), shipped from `kernel/settings/` in the release zip; formats in the specs:
 - `oxos_settings.ini`: `[dashboard]` (`dashboard_1..8`, spec 19), `[launch_redirect]` (`name = SOURCE >> TARGET`, spec 33, `docs/launch_redirect.md`),
-  `[boot_video]` (spec 38, read at a cold boot only). Read by the kernel modules with the parsers in `shared/ini_file/` (host unit tests in `tests/unit/`).
+  `[boot_video]` (spec 38), `[toasts]` (spec 36) and `[storage]` (`show_exfat_as_fatx`, spec 05 §3.1), the last three read at a cold boot only. Read by
+  the kernel modules with the parsers in `shared/ini_file/` (host unit tests in `tests/unit/`).
 - `oxos_title_patches.ini` (per-game fixes, spec 25 §3); `oxos_extensions.ini` and `extensions\oxos_NAME.ini` (spec 34 §3).
 - Safe boot (B held at power-on): no extensions, no boot video, and only `C:\xboxdash.xbe` as the dashboard; launch redirects and title patches still apply.
 

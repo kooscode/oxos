@@ -13,6 +13,9 @@
 //   [toasts]
 //   enabled = no                      no: no toasts over titles (spec/oxos_internal/36); yes or missing: toasts on
 //   show_video_mode = no              no: no toast when a title changes the video mode; yes or missing: one (spec/oxos_internal/36 §2)
+//
+//   [storage]
+//   show_exfat_as_fatx = yes          yes: an exFAT disk names its file system "FATX" to titles; no or missing: "exFAT" (spec/oxos_internal/05 §3.1)
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -47,5 +50,8 @@ bool ReadToastsEnabled(const char *Text, uint32_t Length);
 
 // [toasts]'s show_video_mode (spec/oxos_internal/36 §2): true unless the file says "show_video_mode = no", as ReadToastsEnabled.
 bool ReadShowVideoMode(const char *Text, uint32_t Length);
+
+// [storage]'s show_exfat_as_fatx (spec/oxos_internal/05 §3.1): false unless the file says "show_exfat_as_fatx = yes" (any case; the last one counts).
+bool ReadShowExfatAsFatx(const char *Text, uint32_t Length);
 
 } // namespace oxos::ini_file

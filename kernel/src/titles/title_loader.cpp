@@ -914,6 +914,7 @@ static void ReadColdBootSwitches() {
     BootVideoSwitches = switches & (XK_BOOT_VIDEO_ENABLED | XK_BOOT_VIDEO_ALWAYS);
     toasts::ToastsOff = (switches & XK_TOASTS_OFF) != 0;
     toasts::VideoModeToastOff = (switches & XK_VIDEO_MODE_TOAST_OFF) != 0;
+    filesystems::ExfatShownAsFatx = (switches & XK_EXFAT_AS_FATX) != 0;
 }
 
 // LaunchTitle(Reason), after the boot video when [boot_video] turns it on (user, 2026-11-17: "if enabled, play the boot video always"): the player's

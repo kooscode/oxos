@@ -108,28 +108,42 @@ constexpr char TOASTS_SECTION[] = "toasts";
 constexpr char KEY_TOASTS_ENABLED[] = "enabled";
 constexpr char KEY_SHOW_VIDEO_MODE[] = "show_video_mode";
 
-// A [toasts] switch that is on unless the file says "Key = no".
-static bool ReadToastsSwitch(const char *Text, uint32_t Length, const char *Key) {
-    bool enabled = true, inSection = false;
+// A yes / no switch: Key in Section, Default unless the file says the other ("yes" or "no", any case; anything else keeps Default; a key given twice, the
+// last one counts).
+static bool ReadSwitch(const char *Text, uint32_t Length, const char *Section, const char *Key, bool Default) {
+    bool value = Default, inSection = false;
     INI_READER reader = {Text, Text + Length};
     INI_LINE line;
     while (NextLine(&reader, &line)) {
         if (line.Kind == INI_LINE_KIND::SECTION || line.Kind == INI_LINE_KIND::BAD_SECTION) {
-            inSection = line.Kind == INI_LINE_KIND::SECTION && IsSection(line, TOASTS_SECTION);
+            inSection = line.Kind == INI_LINE_KIND::SECTION && IsSection(line, Section);
             continue;
         }
-        if (inSection && line.Kind == INI_LINE_KIND::KEY && IsKey(line, Key))
-            enabled = !(line.ValueLength == 2 && (line.Value[0] | 0x20) == 'n' && (line.Value[1] | 0x20) == 'o');
+        if (!inSection || line.Kind != INI_LINE_KIND::KEY || !IsKey(line, Key))
+            continue;
+        if (IsYes(line))
+            value = true;
+        else if (line.ValueLength == 2 && (line.Value[0] | 0x20) == 'n' && (line.Value[1] | 0x20) == 'o')
+            value = false;
+        else
+            value = Default;
     }
-    return enabled;
+    return value;
 }
 
 bool ReadToastsEnabled(const char *Text, uint32_t Length) {
-    return ReadToastsSwitch(Text, Length, KEY_TOASTS_ENABLED);
+    return ReadSwitch(Text, Length, TOASTS_SECTION, KEY_TOASTS_ENABLED, true);
 }
 
 bool ReadShowVideoMode(const char *Text, uint32_t Length) {
-    return ReadToastsSwitch(Text, Length, KEY_SHOW_VIDEO_MODE);
+    return ReadSwitch(Text, Length, TOASTS_SECTION, KEY_SHOW_VIDEO_MODE, true);
+}
+
+constexpr char STORAGE_SECTION[] = "storage";
+constexpr char KEY_SHOW_EXFAT_AS_FATX[] = "show_exfat_as_fatx";
+
+bool ReadShowExfatAsFatx(const char *Text, uint32_t Length) {
+    return ReadSwitch(Text, Length, STORAGE_SECTION, KEY_SHOW_EXFAT_AS_FATX, false);
 }
 
 } // namespace oxos::ini_file
