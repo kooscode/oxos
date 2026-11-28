@@ -26,12 +26,15 @@ PC_MAC, PC_IP = bytes.fromhex("025842505331"), bytes([192, 168, 1, 2])  # only u
 TITLE_AT = 0x5FE0
 
 
-def title_package(folder, name):
+def title_package(folder, name, parent=None):
     """A title's files as the kernel installs them (spec/oxos_internal/09_netboot.md §7): the folder's files, with
     default.xbe stored as NAME.xbe. Header {'OXTP', version 1, count, name[16]}, then per file {name[64], offset,
-    size} (from the package's start), then the files, each 16-byte aligned; padded to a multiple of 1 KiB."""
+    size} (from the package's start), then the files, each 16-byte aligned; padded to a multiple of 1 KiB. With parent
+    (installed as E:\\PARENT\\NAME\\): version 2, the header followed by {parent[32]}."""
     if not name or len(name) > 15 or any(c in name for c in "\\/:"):
         raise ValueError(f"title name {name!r}: 1-15 characters, no path separators")
+    if parent is not None and (not parent or len(parent) > 31 or any(c in parent for c in "\\/:")):
+        raise ValueError(f"title folder {parent!r}: 1-31 characters, one folder (no path separators)")
     files = []
     for f in sorted(os.listdir(folder)):
         full = os.path.join(folder, f)
@@ -42,14 +45,18 @@ def title_package(folder, name):
             files.append((stored, open(full, "rb").read()))
     if not any(n == f"{name}.xbe" for n, _ in files):
         raise ValueError(f"{folder}: no default.xbe")
-    at = 28 + 72 * len(files)
+    header = struct.pack("<4sII16s", b"OXTP", 2 if parent else 1, len(files), name.encode())
+    if parent:
+        header += struct.pack("<32s", parent.encode())
+    start = len(header) + 72 * len(files)  # where the files begin
+    at = start
     entries, blobs = b"", b""
     for stored, data in files:
         at = (at + 15) & ~15
         entries += struct.pack("<64sII", stored.encode(), at, len(data))
-        blobs = blobs.ljust(at - (28 + 72 * len(files)), b"\0") + data
+        blobs = blobs.ljust(at - start, b"\0") + data
         at += len(data)
-    package = struct.pack("<4sII16s", b"OXTP", 1, len(files), name.encode()) + entries + blobs
+    package = header + entries + blobs
     return package + bytes(-len(package) % 1024)
 
 
@@ -123,6 +130,8 @@ def main():
     ap.add_argument("--title", metavar="DIR", help="also send this folder's files (a title: default.xbe and its data); "
                     "the kernel installs them as E:\\NAME\\ and runs NAME.xbe instead of the disc or dashboard")
     ap.add_argument("--title-name", default="imgtest", help="the title's folder and XBE name on E: (default %(default)s)")
+    ap.add_argument("--title-folder", help="install the title in this folder on E: (E:\\FOLDER\\NAME\\) instead of at the root; one folder, made when "
+                    "missing; needs a kernel from 2026-11-26 or later")
     a = ap.parse_args()
     log = Log(a.out)
     socks = []
@@ -171,7 +180,7 @@ def main():
                 log.say(f"netboot: <- op {op} session {sess:08x} offset {offset:#x} length {length:#x} from {who}")
             if op == OP_HELLO:
                 try:
-                    image, crc = load(a.image, title_package(a.title, a.title_name) if a.title else None)
+                    image, crc = load(a.image, title_package(a.title, a.title_name, a.title_folder) if a.title else None)
                 except (OSError, ValueError) as e:
                     log.say(f"netboot: console {who} asked, but {e}")
                     continue
@@ -179,7 +188,7 @@ def main():
                     console_mac = payload[HEADER.size:HEADER.size + 6].hex(":")
                     log.say(f"netboot: console {who} ({console_mac}) asks for a kernel; offering {a.image} "
                             f"(CRC-32 {crc:08x}, built {time.ctime(os.path.getmtime(a.image))}"
-                            + (f", title {a.title} as E:\\{a.title_name}\\{a.title_name}.xbe" if a.title else "") + ")")
+                            + (f", title {a.title} as E:\\{a.title_folder + chr(92) if a.title_folder else ''}{a.title_name}\\{a.title_name}.xbe" if a.title else "") + ")")
                     session, served, started = sess, set(), time.monotonic()
                 reply(HEADER.pack(MAGIC, OP_OFFER, 1, 0, sess, crc, len(image)), mac)
             elif op == OP_READ and sess == session and image:

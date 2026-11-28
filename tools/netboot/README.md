@@ -50,6 +50,7 @@ The kernel's own log is on the debug serial port (`SERIAL=1` builds).
 | `--xemu PORT` | Serve an xemu console started with `tools/run.py BIOS --net-udp PORT` instead of the LAN (see 4). |
 | `--title DIR` | Also send a title (DIR's `default.xbe` and its files). The kernel writes it to `E:\\NAME\\` and runs `NAME.xbe` instead of the disc or dashboard (spec/oxos_internal/09 §7). Needs a netboot image flashed after 2026-10-25 (4 MiB downloads). |
 | `--title-name NAME` | The title's folder and XBE name on E: (default `imgtest`). |
+| `--title-folder FOLDER` | Install the title in `E:\\FOLDER\\NAME\\` instead of `E:\\NAME\\` (one folder, made when missing). The served kernel must be from 2026-11-26 or later (it is the served kernel that installs the title, so the flashed netboot image does not matter). |
 
 ## 3. On the console
 

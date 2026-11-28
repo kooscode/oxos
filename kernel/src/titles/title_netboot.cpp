@@ -1,6 +1,7 @@
 // A title delivered by netboot (OXOS addition; spec/oxos_internal/09_netboot.md §7). tools/netboot/netboot.py --title DIR appends the title's files (a package)
 // to the image it serves and leaves a marker in the downloaded bank. At entry the kernel notes where the package is; the memory manager keeps those pages off
-// the free lists; the title-launch thread writes the files to E:\<name>\ (the XBE as <name>.xbe), gives the pages back, and launches that XBE (D: = its folder)
+// the free lists; the title-launch thread writes the files to E:\<name>\ or E:\<folder>\<name>\ (the XBE as <name>.xbe), gives the pages back, and launches
+// that XBE (D: = its folder)
 // instead of the disc or the dashboard. A quick reboot finds no package (the marker is cleared once read), so a title's own reboots and launches behave as
 // usual.
 #include <titles/titles.h>
@@ -21,7 +22,10 @@ constexpr ULONG MAX_IMAGE = 0x400000;      // the 2BL's limit (kernel/boot/netbo
 
 struct PackageHeader { // little-endian, at the package's start
     ULONG Magic, Version, Count;
-    char Name[16];     // the folder on E: and the XBE's base name, NUL-padded
+    char Name[16];     // the title's folder and the XBE's base name, NUL-padded
+};
+struct PackageFolder { // version 2: after the header
+    char Name[32];     // the folder on E: that holds the title's folder (E:\<this>\<Name>\), NUL-padded
 };
 struct PackageEntry {
     char Name[64];     // file name inside the folder, NUL-padded
@@ -47,7 +51,7 @@ void ReadNetbootTitle() {
         return;
     auto header = (const PackageHeader *)(BANK + offset);
     NetbootMarkerSeen[4] = header->Magic;
-    if (header->Magic != PACKAGE_MAGIC || header->Version != 1 || !header->Count || header->Count > 64)
+    if (header->Magic != PACKAGE_MAGIC || (header->Version != 1 && header->Version != 2) || !header->Count || header->Count > 64)
         return;
     NetbootPackagePhysical = (BANK & 0x0FFFFFFF) + offset;
     NetbootPackageSize = size;
@@ -96,15 +100,28 @@ bool LaunchNetbootTitle() {
     }
     auto base = (const UCHAR *)(0x80000000 | NetbootPackagePhysical);
     auto header = (const PackageHeader *)base;
-    auto entries = (const PackageEntry *)(header + 1);
-    char title[16], dir[96], path[192];
+    auto folder = (const PackageFolder *)(header + 1);  // version 2 only
+    auto entries = (const PackageEntry *)(header->Version == 2 ? (const void *)(folder + 1) : (const void *)(header + 1));
+    char title[16], parent[32], dir[96], path[192];
     PackageTitleName(title, header->Name, sizeof(title));
-    snprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s", title);
+    PackageTitleName(parent, header->Version == 2 ? folder->Name : "", sizeof(parent));
     HANDLE h;
-    NTSTATUS status = io::CreateFile(dir, GENERIC_WRITE, 0, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
-    if (NT_SUCCESS(status))
-        NtClose(h);
-    XK_SERIAL("netboot title: %s, %lu files, %lu bytes -> E:\\%s (folder %#lx)\n", title, header->Count, NetbootPackageSize, title, status);
+    NTSTATUS status = STATUS_SUCCESS;
+    if (parent[0]) { // E:\<parent>\ first, then the title's folder inside it
+        snprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s", parent);
+        status = io::CreateFile(dir, GENERIC_WRITE, 0, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
+        if (NT_SUCCESS(status))
+            NtClose(h);
+        snprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s\\%s", parent, title);
+    } else {
+        snprintf(dir, sizeof(dir), "\\Device\\Harddisk0\\Partition1\\%s", title);
+    }
+    if (NT_SUCCESS(status)) {
+        status = io::CreateFile(dir, GENERIC_WRITE, 0, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &h);
+        if (NT_SUCCESS(status))
+            NtClose(h);
+    }
+    XK_SERIAL("netboot title: %s, %lu files, %lu bytes -> %s (folder %#lx)\n", title, header->Count, NetbootPackageSize, dir, status);
     bool written = NT_SUCCESS(status);
     for (ULONG i = 0; written && i < header->Count; i++) {
         const PackageEntry &e = entries[i];
@@ -122,7 +139,7 @@ bool LaunchNetbootTitle() {
             status = e.Size ? NtWriteFile(h, nullptr, nullptr, nullptr, &iosb, (PVOID)(base + e.Offset), e.Size, &at) : STATUS_SUCCESS;
             NtClose(h);
         }
-        XK_SERIAL("netboot title: E:\\%s\\%s, %lu bytes: %#lx\n", title, name, e.Size, status);
+        XK_SERIAL("netboot title: %s, %lu bytes: %#lx\n", path, e.Size, status);
         written = NT_SUCCESS(status);
     }
     ReleaseNetbootPackage();

@@ -88,10 +88,12 @@ RAM disc: the title runs from the disk, as any title launched from it.
 - **Image:** the image as usual (the first bank, or the whole large image), padded to a 4 KiB boundary, then the package. At bank offset 0x5FE0: 'OXTI'
   (0x4954584F), the package's offset in the image, its size. The download limit is 4 MiB (loaders flashed before accept at most 1 MiB).
 - **Package:** {'OXTP', version 1, count, name[16]}, then per file {name[64], offset, size} (offsets from the package's start, each file 16-byte aligned), then
-  the files; padded to a multiple of 1 KiB. DIR's `default.xbe` is stored as NAME.xbe; the other files keep their names.
+  the files; padded to a multiple of 1 KiB. DIR's `default.xbe` is stored as NAME.xbe; the other files keep their names. Version 2 (2026-11-26,
+  `--title-folder FOLDER`): {folder[32]} follows the header, before the file entries, and the title goes to `E:\FOLDER\NAME\` (one folder, made when
+  missing); kernels before it refuse a version 2 package and boot as without a title.
 - **Kernel entry** (cold boots only, `titles/title_netboot.cpp`): with 'OXKP' at bank 0x6000 and the marker present, note the package's physical range and clear
   the marker, so a quick reboot does not find it again.
 - **Memory manager start-up:** the package's pages are held (mapped, counted as contiguous memory), not put on the free lists.
-- **Title launch** (path B of spec/stock/05 §2, before the disc): create `E:\NAME\`, write each file, give the pages back, link D: to the folder, load
+- **Title launch** (path B of spec/stock/05 §2, before the disc): create `E:\NAME\` (version 2: `E:\FOLDER\` and `E:\FOLDER\NAME\`), write each file, give the pages back, link D: to the folder, load
   `E:\NAME\NAME.xbe`. This happens whatever the dashboard would be asked to do: a console without a clock backup always has a reason (the clock is not set). If
   writing or loading fails, the usual disc / dashboard selection follows. Each step is on the log ("netboot title: ...").
