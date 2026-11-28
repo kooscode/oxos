@@ -47,8 +47,8 @@ Boot loop: power off 8 s and on (cold), or `SITE REBOOT` (warm); success = the F
 
 ## 4. Entry snapshot (serial builds)
 start.S reads NV2A 0x10B0, 0x10BC, 0x10E8, NVPLL (0x680500), the PLL select (0x68050C), 0x100210, 0x100200 and 0x100204 before anything else. It keeps them in
-MMX registers until the memory is sized, then stores them at physical 0x2340 ('XC0S' and the eight values). The kernel prints `xcodes at entry: ...`. Build
-switch `-DXK_XCODE_ENTRY_SNAPSHOT=$(SERIAL)`.
+MMX registers until the memory is sized, then stores them at physical 0x2340 ('XC0S' and the eight values), where the GDB kernel's boot stop can read them
+(the memory manager unmaps page 2 after it; the kernel's log does not print them). Build switch `-DXK_XCODE_ENTRY_SNAPSHOT=$(SERIAL)`.
 
 ## 5. Our X-code interpreter (reset code)
 `kernel/boot/reset.S`, the top 512 bytes of each 256 KB bank (bank offset 0x3FE00, run address 0xFFFFFE00).

@@ -9,7 +9,8 @@ The rig is an RP2040 Modxo modchip running the oxos_debug firmware module. Its U
 only while this port is open with DTR set, so the logger keeps it open.
 
   console.py                                            list the connected Modxos: serial number, port, logger and power state
-  console.py log [SERIAL] [--out FILE] [--raw FILE] [--no-dtr]   run the logger (one per Pico; it owns the serial port)
+  console.py log [SERIAL] [--out FILE] [--raw FILE] [--no-dtr] [--gdb PORT]   run the logger (one per Pico; it owns the serial port); --gdb:
+                                                        also a bridge for gdb to a GDB=1 kernel's stub (tools/gdb_bridge.py), on localhost:PORT
   console.py state SERIAL                               print the power state (on / off / unknown / no pico)
   console.py on | off SERIAL                            switch the console on / off (no press if it already is)
   console.py power SERIAL                               press the power button once (a toggle)
@@ -19,13 +20,19 @@ SERIAL is the Pico's USB serial number (the list shows them; /dev/serial/by-id/u
 Modxos instead. The commands talk to that Pico's logger over UDP on 127.0.0.1: each logger takes the first free port from 47800 and answers with its serial
 number; when the Pico has no logger, one is started in the background (its log in /data/sources/tmp/console_SERIAL.txt). --port talks to the logger on that
 port instead, whatever its Pico. The press lasts 2 s (the firmware holds the pin). The power state comes from the status lines' 3v3 level (LPC power).
+The firmware (kooscode/modxo, branch oxos) takes the press wherever 0xFD 'P' is in the stream, and writes its status lines whole. As a safety net, when a
+press does not get through, on and off reset the Pico's USB port (UDP command R), which empties its buffers; the logger does the same when the Pico stops
+taking bytes. The logger also answers UDP command F<text> with its latest log line that contains <text> (tools/debug_console.py finds the FTP server's
+address that way).
 
 Log lines: "HH:MM:SS.mmm post XX" per POST code, "... uart <text>" per COM1 line (a line without its newline is printed after 0.5 s without COM1 bytes, marked
 "[partial line]"), "... pico <status>" per status line. Needs pyserial.
 """
 import argparse
+import collections
 import glob
 import os
+import select
 import socket
 import subprocess
 import sys
@@ -50,6 +57,8 @@ def serial_of(dev):
     real = os.path.realpath(dev)
     return next((sn for sn, d in picos().items() if d == real), "")
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # tools/: gdb_bridge
+
 
 def stamp():
     t = time.time()
@@ -60,12 +69,14 @@ def log(args):
     import serial
     out = open(args.out, "a", buffering=1) if args.out else None
     raw = open(args.raw, "ab", buffering=0) if args.raw else None  # COM1 bytes exactly as sent
+    recent = collections.deque(maxlen=2000)  # the latest log lines, for the F command
 
     def emit(line):
         line = stamp() + " " + line
         print(line, flush=True)
         if out:
             out.write(line + "\n")
+        recent.append(line)
 
     if args.serial:
         dev = picos().get(args.serial)
@@ -73,6 +84,12 @@ def log(args):
             sys.exit("no Pico with serial number %s is connected" % args.serial)
         args.dev = "/dev/serial/by-id/usb-Raspberry_Pi_Pico_%s-if00" % args.serial  # stays right when the ttyACM numbers change
     ident = (args.serial or serial_of(args.dev)).encode()
+    gdb = None  # the gdb bridge (--gdb): COM1 bytes are split into log text and the stub's packets
+    if args.gdb:
+        import gdb_bridge
+        ser_holder = []
+        gdb = gdb_bridge.GdbServer(args.gdb, lambda data: ser_holder[0].write(data) if ser_holder else None, emit)
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if args.port is not None:
         sock.bind(("127.0.0.1", args.port))
@@ -87,10 +104,12 @@ def log(args):
             sys.exit("no free UDP port in %d-%d" % (PORT, PORT + PORTS - 1))
     emit("commands on 127.0.0.1:%d, Pico %s" % (sock.getsockname()[1], ident.decode() or "unknown"))
     sock.setblocking(False)
+    stalled_ready = False  # the gdb bridge's readiness, kept over a reopen after a stalled write (the stub is still there)
     power = None  # the last 3v3 level reported by the Pico: True, False or None (not seen yet)
     while True:
         try:
-            ser = serial.Serial(args.dev, 115200, timeout=0.05)
+            # A write limit: the Pico stops taking bytes when its receive side stalls, and a blocked write would freeze the logger (and the power button)
+            ser = serial.Serial(args.dev, 115200, timeout=0.05, write_timeout=2)
             ser.dtr = not args.no_dtr  # without DTR the Pico does not answer the Super I/O probe: no COM1
         except (serial.SerialException, OSError) as e:
             emit("port %s: %s (retrying)" % (args.dev, e))
@@ -109,6 +128,18 @@ def log(args):
                     time.sleep(0.05)
             continue
         emit("opened " + args.dev)
+        splitter = None
+        if gdb:
+            ser_holder[:] = [ser]
+            gdb.console_off()  # until the stub says it is ready
+            gdb.ready = args.gdb_ready or stalled_ready
+            stalled_ready = False
+
+            def on_line(line):
+                gdb.on_line(line)
+                emit("uart " + line)
+
+            splitter = gdb_bridge.RspSplitter(on_line, gdb.to_gdb, gdb.to_gdb)
         text = bytearray()
         status = None
         want_code = False
@@ -116,8 +147,11 @@ def log(args):
         try:
             while True:
                 try:
-                    cmd, peer = sock.recvfrom(16)
-                    if cmd == b"P":
+                    cmd, peer = sock.recvfrom(256)
+                    if cmd[:1] == b"F":  # the latest log line with this text
+                        found = next((line for line in reversed(recent) if cmd[1:].decode("latin-1") in line), "")
+                        sock.sendto(found.encode("latin-1")[-1000:], peer)
+                    elif cmd == b"P":
                         if args.no_dtr:  # the Pico takes commands only while DTR is set: raise it for the press
                             ser.dtr = True
                             time.sleep(0.3)
@@ -130,9 +164,19 @@ def log(args):
                         sock.sendto({True: b"on", False: b"off", None: b"unknown"}[power], peer)
                     elif cmd == b"I":
                         sock.sendto(ident, peer)
+                    elif cmd == b"G":  # the gdb bridge: whether the stub has said it is ready since the kernel last started
+                        sock.sendto(b"ready" if gdb and gdb.ready else (b"waiting" if gdb else b"no bridge"), peer)
+                    elif cmd == b"R":
+                        raise PicoUsbReset()
                 except BlockingIOError:
                     pass
-                data = ser.read(4096)
+                if gdb:  # wake on either side at once: a 50 ms read would add 50 ms to every gdb round trip
+                    readable, _, _ = select.select([ser.fileno()] + gdb.sockets(), [], [], 0.05)
+                    data = ser.read(ser.in_waiting) if ser.fileno() in readable else b""
+                    gdb.poll(readable)
+                    splitter.flush_partial()
+                else:
+                    data = ser.read(4096)
                 if text and time.time() - last_rx > 0.5:  # 0.5 s without COM1 bytes (status lines don't count)
                     emit("uart " + text.decode("latin-1").rstrip("\r") + "  [partial line]")
                     text.clear()
@@ -142,6 +186,8 @@ def log(args):
                             line = status.decode("latin-1")
                             if line.startswith("3v3="):
                                 power = line[4] == "1"
+                                if gdb and not power:
+                                    gdb.console_off()
                             emit("pico " + line)
                             status = None
                         else:
@@ -153,6 +199,10 @@ def log(args):
                         want_code = True
                     elif b == 0xFC:
                         status = bytearray()
+                    elif splitter:
+                        splitter.feed(bytes([b]))
+                        if raw:
+                            raw.write(bytes([b]))
                     elif b == 0x0A:
                         if raw:
                             raw.write(b"\n")
@@ -163,6 +213,24 @@ def log(args):
                         last_rx = time.time()
                         if raw:
                             raw.write(bytes([b]))
+        except (serial.SerialTimeoutException, PicoUsbReset) as e:
+            if isinstance(e, PicoUsbReset):
+                emit("port: resetting the Pico's USB port (empties its buffers)")
+            else:
+                emit("port: the Pico takes no bytes (its receive side stalled): resetting its USB port")
+            stalled_ready = bool(gdb and gdb.ready)
+            if gdb:
+                gdb.held.clear()  # what gdb sent meanwhile: it sends again
+            try:
+                ser.reset_output_buffer()  # the bytes the Pico would not take: closing would wait 30 s (the tty's closing_wait) for them
+                ser.close()
+            except Exception:
+                pass
+            try:
+                reset_pico_usb(args.dev)
+            except OSError as e:
+                emit("port: USB reset failed: %s" % e)
+            time.sleep(1)  # the Pico enumerates again
         except (serial.SerialException, OSError) as e:
             emit("port lost: %s" % e)
             try:
@@ -170,6 +238,26 @@ def log(args):
             except Exception:
                 pass
             time.sleep(1)
+
+
+class PicoUsbReset(Exception):
+    """The UDP command R: reset the Pico's USB port."""
+
+
+def reset_pico_usb(dev):
+    """A USB port reset of the Pico (USBDEVFS_RESET on its /dev/bus/usb node): TinyUSB empties both serial buffers, so bytes a stopped console never read
+    no longer sit in front of the power button command. The Pico keeps serving the console (LPC) and its flash is untouched; the tty gets a hang-up."""
+    import fcntl
+    usb = os.path.realpath("/sys/class/tty/%s/device/.." % os.path.basename(os.path.realpath(dev)))
+    with open(usb + "/busnum") as f:
+        bus = int(f.read())
+    with open(usb + "/devnum") as f:
+        number = int(f.read())
+    fd = os.open("/dev/bus/usb/%03d/%03d" % (bus, number), os.O_WRONLY)
+    try:
+        fcntl.ioctl(fd, 0x5514, 0)  # USBDEVFS_RESET
+    finally:
+        os.close(fd)
 
 
 def send(port, cmd):
@@ -271,9 +359,12 @@ def switch(port, want):
         sys.exit("no logger answers on 127.0.0.1:%d (run: console.py log)" % port)
     if now == "no pico":
         sys.exit("the logger has no Pico (is it connected? see README.md, Troubleshooting)")
-    for _ in range(2):
+    for attempt in range(2):
         if now == want:
             return True
+        if attempt:  # the press did not get through: bytes a stopped console never read can sit in front of it in the Pico
+            send(port, b"R")
+            time.sleep(3)
         send(port, b"P")
         if wait_state(port, want, 12):
             return True
@@ -291,6 +382,8 @@ def main():
     p.add_argument("--out", help="log: also append the log lines to this file")
     p.add_argument("--raw", help="log: also append the raw COM1 bytes to this file")
     p.add_argument("--no-dtr", action="store_true", help="log: keep DTR low, so the console finds no COM1")
+    p.add_argument("--gdb", type=int, metavar="PORT", help="log: a gdb bridge on localhost:PORT (e.g. 2159) to a GDB=1 kernel's stub")
+    p.add_argument("--gdb-ready", action="store_true", help="log --gdb: the console already runs a stub (it started before this logger)")
     p.add_argument("--off", type=float, default=8.0, help="cycle: seconds off (default %(default)s)")
     args = p.parse_args()
     if args.what in (None, "list") or (args.what != "log" and not args.serial and args.port is None):

@@ -119,7 +119,6 @@ bool Start() {
         Register(HC_RH_PORT_STATUS + 4 * p) = PORT_SET_POWER;
     // Power good (the root hub's own time, 2 ms units), then 100 ms for a device to settle after it is connected.
     SleepMs((Register(HC_RH_DESCRIPTOR_A) >> 24) * 2 + 100);
-    XK_SERIAL("usb: controller running, %lu ports\n", RootPortCount);
     return true;
 }
 

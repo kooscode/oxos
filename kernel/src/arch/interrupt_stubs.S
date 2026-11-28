@@ -3,6 +3,15 @@
 
     .text
 
+// Unwind information for gdb (DEBUG=1 builds): the two common entry paths describe the interrupted code's registers as a signal frame, so a backtrace from
+// a handler goes on into the code the trap or interrupt stopped.
+#if XK_DEBUG_INFO
+#define CFI(...) __VA_ARGS__
+    .cfi_sections .debug_frame
+#else
+#define CFI(...)
+#endif
+
 // --- CPU exceptions: normalize to [vector, error code, eip, cs, eflags] and report.
 .macro EXC_NOERR vec
     .p2align 2
@@ -63,14 +72,22 @@ EXC_NOERR 45                        // int 0x2D: debug service (spec/stock/14)
 // Trap frame (KTRAP_FRAME_XK): edi esi ebp esp ebx edx ecx eax | vector error | eip cs eflags. KiDispatchTrap returns when execution resumes with the (possibly
 // edited) frame; a context with a different stack pointer is resumed through KiContinueContext instead.
 KiTrapCommon:
+    CFI(.cfi_startproc simple; .cfi_signal_frame; .cfi_def_cfa %esp, 20; .cfi_offset %eip, -12)
     pushal
+    CFI(.cfi_def_cfa_offset 52; .cfi_offset %eax, -24; .cfi_offset %ecx, -28; .cfi_offset %edx, -32; .cfi_offset %ebx, -36)
+    CFI(.cfi_offset %ebp, -44; .cfi_offset %esi, -48; .cfi_offset %edi, -52)
     cld
     pushl %esp
+    CFI(.cfi_def_cfa_offset 56)
     call _KiDispatchTrap
     addl $4, %esp
+    CFI(.cfi_def_cfa_offset 52)
     popal
+    CFI(.cfi_def_cfa_offset 20)
     addl $8, %esp
+    CFI(.cfi_def_cfa_offset 12)
     iretl
+    CFI(.cfi_endproc)
 
 // --- Hardware interrupts: push the IRQ number and dispatch in C (KiDispatchHardwareInterrupt).
 .macro IRQ n
@@ -98,14 +115,22 @@ IRQ 14
 IRQ 15
 
 KiIrqCommon:
+    CFI(.cfi_startproc simple; .cfi_signal_frame; .cfi_def_cfa %esp, 16; .cfi_offset %eip, -12)
     pushal
+    CFI(.cfi_def_cfa_offset 48; .cfi_offset %eax, -20; .cfi_offset %ecx, -24; .cfi_offset %edx, -28; .cfi_offset %ebx, -32)
+    CFI(.cfi_offset %ebp, -40; .cfi_offset %esi, -44; .cfi_offset %edi, -48)
     cld
     pushl 32(%esp)                  // IRQ number pushed by the stub
+    CFI(.cfi_def_cfa_offset 52)
     call _KiDispatchHardwareInterrupt
     addl $4, %esp
+    CFI(.cfi_def_cfa_offset 48)
     popal
+    CFI(.cfi_def_cfa_offset 16)
     addl $4, %esp
+    CFI(.cfi_def_cfa_offset 12)
     iretl
+    CFI(.cfi_endproc)
 
     .p2align 2
     .globl _KiIgnoreInterrupt

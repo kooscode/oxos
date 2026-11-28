@@ -105,7 +105,7 @@ template <typename F> static void PciEditAll(ULONG bus, ULONG dev, F edit) {
 // --- Bus masters left running (OXOS addition, spec/oxos_internal/10_dma_quiesce.md). A modchip menu (XeniumOS) or
 // another OS that started this image without a full hardware reset can leave the USB host controllers, the NIC, the audio and IDE DMA engines or the GPU's FIFO
 // running, writing into RAM the kernel is about to reuse: corruption that hangs the boot at varying places on hardware, never in xemu. Before anything here
-// enables bus mastering: log the state each device arrives in, turn bus mastering off and stop or reset each engine. The video overlay (PVIDEO, PMC bit 28):
+// enables bus mastering: turn bus mastering off and stop or reset each engine. The video overlay (PVIDEO, PMC bit 28):
 // stopped and idle, on every boot (cold, and the quick reboot that starts the next title). A dashboard that played video through it can leave a buffer marked
 // in use (0x8700) with an interrupt pending and addresses it never cleared; the hardware then never finishes that buffer, and a title whose graphics set-up
 // stops the overlay and waits for 0x8700 to clear waits for ever. The overlay is stopped, and reset only when the buffer is not released (a reset also clears
@@ -124,7 +124,6 @@ void IdleVideoOverlay() {
     // §4).
     for (ULONG ms = 0; ms < 50 && (nv(0x8700) & 0x11); ms++)
         KeStallExecutionProcessor(1000);
-    [[maybe_unused]] bool reset = false;
     if (nv(0x8700) & 0x11) {
         ULONG v8088 = nv(0x8088), v808c = nv(0x808C);
         auto pmc = (volatile ULONG *)0xFD000200;
@@ -134,22 +133,17 @@ void IdleVideoOverlay() {
         nv(0x808C) = v808c;
         nv(0x8140) = 0;
         nv(0x8100) = 0xFFFFFFFF;
-        reset = true;
+        XK_SERIAL("*** video overlay: the buffer was not released (buffer %lx stop %lx interrupt %lx enable %lx): reset\n", buffer, stop, intr, enable);
     }
-    XK_SERIAL("pci: video overlay: buffer %lx stop %lx interrupt %lx enable %lx -> buffer %lx interrupt %lx%s\n", buffer, stop, intr, enable, nv(0x8700),
-              nv(0x8100), reset ? " (reset: the buffer was not released)" : "");
 }
 
-// Every MCPX function and the GPU at entry: logged, bus mastering off, each engine stopped or reset.
+// Every MCPX function and the GPU at entry: bus mastering off, each engine stopped or reset.
 static void QuiesceBusMasters() {
     constexpr ULONG DEVS[] = {DEV_USB0, DEV_USB1, DEV_NIC, DEV_APU, DEV_AC97, DEV_IDE};
     for (ULONG d : DEVS) {
         ULONG cmd = ReadPci32(0, d, 4);
-        [[maybe_unused]] ULONG bar0 = ReadPci32(0, d, 0x10);
-        XK_SERIAL("pci: at entry 0:%lx.0 cmd %08lx bar0 %08lx\n", d, cmd, bar0);
         WritePci16(0, d, 4, (USHORT)(cmd & ~4u)); // bus master off
     }
-    [[maybe_unused]] ULONG gpuCmd = ReadPci32(1, 0, 4);
     // Memory-mapped engines in 0xFEC00000-0xFEFFFFFF (USB 0xFED00000 / 0xFED08000, NIC 0xFEF00000): not mapped yet (the 2BL maps only RAM, the NV2A and the
     // flash), so map that 4 MB window uncached for a moment through the page directory's self-map (entry 0x300: the directory at 0xC0300000).
     auto pd = (volatile ULONG *)0xC0300000;
@@ -162,7 +156,6 @@ static void QuiesceBusMasters() {
         ULONG bar = ReadPci32(0, d, 0x10) & ~0xFFFu;
         if (bar < 0xFEC00000 || bar >= 0xFF000000 || !(ReadPci32(0, d, 4) & 2))
             continue;
-        XK_SERIAL("pci: USB %lu at entry: control %08lx hcca %08lx\n", d - DEV_USB0, mmio(bar + 4), mmio(bar + 0x18));
         mmio(bar + 0x14) = 0xC000007F; // HcInterruptDisable: all
         mmio(bar + 4) = 0;             // HcControl: USB reset state, every list off
         mmio(bar + 8) = 1;             // HcCommandStatus: host controller reset (clears HCCA and the list pointers)
@@ -172,7 +165,6 @@ static void QuiesceBusMasters() {
     }
     ULONG nic = ReadPci32(0, DEV_NIC, 0x10) & ~0xFFFu;
     if (nic >= 0xFEC00000 && nic < 0xFF000000 && (ReadPci32(0, DEV_NIC, 4) & 2)) {
-        XK_SERIAL("pci: NIC at entry: tx ring %08lx rx ring %08lx tx %lx rx %lx\n", mmio(nic + 0x100), mmio(nic + 0x104), mmio(nic + 0x84), mmio(nic + 0x94));
         mmio(nic + 0x84) = 0;     // transmitter off
         mmio(nic + 0x94) = 0;     // receiver off
         mmio(nic + 0x004) = 0;    // interrupts masked
@@ -202,8 +194,6 @@ static void QuiesceBusMasters() {
     ULONG enable = *pmc;
     // The FIFO's registers only while the FIFO is switched on (PMC bit 8): a switched-off GPU block does not answer properly, and touching one froze consoles
     // (2026-10-23).
-    XK_SERIAL("pci: NV2A at entry: cmd %08lx PMC enable %08lx PFIFO caches %08lx pusher %08lx\n", gpuCmd, enable,
-              (enable & 0x100) ? *(volatile ULONG *)0xFD002500 : 0, (enable & 0x100) ? *(volatile ULONG *)0xFD003220 : 0);
     *pmc = enable & ~0x1100u;
     *pmc = enable;
     IdleVideoOverlay();
@@ -243,11 +233,9 @@ void InitPci() {
     // The bus-master engine keeps its registers across a reset of its owner (a modchip menu or another BIOS started this image): stop it, clear its status and
     // table pointer before anything selects a device. A start bit left set would let the first device to raise DMARQ (the DVD probe's commands) write into
     // reused RAM.
-    XK_SERIAL("pci: IDE bus master at entry: command %#x status %#x table %08lx\n", inb(0xFF60), inb(0xFF62), inl(0xFF64));
     outb(0xFF60, 0);
     outb(0xFF62, 0x06);
     outl(0xFF64, 0);
-    XK_SERIAL("pci: IDE bus master after reset: command %#x status %#x\n", inb(0xFF60), inb(0xFF62));
 
     // NIC.
     PciEditAll(0, DEV_NIC, [](PciSpace &c) {
@@ -321,20 +309,6 @@ void InitPci() {
     WritePci32(1, 0, 0x4C, 0x00000114);
     // The graphics engine to a valid live context, before the splash or any title uses the GPU (spec 24).
     video::InitGraphicsEngine();
-#if XK_DEBUG_SERIAL
-    static const UCHAR devs[] = {0, 1, 2, 3, 4, 5, 6, 9, 0x1E};
-    for (UCHAR d : devs)
-        XK_SERIAL("pci: 0:%x.0 ids %08lx cmd %08lx\n", d, ReadPci32(0, d, 0), ReadPci32(0, d, 4));
-    XK_SERIAL("pci: 1:0.0 ids %08lx; dev1 0x80 %08lx 0x8c %08lx 0xc8 %08lx; ide 0x50 %08lx\n", ReadPci32(1, 0, 0), ReadPci32(0, 1, 0x80), ReadPci32(0, 1, 0x8C),
-              ReadPci32(0, 1, 0xC8), ReadPci32(0, 9, 0x50));
-    XK_SERIAL("pci: memory: host 0x84 %08lx, NV2A PFB 0x100200 %08lx 0x100204 %08lx, NVPLL %08lx, 0x68050C %08lx\n", ReadPci32(0, 0, 0x84),
-              *(volatile ULONG *)0xFD100200, *(volatile ULONG *)0xFD100204,
-              *(volatile ULONG *)0xFD680500, *(volatile ULONG *)0xFD68050C);
-    // The other clocks and the memory timing the X-codes set (debug: a boot with garbled textures).
-    XK_SERIAL("pci: clocks: MPLL %08lx VPLL %08lx host 0x6C %08lx; PFB 0x100210 %08lx 0x100220 %08lx 0x100224 %08lx " "0x100228 %08lx\n",
-              *(volatile ULONG *)0xFD680504, *(volatile ULONG *)0xFD680508, ReadPci32(0, 0, 0x6C), *(volatile ULONG *)0xFD100210, *(volatile ULONG *)0xFD100220,
-              *(volatile ULONG *)0xFD100224, *(volatile ULONG *)0xFD100228);
-#endif
 }
 
 // ACPI power-management block at I/O 0x8000.

@@ -116,8 +116,8 @@ patch = 1010: > 90 90
    patch may be at its own match address). This happens
    - for the preloaded sections, during the load and before the code sections are made read-only;
    - for the others, when the title loads them (XeLoadSection), again on every reload.
-3. **The serial log** shows the counts (matching sections, patches, lines not understood), each section's `name`, and for every patch: written, already there,
-   or the current (match) bytes differ.
+3. **The serial log**, for a title with matching sections (or lines not understood), shows the counts (matching sections, patches, lines not understood),
+   each section's `name`, and for every patch: written, already there, or the current (match) bytes differ.
 
 The records live in the kernel's pool while the title runs (a few bytes per patch). They are freed when the next title is loaded.
 
@@ -131,8 +131,7 @@ to clear; in that state the overlay never finishes and the game hangs on a black
   pending interrupts acknowledged (0x8100 ← 0xFFFFFFFF). Writing 0x8700 does not clear an in-use bit; the stop does, at a vertical blank. The kernel waits up to
   50 ms for that. A buffer still marked in use after the wait is one the overlay never finishes: the overlay is then reset (PMC bit 28 off and on), with 0x8088
   / 0x808C (which the boot display sets, and which the reset would clear) saved and written back, and its interrupts are turned off and acknowledged again.
-- **Log (serial build):** `pci: video overlay: buffer .. stop .. interrupt .. enable .. -> buffer .. interrupt ..`, with `(reset: the buffer was not released)`
-  when the reset was needed.
+- **Log (serial build):** only when the reset was needed: `*** video overlay: the buffer was not released (buffer .. stop .. interrupt .. enable ..): reset`.
 - **Checked:** the test title started from the dashboard several times. With the stop alone the buffer was once still in use at both title switches and the
   title hung; with the wait and the reset it started every time (the buffer was released within the wait on those runs).
 

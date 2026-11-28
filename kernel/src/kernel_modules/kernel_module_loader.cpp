@@ -88,7 +88,6 @@ void WriteKernelModulesCache() {
     at.QuadPart = 0;
     status = NtWriteFile(file, nullptr, nullptr, nullptr, &iosb, (PVOID)header, sizeof(*header) + header->Size, &at);
     NtClose(file);
-    XK_SERIAL("modules: cache written (%lu bytes, %#lx)\n", sizeof(*header) + header->Size, status);
 }
 
 #pragma code_seg()

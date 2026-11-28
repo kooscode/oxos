@@ -488,6 +488,25 @@ void TerminateThread() __attribute__((noreturn));
 extern "C" void KiThreadReturned(); // a system thread's routine returned instead of terminating the thread
 
 // Entered from the interrupt and exception stubs (arch).
+namespace xk::core {
+// The frame KiTrapCommon (arch/interrupt_stubs.S) builds for KiDispatchTrap: pushal, the vector and error code, then the CPU's frame.
+struct KTRAP_FRAME_XK {
+    ULONG Edi, Esi, Ebp, EspIgnored, Ebx, Edx, Ecx, Eax;
+    ULONG Vector, ErrorCode;
+    ULONG Eip, SegCs, EFlags; // the faulting ESP is &EFlags + 1 (no privilege change)
+};
+
+// A thread's processor state, as exception handlers see it (spec/stock/14).
+typedef struct _CONTEXT {
+    ULONG ContextFlags;
+    UCHAR FloatSave[0x204];
+    ULONG Edi, Esi, Ebx, Edx, Ecx, Eax, Ebp, Eip, SegCs, EFlags, Esp, SegSs;
+} CONTEXT, *PCONTEXT;
+XK_SIZE(CONTEXT, 0x238);
+XK_OFFSET(CONTEXT, Eip, 0x224);
+
+extern "C" void KiContinueContext(PCONTEXT Context) __attribute__((noreturn)); // arch/exceptions.S: resume with Context, at its stack pointer
+} // namespace xk::core
 XBAPI void KiDispatchHardwareInterrupt(ULONG irq);
 XBAPI void UnexpectedException(ULONG vector, ULONG errorCode, ULONG eip);
 

@@ -10,7 +10,7 @@ chip to flash and nobody at the console. An AI coding agent (Claude Code) drives
 the PC.*
 
 ## The modchip is the debug port
-The Pico runs Modxo with an OXOS debug module ([`tools/modxo`](../tools/modxo/README.md), firmware on the `oxos-debug` branch of
+The Pico runs Modxo with an OXOS debug module ([`tools/modxo`](../tools/modxo/README.md), firmware on the `oxos` branch of
 [kooscode/modxo](https://github.com/kooscode/modxo)). Over its one USB cable it:
 - holds the BIOS image, reflashed over USB;
 - emulates the console's SuperIO serial port, so the kernel's boot log and crash reports reach the PC (COM1);

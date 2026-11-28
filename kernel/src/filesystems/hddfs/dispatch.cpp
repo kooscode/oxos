@@ -914,7 +914,6 @@ void HDDFSRememberTitleFolder() {
     if (NT_SUCCESS(ObReferenceObjectByHandle(h, &IoFileObjectType, (PVOID *)&fo))) {
         if (fo->DeviceObject && fo->DeviceObject->DriverObject == &HDDFSDriverObject) {
             HDDFSTitleFolder = (HDDFS_FCB *)fo->FsContext; // the open handle keeps it
-            XK_SERIAL("fatx: D: is a hard-disk folder: its sector size is reported as 2048\n");
         }
         ObfDereferenceObject(fo);
     }

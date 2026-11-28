@@ -2,6 +2,8 @@
 
 Status: **proposal**, not implemented (user, 2026-11-15: "full remote debugging - full NXDK support release that will allow nxdk remote debugging, etc. from
 any OS (Mac, Linux, windows) - so home brew developers can build, deploy, debug all in one place"). Nothing here is decided until the user says so.
+The debugger of §2 is **implemented 2026-11-27** over the serial port (§3, choice 2), in its own spec: `oxos_gdb.xos` and the kernel's debug port, with debug
+transports a network extension can provide later. The rest (the `oxos` tool, deploy and run, the network connection) is still a proposal.
 
 Today an nxdk developer can debug at source level only in xemu (`tools/debug_app.py`, VS Code through `tools/vscode/`), and copies a build to a console by
 hand (the File Manager or the FTP server). On a real console there is no debugger: the README lists it under "Not yet". This proposal makes OXOS a development

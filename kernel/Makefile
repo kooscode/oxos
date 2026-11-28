@@ -69,6 +69,13 @@ REBOOT_TEST ?= 0
 ifeq ($(STATEDUMP),1)
 SERIAL := 1
 endif
+# GDB=1: the GDB stub built in (src/debugger/gdb_stub.cpp, shared/gdb_stub; spec/oxos_internal/51 §5), on the debug serial port. Turns SERIAL on.
+# GDB_WAIT=1: a cold boot waits for gdb right after the processor set-up.
+GDB ?= 0
+GDB_WAIT ?= 0
+ifeq ($(GDB),1)
+SERIAL := 1
+endif
 
 # The LLVM tools: from the folder LLVM names (a make option or an environment variable, the same option as the SDK's oxos_extension.mk), by default LLVM
 # 20.1.8's release unpacked in /opt/llvm-20.1.8 when it is there, else (or with LLVM=) from the PATH. LLVM 20.1.0-20.1.2, Ubuntu's clang-20 among them, emit
@@ -92,8 +99,8 @@ ARCH    := -march=pentium -mno-sse -mno-mmx -mno-80387
 # EXTRA_FLAGS: more compiler flags for one-off experiments, in their own BUILD.
 CXXFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -std=c++23 -ffreestanding -fno-exceptions -fno-rtti -fno-builtin \
             -fno-stack-protector -fno-threadsafe-statics -fno-omit-frame-pointer -nostdlib $(OPT) \
-            -Wall -Wextra -Werror -Wno-unused-parameter -Isrc -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST)
-ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Isrc $(if $(filter 1,$(DEBUG)),-g -gdwarf-4)
+            -Wall -Wextra -Werror -Wno-unused-parameter -Isrc -DXK_BOOT_SELFTEST=$(SELFTEST) -DXK_RETAIL_MEDIA_POLICY=$(RETAIL_MEDIA_POLICY) -DXK_TRACE_IMPORTS=$(TRACE_IMPORTS) -DXK_DEBUG_SERIAL=$(SERIAL) -DXK_STATEDUMP=$(STATEDUMP) -DXK_REBOOT_TEST=$(REBOOT_TEST) -DXK_GDB=$(GDB) -DXK_GDB_WAIT=$(GDB_WAIT)
+ASFLAGS := $(EXTRA_FLAGS) $(TARGET) $(ARCH) -Isrc $(if $(filter 1,$(DEBUG)),-g -gdwarf-4 -DXK_DEBUG_INFO=1)
 # The version on the boot splash and the error screens (graphics/text.cpp): vX.Y.Z when built for a release (make release VERSION=X.Y.Z), else DEV (and
 # XK_RELEASE_VERSION 1 or 0: a development build's disk-format countdown is short). It is a generated header, rewritten only when the text changes, so a new
 # version rebuilds what uses it.
@@ -116,9 +123,10 @@ LDFLAGS := /DRIVER /NODEFAULTLIB /ENTRY:KernelEntry /SUBSYSTEM:NATIVE /BASE:0x80
 # Release builds leave out the self-tests and the import tracer: their code and buffers would stay resident and take memory titles count on (Halo 2 needs nearly
 # all of it). Every kernel header (each folder of src/ holds its own): a source file is rebuilt when one changes.
 KERNEL_HEADERS := $(wildcard src/*/*.h src/*/*/*.h modules/*.h $(ROOT)/shared/*.h $(ROOT)/shared/*/*.h)
-# The folders of shared/ the resident kernel builds (shared/ini_file goes into the kernel modules, shared/video_player is for apps only).
+# The folders of shared/ the resident kernel builds (shared/ini_file goes into the kernel modules, shared/video_player is for apps only); GDB=1 kernels also
+# build the GDB stub (shared/gdb_stub, spec/oxos_internal/51 §5).
 # src/runtime/c_library_extensions.cpp is not in the kernel: the SDK's library has it (tools/gen_oxos_sdk.py).
-KERNEL_SHARED_DIRS := graphics
+KERNEL_SHARED_DIRS := graphics $(if $(filter 1,$(GDB)),gdb_stub)
 CXX_SRCS := $(filter-out $(if $(filter 0,$(TRACE_IMPORTS)),src/titles/title_tracer.cpp) src/runtime/c_library_extensions.cpp, \
                          $(wildcard src/*/*.cpp src/*/*/*.cpp $(KERNEL_SHARED_DIRS:%=$(ROOT)/shared/%/*.cpp)))
 # The kernel modules (spec/oxos_internal/43): kernel/modules/ with the shared ini parsers, compiled as the kernel is but linked on their own (below), not into
@@ -208,8 +216,11 @@ $(BUILD)/oxoskrnl.exe: $(OBJS) $(BUILD)/oxoskrnl.def
 	$(OBJCOPY) --strip-all $(BUILD)/oxoskrnl.dbg.exe $@
 	$(GNU_OBJCOPY) -O elf32-i386 $(BUILD)/oxoskrnl.dbg.exe $(BUILD)/oxoskrnl.elf
 else
+# The kernel as before; then oxoskrnl.elf, gdb's symbols for it (the release zip ships it, spec/oxos_internal/51): the kernel itself as ELF plus the names
+# its map gives (tools/make_kernel_symbols.py), so the addresses are the kernel's by construction.
 $(BUILD)/oxoskrnl.exe: $(OBJS) $(BUILD)/oxoskrnl.def
 	$(LD) $(LDFLAGS) /DEF:$(BUILD)/oxoskrnl.def /OUT:$@ $(OBJS)
+	GNU_OBJCOPY=$(GNU_OBJCOPY) python3 -I $(ROOT)/tools/make_kernel_symbols.py $@ $(BUILD)/oxoskrnl.map $(BUILD)/oxoskrnl.elf
 endif
 	python3 -I $(ROOT)/tools/check_kernel_layout.py --exe $@ --map $(BUILD)/oxoskrnl.map --boot-objs $(BOOT_OBJS) \
 	    --boot-entries $(BOOT_ENTRIES) --data-copy $(KI_DATA_COPY_SIZE) $(OBJS) || { rm -f $@; exit 1; }
@@ -291,9 +302,9 @@ bios_256k: $(BUILD)/bios_256k.bin
 # A release, in order, stopping at the first failure: every host unit test (tools/unit_tests.sh), the release images (1 MB and 256 KB, no self-tests, no serial
 # log), the dashboard test on them (make test_dash), and a check that the 256 KB image is the 1 MB image's first bank. VERSION=X.Y.Z also packs the release file
 # build/kernel/release/dist/oxos_vX.Y.Z.zip (release_zip, below: the three images, the FTP server, built with nxdk, which `make nxdk` fetches, the title
-# patches, the shipped extensions and the trainers, in the C:\OXOS layout), puts the kernel extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip,
-# from sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the unit tests and the
-# dashboard test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
+# patches, the shipped extensions and the trainers, in the C:\OXOS layout; beside it symbols/, each kernel's oxoskrnl.elf for gdb, not for the console),
+# puts the kernel extension SDK's release file next to it (oxos_sdk_vX.Y.Z.zip, from sdk/Makefile), and prints the SHA-256 of each. SKIP_TESTS=1 skips the
+# unit tests and the dashboard test, for fast iterations; it cannot be combined with VERSION, so files made for publishing are always tested.
 release:
 	$(if $(and $(filter 1,$(SKIP_TESTS)),$(VERSION)),$(error SKIP_TESTS=1 cannot be used with VERSION: a published release runs every test))
 	$(if $(filter 1,$(SKIP_TESTS)),@echo "release: SKIP_TESTS=1 (unit tests and test_dash skipped)",$(ROOT)/tools/unit_tests.sh)
@@ -330,8 +341,11 @@ release_zip:
 	cp $(OXOS_FTP_XBE) $(RELEASE_OXOS)/apps/oxos_ftp.xbe
 	cp $(OXOS_BOOT_VIDEO_XBE) $(RELEASE_OXOS)/apps/oxos_boot_video.xbe
 	cp $(ROOT)/THIRD_PARTY_NOTICES.md $(RELEASE_DIST)/zip/
+	mkdir -p $(RELEASE_DIST)/zip/symbols/1.6
+	cp $(RELEASE_BUILD)/oxoskrnl.elf $(RELEASE_DIST)/zip/symbols/
+	cp $(RELEASE16_BUILD)/oxoskrnl.elf $(RELEASE_DIST)/zip/symbols/1.6/
 	sed -e 's/@VERSION@/$(VERSION)/g' -e 's/$$/\r/' settings/release_readme.txt > $(RELEASE_DIST)/zip/README.txt
-	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip README.txt OXOS THIRD_PARTY_NOTICES.md
+	cd $(RELEASE_DIST)/zip && zip -q -X -r ../oxos_v$(VERSION).zip README.txt OXOS symbols THIRD_PARTY_NOTICES.md
 	cp $(abspath $(ROOT)/build/sdk/oxos_sdk_v$(VERSION).zip) $(RELEASE_DIST)/
 	cd $(RELEASE_DIST) && sha256sum oxos_v$(VERSION).zip oxos_sdk_v$(VERSION).zip zip/OXOS/bios/*.bin zip/OXOS/oxos_title_patches.ini zip/OXOS/apps/*.xbe
 
@@ -793,6 +807,35 @@ test_fatx_layouts: $(PROBE_XBE) $(HDD_FETCH)
 	python3 -I $(ROOT)/tests/fatx_layout_test.py --bios $(RELEASE_BUILD)/bios.bin --xbe $(PROBE_XBE) --hdd $(HDD_IMAGE) \
 	    $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM)) $(if $(ONLY_CASES),--only $(ONLY_CASES))
 
+# The GDB stub (GDB=1 builds, kernel/src/debugger): tests/gdb_test.py boots a GDB_WAIT=1 kernel in xemu with the gdb test title (tests/gdb_test_title) on a
+# disc and drives the stub over xemu's serial port as gdb does: the boot stop, Ctrl-C, a title breakpoint set before the title loads, threads, a step, a
+# watchpoint, the title's access violation, attaching after the bug check, and the kernel's code left as it was.
+GDB_BUILD      := $(OUT)/gdb_wait
+GDB_TITLE_DIR  := $(ROOT)/tests/gdb_test_title
+GDB_TITLE_XBE  := $(APPS_BUILD)/tests/gdb_test_title_debug/bin/default.xbe
+
+$(GDB_TITLE_XBE): $(NXDK_READY) $(SDL_SCREEN) $(GDB_TITLE_DIR)/gdb_test_title.cpp $(GDB_TITLE_DIR)/Makefile
+	$(NXDK_ENV) DEBUG=y LDFLAGS=-debug:dwarf $(MAKE) -C $(GDB_TITLE_DIR) -j8
+
+test_gdb: $(GDB_TITLE_XBE) $(HDD_FETCH)
+	$(MAKE) BUILD=$(GDB_BUILD) SELFTEST=0 DEBUG=1 GDB=1 GDB_WAIT=1 $(GDB_BUILD)/bios.bin
+	python3 -I $(ROOT)/tests/gdb_test.py --bios $(GDB_BUILD)/bios.bin --map $(GDB_BUILD)/oxoskrnl.map --title $(APPS_BUILD)/tests/gdb_test_title_debug \
+	    --hdd $(HDD_IMAGE) $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
+
+# The GDB debugger as a kernel extension (oxos_gdb.xos, kernel/extensions/oxos_gdb, spec/oxos_internal/51 §3): the release kernel with oxos_gdb.xos enabled
+# on the test disk, its title waiting for gdb at its start; tests/gdb_test.py --extension drives the same session as test_gdb from there, through
+# tools/gdb_bridge.py as gdb on the Modxo rig talks (--bridge).
+GDB_EXTENSION := $(SHIPPED_EXTENSIONS_DIR)/oxos_gdb/oxos_gdb.xos
+test_gdb_extension: $(GDB_TITLE_XBE) $(HDD_FETCH)
+	$(MAKE) BUILD=$(RELEASE_BUILD) SELFTEST=0 $(RELEASE_BUILD)/bios.bin
+	python3 -I $(ROOT)/tools/gen_oxos_sdk.py exports.tsv src $(ROOT)/sdk/src/oxoskrnl.def $(ROOT)/sdk/include/oxos_kernel.h \
+	    $(ROOT)/sdk/src/kernel_table_check.c $(ROOT)/sdk/src/oxos_c_library.cpp
+	$(MAKE) -C $(ROOT)/sdk
+	mkdir -p $(SHIPPED_EXTENSIONS_DIR)/oxos_gdb
+	$(MAKE) -C extensions/oxos_gdb OXOS_OUT=$(SHIPPED_EXTENSIONS_DIR)/oxos_gdb
+	python3 -I $(ROOT)/tests/gdb_test.py --bios $(RELEASE_BUILD)/bios.bin --map $(RELEASE_BUILD)/oxoskrnl.map --title $(APPS_BUILD)/tests/gdb_test_title_debug \
+	    --hdd $(HDD_IMAGE) --extension $(GDB_EXTENSION) --bridge $(if $(MCPX_ROM),--mcpx-rom $(MCPX_ROM))
+
 # The boot video's decoders (spec/oxos_internal/38 §3.1), fetched into third_party/: libmpeg2 0.5.1 (MPEG-1 and MPEG-2 video, GPL v2 or later), its last
 # release, from Debian's copy and checked against Debian's SHA-256; minimp3 (MP2 and MP3 sound, CC0) at a pinned commit.
 LIBMPEG2_DIR    := $(ROOT)/third_party/libmpeg2
@@ -878,4 +921,4 @@ run_stock: $(PLAY_FETCH)
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory regression extensions release_zip nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher apps oxos_ftp oxos_boot_video oxos_intro_video test_boot_video test_iso iso_disc run_iso video_libraries video_decode_title
+.PHONY: all bios bios_256k release netboot mcpx_dump image_test run_image_test hdd_image test test_dash test_encoders test_mcpx test_relaunch test_extensions test_fatal test_format test_upload test_udf test_controller test_memory test_gdb test_gdb_extension regression extensions release_zip nxdk run run_xbe run_trace_xbe xbe_disc run_trace_basic run_trace_full print_trace_dump run_gdb run_stock clean iso_launcher title_launcher apps oxos_ftp oxos_boot_video oxos_intro_video test_boot_video test_iso iso_disc run_iso video_libraries video_decode_title

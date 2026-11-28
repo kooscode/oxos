@@ -746,21 +746,14 @@ void InitDvdDrive() {
         WaitForIdeStatus(IDE_STATUS_BSY, 0, 5000000);
         inb(IDE_STATUS);
     }
-    XK_SERIAL("dvd: lowering IRQL %u -> %u; IRQ 14 taken %lu\n", KeGetCurrentIrql(), old, core::IrqCounts[14]);
     KfLowerIrql(old);
     XK_SERIAL("dvd: %s (step %lu)\n", DvdAbsentReason ? "no drive" : "drive found", DvdAbsentReason);
 
     PDEVICE_OBJECT dev;
-    objects::TraceSymbolicLink = 1;
     NTSTATUS created = io::CreateDevice(&DvdDriverObject, 0, "\\Device\\CdRom0", FILE_DEVICE_CD_ROM, &dev);
-    objects::TraceSymbolicLink = 0;
-    XK_SERIAL("dvd: IoCreateDevice %#lx; IRQ 14 taken %lu\n", created, core::IrqCounts[14]);
-    objects::TraceSymbolicLink = 1;
     NTSTATUS linked = NT_SUCCESS(created) ? io::CreateLink("\\??\\CdRom0:", "\\Device\\CdRom0") : created;
-    objects::TraceSymbolicLink = 0;
     if (!NT_SUCCESS(created) || !NT_SUCCESS(linked))
         user_interface::ShowFatalError(0x10E5F);
-    XK_SERIAL("dvd: link made\n");
     dev->Flags |= 0x44;
     dev->AlignmentRequirement = 1;
     dev->SectorSize = 0x800;
@@ -768,11 +761,9 @@ void InitDvdDrive() {
     DvdDeviceObject = dev;
     KeInitializeTimerEx(&DvdRetryTimer, NotificationTimer);
     KeInitializeDpc(&DvdRetryDpc, DvdRetryRoutine, nullptr);
-    XK_SERIAL("dvd: timer and DPC set up\n");
     // Leave device 0 (the disk) selected and both devices out of a data phase.
     outb(IDE_DRIVE, 0xA0);
     KeStallExecutionProcessor(1);
-    XK_SERIAL("dvd: device ready, selected %#x, status %#x\n", inb(IDE_DRIVE), inb(IDE_ALT_STATUS));
 }
 
 } // namespace xk::hardware::ide

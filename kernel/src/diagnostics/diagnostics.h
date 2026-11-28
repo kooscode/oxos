@@ -30,13 +30,11 @@ void ReportLastWords(); // serial builds: the previous boot's record, then the m
 
 // At kernel entry: DRAM refresh (NV2A PFB 0x100210 bit 31) switched on if it is off (spec/oxos_internal/20).
 void CheckDramRefresh();
-// Before the memory manager unmaps page 2: the boot loader's records (refresh, GPU clock, X-code checks and snapshots, pad calibration); a quick reboot has
-// none.
+// Before the memory manager unmaps page 2: the boot loader's refresh and GPU clock records (serial builds); a quick reboot has none.
 void TakeBootLoaderRecords(bool Quick);
 void ReportMachineChecksAtBoot(bool Quick);     // the CPU signature, microcode and machine-check banks (cleared at a cold boot)
 void ReportMachineCheckBanks(const char *When); // the banks that hold an error
-void ReportNvPads(const char *When);            // the NV2A memory pad registers, and the 2BL's calibration once
-void ReportRefresh();                           // the DRAM refresh, GPU clock and X-code records
+void ReportRefresh();                           // DRAM refresh that was off, a GPU clock the 2BL put back
 extern ULONG MachineCheckBanks;                 // the CPU's machine-check banks (0: none)
 
 // --- The debug log (serial_log.cpp): the kernel's, titles' (DbgPrint, OutputDebugString) and extensions' (oxos_log) debug lines, to the in-memory ring and

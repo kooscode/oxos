@@ -319,6 +319,85 @@ NTSTATUS oxos_toast(const char *Format, ...);
 // Callback gets the extension's own toasts' events, on the run-loop thread at passive level. Register in ExtensionStart, once (a second call returns FALSE).
 BOOLEAN oxos_on_toast(void (*Callback)(ULONG ToastId, OXOS_TOAST_EVENT Event, void *UserData), void *UserData);
 
+// --- 9. Debuggers and debug transports (spec/oxos_internal/51)
+//
+// The kernel's debug port: one debugger at a time (OXOS's own is oxos_gdb.xos, the GDB remote stub) gets the processor's traps, the clock's break-in poll,
+// the bug check and the titles' debug text, and finds the bytes it talks with in a debug transport: the one an extension registered (a network transport,
+// say), else its own. Both are tables of the extension's functions; the kernel forgets them when the extension ends (the title's quick reboot), so each
+// extension attaches or registers again in every ExtensionStart. A debugger stops the console inside a trap, with interrupts off: everything it and the
+// transport do then is polled, and no kernel function that waits may be called.
+
+// The registers a trap saved, as the kernel's trap entry pushes them: the stopped code's stack pointer is the address after EFlags (no privilege change).
+typedef struct OXOS_TRAP_FRAME {
+    ULONG Edi, Esi, Ebp, EspIgnored, Ebx, Edx, Ecx, Eax;
+    ULONG Vector, ErrorCode; // the processor's exception number (3 = int3, 1 = single step or debug register), its error code or 0
+    ULONG Eip, SegCs, EFlags;
+} OXOS_TRAP_FRAME;
+
+// A debug transport: the bytes between the debugger and its host (gdb on a PC). Every function may be called with interrupts off, at any IRQL, from a trap;
+// none may wait for an interrupt, a lock or another thread.
+typedef struct OXOS_DEBUG_TRANSPORT {
+    ULONG Size;                        // sizeof(OXOS_DEBUG_TRANSPORT)
+    const char *Name;                  // for the log: "serial", "network"
+    BOOLEAN (*ReadByte)(UCHAR *Byte);  // a byte from the host if one has come; never waits
+    BOOLEAN (*WriteByte)(UCHAR Byte);  // sends one byte, waiting (bounded) for room; FALSE when it could not
+    BOOLEAN (*IsHostPresent)(void);    // whether a host is there to talk to (the link is up); a byte may still be lost
+    void (*Flush)(void);               // waits (bounded) until every byte written has left: before a reboot empties the buffers
+} OXOS_DEBUG_TRANSPORT;
+
+// A debugger: the kernel calls these, each from the place its comment names. HandleTrap and PollBreakIn run at every trap and every clock tick while it is
+// attached: they return at once when the event is not the debugger's.
+typedef struct OXOS_DEBUGGER {
+    ULONG Size;                                                  // sizeof(OXOS_DEBUGGER)
+    BOOLEAN (*HandleTrap)(OXOS_TRAP_FRAME *Frame);               // every processor trap, first: TRUE when it was the debugger's (the frame resumes)
+    BOOLEAN (*StopOnUnhandledException)(OXOS_TRAP_FRAME *Frame); // an exception nothing handled: TRUE resumes the frame, FALSE goes on to the bug check
+    void (*StopOnBugCheck)(ULONG Code);                          // KeBugCheckEx, before its screen
+    void (*WaitAfterBugCheck)(void);                             // after the bug-check screen, again and again: the console never comes back
+    void (*PollBreakIn)(PULONG InterruptedFrame);                // the clock interrupt, every millisecond: the interrupted eip, cs, eflags
+    void (*TitleLoaded)(const char *Path);                       // the title's XBE is in memory, before its entry point
+    BOOLEAN (*PrintDebugText)(const char *Text, ULONG Length);   // a title's DbgPrint or OutputDebugString text: TRUE when the debugger took it
+} OXOS_DEBUGGER;
+
+// An image the kernel loaded besides itself and the title (OXOS_DEBUG_PORT ListImages): its PE headers are at Base.
+typedef struct OXOS_DEBUG_IMAGE {
+    const char *Name; // the kernel modules: "kernel_modules"; an extension: its section in oxos_extensions.ini
+    PVOID Base;       // where it is loaded
+    ULONG Kind;       // OXOS_DEBUG_IMAGE_KERNEL_MODULES or OXOS_DEBUG_IMAGE_EXTENSION
+} OXOS_DEBUG_IMAGE;
+#define OXOS_DEBUG_IMAGE_KERNEL_MODULES 1
+#define OXOS_DEBUG_IMAGE_EXTENSION 2
+
+// The kernel's side of the debug port: attaching, transports, and what a debugger needs to know about threads that only the kernel can tell. Threads are
+// the kernel's KTHREAD addresses.
+typedef struct OXOS_DEBUG_PORT {
+    ULONG Size; // sizeof(OXOS_DEBUG_PORT) of the kernel that filled it
+    // Attaches Debugger (STATUS_DEVICE_BUSY: another one is attached, such as a GDB=1 kernel's own); detaching forgets it (another one's: nothing).
+    NTSTATUS (*AttachDebugger)(const OXOS_DEBUGGER *Debugger);
+    void (*DetachDebugger)(const OXOS_DEBUGGER *Debugger);
+    // Registers Transport for the debugger to use (STATUS_DEVICE_BUSY: one is registered); the registered one, or null.
+    NTSTATUS (*RegisterTransport)(const OXOS_DEBUG_TRANSPORT *Transport);
+    void (*UnregisterTransport)(const OXOS_DEBUG_TRANSPORT *Transport);
+    const OXOS_DEBUG_TRANSPORT *(*Transport)(void);
+    // Whether Address can be read without a fault (the page tables).
+    BOOLEAN(NTAPI *IsAddressValid)(PVOID Address);
+    // The thread running now (null before the scheduler starts); the threads, the idle thread first, Count of them in Threads (up to Max).
+    PVOID (*CurrentThread)(void);
+    ULONG (*ListThreads)(PVOID *Threads, ULONG Max);
+    // A thread that is not running: ebx, esp, ebp, esi, edi, eip, eflags from where it was switched out (Registers in gdb's order, eax to gs; the others 0).
+    BOOLEAN (*ReadThreadRegisters)(PVOID Thread, ULONG Registers[16]);
+    // A thread's state (0 new, 1 ready, 2 running, 3 standby, 4 ended, 5 waiting) and priority; FALSE when Thread is not one.
+    BOOLEAN (*DescribeThread)(PVOID Thread, ULONG *State, LONG *Priority);
+    // The thread whose x87/SSE registers are in the processor now (null: none); where another thread's are saved (512 bytes, FXSAVE's layout).
+    PVOID (*FloatOwnerThread)(void);
+    PVOID (*FloatArea)(PVOID Thread);
+    // The images loaded besides the kernel and the title, Count of them in Images (up to Max): the kernel modules while they are mapped (during a
+    // launch), then each loaded extension, in oxos_extensions.ini's order.
+    ULONG (*ListImages)(OXOS_DEBUG_IMAGE *Images, ULONG Max);
+} OXOS_DEBUG_PORT;
+
+// The kernel's debug port (kernels after 0.5.9; an older one has no such export and does not load the extension).
+const OXOS_DEBUG_PORT *oxos_debug_port(void);
+
 // --- How the macros above work: nothing here to use
 
 #define OXOS_EXTENSION_MAGIC 0x58534F58UL         // "XOSX"

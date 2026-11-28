@@ -88,7 +88,6 @@ static void SetUpDevice(bool LowSpeed, ULONG Depth) {
     }
     if (ControlTransfer(device, TO_DEVICE, REQUEST_SET_CONFIGURATION, config[5], 0, 0, nullptr) < 0)
         return;
-    XK_SERIAL("usb: device %u: class %02x%s\n", address, head[4], hub ? ", a hub" : "");
     if (hub && Depth < MAX_HUB_DEPTH)
         return SetUpHub(device, Depth);
     DeviceFound(device, config, length);

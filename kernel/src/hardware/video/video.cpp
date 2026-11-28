@@ -789,7 +789,6 @@ void PrepareBootDisplay() {
     reg32(0x000200) = 0xFFFFFFFF;
     // 6. (The part the display needs) PFB 0x100214 bit 0 clear.
     reg32(0x100214) = reg32(0x100214) & ~1u;
-    XK_SERIAL("av: RAMDAC general control %#lx before the boot display\n", reg32(0x680600));
     // 7. CRTC and video overlay set-up.
     regs[0x6013D4] = 0x1F;
     UCHAR lock = regs[0x6013D5];

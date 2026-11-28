@@ -28,6 +28,12 @@ show_video_mode = no under [toasts] in C:\OXOS\oxos_settings.ini.
 If a title leaves the sound chip frozen, "Audio Codec Frozen - Restarting"
 shows and the console restarts into the same launch, with sound.
 
+DEBUGGING (developers)
+OXOS\extensions\oxos_gdb.xos lets gdb on a PC debug titles and the kernel over
+the console's serial port; it ships off (oxos_extensions.ini, [oxos_gdb]).
+symbols\ holds each kernel's symbols for gdb (oxoskrnl.elf; symbols\1.6\ for
+the 1.6 image): not for the console.
+
 EXFAT DISKS
 Titles see an exFAT disk as exFAT. For a title that only accepts FATX:
 show_exfat_as_fatx = yes under [storage] in C:\OXOS\oxos_settings.ini.

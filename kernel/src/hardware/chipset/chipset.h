@@ -72,6 +72,8 @@ void WritePci32(ULONG bus, ULONG dev, ULONG reg, ULONG v);
 // SMBus, the SMC and firmware return (smbus.cpp, spec/stock/12).
 XBAPI NTSTATUS NTAPI HalReadSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN ReadWordValue, PULONG DataValue);
 XBAPI NTSTATUS NTAPI HalWriteSMBusValue(UCHAR SlaveAddress, UCHAR CommandCode, BOOLEAN WriteWordValue, ULONG DataValue);
+namespace xk::hardware::chipset {
+} // namespace xk::hardware::chipset
 XBAPI NTSTATUS NTAPI HalReadSMCTrayState(PULONG TrayState, PULONG TrayStateChangeCount);
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine);
 namespace xk::hardware::chipset {

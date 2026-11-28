@@ -74,7 +74,6 @@ void StartWatchingControllers() {
         return;
     UsbRunning = true;
     hardware::usb::SetUpDevices(FoundDevice);
-    XK_SERIAL("gamepad: %lu pads\n", ControllersFound);
 }
 
 void PollControllers() {

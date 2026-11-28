@@ -583,7 +583,6 @@ static void IdentifyDisk() {
         }
         KeStallExecutionProcessor(10);
     }
-    XK_SERIAL("disk: ready after %lu ms\n", (ULONG)((KeQueryInterruptTime() - start) / 10000));
     KIRQL old = KfRaiseIrql(IdexChannelObject.InterruptIrql);
     DiskLastStatus = inb(IDE_ALT_STATUS);
     if (!DiskCommand(0xEF, 0x03, 0x0C) || !DiskCommand(0xEF, 0x03, 0x42)) // PIO 4, UDMA 2

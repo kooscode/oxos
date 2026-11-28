@@ -99,11 +99,6 @@ static bool EXFATEntryFromSet(HDDFS_VOLUME *v, const EXFAT_SET *s, HDDFS_ENTRY *
     ULONGLONG length = *(const ULONGLONG *)(st + 24);
     if (length > 0xFFFFFFFFull && (attributes & FILE_ATTRIBUTE_DIRECTORY))
         return false;
-#if XK_DEBUG_SERIAL
-    if (ULONGLONG valid = *(const ULONGLONG *)(st + 8); valid != length && length >= 0x4000000) {
-        XK_SERIAL("exfat: file at cluster %#lx: valid data length %#llx of %#llx\n", *(const ULONG *)(st + 20), valid, length);
-    }
-#endif
     memset(Out, 0, sizeof(*Out));
     for (ULONG i = 0; i < nameLength; i++) {
         const UCHAR *n = s->e[2 + i / 15];

@@ -132,22 +132,27 @@ characters or fewer.
 Details: [`../spec/oxos_internal/16_virtual_discs.md`](../spec/oxos_internal/16_virtual_discs.md).
 
 ## Debugging with gdb or VS Code
-xemu's GDB server and a debug build of the kernel (`DEBUG=1`: DWARF debug info, `-Og`) let you debug at source level: breakpoints, stepping, variables and the
-call stack, in your own [nxdk](https://github.com/XboxDev/nxdk) apps and in the kernel, in one session (step from your app into a kernel call and back). You
-need `gdb-multiarch` and GNU `objcopy` (binutils).
+OXOS can be debugged at source level, kernel and titles in one session (step from your app into a kernel call and back), in two places:
+- **In xemu**, through xemu's GDB server and a debug build of the kernel (`DEBUG=1`: DWARF debug info, `-Og`).
+- **On a real console**, through OXOS's own GDB debugger (spec/oxos_internal/51): the kernel extension `oxos_gdb.xos` on a release kernel (it ships in the
+  release zip, off), or built into a `GDB=1` kernel, talking to gdb over the console's serial port.
 
-**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and press F5. It asks for a disc image
-(leave it empty for the dashboard), builds the debug kernel, starts xemu paused and runs to your breakpoint. For example, a breakpoint in
-`titles::LoadImageFile` (`src/titles/title_loader.cpp`) stops on every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the title's name and
-`XeImageFileName` its path.
+You need `gdb-multiarch` and GNU `objcopy` (binutils); for VS Code, the C/C++ extension (`ms-vscode.cpptools`).
+
+### In xemu
+**The kernel in VS Code:** open the OXOS folder itself (its `.vscode/` is set up), set a breakpoint in kernel source and press F5 on "OXOS kernel: Xemu
+(Run)". It asks for a disc image (leave it empty for the dashboard), builds the debug kernel, starts xemu paused and runs to your breakpoint. For example, a
+breakpoint in `titles::LoadImageFile` (`src/titles/title_loader.cpp`) stops on every title load; the watch `(char16_t*)(*(unsigned*)0x10118 + 12)` shows the
+title's name and `XeImageFileName` its path.
 
 ![Kernel debugging in VS Code: stopped in titles::LoadImageFile, with the loaded title's name in a watch](../docs/kernel_debugging.jpg)
 
-**An nxdk app in VS Code** (C/C++ extension, `ms-vscode.cpptools`):
+**An nxdk app in VS Code:**
 1. Copy `../tools/vscode/*.json` into your app's `.vscode/` folder and set `oxos.dir` and `oxos.nxdkDir` in `settings.json`.
-2. Set breakpoints and press F5. VS Code builds the app with `make DEBUG=y`, then `tools/debug_app.py` builds the debug kernel (once), packs the app's `bin/`
-   folder as a disc, and starts xemu paused with the kernel's serial log in the terminal. VS Code attaches, the kernel boots the disc, and the app stops at your
-   first breakpoint. Stopping the debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel calls.
+2. Set breakpoints and press F5 on "OXOS: debug in xemu". VS Code builds the app with `make DEBUG=y`, then `tools/debug_app.py` builds the debug kernel
+   (once), packs the app's `bin/` folder as a disc, and starts xemu paused with the kernel's serial log in the terminal. VS Code attaches, the kernel boots the
+   disc, and the app stops at your first breakpoint. Stopping the debugger closes xemu. Kernel source is loaded too, so you can step from the app into kernel
+   calls.
 3. Add `.oxos/` (the disc image and gdb symbol file the launcher writes) to your app's `.gitignore`.
 
 **From a terminal:** `make run_gdb` starts the debug kernel paused (add `ISO=...` for a disc); attach with `gdb-multiarch ../build/kernel/debug/oxoskrnl.elf -ex
@@ -155,8 +160,56 @@ need `gdb-multiarch` and GNU `objcopy` (binutils).
 attach with `gdb-multiarch path/to/app/.oxos/main.elf -ex 'set confirm off' -ex 'add-symbol-file ../build/kernel/debug/oxoskrnl.elf' -ex 'target remote
 localhost:1234'`.
 
-Notes: gdb sees one CPU, not the app's threads; timers stop while you are paused. C++ apps should add `CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract` to
-their Makefile, so that gdb shows function names (it cannot read the MSVC-style names nxdk's compiler uses). Debugging on a real Xbox is not implemented yet.
+Notes: xemu's GDB server shows one CPU, not the app's threads; timers stop while you are paused. C++ apps should add `CXXFLAGS += -mllvm
+-dwarf-linkage-names=Abstract` to their Makefile, so that gdb shows function names (it cannot read the MSVC-style names nxdk's compiler uses).
+
+### On a real console
+What it does: software and hardware breakpoints, single steps, watchpoints (any size, on the four debug registers), the title's threads with their registers
+and stacks, reading and writing memory and registers, memory search on the console (`find`), a stop at a title's crash (and after a bug check), Ctrl-C into a
+running title, `call`, `DbgPrint` in gdb, and following the console from one title into the next. Any title can be debugged, retail ones too.
+
+**What you need:**
+- The console's serial port on the PC, through a bridge that gdb connects to on `localhost:2159` and that also prints the kernel's log:
+  - the Modxo rig: `python3 -I ../tools/modxo/console.py log SERIAL --gdb 2159` (it owns the Pico's serial port;
+    [`tools/modxo/README.md`](../tools/modxo/README.md)). Use the Modxo firmware's `oxos` branch ([kooscode/modxo](https://github.com/kooscode/modxo)):
+    its USB serial port carries gdb's packets reliably and adds the power button and POST codes; the stock firmware's COM1 is untested;
+  - a debug kit's or a SuperIO's COM1 on a USB serial adapter: `python3 -I ../tools/gdb_bridge.py --serial /dev/ttyUSB0`.
+- `oxos_gdb.xos` on: in `C:\OXOS\oxos_extensions.ini`, `[oxos_gdb]` `enabled = yes`. Its settings are in `C:\OXOS\extensions\oxos_gdb.ini`:
+  `wait_for_gdb = yes` stops each title at its first instruction until gdb attaches; `title = NAME` limits that (and gdb's title breakpoints) to the titles
+  whose path contains NAME. A kernel older than the debugger refuses it (the extension unloads itself).
+- The kernel's symbols: the release zip's `symbols/oxoskrnl.elf` (`symbols/1.6/` for the 1.6 image), names of the kernel's functions and variables;
+  every build writes its own next to `oxoskrnl.exe`. A `DEBUG=1` build's also has source lines.
+
+**Your own nxdk app, F5 in VS Code:** with `../tools/vscode/*.json` in the app's `.vscode/` (as for xemu), set `oxos.console` (the Modxo's serial number,
+`tools/modxo/console.py` lists them) and `oxos.consoleMcpx16` (`"1"` for a 1.6) in its `settings.json`, then F5 on "OXOS: debug on the console". It builds the
+app, `tools/debug_console.py APP --release` netboots the release kernel with the app, puts `oxos_gdb.xos` on the console's C: over its FTP server the first
+time, power-cycles the console, and gdb attaches with the title stopped at its start. Only one console may be on (the others are checked off). The task "oxos:
+remove the debugger from the console" (`debug_console.py --remove`) takes `oxos_gdb.xos` off the console again, its `oxos_extensions.ini` as it was.
+
+**Any running title (a retail game too), attach in VS Code:** start the title on a console with `oxos_gdb.xos` on, then in the OXOS folder pick "OXOS title:
+Console 1.6, release kernel (Attach)" (its `program` is the 1.6's release kernel symbols; use `build/kernel/release/oxoskrnl.elf` for the other consoles)
+and press F5: no build, no power cycle; stopping the session leaves the title running. A title without symbols shows its code in the Disassembly View (Call
+Stack, right-click the top frame). gdb commands go in the Debug Console with `-exec`, and memory is read and written only while the title is paused (F6):
+```text
+-exec find /h 0x10000, 0x4000000, 60                      every 16-bit 60 in the title's memory (searched on the console)
+-exec find /w 0x80000000, 0x84000000, 0x001e006c          a 32-bit value in contiguous memory, where titles keep much of their data
+-exec watch *(short*)0x82e42b0c                            stop when the title writes it: F5, then make it change in the game
+-exec x/6i $pc-14                                          the instructions that wrote it
+-exec set var *(short*)0x82e42b0c = 99                     change it; F5 and the game goes on with it
+-exec delete                                               remove the watchpoints
+```
+To find a value such as the ammo in a game: search for the number the screen shows, change it in the game, search the hits again for the new number
+(`find` again, or read them), until one is left; then `watch` it.
+
+**From a terminal:**
+```sh
+python3 -I ../tools/debug_console.py path/to/app --release --console SERIAL      # --mcpx16 for a 1.6
+gdb-multiarch path/to/app/.oxos/main.elf -ex 'target extended-remote localhost:2159' -ex 'source path/to/app/.oxos/console.gdb'
+gdb-multiarch ../build/kernel/release/oxoskrnl.elf -ex 'target extended-remote localhost:2159'   # attach to whatever runs
+```
+gdb loads the symbols of the kernel and the extensions from the debugger's library list (`console.gdb` sets the search path), follows the console into each
+new title, and `run` starts the title again (`set remote exec-file E:\Games\X\default.xbe` first: another XBE). **The kernel too:** a `GDB=1` kernel
+(`debug_console.py APP` without `--release`) has the debugger from the boot on, so the boot and every launch can be debugged as well.
 
 ## About the BIOS image you build
 `make bios` contains our code plus parts of XboxDev/cromwell (X-codes and the EEPROM key states), both GPL-2.0, and Intel's CPU microcode (unmodified, under
@@ -184,6 +237,7 @@ from which titles derive their save-signature and System Link keys: with it, sav
 | `src/boot_splash/` | the boot splash (one picture faded in, held 4 s; spec/oxos_internal/00): boot-only code, freed before the first title starts (spec/oxos_internal/18) |
 | `src/core/` | processor bring-up (GDT/TSS/IDT/PCR), start-up, clock, IRQL, DPCs, APCs, threads and system threads, scheduler, waits, timers, exceptions, bug checks |
 | `src/crypto/` | SHA-1, HMAC, RC4, DES block ciphers, RSA (modular exponentiation, PKCS signature checks) |
+| `src/debugger/` | the debug port (spec/oxos_internal/51 §2): one debugger (`oxos_gdb.xos`, or a `GDB=1` kernel's own) gets the traps, the clock's break-in poll, the bug check, the title's start and the debug text (`debug_port.cpp`, resident); a `GDB=1` kernel's own GDB stub (`gdb_stub.cpp`, the shared stub of `shared/gdb_stub`) |
 | `src/diagnostics/` | what a console that freezes or faults leaves in CMOS for the next boot: start-up marks and their watchdog (`boot_marks.cpp`), the last words of an exception or bug check (`last_words.cpp`); and the start-up reports for the serial log: DRAM refresh, GPU clock, X-code checks, machine checks, NV2A memory pads (`boot_reports.cpp`); the debug log, every debug line's way to the serial port and its in-memory copy, in `SERIAL=1` builds only (`serial_log.cpp`: `XK_SERIAL`, `DbgPrint`, extensions' `oxos_log`); and the log files in `C:\OXOS\log` (`file_log.cpp`, spec/oxos_internal/35) |
 | `src/extensions/` | kernel extensions (spec/oxos_internal/34). Resident while a title runs: `extension_runtime.cpp` (hooked imports, events, the end of a title, and `LoadExtensions`, which runs the loader, a kernel module, before each title) |
 | `src/kernel_modules/` | the kernel module loader and unloader (spec/oxos_internal/43): `kernel_module_loader.cpp` maps the modules' image for each launch (from the kernel image at a cold boot, from `C:\OXOS\cache\oxos_kernel.cache` after a quick reboot) and frees it before the title starts; `kernel_modules.h` is the table of the modules' functions |

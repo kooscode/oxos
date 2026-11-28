@@ -121,6 +121,7 @@ apply it, so the extension needs no code for it; the SDK's `oxos_extensions.ini`
 | Title events | `oxos_on_title_loading`, `oxos_on_title_loaded`, `oxos_on_title_exiting` (in `ExtensionStart`); `oxos_title_redirect` starts another XBE in place of a title being loaded |
 | Toasts | `oxos_toast_enqueue` (any IRQL, hooks too; never waits), `oxos_toast_enqueue_wait`, `oxos_toast("...")`, `oxos_on_toast` (its toasts shown, hidden or dropped): a short message over the title on the GPU's video overlay (C++; `examples/example_toast`) |
 | Pads, launches and resets | `oxos_on_pad_changed` (each change of a pad's buttons, in any title), `oxos_pad_state`; `oxos_title_launch` (stop the title, start an XBE or the dashboard), `oxos_console_reset` (C++; `kernel/extensions/oxos_igs/` uses them) |
+| Debuggers and debug transports | `oxos_debug_port()`: attach a debugger to the kernel's traps, or register a debug transport (the bytes between a debugger and its host, for example over the network) that OXOS's GDB debugger (`oxos_gdb.xos`) then uses; everything runs polled, with interrupts off (`oxos_sdk.h` section 9) |
 | The C library | `strlen`, `strcmp`, `strcasecmp`, `strchr`, `strstr`, `strlcpy`, `snprintf`, `strtoul`, `memcpy`, `memset`, `toupper`, `isdigit`, ... under their usual names |
 | The kernel | every function of the Xbox kernel, by name, as `include/oxos_kernel.h` declares it (`NtReadFile`, `KeTickCount`, `HalWriteSMBusValue`, ...) |
 

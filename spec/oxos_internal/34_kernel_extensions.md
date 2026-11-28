@@ -681,15 +681,9 @@ other name; the `oxos_` prefix is OXOS's. Kernel features keep their files (`oxo
   spec/oxos_internal/43: about 4 KB), without needing an extension.
 
 ### 10.1 Proposed extensions (not decided)
-- **GDB remote debugging (`gdbstub.xos`)**: debug a title (an nxdk game netbooted with its `.xos`, §10) from `gdb` on a PC with the GDB remote protocol:
-  breakpoints, single steps, hardware watchpoints (DR0-DR7), reading and writing memory and registers, the title's threads.
-  - Needs a new kernel interface: **exception callbacks**: first chance at breakpoint (`int 3`, `STATUS_BREAKPOINT`), single-step and debug-register exceptions
-    and faults, with the trap frame, able to handle one and resume (`kernel/src/core/exceptions.cpp` today ends them in the debug service or the fatal screen).
-    While stopped, the stub keeps the processor in its handler and polls its connection, as a kernel debugger does, so every thread of the title stands still.
-  - **Connection:** the serial port first (debug kits, the Modxo's COM1 and other LPC serial ports; polled, no sharing). Over the network only for titles that
-    do not use the network themselves: an nxdk title drives the network card with its own lwIP driver, and two drivers on one card do not work. *Open:* a way to
-    share it.
-  - Symbols: the title built with DWARF (`lld-link /DEBUG:DWARF`); its addresses are the XBE's, so `gdb` loads the `.exe` as it is.
+- **GDB remote debugging:** **implemented 2026-11-27** as `oxos_gdb.xos` (`kernel/extensions/oxos_gdb/`, its own spec): the kernel's debug port
+  (the exception callbacks this proposal asked for: every trap first, the unhandled exception, the bug check, the clock's break-in poll, the title's start,
+  the debug text; `oxos_sdk.h` §9), the serial port first, and a debug transport another extension registers (the network, later).
 - **Screenshots (`screenshot.xos`)**: a controller combination saves the screen the console shows as a file on the disk.
   - Needs: the pads' changes (§7.3, `oxos_on_pad_changed`), for every title.
   - The event only sets a flag; the next `RunLoop` reads the front buffer (its address, pitch and format from the GPU's display registers) and writes a BMP or

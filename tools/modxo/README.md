@@ -11,9 +11,11 @@ console debug rig:
 These scripts are the PC side.
 
 ## Hardware
-- An RP2040 Modxo board on the LPC header, flashed with Modxo built from the **`oxos-debug` branch** of [kooscode/modxo](https://github.com/kooscode/modxo). The
-  module is `modxo_modules/oxos_debug`; its README has the stream format. Build as Modxo (`cmake` for your board, then `ninja`), and flash the firmware .uf2
-  with `flash_uf2.sh`.
+- An RP2040 Modxo board on the LPC header, flashed with Modxo built from the **`oxos` branch** (the default) of
+  [kooscode/modxo](https://github.com/kooscode/modxo). The module is `modxo_modules/oxos_debug`; its README has the stream format. Build as Modxo (`cmake`
+  for your board, then `ninja`), and flash the firmware .uf2 with `flash_uf2.sh`. The firmware serves USB on the Pico's second core: status lines go out
+  whole, never cut by COM1 bytes, and the power-button command is taken wherever it is in the PC's stream, so a console stopped in the GDB debugger cannot
+  hold it back.
 - Power button: GPIO 28 (`OXOS_POWER_PIN`) → 1 kΩ → base of an NPN transistor (e.g. 2N2222). Emitter to Xbox ground, collector to the power switch's signal
   side. On the RP2040-Tiny GPIO 28 is SERIRQ, so that branch leaves the SERIRQ module unregistered.
 - **1.6 board without the transistor** (e.g. an RP2040-Zero on the ModXo-RP2040-Zero PCB): build Modxo with `-DMODXO_PINOUT=rp2040_zero_1_6` and wire GPIO 9
@@ -40,7 +42,7 @@ python3 tools/modxo/console.py on 5303284748C4721C
 | Command | Does |
 |---|---|
 | `console.py` (or `list`) | the connected Modxos: serial number, port, logger and power state; any command below without SERIAL lists them too |
-| `console.py log SERIAL [--out FILE] [--raw FILE] [--no-dtr]` | log everything; `--raw` also keeps COM1's bytes unmodified (binary protocols); `--no-dtr` hides COM1 from the console (it raises DTR only for a power press); `--dev PORT` instead of SERIAL |
+| `console.py log SERIAL [--out FILE] [--raw FILE] [--no-dtr] [--gdb PORT]` | log everything; `--raw` also keeps COM1's bytes unmodified (binary protocols); `--no-dtr` hides COM1 from the console (it raises DTR only for a power press); `--gdb PORT`: also a bridge for gdb to OXOS's GDB debugger on localhost:PORT (`tools/gdb_bridge.py`); `--dev PORT` instead of SERIAL |
 | `console.py state SERIAL` | `on`, `off`, `unknown` (no status line yet) or `no pico` (from the status lines' 3v3 level) |
 | `console.py on` / `off SERIAL` | switch the console on / off; no press if it already is; a missed press is retried |
 | `console.py power SERIAL` | press the power button once (a toggle) |

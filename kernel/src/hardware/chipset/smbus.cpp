@@ -40,13 +40,8 @@ static void AcquireSMBus() {
         KeInitializeEvent(&SMBusLock, SynchronizationEvent, TRUE);
         SMBusLockReady = true;
     }
-    if (KeGetCurrentIrql() >= DISPATCH_LEVEL && !SMBusLock.Header.SignalState) {
-        ULONG n = SMBusRaisedWhileBusy;
-        SMBusRaisedWhileBusy = n + 1;
-        if (n < 8) {
-            XK_SERIAL("smbus: called at IRQL %u from %p while a thread holds the bus\n", KeGetCurrentIrql(), __builtin_return_address(0));
-        }
-    }
+    if (KeGetCurrentIrql() >= DISPATCH_LEVEL && !SMBusLock.Header.SignalState)
+        SMBusRaisedWhileBusy = SMBusRaisedWhileBusy + 1;
     if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         KeWaitForSingleObject(&SMBusLock, Executive, KernelMode, FALSE, nullptr);
 }
@@ -297,13 +292,6 @@ NTSTATUS ResetConsole(ULONG Kind) {
 XBAPI void NTAPI HalReturnToFirmware(ULONG Routine) {
     XK_SERIAL("firmware: HalReturnToFirmware(%lu) from %p\n", Routine, __builtin_return_address(0));
 #if XK_DEBUG_SERIAL
-    {
-        auto ldp = (const ULONG *)LaunchDataPage;
-        if (ldp) {
-            XK_SERIAL("firmware: launch data type %#lx title %08lx path '%.40s' data %lx %lx %lx\n", ldp[0], ldp[1], (const char *)(ldp + 2), ldp[0x100],
-                      ldp[0x101], ldp[0x102]);
-        }
-    }
 #endif
     if (Routine != 2) {
         if (Routine == 4)

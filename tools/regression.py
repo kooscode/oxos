@@ -19,7 +19,7 @@ OUT = os.path.join(ROOT, "build", "regression")
 
 # The xemu phases, in the order they run: `make test` also runs test_dash, test_relaunch, test_fatal and test_udf, so they are not listed again.
 XEMU_PHASES = ["test", "test_mcpx", "test_exfat", "test_lba48", "test_fatx_layouts", "test_extensions", "test_format", "test_upload", "test_iso",
-               "test_encoders", "test_controller", "test_boot_video", "test_memory"]
+               "test_encoders", "test_controller", "test_boot_video", "test_gdb", "test_gdb_extension", "test_memory"]
 
 
 # Started from `make regression`, the environment carries make's command-line variables (MAKEFLAGS): MCPX_ROM would reach every phase and boot them all

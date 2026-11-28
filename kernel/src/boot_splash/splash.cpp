@@ -129,8 +129,8 @@ static ULONG LoadSplash(ULONG *img) {
 static void NTAPI SplashThread(PVOID) {
     memset(SplashScreen, 0, SPLASH_PITCH * SPLASH_H);
     SplashStatus = LoadSplash(SplashImage);
-    XK_SERIAL("splash: image status %#lx\n", SplashStatus);
     if (SplashStatus) { // no scene: the emblem and the name
+        XK_SERIAL("splash: no scene image (%#lx): the emblem and the name\n", SplashStatus);
         memset(SplashImage, 0, SPLASH_PITCH * SPLASH_H);
         DrawEmblem(SplashImage);
         graphics::DrawCentredText(SplashImage, 330, "OXOS", 6, 0xA8B4A0);
@@ -140,7 +140,6 @@ static void NTAPI SplashThread(PVOID) {
     // The reference boot display (spec/stock/22 §7-8): device set-up, the AV pack's mode word, then the screen on.
     hardware::video::PrepareBootDisplay();
     graphics::ShowScreen(MmGetPhysicalAddress(SplashScreen));
-    XK_SERIAL("splash: display mode set\n");
     {
         // The colour table, now that the encoder clocks the display: after the next vertical blank (PCRTC interrupt status bit 0; at most 100 ms).
         auto pcrtc = (volatile ULONG *)0xFD600100;
@@ -149,7 +148,6 @@ static void NTAPI SplashThread(PVOID) {
             KeStallExecutionProcessor(1000);
         if (*pcrtc & 1) {
             hardware::video::LoadBootGamma();
-            XK_SERIAL("splash: colour table loaded\n");
         } else {
             XK_SERIAL("splash: no vertical blank within 100 ms: colour table left alone\n");
         }
@@ -195,7 +193,6 @@ static void NTAPI SplashThread(PVOID) {
     gamepad::StartWatchingControllers();
     if (ULONG ms = sinceMs(shown); ms < SPLASH_SHOW_MS)
         sleepMs(SPLASH_SHOW_MS - ms);
-    XK_SERIAL("splash: shown\n");
     gamepad::StopWatchingControllers();
     KeSetEvent(&SplashDone, 0, FALSE);
 }

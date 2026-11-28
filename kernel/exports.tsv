@@ -403,3 +403,4 @@ ordinal	name	convention	arg_bytes	kind	kernel_symbol
 435	oxos_console_reset	cdecl		func	?ResetConsole@chipset@hardware@xk@@YAJK@Z
 436	oxos_toast_enqueue	cdecl		func	?EnqueueToast@toasts@xk@@YAJAAUOXOS_TOAST@@@Z
 437	oxos_toast_enqueue_wait	cdecl		func	?EnqueueToastWait@toasts@xk@@YAJAAUOXOS_TOAST@@K@Z
+438	oxos_debug_port	cdecl		func	?GetDebugPort@debugger@xk@@YAPBUOXOS_DEBUG_PORT@@XZ

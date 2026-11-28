@@ -10,6 +10,7 @@
 #include <io/io.h>
 #include <memory/memory.h>
 #include <hardware/usb/pad_reports.h>
+#include <debugger/debug_port.h>
 
 namespace xk::core {
 
@@ -17,7 +18,7 @@ constexpr ULONG SWI_APC = 1u << APC_LEVEL, SWI_DISPATCH = 1u << DISPATCH_LEVEL;
 
 static volatile ULONG PendingSoftwareInterrupts;
 static PKINTERRUPT InterruptObjects[16];
-volatile ULONG IrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the serial log prints them)
+volatile ULONG IrqCounts[16]; // diagnostics: interrupts taken per IRQ line (the interrupt-storm detector; a debugger reads them)
 
 // Interrupts are disabled on entry and exit; enabled while a handler runs.
 void DeliverSoftwareInterrupts() {
@@ -218,6 +219,8 @@ extern "C" void KiDispatchHardwareInterrupt(ULONG irq) {
         }
     }
 #endif
+    if (irq == 0)
+        debugger::PollBreakIn((PULONG)__builtin_frame_address(0) + 3 + 9); // the interrupted eip, cs, eflags
     KIRQL old = KiPcr.Irql;
     KIRQL level = hardware::chipset::GetIrqLevel(irq);
     KiPcr.Irql = level;

@@ -47,8 +47,10 @@ void BuildTitlePatches(ULONG TitleId, ULONG Version, const titles::XBE_SECTION_H
     INI_PATCH_COUNTS counts = {};
     ULONG used = out ? oxos::ini_file::ParseTitlePatches(text, got, TitleId, Version, out, room, &counts) : 0;
     ExFreePool(text);
-    XK_SERIAL("patches: title %08lx version %lu: %u sections, %u patches, %u lines not understood\n", TitleId, Version, counts.Sections, counts.Patches,
-              counts.Errors);
+    if (counts.Sections || counts.Errors) {
+        XK_SERIAL("patches: title %08lx version %lu: %u sections, %u patches, %u lines not understood\n", TitleId, Version, counts.Sections, counts.Patches,
+                  counts.Errors);
+    }
     if (!used) {
         if (out)
             ExFreePool(out);

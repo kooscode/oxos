@@ -1,11 +1,13 @@
 // The kernel's debug log (spec/oxos_internal/03, spec/stock/13), in SERIAL=1 builds only: one formatted line at a time to its in-memory copy, a ring the
 // emulator monitor can read (DebugLog / DebugLogPosition), and to the debug serial port (the UART driver: hardware/chipset/serial.cpp). Every debug line comes
 // here: the kernel's own through XK_SERIAL (only in SERIAL=1 builds: a release kernel keeps a start-up mark of each instead), titles' through DbgPrint and
-// OutputDebugString (core/debug.cpp), and kernel extensions' through oxos_log (extensions/extension_runtime.cpp). Files: file_log.cpp.
+// OutputDebugString (core/debug.cpp), and kernel extensions' through oxos_log (extensions/extension_runtime.cpp). A release kernel passes the lines that
+// reach it (titles' and extensions') only to an attached debugger (debugger/debug_port.h). Files: file_log.cpp.
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <hardware/chipset/serial.h>
 #include <runtime/runtime.h>
+#include <debugger/debug_port.h>
 
 namespace xk::diagnostics {
 
@@ -34,7 +36,8 @@ static void WriteLogText(const char *Text, ULONG Length) {
     for (ULONG i = 0; i < Length; i++)
         DebugLog[(DebugLogPosition + i) % sizeof(DebugLog)] = Text[i];
     DebugLogPosition = DebugLogPosition + Length;
-    hardware::chipset::WriteSerial(Text, Length);
+    if (!debugger::PrintDebugText(Text, Length)) // while gdb waits for the target: an O packet, shown by gdb and the bridge
+        hardware::chipset::WriteSerial(Text, Length);
     restore_flags(flags);
 }
 
@@ -74,13 +77,23 @@ void LogLine(const char *Format, ...) {
 #else
 
 // A release kernel keeps no debug log, as the stock kernel prints nothing without a debugger: nothing could read it on a console, and it would take resident
-// memory titles count on. DbgPrint and OutputDebugString still exist for titles; extensions' log lines go to their file.
+// memory titles count on. DbgPrint and OutputDebugString still exist for titles, and reach an attached debugger (spec/oxos_internal/51 §2); extensions' log
+// lines go to their file.
 void LogLineArgs(const char *Format, __builtin_va_list Args) {
-    // Nothing kept.
+    if (!debugger::AttachedDebugger)
+        return;
+    char line[256];
+    int length = vsnprintf(line, sizeof(line), Format, Args);
+    if (length < 0 || length >= (int)sizeof(line))
+        length = sizeof(line) - 1;
+    debugger::PrintDebugText(line, length);
 }
 
 void LogLine(const char *Format, ...) {
-    // Nothing kept.
+    __builtin_va_list args;
+    __builtin_va_start(args, Format);
+    LogLineArgs(Format, args);
+    __builtin_va_end(args);
 }
 
 #endif

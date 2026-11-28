@@ -21,6 +21,62 @@
             ],
             "preLaunchTask": "oxos: start xemu",
             "postDebugTask": "oxos: stop xemu"
+        },
+        {
+            // F5 on a real console, as a developer with a stock OXOS has it: the Modxo rig with the console's logger running as `tools/modxo/console.py log
+            // SERIAL --gdb 2159` (settings.json: oxos.console). Builds with DEBUG=y, netboots OXOS's release kernel with the app as the title and
+            // oxos_gdb.xos, the debugger as a kernel extension (put on the console's C: over FTP the first time), power-cycles the console and attaches
+            // over the Modxo's serial port; the title waits for gdb at its start. gdb loads the kernel's and the extensions' symbols from the debugger's
+            // library list, follows the console into the next title, and `run` in the Debug Console starts the title again.
+            "name": "OXOS: debug on the console",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/.oxos/main.elf",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "useExtendedRemote": true,
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                // The library list's files come from OXOS's build (the debugger offers no file transfer): .oxos/console.gdb, written by
+                // tools/debug_console.py, sets the search path to the release kernel's oxoskrnl.elf (its names) and oxos_gdb.xos.
+                {"text": "set sysroot"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start on console",
+            "postDebugTask": "oxos: stop on console"
+        },
+        {
+            // The same on a GDB=1 kernel (OXOS development): netboots build/kernel/gdb_wait, which has the debugger built in and waits for gdb at boot, so
+            // the kernel's own start can be debugged too.
+            "name": "OXOS: debug on the console (GDB kernel)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/.oxos/main.elf",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "useExtendedRemote": true,
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "set sysroot"},
+                {"text": "set solib-search-path ${config:oxos.dir}/build/kernel/gdb_wait:${config:oxos.dir}/build/kernel/extensions/oxos_gdb"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start on console (GDB kernel)",
+            "postDebugTask": "oxos: stop on console"
         }
     ]
 }

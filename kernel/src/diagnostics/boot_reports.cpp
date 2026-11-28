@@ -1,6 +1,6 @@
-// Boot reports for the debug log (serial builds): the machine-check banks, DRAM refresh (spec/oxos_internal/20), the GPU clock, the X-code checks and
-// snapshots, and the NV2A memory pads with the 2BL's calibration (spec/oxos_internal/27, 28). The boot loader's records are copied before the memory manager
-// unmaps page 2.
+// Boot reports for the debug log (serial builds): the CPU, and the problems a boot found: machine-check errors, DRAM refresh that was off
+// (spec/oxos_internal/20), a GPU clock the 2BL had to put back (spec/oxos_internal/26). The boot loader's records are copied before the memory manager unmaps
+// page 2; its other records (X-code read-back, pad calibration) stay there for a debugger at the GDB kernel's boot stop.
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <core/core.h>
@@ -15,13 +15,7 @@ static ULONG RefreshFoundOff = 0xFFFFFFFF; // the value found when refresh was o
 // (they would take resident memory titles count on, spec/oxos_internal/18).
 #if XK_DEBUG_SERIAL
 static ULONG RefreshBootFix[4]; // start.S's record ('RFS0', value), the 2BL's record ('RFEN', value)
-// The 2BL's GPU clock record (boot/bl.cpp, physical 0x23E0), start.S's snapshot right after the X-codes (0x2340), and the 2BL's X-code checks
-// (BlCheckXcodeValues, 0x2400 and 0x2600).
-static ULONG GpuClockRecord[5];
-static ULONG XcodeEntryRecord[9];
-static ULONG XcodeRecord[2][2 + 2 * 60];
-static ULONG XcodeSnapshot[2 + 2 * 40]; // the 2BL's snapshot of the memory set-up (physical 0x2800)
-static ULONG PadRecord[13];             // the 2BL's pad calibration record (physical 0x2300)
+static ULONG GpuClockRecord[5]; // the 2BL's GPU clock record (boot/bl.cpp, physical 0x23E0)
 #endif
 
 void CheckDramRefresh() {
@@ -32,26 +26,12 @@ void CheckDramRefresh() {
     }
 }
 
-void TakeBootLoaderRecords(bool Quick) {
-    if (!Quick) { // a later boot loader without these snapshots leaves no stale record
-        ((volatile ULONG *)0x80002340)[0] = 0;
-        ((volatile ULONG *)0x80002800)[0] = 0;
-    }
+void TakeBootLoaderRecords([[maybe_unused]] bool Quick) {
 #if XK_DEBUG_SERIAL
     for (int i = 0; i < 4; i++) // the boot loader's refresh records (boot/start.S at 0x23D8, boot/bl.cpp at 0x23D0)
         RefreshBootFix[i] = Quick ? 0 : ((volatile ULONG *)0x800023D0)[i < 2 ? i + 2 : i - 2];
-    for (int i = 0; i < 9; i++) // boot/start.S's X-code snapshot at 0x2340 (serial builds)
-        XcodeEntryRecord[i] = Quick ? 0 : ((volatile ULONG *)0x80002340)[i];
     for (int i = 0; i < 5; i++) // boot/bl.cpp's GPU clock record at 0x23E0
         GpuClockRecord[i] = Quick ? 0 : ((volatile ULONG *)0x800023E0)[i];
-    for (ULONG r = 0; r < 2; r++) {
-        for (ULONG i = 0; i < sizeof(XcodeRecord[0]) / 4; i++)
-            XcodeRecord[r][i] = Quick ? 0 : ((volatile ULONG *)(0x80002400 + 0x200 * r))[i];
-    }
-    for (ULONG i = 0; i < sizeof(XcodeSnapshot) / 4; i++) // boot/bl.cpp BlSnapshotRegisters
-        XcodeSnapshot[i] = Quick ? 0 : ((volatile ULONG *)0x80002800)[i];
-    for (int i = 0; i < 13; i++) // boot/bl.cpp BL_PAD_RESULT at physical 0x2300 (cold boot only; page 2 is free)
-        PadRecord[i] = Quick ? 0 : ((volatile ULONG *)0x80002300)[i];
 #endif
 }
 
@@ -68,8 +48,10 @@ void ReportMachineCheckBanks(const char *When) {
                       (ULONG)addr);
         }
     }
-    if (MachineCheckBanks)
-        XK_SERIAL("machine check: MCG_STATUS %08lx (%s)\n", (ULONG)rdmsr(0x17A), When);
+#if XK_DEBUG_SERIAL
+    if (MachineCheckBanks && rdmsr(0x17A))
+        XK_SERIAL("*** machine check: MCG_STATUS %08lx (%s)\n", (ULONG)rdmsr(0x17A), When);
+#endif
 }
 
 // Whether DRAM refresh had to be switched on before or at kernel entry (debug log, spec/oxos_internal/20).
@@ -85,62 +67,9 @@ void ReportRefresh() {
     }
     // The GPU core clock (boot/bl.cpp BlCheckGpuClock): NVPLL and the PLL select as the X-codes write them, unless the 2BL had to put them back.
     const ULONG *g = GpuClockRecord;
-    if (g[0] == 0x4C50564E) { // 'NVPL'
-        if (g[1] != 0x00011C01 || g[2] != 0x000A0400 || g[3] != 0x00011C01 || g[4] != 0x000A0400) {
-            XK_SERIAL("*** gpu clock: NVPLL %08lx select %08lx at 2BL start, %08lx %08lx before the kernel; the 2BL " "set 00011c01 000a0400\n", g[1], g[2],
-                      g[3], g[4]);
-        } else {
-            XK_SERIAL("gpu clock: NVPLL 00011c01 select 000a0400\n");
-        }
-    }
-    // boot/start.S's snapshot of the settings that get lost on some cold boots, taken before any OXOS code ran (spec/oxos_internal/27 §4).
-    const ULONG *e = XcodeEntryRecord;
-    if (e[0] == 0x53304358) { // 'XC0S'
-        XK_SERIAL("xcodes at entry: 10b0 %08lx 10bc %08lx 10e8 %08lx nvpll %08lx select %08lx refresh %08lx " "100200 %08lx 100204 %08lx\n", e[1], e[2], e[3],
-                  e[4], e[5], e[6], e[7], e[8]);
-    }
-    // The 2BL's snapshot of the memory set-up the X-codes left, and EEPROM 0xC0-0xC3 (spec/oxos_internal/28 §4 G0): NV2A offsets, PCI configuration addresses
-    // (bit 31) and EEPROM words (0xEE0000nn), four per line.
-    const ULONG *m = XcodeSnapshot;
-    if (m[0] == 0x53363158) { // 'X16S'
-        for (ULONG i = 0; i < m[1] && i < 40; i += 4) {
-            XK_SERIAL("xcode snapshot:");
-            for (ULONG j = i; j < i + 4 && j < m[1]; j++)
-                XK_SERIAL(" %lx=%08lx", m[2 + 2 * j], m[3 + 2 * j]);
-            XK_SERIAL("\n");
-        }
-    }
-    // The 2BL's checks of the X-codes' settings (at its start, and before the kernel): the registers that did not hold the value written.
-    for (ULONG r = 0; r < 2; r++) {
-        const ULONG *x = XcodeRecord[r];
-        const char *when = r ? "before the kernel" : "at 2BL start";
-        if (x[0] != 0x4B484358) // 'XCHK'
-            continue;
-        XK_SERIAL("xcodes: %lu settings differ %s\n", x[1], when);
-        for (ULONG i = 0; i < x[1] && i < 60; i++)
-            XK_SERIAL("xcodes: %s: %08lx reads %08lx\n", when, x[2 + 2 * i], x[3 + 2 * i]);
-    }
-#endif
-}
-
-// NV2A memory pad registers (debug log): the X-codes set them; read at two points to see whether they change.
-void ReportNvPads([[maybe_unused]] const char *When) {
-    [[maybe_unused]] auto nv = [](ULONG o) { return *(volatile ULONG *)(0xFD000000 + o); };
-    XK_SERIAL("nv pads (%s): 1214 %08lx 122c %08lx 1230 %08lx 1234 %08lx 1238 %08lx 123c %08lx 1240 %08lx 1244 %08lx " "1248 %08lx 1250 %08lx\n", When,
-              nv(0x1214), nv(0x122C), nv(0x1230), nv(0x1234), nv(0x1238), nv(0x123C), nv(0x1240), nv(0x1244), nv(0x1248), nv(0x1250));
-    // The 2BL's pad calibration record (boot/bl.cpp BL_PAD_RESULT, physical 0x2300), printed once.
-#if XK_DEBUG_SERIAL
-    static bool shown;
-    auto r = PadRecord;
-    // 'PADC' the table method, 'PADE' the EEPROM method (1.6), 'PADN' none.
-    if (!shown && (r[0] == 0x43444150 || r[0] == 0x45444150 || r[0] == 0x4E444150)) {
-        shown = true;
-        if (r[0] == 0x4E444150) {
-            XK_SERIAL("nv pads: the 2BL did not calibrate (no table in this image, or no EEPROM answer)\n");
-        } else {
-            XK_SERIAL("nv pads: 2BL calibration (%s) A %#lx B %#lx strap %08lx -> %08lx %08lx %08lx %08lx %08lx %08lx " "%08lx %08lx %08lx\n",
-                      r[0] == 0x45444150 ? "EEPROM rows" : "table", r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]);
-        }
+    if (g[0] == 0x4C50564E && (g[1] != 0x00011C01 || g[2] != 0x000A0400 || g[3] != 0x00011C01 || g[4] != 0x000A0400)) { // 'NVPL'
+        XK_SERIAL("*** gpu clock: NVPLL %08lx select %08lx at 2BL start, %08lx %08lx before the kernel; the 2BL " "set 00011c01 000a0400\n", g[1], g[2],
+                  g[3], g[4]);
     }
 #endif
 }

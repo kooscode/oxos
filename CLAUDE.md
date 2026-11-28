@@ -43,7 +43,8 @@ make -C kernel regression ONLY=test_extensions,test_memory                # some
 ```
 - **What runs:** the unit tests, then the xemu phases in order: `test` (the self-test kernel's boot, which also runs `test_dash`, `test_relaunch`,
   `test_fatal`, `test_udf`), `test_mcpx` (the real boot ROM; skipped without `MCPX_ROM`), `test_exfat` (about 8 minutes alone), `test_lba48`,
-  `test_fatx_layouts`, `test_extensions`, `test_format`, `test_upload`, `test_iso`, `test_encoders`, `test_controller`, `test_boot_video`, `test_memory`. About 20 minutes.
+  `test_fatx_layouts`, `test_extensions`, `test_format`, `test_upload`, `test_iso`, `test_encoders`, `test_controller`, `test_boot_video`, `test_gdb`,
+  `test_gdb_extension`, `test_memory`. About 20 minutes.
 - **Result:** one line per phase as it finishes (`test_iso: PASS (N checks, S s)`); `build/regression/summary.txt` and each phase's log
   (`build/regression/PHASE.log`). It goes on after a failure and fails if any phase fails or `test_memory` reports fewer than 15 960 free pages
   (`--pages`). Every phase must pass before the commit.
@@ -200,6 +201,11 @@ clean the implementation up, cite the `spec/` spec in its comments (`spec/stock/
 ## Debug
 - **Serial log:** builds with `SERIAL=1` print the kernel's debug log on the serial port; `make -C kernel run_trace_basic` shows it in the terminal.
 - **gdb:** `make -C kernel run_gdb` (xemu paused at power-on, symbols in `build/kernel/debug/oxoskrnl.elf`); `tools/debug_app.py` for an nxdk app.
+- **gdb on a console:** `oxos_gdb.xos` (`kernel/extensions/oxos_gdb/`, spec/oxos_internal/51) on any release kernel, or a `GDB=1` kernel's own stub; over
+  the serial port (the Modxo: `tools/modxo/console.py log SERIAL --gdb 2159`, then `target extended-remote localhost:2159`), or a transport an extension
+  registers. gdb loads the kernel's and extensions' symbols from the stub's library list (`set sysroot`, `set solib-search-path`), follows the console into
+  each new title, and `run` / `monitor launch PATH` start titles. `tools/debug_console.py APP [--release] --console SERIAL` sets a console up (netboot,
+  power cycle; `--release` installs `oxos_gdb.xos` over FTP once, `--remove` takes it off); VS Code: `tools/vscode/`.
 - **Call traces:** `make -C kernel run_trace_full` records the last kernel calls a title made (`print_trace_dump`).
 - **Real hardware:** a console with a netboot BIOS loads each new kernel over the network (`tools/netboot/README.md`), with an XBE to run straight away
   (`--title DIR --title-name NAME`); the unattended rig is described in [`docs/hwitl.md`](docs/hwitl.md).
@@ -231,7 +237,7 @@ Each tool's invocation and options are in its README (folders) or its docstring 
 | Kernel extensions | `sdk/` (its README), `kernel/extensions/` (the ones OXOS ships) | spec 34 |
 | Trainer pack, trainer ini | `third_party/xbox_trainers/` (its README, `index.csv`), `tools/gen_trainers_ini.py` | spec 37 |
 | Boot splash | `tools/svg_splash.py`, `tools/vsplash/` | one picture, faded in, 4 s (spec oxos_internal/00) |
-| BIOS image internals | `tools/mkbios.py`, `tools/lzx.py`, `tools/harden_xcodes.py`, `tools/link_kernel_modules.py` | `make` runs them |
+| BIOS image internals | `tools/mkbios.py`, `tools/lzx.py`, `tools/harden_xcodes.py`, `tools/link_kernel_modules.py`, `tools/make_kernel_symbols.py` (`oxoskrnl.elf`) | `make` runs them |
 | Checks that run after every kernel link | `tools/check_kernel_layout.py`, `tools/check_c_library_use.py` | a failure stops the build |
 | Generated sources | `tools/gen_def.py` (exports), `tools/gen_oxos_sdk.py` (SDK), `tools/gen_av_tables.py` (video encoders), `tools/mkucode.py` | regenerate, never edit by hand |
 

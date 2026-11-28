@@ -7,7 +7,12 @@
             "command": "make",
             "args": ["-j8", "DEBUG=y"],
             "options": {
+                // LDFLAGS: a symbol table next to the DWARF, so gdb knows the nxdk library's functions (built without -g) and `next` steps over them.
+                // CXXFLAGS: gdb names C++ functions from the debug information (it cannot demangle Microsoft-style names). Environment variables, so an
+                // app's own LDFLAGS += ... and CXXFLAGS += ... still apply.
                 "env": {
+                    "LDFLAGS": "-debug:dwarf",
+                    "CXXFLAGS": "-mllvm -dwarf-linkage-names=Abstract",
                     "NXDK_DIR": "${config:oxos.nxdkDir}",
                     "PATH": "${config:oxos.nxdkDir}/bin:/usr/lib/llvm-18/bin:${env:PATH}"
                 }
@@ -31,6 +36,55 @@
                 "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
                 "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
             }
+        },
+        {
+            // The console: the release kernel, oxos_gdb.xos and bin/ as the title by netboot, the console power-cycled through the Modxo rig. The first
+            // time (and when oxos_gdb.xos changed) it boots the console's FTP server once to put oxos_gdb.xos on C: (the task "oxos: remove the debugger
+            // from the console" takes it off again).
+            "label": "oxos: start on console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug_console.py", "${workspaceFolder}", "--release"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "dependsOn": "oxos: build (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            // A GDB=1 kernel and bin/ as the title by netboot (OXOS development: the kernel waits for gdb at boot).
+            "label": "oxos: start on console (GDB kernel)",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug_console.py", "${workspaceFolder}"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "dependsOn": "oxos: build (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            "label": "oxos: stop on console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug_console.py", "--stop"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}"}},
+            "problemMatcher": []
+        },
+        {
+            // oxos_gdb.xos off the console again: its FTP server once more, the console's own oxos_extensions.ini back.
+            "label": "oxos: remove the debugger from the console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${config:oxos.dir}/tools/debug_console.py", "--remove"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "problemMatcher": []
         },
         {
             "label": "oxos: stop xemu",

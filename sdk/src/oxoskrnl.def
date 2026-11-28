@@ -403,3 +403,4 @@ EXPORTS
     oxos_console_reset                           @435 NONAME
     oxos_toast_enqueue                           @436 NONAME
     oxos_toast_enqueue_wait                      @437 NONAME
+    oxos_debug_port                              @438 NONAME

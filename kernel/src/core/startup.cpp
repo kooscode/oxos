@@ -10,6 +10,9 @@
 #include <storage/storage.h>
 #include <runtime/runtime.h>
 #include <hardware/chipset/serial.h>
+#if XK_GDB
+#include <debugger/gdb_stub.h>
+#endif
 #include <titles/titles.h>
 #include <boot_splash/boot_splash.h>
 #include <filesystems/filesystems.h>
@@ -84,6 +87,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 
     KiBootStep("processor");
     InitializeProcessor();
+#if XK_GDB
+    debugger::InitGdbStub(quick); // after the IDT: a cold boot can wait for gdb here (GDB_WAIT=1)
+#endif
 
     // As the reference (KfLowerIrql(1) at 0x8001C838, before its executive init): the start-up runs at APC_LEVEL, and with interrupts enabled from the PIC
     // set-up on, so the clock, timers and DPCs run while the drivers start. (The PIC is not set up yet: only the IRQL value changes here;
@@ -100,19 +106,15 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     KiBootStep("memory manager");
     memory::InitMemoryManager(quick);
     diagnostics::ReportMachineChecksAtBoot(quick);
-    diagnostics::ReportNvPads("after the memory manager");
     diagnostics::ReportRefresh();
     diagnostics::ReportPreviousBootMarks();
     diagnostics::ReportLastWords();
-    XK_SERIAL("cpu: PAT %08lx%08lx\n", (ULONG)(rdmsr(0x277) >> 32), (ULONG)rdmsr(0x277));
+#if XK_DEBUG_SERIAL
     {
-        [[maybe_unused]] static const char *what[] = {"not run", "64 MB (64 MB + x reads back at x)", "more than 64 MB", "unclear"};
-        [[maybe_unused]] ULONG top;
-        HalReadWritePCISpace(0, 0, 0x84, &top, 4, FALSE);
-        XK_SERIAL("ram: %s; GPU memory size %08lx -> %08lx (PFB 0x100200 %08lx); host top of memory %08lx\n", what[memory::RamProbe & 3], memory::GpuSizeBefore,
-                  memory::GpuSizeAfter,
-                  *(volatile ULONG *)0xFD100200, top);
+        static const char *what[] = {"not probed", "64 MB", "more than 64 MB", "unclear"};
+        XK_SERIAL("ram: %s\n", what[memory::RamProbe & 3]);
     }
+#endif
     if (!quick)
         hardware::chipset::DetectHardware();
     InitializeDpcs();
@@ -123,7 +125,6 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     // object and I/O managers): the clock (IRQ 0, latched) first. Its IRQ 8 (RTC, whose interrupts stay off) and IRQ 11 (SMBus) handlers have no counterpart
     // here yet (our SMBus polls); IRQ 12 (SMC events) is enabled by hardware::chipset::StartSmcEvents below.
     HalEnableSystemInterrupt(0, Latched); // PIT clock
-    XK_SERIAL("boot: clock interrupt on\n");
     KiBootStep("object manager");
     objects::InitObjectManager();
     KiBootStep("I/O manager");
@@ -141,18 +142,14 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
     // thread's IRQL, so the splash shows meanwhile (spec/oxos_internal/00).
     if (!quick)
         boot_splash::StartSplash();
-    XK_SERIAL("boot: splash started\n");
     KiBootStep("IDE");
     hardware::ide::InitIdeChannel();
-    XK_SERIAL("boot: IDE done\n");
     hardware::chipset::StartSmcEvents();
-    XK_SERIAL("boot: SMC events started\n");
 
 #if XK_BOOT_SELFTEST
     if (!quick)
         KiRunBootSelfTests();
 #endif
-    diagnostics::ReportNvPads("at the title launcher");
 #if XK_STATEDUMP
     {
         // The machine-state probe (tools/statedump, make STATEDUMP=1), where a reference dump is taken.
@@ -180,6 +177,9 @@ extern "C" void KiSystemStartup(ULONG arg0, const UCHAR *bootKeys) {
 #endif
 #if XK_DEBUG_SERIAL
     StartHangDumps(); // serial builds: the hang dump's own thread (interrupts.cpp)
+#endif
+#if XK_GDB
+    debugger::StartGdbLauncher(); // GDB=1 builds: gdb's vRun and `monitor launch`
 #endif
     KiBootStep("title launcher");
     titles::StartTitleLauncher();

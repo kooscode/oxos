@@ -1,10 +1,16 @@
 {
     "version": "0.2.0",
     "configurations": [
+        // Pick a configuration in the Run and Debug view (Ctrl+Shift+D); F5 starts the one picked. Needs the C/C++ extension (ms-vscode.cpptools) and
+        // gdb-multiarch. Per program: Xemu (Run) builds and starts xemu paused at power-on; Xemu (Attach) joins an xemu already started that way (Terminal >
+        // Run Task > the program's "start ... in xemu" task); Console (Run) builds, netboots and power-cycles the console (the Modxo rig, its logger running as
+        // `tools/modxo/console.py log SERIAL --gdb 2159`; settings.json's oxos.console names it when several are connected) and switches it off when the
+        // session stops; Console (Attach) joins a console already running the GDB kernel (the program's "start ... on the console" task) and leaves it
+        // running. Other nxdk apps: tools/vscode/.
         {
-            // F5: build the debug kernel, start xemu paused, attach, run to the first breakpoint in the kernel. Needs the C/C++ extension (ms-vscode.cpptools)
-            // and gdb-multiarch. nxdk apps: tools/vscode/.
-            "name": "OXOS kernel: debug in xemu",
+            // Builds the debug kernel (build/kernel/debug) and starts xemu paused at power-on, then attaches and runs to the first breakpoint. Asks for a disc
+            // image (empty: the dashboard).
+            "name": "OXOS kernel: Xemu (Run)",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/kernel/debug/oxoskrnl.elf",
@@ -18,7 +24,275 @@
                 {"text": "-enable-pretty-printing", "ignoreFailures": true}
             ],
             "preLaunchTask": "oxos: start debug kernel",
-            "postDebugTask": "oxos: stop debug kernel"
+            "postDebugTask": "oxos: stop debug kernel",
+            "presentation": {"group": "1 OXOS kernel", "order": 1}
+        },
+        {
+            // Joins an xemu started by the task "oxos: start debug kernel" (Terminal > Run Task), with no restart; stopping the session leaves xemu running.
+            "name": "OXOS kernel: Xemu (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/debug/oxoskrnl.elf",
+            "cwd": "${workspaceFolder}/kernel",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true}
+            ],
+            "presentation": {"group": "1 OXOS kernel", "order": 2}
+        },
+        {
+            // Builds the GDB kernel, netboots it, power-cycles the console and attaches; the kernel waits for gdb at boot, then boots the dashboard. Stopping
+            // the session switches the console off.
+            "name": "OXOS kernel: Console (Run)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/gdb_wait/oxoskrnl.elf",
+            "cwd": "${workspaceFolder}/kernel",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                // The kernel is this program: gdb must not load it again from the debugger's library list.
+                {"text": "set auto-solib-add off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start kernel on console",
+            "postDebugTask": "oxos: stop the console",
+            "presentation": {"group": "1 OXOS kernel", "order": 3}
+        },
+        {
+            // Joins the console as it runs (started by the task "oxos: start kernel on console", or a Console (Run) session), with no power cycle: connecting
+            // stops it briefly, the pause button stops it again; stopping the session leaves it running. The symbols must be the running build's.
+            "name": "OXOS kernel: Console (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/gdb_wait/oxoskrnl.elf",
+            "cwd": "${workspaceFolder}/kernel",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                // The kernel is this program: gdb must not load it again from the debugger's library list.
+                {"text": "set auto-solib-add off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: check the console runs a GDB kernel",
+            "presentation": {"group": "1 OXOS kernel", "order": 4}
+        },
+        {
+            // Joins a title running on a console with a release kernel and oxos_gdb.xos enabled (spec/oxos_internal/51): any title, a retail one too, with
+            // no build and no power cycle; connecting stops it briefly, stopping the session leaves it running. Symbols: the release kernel's names (the
+            // 1.6's kernel here; the other consoles: build/kernel/release); a title without symbols shows in the Disassembly View. Raw addresses from the Debug
+            // Console: -exec watch *(short*)0xADDR, -exec set var *(short*)0xADDR = 999, -exec x/8i $pc-16.
+            "name": "OXOS title: Console 1.6, release kernel (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/release_1_6/oxoskrnl.elf",
+            "cwd": "${workspaceFolder}/kernel",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                // The kernel is this program: gdb must not load it again from the debugger's library list.
+                {"text": "set auto-solib-add off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: check the console runs a GDB kernel",
+            "presentation": {"group": "1 OXOS kernel", "order": 5}
+        },
+        {
+            // Builds the FTP server and starts xemu paused at power-on, then attaches and runs to the first breakpoint.
+            "name": "OXOS FTP server: Xemu (Run)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/apps/oxos_ftp",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "add-symbol-file ${workspaceFolder}/build/kernel/debug/oxoskrnl.elf", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start the FTP server in xemu",
+            "postDebugTask": "oxos: stop the FTP server in xemu",
+            "presentation": {"group": "2 OXOS FTP server", "order": 1}
+        },
+        {
+            // Joins an xemu started by the task "oxos: start the FTP server in xemu" (Terminal > Run Task), with no restart; stopping the session leaves xemu
+            // running.
+            "name": "OXOS FTP server: Xemu (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/apps/oxos_ftp",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "add-symbol-file ${workspaceFolder}/build/kernel/debug/oxoskrnl.elf", "ignoreFailures": true}
+            ],
+            "presentation": {"group": "2 OXOS FTP server", "order": 2}
+        },
+        {
+            // Builds the FTP server's debug build, netboots it as the title with the GDB kernel, power-cycles the console and attaches; breakpoints wait until
+            // it is loaded. Stopping the session switches the console off.
+            "name": "OXOS FTP server: Console (Run)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/apps/oxos_ftp",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "set sysroot"},
+                {"text": "set solib-search-path ${workspaceFolder}/build/kernel/gdb_wait:${workspaceFolder}/build/kernel/extensions/oxos_gdb"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start the FTP server on the console",
+            "postDebugTask": "oxos: stop the console",
+            "presentation": {"group": "2 OXOS FTP server", "order": 3}
+        },
+        {
+            // Joins the console as it runs (started by the task "oxos: start the FTP server on the console", or a Console (Run) session), with no power cycle:
+            // connecting stops it briefly, the pause button stops it again; stopping the session leaves it running. The symbols must be the running build's.
+            "name": "OXOS FTP server: Console (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/apps/oxos_ftp",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "set sysroot"},
+                {"text": "set solib-search-path ${workspaceFolder}/build/kernel/gdb_wait:${workspaceFolder}/build/kernel/extensions/oxos_gdb"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/build/apps/oxos_ftp_debug/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: check the console runs a GDB kernel",
+            "presentation": {"group": "2 OXOS FTP server", "order": 4}
+        },
+        {
+            // Builds the Universal Trainers menu and starts xemu paused at power-on, then attaches and runs to the first breakpoint.
+            "name": "OXOS Universal Trainers menu: Xemu (Run)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/kernel/extensions/oxos_trainers/app",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "add-symbol-file ${workspaceFolder}/build/kernel/debug/oxoskrnl.elf", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start the Universal Trainers menu in xemu",
+            "postDebugTask": "oxos: stop the Universal Trainers menu in xemu",
+            "presentation": {"group": "3 OXOS Universal Trainers menu", "order": 1}
+        },
+        {
+            // Joins an xemu started by the task "oxos: start the Universal Trainers menu in xemu" (Terminal > Run Task), with no restart; stopping the session
+            // leaves xemu running.
+            "name": "OXOS Universal Trainers menu: Xemu (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/kernel/extensions/oxos_trainers/app",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:1234",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "add-symbol-file ${workspaceFolder}/build/kernel/debug/oxoskrnl.elf", "ignoreFailures": true}
+            ],
+            "presentation": {"group": "3 OXOS Universal Trainers menu", "order": 2}
+        },
+        {
+            // Builds the Universal Trainers menu's debug build, netboots it as the title with the GDB kernel, power-cycles the console and attaches;
+            // breakpoints wait until it is loaded. Stopping the session switches the console off.
+            "name": "OXOS Universal Trainers menu: Console (Run)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/kernel/extensions/oxos_trainers/app",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "set sysroot"},
+                {"text": "set solib-search-path ${workspaceFolder}/build/kernel/gdb_wait:${workspaceFolder}/build/kernel/extensions/oxos_gdb"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: start the Universal Trainers menu on the console",
+            "postDebugTask": "oxos: stop the console",
+            "presentation": {"group": "3 OXOS Universal Trainers menu", "order": 3}
+        },
+        {
+            // Joins the console as it runs (started by the task "oxos: start the Universal Trainers menu on the console", or a Console (Run) session), with no
+            // power cycle: connecting stops it briefly, the pause button stops it again; stopping the session leaves it running. The symbols must be the
+            // running build's.
+            "name": "OXOS Universal Trainers menu: Console (Attach)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/main.elf",
+            "cwd": "${workspaceFolder}/kernel/extensions/oxos_trainers/app",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb-multiarch",
+            "miDebuggerServerAddress": "localhost:2159",
+            "stopAtEntry": false,
+            "setupCommands": [
+                {"text": "set confirm off"},
+                {"text": "set remotetimeout 10"},
+                {"text": "-enable-pretty-printing", "ignoreFailures": true},
+                {"text": "set sysroot"},
+                {"text": "set solib-search-path ${workspaceFolder}/build/kernel/gdb_wait:${workspaceFolder}/build/kernel/extensions/oxos_gdb"}
+            ],
+            "postRemoteConnectCommands": [
+                {"text": "source ${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug/.oxos/console.gdb", "ignoreFailures": true}
+            ],
+            "preLaunchTask": "oxos: check the console runs a GDB kernel",
+            "presentation": {"group": "3 OXOS Universal Trainers menu", "order": 4}
         }
     ]
 }

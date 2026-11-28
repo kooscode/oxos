@@ -14,8 +14,8 @@ The 1.6 boots OXOS to the dashboard from OXOS's own code, 3 of 3 cold boots (POS
 - **Checks:**
   - A scratch X-code simulator gives the same final register values as the 5838 program for this console's EEPROM bytes and for 300 random ones, with the same
     register write order. The differences: the memory test (start.S makes it), the overflow-trick jump, and the lane masks.
-  - On the console, the 2BL's snapshot of the memory set-up (serial builds, log lines `xcode snapshot:`) reads the same as with the 5838 X-codes, register for
-    register, except the lane masks.
+  - On the console, the 2BL's snapshot of the memory set-up (serial builds, at physical 0x2800; read at the GDB kernel's boot stop) reads the same as with
+    the 5838 X-codes, register for register, except the lane masks.
 
 ## 2. Measured on this console
 - EEPROM 0xC0-0xC3: 0x68, 0xAA, 0xDD, 0x42. So 0x1214 = 0x68686868, 0x122C = 0xAAAAAAAA, 0x10B8 = 0xDDDD0000, strap 0x801D4401 (bits 18 and 19 set).
@@ -37,8 +37,8 @@ The 1.6 boots OXOS to the dashboard from OXOS's own code, 3 of 3 cold boots (POS
 ## 4. Gap list (2026-11-07)
 Spec/stock/24 (the retail 1.6 path) compared with OXOS's code: `kernel/boot/xcodes.S` (MCPXREVD5 = Cromwell's boot_rom/Xcodes.h), `tools/harden_xcodes.py`,
 `kernel/boot/start.S`, `kernel/boot/bl.cpp` (including the uncommitted 1.6 repair table), `kernel/src/hardware/`, `kernel/src/memory/init.cpp`. Each row: what
-OXOS must do, where, and how the hardware side can check it. "Snapshot" = the start.S entry snapshot (spec 27 §4, log line `xcodes at entry`), extended as
-listed in G0.
+OXOS must do, where, and how the hardware side can check it. "Snapshot" = the start.S entry snapshot (spec 27 §4, physical 0x2340), extended as listed
+in G0.
 
 ### 4.1 X-codes (`kernel/boot/xcodes.S`, MCPXREVD5)
 | # | Gap | What OXOS must do | Check |

@@ -2,6 +2,10 @@
     // Where OXOS and nxdk live (used by tasks.json and launch.json).
     "oxos.dir": "/path/to/oxos",
     "oxos.nxdkDir": "/path/to/nxdk",
+    // The console to debug on (the Modxo rig): its Pico's serial number, as tools/modxo/console.py lists them (empty: the only one connected); "1" when
+    // it is a 1.6, whose kernels are their own build.
+    "oxos.console": "",
+    "oxos.consoleMcpx16": "0",
     // Start debugging even when the Problems panel lists errors (VS Code counts every error in the workspace after the pre-launch task, not just the task's
     // own).
     "debug.onTaskErrors": "debugAnyway"

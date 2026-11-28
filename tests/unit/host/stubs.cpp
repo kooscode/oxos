@@ -15,6 +15,9 @@
 #include <toasts/toasts.h>
 #include <extensions/extensions.h>
 #include <io/io.h>
+#include <hardware/chipset/chipset.h>
+#include <extensions/extension_state.h>
+#include <kernel_modules/kernel_modules.h>
 
 using namespace xk; // the kernel's subsystems as storage::, core::, ...
 
@@ -53,10 +56,18 @@ void WriteSerial(const char *Text, ULONG Length) {
     HostLogWrite(Text, Length);
 }
 
-
 } // namespace xk::hardware::chipset
 
 // diagnostics/: the start-up marks and last words (CMOS records) are not under test here; the debug log goes to the harness's log.
+// The debug port's image list (debugger/debug_port.cpp): no kernel modules mapped and no extension loaded in host tests.
+namespace xk::kernel_modules {
+const XK_KERNEL_MODULES *Modules;
+} // namespace xk::kernel_modules
+
+namespace xk::extensions {
+XK_EXTENSIONS_STATE *LoadedExtensions;
+} // namespace xk::extensions
+
 namespace xk::diagnostics {
 void LogLineArgs(const char *Format, va_list Args) {
     char line[256];

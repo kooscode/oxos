@@ -1,13 +1,20 @@
 // The C library of the code in shared/: the standard functions under their standard names, from whichever C library the program is built with.
 //   - The kernel (and the host unit tests, which build the kernel's sources), built with OXOS_KERNEL: the kernel's own (kernel/src/runtime/c_library.h).
+//   - Kernel extensions, built with OXOS_EXTENSION_BUILD against the SDK (no host headers: -nostdinc): the kernel's, as oxos_kernel.h declares it.
 //   - Apps (nxdk) and host tools: the real one. nxdk's lacks strlcpy, strncasecmp and strcasecmp, so they are defined here for nxdk builds.
 #pragma once
 
+#if defined(OXOS_EXTENSION_BUILD)
+#include <oxos_sdk.h>
+#else
 #include <stddef.h>
 #include <stdint.h>
+#endif
 
 #if defined(OXOS_KERNEL)
 #include <runtime/c_library.h>
+#elif defined(OXOS_EXTENSION_BUILD)
+// Everything is in oxos_kernel.h.
 #else
 #include <ctype.h>
 #include <string.h>

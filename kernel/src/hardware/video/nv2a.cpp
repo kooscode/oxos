@@ -114,8 +114,6 @@ void InitGraphicsEngine() {
     Nv(0x400720) = 1;
     Nv(0x400100) = 0xFFFFFFFF; // nothing pending, interrupts stay off
     Nv(0x400140) = 0;
-    XK_SERIAL("gpu: default graphics context loaded%s (PMC %08lx -> %08lx, 0x40005c %08lx -> %08lx)\n", idle ? "" : " (engine not idle!)", pmc, Nv(0x200), junk,
-              Nv(0x40005C));
 }
 
 } // namespace xk::hardware::video

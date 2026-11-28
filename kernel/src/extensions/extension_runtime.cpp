@@ -6,6 +6,7 @@
 #include <extensions/extensions.h>
 #include <extensions/extension_state.h>
 #include <core/core.h>
+#include <debugger/debug_port.h>
 #include <diagnostics/diagnostics.h>
 #include <io/io.h>
 #include <kernel_modules/kernel_modules.h>
@@ -207,6 +208,7 @@ void TitleExiting() {
         if (extension.Descriptor->Terminate)
             extension.Descriptor->Terminate();
     }
+    debugger::ForgetExtensionDebugger(); // their code goes away with the quick reboot (spec/oxos_internal/51 §2)
 }
 
 } // namespace xk::extensions

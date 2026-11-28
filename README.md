@@ -25,6 +25,9 @@ consoles, from a **fully open BIOS image**: no Microsoft code or boot-ROM dump i
 - **Launch redirects:** `[launch_redirect]` in `C:\OXOS\oxos_settings.ini` starts another XBE in place of one a title launches, e.g. a new Xbox Live
   updater instead of the old one ([how to use it](docs/launch_redirect.md)).
 - **Kernel extensions + SDK:** SDK for Kernel intercepting ALL Kernel functions and Title events (like Title Launch/Exit)
+- **GDB debugger:** Debug your homebrew, any running title and the kernel on a real console from gdb or VS Code: breakpoints, steps, watchpoints, threads,
+  crashes and memory search, over the console's serial port (`oxos_gdb.xos`, shipped off; kernel symbols in the release zip;
+  [how](kernel/README.md#debugging-with-gdb-or-vs-code)).
 - **In-Game Shortcuts (IGS):** The standard In Game Reset we are used to (LT + RT + BACK + BLACK), plus your own button combinations to start any XBE,
   in every title, with a toast on screen first (`C:\OXOS\extensions\oxos_igs.ini`).
 - **Video mode toast:** Each title's video mode shows briefly ("Video Mode: 720p"); `show_video_mode = no` under `[toasts]` in
@@ -139,7 +142,7 @@ unattended on a [hardware-in-the-loop rig](docs/hwitl.md).
 ## Not yet
 - One image for every revision (the 1.6 still needs its own).
 - Retail 1.0 – 1.3 consoles are untested (the Conexant encoder is tested on a 1.0 debug kit).
-- Debugging on a real console.
+- Debugging over the network (the debugger uses the serial port for now).
 
 What OXOS adds to a stock kernel, and what is planned next: [`spec/oxos_features.md`](spec/oxos_features.md).
 

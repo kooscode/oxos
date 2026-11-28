@@ -2,6 +2,75 @@
     "version": "2.0.0",
     "tasks": [
         {
+            // The default build: build/kernel/self_tests/bios.bin, the kernel with its boot self-tests. Ctrl+Shift+B offers every build task; errors show in
+            // the Problems panel.
+            "label": "oxos: build the kernel (self-tests)",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) bios",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": {"base": "$gcc", "fileLocation": ["autoDetect", "${workspaceFolder}/kernel"]}
+        },
+        {
+            // Build/kernel/release/bios.bin: what make run boots and the release ships. Ctrl+Shift+B offers every build task; errors show in the Problems
+            // panel.
+            "label": "oxos: build the release BIOS",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) BUILD=../build/kernel/release SELFTEST=0 ../build/kernel/release/bios.bin",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": {"base": "$gcc", "fileLocation": ["autoDetect", "${workspaceFolder}/kernel"]}
+        },
+        {
+            // Build/kernel/serial/bios.bin: the release kernel with the debug serial log (netboot it to the console with its log). Ctrl+Shift+B offers every
+            // build task; errors show in the Problems panel.
+            "label": "oxos: build the serial BIOS",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) BUILD=../build/kernel/serial SELFTEST=0 SERIAL=1 ../build/kernel/serial/bios.bin",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": {"base": "$gcc", "fileLocation": ["autoDetect", "${workspaceFolder}/kernel"]}
+        },
+        {
+            // Build/kernel/gdb_wait/bios.bin: the kernel with the GDB stub, waiting for gdb at boot (the console debug configurations build it too).
+            // Ctrl+Shift+B offers every build task; errors show in the Problems panel.
+            "label": "oxos: build the gdb BIOS",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) BUILD=../build/kernel/gdb_wait SELFTEST=0 DEBUG=1 GDB=1 GDB_WAIT=1 ../build/kernel/gdb_wait/bios.bin",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": {"base": "$gcc", "fileLocation": ["autoDetect", "${workspaceFolder}/kernel"]}
+        },
+        {
+            // OXOS's console apps (apps/: the FTP server, the boot video player) into build/apps/<name>. Ctrl+Shift+B offers every build task; errors show in
+            // the Problems panel.
+            "label": "oxos: build the apps",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) apps",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            // The extensions OXOS ships (kernel/extensions/: Universal Trainers and its menu). Ctrl+Shift+B offers every build task; errors show in the
+            // Problems panel.
+            "label": "oxos: build the extensions",
+            "type": "shell",
+            "command": "make -C kernel -j$(nproc) extensions",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            // The host unit tests (tests/unit, GoogleTest): after every kernel change.
+            "label": "oxos: run the unit tests",
+            "type": "shell",
+            "command": "tools/unit_tests.sh",
+            "options": {"cwd": "${workspaceFolder}"},
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
             // Builds the debug kernel (build/kernel/debug) and starts xemu paused, with the GDB server on localhost:1234 and the kernel's debug serial output
             // in this terminal.
             "label": "oxos: start debug kernel",
@@ -9,10 +78,10 @@
             "command": "python3",
             "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "--port", "1234", "--iso=${input:disc}"],
             "isBackground": true,
+            // VS Code needs a pattern naming file and message groups; this one never matches (errors show in the terminal). Only the background part matters:
+            // it tells VS Code when xemu or the console is ready.
             "problemMatcher": {
                 "owner": "oxos",
-                // VS Code needs a pattern naming file and message groups; this one never matches (errors show in the terminal). Only the background part
-                // matters: it tells VS Code when xemu is ready.
                 "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
                 "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
             }
@@ -23,6 +92,143 @@
             "command": "python3",
             "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "--stop"],
             "problemMatcher": []
+        },
+        {
+            // The console (prototype): the GDB kernel by netboot, the console power-cycled through the Modxo rig; the kernel waits for gdb at boot.
+            "label": "oxos: start kernel on console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_console.py"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            // Before a Console (Attach): the console must be running a GDB kernel (not the kernel in the Modxo's flash, which a power-on without a netboot
+            // server falls back to); says so in this terminal when it is not.
+            "label": "oxos: check the console runs a GDB kernel",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_console.py", "--check"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "problemMatcher": []
+        },
+        {
+            // Every console session ends here: the console off, the netboot server stopped.
+            "label": "oxos: stop the console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_console.py", "--stop"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "problemMatcher": []
+        },
+        {
+            // The FTP server's debug build (build/apps/oxos_ftp_debug, tools/nxdk_app.mk with DEBUG=y). NXDK_DIR: nxdk's compiler wrappers read it. LDFLAGS: a
+            // symbol table next to the DWARF, so gdb knows the nxdk library's functions (built without -g) and `next` steps over them.
+            "label": "oxos: build the FTP server (debug)",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${workspaceFolder}/apps/oxos_ftp", "-j8", "DEBUG=y"],
+            "options": {
+                "env": {
+                    "NXDK_DIR": "${workspaceFolder}/third_party/nxdk",
+                    "LDFLAGS": "-debug:dwarf",
+                    "PATH": "${workspaceFolder}/third_party/nxdk/bin:/usr/lib/llvm-18/bin:${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "oxos: start the FTP server in xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "${workspaceFolder}/build/apps/oxos_ftp_debug", "--port", "1234"],
+            "dependsOn": "oxos: build the FTP server (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            "label": "oxos: stop the FTP server in xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "${workspaceFolder}/build/apps/oxos_ftp_debug", "--stop"],
+            "problemMatcher": []
+        },
+        {
+            "label": "oxos: start the FTP server on the console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_console.py", "${workspaceFolder}/build/apps/oxos_ftp_debug", "--name", "oxos_ftp"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "dependsOn": "oxos: build the FTP server (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            // The Universal Trainers menu's debug build (build/kernel/extensions/oxos_trainers/app_debug, tools/nxdk_app.mk with DEBUG=y). NXDK_DIR: nxdk's
+            // compiler wrappers read it. LDFLAGS: a symbol table next to the DWARF, so gdb knows the nxdk library's functions (built without -g) and `next`
+            // steps over them.
+            "label": "oxos: build the Universal Trainers menu (debug)",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${workspaceFolder}/kernel/extensions/oxos_trainers/app", "-j8", "DEBUG=y"],
+            "options": {
+                "env": {
+                    "NXDK_DIR": "${workspaceFolder}/third_party/nxdk",
+                    "LDFLAGS": "-debug:dwarf",
+                    "PATH": "${workspaceFolder}/third_party/nxdk/bin:/usr/lib/llvm-18/bin:${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "oxos: start the Universal Trainers menu in xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug", "--port", "1234"],
+            "dependsOn": "oxos: build the Universal Trainers menu (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
+        },
+        {
+            "label": "oxos: stop the Universal Trainers menu in xemu",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_app.py", "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug", "--stop"],
+            "problemMatcher": []
+        },
+        {
+            "label": "oxos: start the Universal Trainers menu on the console",
+            "type": "shell",
+            "command": "python3",
+            "args": ["-I", "${workspaceFolder}/tools/debug_console.py", "${workspaceFolder}/build/kernel/extensions/oxos_trainers/app_debug",
+                     "--name", "oxos_trainers"],
+            "options": {"env": {"OXOS_CONSOLE": "${config:oxos.console}", "OXOS_CONSOLE_MCPX16": "${config:oxos.consoleMcpx16}"}},
+            "dependsOn": "oxos: build the Universal Trainers menu (debug)",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "oxos",
+                "pattern": {"regexp": "^__never_matches__(.)(.)(.)$", "file": 1, "location": 2, "message": 3},
+                "background": {"activeBegin": true, "beginsPattern": "OXOS debug: starting", "endsPattern": "OXOS debug: (ready|error)"}
+            }
         }
     ],
     "inputs": [

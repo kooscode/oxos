@@ -5,6 +5,7 @@
 #include <user_interface/user_interface.h>
 #include <arch/arch.h>
 #include <titles/titles.h>
+#include <debugger/debug_port.h>
 
 XBAPI ULONG KiBugCheckData[5] = {}; // exported: code and the four parameters
 
@@ -30,6 +31,7 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
     else
         diagnostics::SaveBugCheckLastWords(BugCheckCode, P1, (ULONG)__builtin_return_address(0));
     XK_SERIAL("*** bug check %#lx (%#lx, %#lx, %#lx, %#lx)\n", BugCheckCode, P1, P2, P3, P4);
+    debugger::StopOnBugCheck(BugCheckCode); // a debugger stops here, in the bug check's caller's stack, before the screen
 #if XK_TRACE_IMPORTS
     // Trace builds: the title's last kernel calls (ordinal, return value, caller, arguments), oldest first.
     XK_SERIAL("    trace ring %p, %lu calls\n", (void *)XkTraceRing, XkTraceCount);
@@ -56,8 +58,7 @@ XBAPI void NTAPI KeBugCheckEx(ULONG BugCheckCode, ULONG_PTR P1, ULONG_PTR P2, UL
         user_interface::ShowBugCheck(BugCheckCode, parameters);
     }
 #endif
-    for (;;)
-        halt();
+    debugger::WaitAfterBugCheck(); // a debugger can attach and look; without one the processor halts
 }
 
 XBAPI void NTAPI KeBugCheck(ULONG BugCheckCode) {

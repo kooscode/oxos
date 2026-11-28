@@ -325,7 +325,9 @@ XBAPI NTSTATUS NTAPI IoCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess,
 // Debug (serial builds): opens that fail, with the name, so a title's error screen names the file it missed.
 static NTSTATUS LogFailedOpen(NTSTATUS Status, POBJECT_ATTRIBUTES ObjectAttributes, ULONG Disposition, ULONG Options) {
 #if XK_DEBUG_SERIAL
-    if (!NT_SUCCESS(Status) && ObjectAttributes && ObjectAttributes->ObjectName) {
+    // Not found, already there and no disc are what probing for a file gets (dashboards look for many): not logged.
+    if (!NT_SUCCESS(Status) && Status != (NTSTATUS)0xC0000034 && Status != (NTSTATUS)0xC000003A && Status != (NTSTATUS)0xC0000035 &&
+        Status != (NTSTATUS)0xC0000013 && ObjectAttributes && ObjectAttributes->ObjectName) {
         POBJECT_STRING name = ObjectAttributes->ObjectName;
         XK_SERIAL("io: open %.*s (disposition %lu, options %08lx) failed %08lx\n", (int)name->Length, name->Buffer, Disposition, Options, (ULONG)Status);
     }

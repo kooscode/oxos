@@ -82,11 +82,6 @@ NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
         }
     }
     // Count free clusters (FileFsSizeInformation) and find the first free one.
-    [[maybe_unused]] ULONG scanStart = KeTickCount;
-    if (NT_SUCCESS(status)) {
-        XK_SERIAL("fatx: mount %#llx bytes, cluster %#lx, %#lx clusters, FAT%u\n", v->PartitionLength, v->BytesPerCluster, v->NumberOfClusters,
-                  8u << v->FatEntryShift);
-    }
     for (ULONG c = 1; NT_SUCCESS(status) && c <= v->NumberOfClusters; c++) {
         ULONG e;
         status = HDDFSGetFatEntry(v, c, &e);
@@ -97,8 +92,6 @@ NTSTATUS FATXMountVolume(PDEVICE_OBJECT TargetDevice) {
         }
     }
     HDDFSReleaseVolume(v);
-    if (NT_SUCCESS(status))
-        XK_SERIAL("fatx: %#lx free clusters counted in %lu ms\n", v->Alloc->FreeClusters, KeTickCount - scanStart);
     if (!NT_SUCCESS(status)) {
         HDDFSForgetVolume(v);
         IoDeleteDevice(dev);

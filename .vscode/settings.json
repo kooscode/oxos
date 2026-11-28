@@ -1,5 +1,9 @@
 {
     // Start debugging even when the Problems panel lists errors: VS Code counts every error in the workspace (such as IntelliSense's) after the pre-launch
     // task, not just the task's own.
-    "debug.onTaskErrors": "debugAnyway"
+    "debug.onTaskErrors": "debugAnyway",
+    // The console the Console configurations debug on (the Modxo rig): its Pico's serial number, as tools/modxo/console.py lists them (empty: the only
+    // one connected); "1" when it is a 1.6, whose kernels are their own build.
+    "oxos.console": "",
+    "oxos.consoleMcpx16": "0"
 }

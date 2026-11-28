@@ -3,11 +3,12 @@
 # needs them, then includes this file.
 #
 # The app builds in build/<its folder> at the repository root, e.g. build/apps/oxos_ftp: bin/default.xbe, the .iso, main.exe, the objects and libSDL3.lib.
-# Its own folder keeps only sources: `make` there, or `make -C` it, runs the build in the build folder. nxdk and SDL3 come from third_party/ (`make -C kernel
-# nxdk`).
+# A debug build (DEBUG=y: -g, for gdb) goes to build/<its folder>_debug, so its objects never end up in a release build and the other way round (make does
+# not see changed flags). Its own folder keeps only sources: `make` there, or `make -C` it, runs the build in the build folder. nxdk and SDL3 come from
+# third_party/ (`make -C kernel nxdk`).
 NXDK_APP_DIR := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 OXOS_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-NXDK_APP_BUILD := $(OXOS_ROOT)/build/$(patsubst $(OXOS_ROOT)/%,%,$(NXDK_APP_DIR))
+NXDK_APP_BUILD := $(OXOS_ROOT)/build/$(patsubst $(OXOS_ROOT)/%,%,$(NXDK_APP_DIR))$(if $(filter y,$(DEBUG)),_debug)
 
 ifneq ($(abspath $(CURDIR)),$(NXDK_APP_BUILD))
 
@@ -27,6 +28,10 @@ vpath %.cpp $(NXDK_APP_DIR) $(OXOS_ROOT)/tools/sdl_screen
 vpath %.c $(NXDK_APP_DIR)
 NXDK_CXX = y
 NXDK_DIR ?= $(OXOS_ROOT)/third_party/nxdk
+ifeq ($(DEBUG),y)
+# gdb names C++ functions from the debug information, as in the kernel's debug builds: it cannot demangle the Microsoft-style names in the linkage names
+NXDK_CXXFLAGS += -mllvm -dwarf-linkage-names=Abstract
+endif
 include $(NXDK_DIR)/Makefile
 include $(OXOS_ROOT)/tools/sdl_screen/sdl_screen.mk
 

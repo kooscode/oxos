@@ -23,6 +23,7 @@
 #if XK_BOOT_SELFTEST
 #include <kernel_self_tests.h> // tests/kernel_self_tests (SELFTEST=1 builds only)
 #endif
+#include <debugger/debug_port.h>
 
 // The exported launch state (titles see these names): outside the namespace.
 OBJECT_STRING XeImageFileName;
@@ -322,7 +323,6 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
 
     HANDLE h;
     NTSTATUS status = OpenImage(&h);
-    XK_SERIAL("load: opened %#lx\n", status);
     if (!NT_SUCCESS(status))
         return status;
     auto head = (PUCHAR)ExAllocatePoolWithTag(0x1000, 'iHeX');
@@ -332,7 +332,6 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
     status = ReadWholeFile(h, head, 0x1000, 0, &got);
-    XK_SERIAL("load: first page read %#lx (%lu bytes)\n", status, got);
     ULONG sizeOfHeaders = *(ULONG *)(head + 0x108), sizeOfImage = *(ULONG *)(head + 0x10C);
     bool reserved = false;
     if (NT_SUCCESS(status) && (got < 0x178 || *(ULONG *)head != XBE_MAGIC || sizeOfHeaders < 0x179 || sizeOfImage < sizeOfHeaders ||
@@ -342,12 +341,10 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         PVOID base = (PVOID)XBE_BASE;
         SIZE_T size = sizeOfImage;
         status = NtAllocateVirtualMemory(&base, 0, &size, MEM_RESERVE, PAGE_READWRITE);
-        XK_SERIAL("load: image reserved %#lx\n", status);
         reserved = NT_SUCCESS(status);
         size = sizeOfHeaders;
         if (reserved)
             status = memory::CommitImageMemory(&base, &size);
-        XK_SERIAL("load: headers committed %#lx\n", status);
     }
     if (NT_SUCCESS(status)) {
         memcpy((PVOID)XBE_BASE, head, got < sizeOfHeaders ? got : sizeOfHeaders);
@@ -356,7 +353,6 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
             status = ReadWholeFile(h, (PVOID)(XBE_BASE + got), sizeOfHeaders - got, got);
     }
     ExFreePool(head);
-    XK_SERIAL("load: headers %#lx\n", status);
     // The header fields only once the headers are in memory: a file that failed the first-page checks reserved nothing.
     bool loaded = NT_SUCCESS(status);
     ULONG cert = loaded ? XbeField(0x118) : 0, sections = loaded ? XbeField(0x120) : 0, count = loaded ? XbeField(0x11C) : 0;
@@ -410,16 +406,13 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
         LoadPatches(*(ULONG *)(cert + 8), *(ULONG *)(cert + 0xAC), sec, count);
     for (ULONG i = 0; NT_SUCCESS(status) && i < count; i++) {
         if (sec[i].Flags & XBE_SECTION_PRELOAD) {
-            XK_SERIAL("load: section %lu\n", i);
             status = LoadXbeSection(h, &sec[i]);
         }
     }
-    XK_SERIAL("load: sections %#lx\n", status);
     // SMC events from now on; an eject handled during boot sends a disc title back (to the dashboard), as the reference does (spec/stock/05 §4.16). A title on
     // the hard disk still starts: a console without a DVD drive reports an eject at every boot.
     if (NT_SUCCESS(status) && hardware::chipset::ArmSmcEvents(Dashboard) && !Dashboard && media != 1)
         status = (NTSTATUS)0xC000003A;
-    XK_SERIAL("load: SMC events armed\n");
     // SMC "reset on eject" (spec/stock/05 §4.16): kept off (0x19 = 1, boot flag 8) for the dashboard, titles allowed on non-secure media, boot flag 4 and
     // manufacturing units; turned back on for everything else.
     if (NT_SUCCESS(status)) {
@@ -435,11 +428,9 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
                 // Retry until the SMC accepts the write.
             }
         }
-        XK_SERIAL("load: reset on eject set\n");
     }
     if (NT_SUCCESS(status) && XbeField(0x158)) // 0: no kernel thunk table
         status = ResolveKernelThunks((PULONG)XbeField(0x158));
-    XK_SERIAL("load: thunks %#lx\n", status);
     if (NT_SUCCESS(status)) {
         for (ULONG i = 0; i < count; i++) {
             if ((sec[i].Flags & (XBE_SECTION_PRELOAD | XBE_SECTION_WRITABLE)) != XBE_SECTION_PRELOAD)
@@ -484,7 +475,6 @@ static NTSTATUS LoadImageFile(PCSZ Path, BOOLEAN Dashboard) {
 // Path's title-loading event (spec/oxos_internal/34 §7.2), then Path. Target (INI_REDIRECT_MAX_PATH + 1 bytes), for a launch an extension may redirect: when
 // one names an XBE there (oxos_title_redirect), Path is not loaded and the result is STATUS_REPARSE.
 NTSTATUS LoadImage(PCSZ Path, BOOLEAN Dashboard, char *Target) {
-    XK_SERIAL("load %s: start\n", Path);
     if (Target)
         Target[0] = 0;
     extensions::TitleLoading(Path, Dashboard, Target, INI_REDIRECT_MAX_PATH + 1);
@@ -966,8 +956,6 @@ void LaunchAtColdBoot() {
     if (kernel_modules::Modules && kernel_modules::Modules->RestoreSoundRecoveryLaunch())
         return LaunchAfterSoundRecovery();
     ULONG reason = CheckFirstBoot();
-    XK_SERIAL("launch: cold boot: boot flags %#lx, region %#lx, first-boot reason %#lx, boot video switches %#lx\n", hardware::chipset::BootFlags,
-              ConsoleGameRegion, reason, BootVideoSwitches);
     if ((hardware::chipset::BootFlags & 4) || (ConsoleGameRegion & 0x80000000))
         return LaunchTitleAfterBootVideo(0);
     LaunchReason = reason;
@@ -1032,6 +1020,7 @@ static void NTAPI TitleThread(PVOID, PVOID) {
 #if XK_DEBUG_SERIAL
     memory::CountUnmovablePagesForTitle(AvGetSavedDataAddress());
 #endif
+    debugger::TitleLoaded(XeImageFileName.Buffer); // breakpoints gdb set in the title before it was here go in now
     CallTitleEntry(); // exactly `call [0x00010128]`, which trainer loaders hook (spec/oxos_internal/23)
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

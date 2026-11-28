@@ -25,8 +25,8 @@ them back, up to three times:
 2. again just before it jumps to the kernel.
 
 Its record at physical 0x23E0 (cold boots): 'NVPL' (0x4C50564E), NVPLL and the select at step 1, NVPLL and the select at step 2. The kernel copies it before the
-memory manager starts and prints, on a serial build, `gpu clock: NVPLL 00011c01 select 000a0400`, or `*** gpu clock: NVPLL ... select ... at 2BL start, ...
-before the kernel; the 2BL set 00011c01 000a0400` when it had to put them back.
+memory manager starts and prints, on a serial build, `*** gpu clock: NVPLL ... select ... at 2BL start, ... before the kernel; the 2BL set 00011c01
+000a0400` when it had to put them back (nothing when the clock was right).
 
 ## 3. Result
 Netboot BIOS with the check, 15 cold boots to the dashboard: 6 started with a wrong clock (0x0006F3FF, 0x0003CA5D, and 0x00012501 with the select 0x000A0000);
@@ -60,13 +60,13 @@ storing pass run from the caches with interrupts off).
 Netboot BIOS with the fix, 20 cold boots to the dashboard: 13 started with memory interface settings changed (including 0x10BC 0xFF885066 and 0x10B0
 0x76086673), the check before the kernel found all of them right, and every dashboard was drawn correctly.
 
-## 5. The X-code read-back (debug log)
+## 5. The X-code read-back
 `BlCheckXcodeValues` reads back the registers Cromwell's table writes (the last value of each, under a mask; not the memory size, which start.S decides, the
 DRAM mode commands, or the registers the table changes by read-modify-write) when the 2BL starts and again before the kernel, and leaves the ones that differ in
 records at physical 0x2400 and 0x2600 ('XCHK', the count, {address, value} pairs; NV2A registers as 0x0Fxxxxxx, PCI configuration addresses as 0x8xxxxxxx). The
-kernel prints them on a serial build (`xcodes: ...`). Expected to differ on every boot: PCI 0x80000804, 0x80000810, 0x80010014 (read-only or status bits), the
-pad registers 0x1214-0x1250 (the calibration rewrites them), 0x1228 (left by the calibration's measurement), and at 2BL start 0x10032C, 0x100410, 0x1210,
-0x1218, 0x100328, 0x100338 on some boots, with no visible fault.
+kernel's log does not print them; the GDB kernel's boot stop can read them before the memory manager unmaps page 2. Expected to differ on every boot: PCI
+0x80000804, 0x80000810, 0x80010014 (read-only or status bits), the pad registers 0x1214-0x1250 (the calibration rewrites them), 0x1228 (left by the
+calibration's measurement), and at 2BL start 0x10032C, 0x100410, 0x1210, 0x1218, 0x100328, 0x100338 on some boots, with no visible fault.
 
 ## 4. Open
 - Why X-code settings do not hold on some cold boots (the GPU clock, the memory interface, DRAM refresh in spec 20): the NV2A ignores the writes during the

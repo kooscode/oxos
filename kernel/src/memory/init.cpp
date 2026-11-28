@@ -210,7 +210,6 @@ ULONG FreeBootPages(ULONG_PTR KeepStart, ULONG_PTR KeepEnd) {
         FreeContiguousPage(pfn);
         freed++;
     }
-    XK_SERIAL("mm: %lu boot-only pages freed (pages %#lx-%#lx; kept %08lx-%08lx)\n", freed, BootFirstPfn, BootEndPfn - 1, KeepStart, KeepEnd);
     return freed;
 }
 

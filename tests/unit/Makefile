@@ -37,7 +37,7 @@ KERNEL_SOURCES := \
     src/runtime/status.cpp src/runtime/string.cpp src/runtime/sync.cpp src/runtime/time.cpp \
     src/hardware/chipset/interrupts_timers.cpp src/hardware/chipset/port_io.cpp src/user_interface/error_screen_text.cpp \
     src/storage/disk_format.cpp src/filesystems/hddfs/format_exfat.cpp \
-    src/toasts/toast_queue.cpp modules/extension_parser.cpp
+    src/toasts/toast_queue.cpp src/debugger/debug_port.cpp modules/extension_parser.cpp
 # The code shared with the apps and tools (shared/README.md), built as the kernel builds it (OXOS_KERNEL: the kernel's C library).
 SHARED         := ../../shared
 SDK_INCLUDES   := -I../../sdk/include -I../../sdk/src # oxos_sdk.h: the types the kernel shares with extensions (as the kernel's build)

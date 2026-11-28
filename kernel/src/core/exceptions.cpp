@@ -3,6 +3,7 @@
 #include <diagnostics/diagnostics.h>
 #include <arch/arch.h>
 #include <runtime/runtime.h>
+#include <debugger/debug_port.h>
 
 namespace xk::core {
 
@@ -26,28 +27,12 @@ typedef struct _EXCEPTION_RECORD {
 } EXCEPTION_RECORD, *PEXCEPTION_RECORD;
 XK_SIZE(EXCEPTION_RECORD, 0x50);
 
-typedef struct _CONTEXT {
-    ULONG ContextFlags;
-    UCHAR FloatSave[0x204];
-    ULONG Edi, Esi, Ebx, Edx, Ecx, Eax, Ebp, Eip, SegCs, EFlags, Esp, SegSs;
-} CONTEXT, *PCONTEXT;
-XK_SIZE(CONTEXT, 0x238);
-XK_OFFSET(CONTEXT, Eip, 0x224);
-
-struct KTRAP_FRAME_XK {
-    ULONG Edi, Esi, Ebp, EspIgnored, Ebx, Edx, Ecx, Eax;
-    ULONG Vector, ErrorCode;
-    ULONG Eip, SegCs, EFlags; // the faulting ESP is &EFlags + 1 (no privilege change)
-};
-
 struct EXCEPTION_REGISTRATION {
     EXCEPTION_REGISTRATION *Next;
     ULONG(__cdecl *Handler)(PEXCEPTION_RECORD, PVOID, PCONTEXT, PVOID);
 };
 #define EXCEPTION_CHAIN_END ((EXCEPTION_REGISTRATION *)0xFFFFFFFF)
 enum { ExceptionContinueExecution, ExceptionContinueSearch, ExceptionNestedException, ExceptionCollidedUnwind };
-
-extern "C" void KiContinueContext(PCONTEXT Context) __attribute__((noreturn)); // arch/exceptions.S
 
 static volatile ULONG DispatchDepth; // traps being dispatched, nested (a cascade bug-checks past 8)
 volatile ULONG ExceptionsDispatched; // diagnostics
@@ -157,6 +142,8 @@ static ULONG FloatStatusCode(UCHAR vector) {
 }
 
 extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
+    if (debugger::HandleTrap(Frame))
+        return; // the debugger's: a breakpoint, a single step, a break-in, a fault in its own memory access
     // A page fault in the S-list pop's read of an entry another thread popped and freed meanwhile: the pop starts over (spec/stock/14, "Page faults").
     if (Frame->Vector == 14 && KiRestartSListPop(Frame->Eip, Frame->EFlags & 0x200))
         return;
@@ -239,6 +226,11 @@ extern "C" void KiDispatchTrap(KTRAP_FRAME_XK *Frame) {
     BOOLEAN handled = DispatchException(&record, &context);
     DispatchDepth = DispatchDepth - 1;
     if (!handled) {
+        // A debugger stops at the faulting instruction first; it resumes there (with what gdb changed), or the bug check follows when gdb detached.
+        if (debugger::StopOnUnhandledException(Frame)) {
+            cli();
+            return;
+        }
         XK_SERIAL("*** unhandled exception %#lx at %#lx (vector %lu, error %#lx, address %#lx)\n", record.ExceptionCode, Frame->Eip, vector, Frame->ErrorCode,
                   record.ExceptionInformation[1]);
         XK_SERIAL("    eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx efl %08lx\n", Frame->Eax, Frame->Ebx, Frame->Ecx,
